@@ -13,6 +13,7 @@ import { DbManagerContent } from "./_components/DbManagerContent"
 import { SystemListManager } from "./_components/SystemListManager"
 import { ServiceListManager } from "./_components/ServiceListManager"
 import { LayerInfoManager } from "./_components/LayerInfoManager"
+import { LayerAttrManager } from "./_components/LayerAttrManager"
 
 const DEV_AUTH_KEY = "dev_mode_auth"
 const DEV_PASSWORD = "admin00!!"
@@ -186,11 +187,13 @@ export default function DevPage() {
                     ? "기능 목록관리 설정 화면입니다."
                     : selectedMenu === "layerInfo"
                       ? "레이어 정보관리 설정 화면입니다."
-                      : selectedMenu === "devTest"
-                    ? "데이터베이스 연결 테스트"
-                    : selectedMenu === "dbManager"
-                      ? "데이터 가져오기 / 백업 / 업데이트"
-                      : `${currentLabel} 설정 화면입니다. (구현 예정)`}
+                      : selectedMenu === "layerAttr"
+                        ? "레이어 속성관리 설정 화면입니다."
+                        : selectedMenu === "devTest"
+                          ? "데이터베이스 연결 테스트"
+                          : selectedMenu === "dbManager"
+                            ? "데이터 가져오기 / 백업 / 업데이트"
+                            : `${currentLabel} 설정 화면입니다. (구현 예정)`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -200,6 +203,8 @@ export default function DevPage() {
                 <ServiceListManager />
               ) : selectedMenu === "layerInfo" ? (
                 <LayerInfoManager />
+              ) : selectedMenu === "layerAttr" ? (
+                <LayerAttrManager />
               ) : selectedMenu === "devTest" ? (
                 <DevTestContent />
               ) : selectedMenu === "dbManager" ? (
