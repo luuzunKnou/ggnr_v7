@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# pg_map_modules (바이너리 파일 포함)
+/pg_map_modules/services/pg_tileserv/
+/pg_map_modules/services/pg_featureserv/
+/pg_map_modules/services/*.zip
+/pg_map_modules/services/*.exe
+
+# defineLayer config files (분할된 설정 파일들)
+/src/config/defineLayer/
+/src/config/defineLayer.config
+/src/config/defineLayer.config.backup
