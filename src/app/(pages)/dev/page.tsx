@@ -14,6 +14,7 @@ import { SystemListManager } from "./_components/SystemListManager"
 import { ServiceListManager } from "./_components/ServiceListManager"
 import { LayerInfoManager } from "./_components/LayerInfoManager"
 import { LayerAttrManager } from "./_components/LayerAttrManager"
+import { LayerCodeManager } from "./_components/LayerCodeManager"
 
 const DEV_AUTH_KEY = "dev_mode_auth"
 const DEV_PASSWORD = "admin00!!"
@@ -189,7 +190,9 @@ export default function DevPage() {
                       ? "레이어 정보관리 설정 화면입니다."
                       : selectedMenu === "layerAttr"
                         ? "레이어 속성관리 설정 화면입니다."
-                        : selectedMenu === "devTest"
+                        : selectedMenu === "layerCode"
+                          ? "레이어 코드관리 설정 화면입니다."
+                          : selectedMenu === "devTest"
                           ? "데이터베이스 연결 테스트"
                           : selectedMenu === "dbManager"
                             ? "데이터 가져오기 / 백업 / 업데이트"
@@ -205,6 +208,10 @@ export default function DevPage() {
                 <LayerInfoManager />
               ) : selectedMenu === "layerAttr" ? (
                 <LayerAttrManager />
+              ) : selectedMenu === "layerCode" ? (
+                <div className="overflow-hidden max-h-[calc(100vh-10rem)] min-h-0">
+                  <LayerCodeManager />
+                </div>
               ) : selectedMenu === "devTest" ? (
                 <DevTestContent />
               ) : selectedMenu === "dbManager" ? (

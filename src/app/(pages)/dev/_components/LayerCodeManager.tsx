@@ -1,0 +1,492 @@
+"use client"
+
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react"
+import { Button } from "@/app/shadcnComponents/ui/button"
+import { Input } from "@/app/shadcnComponents/ui/input"
+import { Save, RotateCcw, Search, Plus, Trash2 } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+type DefineLayerTable = Record<string, unknown>
+type DefineField = Record<string, unknown>
+type DefineCode = Record<string, unknown>
+
+const LAYER_LIST_WIDTH = 280
+const FIELD_LIST_WIDTH = 280
+
+export function LayerCodeManager() {
+  const [tables, setTables] = useState<DefineLayerTable[]>([])
+  const [codeTableKeys, setCodeTableKeys] = useState<Set<string>>(new Set())
+  const [selectedTableKey, setSelectedTableKey] = useState<string>("")
+  const [layerListSearch, setLayerListSearch] = useState("")
+  const [debouncedLayerListSearch, setDebouncedLayerListSearch] = useState("")
+  const [fields, setFields] = useState<DefineField[]>([])
+  const [codeFields, setCodeFields] = useState<DefineField[]>([])
+  const [fieldListSearch, setFieldListSearch] = useState("")
+  const [debouncedFieldListSearch, setDebouncedFieldListSearch] = useState("")
+  const [selectedFieldKey, setSelectedFieldKey] = useState<string>("")
+  const [codes, setCodes] = useState<DefineCode[]>([])
+  const [deletedIndices, setDeletedIndices] = useState<Set<number>>(new Set())
+  const [loadingTables, setLoadingTables] = useState(true)
+  const [loadingFields, setLoadingFields] = useState(false)
+  const [loadingCodes, setLoadingCodes] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [newCodeName, setNewCodeName] = useState("")
+  const [newCodeKorName, setNewCodeKorName] = useState("")
+
+  // CODE 필드가 있는 테이블 키 목록
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/config/defineLayer/codeTables")
+      .then((res) => res.json())
+      .then((body) => {
+        if (cancelled) return
+        if (body.success && Array.isArray(body.tableKeys)) {
+          setCodeTableKeys(new Set(body.tableKeys))
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // 테이블 목록 (전체)
+  useEffect(() => {
+    let cancelled = false
+    setLoadingTables(true)
+    fetch("/api/config/defineLayer")
+      .then((res) => res.json())
+      .then((body) => {
+        if (cancelled) return
+        if (body.success && Array.isArray(body.data)) {
+          setTables(body.data)
+        }
+      })
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
+      .finally(() => !cancelled && setLoadingTables(false))
+    return () => { cancelled = true }
+  }, [])
+
+  // 선택한 테이블의 필드 로드 → CODE 타입만
+  useEffect(() => {
+    if (!selectedTableKey) {
+      setFields([])
+      setCodeFields([])
+      setSelectedFieldKey("")
+      setCodes([])
+      return
+    }
+    setLoadingFields(true)
+    setSelectedFieldKey("")
+    setCodes([])
+    fetch(`/api/config/defineLayer/fields/${encodeURIComponent(selectedTableKey)}`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (body.success && Array.isArray(body.data)) {
+          setFields(body.data)
+          const codeOnly = body.data.filter(
+            (f: DefineField) => String((f as Record<string, unknown>).define_field_type ?? "").toUpperCase() === "CODE"
+          )
+          setCodeFields(codeOnly)
+        } else {
+          setFields([])
+          setCodeFields([])
+        }
+      })
+      .catch(() => {
+        setFields([])
+        setCodeFields([])
+      })
+      .finally(() => setLoadingFields(false))
+  }, [selectedTableKey])
+
+  // 선택한 필드의 코드 로드
+  useEffect(() => {
+    if (!selectedFieldKey) {
+      setCodes([])
+      setDeletedIndices(new Set())
+      return
+    }
+    setLoadingCodes(true)
+    setDeletedIndices(new Set())
+    fetch(`/api/config/defineLayer/codes/${encodeURIComponent(selectedFieldKey)}`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (body.success && Array.isArray(body.data)) {
+          setCodes(body.data)
+        } else {
+          setCodes([])
+        }
+      })
+      .catch(() => setCodes([]))
+      .finally(() => setLoadingCodes(false))
+  }, [selectedFieldKey])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedLayerListSearch(layerListSearch), 300)
+    return () => clearTimeout(t)
+  }, [layerListSearch])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFieldListSearch(fieldListSearch), 300)
+    return () => clearTimeout(t)
+  }, [fieldListSearch])
+
+  /** CODE 필드가 있는 테이블만, 검색 필터 */
+  const filteredTables = useMemo(() => {
+    let list = tables.filter((t) => codeTableKeys.has(String((t as Record<string, unknown>).define_table_key ?? "")))
+    if (debouncedLayerListSearch.trim()) {
+      const q = debouncedLayerListSearch.trim().toLowerCase()
+      list = list.filter((t) => {
+        const r = t as Record<string, unknown>
+        const group = String(r.define_table_group ?? "").toLowerCase()
+        const name = String(r.define_table_name ?? "").toLowerCase()
+        const kor = String(r.define_table_kor_name ?? "").toLowerCase()
+        const key = String(r.define_table_key ?? "").toLowerCase()
+        return group.includes(q) || name.includes(q) || kor.includes(q) || key.includes(q)
+      })
+    }
+    return list
+  }, [tables, codeTableKeys, debouncedLayerListSearch])
+
+  /** 필드 목록 검색 필터 */
+  const filteredCodeFields = useMemo(() => {
+    if (!codeFields.length) return []
+    let list = [...codeFields]
+    if (debouncedFieldListSearch.trim()) {
+      const q = debouncedFieldListSearch.trim().toLowerCase()
+      list = list.filter(
+        (f) =>
+          String(f.define_field_name ?? "").toLowerCase().includes(q) ||
+          String(f.define_field_kor_name ?? "").toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [codeFields, debouncedFieldListSearch])
+
+  const updateCodeCell = useCallback(
+    (index: number, key: "define_code_name" | "define_code_kor_name", value: string) => {
+      setCodes((prev) => {
+        const next = [...prev]
+        next[index] = { ...next[index], [key]: value }
+        return next
+      })
+    },
+    []
+  )
+
+  const toggleDelete = useCallback((idx: number) => {
+    setDeletedIndices((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }, [])
+
+  const addCode = useCallback(() => {
+    setCodes((prev) => [
+      ...prev,
+      { define_code_name: newCodeName.trim(), define_code_kor_name: newCodeKorName.trim() },
+    ])
+    setNewCodeName("")
+    setNewCodeKorName("")
+  }, [newCodeName, newCodeKorName])
+
+  const saveConfig = useCallback(async () => {
+    if (!selectedFieldKey) return
+    setSaving(true)
+    setSuccessMsg(null)
+    setError(null)
+    try {
+      const toSave = codes.filter((_, idx) => !deletedIndices.has(idx))
+      const res = await fetch(`/api/config/defineLayer/codes/${encodeURIComponent(selectedFieldKey)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: toSave }),
+      })
+      const body = await res.json()
+      if (body.success) {
+        setCodes(toSave)
+        setDeletedIndices(new Set())
+        setSuccessMsg("저장되었습니다.")
+      } else setError(body.error ?? "저장에 실패했습니다.")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장에 실패했습니다.")
+    } finally {
+      setSaving(false)
+    }
+  }, [selectedFieldKey, codes, deletedIndices])
+
+  if (loadingTables) return <p className="text-sm text-muted-foreground">테이블 목록 로딩 중...</p>
+
+  return (
+    <div
+      className="flex gap-4 min-h-0 flex-1 overflow-hidden w-full min-w-0"
+      style={{ height: "calc(100vh - 14rem)" }}
+    >
+      {/* 1. 왼쪽: 레이어 목록 (CODE 필드가 있는 테이블만) + 검색 */}
+      <div
+        className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
+        style={{ width: LAYER_LIST_WIDTH, height: "calc(100vh - 14rem)" }}
+      >
+        <div className="shrink-0 p-2 border-b bg-muted/50">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="레이어 검색 (그룹/테이블명/한글명)"
+              value={layerListSearch}
+              onChange={(e) => setLayerListSearch(e.target.value)}
+              className="h-9 pl-8 rounded-none text-sm bg-background"
+            />
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          {filteredTables.length === 0 ? (
+            <p className="p-3 text-sm text-muted-foreground">CODE 필드가 있는 레이어가 없습니다.</p>
+          ) : (
+            <ul className="py-0.5">
+              {filteredTables.map((t) => {
+                const key = String((t as Record<string, unknown>).define_table_key ?? "")
+                const group = String((t as Record<string, unknown>).define_table_group ?? "")
+                const name =
+                  String((t as Record<string, unknown>).define_table_kor_name ?? "") ||
+                  String((t as Record<string, unknown>).define_table_name ?? key)
+                const isSelected = selectedTableKey === key
+                const label = group ? `${group} - ${name}` : name
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTableKey(key)}
+                      title={label}
+                      className={cn(
+                        "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0",
+                        "hover:bg-muted/70",
+                        isSelected
+                          ? "border-l-primary bg-primary/10 text-foreground font-medium"
+                          : "border-l-transparent text-muted-foreground"
+                      )}
+                    >
+                      <span className="truncate block min-w-0">{label}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* 2. 가운데: 필드 목록 (CODE 타입만) + 검색 */}
+      <div
+        className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
+        style={{ width: FIELD_LIST_WIDTH, height: "calc(100vh - 14rem)" }}
+      >
+        <div className="shrink-0 p-2 border-b bg-muted/50">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="필드 검색 (영문명/한글명)"
+              value={fieldListSearch}
+              onChange={(e) => setFieldListSearch(e.target.value)}
+              className="h-9 pl-8 rounded-none text-sm bg-background"
+              disabled={!selectedTableKey}
+            />
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          {!selectedTableKey ? (
+            <p className="p-3 text-sm text-muted-foreground">레이어를 선택하세요.</p>
+          ) : loadingFields ? (
+            <p className="p-3 text-sm text-muted-foreground">필드 로딩 중...</p>
+          ) : filteredCodeFields.length === 0 ? (
+            <p className="p-3 text-sm text-muted-foreground">CODE 필드가 없습니다.</p>
+          ) : (
+            <ul className="py-0.5">
+              {filteredCodeFields.map((f) => {
+                const key = String(f.define_field_key ?? "")
+                const name =
+                  String(f.define_field_kor_name ?? "") || String(f.define_field_name ?? "") || key
+                const isSelected = selectedFieldKey === key
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFieldKey(key)}
+                      title={name}
+                      className={cn(
+                        "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0",
+                        "hover:bg-muted/70",
+                        isSelected
+                          ? "border-l-primary bg-primary/10 text-foreground font-medium"
+                          : "border-l-transparent text-muted-foreground"
+                      )}
+                    >
+                      <span className="truncate block min-w-0">{name}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* 3. 오른쪽: 코드 그리드 (코드명, 한글명, 삭제) */}
+      <div className="flex-1 min-w-0 flex flex-col gap-2 min-h-0 overflow-hidden">
+        {!selectedFieldKey ? (
+          <p className="text-sm text-muted-foreground py-4">
+            왼쪽에서 레이어를, 가운데에서 CODE 필드를 선택하면 코드 목록을 편집할 수 있습니다.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 flex-wrap shrink-0">
+              <Button size="sm" className="rounded-none" onClick={saveConfig} disabled={saving}>
+                <Save className="w-4 h-4 mr-1.5" />
+                {saving ? "저장 중..." : "저장"}
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-none"
+                onClick={() => {
+                  setFieldListSearch("")
+                  setDebouncedFieldListSearch("")
+                }}
+              >
+                <RotateCcw className="w-4 h-4 mr-1.5" />
+                초기화
+              </Button>
+              {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
+              {error && <span className="text-sm text-destructive">{error}</span>}
+              <span className="text-sm text-muted-foreground">{codes.length}개</span>
+            </div>
+            {loadingCodes ? (
+              <p className="text-sm text-muted-foreground py-4 shrink-0">코드 로딩 중...</p>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-hidden w-full min-w-0 flex flex-col gap-2">
+                {/* 추가 행: 코드명·한글명 입력 후 표에 추가 */}
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 border border-border bg-muted/20 p-2 shrink-0 items-center">
+                  <Input
+                    placeholder="코드명"
+                    value={newCodeName}
+                    onChange={(e) => setNewCodeName(e.target.value)}
+                    className="h-8 rounded-none text-sm"
+                  />
+                  <Input
+                    placeholder="한글명"
+                    value={newCodeKorName}
+                    onChange={(e) => setNewCodeKorName(e.target.value)}
+                    className="h-8 rounded-none text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    className="rounded-none shrink-0 w-fit"
+                    onClick={addCode}
+                    disabled={!selectedFieldKey}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    추가
+                  </Button>
+                </div>
+                {/* 단일 표, 세로 3열: 내용이 길면 표 안에 세로 스크롤 */}
+                <div className="flex-1 min-h-0 flex flex-col border border-border bg-muted/20 w-full min-w-0 overflow-hidden">
+                  <div className="grid grid-cols-[minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)_minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)_minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)] gap-x-2 border-b border-border bg-muted shrink-0 min-w-0">
+                    {[0, 1, 2].map((i) => (
+                      <Fragment key={i}>
+                        <div className="py-1 px-1.5 text-xs font-medium flex items-center justify-start text-left text-muted-foreground min-w-0">
+                          코드명
+                        </div>
+                        <div className="py-1 px-1.5 text-xs font-medium flex items-center justify-start text-left text-muted-foreground min-w-0">
+                          한글명
+                        </div>
+                        <div className={cn(
+                          "py-1 px-1.5 pr-[23px] text-xs font-medium flex items-center justify-start text-left text-muted-foreground min-w-14 shrink-0 whitespace-nowrap",
+                          i < 2 && "border-r border-border/60"
+                        )}>
+                          삭제
+                        </div>
+                      </Fragment>
+                    ))}
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-background min-w-0">
+                    {Array.from({ length: Math.ceil(codes.length / 3) }, (_, rowIndex) => {
+                      const totalRows = Math.ceil(codes.length / 3)
+                      const idx0 = rowIndex * 3
+                      const idx1 = idx0 + 1
+                      const idx2 = idx0 + 2
+                      const isLastRow = rowIndex === totalRows - 1
+                      const showBorder = (rowIndex + 1) % 5 === 0 || isLastRow
+                      return (
+                        <div
+                          key={rowIndex}
+                          className={cn(
+                            "grid grid-cols-[minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)_minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)_minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)] gap-x-2 border-border min-w-0",
+                            showBorder && "border-b"
+                          )}
+                        >
+                          {[idx0, idx1, idx2].map((idx, groupIndex) => {
+                            if (idx >= codes.length) {
+                              return (
+                                <div key={idx} className="contents">
+                                  <div className="min-h-[28px] min-w-0" />
+                                  <div className="min-h-[28px] min-w-0" />
+                                  <div className={cn(
+                                    "min-h-[28px] min-w-14 shrink-0 pr-[23px]",
+                                    groupIndex < 2 && "border-r border-border/60"
+                                  )} />
+                                </div>
+                              )
+                            }
+                            const row = codes[idx]
+                            const isDeleted = deletedIndices.has(idx)
+                            return (
+                              <div
+                                key={idx}
+                                className={cn(
+                                  "contents",
+                                  isDeleted && "[&>*]:opacity-50"
+                                )}
+                              >
+                                <div className="py-0 px-1 flex items-center min-h-[28px] min-w-0">
+                                  <span className="text-sm font-mono text-primary truncate block py-1">
+                                    {String(row.define_code_name ?? "")}
+                                  </span>
+                                </div>
+                                <div className="py-0 px-1 flex items-center min-h-[28px]">
+                                  <Input
+                                    value={String(row.define_code_kor_name ?? "")}
+                                    onChange={(e) => updateCodeCell(idx, "define_code_kor_name", e.target.value)}
+                                    className="h-6 rounded-none text-sm min-w-0 py-0 px-1"
+                                  />
+                                </div>
+                                <div className={cn(
+                                  "py-0 px-1 pr-[23px] flex items-center justify-center min-h-[28px] min-w-14 shrink-0",
+                                  groupIndex < 2 && "border-r border-border/60"
+                                )}>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-1.5 rounded-none text-xs text-muted-foreground hover:text-destructive gap-0"
+                                    onClick={() => toggleDelete(idx)}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    삭제
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
