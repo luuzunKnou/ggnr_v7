@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import 'ol/ol.css';
 import {
   MapControlPanel,
@@ -8,6 +8,7 @@ import {
 } from './_mapControlPanel/mapControlPanel';
 import { BackgroundMapSelector } from './_mapControlPanel/backgroundMapSelector';
 import { useMapInstance } from './hooks/useMapInstance';
+import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
@@ -31,10 +32,15 @@ const MEASUREMENT_IDS = ['distance', 'area', 'altitude', 'slope'];
 
 export default function OpenLayersMap() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useMapInstance(mapRef);
+  const sharedMapRef = useMapContext();
+  const { mapInstanceRef, mapReady } = useMapInstance(mapRef, sharedMapRef);
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
+  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
+  const [centerXY, setCenterXY] = useState<{ x: number; y: number } | null>(null);
+  const [projectionCode, setProjectionCode] = useState<string | null>(null);
+  const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
 
   // 측정 타입 결정
   const measureType: MeasureType | null = activeControls.includes('distance')
@@ -45,6 +51,41 @@ export default function OpenLayersMap() {
 
   // 배경지도 관리
   useBackgroundLayer(mapInstanceRef.current, selectedBackgroundMap);
+
+  // 줌 레벨 + 좌표계 + x,y 표시 (맵 준비 후 구독, 뷰 변경 시마다 실시간 갱신)
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const view = map.getView();
+    const proj = view.getProjection();
+    const update = () => {
+      const z = view.getZoom();
+      setZoomLevel(z !== undefined ? z : null);
+      const center = view.getCenter();
+      if (center) setCenterXY({ x: center[0], y: center[1] });
+      if (proj) setProjectionCode(proj.getCode());
+    };
+    update();
+    view.on('change', update);
+    return () => view.un('change', update);
+  }, [mapReady]);
+
+  // 배경지도 패널: exit 애니메이션 끝난 뒤 상태 정리 (duration 400ms)
+  useEffect(() => {
+    if (!isBackgroundPanelExiting) return;
+    const t = setTimeout(() => setIsBackgroundPanelExiting(false), 400);
+    return () => clearTimeout(t);
+  }, [isBackgroundPanelExiting]);
+
+  // 지적도 버튼 → 지적도 관련 레이어(ri, emd, jijuk) 동시 on/off
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const visible = activeControls.includes('cadastral');
+    map.getLayers().getArray().forEach((l) => {
+      if (l.get('cadastralLayer')) l.setVisible(visible);
+    });
+  }, [activeControls, mapReady]);
 
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
@@ -79,6 +120,13 @@ export default function OpenLayersMap() {
       setActiveControls((prev) =>
         isActive ? prev.filter((item) => item !== id) : [...prev, id]
       );
+    } else if (id === 'background-map' && isActive) {
+      // 배경지도 패널 닫기: exit 애니메이션 먼저 시작한 뒤 activeControls에서 제거 (깜빡임 방지)
+      setIsBackgroundPanelExiting(true);
+      setActiveControls((prev) => {
+        const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
+        return withoutSingle;
+      });
     } else {
       // 단일 선택 항목: 배타적 토글
       // 측정 도구는 서로 배타적 (거리/면적 동시 선택 불가)
@@ -102,12 +150,20 @@ export default function OpenLayersMap() {
 
       {/* 오른쪽 맵 컨트롤 패널 */}
       <div className="absolute right-4 top-20 z-10 flex items-start gap-3">
-        {/* 배경지도 선택 패널 */}
-        {activeControls.includes('background-map') && (
-          <BackgroundMapSelector
-            value={selectedBackgroundMap}
-            onValueChange={setSelectedBackgroundMap}
-          />
+        {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
+        {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
+          <div
+            className={
+              isBackgroundPanelExiting
+                ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
+                : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+            }
+          >
+            <BackgroundMapSelector
+              value={selectedBackgroundMap}
+              onValueChange={setSelectedBackgroundMap}
+            />
+          </div>
         )}
 
         <MapControlPanel
@@ -116,6 +172,19 @@ export default function OpenLayersMap() {
           onItemClick={handleControlClick}
         />
       </div>
+
+      {/* 하단 중앙: 줌 레벨, 좌표계, x, y */}
+      {zoomLevel !== null && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-red-600 font-mono text-sm font-medium bg-white/90 px-2 py-1 rounded shadow flex items-center gap-4">
+          <span>zoomLevel: {Number(zoomLevel).toFixed(1)}</span>
+          {projectionCode && <span>{projectionCode}</span>}
+          {centerXY && (
+            <span>
+              x: {centerXY.x.toFixed(0)} y: {centerXY.y.toFixed(0)}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

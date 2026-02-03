@@ -64,9 +64,8 @@ export function saveSystemList(params: { systems: SystemConfigItem[] }): { saved
 }
 
 export type SerConfigItem = {
-  ser_key: number | null
-  ser_dep1: string | null
-  ser_dep2: string | null
+  ser_menu: string | null
+  ser_cat: string | null
   ser_kor: string | null
   ser_eng: string | null
   ser_type: string | null
@@ -104,9 +103,8 @@ export function saveServiceList(params: { ser: SerConfigItem[] }): { saved: numb
     throw new Error("ser 배열이 필요합니다.")
   }
   const normalized = ser.map((s) => ({
-    ser_key: s.ser_key ?? null,
-    ser_dep1: s.ser_dep1 ?? null,
-    ser_dep2: s.ser_dep2 ?? null,
+    ser_menu: s.ser_menu ?? null,
+    ser_cat: s.ser_cat ?? null,
     ser_kor: s.ser_kor ?? null,
     ser_eng: s.ser_eng ?? null,
     ser_type: s.ser_type ?? null,

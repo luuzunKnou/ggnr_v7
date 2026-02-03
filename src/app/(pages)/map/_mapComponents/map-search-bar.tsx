@@ -4,12 +4,12 @@ import React, { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
-import { cn } from '@/lib/utils';
+import { MapLayergroupBar } from './map-layergroup-bar';
 
 /**
- * 상단 중앙 검색창 (지도 위 오버레이)
+ * 상단 왼쪽 검색창 (지도 위 오버레이)
  * - URL query param `q`에 검색어를 동기화(간단 동작)
- * - 실제 지도 이동/검색 API 연동은 이후 단계에서 연결 가능
+ * - 레이어 그룹 버튼들은 map-layergroup-bar 로 분리
  */
 export function MapSearchBar() {
   const router = useRouter();
@@ -27,26 +27,19 @@ export function MapSearchBar() {
   };
 
   return (
-    // 사이드바(65px) 영역을 제외한 곳에서 중앙 정렬
-    <div className="fixed top-4 left-[65px] right-0 z-40 flex justify-center pointer-events-none">
-      <div className="pointer-events-auto w-full max-w-[560px] px-4">
+    <div className="fixed top-4 left-[85px] z-40 flex items-center gap-3 pointer-events-none">
+      <div className="pointer-events-auto flex items-center gap-8">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             submit(query);
           }}
-          className={cn(
-            'flex items-center gap-2',
-            'rounded-xl bg-white/90 backdrop-blur-md',
-            'border border-slate-200 shadow-lg',
-            // 높이 조금 축소
-            'px-3 py-1'
-          )}
+          className="flex items-center gap-2 w-full max-w-[360px] rounded-xl bg-white backdrop-blur-md border border-slate-200 shadow-lg px-3 py-1"
         >
           {/* 좌측 돋보기: 검색 버튼(Submit) */}
           <button
             type="submit"
-            className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-slate-100 text-slate-600 -mr-1"
+            className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-md hover:bg-slate-100 text-slate-600 -mr-1"
             aria-label="검색"
             title="검색"
           >
@@ -57,12 +50,7 @@ export function MapSearchBar() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="주소/지번 검색"
-            className={cn(
-              // 높이 조금 축소
-              'h-8',
-              'border-0 bg-transparent shadow-none',
-              'focus-visible:ring-0 focus-visible:border-0'
-            )}
+            className="h-[30px] border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-0"
           />
 
           {query.trim().length > 0 && (
@@ -72,7 +60,7 @@ export function MapSearchBar() {
                 setQuery('');
                 submit('');
               }}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-slate-100 text-slate-500"
+              className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-md hover:bg-slate-100 text-slate-500"
               aria-label="검색어 지우기"
               title="지우기"
             >
@@ -80,6 +68,8 @@ export function MapSearchBar() {
             </button>
           )}
         </form>
+
+        <MapLayergroupBar />
       </div>
     </div>
   );

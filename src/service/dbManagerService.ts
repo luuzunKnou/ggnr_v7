@@ -338,6 +338,75 @@ export async function getTables(params: DbConnectionParams & { schema: string })
 }
 
 /**
+ * layer 스키마(또는 지정 스키마) 내 모든 테이블의 geom 컬럼 SRID를 5181로 설정.
+ * pg_tileserv 등에서 좌표계가 설정된 레이어만 로드할 수 있으므로 사용.
+ */
+export async function setLayerSchemaGeomSrid(
+  params: DbConnectionParams & { schema?: string }
+): Promise<{
+  schema: string;
+  updatedCount: number;
+  failedCount: number;
+  results: Array<{
+    schema: string;
+    table: string;
+    column: string;
+    status: 'updated' | 'failed';
+    error?: string;
+  }>;
+}> {
+  const schema = (params.schema ?? 'layer').trim() || 'layer';
+  const connectionParams: DbConnectionParams = {
+    host: params.host,
+    port: params.port,
+    database: params.database,
+    username: params.username,
+    password: params.password,
+    ssl: params.ssl,
+  };
+
+  const results: Array<{ schema: string; table: string; column: string; status: 'updated' | 'failed'; error?: string }> = [];
+
+  await withClient(connectionParams, async (client) => {
+    const res = await client.query<{
+      f_table_schema: string;
+      f_table_name: string;
+      f_geometry_column: string;
+    }>(
+      `
+      SELECT f_table_schema, f_table_name, f_geometry_column
+      FROM geometry_columns
+      WHERE f_table_schema = $1
+      ORDER BY f_table_schema, f_table_name, f_geometry_column
+      `,
+      [schema]
+    );
+
+    for (const row of res.rows) {
+      const { f_table_schema: s, f_table_name: t, f_geometry_column: c } = row;
+      try {
+        const sql = `ALTER TABLE ${fq(s, t)} ALTER COLUMN ${quoteIdent(c)} TYPE geometry(Geometry, 5181) USING ST_SetSRID(${quoteIdent(c)}::geometry, 5181)`;
+        await client.query(sql);
+        results.push({ schema: s, table: t, column: c, status: 'updated' });
+      } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        results.push({ schema: s, table: t, column: c, status: 'failed', error: errMsg });
+      }
+    }
+  });
+
+  const updatedCount = results.filter((r) => r.status === 'updated').length;
+  const failedCount = results.filter((r) => r.status === 'failed').length;
+
+  return {
+    schema,
+    updatedCount,
+    failedCount,
+    results,
+  };
+}
+
+/**
  * 테이블 목록 조회 (여러 스키마)
  * - 스키마 체크박스 다중선택을 위한 배치 API
  */

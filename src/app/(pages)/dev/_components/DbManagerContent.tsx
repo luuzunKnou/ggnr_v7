@@ -10,8 +10,9 @@ import { DbManagerUpdateContent } from "./DbManagerUpdateContent"
 import { DbManagerSyncContent } from "./DbManagerSyncContent"
 import { DbManagerErDiagramContent } from "./DbManagerErDiagramContent"
 import { DbManagerTableDefContent } from "./DbManagerTableDefContent"
+import { DbManagerLayerGeomSridContent } from "./DbManagerLayerGeomSridContent"
 
-type DbManagerModalType = "import" | "backup" | "update" | "sync" | "erDiagram" | "tableDef" | null
+type DbManagerModalType = "import" | "backup" | "update" | "sync" | "erDiagram" | "tableDef" | "layerGeomSrid" | null
 
 export function DbManagerContent() {
   const [modalType, setModalType] = useState<DbManagerModalType>(null)
@@ -93,6 +94,18 @@ export function DbManagerContent() {
             </Button>
           </CardContent>
         </Card>
+
+        <Card className="rounded-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">layer geom 좌표계 5181 설정</CardTitle>
+            <CardDescription>layer 스키마 모든 테이블의 geom SRID를 EPSG:5181로 설정 (pg_tileserv용)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button size="sm" className="rounded-none" onClick={() => setModalType("layerGeomSrid")}>
+              열기
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={open} onOpenChange={(o) => !o && closeModal()}>
@@ -104,6 +117,7 @@ export function DbManagerContent() {
             {modalType === "sync" && "테이블 구조 동기화"}
             {modalType === "erDiagram" && "ER-Diagram"}
             {modalType === "tableDef" && "테이블 정의서 보기"}
+            {modalType === "layerGeomSrid" && "layer geom 좌표계 5181 설정"}
           </DialogTitle>
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             {modalType === "import" && <DbManagerImportContent onBack={closeModal} />}
@@ -112,6 +126,7 @@ export function DbManagerContent() {
             {modalType === "sync" && <DbManagerSyncContent onBack={closeModal} />}
             {modalType === "erDiagram" && <DbManagerErDiagramContent onBack={closeModal} />}
             {modalType === "tableDef" && <DbManagerTableDefContent onBack={closeModal} />}
+            {modalType === "layerGeomSrid" && <DbManagerLayerGeomSridContent onBack={closeModal} />}
           </div>
         </DialogContent>
       </Dialog>

@@ -6,9 +6,8 @@ import { ser } from '@/database/schema/ser';
 import { asc, eq } from 'drizzle-orm';
 
 export type SerItem = {
-  ser_key: number | null;
-  ser_dep1: string | null;
-  ser_dep2: string | null;
+  ser_menu: string | null;
+  ser_cat: string | null;
   ser_kor: string | null;
   ser_eng: string | null;
   ser_type: string | null;
@@ -25,11 +24,10 @@ export type SerItem = {
 
 /** DB 행을 목록용 공통 형태로 변환 (snake_case) */
 function rowToSerItem(row: {
-  serKey: number;
-  serDep1: string | null;
-  serDep2: string | null;
+  serEng: string;
+  serMenu: string | null;
+  serCat: string | null;
   serKor: string | null;
-  serEng: string | null;
   serType: string | null;
   serWorkType: string | null;
   serIsPrivate: boolean | null;
@@ -42,11 +40,10 @@ function rowToSerItem(row: {
   serIsDel: boolean | null;
 }): SerItem {
   return {
-    ser_key: row.serKey,
-    ser_dep1: row.serDep1,
-    ser_dep2: row.serDep2,
+    ser_menu: row.serMenu,
+    ser_cat: row.serCat,
     ser_kor: row.serKor,
-    ser_eng: row.serEng,
+    ser_eng: row.serEng ?? null,
     ser_type: row.serType,
     ser_work_type: row.serWorkType,
     ser_is_private: row.serIsPrivate,
@@ -68,7 +65,7 @@ export async function getCustomSerList(_params?: unknown) {
     const rows = await db
       .select()
       .from(ser)
-      .orderBy(asc(ser.serIdx), asc(ser.serKey));
+      .orderBy(asc(ser.serIdx), asc(ser.serEng));
     const data = rows.map(rowToSerItem);
     return { success: true, data };
   } catch (error: unknown) {
@@ -98,8 +95,8 @@ function boolOrNull(v: unknown): boolean | null {
  * 커스텀 기능 추가 (ser 테이블 insert)
  */
 export async function createSer(params: {
-  ser_dep1?: string | null;
-  ser_dep2?: string | null;
+  ser_menu?: string | null;
+  ser_cat?: string | null;
   ser_kor?: string | null;
   ser_eng?: string | null;
   ser_type?: string | null;
@@ -113,14 +110,18 @@ export async function createSer(params: {
   ser_url?: string | null;
   ser_is_del?: boolean | null;
 }) {
+  const eng = strOrNull(params.ser_eng);
+  if (!eng || !eng.trim()) {
+    return { success: false, error: 'ser_eng is required (PK)' };
+  }
   try {
     const [inserted] = await db
       .insert(ser)
       .values({
-        serDep1: strOrNull(params.ser_dep1),
-        serDep2: strOrNull(params.ser_dep2),
+        serEng: eng,
+        serMenu: strOrNull(params.ser_menu),
+        serCat: strOrNull(params.ser_cat),
         serKor: strOrNull(params.ser_kor),
-        serEng: strOrNull(params.ser_eng),
         serType: strOrNull(params.ser_type),
         serWorkType: strOrNull(params.ser_work_type),
         serIsPrivate: boolOrNull(params.ser_is_private),
@@ -142,12 +143,12 @@ export async function createSer(params: {
 }
 
 /**
- * 커스텀 기능 수정 (ser 테이블 update, ser_key는 PK)
+ * 커스텀 기능 수정 (ser 테이블 update, ser_eng가 PK)
  */
 export async function updateSer(params: {
-  ser_key: number;
-  ser_dep1?: string | null;
-  ser_dep2?: string | null;
+  ser_eng: string;
+  ser_menu?: string | null;
+  ser_cat?: string | null;
   ser_kor?: string | null;
   ser_eng?: string | null;
   ser_type?: string | null;
@@ -161,18 +162,18 @@ export async function updateSer(params: {
   ser_url?: string | null;
   ser_is_del?: boolean | null;
 }) {
-  const id = params.ser_key;
-  if (typeof id !== 'number' || Number.isNaN(id)) {
-    return { success: false, error: 'Invalid ser_key' };
+  const id = params.ser_eng;
+  if (typeof id !== 'string' || !id.trim()) {
+    return { success: false, error: 'Invalid ser_eng' };
   }
   try {
     const [updated] = await db
       .update(ser)
       .set({
-        ...(params.ser_dep1 !== undefined && { serDep1: strOrNull(params.ser_dep1) }),
-        ...(params.ser_dep2 !== undefined && { serDep2: strOrNull(params.ser_dep2) }),
+        ...(params.ser_menu !== undefined && { serMenu: strOrNull(params.ser_menu) }),
+        ...(params.ser_cat !== undefined && { serCat: strOrNull(params.ser_cat) }),
         ...(params.ser_kor !== undefined && { serKor: strOrNull(params.ser_kor) }),
-        ...(params.ser_eng !== undefined && { serEng: strOrNull(params.ser_eng) }),
+        ...(params.ser_eng !== undefined && params.ser_eng !== id && { serEng: strOrNull(params.ser_eng) ?? id }),
         ...(params.ser_type !== undefined && { serType: strOrNull(params.ser_type) }),
         ...(params.ser_work_type !== undefined && { serWorkType: strOrNull(params.ser_work_type) }),
         ...(params.ser_is_private !== undefined && { serIsPrivate: boolOrNull(params.ser_is_private) }),
@@ -184,7 +185,7 @@ export async function updateSer(params: {
         ...(params.ser_url !== undefined && { serUrl: strOrNull(params.ser_url) }),
         ...(params.ser_is_del !== undefined && { serIsDel: boolOrNull(params.ser_is_del) }),
       })
-      .where(eq(ser.serKey, id))
+      .where(eq(ser.serEng, id))
       .returning();
     if (!updated) return { success: false, error: 'Not found' };
     return { success: true, data: rowToSerItem(updated) };
@@ -197,13 +198,13 @@ export async function updateSer(params: {
 /**
  * 커스텀 기능 삭제 (ser 테이블 delete)
  */
-export async function deleteSer(params: { ser_key: number }) {
-  const id = params.ser_key;
-  if (typeof id !== 'number' || Number.isNaN(id)) {
-    return { success: false, error: 'Invalid ser_key' };
+export async function deleteSer(params: { ser_eng: string }) {
+  const id = params.ser_eng;
+  if (typeof id !== 'string' || !id.trim()) {
+    return { success: false, error: 'Invalid ser_eng' };
   }
   try {
-    const result = await db.delete(ser).where(eq(ser.serKey, id)).returning({ serKey: ser.serKey });
+    const result = await db.delete(ser).where(eq(ser.serEng, id)).returning({ serEng: ser.serEng });
     if (result.length === 0) return { success: false, error: 'Not found' };
     return { success: true };
   } catch (error: unknown) {

@@ -8,6 +8,7 @@ import LandInfo from './_mapComponents/LandInfo';
 import MapControls from './_mapComponents/MapControls';
 import { MapSidebar } from './_mapComponents/map-sidebar';
 import { MapSearchBar } from './_mapComponents/map-search-bar';
+import { MapContextProvider } from './_mapComponents/MapContext';
 
 export default function MapLayout({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
@@ -16,6 +17,7 @@ export default function MapLayout({ children }: { children: React.ReactNode }) {
   const openedWindows = searchParams.get('opened')?.split(',').filter(Boolean) || [];
 
   return (
+    <MapContextProvider>
     <div className="relative w-full h-screen overflow-hidden bg-slate-100 pl-[65px]">
       {/* 좌측 사이드바 */}
       <MapSidebar />
@@ -52,5 +54,6 @@ export default function MapLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </div>
+    </MapContextProvider>
   );
 }

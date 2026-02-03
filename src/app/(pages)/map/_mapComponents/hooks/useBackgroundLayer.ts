@@ -31,25 +31,13 @@ export function useBackgroundLayer(
 
     if (newLayer) {
       newLayer.set('name', 'background');
-      map.addLayer(newLayer);
+      map.getLayers().insertAt(0, newLayer);
 
       // 좌표계 변경 (카카오맵인 경우 EPSG:5181, 그 외는 EPSG:3857)
       if (provider === 'kakao') {
         updateViewProjection(map, 'EPSG:5181');
       } else {
         updateViewProjection(map, 'EPSG:3857');
-      }
-
-      // 레이어 순서 재정렬: 배경 레이어를 맨 아래로
-      const allLayers = map.getLayers().getArray();
-      const bgIndex = allLayers.indexOf(newLayer);
-      if (bgIndex > 0) {
-        allLayers.forEach((layer, index) => {
-          if (layer !== newLayer && index < bgIndex) {
-            map.removeLayer(layer);
-            map.addLayer(layer);
-          }
-        });
       }
     }
 

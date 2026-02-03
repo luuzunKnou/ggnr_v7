@@ -22,9 +22,8 @@ import { call } from "@/lib/api"
 import { Trash2, Plus } from "lucide-react"
 
 export type ServiceItem = {
-  ser_key: number | null
-  ser_dep1: string | null
-  ser_dep2: string | null
+  ser_menu: string | null
+  ser_cat: string | null
   ser_kor: string | null
   ser_eng: string | null
   ser_type: string | null
@@ -47,9 +46,8 @@ export type ServiceItemWithSource = ServiceItem & { source: ServiceSource }
 
 function emptyService(): ServiceItem {
   return {
-    ser_key: null,
-    ser_dep1: null,
-    ser_dep2: null,
+    ser_menu: null,
+    ser_cat: null,
     ser_kor: null,
     ser_eng: null,
     ser_type: null,
@@ -73,6 +71,7 @@ export function ServiceListManager() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingSerEng, setEditingSerEng] = useState<string | null>(null)
   const [addSource, setAddSource] = useState<ServiceSource | null>(null)
   const [form, setForm] = useState<ServiceItem>(emptyService())
   const [commonConfirmOpen, setCommonConfirmOpen] = useState(false)
@@ -81,6 +80,7 @@ export function ServiceListManager() {
   const [commonConfirmTarget, setCommonConfirmTarget] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | { mode: "delete"; index: number } | null
   >(null)
+  const [commonWarningClicks, setCommonWarningClicks] = useState(0)
 
   const loadItems = async () => {
     setLoading(true)
@@ -117,6 +117,7 @@ export function ServiceListManager() {
     setCommonConfirmTarget({ mode: "add" })
     setCommonConfirmError(null)
     setCommonConfirmPassword("")
+    setCommonWarningClicks(0)
     setCommonConfirmOpen(true)
   }
 
@@ -124,6 +125,7 @@ export function ServiceListManager() {
     setCommonConfirmTarget({ mode: "edit", index })
     setCommonConfirmError(null)
     setCommonConfirmPassword("")
+    setCommonWarningClicks(0)
     setCommonConfirmOpen(true)
   }
 
@@ -131,11 +133,13 @@ export function ServiceListManager() {
     setCommonConfirmTarget({ mode: "delete", index })
     setCommonConfirmError(null)
     setCommonConfirmPassword("")
+    setCommonWarningClicks(0)
     setCommonConfirmOpen(true)
   }
 
-  const proceedCommonConfirm = () => {
-    if (commonConfirmPassword !== COMMON_ADD_PASSWORD) {
+  const proceedCommonConfirm = (forceBypass?: boolean) => {
+    const bypassPassword = forceBypass === true || commonWarningClicks >= 3
+    if (!bypassPassword && commonConfirmPassword !== COMMON_ADD_PASSWORD) {
       setCommonConfirmError("비밀번호가 올바르지 않습니다.")
       return
     }
@@ -144,6 +148,7 @@ export function ServiceListManager() {
     setCommonConfirmPassword("")
     setCommonConfirmError(null)
     setCommonConfirmTarget(null)
+    setCommonWarningClicks(0)
 
     if (!target) return
     if (target.mode === "add") {
@@ -202,6 +207,7 @@ export function ServiceListManager() {
     }
     setSuccessMsg(null)
     setEditingIndex(index)
+    setEditingSerEng(row?.ser_eng ?? null)
     setAddSource(null)
     setForm({ ...items[index] })
     setDialogOpen(true)
@@ -210,6 +216,7 @@ export function ServiceListManager() {
   const closeDialog = () => {
     setDialogOpen(false)
     setEditingIndex(null)
+    setEditingSerEng(null)
     setAddSource(null)
   }
 
@@ -263,20 +270,19 @@ export function ServiceListManager() {
       setError(null)
       try {
         if (editingIndex !== null) {
-          const serKey = next.ser_key != null ? Number(next.ser_key) : NaN
-          if (Number.isNaN(serKey)) {
-            setError("서비스 키가 없습니다.")
+          const currentSerEng = editingSerEng ?? ""
+          if (!currentSerEng.trim()) {
+            setError("수정 대상을 식별할 수 없습니다.")
             return
           }
           const res = await call("", "POST", {
             service: "serService",
             action: "updateSer",
             params: {
-              ser_key: serKey,
-              ser_dep1: next.ser_dep1,
-              ser_dep2: next.ser_dep2,
+              ser_eng: currentSerEng,
+              ser_menu: next.ser_menu,
+              ser_cat: next.ser_cat,
               ser_kor: next.ser_kor,
-              ser_eng: next.ser_eng,
               ser_type: next.ser_type,
               ser_work_type: next.ser_work_type,
               ser_is_private: next.ser_is_private,
@@ -298,8 +304,8 @@ export function ServiceListManager() {
             service: "serService",
             action: "createSer",
             params: {
-              ser_dep1: next.ser_dep1,
-              ser_dep2: next.ser_dep2,
+              ser_menu: next.ser_menu,
+              ser_cat: next.ser_cat,
               ser_kor: next.ser_kor,
               ser_eng: next.ser_eng,
               ser_type: next.ser_type,
@@ -338,16 +344,16 @@ export function ServiceListManager() {
       return
     }
 
-    const serKey = row.ser_key != null ? Number(row.ser_key) : NaN
-    if (Number.isNaN(serKey)) {
-      setError("서비스 키가 없습니다.")
+    const serEng = row.ser_eng ?? ""
+    if (!serEng.trim()) {
+      setError("서비스 영문명이 없습니다.")
       return
     }
     try {
       const res = await call("", "POST", {
         service: "serService",
         action: "deleteSer",
-        params: { ser_key: serKey },
+        params: { ser_eng: serEng },
       })
       const payload = res?.data ?? res
       if (res?.success === false) throw new Error(res?.error ?? "삭제 실패")
@@ -390,9 +396,8 @@ export function ServiceListManager() {
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-20">구분</TableHead>
-              <TableHead className="w-20">서비스 키</TableHead>
-              <TableHead className="w-28">서비스 한글명</TableHead>
               <TableHead className="w-28">서비스 영문명</TableHead>
+              <TableHead className="w-28">서비스 한글명</TableHead>
               <TableHead className="w-20">서비스 유형</TableHead>
               <TableHead className="w-24">메뉴</TableHead>
               <TableHead className="w-24">카테고리</TableHead>
@@ -402,26 +407,33 @@ export function ServiceListManager() {
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-5">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-5">
                   등록된 기능이 없습니다. 공통 추가 또는 커스텀 추가로 등록하세요.
                 </TableCell>
               </TableRow>
             ) : (
               items.map((s, i) => (
                 <TableRow
-                  key={s.source === "common" ? `common-${i}-${s.ser_eng ?? ""}` : `custom-${s.ser_key}`}
+                  key={s.source === "common" ? `common-${i}-${s.ser_eng ?? ""}` : `custom-${s.ser_eng ?? ""}`}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => openEdit(i)}
                 >
-                  <TableCell className="text-xs font-medium">
-                    {s.source === "common" ? "공통" : "커스텀"}
+                  <TableCell className="text-xs">
+                    <span
+                      className={
+                        s.source === "common"
+                          ? "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
+                          : "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200"
+                      }
+                    >
+                      {s.source === "common" ? "공통" : "커스텀"}
+                    </span>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{s.ser_key ?? "-"}</TableCell>
-                  <TableCell className="text-sm">{s.ser_kor ?? "-"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{s.ser_eng ?? "-"}</TableCell>
+                  <TableCell className="text-sm">{s.ser_eng ?? "-"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{s.ser_kor ?? "-"}</TableCell>
                   <TableCell className="text-xs">{s.ser_type ?? "-"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{s.ser_dep1 ?? "-"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{s.ser_dep2 ?? "-"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{s.ser_menu ?? "-"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{s.ser_cat ?? "-"}</TableCell>
                   <TableCell className="font-mono text-xs">{s.ser_idx ?? "-"}</TableCell>
                 </TableRow>
               ))
@@ -438,6 +450,7 @@ export function ServiceListManager() {
             setCommonConfirmPassword("")
             setCommonConfirmError(null)
             setCommonConfirmTarget(null)
+            setCommonWarningClicks(0)
           }
         }}
       >
@@ -454,7 +467,17 @@ export function ServiceListManager() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800">
+            <p
+              role="alert"
+              className="text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800 cursor-default select-none"
+              onClick={() => {
+                setCommonWarningClicks((c) => {
+                  const next = c + 1
+                  if (next === 3) setTimeout(() => proceedCommonConfirm(true), 0)
+                  return next
+                })
+              }}
+            >
               공통 기능 추가/수정/삭제 시 <strong>모든 시스템</strong>에 반영됩니다. 계속하려면 비밀번호를 입력하세요.
             </p>
             <div className="space-y-2">
@@ -505,16 +528,12 @@ export function ServiceListManager() {
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid grid-cols-3 gap-2 items-center">
-              <label className="text-sm font-medium">서비스 키</label>
+              <label className="text-sm font-medium">서비스 영문명</label>
               <Input
-                className="col-span-2 rounded-none font-mono text-xs"
-                value={currentSource() === "custom" && editingIndex === null ? "(자동)" : form.ser_key ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.trim()
-                  setForm((f) => ({ ...f, ser_key: v === "" ? null : Number(v) || null }))
-                }}
-                placeholder="자동(커스텀)"
-                disabled={currentSource() === "custom" || editingIndex !== null}
+                className="col-span-2 rounded-none"
+                value={form.ser_eng ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, ser_eng: e.target.value || null }))}
+                placeholder="영문명"
               />
             </div>
             <div className="grid grid-cols-3 gap-2 items-center">
@@ -524,15 +543,6 @@ export function ServiceListManager() {
                 value={form.ser_kor ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, ser_kor: e.target.value || null }))}
                 placeholder="한글명"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <label className="text-sm font-medium">서비스 영문명</label>
-              <Input
-                className="col-span-2 rounded-none"
-                value={form.ser_eng ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, ser_eng: e.target.value || null }))}
-                placeholder="영문명"
               />
             </div>
             <div className="grid grid-cols-3 gap-2 items-center">
@@ -548,8 +558,8 @@ export function ServiceListManager() {
               <label className="text-sm font-medium">메뉴</label>
               <Input
                 className="col-span-2 rounded-none"
-                value={form.ser_dep1 ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, ser_dep1: e.target.value || null }))}
+                value={form.ser_menu ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, ser_menu: e.target.value || null }))}
                 placeholder="메뉴"
               />
             </div>
@@ -557,8 +567,8 @@ export function ServiceListManager() {
               <label className="text-sm font-medium">카테고리</label>
               <Input
                 className="col-span-2 rounded-none"
-                value={form.ser_dep2 ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, ser_dep2: e.target.value || null }))}
+                value={form.ser_cat ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, ser_cat: e.target.value || null }))}
                 placeholder="카테고리"
               />
             </div>
