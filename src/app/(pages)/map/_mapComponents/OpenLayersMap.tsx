@@ -13,6 +13,7 @@ import { useBackgroundLayer } from './hooks/useBackgroundLayer';
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { MapView } from './MapView';
+import { call } from '@/lib/api';
 
 // 다중 선택 가능한 아이템 ID 목록
 const MULTI_SELECT_IDS = [
@@ -87,6 +88,16 @@ export default function OpenLayersMap() {
     });
   }, [activeControls, mapReady]);
 
+  // 거리뷰 버튼 → serviceLayerView 레이어 on/off
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const visible = activeControls.includes('street-view');
+    map.getLayers().getArray().forEach((l) => {
+      if (l.get('serviceLayerViewLayer')) l.setVisible(visible);
+    });
+  }, [activeControls, mapReady]);
+
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
 
@@ -108,10 +119,32 @@ export default function OpenLayersMap() {
       return;
     }
 
-    // 액션 전용 버튼은 상태 변경 없이 액션만 실행
+    // 인쇄 버튼: serviceLayerView 뷰 생성 (layerFilter로 wtl만 포함해 뷰 크기/성능 개선)
+    if (id === 'print') {
+      call('', 'POST', {
+        service: 'layerViewService',
+        action: 'createServiceLayerView',
+        params: { execute: true, layerFilter: 'wtl' },
+      })
+        .then((res: { success?: boolean; data?: { executed?: boolean; layerCount?: number; error?: string } }) => {
+          const data = res?.data;
+          if (res?.success && data?.executed) {
+            alert(`serviceLayerView 뷰 생성 완료 (${data.layerCount ?? 0}개 레이어)`);
+          } else if (data?.error) {
+            alert(`뷰 생성 실패: ${data.error}`);
+          } else {
+            alert('뷰 생성 요청이 완료되었습니다.');
+          }
+        })
+        .catch((err: { error?: string; message?: string }) => {
+          alert(`오류: ${err?.error ?? err?.message ?? '알 수 없음'}`);
+        });
+      return;
+    }
+
+    // 그 외 액션 전용 버튼
     if (ACTION_ONLY_IDS.includes(id)) {
       console.log(`[v0] Action triggered: ${id}`);
-      // 여기에 인쇄 등 실제 액션 로직 추가
       return;
     }
 

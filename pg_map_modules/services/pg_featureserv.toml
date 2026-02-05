@@ -4,7 +4,7 @@
 # .env.local의 DB 정보는 실행 스크립트에서 DATABASE_URL로 변환되어 사용됩니다.
 [Database]
 # 아래 값들은 DATABASE_URL 환경 변수가 없을 때만 사용됩니다.
-Host = "localhost"
+Host = "192.168.120.82"
 Port = 5433
 Database = "postgres"
 User = "postgres"
@@ -15,7 +15,7 @@ Password = "postgres"
 HttpHost = "0.0.0.0"
 HttpPort = 9000
 UrlScheme = "http"
-UrlHost = "localhost:9000"
+UrlHost = "192.168.120.82:9000"
 CorsAllowedOrigins = ["*"]
 
 # 로깅

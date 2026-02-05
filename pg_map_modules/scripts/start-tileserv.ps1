@@ -11,7 +11,7 @@ $configFile = Join-Path $servicesDir "pg_tileserv.toml"
 
 # .env.local에서 DB 정보 읽기 및 DATABASE_URL 생성
 $envFile = Join-Path $projectRoot ".env.local"
-$dbHost = "localhost"
+$dbHost = "192.168.120.82"
 $dbPort = "5432"
 $dbName = "postgres"
 $dbUser = "postgres"
@@ -52,7 +52,7 @@ if (-not (Test-Path $tileservExe)) {
 }
 
 Write-Host "pg_tileserv를 시작합니다..." -ForegroundColor Green
-Write-Host "서비스 URL: http://localhost:7800" -ForegroundColor Cyan
+Write-Host "서비스 URL: http://192.168.120.82:7800" -ForegroundColor Cyan
 
 if (Test-Path $configFile) {
     & $tileservExe --config $configFile

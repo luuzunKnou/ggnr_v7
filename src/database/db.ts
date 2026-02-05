@@ -13,7 +13,7 @@ const getDatabaseConfig = () => {
 
   // 개별 환경 변수 사용
   return {
-    host: process.env.DATABASE_HOST || 'localhost',
+    host: process.env.DATABASE_HOST || '192.168.120.82',
     port: parseInt(process.env.DATABASE_PORT || '5432', 10),
     database: process.env.DATABASE_NAME,
     user: process.env.DATABASE_USER,
@@ -21,8 +21,8 @@ const getDatabaseConfig = () => {
   };
 };
 
-// PostgreSQL 연결 풀 생성
-const pool = new Pool(getDatabaseConfig());
+// PostgreSQL 연결 풀 생성 (raw SQL 실행용 export)
+export const pool = new Pool(getDatabaseConfig());
 
 // 연결 풀 이벤트 핸들러
 pool.on('error', (err) => {

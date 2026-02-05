@@ -28,7 +28,7 @@ export function getDefaultDbConfig(_params?: unknown): {
         const password = m[2] ? decodeURIComponent(m[2]) : '';
         return {
           username: decodeURIComponent(m[1] ?? ''),
-          host: m[3] ?? 'localhost',
+          host: m[3] ?? '192.168.120.82',
           port: m[4] || '5432',
           database: (m[5] ?? '').replace(/\/$/, ''),
           password,
@@ -39,7 +39,7 @@ export function getDefaultDbConfig(_params?: unknown): {
     }
   }
   return {
-    host: process.env.DATABASE_HOST || 'localhost',
+    host: process.env.DATABASE_HOST || '192.168.120.82',
     port: process.env.DATABASE_PORT || '5432',
     database: process.env.DATABASE_NAME || '',
     username: process.env.DATABASE_USER || '',

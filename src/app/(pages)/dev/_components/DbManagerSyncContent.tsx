@@ -688,7 +688,7 @@ export function DbManagerSyncContent({ onBack }: { onBack?: () => void }) {
                 label="Host"
                 value={conn.host}
                 onChange={(v) => setConn((c) => ({ ...c, host: v }))}
-                placeholder="localhost"
+                placeholder="192.168.120.82"
                 disabled={isConnected}
               />
               <Field

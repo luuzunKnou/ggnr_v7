@@ -4,7 +4,7 @@
 # .env.local의 DB 정보는 실행 스크립트에서 DATABASE_URL로 변환되어 사용됩니다.
 [Database]
 # 아래 값들은 DATABASE_URL 환경 변수가 없을 때만 사용됩니다.
-Host = "localhost"
+Host = "192.168.120.82"
 Port = 5433
 Database = "postgres"
 User = "postgres"
@@ -15,13 +15,17 @@ Password = "postgres"
 HttpHost = "0.0.0.0"
 HttpPort = 7800
 UrlScheme = "http"
-UrlHost = "localhost:7800"
+UrlHost = "192.168.120.82:7800"
 CorsAllowedOrigins = ["*"]
 
 # 타일 설정
+# DefaultResolution: 벡터 타일 좌표 양자화 해상도(한 변당 단위). 4096이면 4096x4096 그리드.
+# DefaultBuffer: 타일 경계 밖 패딩(단위). 선/심볼이 경계에서 잘리지 않도록 함. 64=작은 타일, 256=공식 예시 기본값.
+# MaxFeaturesPerTile: 타일당 최대 피처 수. 미설정 시 기본 50000. -1이면 제한 없음. 클라이언트에서 ?limit= 로 요청 시 오버라이드 가능.
 [Tiles]
 DefaultResolution = 4096
 DefaultBuffer = 64
+# MaxFeaturesPerTile = 50000
 MinZoom = 0
 MaxZoom = 22
 

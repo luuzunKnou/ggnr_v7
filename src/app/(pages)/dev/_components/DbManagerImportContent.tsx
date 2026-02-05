@@ -134,7 +134,7 @@ function SrcEndpointCard({
             label="Host"
             value={endpoint.host}
             onChange={(host) => onChange({ ...endpoint, host })}
-            placeholder="예: localhost 또는 10.0.0.10"
+            placeholder="예: 192.168.120.82 또는 10.0.0.10"
             disabled={isConnected}
           />
           <Field
@@ -550,7 +550,7 @@ function DestEndpointCard({
             label="Host"
             value={endpoint.host}
             onChange={(host) => onChange({ ...endpoint, host })}
-            placeholder="예: localhost 또는 10.0.0.10"
+            placeholder="예: 192.168.120.82 또는 10.0.0.10"
             disabled={isConnected}
           />
           <Field

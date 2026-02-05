@@ -12,7 +12,7 @@ const FILL_COLOR = 'rgba(100, 116, 139, 0.15)';
 const POINT_RADIUS = 4;
 const LINE_WIDTH = 1.5;
 
-const TILESERV_BASE = 'http://localhost:7800';
+const TILESERV_BASE = 'http://192.168.120.82:7800';
 const TILESERV_SCHEMA = 'layer';
 
 type SerConfigItem = {
@@ -83,7 +83,7 @@ function createGeometryStyle(): StyleLike {
 
 /**
  * serviceList.config에서 type이 layer인 항목 중
- * http://localhost:7800/index.json 에 존재하는 레이어만 VectorTileLayer로 생성
+ * http://192.168.120.82:7800/index.json 에 존재하는 레이어만 VectorTileLayer로 생성
  */
 export async function createServiceLayers(): Promise<VectorTileLayer<VectorTileSource>[]> {
   const [serviceListRes, indexRes] = await Promise.all([

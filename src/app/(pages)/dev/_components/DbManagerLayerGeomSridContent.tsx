@@ -152,7 +152,7 @@ export function DbManagerLayerGeomSridContent({ onBack }: { onBack?: () => void 
               <Input
                 value={conn.host}
                 onChange={(e) => setConn((c) => ({ ...c, host: e.target.value }))}
-                placeholder="localhost"
+                placeholder="192.168.120.82"
                 className="rounded-none"
               />
             </div>
