@@ -150,7 +150,7 @@ export async function updateSer(params: {
   ser_menu?: string | null;
   ser_cat?: string | null;
   ser_kor?: string | null;
-  ser_eng?: string | null;
+  ser_eng_new?: string | null;
   ser_type?: string | null;
   ser_work_type?: string | null;
   ser_is_private?: boolean | null;
@@ -173,7 +173,7 @@ export async function updateSer(params: {
         ...(params.ser_menu !== undefined && { serMenu: strOrNull(params.ser_menu) }),
         ...(params.ser_cat !== undefined && { serCat: strOrNull(params.ser_cat) }),
         ...(params.ser_kor !== undefined && { serKor: strOrNull(params.ser_kor) }),
-        ...(params.ser_eng !== undefined && params.ser_eng !== id && { serEng: strOrNull(params.ser_eng) ?? id }),
+        ...(params.ser_eng_new !== undefined && params.ser_eng_new !== id && { serEng: strOrNull(params.ser_eng_new) ?? id }),
         ...(params.ser_type !== undefined && { serType: strOrNull(params.ser_type) }),
         ...(params.ser_work_type !== undefined && { serWorkType: strOrNull(params.ser_work_type) }),
         ...(params.ser_is_private !== undefined && { serIsPrivate: boolOrNull(params.ser_is_private) }),

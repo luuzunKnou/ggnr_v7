@@ -1,12 +1,13 @@
 'use client';
 
 import React, { createContext, useContext, useRef, type RefObject } from 'react';
-import type Map from 'ol/Map';
+import type maplibregl from 'maplibre-gl';
 
-const MapContext = createContext<RefObject<Map | null> | null>(null);
+/** MapLibre Map 인스턴스를 담을 ref */
+const MapContext = createContext<RefObject<maplibregl.Map | null> | null>(null);
 
 export function MapContextProvider({ children }: { children: React.ReactNode }) {
-  const mapInstanceRef = useRef<Map | null>(null);
+  const mapInstanceRef = useRef<maplibregl.Map | null>(null);
   return (
     <MapContext.Provider value={mapInstanceRef}>
       {children}
@@ -14,6 +15,6 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   );
 }
 
-export function useMapContext(): RefObject<Map | null> | null {
+export function useMapContext(): RefObject<maplibregl.Map | null> | null {
   return useContext(MapContext);
 }

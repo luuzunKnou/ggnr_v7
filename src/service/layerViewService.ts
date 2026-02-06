@@ -25,6 +25,18 @@ async function fetchTableIds(): Promise<string[]> {
     .map(([id]) => id);
 }
 
+/** 뷰 생성 시 제외할 테이블명 접두사 */
+const EXCLUDED_TABLE_PREFIXES = [
+  'bml', 'cit', 'lsmd', 'ufl',
+  'ub', 'ud', 'ue', 'uf',
+  'uh', 'ui', 'uj', 'um', 'un', 'uo', 'up', 'uq',
+];
+
+function isExcludedTable(layerId: string): boolean {
+  const tableName = layerId.includes('.') ? layerId.slice(layerId.indexOf('.') + 1) : layerId;
+  return EXCLUDED_TABLE_PREFIXES.some((prefix) => tableName.startsWith(prefix));
+}
+
 /**
  * layer_id(schema.name)를 PostgreSQL 식별자로 이스케이프
  * 예: layer.bike -> "layer"."bike", public_layer.bjd -> "public_layer"."bjd"
@@ -37,14 +49,17 @@ function quoteTableRef(layerId: string): string {
   return `"${schema}"."${table}"`;
 }
 
+/** ST_Simplify 허용 오차 (줌에 따라 선 단순화 → 데이터 크기 감소) */
+const SIMPLIFY_TOLERANCE = 0.0001;
+
 /**
  * serviceLayerView 뷰 생성 SQL 생성
- * - 컬럼: layer_name(text), geom(geometry) 만 사용 (속성 제외로 성능 개선)
+ * - layer_name, geom (ST_Simplify 적용)
  */
 function buildCreateViewSql(layerIds: string[]): string {
   const selects = layerIds.map((layerId) => {
     const ref = quoteTableRef(layerId);
-    return `  SELECT '${layerId.replace(/'/g, "''")}'::text AS layer_name, t.geom FROM ${ref} t`;
+    return `  SELECT '${layerId.replace(/'/g, "''")}'::text AS layer_name, ST_Simplify(t.geom, ${SIMPLIFY_TOLERANCE})::geometry(Geometry, 5181) AS geom FROM ${ref} t`;
   });
   const unionAll = selects.join('\n  UNION ALL\n');
   return `
@@ -85,18 +100,15 @@ export async function createServiceLayerView(
   let layerIds: string[];
 
   if (Array.isArray(paramLayerIds) && paramLayerIds.length > 0) {
-    // 지정된 레이어 ID만 사용 (index에 존재하는지 확인)
     const allIds = await fetchTableIds();
     const indexSet = new Set(allIds);
-    layerIds = paramLayerIds.filter((id) => indexSet.has(id));
+    layerIds = paramLayerIds.filter((id) => indexSet.has(id) && !isExcludedTable(id));
   } else {
     layerIds = await fetchTableIds();
-    // serviceLayerView(및 serviceLayerView_* 등) 뷰는 제외 → 재귀/중복 방지
     layerIds = layerIds.filter((id) => {
       const tableName = id.includes('.') ? id.slice(id.indexOf('.') + 1) : id;
-      return !tableName.startsWith('serviceLayerView');
+      return !tableName.startsWith('serviceLayerView') && !isExcludedTable(id);
     });
-    // layerFilter가 있으면 해당 문자열이 포함된 ID만
     if (layerFilter && layerFilter.trim() !== '') {
       const filter = layerFilter.trim();
       layerIds = layerIds.filter((id) => id.includes(filter));

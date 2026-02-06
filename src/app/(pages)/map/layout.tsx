@@ -1,7 +1,7 @@
 // src/app/(pages)/map/layout.tsx
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import StandardList from './_mapComponents/StandardList';
 import LandInfo from './_mapComponents/LandInfo';
@@ -9,15 +9,13 @@ import MapControls from './_mapComponents/MapControls';
 import { MapSidebar } from './_mapComponents/map-sidebar';
 import { MapSearchBar } from './_mapComponents/map-search-bar';
 import { MapContextProvider } from './_mapComponents/MapContext';
+import { LayerCategoryProvider } from './_mapComponents/LayerCategoryContext';
 
-export default function MapLayout({ children }: { children: React.ReactNode }) {
+function MapLayoutContent({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
-  
-  // URL에서 ?opened=river,land 형태로 된 값을 배열로 바꿉니다.
   const openedWindows = searchParams.get('opened')?.split(',').filter(Boolean) || [];
 
   return (
-    <MapContextProvider>
     <div className="relative w-full h-screen overflow-hidden bg-slate-100 pl-[65px]">
       {/* 좌측 사이드바 */}
       <MapSidebar />
@@ -54,6 +52,19 @@ export default function MapLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MapLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <MapContextProvider>
+      <LayerCategoryProvider>
+      <Suspense fallback={
+        <div className="relative w-full h-screen overflow-hidden bg-slate-100 pl-[65px]" />
+      }>
+        <MapLayoutContent>{children}</MapLayoutContent>
+      </Suspense>
+      </LayerCategoryProvider>
     </MapContextProvider>
   );
 }

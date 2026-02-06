@@ -256,7 +256,10 @@ export default function DashboardPage() {
           <div className="lg:col-span-2 grid md:grid-cols-2 gap-6">
             <ParcelSlider slides={parcelSlides} />
             
-            <div className="relative overflow-hidden bg-blue-600 p-8 text-white min-h-[280px] flex flex-col items-center justify-center text-center">
+            <Link
+              href="/map"
+              className="relative overflow-hidden bg-blue-600 p-8 text-white min-h-[280px] flex flex-col items-center justify-center text-center block hover:bg-blue-700 transition-colors cursor-pointer"
+            >
               <div className="w-24 h-24 mb-4">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-full h-full">
                   <rect x="3" y="3" width="18" height="18" rx="0" transform="rotate(45 12 12)" />
@@ -268,7 +271,7 @@ export default function DashboardPage() {
                 사용자가 원하는 위치를 직관적으로 확인<br />
                 하고 데이터를 시각화합니다.
               </p>
-            </div>
+            </Link>
           </div>
 
           {/* Right: 공지사항 & 자료실 */}

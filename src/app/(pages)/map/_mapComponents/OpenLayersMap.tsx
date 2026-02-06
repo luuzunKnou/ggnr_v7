@@ -1,21 +1,24 @@
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
-import 'ol/ol.css';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import 'maplibre-gl-draw/dist/mapbox-gl-draw.css';
+import { MapboxOverlay } from '@deck.gl/mapbox';
 import {
   MapControlPanel,
   defaultMapControlGroups,
 } from './_mapControlPanel/mapControlPanel';
 import { BackgroundMapSelector } from './_mapControlPanel/backgroundMapSelector';
-import { useMapInstance } from './hooks/useMapInstance';
-import { useMapContext } from './MapContext';
-import { useBackgroundLayer } from './hooks/useBackgroundLayer';
-import { useMapInteractions } from './hooks/useMapInteractions';
-import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { MapView } from './MapView';
+import { useMapContext } from './MapContext';
+import { getBackgroundLayerSpecById } from './backgroundLayerFactory';
+import { createServiceLayerViewLayer } from './serviceLayerFactory';
+import { fetchIndexLayers } from './indexLayerFactory';
+import { useLayerCategory } from './LayerCategoryContext';
+import { useMeasure, formatDistance, formatArea } from './hooks/useMeasure';
 import { call } from '@/lib/api';
 
-// 다중 선택 가능한 아이템 ID 목록
 const MULTI_SELECT_IDS = [
   'cadastral',
   'building-road',
@@ -24,114 +27,190 @@ const MULTI_SELECT_IDS = [
   'ownership',
   'street-view',
 ];
-
-// 액션 전용 버튼 (토글 없이 클릭만)
 const ACTION_ONLY_IDS = ['print', 'reset-measurements'];
-
-// 측정 관련 버튼 ID 목록
 const MEASUREMENT_IDS = ['distance', 'area', 'altitude', 'slope'];
 
+const BACKGROUND_SOURCE_ID = 'background';
+const BACKGROUND_LAYER_ID = 'background';
+
+/** 안동 시청 근처 (경도, 위도) */
+const DEFAULT_CENTER: [number, number] = [128.7229, 36.5664];
+const DEFAULT_ZOOM = 10;
+
+/** MapLibre 지도 화면. 배경지도 선택에 따라 backgroundLayerFactory 스펙으로 배경 전환. */
 export default function OpenLayersMap() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const sharedMapRef = useMapContext();
-  const { mapInstanceRef, mapReady } = useMapInstance(mapRef, sharedMapRef);
+  const mapInstanceRef = useMapContext();
+  const deckOverlayRef = useRef<MapboxOverlay | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
-  const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
-  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
-  const [centerXY, setCenterXY] = useState<{ x: number; y: number } | null>(null);
-  const [projectionCode, setProjectionCode] = useState<string | null>(null);
-  const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
 
-  // 측정 타입 결정
-  const measureType: MeasureType | null = activeControls.includes('distance')
-    ? 'distance'
-    : activeControls.includes('area')
-    ? 'area'
-    : null;
+  const { activeCategories } = useLayerCategory() ?? { activeCategories: [] as string[] };
 
-  // 배경지도 관리
-  useBackgroundLayer(mapInstanceRef.current, selectedBackgroundMap);
+  const isDistanceActive = activeControls.includes('distance');
+  const isAreaActive = activeControls.includes('area');
+  const measureMode = isDistanceActive ? 'distance' : isAreaActive ? 'area' : null;
 
-  // 줌 레벨 + 좌표계 + x,y 표시 (맵 준비 후 구독, 뷰 변경 시마다 실시간 갱신)
+  const { distanceM, areaSqM, mousePosition: measureMousePosition, reset: resetMeasure } = useMeasure({
+    mapRef: mapInstanceRef,
+    mode: measureMode && mapReady ? measureMode : null,
+  });
+
+  const isMeasureActive = isDistanceActive || isAreaActive;
+
   useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-    const view = map.getView();
-    const proj = view.getProjection();
-    const update = () => {
-      const z = view.getZoom();
-      setZoomLevel(z !== undefined ? z : null);
-      const center = view.getCenter();
-      if (center) setCenterXY({ x: center[0], y: center[1] });
-      if (proj) setProjectionCode(proj.getCode());
+    if (!mapRef.current || !mapInstanceRef) return;
+    const map = new maplibregl.Map({
+      container: mapRef.current,
+      style: { version: 8, sources: {}, layers: [] },
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
+    });
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    mapInstanceRef.current = map;
+    map.once('load', () => {
+      map.resize();
+      setMapReady(true);
+    });
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+      setMapReady(false);
     };
-    update();
-    view.on('change', update);
-    return () => view.un('change', update);
-  }, [mapReady]);
+  }, [mapInstanceRef]);
 
-  // 배경지도 패널: exit 애니메이션 끝난 뒤 상태 정리 (duration 400ms)
-  useEffect(() => {
-    if (!isBackgroundPanelExiting) return;
-    const t = setTimeout(() => setIsBackgroundPanelExiting(false), 400);
-    return () => clearTimeout(t);
-  }, [isBackgroundPanelExiting]);
+  /** 배경지도 적용: id에 따라 factory에서 스펙 조회 후 소스/레이어 교체 */
+  const applyBackground = (map: maplibregl.Map, id: string) => {
+    const style = map.getStyle();
+    if (!style?.sources) return;
+    const hasLayer = style.layers?.some((l) => l.id === BACKGROUND_LAYER_ID);
+    const hasSource = style.sources[BACKGROUND_SOURCE_ID];
+    if (hasLayer) map.removeLayer(BACKGROUND_LAYER_ID);
+    if (hasSource) map.removeSource(BACKGROUND_SOURCE_ID);
 
-  // 지적도 버튼 → 지적도 관련 레이어(ri, emd, jijuk) 동시 on/off
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const visible = activeControls.includes('cadastral');
-    map.getLayers().getArray().forEach((l) => {
-      if (l.get('cadastralLayer')) l.setVisible(visible);
-    });
-  }, [activeControls, mapReady]);
-
-  // 거리뷰 버튼 → serviceLayerView 레이어 on/off
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const visible = activeControls.includes('street-view');
-    map.getLayers().getArray().forEach((l) => {
-      if (l.get('serviceLayerViewLayer')) l.setVisible(visible);
-    });
-  }, [activeControls, mapReady]);
-
-  // 인터랙션 관리 (draw, snap 등)
-  useMapInteractions(mapInstanceRef.current, activeInteractions);
-
-  // 측정 기능
-  const { clearMeasurements } = useMeasure(
-    mapInstanceRef.current,
-    measureType,
-    (result) => {
-      console.log('측정 완료:', result);
+    const spec = getBackgroundLayerSpecById(id);
+    if (spec) {
+      map.addSource(BACKGROUND_SOURCE_ID, {
+        type: 'raster',
+        tiles: spec.tiles,
+        tileSize: spec.tileSize,
+        attribution: spec.attribution,
+        minzoom: spec.minzoom,
+        maxzoom: spec.maxzoom,
+      });
+      map.addLayer({ id: BACKGROUND_LAYER_ID, type: 'raster', source: BACKGROUND_SOURCE_ID });
     }
-  );
+  };
+
+  useEffect(() => {
+    const map = mapInstanceRef?.current;
+    if (!map) return;
+    const onLoad = () => applyBackground(map, selectedBackgroundMap);
+    if (map.getStyle()?.sources) {
+      onLoad();
+    } else {
+      map.once('load', onLoad);
+    }
+    return () => {
+      map.off('load', onLoad);
+    };
+  }, [mapInstanceRef, selectedBackgroundMap]);
+
+  /** 컨테이너 크기 변경 시 지도 resize (반만 그려지는 현상 방지) */
+  useEffect(() => {
+    const map = mapInstanceRef?.current;
+    const el = mapRef.current;
+    if (!map || !el) return;
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mapInstanceRef, mapReady]);
+
+  /** 줌 레벨 구독 */
+  useEffect(() => {
+    const map = mapInstanceRef?.current;
+    if (!map || !mapReady) return;
+    const onZoom = () => setZoomLevel(map.getZoom());
+    setZoomLevel(map.getZoom());
+    map.on('zoom', onZoom);
+    return () => {
+      map.off('zoom', onZoom);
+    };
+  }, [mapInstanceRef, mapReady]);
+
+  /** deck.gl MapboxOverlay 추가 */
+  useEffect(() => {
+    const map = mapInstanceRef?.current;
+    if (!map || !mapReady) return;
+
+    const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
+    map.addControl(overlay as unknown as maplibregl.IControl);
+    deckOverlayRef.current = overlay;
+
+    return () => {
+      map.removeControl(overlay as unknown as maplibregl.IControl);
+      overlay.finalize?.();
+      deckOverlayRef.current = null;
+    };
+  }, [mapInstanceRef, mapReady]);
+
+  /** 단일 MVT(serviceLayerView) 레이어 + 거리뷰/카테고리별 필터 */
+  const isStreetViewOn = activeControls.includes('street-view');
+  useEffect(() => {
+    const overlay = deckOverlayRef.current;
+    if (!overlay) return;
+
+    let cancelled = false;
+    fetchIndexLayers()
+      .then((entries) => {
+        if (cancelled) return;
+        const allIds = entries
+          .map((e) => e.id)
+          .filter((id) => !id.includes('serviceLayerView'));
+        let activeLayerNames: string[];
+        if (isStreetViewOn) {
+          activeLayerNames = allIds;
+        } else {
+          activeLayerNames = [];
+          if (activeCategories.includes('상수관망도')) {
+            activeLayerNames.push(...allIds.filter((id) => id.includes('wtl')));
+          }
+          if (activeCategories.includes('하수관망도') || activeCategories.includes('하수')) {
+            activeLayerNames.push(...allIds.filter((id) => id.includes('swl')));
+          }
+        }
+        const layer = createServiceLayerViewLayer(activeLayerNames);
+        overlay.setProps({ layers: [layer] });
+      })
+      .catch(() => {
+        if (!cancelled) overlay.setProps({ layers: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, activeCategories, isStreetViewOn]);
 
   const handleControlClick = (id: string, isActive: boolean) => {
-    // 초기화 버튼: 측정 관련 버튼 모두 선택 해제 및 측정 결과 초기화
     if (id === 'reset-measurements') {
+      resetMeasure();
       setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
-      clearMeasurements();
-      console.log(`[v0] Reset measurements triggered`);
       return;
     }
 
-    // 인쇄 버튼: serviceLayerView 뷰 생성 (layerFilter로 wtl만 포함해 뷰 크기/성능 개선)
     if (id === 'print') {
       call('', 'POST', {
         service: 'layerViewService',
         action: 'createServiceLayerView',
-        params: { execute: true, layerFilter: 'wtl' },
+        params: { execute: true },
       })
         .then((res: { success?: boolean; data?: { executed?: boolean; layerCount?: number; error?: string } }) => {
           const data = res?.data;
           if (res?.success && data?.executed) {
             alert(`serviceLayerView 뷰 생성 완료 (${data.layerCount ?? 0}개 레이어)`);
           } else if (data?.error) {
-            alert(`뷰 생성 실패: ${data.error}`);
+            alert(`뷰 생성 실패: ${data?.error}`);
           } else {
             alert('뷰 생성 요청이 완료되었습니다.');
           }
@@ -142,27 +221,15 @@ export default function OpenLayersMap() {
       return;
     }
 
-    // 그 외 액션 전용 버튼
-    if (ACTION_ONLY_IDS.includes(id)) {
-      console.log(`[v0] Action triggered: ${id}`);
-      return;
-    }
+    if (ACTION_ONLY_IDS.includes(id)) return;
 
     if (MULTI_SELECT_IDS.includes(id)) {
-      // 다중 선택 가능한 항목: 토글
       setActiveControls((prev) =>
         isActive ? prev.filter((item) => item !== id) : [...prev, id]
       );
     } else if (id === 'background-map' && isActive) {
-      // 배경지도 패널 닫기: exit 애니메이션 먼저 시작한 뒤 activeControls에서 제거 (깜빡임 방지)
-      setIsBackgroundPanelExiting(true);
-      setActiveControls((prev) => {
-        const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
-        return withoutSingle;
-      });
+      setActiveControls((prev) => prev.filter((item) => MULTI_SELECT_IDS.includes(item)));
     } else {
-      // 단일 선택 항목: 배타적 토글
-      // 측정 도구는 서로 배타적 (거리/면적 동시 선택 불가)
       if (MEASUREMENT_IDS.includes(id)) {
         setActiveControls((prev) => {
           const withoutMeasurements = prev.filter((item) => !MEASUREMENT_IDS.includes(item));
@@ -181,22 +248,40 @@ export default function OpenLayersMap() {
     <div className="relative w-full h-full">
       <MapView ref={mapRef} />
 
-      {/* 오른쪽 맵 컨트롤 패널 */}
+      {/* 측정 중 마우스 따라다니는 안내 툴팁 */}
+      {isMeasureActive && measureMousePosition != null && (
+        <div
+          className="fixed z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200 px-2 py-1 pointer-events-none"
+          style={{
+            left: `${measureMousePosition.x + 15}px`,
+            top: `${measureMousePosition.y - 10}px`,
+            fontSize: '0.7rem',
+          }}
+        >
+          {isDistanceActive ? (
+            distanceM != null ? (
+              <div className="font-medium text-slate-700">
+                총 거리: <span className="text-blue-600 font-semibold">{formatDistance(distanceM)}</span>
+              </div>
+            ) : (
+              <div className="text-slate-600">클릭하여 선을 그리세요. 더블클릭으로 완료</div>
+            )
+          ) : areaSqM != null ? (
+            <div className="font-medium text-slate-700">
+              총 면적: <span className="text-blue-600 font-semibold">{formatArea(areaSqM)}</span>
+            </div>
+          ) : (
+            <div className="text-slate-600">클릭하여 영역을 그리세요. 더블클릭으로 완료</div>
+          )}
+        </div>
+      )}
+
       <div className="absolute right-4 top-20 z-10 flex items-start gap-3">
-        {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
-        {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
-          <div
-            className={
-              isBackgroundPanelExiting
-                ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
-            }
-          >
-            <BackgroundMapSelector
-              value={selectedBackgroundMap}
-              onValueChange={setSelectedBackgroundMap}
-            />
-          </div>
+        {activeControls.includes('background-map') && (
+          <BackgroundMapSelector
+            value={selectedBackgroundMap}
+            onValueChange={setSelectedBackgroundMap}
+          />
         )}
 
         <MapControlPanel
@@ -206,16 +291,9 @@ export default function OpenLayersMap() {
         />
       </div>
 
-      {/* 하단 중앙: 줌 레벨, 좌표계, x, y */}
-      {zoomLevel !== null && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-red-600 font-mono text-sm font-medium bg-white/90 px-2 py-1 rounded shadow flex items-center gap-4">
-          <span>zoomLevel: {Number(zoomLevel).toFixed(1)}</span>
-          {projectionCode && <span>{projectionCode}</span>}
-          {centerXY && (
-            <span>
-              x: {centerXY.x.toFixed(0)} y: {centerXY.y.toFixed(0)}
-            </span>
-          )}
+      {zoomLevel != null && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-slate-200 text-sm font-medium text-slate-700">
+          Zoom: {zoomLevel.toFixed(1)}
         </div>
       )}
     </div>

@@ -21,7 +21,7 @@ export interface BackgroundMapGroup {
 export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
   {
     id: 'custom-aerial',
-    title: '자체항공영상',
+    title: '국토정보지리원 영상',
     options: [
       { id: 'aerial-2017', label: '항공영상(2017)' },
       { id: 'aerial-2021', label: '항공영상(2021)' },
@@ -37,10 +37,10 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
     title: '일반영상',
     options: [
       { id: 'general-vworld', label: '일반지도(vworld)' },
-      { id: 'general-daum', label: '일반지도(다음)' },
       { id: 'general-google-building', label: '일반지도(구글건물)' },
       { id: 'general-google', label: '일반지도(구글)' },
       { id: 'general-osm', label: '일반지도(OSM)' },
+      { id: 'general-osm-hot', label: '일반지도(HOT)' },
     ],
   },
   {
@@ -48,8 +48,8 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
     title: '항공영상',
     options: [
       { id: 'aerial-vworld', label: '항공영상(vworld)' },
-      { id: 'aerial-daum', label: '항공영상(다음)' },
       { id: 'aerial-google', label: '항공영상(구글)' },
+      { id: 'aerial-osm', label: '항공영상(OSM)' },
     ],
   },
   {

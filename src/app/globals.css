@@ -123,3 +123,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 거리측정 Popup: MapLibre 기본 wrapper 스타일 초기화 */
+.measure-result-popup .maplibregl-popup-content {
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;  
+}
+
+.measure-result-popup .maplibregl-popup-tip {
+  display: none !important;
+}
