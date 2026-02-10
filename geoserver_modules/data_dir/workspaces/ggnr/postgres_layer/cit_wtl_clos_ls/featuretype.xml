@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27b3</id>
+  <name>cit_wtl_clos_ls</name>
+  <nativeName>cit_wtl_clos_ls</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl--5c4b2843:19c369379bc:-7fff</id>
+  </namespace>
+  <title>cit_wtl_clos_ls</title>
+  <keywords>
+    <string>cit_wtl_clos_ls</string>
+    <string>features</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>337701.33943406</minx>
+    <maxx>359760.33653148</maxx>
+    <miny>331277.56802221</miny>
+    <maxy>354350.44495459</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.53634787923326</minx>
+    <maxx>128.78714538595992</maxx>
+    <miny>36.46642191355761</miny>
+    <maxy>36.67768875103895</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl--45bf12f6:19c3705dedf:2734</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

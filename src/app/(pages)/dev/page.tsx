@@ -8,13 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
-import { DevTestContent } from "./_components/DevTestContent"
 import { DbManagerContent } from "./_components/DbManagerContent"
 import { SystemListManager } from "./_components/SystemListManager"
 import { ServiceListManager } from "./_components/ServiceListManager"
 import { LayerInfoManager } from "./_components/LayerInfoManager"
 import { LayerAttrManager } from "./_components/LayerAttrManager"
 import { LayerCodeManager } from "./_components/LayerCodeManager"
+import { GeoserverManagerContent } from "@/app/(pages)/dev/_components/GeoserverManagerContent"
 
 const DEV_AUTH_KEY = "dev_mode_auth"
 const DEV_PASSWORD = "admin00!!"
@@ -27,7 +27,7 @@ const DEV_SUBMENUS = [
   { id: "layerCode", label: "레이어 코드관리" },
   { id: "systemVar", label: "시스템 변수" },
   { id: "dbManager", label: "DB Manager" },
-  { id: "devTest", label: "devTest" },
+  { id: "geoserverManager", label: "Geoserver Manager" },
 ] as const
 
 type DevSubmenuId = (typeof DEV_SUBMENUS)[number]["id"]
@@ -192,11 +192,11 @@ export default function DevPage() {
                         ? "레이어 속성관리 설정 화면입니다."
                         : selectedMenu === "layerCode"
                           ? "레이어 코드관리 설정 화면입니다."
-                          : selectedMenu === "devTest"
-                          ? "데이터베이스 연결 테스트"
                           : selectedMenu === "dbManager"
                             ? "데이터 가져오기 / 백업 / 업데이트"
-                            : `${currentLabel} 설정 화면입니다. (구현 예정)`}
+                            : selectedMenu === "geoserverManager"
+                              ? "GeoServer 연결·레이어·스타일 상태 및 로그"
+                              : `${currentLabel} 설정 화면입니다. (구현 예정)`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -212,10 +212,14 @@ export default function DevPage() {
                 <div className="overflow-hidden max-h-[calc(100vh-10rem)] min-h-0">
                   <LayerCodeManager />
                 </div>
-              ) : selectedMenu === "devTest" ? (
-                <DevTestContent />
               ) : selectedMenu === "dbManager" ? (
-                <DbManagerContent />
+                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+                  <DbManagerContent />
+                </div>
+              ) : selectedMenu === "geoserverManager" ? (
+                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+                  <GeoserverManagerContent />
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {currentLabel} 설정을 위한 화면이 여기에 표시됩니다.

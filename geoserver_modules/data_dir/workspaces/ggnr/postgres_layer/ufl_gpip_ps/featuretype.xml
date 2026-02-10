@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:29df</id>
+  <name>ufl_gpip_ps</name>
+  <nativeName>ufl_gpip_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl--5c4b2843:19c369379bc:-7fff</id>
+  </namespace>
+  <title>ufl_gpip_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>ufl_gpip_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>331145.02596802</minx>
+    <maxx>361017.4378157</maxx>
+    <miny>326936.36274199</miny>
+    <maxy>346201.12104827</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.46248602618715</minx>
+    <maxx>128.7994932094534</maxx>
+    <miny>36.42710945862336</miny>
+    <maxy>36.605202451163386</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl--45bf12f6:19c3705dedf:2734</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

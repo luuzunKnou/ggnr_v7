@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:274f</id>
+  <name>bml_5trnl_as</name>
+  <nativeName>bml_5trnl_as</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl--5c4b2843:19c369379bc:-7fff</id>
+  </namespace>
+  <title>bml_5trnl_as</title>
+  <keywords>
+    <string>features</string>
+    <string>bml_5trnl_as</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>346382.85898768</minx>
+    <maxx>354330.41625904</maxx>
+    <miny>340705.14140575</miny>
+    <maxy>343815.07764566</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.63495956462333</minx>
+    <maxx>128.7243136161252</maxx>
+    <miny>36.55222984753127</miny>
+    <maxy>36.58149353257644</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl--45bf12f6:19c3705dedf:2734</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

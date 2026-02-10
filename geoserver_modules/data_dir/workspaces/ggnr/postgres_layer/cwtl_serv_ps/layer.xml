@@ -1,0 +1,19 @@
+<layer>
+  <name>cwtl_serv_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27e0</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3a78</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27df</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:34.93 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:00.294 UTC</dateModified>
+</layer>

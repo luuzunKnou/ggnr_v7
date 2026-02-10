@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:29fb</id>
+  <name>ui310</name>
+  <nativeName>ui310</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl--5c4b2843:19c369379bc:-7fff</id>
+  </namespace>
+  <title>ui310</title>
+  <keywords>
+    <string>features</string>
+    <string>ui310</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>347096.7483784</minx>
+    <maxx>357688.82140264</maxx>
+    <miny>327978.83642973</miny>
+    <maxy>358623.8665792</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.64050972034545</minx>
+    <maxx>128.76486235987176</maxx>
+    <miny>36.43705178733783</miny>
+    <maxy>36.7147759982513</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl--45bf12f6:19c3705dedf:2734</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_cmdt_as</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:28e6</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38d1</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28e5</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:47.613 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:55.204 UTC</dateModified>
+</layer>

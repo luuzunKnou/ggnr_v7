@@ -6,7 +6,7 @@ import { defaults } from 'ol/control';
 import { getTransform } from 'ol/proj';
 import '../config/projections'; // 좌표계 등록
 import { createInitialPgTileservLayers } from '../boundaryLayerFactory';
-import { createServiceLayers } from '../serviceLayerFactory';
+import { createServiceLayer } from '../serviceLayerFactory';
 
 // 안동 중심 (경도, 위도 WGS84)
 const ANDONG_LON = 128.7229;
@@ -55,11 +55,8 @@ export function useMapInstance(
     if (externalMapRef) externalMapRef.current = map;
     setMapReady(true);
 
-    createServiceLayers()
-      .then((serviceLayers) => {
-        serviceLayers.forEach((layer) => map.getLayers().push(layer));
-      })
-      .catch(() => {});
+    const serviceLayer = createServiceLayer();
+    map.getLayers().push(serviceLayer);
 
     // 컴포넌트 언마운트 시 지도 정리
     return () => {

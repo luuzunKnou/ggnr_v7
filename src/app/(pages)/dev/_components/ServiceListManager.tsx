@@ -508,7 +508,7 @@ export function ServiceListManager() {
             >
               취소
             </Button>
-            <Button size="sm" className="rounded-none" onClick={proceedCommonConfirm}>
+            <Button size="sm" className="rounded-none" onClick={() => proceedCommonConfirm()}>
               확인
             </Button>
           </DialogFooter>

@@ -1,0 +1,16 @@
+<layer>
+  <name>lard_lawst_ri_budr</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:281e</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--393a140:19c368a18eb:-7ffc</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:281d</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:37.532 UTC</dateCreated>
+</layer>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import 'ol/ol.css';
+import { call } from '@/lib/api';
 import {
   MapControlPanel,
   defaultMapControlGroups,
@@ -32,8 +33,10 @@ const MEASUREMENT_IDS = ['distance', 'area', 'altitude', 'slope'];
 
 export default function OpenLayersMap() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const sharedMapRef = useMapContext();
+  const mapContext = useMapContext();
+  const sharedMapRef = mapContext?.mapInstanceRef ?? null;
   const { mapInstanceRef, mapReady } = useMapInstance(mapRef, sharedMapRef);
+  const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
@@ -41,6 +44,27 @@ export default function OpenLayersMap() {
   const [centerXY, setCenterXY] = useState<{ x: number; y: number } | null>(null);
   const [projectionCode, setProjectionCode] = useState<string | null>(null);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
+  const [geoserverLogLines, setGeoserverLogLines] = useState<string[]>([]);
+
+  const fetchGeoserverLog = useCallback(async () => {
+    try {
+      const res = await call('', 'POST', {
+        service: 'devTestService',
+        action: 'getGeoServerLog',
+        params: { maxLines: 500 },
+      });
+      const d = res?.data ?? res;
+      setGeoserverLogLines(Array.isArray(d?.lines) ? d.lines : []);
+    } catch {
+      setGeoserverLogLines([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGeoserverLog();
+    const t = setInterval(fetchGeoserverLog, 2000);
+    return () => clearInterval(t);
+  }, [fetchGeoserverLog]);
 
   // 측정 타입 결정
   const measureType: MeasureType | null = activeControls.includes('distance')
@@ -79,6 +103,7 @@ export default function OpenLayersMap() {
 
   // 지적도 버튼 → 지적도 관련 레이어(ri, emd, jijuk) 동시 on/off
   useEffect(() => {
+    if (!mapReady) return;
     const map = mapInstanceRef.current;
     if (!map) return;
     const visible = activeControls.includes('cadastral');
@@ -173,16 +198,38 @@ export default function OpenLayersMap() {
         />
       </div>
 
-      {/* 하단 중앙: 줌 레벨, 좌표계, x, y */}
-      {zoomLevel !== null && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-red-600 font-mono text-sm font-medium bg-white/90 px-2 py-1 rounded shadow flex items-center gap-4">
-          <span>zoomLevel: {Number(zoomLevel).toFixed(1)}</span>
-          {projectionCode && <span>{projectionCode}</span>}
-          {centerXY && (
-            <span>
-              x: {centerXY.x.toFixed(0)} y: {centerXY.y.toFixed(0)}
-            </span>
-          )}
+      {/* 하단: GeoServer 로그 (줌 레벨 위) — showDebugUi 시에만 표시 */}
+      {showDebugUi && (
+        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-10 w-full max-w-2xl px-2">
+          <div
+            className="font-mono text-xs leading-tight bg-black/70 text-green-400 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide"
+            style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
+          >
+            {geoserverLogLines.length === 0 ? (
+              <span className="text-white/60">GeoServer 로그 없음</span>
+            ) : (
+              geoserverLogLines.map((line, i) => (
+                <div key={i} className="break-words" title={line}>
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 하단 중앙: 줌 레벨, 좌표계, x, y — showDebugUi 시에만 표시 */}
+      {showDebugUi && zoomLevel !== null && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-full max-w-2xl px-2">
+          <div className="w-full text-red-600 font-mono text-sm font-medium bg-white/90 px-2 py-1 rounded shadow flex items-center gap-4">
+            <span>zoomLevel: {Number(zoomLevel).toFixed(1)}</span>
+            {projectionCode && <span>{projectionCode}</span>}
+            {centerXY && (
+              <span>
+                x: {centerXY.x.toFixed(0)} y: {centerXY.y.toFixed(0)}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>

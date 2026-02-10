@@ -1,0 +1,19 @@
+<layer>
+  <name>ufl_gpip_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:29e0</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38f4</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:29df</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:28:00.376 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:57.824 UTC</dateModified>
+</layer>

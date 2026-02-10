@@ -1,0 +1,19 @@
+<layer>
+  <name>bml_i050_as</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2766</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3891</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2765</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:28.43 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:51.72 UTC</dateModified>
+</layer>

@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_pcbs_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2900</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38de</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28ff</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:48.843 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:56.171 UTC</dateModified>
+</layer>

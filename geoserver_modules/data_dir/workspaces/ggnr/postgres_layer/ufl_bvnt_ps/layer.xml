@@ -1,0 +1,19 @@
+<layer>
+  <name>ufl_bvnt_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:29d8</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3bb5</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:29d7</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:28:00.4 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:12.609 UTC</dateModified>
+</layer>

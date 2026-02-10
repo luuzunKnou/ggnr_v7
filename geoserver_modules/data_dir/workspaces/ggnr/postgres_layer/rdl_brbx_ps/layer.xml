@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_brbx_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:28da</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38cb</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28d9</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:46.974 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:54.782 UTC</dateModified>
+</layer>

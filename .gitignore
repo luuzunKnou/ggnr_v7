@@ -40,6 +40,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# geoserver_modules (바이너리 파일 포함)
+/geoserver_modules/java/
+/geoserver_modules/geoserver/
+
+# data_dir는 Git 관리 대상. 아래 런타임 생성 폴더만 제외
+/geoserver_modules/data_dir/logs/
+/geoserver_modules/data_dir/gwc/
+
 # pg_map_modules (바이너리 파일 포함)
 /pg_map_modules/services/pg_tileserv/
 /pg_map_modules/services/pg_featureserv/

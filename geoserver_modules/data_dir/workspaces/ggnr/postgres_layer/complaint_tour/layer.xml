@@ -1,0 +1,19 @@
+<layer>
+  <name>complaint_tour</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27ca</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3a97</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27c9</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:33.113 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:02.235 UTC</dateModified>
+</layer>

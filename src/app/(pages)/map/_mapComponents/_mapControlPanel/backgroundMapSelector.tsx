@@ -33,6 +33,15 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
     ],
   },
   {
+    id: 'aerial',
+    title: '항공영상',
+    options: [
+      { id: 'aerial-vworld', label: '항공영상(vworld)' },
+      { id: 'aerial-daum', label: '항공영상(다음)' },
+      { id: 'aerial-google', label: '항공영상(구글)' },
+    ],
+  },
+  {
     id: 'general',
     title: '일반영상',
     options: [
@@ -41,15 +50,6 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
       { id: 'general-google-building', label: '일반지도(구글건물)' },
       { id: 'general-google', label: '일반지도(구글)' },
       { id: 'general-osm', label: '일반지도(OSM)' },
-    ],
-  },
-  {
-    id: 'aerial',
-    title: '항공영상',
-    options: [
-      { id: 'aerial-vworld', label: '항공영상(vworld)' },
-      { id: 'aerial-daum', label: '항공영상(다음)' },
-      { id: 'aerial-google', label: '항공영상(구글)' },
     ],
   },
   {

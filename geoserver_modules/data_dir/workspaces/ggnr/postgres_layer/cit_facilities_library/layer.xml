@@ -1,0 +1,19 @@
+<layer>
+  <name>cit_facilities_library</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2792</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38bd</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2791</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:30.468 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:53.779 UTC</dateModified>
+</layer>

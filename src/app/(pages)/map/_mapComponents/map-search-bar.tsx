@@ -8,10 +8,16 @@ import { MapLayergroupBar } from './map-layergroup-bar';
 
 /**
  * 상단 왼쪽 검색창 (지도 위 오버레이)
+ * - 데이터 조회 열리면 주소검색/레이어바가 오른쪽으로 밀림 (dataQueryPanelWidth 반영)
  * - URL query param `q`에 검색어를 동기화(간단 동작)
- * - 레이어 그룹 버튼들은 map-layergroup-bar 로 분리
  */
-export function MapSearchBar() {
+export function MapSearchBar({
+  dataQueryOpen = false,
+  dataQueryPanelWidth = 460,
+}: {
+  dataQueryOpen?: boolean;
+  dataQueryPanelWidth?: number;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -26,8 +32,13 @@ export function MapSearchBar() {
     router.push(`/map?${params.toString()}`);
   };
 
+  const leftOffset = dataQueryOpen ? 65 + dataQueryPanelWidth + 20 : 85;
+
   return (
-    <div className="fixed top-4 left-[85px] z-40 flex items-center gap-3 pointer-events-none">
+    <div
+      className="fixed top-4 z-40 flex items-center gap-3 pointer-events-none transition-[left] duration-200"
+      style={{ left: `${leftOffset}px` }}
+    >
       <div className="pointer-events-auto flex items-center gap-8">
         <form
           onSubmit={(e) => {

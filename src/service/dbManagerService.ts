@@ -7,6 +7,8 @@
  */
 
 import { Client } from 'pg';
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * 프로젝트 설정(환경 변수)에서 기본 DB 연결 정보 반환.
@@ -252,6 +254,27 @@ async function getTableComment(client: Client, schema: string, table: string): P
   );
   const comment = res.rows[0]?.comment;
   return typeof comment === 'string' ? comment : null;
+}
+
+async function getTableColumnsWithComments(
+  client: Client,
+  schema: string,
+  table: string
+): Promise<{ name: string; comment: string | null; dataType: string }[]> {
+  const res = await client.query<{ column_name: string; comment: string | null; data_type: string }>(
+    `
+    SELECT a.attname AS column_name,
+           pg_catalog.col_description(c.oid, a.attnum) AS comment,
+           pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type
+    FROM pg_attribute a
+    JOIN pg_class c ON a.attrelid = c.oid
+    JOIN pg_namespace n ON c.relnamespace = n.oid
+    WHERE n.nspname = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped
+    ORDER BY a.attnum
+    `,
+    [schema, table]
+  );
+  return res.rows.map((r) => ({ name: r.column_name, comment: r.comment ?? null, dataType: r.data_type ?? '' }));
 }
 
 const RELKIND_LABEL: Record<string, string> = {
@@ -758,20 +781,23 @@ export async function getTableColumnsFromDb(
 
 /** serial·integer, varchar·character varying, timestamp·timestamp without time zone 등을 동일 타입으로 취급 */
 function isSameColumnType(defType: string, actualType: string): boolean {
-  const d = defType.toLowerCase().trim();
-  const a = actualType.toLowerCase().trim();
-  if (d === a) return true;
+  return normalizeColumnTypeForCompare(defType) === normalizeColumnTypeForCompare(actualType);
+}
+
+/** diff/동기화 비교용: 동일 취급되는 타입을 하나의 정규 형태로 통일 */
+export function normalizeColumnTypeForCompare(type: string): string {
+  const t = type.toLowerCase().trim();
+  if (!t) return '';
   const int4Group = ['serial', 'serial4', 'integer', 'int4'];
   const int8Group = ['serial8', 'bigint', 'int8'];
   const varcharGroup = ['varchar', 'character varying'];
   const timestampGroup = ['timestamp without time zone', 'timestamp'];
-  const inGroup = (t: string, group: string[]) =>
-    group.some((g) => t === g || t.startsWith(g));
-  if (inGroup(d, int4Group) && inGroup(a, int4Group)) return true;
-  if (inGroup(d, int8Group) && inGroup(a, int8Group)) return true;
-  if (inGroup(d, varcharGroup) && inGroup(a, varcharGroup)) return true;
-  if (inGroup(d, timestampGroup) && inGroup(a, timestampGroup)) return true;
-  return false;
+  const inGroup = (s: string, group: string[]) => group.some((g) => s === g || s.startsWith(g));
+  if (inGroup(t, int4Group)) return 'integer';
+  if (inGroup(t, int8Group)) return 'bigint';
+  if (inGroup(t, varcharGroup)) return 'varchar';
+  if (inGroup(t, timestampGroup)) return 'timestamp';
+  return t;
 }
 
 export type SchemaSyncTableComparison = {
@@ -990,7 +1016,7 @@ export type SchemaSyncApplyOptions = {
 export type SchemaSyncReportItem = {
   schema: string;
   table: string;
-  action: 'table_created' | 'table_comment_updated' | 'columns_added' | 'columns_dropped' | 'columns_modified' | 'skipped' | 'failed';
+  action: 'table_created' | 'table_comment_updated' | 'columns_added' | 'columns_dropped' | 'columns_modified' | 'table_dropped' | 'column_comment_added' | 'skipped' | 'failed';
   detail?: string;
   columnsAdded?: string[];
   columnsDropped?: string[];
@@ -1249,3 +1275,716 @@ export async function applySchemaSync(
   };
 }
 
+export type SchemaSyncPlan = {
+  tablesToCreate: SchemaTable[];
+  tablesToDrop: SchemaTable[];
+  columnsToAddByTable: Record<string, string[]>;
+  columnsToRemoveByTable: Record<string, string[]>;
+  commentUpdatesCount: number;
+};
+
+/**
+ * 전체 동기화 시 실제로 수행할 항목만 반환 (실행하지 않음).
+ * params 없으면 getDefaultDbConfig() 사용.
+ */
+export async function getSchemaSyncPlan(
+  params?: DbConnectionParams
+): Promise<SchemaSyncPlan> {
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params?.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return {
+      tablesToCreate: [],
+      tablesToDrop: [],
+      columnsToAddByTable: {},
+      columnsToRemoveByTable: {},
+      commentUpdatesCount: 0,
+    };
+  }
+  const connectionParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+    ssl: conn.ssl,
+  };
+
+  const comparison = await getSchemaSyncComparison(connectionParams);
+  const columnsToAddByTable: Record<string, string[]> = {};
+  const columnsToRemoveByTable: Record<string, string[]> = {};
+  for (const t of comparison.inBoth) {
+    const colDiff = await getTableColumnComparison({ ...connectionParams, schema: t.schema, table: t.table });
+    const key = `${t.schema}.${t.table}`;
+    if (colDiff?.toAdd?.length) columnsToAddByTable[key] = colDiff.toAdd.map((c) => c.name);
+    if (colDiff?.toRemove?.length) columnsToRemoveByTable[key] = colDiff.toRemove.map((c) => c.name);
+  }
+
+  const tablesToDrop = comparison.onlyInDb.filter((t) => !(t.schema === 'public' && t.table === 'spatial_ref_sys'));
+
+  let commentUpdatesCount = 0;
+  await withClient(connectionParams, async (client) => {
+    for (const t of comparison.inBoth) {
+      const dbTableComment = await getTableComment(client, t.schema, t.table);
+      const schemaTableComment = getSchemaTableComment(t.schema, t.table) ?? '';
+      if (!(dbTableComment ?? '').trim() && schemaTableComment) commentUpdatesCount += 1;
+      const cols = await getTableColumnsWithComments(client, t.schema, t.table);
+      for (const col of cols) {
+        const dbComment = (col.comment ?? '').trim();
+        const schemaComment = getSchemaColumnComment(t.schema, t.table, col.name) ?? '';
+        if (!dbComment && schemaComment) commentUpdatesCount += 1;
+      }
+    }
+  });
+
+  return {
+    tablesToCreate: comparison.onlyInSchema,
+    tablesToDrop,
+    columnsToAddByTable,
+    columnsToRemoveByTable,
+    commentUpdatesCount,
+  };
+}
+
+export type SchemaSyncPlanForField = {
+  schema: string;
+  table: string;
+  field: string;
+  action: 'createTable' | 'dropTable' | 'addColumn' | 'dropColumn' | 'addComment' | null;
+};
+
+/**
+ * 필드(또는 테이블 행) 단위로 실제로 수행할 동작만 반환.
+ * field === '(table)' 이면 테이블 행: createTable(스키마에만 있을 때) / dropTable(DB에만 있을 때).
+ * 그 외에는 컬럼: addColumn / dropColumn / addComment.
+ */
+export async function getSchemaSyncPlanForField(
+  params: DbConnectionParams & { schema: string; table: string; field: string }
+): Promise<SchemaSyncPlanForField> {
+  const { schema, table, field } = params;
+  const connectionParams: DbConnectionParams = {
+    host: params.host,
+    port: params.port ?? 5432,
+    database: params.database,
+    username: params.username ?? '',
+    password: params.password,
+    ssl: params.ssl,
+  };
+
+  const comparison = await getSchemaSyncComparison(connectionParams);
+  const onlyInSchema = comparison.onlyInSchema.some((t) => t.schema === schema && t.table === table);
+  const onlyInDb = comparison.onlyInDb.some((t) => t.schema === schema && t.table === table);
+  const inBoth = comparison.inBoth.some((t) => t.schema === schema && t.table === table);
+
+  if (field === '(table)') {
+    if (onlyInSchema) return { schema, table, field, action: 'createTable' };
+    if (onlyInDb && !(schema === 'public' && table === 'spatial_ref_sys')) return { schema, table, field, action: 'dropTable' };
+    return { schema, table, field, action: null };
+  }
+
+  if (onlyInSchema) {
+    return { schema, table, field, action: 'createTable' };
+  }
+  if (onlyInDb) {
+    if (schema === 'public' && table === 'spatial_ref_sys') return { schema, table, field, action: null };
+    return { schema, table, field, action: 'dropTable' };
+  }
+  if (!inBoth) return { schema, table, field, action: null };
+
+  const colDiff = await getTableColumnComparison({ ...connectionParams, schema, table });
+  if (colDiff?.toAdd?.some((c) => c.name === field)) return { schema, table, field, action: 'addColumn' };
+  if (colDiff?.toRemove?.some((c) => c.name === field)) return { schema, table, field, action: 'dropColumn' };
+
+  const needComment = await withClient(connectionParams, async (client) => {
+    const cols = await getTableColumnsWithComments(client, schema, table);
+    const col = cols.find((c) => c.name === field);
+    if (!col) return false;
+    const dbComment = (col.comment ?? '').trim();
+    const schemaComment = getSchemaColumnComment(schema, table, field) ?? '';
+    return !dbComment && !!schemaComment;
+  });
+  if (needComment) return { schema, table, field, action: 'addComment' };
+
+  return { schema, table, field, action: null };
+}
+
+/**
+ * 필드(또는 테이블 행) 단위로 동기화 실행.
+ * createTable: 스키마에만 있는 테이블 → DB에 테이블 생성(전체 컬럼).
+ * dropTable: 스키마에 없는 테이블 → DB에서 테이블 삭제.
+ * addColumn / dropColumn / addComment: 해당 컬럼만 처리.
+ */
+export async function applySchemaSyncForField(
+  params: DbConnectionParams & { schema: string; table: string; field: string }
+): Promise<SchemaSyncReport> {
+  const { schema, table, field } = params;
+  const connectionParams: DbConnectionParams = {
+    host: params.host,
+    port: params.port ?? 5432,
+    database: params.database,
+    username: params.username ?? '',
+    password: params.password,
+    ssl: params.ssl,
+  };
+  const startedAt = new Date().toISOString();
+  const results: SchemaSyncReportItem[] = [];
+  const executedSql: string[] = [];
+
+  const plan = await getSchemaSyncPlanForField({ ...connectionParams, schema, table, field });
+  if (!plan.action) {
+    return {
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      options: {},
+      results: [{ schema, table, action: 'skipped', detail: '수행할 동작 없음' }],
+      executedSql: [],
+    };
+  }
+
+  await withClient(connectionParams, async (client) => {
+    if (plan.action === 'createTable') {
+      const definedCols = getSchemaDefinedColumns(schema, table);
+      if (!definedCols?.length) {
+        results.push({ schema, table, action: 'skipped', detail: '정의된 컬럼 없음' });
+        return;
+      }
+      await client.query(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(schema)}`);
+      const colSql = definedCols
+        .map((c) => {
+          const colType = toWritableColumnType(c.type);
+          const parts = [quoteIdent(c.name), colType];
+          if (c.notNull) parts.push('NOT NULL');
+          return parts.join(' ');
+        })
+        .join(',\n  ');
+      const createTableSql = `CREATE TABLE IF NOT EXISTS ${fq(schema, table)} (\n  ${colSql}\n)`;
+      executedSql.push(createTableSql);
+      await client.query(createTableSql);
+      const tableComment = getSchemaTableComment(schema, table);
+      if (tableComment) {
+        const escaped = tableComment.replace(/'/g, "''");
+        await client.query(`COMMENT ON TABLE ${fq(schema, table)} IS '${escaped}'`);
+      }
+      for (const c of definedCols) {
+        const colComment = getSchemaColumnComment(schema, table, c.name);
+        if (colComment) {
+          const escaped = colComment.replace(/'/g, "''");
+          await client.query(`COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(c.name)} IS '${escaped}'`);
+        }
+      }
+      results.push({ schema, table, action: 'table_created', detail: `테이블 생성 (${definedCols.length} 컬럼)` });
+      return;
+    }
+
+    if (plan.action === 'dropTable') {
+      const dropSql = `DROP TABLE IF EXISTS ${fq(schema, table)} CASCADE`;
+      executedSql.push(dropSql);
+      await client.query(dropSql);
+      results.push({ schema, table, action: 'table_dropped', detail: '스키마에 없어 삭제' });
+      return;
+    }
+
+    if (plan.action === 'addColumn') {
+      const definedCols = getSchemaDefinedColumns(schema, table) ?? [];
+      const col = definedCols.find((c) => c.name === field);
+      if (!col) {
+        results.push({ schema, table, action: 'failed', error: `스키마에 컬럼 ${field} 없음` });
+        return;
+      }
+      const colType = toWritableColumnType(col.type);
+      const addColSql = `ALTER TABLE ${fq(schema, table)} ADD COLUMN IF NOT EXISTS ${quoteIdent(field)} ${colType}${col.notNull ? ' NOT NULL' : ''}`;
+      executedSql.push(addColSql);
+      await client.query(addColSql);
+      const colComment = getSchemaColumnComment(schema, table, field);
+      if (colComment) {
+        const escaped = colComment.replace(/'/g, "''");
+        await client.query(`COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(field)} IS '${escaped}'`);
+      }
+      results.push({ schema, table, action: 'columns_added', columnsAdded: [field] });
+      return;
+    }
+
+    if (plan.action === 'dropColumn') {
+      const dropColSql = `ALTER TABLE ${fq(schema, table)} DROP COLUMN IF EXISTS ${quoteIdent(field)}`;
+      executedSql.push(dropColSql);
+      await client.query(dropColSql);
+      results.push({ schema, table, action: 'columns_dropped', columnsDropped: [field] });
+      return;
+    }
+
+    if (plan.action === 'addComment') {
+      const schemaComment = getSchemaColumnComment(schema, table, field) ?? '';
+      const escaped = schemaComment.replace(/'/g, "''");
+      const commentSql = `COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(field)} IS '${escaped}'`;
+      executedSql.push(commentSql);
+      await client.query(commentSql);
+      results.push({ schema, table, action: 'column_comment_added', detail: field });
+    }
+  });
+
+  return {
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    options: {},
+    results,
+    executedSql,
+  };
+}
+
+export type SchemaSyncPlanForTable = {
+  tableKey: string;
+  createTable: boolean;
+  columnsToAdd: string[];
+  columnsToRemove: string[];
+  commentUpdatesCount: number;
+};
+
+/**
+ * 해당 테이블에 대해 실제로 수행할 동작만 반환 (실행하지 않음).
+ * 스키마에 없는 테이블(onlyInDb)이면 빈 계획 반환.
+ */
+export async function getSchemaSyncPlanForTable(
+  params: DbConnectionParams & { schema: string; table: string }
+): Promise<SchemaSyncPlanForTable> {
+  const { schema, table } = params;
+  const connectionParams: DbConnectionParams = {
+    host: params.host,
+    port: params.port ?? 5432,
+    database: params.database,
+    username: params.username ?? '',
+    password: params.password,
+    ssl: params.ssl,
+  };
+  const tableKey = `${schema}.${table}`;
+  const empty = {
+    tableKey,
+    createTable: false,
+    columnsToAdd: [],
+    columnsToRemove: [],
+    commentUpdatesCount: 0,
+  };
+
+  const comparison = await getSchemaSyncComparison(connectionParams);
+  const inOnlyInSchema = comparison.onlyInSchema.some((t) => t.schema === schema && t.table === table);
+  const inBoth = comparison.inBoth.some((t) => t.schema === schema && t.table === table);
+  const onlyInDb = comparison.onlyInDb.some((t) => t.schema === schema && t.table === table);
+
+  if (onlyInDb) return empty;
+
+  if (inOnlyInSchema) {
+    const definedCols = getSchemaDefinedColumns(schema, table) ?? [];
+    return {
+      tableKey,
+      createTable: true,
+      columnsToAdd: definedCols.map((c) => c.name),
+      columnsToRemove: [],
+      commentUpdatesCount: 0,
+    };
+  }
+
+  if (!inBoth) return empty;
+
+  const colDiff = await getTableColumnComparison({ ...connectionParams, schema, table });
+  const columnsToAdd = colDiff?.toAdd?.map((c) => c.name) ?? [];
+  const columnsToRemove = colDiff?.toRemove?.map((c) => c.name) ?? [];
+
+  let commentUpdatesCount = 0;
+  await withClient(connectionParams, async (client) => {
+    const dbTableComment = await getTableComment(client, schema, table);
+    const schemaTableComment = getSchemaTableComment(schema, table) ?? '';
+    if (!(dbTableComment ?? '').trim() && schemaTableComment) commentUpdatesCount += 1;
+    const cols = await getTableColumnsWithComments(client, schema, table);
+    for (const col of cols) {
+      const dbComment = (col.comment ?? '').trim();
+      const schemaComment = getSchemaColumnComment(schema, table, col.name) ?? '';
+      if (!dbComment && schemaComment) commentUpdatesCount += 1;
+    }
+  });
+
+  return {
+    tableKey,
+    createTable: false,
+    columnsToAdd,
+    columnsToRemove,
+    commentUpdatesCount,
+  };
+}
+
+/**
+ * 해당 테이블만 스키마 기준으로 동기화 (테이블 생성 또는 컬럼 추가/삭제, 코멘트 보강).
+ * 스키마에 없는 테이블(onlyInDb)은 삭제하지 않음.
+ */
+export async function applySchemaSyncForTable(
+  params: DbConnectionParams & { schema: string; table: string }
+): Promise<SchemaSyncReport> {
+  const { schema, table } = params;
+  const connectionParams: DbConnectionParams = {
+    host: params.host,
+    port: params.port ?? 5432,
+    database: params.database,
+    username: params.username ?? '',
+    password: params.password,
+    ssl: params.ssl,
+  };
+
+  const comparison = await getSchemaSyncComparison(connectionParams);
+  const inOnlyInSchema = comparison.onlyInSchema.some((t) => t.schema === schema && t.table === table);
+  const inBoth = comparison.inBoth.some((t) => t.schema === schema && t.table === table);
+
+  if (!inOnlyInSchema && !inBoth) {
+    return {
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      options: {},
+      results: [{ schema, table, action: 'skipped', detail: '스키마에 없는 테이블이므로 변경 없음' }],
+      executedSql: [],
+    };
+  }
+
+  const columnsToRemoveByTable: Record<string, string[]> = {};
+  if (inBoth) {
+    const colDiff = await getTableColumnComparison({ ...connectionParams, schema, table });
+    if (colDiff?.toRemove?.length) {
+      columnsToRemoveByTable[`${schema}.${table}`] = colDiff.toRemove.map((c) => c.name);
+    }
+  }
+
+  const syncReport = await applySchemaSync({
+    ...connectionParams,
+    tablesToCreate: inOnlyInSchema ? [{ schema, table }] : [],
+    tables: inBoth ? [{ schema, table }] : [],
+    columnsToRemoveByTable,
+    addColumnsOnly: false,
+    tableCommentOnly: false,
+  });
+
+  const results = [...syncReport.results];
+  const executedSql = [...syncReport.executedSql];
+
+  if (inBoth) {
+    await withClient(connectionParams, async (client) => {
+      const dbTableComment = await getTableComment(client, schema, table);
+      const schemaTableComment = getSchemaTableComment(schema, table) ?? '';
+      if (!(dbTableComment ?? '').trim() && schemaTableComment) {
+        try {
+          const escaped = schemaTableComment.replace(/'/g, "''");
+          const commentSql = `COMMENT ON TABLE ${fq(schema, table)} IS '${escaped}'`;
+          executedSql.push(commentSql);
+          await client.query(commentSql);
+          results.push({ schema, table, action: 'table_comment_updated', detail: '한글명 추가' });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          results.push({ schema, table, action: 'failed', error: `TABLE COMMENT: ${msg}` });
+        }
+      }
+      const cols = await getTableColumnsWithComments(client, schema, table);
+      for (const col of cols) {
+        const dbComment = (col.comment ?? '').trim();
+        const schemaComment = getSchemaColumnComment(schema, table, col.name) ?? '';
+        if (!dbComment && schemaComment) {
+          try {
+            const escaped = schemaComment.replace(/'/g, "''");
+            const commentSql = `COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(col.name)} IS '${escaped}'`;
+            executedSql.push(commentSql);
+            await client.query(commentSql);
+            results.push({ schema, table, action: 'column_comment_added', detail: col.name });
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            results.push({ schema, table, action: 'failed', error: `COMMENT ${col.name}: ${msg}` });
+          }
+        }
+      }
+    });
+  }
+
+  return {
+    startedAt: syncReport.startedAt,
+    finishedAt: new Date().toISOString(),
+    options: syncReport.options,
+    results,
+    executedSql,
+  };
+}
+
+/**
+ * 전체 동기화 (스키마 기준으로 DB를 맞춤. 스키마는 수정하지 않음)
+ * 1. 스키마에만 있는 테이블 → 생성
+ * 2. 스키마에만 있는 필드 → ADD COLUMN
+ * 3. DB에만 있는 필드 → DROP COLUMN
+ * 4. 스키마에 없는 테이블 → DROP TABLE
+ * 5. DB에 한글명(코멘트) 없으면 스키마 참조하여 COMMENT 추가
+ * params 없으면 getDefaultDbConfig() 사용
+ */
+export async function applySchemaSyncFull(
+  params?: DbConnectionParams
+): Promise<SchemaSyncReport> {
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params?.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return {
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      options: {},
+      results: [{ schema: '', table: '', action: 'failed', error: '연결 정보 없음' }],
+      executedSql: [],
+    };
+  }
+  const connectionParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+    ssl: conn.ssl,
+  };
+
+  const comparison = await getSchemaSyncComparison(connectionParams);
+  const columnsToRemoveByTable: Record<string, string[]> = {};
+  for (const t of comparison.inBoth) {
+    const colDiff = await getTableColumnComparison({ ...connectionParams, schema: t.schema, table: t.table });
+    if (colDiff?.toRemove?.length) {
+      columnsToRemoveByTable[`${t.schema}.${t.table}`] = colDiff.toRemove.map((c) => c.name);
+    }
+  }
+
+  const syncReport = await applySchemaSync({
+    ...connectionParams,
+    tablesToCreate: comparison.onlyInSchema,
+    tables: comparison.inBoth,
+    columnsToRemoveByTable,
+    addColumnsOnly: false,
+    tableCommentOnly: false,
+  });
+
+  const results = [...syncReport.results];
+  const executedSql = [...syncReport.executedSql];
+
+  await withClient(connectionParams, async (client) => {
+    for (const t of comparison.inBoth) {
+      const dbTableComment = await getTableComment(client, t.schema, t.table);
+      const schemaTableComment = getSchemaTableComment(t.schema, t.table) ?? '';
+      if (!(dbTableComment ?? '').trim() && schemaTableComment) {
+        try {
+          const escaped = schemaTableComment.replace(/'/g, "''");
+          const commentSql = `COMMENT ON TABLE ${fq(t.schema, t.table)} IS '${escaped}'`;
+          executedSql.push(commentSql);
+          await client.query(commentSql);
+          results.push({ schema: t.schema, table: t.table, action: 'table_comment_updated', detail: '한글명 추가' });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          results.push({ schema: t.schema, table: t.table, action: 'failed', error: `TABLE COMMENT: ${msg}` });
+        }
+      }
+      const cols = await getTableColumnsWithComments(client, t.schema, t.table);
+      for (const col of cols) {
+        const dbComment = (col.comment ?? '').trim();
+        const schemaComment = getSchemaColumnComment(t.schema, t.table, col.name) ?? '';
+        if (!dbComment && schemaComment) {
+          try {
+            const escaped = schemaComment.replace(/'/g, "''");
+            const commentSql = `COMMENT ON COLUMN ${fq(t.schema, t.table)}.${quoteIdent(col.name)} IS '${escaped}'`;
+            executedSql.push(commentSql);
+            await client.query(commentSql);
+            results.push({ schema: t.schema, table: t.table, action: 'column_comment_added', detail: col.name });
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            results.push({ schema: t.schema, table: t.table, action: 'failed', error: `COMMENT ${col.name}: ${msg}` });
+          }
+        }
+      }
+    }
+    for (const t of comparison.onlyInDb) {
+      if (t.schema === 'public' && t.table === 'spatial_ref_sys') continue;
+      try {
+        const dropSql = `DROP TABLE IF EXISTS ${fq(t.schema, t.table)} CASCADE`;
+        executedSql.push(dropSql);
+        await client.query(dropSql);
+        results.push({ schema: t.schema, table: t.table, action: 'table_dropped', detail: '스키마에 없어 삭제' });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        results.push({ schema: t.schema, table: t.table, action: 'failed', error: msg });
+      }
+    }
+  });
+
+  return {
+    startedAt: syncReport.startedAt,
+    finishedAt: new Date().toISOString(),
+    options: syncReport.options,
+    results,
+    executedSql,
+  };
+}
+
+export type TableColumnRow = {
+  schema?: string;
+  tableComment: string;
+  tableName: string;
+  columnComment: string;
+  columnName: string;
+  columnType: string;
+  /** 비교용: varchar/character varying 등 동일 취급 타입 통일 */
+  columnTypeNormalized?: string;
+};
+
+/**
+ * schema 정의 기준 테이블·컬럼 목록 (테이블명|테이블영문명|필드명|필드영문명)
+ * diff 좌측용. schema 필드로 스키마 구분 (public, layer 등).
+ */
+export function getSchemaTableColumnList(_params?: unknown): { rows: TableColumnRow[] } {
+  const rows: TableColumnRow[] = [];
+  const tables = getSchemaDefinedTables();
+  for (const { schema, table } of tables) {
+    const tableComment = getSchemaTableComment(schema, table) ?? '';
+    const cols = getSchemaDefinedColumns(schema, table);
+    if (!cols || cols.length === 0) {
+      rows.push({ schema, tableComment, tableName: table, columnComment: '', columnName: '', columnType: '', columnTypeNormalized: '' });
+      continue;
+    }
+    for (const col of cols) {
+      const columnComment = col.comment ?? getSchemaColumnComment(schema, table, col.name) ?? '';
+      const columnType = col.type ?? '';
+      rows.push({
+        schema,
+        tableComment,
+        tableName: table,
+        columnComment,
+        columnName: col.name,
+        columnType,
+        columnTypeNormalized: normalizeColumnTypeForCompare(columnType),
+      });
+    }
+  }
+  return { rows };
+}
+
+/**
+ * DB public 스키마 기준 테이블·컬럼 목록 (테이블명|테이블영문명|필드명|필드영문명)
+ * params 없거나 host 없으면 getDefaultDbConfig() 사용. diff 우측용.
+ */
+export async function getDbTableColumnList(params?: DbConnectionParams): Promise<{ rows: TableColumnRow[]; error?: string }> {
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params?.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return { rows: [], error: '연결 정보 없음' };
+  }
+  const connParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+  };
+  const rows: TableColumnRow[] = [];
+  try {
+    await withClient(connParams, async (client) => {
+      const tableRes = await client.query<{ table_name: string }>(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+           AND table_name <> 'spatial_ref_sys'
+         ORDER BY table_name`
+      );
+      for (const { table_name: table } of tableRes.rows) {
+        const tableComment = await getTableComment(client, 'public', table);
+        const cols = await getTableColumnsWithComments(client, 'public', table);
+        const tc = tableComment ?? '';
+        if (cols.length === 0) {
+          rows.push({ schema: 'public', tableComment: tc, tableName: table, columnComment: '', columnName: '', columnType: '', columnTypeNormalized: '' });
+          continue;
+        }
+        for (const col of cols) {
+          const columnType = col.dataType ?? '';
+          rows.push({
+            schema: 'public',
+            tableComment: tc,
+            tableName: table,
+            columnComment: col.comment ?? '',
+            columnName: col.name,
+            columnType,
+            columnTypeNormalized: normalizeColumnTypeForCompare(columnType),
+          });
+        }
+      }
+    });
+    return { rows };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { rows: [], error: msg };
+  }
+}
+
+/**
+ * database/schema 폴더 내 .ts 파일 내용을 합쳐서 반환 (테이블 구조 동기화 diff 좌측용)
+ */
+export function getSchemaSourceContent(_params?: unknown): { content: string } {
+  const projectRoot = process.cwd();
+  const schemaDir = path.join(projectRoot, 'src', 'database', 'schema');
+  const parts: string[] = [];
+  try {
+    if (!fs.existsSync(schemaDir)) {
+      return { content: '(schema 폴더를 찾을 수 없습니다)' };
+    }
+    const files = fs.readdirSync(schemaDir).filter((f) => f.endsWith('.ts')).sort();
+    for (const file of files) {
+      const filePath = path.join(schemaDir, file);
+      const text = fs.readFileSync(filePath, 'utf-8');
+      parts.push(`// === ${file} ===\n${text}`);
+    }
+    return { content: parts.join('\n\n') || '(파일 없음)' };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { content: `(읽기 오류: ${msg})` };
+  }
+}
+
+/**
+ * 현재 DB의 테이블·컬럼 구조를 텍스트로 반환 (테이블 구조 동기화 diff 우측용)
+ * params 없거나 host 없으면 getDefaultDbConfig() 사용
+ */
+export async function getDbTableStructureText(
+  params?: DbConnectionParams
+): Promise<{ text: string; error?: string }> {
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params?.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return { text: '(DB 연결 정보가 없습니다)', error: '연결 정보 없음' };
+  }
+  const connParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+  };
+  try {
+    const lines: string[] = [];
+    await withClient(connParams, async (client) => {
+      const schemaRes = await client.query<{ schema_name: string }>(
+        `SELECT schema_name FROM information_schema.schemata
+         WHERE schema_name NOT IN ('information_schema') AND schema_name NOT LIKE 'pg_%'
+         ORDER BY schema_name`
+      );
+      for (const { schema_name: schema } of schemaRes.rows) {
+        const tableRes = await client.query<{ table_name: string }>(
+          `SELECT table_name FROM information_schema.tables
+           WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+           ORDER BY table_name`,
+          [schema]
+        );
+        for (const { table_name: table } of tableRes.rows) {
+          const cols = await getTableColumns(client, schema, table);
+          lines.push(`${schema}.${table}`);
+          for (const c of cols) {
+            const nn = c.notNull ? ' NOT NULL' : '';
+            lines.push(`  ${c.name} ${c.type}${nn}`);
+          }
+          lines.push('');
+        }
+      }
+    });
+    return { text: lines.length ? lines.join('\n') : '(테이블 없음)' };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { text: '', error: msg };
+  }
+}

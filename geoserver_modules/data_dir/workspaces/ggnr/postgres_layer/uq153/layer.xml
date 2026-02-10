@@ -1,0 +1,19 @@
+<layer>
+  <name>uq153</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2a38</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3868</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2a37</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:28:04.390 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:48.757 UTC</dateModified>
+</layer>

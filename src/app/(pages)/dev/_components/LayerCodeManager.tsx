@@ -133,7 +133,7 @@ export function LayerCodeManager() {
 
   /** CODE 필드가 있는 테이블만, 검색 필터 */
   const filteredTables = useMemo(() => {
-    let list = tables.filter((t) => codeTableKeys.has(String((t as Record<string, unknown>).define_table_key ?? "")))
+    let list = tables.filter((t) => codeTableKeys.has(String((t as Record<string, unknown>).define_table_name ?? "")))
     if (debouncedLayerListSearch.trim()) {
       const q = debouncedLayerListSearch.trim().toLowerCase()
       list = list.filter((t) => {
@@ -141,8 +141,7 @@ export function LayerCodeManager() {
         const group = String(r.define_table_group ?? "").toLowerCase()
         const name = String(r.define_table_name ?? "").toLowerCase()
         const kor = String(r.define_table_kor_name ?? "").toLowerCase()
-        const key = String(r.define_table_key ?? "").toLowerCase()
-        return group.includes(q) || name.includes(q) || kor.includes(q) || key.includes(q)
+        return group.includes(q) || name.includes(q) || kor.includes(q)
       })
     }
     return list
@@ -246,7 +245,7 @@ export function LayerCodeManager() {
           ) : (
             <ul className="py-0.5">
               {filteredTables.map((t) => {
-                const key = String((t as Record<string, unknown>).define_table_key ?? "")
+                const key = String((t as Record<string, unknown>).define_table_name ?? "")
                 const group = String((t as Record<string, unknown>).define_table_group ?? "")
                 const name =
                   String((t as Record<string, unknown>).define_table_kor_name ?? "") ||
@@ -304,9 +303,10 @@ export function LayerCodeManager() {
           ) : (
             <ul className="py-0.5">
               {filteredCodeFields.map((f) => {
-                const key = String(f.define_field_key ?? "")
+                const fieldName = String(f.define_field_name ?? "")
+                const key = selectedTableKey ? `${selectedTableKey}__${fieldName}` : fieldName
                 const name =
-                  String(f.define_field_kor_name ?? "") || String(f.define_field_name ?? "") || key
+                  String(f.define_field_kor_name ?? "") || fieldName || key
                 const isSelected = selectedFieldKey === key
                 return (
                   <li key={key}>

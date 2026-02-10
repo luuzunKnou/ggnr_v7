@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_sply_ls</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2a8c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:2732</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2a8b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:28:08.547 UTC</dateCreated>
+  <dateModified>2026-02-07 15:08:21.635 UTC</dateModified>
+</layer>

@@ -1,0 +1,19 @@
+<layer>
+  <name>complaint_wtl</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27d0</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3a98</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27cf</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:33.407 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:02.330 UTC</dateModified>
+</layer>

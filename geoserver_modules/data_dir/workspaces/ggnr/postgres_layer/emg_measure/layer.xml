@@ -1,0 +1,19 @@
+<layer>
+  <name>emg_measure</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27ec</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3b6a</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27eb</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:34.874 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:11.870 UTC</dateModified>
+</layer>

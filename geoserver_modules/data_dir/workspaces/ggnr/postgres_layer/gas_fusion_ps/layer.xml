@@ -1,0 +1,19 @@
+<layer>
+  <name>gas_fusion_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27fe</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3c63</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27fd</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:35.800 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:19.421 UTC</dateModified>
+</layer>

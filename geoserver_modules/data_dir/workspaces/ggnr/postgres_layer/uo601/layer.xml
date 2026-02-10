@@ -1,0 +1,19 @@
+<layer>
+  <name>uo601</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2a1a</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38a3</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2a19</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:28:02.890 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:52.188 UTC</dateModified>
+</layer>

@@ -1,0 +1,19 @@
+<layer>
+  <name>sfl_bpum_ps</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2944</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3ad0</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2943</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:52.313 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:05.902 UTC</dateModified>
+</layer>

@@ -16,9 +16,10 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:introspect": "drizzle-kit introspect",
-    "install-pg-services": "powershell -ExecutionPolicy Bypass -File pg_map_modules/scripts/install-pg-services.ps1",
-    "tileserv": "powershell -ExecutionPolicy Bypass -File pg_map_modules/scripts/start-tileserv.ps1",
-    "featureserv": "powershell -ExecutionPolicy Bypass -File pg_map_modules/scripts/start-featureserv.ps1"
+    "install-geoserver": "powershell -ExecutionPolicy Bypass -File geoserver_modules/scripts/install-geoserver.ps1",
+    "install-geoserver-css": "powershell -ExecutionPolicy Bypass -File geoserver_modules/scripts/install-geoserver-css.ps1",
+    "geoserver": "cmd /c geoserver_modules\\scripts\\start-geoserver.bat",
+    "geoserver:stop": "cmd /c geoserver_modules\\scripts\\stop-geoserver.bat"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -39,7 +40,8 @@
     "proj4": "^2.20.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

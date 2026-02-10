@@ -1,0 +1,19 @@
+<layer>
+  <name>cit_facilities_culture</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:278c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38ba</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:278b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:30.125 UTC</dateCreated>
+  <dateModified>2026-02-07 13:29:53.568 UTC</dateModified>
+</layer>

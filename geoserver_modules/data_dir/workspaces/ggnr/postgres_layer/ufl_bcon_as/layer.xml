@@ -1,0 +1,19 @@
+<layer>
+  <name>ufl_bcon_as</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:29c8</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3b95</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:29c7</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:59.234 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:11.933 UTC</dateModified>
+</layer>

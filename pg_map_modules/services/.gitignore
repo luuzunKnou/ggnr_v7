@@ -1,5 +1,0 @@
-# pg_tileserv 및 pg_featureserv 바이너리 제외
-pg_tileserv/
-pg_featureserv/
-*.exe
-*.zip

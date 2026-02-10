@@ -48,7 +48,6 @@ const SORT_TYPE_OPTIONS = ["DESC", "ASC"] as const
 const SELECT_KEYS = new Set(["define_field_type", "define_field_sort_type"])
 
 const COLUMN_LABELS: Record<string, string> = {
-  define_field_key: "키",
   define_field_name: "영문명",
   define_field_kor_name: "한글명",
   define_field_idx: "순서",
@@ -75,7 +74,6 @@ const COLUMN_LABELS: Record<string, string> = {
 }
 
 const COLUMN_WIDTHS: Record<string, string> = {
-  define_field_key: "72px",
   define_field_name: "190px",
   define_field_kor_name: "190px",
   define_field_idx: "56px",
@@ -189,7 +187,7 @@ export function LayerAttrManager() {
         if (body.success && Array.isArray(body.data)) {
           setTables(body.data)
           if (body.data.length > 0 && !selectedTableKey) {
-            const first = String((body.data[0] as Record<string, unknown>).define_table_key ?? "")
+            const first = String((body.data[0] as Record<string, unknown>).define_table_name ?? "")
             if (first) setSelectedTableKey(first)
           }
         }
@@ -304,8 +302,7 @@ export function LayerAttrManager() {
         const group = String(r.define_table_group ?? "").toLowerCase()
         const name = String(r.define_table_name ?? "").toLowerCase()
         const kor = String(r.define_table_kor_name ?? "").toLowerCase()
-        const key = String(r.define_table_key ?? "").toLowerCase()
-        return group.includes(q) || name.includes(q) || kor.includes(q) || key.includes(q)
+        return group.includes(q) || name.includes(q) || kor.includes(q)
       })
     }
     return list
@@ -353,11 +350,11 @@ export function LayerAttrManager() {
         fullBody.success && Array.isArray(fullBody.data) ? fullBody.data : []
       const byKey = new Map<string, DefineField>()
       for (const f of fields) {
-        const key = String(f.define_field_key ?? "")
+        const key = String(f.define_field_name ?? "")
         if (key) byKey.set(key, f)
       }
       fullFields = fullFields.map((f) => {
-        const key = String(f.define_field_key ?? "")
+        const key = String(f.define_field_name ?? "")
         return byKey.get(key) ?? f
       })
       const res = await fetch(
@@ -379,7 +376,7 @@ export function LayerAttrManager() {
   }, [selectedTableKey, fields])
 
   const selectedTable = tables.find(
-    (t) => String((t as Record<string, unknown>).define_table_key ?? "") === selectedTableKey
+    (t) => String((t as Record<string, unknown>).define_table_name ?? "") === selectedTableKey
   )
   const selectedTableName =
     selectedTable &&
@@ -415,7 +412,7 @@ export function LayerAttrManager() {
           ) : (
             <ul className="py-0.5">
               {filteredTables.map((t) => {
-                const key = String((t as Record<string, unknown>).define_table_key ?? "")
+                const key = String((t as Record<string, unknown>).define_table_name ?? "")
                 const group = String((t as Record<string, unknown>).define_table_group ?? "")
                 const name =
                   String((t as Record<string, unknown>).define_table_kor_name ?? "") ||
@@ -532,7 +529,7 @@ export function LayerAttrManager() {
 
                     return (
                       <div
-                        key={String(row.define_field_key ?? listIndex)}
+                        key={String(row.define_field_name ?? listIndex)}
                         className="grid border-b hover:bg-muted/50 w-full min-w-0"
                         style={{
                           gridTemplateColumns: getGridTemplateColumns(),

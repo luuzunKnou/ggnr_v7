@@ -1,0 +1,19 @@
+<layer>
+  <name>swl_aodp_as</name>
+  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2964</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3c37</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2963</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-07 13:27:53.874 UTC</dateCreated>
+  <dateModified>2026-02-07 13:30:16.425 UTC</dateModified>
+</layer>
