@@ -45,7 +45,8 @@ export function MapLayergroupBar() {
   const [tableList, setTableList] = useState<DefineLayerRow[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
+  const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
+  const setVisibleLayerNames = mapContext?.setVisibleLayerNames ?? (() => {});
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [layerFilterRows, setLayerFilterRows] = useState<Map<string, LayerFilterRow[]>>(() => new Map());

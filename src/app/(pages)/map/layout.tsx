@@ -4,7 +4,7 @@
 import React, { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import LandInfo from './_mapComponents/LandInfo';
-import DataQuery from './_mapComponents/DataQuery';
+import StandardList from './_mapComponents/StandardList';
 import { MapSidebar } from './_mapComponents/map-sidebar';
 import { MapSearchBar } from './_mapComponents/map-search-bar';
 import { MapContextProvider } from './_mapComponents/MapContext';
@@ -34,7 +34,7 @@ function MapLayoutContent({ children }: { children: React.ReactNode }) {
       <div className="relative z-10 pl-[65px] flex h-full pointer-events-none">
         {dataQueryOpen && (
           <div className="pointer-events-auto shrink-0">
-            <DataQuery
+            <StandardList
               width={dataQueryPanelWidth}
               minWidth={DATA_QUERY_MIN_WIDTH}
               maxWidth={DATA_QUERY_MAX_WIDTH}

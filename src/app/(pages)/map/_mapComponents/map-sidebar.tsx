@@ -2,7 +2,7 @@
 
 import React, { useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Layers, Download, MapPin, BarChart3, Search, Wrench, ClipboardList } from 'lucide-react';
+import { Crop, Download, PanelsLeftBottom, BarChart3, LayoutList, Droplets, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from './MapContext';
 
@@ -85,7 +85,7 @@ export function MapSidebar() {
       <div className="flex flex-col flex-1 min-h-0 w-full">
         <div className="flex flex-col">
         <SidebarButton
-          icon={<Layers className="w-6 h-6" />}
+          icon={<Crop className="w-6 h-6" />}
           label="단면도"
           onClick={() => toggleWindow('sectionView')}
           isActive={openedWindows.includes('sectionView')}
@@ -97,7 +97,7 @@ export function MapSidebar() {
           isActive={openedWindows.includes('download')}
         />
         <SidebarButton
-          icon={<MapPin className="w-6 h-6" />}
+          icon={<PanelsLeftBottom className="w-6 h-6" />}
           label="필지분석"
           onClick={() => toggleWindow('landInfo')}
           isActive={openedWindows.includes('landInfo')}
@@ -109,13 +109,13 @@ export function MapSidebar() {
           isActive={openedWindows.includes('standardList')}
         />
         <SidebarButton
-          icon={<Search className="w-6 h-6" />}
+          icon={<LayoutList className="w-6 h-6" />}
           label="목록보기"
           onClick={() => toggleWindow('dataQuery')}
           isActive={openedWindows.includes('dataQuery')}
         />
         <SidebarButton
-          icon={<Wrench className="w-6 h-6" />}
+          icon={<Droplets className="w-6 h-6" />}
           label="급수공사"
           onClick={() => toggleWindow('waterSupply')}
           isActive={openedWindows.includes('waterSupply')}
