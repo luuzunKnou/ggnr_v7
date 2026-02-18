@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useRef, useCallback } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Crop, Download, PanelsLeftBottom, BarChart3, LayoutList, Droplets, ClipboardList } from 'lucide-react';
+import { Crop, Download, PanelsLeftBottom, BarChart3, LayoutList, Droplets, ClipboardList, Video, Inbox, StickyNote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from './MapContext';
 
@@ -41,7 +43,8 @@ const CLICK_RESET_MS = 800;
 export function MapSidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const openedWindows = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+  const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+  const openedWindows = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
   const mapContext = useMapContext();
   const debugClickCountRef = useRef(0);
   const debugClickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,6 +87,19 @@ export function MapSidebar() {
     <aside className="fixed left-0 top-0 h-screen w-[65px] bg-black/70 backdrop-blur-sm flex flex-col items-center pt-4 z-50">
       <div className="flex flex-col flex-1 min-h-0 w-full">
         <div className="flex flex-col">
+        <Link
+          href="/"
+          className="flex items-center justify-center w-[65px] h-[45px] shrink-0 mb-1 hover:bg-white/10 transition-colors rounded"
+          title="메인으로"
+        >
+          <Image
+            src="/ggnr_ai.svg"
+            alt="GGNR AI"
+            width={44}
+            height={40}
+            className="object-contain brightness-0 invert"
+          />
+        </Link>
         <SidebarButton
           icon={<Crop className="w-6 h-6" />}
           label="단면도"
@@ -110,9 +126,9 @@ export function MapSidebar() {
         />
         <SidebarButton
           icon={<LayoutList className="w-6 h-6" />}
-          label="목록보기"
-          onClick={() => toggleWindow('dataQuery')}
-          isActive={openedWindows.includes('dataQuery')}
+          label="데이터 목록"
+          onClick={() => toggleWindow('listView')}
+          isActive={openedWindows.includes('listView')}
         />
         <SidebarButton
           icon={<Droplets className="w-6 h-6" />}
@@ -125,6 +141,24 @@ export function MapSidebar() {
           label="상수도 공사대장"
           onClick={() => toggleWindow('constructionLedger')}
           isActive={openedWindows.includes('constructionLedger')}
+        />
+        <SidebarButton
+          icon={<Video className="w-6 h-6" />}
+          label="고화질영상"
+          onClick={() => toggleWindow('highQualityVideo')}
+          isActive={openedWindows.includes('highQualityVideo')}
+        />
+        <SidebarButton
+          icon={<Inbox className="w-6 h-6" />}
+          label="민원관리"
+          onClick={() => toggleWindow('complaintManagement')}
+          isActive={openedWindows.includes('complaintManagement')}
+        />
+        <SidebarButton
+          icon={<StickyNote className="w-6 h-6" />}
+          label="메모관리"
+          onClick={() => toggleWindow('memoManagement')}
+          isActive={openedWindows.includes('memoManagement')}
         />
         </div>
         <div className="flex-1 min-h-0 w-full" aria-hidden />

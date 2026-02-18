@@ -257,7 +257,7 @@ export function DevTestContent() {
 
       const d = response.data
       if (d.success) {
-        addGeoserverLog(`GeoServer DB 연결 설정 완료 (workspace: ${d.workspace ?? "ggnr"}, datastore: ${d.datastoreName ?? "postgres"})`)
+        addGeoserverLog(`GeoServer DB 연결 설정 완료 (workspace: ${d.workspace ?? "ggnr"}, datastore: ${d.datastoreName ?? "postgres_layer,postgres_public_layer"})`)
       } else {
         addGeoserverLog(`설정 실패: ${d.error ?? "Unknown"}`)
       }

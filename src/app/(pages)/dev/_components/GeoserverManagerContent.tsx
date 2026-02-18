@@ -27,10 +27,15 @@ type DbStatus = {
 type DiffRow = {
   key: string
   tablesJson: { kor: string; eng: string } | null
+  parentsLayer: string | null
+  divQuery: string | null
   layerSchema: string | null
   geoserver: string | null
   style: string | null
+  excludeFromMismatch?: boolean
 }
+
+const EXCLUDED_STYLE_NAMES = new Set(["generic", "line", "point", "polygon", "raster"])
 
 export function GeoserverManagerContent() {
   const [geoserverUrl] = useState(GEOSERVER_DEFAULT_URL)
@@ -45,6 +50,8 @@ export function GeoserverManagerContent() {
   const [geoStartLoading, setGeoStartLoading] = useState(false)
   const [geoStopLoading, setGeoStopLoading] = useState(false)
   const [dbSetupLoading, setDbSetupLoading] = useState(false)
+  const [styleAutoLoading, setStyleAutoLoading] = useState(false)
+  const [layerAutoCreateLoading, setLayerAutoCreateLoading] = useState(false)
   const logScrollRef = useRef<HTMLDivElement>(null)
 
   const fetchGeoStatus = useCallback(async () => {
@@ -102,8 +109,13 @@ export function GeoserverManagerContent() {
       ])
       const layerData = layerRes?.data ?? layerRes
       const styleData = styleRes?.data ?? styleRes
+      const filteredStyles = Array.isArray(styleData?.styles)
+        ? styleData.styles.filter(
+            (s: { name?: string }) => !EXCLUDED_STYLE_NAMES.has(String(s?.name ?? "").toLowerCase())
+          )
+        : []
       setLayerCount(Array.isArray(layerData?.layers) ? layerData.layers.length : 0)
-      setStyleCount(Array.isArray(styleData?.styles) ? styleData.styles.length : 0)
+      setStyleCount(filteredStyles.length)
     } catch {
       setLayerCount(0)
       setStyleCount(0)
@@ -144,22 +156,40 @@ export function GeoserverManagerContent() {
       const defineTables = (defineRes?.data?.tables ?? []) as Array<{
         define_table_name?: string
         define_table_kor_name?: string
+        define_table_parents_layer?: string
+        define_table_div_query?: string
       }>
       const layerTables = (layerRes?.data?.tables ?? []) as Array<{ schema: string; table: string }>
       const geoLayers = (geoRes?.data?.layers ?? []) as string[]
-      const styleList = (styleRes?.data?.styles ?? []) as Array<{ name: string }>
+      const styleList = ((styleRes?.data?.styles ?? []) as Array<{ name: string }>).filter(
+        (s) => !EXCLUDED_STYLE_NAMES.has(String(s?.name ?? "").toLowerCase())
+      )
 
-      const defineMap = new Map<string, { kor: string; eng: string }>()
+      const defineMap = new Map<string, { kor: string; eng: string; parentsLayer: string; divQuery: string }>()
       defineTables.forEach((t) => {
         const eng = String(t.define_table_name ?? "").trim()
-        if (eng) defineMap.set(eng, { kor: String(t.define_table_kor_name ?? "").trim(), eng })
+        if (eng) {
+          defineMap.set(eng, {
+            kor: String(t.define_table_kor_name ?? "").trim(),
+            eng,
+            parentsLayer: String(t.define_table_parents_layer ?? "").trim(),
+            divQuery: String(t.define_table_div_query ?? "").trim(),
+          })
+        }
       })
 
       const layerSchemaSet = new Set(
-        layerTables.filter((t) => t.schema === "layer").map((t) => t.table)
+        layerTables
+          .filter((t) => t.schema === "layer" || t.schema === "public_layer")
+          .map((t) => t.table)
       )
       const geoSet = new Set(geoLayers)
       const styleSet = new Set(styleList.map((s) => s.name))
+      const splitParents = new Set(
+        Array.from(defineMap.values())
+          .filter((v) => !!v.parentsLayer && !!v.divQuery)
+          .map((v) => v.parentsLayer)
+      )
 
       const allKeys = new Set<string>([
         ...defineMap.keys(),
@@ -169,13 +199,31 @@ export function GeoserverManagerContent() {
       ])
       const sortedKeys = Array.from(allKeys).sort((a, b) => a.localeCompare(b, "ko"))
 
-      const rows: DiffRow[] = sortedKeys.map((key) => ({
-        key,
-        tablesJson: defineMap.get(key) ?? null,
-        layerSchema: layerSchemaSet.has(key) ? key : null,
-        geoserver: geoSet.has(key) ? key : null,
-        style: styleSet.has(key) ? key : null,
-      }))
+      const rows: DiffRow[] = sortedKeys.map((key) => {
+        const defineRow = defineMap.get(key) ?? null
+        const parentsLayer = defineRow?.parentsLayer || null
+        const divQuery = defineRow?.divQuery || null
+        const isSplitLayer = !!parentsLayer && !!divQuery
+        const dbMatched = isSplitLayer
+          ? layerSchemaSet.has(parentsLayer)
+          : layerSchemaSet.has(key)
+        const layerSchema = dbMatched
+          ? isSplitLayer
+            ? `${parentsLayer}  -  ${divQuery}`
+            : key
+          : null
+
+        return {
+          key,
+          tablesJson: defineRow ? { kor: defineRow.kor, eng: defineRow.eng } : null,
+          parentsLayer,
+          divQuery,
+          layerSchema,
+          geoserver: geoSet.has(key) ? key : null,
+          style: styleSet.has(key) ? key : null,
+          excludeFromMismatch: splitParents.has(key),
+        }
+      })
       setDiffRows(rows)
     } catch {
       setDiffRows([])
@@ -252,6 +300,34 @@ export function GeoserverManagerContent() {
     }
   }
 
+  const autoApplyStyles = async () => {
+    setStyleAutoLoading(true)
+    try {
+      await call("", "POST", {
+        service: "devTestService",
+        action: "applyAllDefaultStyles",
+        params: { url: geoserverUrl },
+      })
+      await Promise.all([fetchCounts(), fetchDiff()])
+    } finally {
+      setStyleAutoLoading(false)
+    }
+  }
+
+  const autoCreateLayers = async () => {
+    setLayerAutoCreateLoading(true)
+    try {
+      await call("", "POST", {
+        service: "devTestService",
+        action: "createGeoServerLayers",
+        params: { url: geoserverUrl },
+      })
+      await Promise.all([fetchCounts(), fetchDiff()])
+    } finally {
+      setLayerAutoCreateLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* 상단: GeoServer 상태 (콘텐츠 높이만 사용, 여백은 diff로) */}
@@ -324,7 +400,7 @@ export function GeoserverManagerContent() {
                   : `실패: ${dbStatus.error ?? "연결 불가"}`}
             </div>
             <Button size="sm" variant="outline" onClick={setupDb} disabled={dbSetupLoading}>
-              {dbSetupLoading ? "설정 중..." : "DB 연결 자동설정"}
+              {dbSetupLoading ? "설정 중..." : "작업공간, 저장소 자동설정"}
             </Button>
           </div>
           <div className="rounded border bg-muted/30 p-2 space-y-1.5">
@@ -332,34 +408,64 @@ export function GeoserverManagerContent() {
             <div className="text-xs font-mono">
               레이어: {layerCount ?? "-"}개 · 스타일: {styleCount ?? "-"}개
             </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={autoCreateLayers} disabled={layerAutoCreateLoading}>
+                {layerAutoCreateLoading ? "생성 중..." : "레이어 자동생성"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={autoApplyStyles} disabled={styleAutoLoading}>
+                {styleAutoLoading ? "적용 중..." : "스타일 자동설정"}
+              </Button>
+            </div>
           </div>
         </div>
       </section>
 
       {/* 중앙: 레이어 diff 테이블 */}
-      <section className="flex-1 min-h-0 overflow-auto border-b pb-3 mb-3">
-        <div className="text-sm font-medium mb-2 flex items-center gap-2 flex-wrap">
+      <section className="flex-1 min-h-0 overflow-hidden border-b pb-3 mb-3 flex flex-col">
+        <div className="shrink-0 text-sm font-medium mb-2 flex items-center gap-2 flex-wrap">
           레이어 목록 diff (tables.json · Database · GeoServer · Style)
           {diffRows.length > 0 && (
             <span className="text-xs font-normal text-muted-foreground">
               일치 <span className="font-semibold text-green-600 dark:text-green-400">
-                {diffRows.filter((r) => r.tablesJson != null && r.layerSchema != null && r.geoserver != null && r.style != null).length}
+                {diffRows.filter((r) => {
+                  const isMatch =
+                    r.tablesJson != null &&
+                    r.layerSchema != null &&
+                    r.geoserver != null &&
+                    r.style != null
+                  return isMatch || r.excludeFromMismatch
+                }).length}
               </span>
               {" / "}
               불일치 <span className="font-semibold text-red-600 dark:text-red-400">
-                {diffRows.filter((r) => !(r.tablesJson != null && r.layerSchema != null && r.geoserver != null && r.style != null)).length}
+                {diffRows.filter((r) => {
+                  const isMatch =
+                    r.tablesJson != null &&
+                    r.layerSchema != null &&
+                    r.geoserver != null &&
+                    r.style != null
+                  return !isMatch && !r.excludeFromMismatch
+                }).length}
               </span>
             </span>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full border-collapse text-xs">
             <thead>
-              <tr className="border-b bg-muted/50 leading-none">
-                <th className="text-left py-1.5 px-2 w-[25%]">tables.json (한글명 / 영문명)</th>
-                <th className="text-left py-1.5 px-2 w-[25%]">Database</th>
-                <th className="text-left py-1.5 px-2 w-[25%]">GeoServer 레이어</th>
-                <th className="text-left py-1.5 px-2 w-[25%]">Style</th>
+              <tr className="border-b leading-none">
+                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                  tables.json (한글명 / 영문명)
+                </th>
+                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                  Database
+                </th>
+                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                  GeoServer 레이어
+                </th>
+                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                  Style
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -376,14 +482,17 @@ export function GeoserverManagerContent() {
                     row.layerSchema != null &&
                     row.geoserver != null &&
                     row.style != null
+                  const rowBg = row.excludeFromMismatch
+                    ? "bg-slate-50/80 dark:bg-slate-900/30"
+                    : isMatch
+                      ? "bg-green-50/80 dark:bg-green-950/30"
+                      : "bg-red-50/80 dark:bg-red-950/30"
                   return (
                   <tr
                     key={row.key}
                     className={cn(
                       "border-b border-border/50 leading-none",
-                      isMatch
-                        ? "bg-green-50/80 dark:bg-green-950/30"
-                        : "bg-red-50/80 dark:bg-red-950/30"
+                      rowBg
                     )}
                   >
                     <td className="py-1.5 px-2 font-mono">
@@ -391,7 +500,15 @@ export function GeoserverManagerContent() {
                         ? `${row.tablesJson.kor || "-"} / ${row.tablesJson.eng}`
                         : ""}
                     </td>
-                    <td className="py-1.5 px-2 font-mono">{row.layerSchema ?? ""}</td>
+                    <td className="py-1.5 px-2 font-mono">
+                      {row.layerSchema ? (
+                        <span className="block truncate" title={row.layerSchema}>
+                          {row.layerSchema}
+                        </span>
+                      ) : (
+                        ""
+                      )}
+                    </td>
                     <td className="py-1.5 px-2 font-mono">{row.geoserver ?? ""}</td>
                     <td className="py-1.5 px-2 font-mono">{row.style ?? ""}</td>
                   </tr>

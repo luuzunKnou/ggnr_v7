@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d6b</id>
+  <name>lsmd_cont_uj201_ujb100</name>
+  <nativeName>lsmd_cont_uj201</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>lsmd_cont_uj201</title>
+  <keywords>
+    <string>features</string>
+    <string>lsmd_cont_uj201</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>327844.5428333645</minx>
+    <maxx>381450.49748021865</maxx>
+    <miny>312781.49270530697</miny>
+    <maxy>369280.3049849124</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.4233654270716</minx>
+    <maxx>129.03319501913916</maxx>
+    <miny>36.29598542128744</miny>
+    <maxy>36.813558026738</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -1,12 +1,12 @@
 <layer>
   <name>jsj</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2810</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fcc</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38a9</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c76</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:280f</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fcd</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:36.700 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:52.624 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:14.234 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:31.174 UTC</dateModified>
 </layer>

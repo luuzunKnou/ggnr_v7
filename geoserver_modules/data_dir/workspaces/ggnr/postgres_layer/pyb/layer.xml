@@ -1,12 +1,12 @@
 <layer>
   <name>pyb</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:28d8</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fca</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38aa</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c75</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28d7</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fcb</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:46.878 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:52.719 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:14.329 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:31.207 UTC</dateModified>
 </layer>

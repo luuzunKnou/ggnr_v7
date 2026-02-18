@@ -1,0 +1,22 @@
+<layer>
+  <name>landown_parking</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d08</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b14</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d09</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">jimok = &apos;11&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:01:01.974 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:01.990 UTC</dateModified>
+</layer>

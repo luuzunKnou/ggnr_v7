@@ -77,7 +77,7 @@ export function MapControlPanel({
   className,
 }: MapControlPanelProps) {
   return (
-    <div className={cn("flex flex-col gap-2.5 w-14", className)}>
+    <div className={cn("flex flex-col gap-2.5 w-14 opacity-90", className)}>
       {groups.map((group) => (
         <div
           key={group.id}

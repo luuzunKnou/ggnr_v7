@@ -1,32 +1,25 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { call } from '@/lib/api';
 import {
   Search,
-  X,
   ChevronDown,
   ChevronRight,
   Square,
   Circle,
   Pentagon,
   RefreshCw,
-  GripVertical,
   Database,
   Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from './MapContext';
+import { getRowValueByField } from './defineLayerRowUtils';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import { Style, Stroke, Fill, Circle as CircleStyle, Icon } from 'ol/style';
-
-const SIDEBAR_WIDTH = 65;
-
-/* ------------------------------------------------------------------ */
-/*  defineLayer 기반 레이어 그룹/목록 (켜진 레이어 기준)                */
 /* ------------------------------------------------------------------ */
 
 type DefineLayerRow = {
@@ -71,101 +64,14 @@ const SPATIAL_TOOLS: { id: SpatialSearchTool; icon: typeof Square; label: string
 /*  Props                                                              */
 /* ------------------------------------------------------------------ */
 
-type StandardListProps = {
-  width: number;
-  minWidth: number;
-  maxWidth: number;
-  onWidthChange: (width: number) => void;
-};
+/*  목록보기 내용 (Layout에서 MapSideListPanel children으로 사용)      */
+/* ------------------------------------------------------------------ */
 
-export default function StandardList({
-  width,
-  minWidth,
-  maxWidth,
-  onWidthChange,
-}: StandardListProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export default function StandardList() {
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const openedKey = 'dataQuery';
-
-  const handleResize = useCallback(
-    (e: MouseEvent) => {
-      const next = Math.min(maxWidth, Math.max(minWidth, e.clientX - SIDEBAR_WIDTH));
-      onWidthChange(next);
-    },
-    [minWidth, maxWidth, onWidthChange]
-  );
-
-  const handleResizeEnd = useCallback(() => {
-    window.removeEventListener('mousemove', handleResize);
-    window.removeEventListener('mouseup', handleResize);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  }, [handleResize]);
-
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      window.addEventListener('mousemove', handleResize);
-      window.addEventListener('mouseup', handleResizeEnd);
-    },
-    [handleResize, handleResizeEnd]
-  );
-
-  useEffect(() => {
-    return () => {
-      window.removeEventListener('mousemove', handleResize);
-      window.removeEventListener('mouseup', handleResizeEnd);
-    };
-  }, [handleResize, handleResizeEnd]);
-
-  const handleClose = () => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()));
-    const opened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
-    const filtered = opened.filter((w) => w !== openedKey);
-    if (filtered.length > 0) {
-      current.set('opened', filtered.join(','));
-    } else {
-      current.delete('opened');
-    }
-    router.push(`/map?${current.toString()}`);
-  };
-
-  const panelClassName =
-    'h-full shrink-0 flex flex-col bg-white border-r border-slate-200 shadow-lg overflow-hidden relative';
-  const resizeHandle = (
-    <div
-      role="separator"
-      aria-label="패널 너비 조절"
-      onMouseDown={handleResizeStart}
-      className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center z-10 group hover:bg-slate-100/80"
-    >
-      <span className="opacity-0 group-hover:opacity-100 text-slate-400 transition-opacity">
-        <GripVertical className="w-4 h-4" />
-      </span>
-    </div>
-  );
-
-  return (
-    <AttributeQueryUI
-      panelRef={panelRef}
-      width={width}
-      panelClassName={panelClassName}
-      resizeHandle={resizeHandle}
-      handleClose={handleClose}
-      visibleLayerNames={visibleLayerNames}
-    />
-  );
+  return <AttributeQueryUI visibleLayerNames={visibleLayerNames} />;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Attribute Query UI (default)                                      */
-/* ------------------------------------------------------------------ */
 
 const PAGE_SIZE = 20;
 
@@ -179,18 +85,8 @@ type LayerTableData = {
 };
 
 function AttributeQueryUI({
-  panelRef,
-  width,
-  panelClassName,
-  resizeHandle,
-  handleClose,
   visibleLayerNames,
 }: {
-  panelRef: React.RefObject<HTMLDivElement | null>;
-  width: number;
-  panelClassName: string;
-  resizeHandle: React.ReactNode;
-  handleClose: () => void;
   visibleLayerNames: Set<string>;
 }) {
   const [activeTool, setActiveTool] = useState<SpatialSearchTool>('rectangle');
@@ -269,7 +165,7 @@ function AttributeQueryUI({
 
   useEffect(() => {
     if (layerGroups.length === 0) return;
-    setExpandedGroups((prev) => (prev.length === 0 ? layerGroups.map((g) => g.id) : prev));
+    setExpandedGroups(layerGroups.map((g) => g.id));
   }, [layerGroups]);
 
   useEffect(() => {
@@ -683,7 +579,11 @@ function AttributeQueryUI({
     setExpandedLayers((prev) => {
       const isRemoving = prev.includes(layerId);
       const next = isRemoving ? prev.filter((id) => id !== layerId) : [...prev, layerId];
-      if (isRemoving) clearHighlight();
+      if (isRemoving) {
+        clearHighlight();
+        setHighlightedRow((prev) => (prev?.layerId === layerId ? null : prev));
+        mapContext?.setSelectedDetail?.(null);
+      }
       return next;
     });
   };
@@ -696,6 +596,7 @@ function AttributeQueryUI({
       ...prev,
       [tableName]: { ...prev[tableName], loading: true, error: null },
     }));
+    if (highlightedRow?.layerId === tableName) mapContext?.setSelectedDetail?.(null);
     setHighlightedRow((prev) => (prev?.layerId === tableName ? null : prev));
     call('', 'POST', {
       service: 'standardService',
@@ -737,16 +638,11 @@ function AttributeQueryUI({
   };
 
   return (
-    <div ref={panelRef} className={cn(panelClassName, 'opacity-[0.95]')} style={{ width: `${width}px` }}>
-      {resizeHandle}
-
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden opacity-[0.95]">
       {/* 공간검색 */}
       <div className="border-b border-slate-200 px-4 py-3 shrink-0">
         <div className="flex items-baseline justify-between gap-2 mb-2">
-          <h4 className="text-sm font-bold text-primary">공간검색</h4>
-          <span className="text-xs text-slate-500 text-right shrink-0">
-            도형·행정경계·다른 테이블 속성으로 영역을 지정합니다.
-          </span>
+          <span className="font-medium text-slate-700">{'공간검색'}</span>
         </div>
         <div className="flex items-stretch w-full gap-2">
           {SPATIAL_TOOLS.map((tool) => {
@@ -878,6 +774,7 @@ function AttributeQueryUI({
         )}
         {layerGroups.map((group) => {
           const isGroupOpen = expandedGroups.includes(group.id);
+          const hasOpenLayer = group.layers.some((l) => expandedLayers.includes(l.id));
           const groupCount = group.layers.length;
 
           return (
@@ -885,26 +782,31 @@ function AttributeQueryUI({
               key={group.id}
               className={cn(
                 'border-b border-slate-200 border-l-4',
-                isGroupOpen ? 'border-l-primary' : 'border-l-slate-200'
+                hasOpenLayer ? 'border-l-primary' : 'border-l-slate-200'
               )}
             >
               <button
                 type="button"
                 onClick={() => toggleGroup(group.id)}
                 className={cn(
-                  'flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-primary/10',
-                  isGroupOpen && 'bg-primary/15'
+                  'flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-slate-100',
+                  hasOpenLayer && 'hover:bg-primary/10 bg-primary/15'
                 )}
               >
                 {isGroupOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <ChevronDown
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0',
+                      hasOpenLayer ? 'text-primary' : 'text-slate-500'
+                    )}
+                  />
                 ) : (
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                 )}
                 <span
                   className={cn(
                     'text-[14px] font-semibold',
-                    isGroupOpen ? 'text-primary' : 'text-slate-800'
+                    hasOpenLayer ? 'text-primary' : 'text-slate-800'
                   )}
                 >
                   {group.name}
@@ -912,7 +814,7 @@ function AttributeQueryUI({
                 <span
                   className={cn(
                     'ml-auto rounded-full px-2 py-0.5 text-[12px] font-medium',
-                    isGroupOpen ? 'bg-primary/25 text-primary' : 'bg-slate-200 text-slate-600'
+                    hasOpenLayer ? 'bg-primary/25 text-primary' : 'bg-slate-200 text-slate-600'
                   )}
                 >
                   {groupCount}개 레이어
@@ -920,7 +822,7 @@ function AttributeQueryUI({
               </button>
 
               {isGroupOpen && (
-                <div className="bg-primary/5">
+                <div className={cn(hasOpenLayer ? 'bg-primary/5' : 'bg-slate-50/80')}>
                   {group.layers.map((layer) => {
                     const isLayerOpen = expandedLayers.includes(layer.id);
                     const data = layerData[layer.tableName];
@@ -994,26 +896,39 @@ function AttributeQueryUI({
                                   <button
                                     key={rowIndex}
                                     type="button"
-                                    onClick={() =>
-                                      setHighlightedRow(
-                                        isHighlighted ? null : { layerId: layer.tableName, rowIndex }
-                                      )
-                                    }
+                                    onClick={() => {
+                                      if (isHighlighted) {
+                                        setHighlightedRow(null);
+                                        mapContext?.setSelectedDetail?.(null);
+                                      } else {
+                                        setHighlightedRow({
+                                          layerId: layer.tableName,
+                                          rowIndex,
+                                        });
+                                        mapContext?.setSelectedDetail?.({
+                                          layerName: layer.name,
+                                          tableName: layer.tableName,
+                                          row: data.rows[rowIndex] as Record<string, unknown>,
+                                          fields: data.fields,
+                                        });
+                                      }
+                                    }}
                                     className={cn(
                                       'flex w-full items-center border-b border-slate-100 px-4 py-1.5 text-left text-[12px] transition-colors hover:bg-primary/5',
                                       isHighlighted && 'bg-primary/10'
                                     )}
                                   >
-                                    {data.fields.map((f) => (
-                                      <span
-                                        key={String(f.define_field_name)}
-                                        className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-slate-800"
-                                      >
-                                        {row[String(f.define_field_name)] != null
-                                          ? String(row[String(f.define_field_name)])
-                                          : '-'}
-                                      </span>
-                                    ))}
+                                    {data.fields.map((f) => {
+                                      const value = getRowValueByField(row, String(f.define_field_name));
+                                      return (
+                                        <span
+                                          key={String(f.define_field_name)}
+                                          className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-slate-800"
+                                        >
+                                          {value != null ? String(value) : '-'}
+                                        </span>
+                                      );
+                                    })}
                                   </button>
                                 );
                                 })}

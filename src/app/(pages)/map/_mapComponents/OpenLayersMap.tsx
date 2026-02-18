@@ -14,6 +14,7 @@ import { useBackgroundLayer } from './hooks/useBackgroundLayer';
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { MapView } from './MapView';
+import { Crosshair } from 'lucide-react';
 
 // 다중 선택 가능한 아이템 ID 목록
 const MULTI_SELECT_IDS = [
@@ -173,29 +174,42 @@ export default function OpenLayersMap() {
     <div className="relative w-full h-full">
       <MapView ref={mapRef} />
 
-      {/* 오른쪽 맵 컨트롤 패널 */}
-      <div className="absolute right-4 top-20 z-10 flex items-start gap-3">
-        {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
-        {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
-          <div
-            className={
-              isBackgroundPanelExiting
-                ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
-            }
-          >
-            <BackgroundMapSelector
-              value={selectedBackgroundMap}
-              onValueChange={setSelectedBackgroundMap}
-            />
-          </div>
-        )}
-
-        <MapControlPanel
-          groups={defaultMapControlGroups}
-          activeIds={activeControls}
-          onItemClick={handleControlClick}
+      {/* 지도 중심점 마크 (화면 중앙 고정) */}
+      <div
+        className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+        aria-hidden
+      >
+        <Crosshair
+          className="w-6 h-6 text-orange-600 opacity-80 drop-shadow-md"
+          strokeWidth={2}
         />
+      </div>
+
+      {/* 오른쪽 맵 컨트롤 패널 */}
+      <div className="absolute right-4 top-20 z-10 flex flex-col items-end gap-3">
+        <div className="flex items-start gap-3">
+          {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
+          {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
+            <div
+              className={
+                isBackgroundPanelExiting
+                  ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
+                  : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+              }
+            >
+              <BackgroundMapSelector
+                value={selectedBackgroundMap}
+                onValueChange={setSelectedBackgroundMap}
+              />
+            </div>
+          )}
+
+          <MapControlPanel
+            groups={defaultMapControlGroups}
+            activeIds={activeControls}
+            onItemClick={handleControlClick}
+          />
+        </div>
       </div>
 
       {/* 하단: GeoServer 로그 (줌 레벨 위) — showDebugUi 시에만 표시 */}

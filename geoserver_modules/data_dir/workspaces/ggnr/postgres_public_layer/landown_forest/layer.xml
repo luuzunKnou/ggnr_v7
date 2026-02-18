@@ -1,0 +1,22 @@
+<layer>
+  <name>landown_forest</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d1a</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b1d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d1b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">jimok = &apos;05&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:58.457 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:58.632 UTC</dateModified>
+</layer>

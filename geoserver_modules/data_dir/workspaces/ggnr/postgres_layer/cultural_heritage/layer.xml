@@ -1,12 +1,12 @@
 <layer>
   <name>cultural_heritage</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27da</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e8c</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3a83</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7bd6</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27d9</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e8d</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:33.849 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:01.166 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:31.882 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:48.133 UTC</dateModified>
 </layer>

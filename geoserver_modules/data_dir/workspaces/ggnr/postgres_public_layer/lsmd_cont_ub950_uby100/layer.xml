@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_ub950_uby100</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7db2</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b69</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7db3</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UBY100%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:44.990 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:45.55 UTC</dateModified>
+</layer>

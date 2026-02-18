@@ -1,8 +1,11 @@
 * {
-  fill: #FF9800;
-  stroke: #FFFFFF;
-  stroke-width: 1.5;
-  stroke-opacity: 1;
-  fill-opacity: 1;
+  mark: symbol(circle);
   mark-size: 10;
+  :mark {
+    fill: #E91E63;
+    stroke: #FFFFFF;
+    stroke-width: 1.5;
+    stroke-opacity: 1;
+    fill-opacity: 1;
+  }
 }

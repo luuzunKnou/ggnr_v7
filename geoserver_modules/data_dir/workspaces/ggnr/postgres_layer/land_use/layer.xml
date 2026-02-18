@@ -1,12 +1,12 @@
 <layer>
   <name>land_use</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2814</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cec</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3c1c</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b06</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2813</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7ced</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:36.853 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:15.369 UTC</dateModified>
+  <dateCreated>2026-02-11 16:01:06.734 UTC</dateCreated>
+  <dateModified>2026-02-11 16:02:14.124 UTC</dateModified>
 </layer>

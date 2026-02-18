@@ -7,5 +7,6 @@ import * as dbManagerService from './dbManagerService';
 import * as sysService from './sysService';
 import * as serService from './serService';
 import * as standardService from './standardService';
+import * as complaintService from './complaintService';
 
-export { configService, devTestService, dbManagerService, sysService, serService, standardService };
+export { configService, devTestService, dbManagerService, sysService, serService, standardService, complaintService };

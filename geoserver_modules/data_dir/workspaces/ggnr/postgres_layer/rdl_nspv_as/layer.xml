@@ -1,12 +1,12 @@
 <layer>
   <name>rdl_nspv_as</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:28f4</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7f7c</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38d8</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c4e</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28f3</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7f7d</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:48.318 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:55.736 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:18.194 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:35.681 UTC</dateModified>
 </layer>

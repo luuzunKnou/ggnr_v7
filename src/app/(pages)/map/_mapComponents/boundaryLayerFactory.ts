@@ -2,8 +2,6 @@ import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import { WORKSPACE } from './serviceLayerFactory';
 
-const WMS_EXCEPTIONS = 'application/vnd.ogc.se_inimage';
-
 function getGeoServerBase(): string {
   if (typeof window !== 'undefined') {
     return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
@@ -23,32 +21,32 @@ const CADASTRAL_LAYERS: {
 ];
 
 /**
- * 지적도 관련 GeoServer WMS 레이어 (jijuk, emd, ri).
- * 스타일은 GeoServer 레이어 default style 사용.
+ * 지적도 관련 GeoServer WMS 레이어 (jijuk, ri, emd)
  */
-export function createInitialPgTileservLayers(): TileLayer<TileWMS>[] {
+export function createCadastralLayers(): TileLayer<TileWMS>[] {
   const geoServerBase = getGeoServerBase();
   const wmsUrl = `${geoServerBase}/${WORKSPACE}/wms`;
 
-  return CADASTRAL_LAYERS.map(({ tableName, layerName, minZoom, maxZoom }) => {
-    const layer = new TileLayer({
-      visible: false,
-      minZoom,
-      maxZoom,
-      source: new TileWMS({
-        url: wmsUrl,
-        params: {
-          LAYERS: `${WORKSPACE}:${tableName}`,
-          TILED: true,
-          EXCEPTIONS: WMS_EXCEPTIONS,
-        },
-        serverType: 'geoserver',
-        transition: 0,
-      }),
-    });
-
-    layer.set('name', layerName);
-    layer.set('cadastralLayer', true);
-    return layer;
-  });
+  return CADASTRAL_LAYERS.map(
+    ({ tableName, layerName, minZoom, maxZoom }) => {
+      const layer = new TileLayer({
+        minZoom,
+        maxZoom,
+        visible: false,
+        source: new TileWMS({
+          url: wmsUrl,
+          params: {
+            LAYERS: `${WORKSPACE}:${tableName}`,
+            TILED: true,
+            EXCEPTIONS: 'application/vnd.ogc.se_inimage',
+          },
+          serverType: 'geoserver',
+          transition: 0,
+        }),
+      });
+      layer.set('name', layerName);
+      layer.set('cadastralLayer', true);
+      return layer;
+    }
+  );
 }

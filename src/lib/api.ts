@@ -70,15 +70,29 @@ export function call(api: string, method: 'GET' | 'POST', request?: any): Promis
         return Promise.reject({ status: 403, message: 'Forbidden' });
       }
 
-      return response.json().then((json) => {
+      return response.text().then((text) => {
+        let json: any;
+        try {
+          json = text ? JSON.parse(text) : {};
+        } catch {
+          const err = {
+            status: response.status,
+            message: 'Response is not JSON',
+            body: text?.slice(0, 300),
+          };
+          console.error('API call error:', err);
+          return Promise.reject(err);
+        }
         if (!response.ok) {
+          console.error('API call error:', { status: response.status, ...json });
           return Promise.reject(json);
         }
         return json;
       });
     })
     .catch((error) => {
-      console.error('API call error:', error);
+      const msg = error?.message ?? error?.error ?? (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
+      console.error('API call error:', msg, error);
       return Promise.reject(error);
     });
 }

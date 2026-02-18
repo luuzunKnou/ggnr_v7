@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_uh212_uhj100</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d7e</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b4f</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d7f</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UHJ100%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:49.679 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:49.703 UTC</dateModified>
+</layer>

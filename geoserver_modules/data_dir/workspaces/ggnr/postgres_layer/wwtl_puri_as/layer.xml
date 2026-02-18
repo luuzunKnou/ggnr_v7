@@ -1,12 +1,12 @@
 <layer>
   <name>wwtl_puri_as</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2a9c</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fde</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3856</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c7f</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2a9b</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fdf</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:28:09.470 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:47.574 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:13.289 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:30.189 UTC</dateModified>
 </layer>

@@ -1,12 +1,12 @@
 <layer>
   <name>cit_facilities_child</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:278a</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fba</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38b9</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c6d</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2789</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fbb</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:30.26 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:53.521 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:15.106 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:32.12 UTC</dateModified>
 </layer>

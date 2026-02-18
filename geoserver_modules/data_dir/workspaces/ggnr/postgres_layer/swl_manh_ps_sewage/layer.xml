@@ -1,0 +1,22 @@
+<layer>
+  <name>swl_manh_ps_sewage</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cbe</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7aef</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cbf</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">smu_cde = &apos;SMU002&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:01:09.76 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:09.149 UTC</dateModified>
+</layer>

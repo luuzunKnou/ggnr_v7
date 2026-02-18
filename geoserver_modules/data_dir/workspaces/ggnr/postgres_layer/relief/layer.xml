@@ -1,12 +1,12 @@
 <layer>
   <name>relief</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:292a</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7de0</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3b15</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b80</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2929</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7de1</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:50.907 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:10.114 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:42.308 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:58.51 UTC</dateModified>
 </layer>

@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_uq112_uqb200</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7de8</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b84</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7de9</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UQB200%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:41.868 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:41.931 UTC</dateModified>
+</layer>

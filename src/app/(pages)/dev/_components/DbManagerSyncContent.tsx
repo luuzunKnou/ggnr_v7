@@ -52,6 +52,8 @@ type ColumnComparison = {
   toModify: Array<{ name: string; defined: { name: string; type: string; notNull: boolean; comment?: string }; actual: { name: string; type: string; notNull: boolean } }>;
   same: { name: string; type: string; notNull: boolean; comment?: string }[];
   primaryKeyColumns?: string[];
+  /** DB에 실제 설정된 PK 컬럼 (없으면 []) */
+  actualPrimaryKeyColumns?: string[];
 };
 
 type SyncReportItem = {
@@ -154,6 +156,8 @@ export function DbManagerSyncContent({ onBack }: { onBack?: () => void }) {
   const [syncingTableKey, setSyncingTableKey] = useState<string | null>(null);
   /** 3단계: 행 단위 "_all" | `${tableKey}-${fieldName}` */
   const [step3Syncing, setStep3Syncing] = useState<string | null>(null);
+  /** 3단계: PK 동기화 중인 테이블 (schema.table) */
+  const [step3PkSyncing, setStep3PkSyncing] = useState<string | null>(null);
 
   /** 불일치 항목만 표시 (2·3단계 테이블) — 기본값: 체크 */
   const [showOnlyMismatch, setShowOnlyMismatch] = useState(true);
@@ -643,6 +647,38 @@ export function DbManagerSyncContent({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  const handlePkSync = async (tableKey: string) => {
+    const [schema, table] = tableKey.split(".");
+    if (!schema || !table) return;
+    setStep3PkSyncing(tableKey);
+    setCompareError(null);
+    try {
+      const response = await call("", "POST", {
+        service: "dbManagerService",
+        action: "applyPrimaryKeySync",
+        params: { ...params, schema, table },
+      });
+      if (!response?.success) throw new Error(response?.error || "PK 동기화 실패");
+      if (response?.data?.executedSql?.length) setSyncReportSql(response.data.executedSql);
+      pushSyncReportLog(3, "PK 동기화", `${tableKey} Primary Key 추가`, {
+        executedSql: response.data?.executedSql,
+        results: response.data?.results,
+      });
+      const diffRes = await call("", "POST", {
+        service: "dbManagerService",
+        action: "getTableColumnComparison",
+        params: { ...params, schema, table },
+      });
+      if (diffRes?.success && diffRes?.data) {
+        setColumnDiffs((prev) => ({ ...prev, [tableKey]: diffRes.data }));
+      }
+    } catch (e: any) {
+      setCompareError(e?.error || e?.message || "PK 동기화 실패");
+    } finally {
+      setStep3PkSyncing(null);
+    }
+  };
+
   const hasAnyColumnsToAdd = useMemo(
     () => Object.keys(columnsToAdd).some((k) => (columnsToAdd[k]?.length ?? 0) > 0),
     [columnsToAdd]
@@ -948,10 +984,40 @@ export function DbManagerSyncContent({ onBack }: { onBack?: () => void }) {
                 }
                 const displayRows = showOnlyMismatch ? fieldRows.filter((r) => r.status !== "일치") : fieldRows;
                 const isLoading = loadingColumn !== null;
+                const tablesWithMissingPk = tablesToSync.filter((t) => {
+                  const key = `${t.schema}.${t.table}`;
+                  const d = columnDiffs[key];
+                  return (d?.primaryKeyColumns?.length ?? 0) > 0 && (d?.actualPrimaryKeyColumns?.length ?? 0) === 0;
+                });
                 return (
                   <div className="space-y-1.5">
                     {isLoading && (
                       <div className="text-sm text-slate-600">필드 비교 조회 중...</div>
+                    )}
+                    {tablesWithMissingPk.length > 0 && (
+                      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <p className="font-medium mb-1.5">다음 테이블에 PK가 DB에 설정되지 않았습니다. (데이터 수정 불가)</p>
+                        <div className="flex flex-wrap gap-2">
+                          {tablesWithMissingPk.map((t) => {
+                            const key = `${t.schema}.${t.table}`;
+                            const syncing = step3PkSyncing === key;
+                            return (
+                              <span key={key} className="flex items-center gap-2">
+                                <span className="font-mono text-slate-700">{key}</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-none h-6 px-2 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                                  onClick={() => handlePkSync(key)}
+                                  disabled={syncing || step3PkSyncing !== null}
+                                >
+                                  {syncing ? "동기화 중..." : "PK 동기화"}
+                                </Button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
                     <div className="flex items-center justify-between gap-2">
                       <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
@@ -1052,7 +1118,23 @@ export function DbManagerSyncContent({ onBack }: { onBack?: () => void }) {
                                   </td>
                                   <td className="py-1 px-2 w-20 font-mono truncate align-middle">{row.type}</td>
                                   <td className="py-1 px-2 w-20 align-middle">{row.nullable}</td>
-                                  <td className="py-1 px-2 w-24 align-middle">{row.isPk ? "PK" : "—"}</td>
+                                  <td className="py-1 px-2 w-24 align-middle">
+                                    {row.isPk ? (
+                                      (() => {
+                                        const diff = columnDiffs[row.tableKey];
+                                        const pkMissing = (diff?.primaryKeyColumns?.length ?? 0) > 0 && (diff?.actualPrimaryKeyColumns?.length ?? 0) === 0;
+                                        return pkMissing ? (
+                                          <span className="text-red-600 font-medium" title="DB에 PK가 설정되지 않음. 위 PK 동기화 버튼으로 추가하세요.">
+                                            PK (미설정)
+                                          </span>
+                                        ) : (
+                                          "PK"
+                                        );
+                                      })()
+                                    ) : (
+                                      "—"
+                                    )}
+                                  </td>
                                   <td className="py-1 px-2 min-w-0 align-middle">
                                     <span className={`inline-block truncate max-w-full ${statusBadge}`}>{row.status === "추가" ? "스키마에만" : row.status}</span>
                                   </td>

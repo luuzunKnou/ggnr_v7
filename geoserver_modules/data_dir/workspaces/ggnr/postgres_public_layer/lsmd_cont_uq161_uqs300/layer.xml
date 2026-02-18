@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_uq161_uqs300</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7f28</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c24</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7f29</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UQS300%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:23.46 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:23.101 UTC</dateModified>
+</layer>

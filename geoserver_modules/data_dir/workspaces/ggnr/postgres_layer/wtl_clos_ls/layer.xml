@@ -1,12 +1,12 @@
 <layer>
   <name>wtl_clos_ls</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2a6e</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e66</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3aac</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7bc3</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2a6d</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e67</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:28:06.874 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:03.598 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:33.809 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:50.260 UTC</dateModified>
 </layer>

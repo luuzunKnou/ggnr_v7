@@ -5,15 +5,12 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
-          <sld:PolygonSymbolizer>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#009688</sld:CssParameter>
-            </sld:Fill>
+          <sld:LineSymbolizer>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-              <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
+              <sld:CssParameter name="stroke">#673AB7</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">2</sld:CssParameter>
             </sld:Stroke>
-          </sld:PolygonSymbolizer>
+          </sld:LineSymbolizer>
         </sld:Rule>
         <sld:VendorOption name="ruleEvaluation">first</sld:VendorOption>
       </sld:FeatureTypeStyle>

@@ -1,10 +1,15 @@
-import { pgTable, serial, integer, varchar, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, boolean, timestamp } from 'drizzle-orm/pg-core';
 import { ug } from './ug';
+import { ut } from './ut';
 
 export const usr = pgTable('usr', {
-  usrKey: serial('usr_key').primaryKey().notNull(),
-  ugKey: integer('ug_key').references(() => ug.ugKey, { onDelete: 'cascade' }),
-  usrId: varchar('usr_id'),
+  usrId: varchar('usr_id').primaryKey().notNull(),
+  ugName: varchar('ug_name')
+    .references(() => ug.ugName, { onDelete: 'cascade' })
+    .notNull(),
+  utName: varchar('ut_name')
+    .references(() => ut.utName, { onDelete: 'cascade' })
+    .notNull(),
   usrName: varchar('usr_name'),
   usrPwd: varchar('usr_pwd'),
   usrTel: varchar('usr_tel'),
@@ -24,9 +29,9 @@ export const usrTableComment = '사용자';
 
 /** 필드별 코멘트. 키 = DB 컬럼명 */
 export const usrColumnComments: Record<string, string> = {
-  usr_key: '사용자 키',
-  ug_key: '사용자 그룹 키',
   usr_id: '사용자 아이디',
+  ug_name: '부서 한글명',
+  ut_name: '팀 한글명',
   usr_name: '사용자 이름',
   usr_pwd: '비밀번호',
   usr_tel: '전화번호',

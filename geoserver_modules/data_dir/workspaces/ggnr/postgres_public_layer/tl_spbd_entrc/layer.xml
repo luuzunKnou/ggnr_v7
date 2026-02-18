@@ -1,0 +1,19 @@
+<layer>
+  <name>tl_spbd_entrc</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cb2</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7ae9</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cb3</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:01:10.225 UTC</dateCreated>
+  <dateModified>2026-02-11 16:02:17.329 UTC</dateModified>
+</layer>

@@ -307,8 +307,11 @@ export async function setupGeoServerDb(params: {
 } = {}) {
   const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const datastoreName = params?.datastoreName?.trim() || 'postgres';
   const db = getDbConfig();
+  const targets = [
+    { name: 'postgres_layer', schema: 'layer' },
+    { name: 'postgres_public_layer', schema: 'public_layer' },
+  ] as const;
 
   try {
     const wsRes = await geoserverFetch(baseUrl, `/rest/workspaces/${workspace}.json`);
@@ -327,34 +330,58 @@ export async function setupGeoServerDb(params: {
       }
     }
 
-    const dataStoreBody = {
-      dataStore: {
-        name: datastoreName,
-        type: 'PostGIS',
-        enabled: true,
-        connectionParameters: {
-          entry: [
-            { '@key': 'host', $: String(db.host) },
-            { '@key': 'port', $: String(db.port) },
-            { '@key': 'database', $: db.database },
-            { '@key': 'schema', $: db.schema },
-            { '@key': 'user', $: db.user },
-            { '@key': 'passwd', $: db.password },
-          ],
-        },
-      },
-    };
+    const datastores: Array<{ name: string; schema: string; status: 'created' | 'exists' }> = [];
 
-    const dsRes = await geoserverFetch(
-      baseUrl,
-      `/rest/workspaces/${workspace}/datastores.json`,
-      { method: 'POST', body: JSON.stringify(dataStoreBody) }
-    );
-    if (!dsRes.ok) {
-      const text = await dsRes.text();
-      return { success: false, error: `데이터 스토어 생성 실패: ${dsRes.status} ${text}` };
+    for (const target of targets) {
+      const dsGetRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${target.name}.json`
+      );
+      if (dsGetRes.ok) {
+        datastores.push({ name: target.name, schema: target.schema, status: 'exists' });
+        continue;
+      }
+      if (dsGetRes.status !== 404) {
+        const text = await dsGetRes.text();
+        return { success: false, error: `데이터 스토어 조회 실패(${target.name}): ${dsGetRes.status} ${text}` };
+      }
+
+      const dataStoreBody = {
+        dataStore: {
+          name: target.name,
+          type: 'PostGIS',
+          enabled: true,
+          connectionParameters: {
+            entry: [
+              { '@key': 'host', $: String(db.host) },
+              { '@key': 'port', $: String(db.port) },
+              { '@key': 'database', $: db.database },
+              { '@key': 'schema', $: target.schema },
+              { '@key': 'user', $: db.user },
+              { '@key': 'passwd', $: db.password },
+            ],
+          },
+        },
+      };
+
+      const dsRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores.json`,
+        { method: 'POST', body: JSON.stringify(dataStoreBody) }
+      );
+      if (!dsRes.ok) {
+        const text = await dsRes.text();
+        return { success: false, error: `데이터 스토어 생성 실패(${target.name}): ${dsRes.status} ${text}` };
+      }
+      datastores.push({ name: target.name, schema: target.schema, status: 'created' });
     }
-    return { success: true, workspace, datastoreName };
+
+    return {
+      success: true,
+      workspace,
+      datastoreName: targets.map((t) => t.name).join(','),
+      datastores,
+    };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -371,36 +398,57 @@ export async function verifyGeoServerDbConnection(params: {
 } = {}) {
   const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const datastoreName = params?.datastoreName?.trim() || 'postgres';
+  const targets = [
+    { name: 'postgres_layer', schema: 'layer' },
+    { name: 'postgres_public_layer', schema: 'public_layer' },
+  ] as const;
 
   try {
-    const dsRes = await geoserverFetch(
-      baseUrl,
-      `/rest/workspaces/${workspace}/datastores/${datastoreName}.json`
-    );
-    if (!dsRes.ok) {
-      const text = await dsRes.text();
-      return { success: false, error: `데이터 스토어 조회 실패: ${dsRes.status} ${text}` };
-    }
-    const datastore = await dsRes.json();
+    const featureTypes: Array<{ name?: string; datastoreName: string }> = [];
+    const datastores: Array<{ name: string; schema: string; ok: boolean; error?: string }> = [];
+    const errors: string[] = [];
 
-    const ftRes = await geoserverFetch(
-      baseUrl,
-      `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes.json`
-    );
-    if (!ftRes.ok) {
-      const text = await ftRes.text();
-      return {
-        success: true,
-        datastore,
-        error: `Feature types 조회 실패: ${ftRes.status} ${text}`,
-        featureTypes: [],
-      };
+    for (const target of targets) {
+      const dsRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${target.name}.json`
+      );
+      if (!dsRes.ok) {
+        const text = await dsRes.text();
+        const err = `데이터 스토어 조회 실패(${target.name}): ${dsRes.status} ${text}`;
+        datastores.push({ name: target.name, schema: target.schema, ok: false, error: err });
+        errors.push(err);
+        continue;
+      }
+
+      datastores.push({ name: target.name, schema: target.schema, ok: true });
+
+      const ftRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${target.name}/featuretypes.json`
+      );
+      if (!ftRes.ok) {
+        const text = await ftRes.text();
+        errors.push(`Feature types 조회 실패(${target.name}): ${ftRes.status} ${text}`);
+        continue;
+      }
+      const ftData = await ftRes.json();
+      const raw = ftData?.featureTypes?.featureType ?? ftData?.featureTypes;
+      const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      for (const item of arr) {
+        featureTypes.push({
+          datastoreName: target.name,
+          ...(typeof item === 'object' && item ? (item as Record<string, unknown>) : { name: String(item) }),
+        });
+      }
     }
-    const ftData = await ftRes.json();
-    const raw = ftData?.featureTypes?.featureType ?? ftData?.featureTypes;
-    const featureTypes = Array.isArray(raw) ? raw : raw ? [raw] : [];
-    return { success: true, datastore, featureTypes };
+
+    return {
+      success: errors.length === 0,
+      datastores,
+      featureTypes,
+      error: errors.length ? errors.join(' | ') : undefined,
+    };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -438,7 +486,7 @@ export async function getGeoServerLayerList(params: {
 }
 
 /**
- * layer, public 스키마의 geometry 테이블 목록 조회
+ * layer, public_layer 스키마의 geometry 테이블 목록 조회
  */
 export async function getLayerTableList() {
   try {
@@ -446,7 +494,7 @@ export async function getLayerTableList() {
       sql`
         SELECT f_table_schema, f_table_name, f_geometry_column
         FROM geometry_columns
-        WHERE f_table_schema IN ('layer', 'public')
+        WHERE f_table_schema IN ('layer', 'public_layer')
         ORDER BY f_table_schema, f_table_name
       `
     );
@@ -467,7 +515,11 @@ export async function getLayerTableList() {
 }
 
 /**
- * GeoServer 레이어 생성 (layer, public 스키마의 geometry 테이블 → feature type)
+ * GeoServer 레이어 생성
+ * - 기준: tables.json(defineLayer)
+ * - 생성할 레이어 목록은 tables.json(defineLayer)만 참조. DB 테이블 목록은 원본 테이블 존재·스키마 확인용.
+ * - 일반 레이어: define_table_name == nativeName
+ * - 분할 레이어: define_table_parents_layer + define_table_div_query 사용
  */
 export async function createGeoServerLayers(params: {
   url?: string;
@@ -477,23 +529,34 @@ export async function createGeoServerLayers(params: {
   const workspace = params?.workspace?.trim() || 'ggnr';
 
   try {
-    const listRes = await getLayerTableList();
-    if (!listRes.success || !listRes.tables?.length) {
+    const defineRes = await getDefineLayerTables();
+    if (!defineRes.success || !defineRes.tables?.length) {
       return {
         success: false,
-        error: listRes.error ?? 'geometry 테이블이 없습니다.',
+        error: defineRes.error ?? 'defineLayer 테이블이 없습니다.',
         created: [],
         failed: [],
       };
     }
 
+    const dbTableMap = new Map<string, { schema: string; table: string }>();
+    const listRes = await getLayerTableList();
+    if (listRes.success && Array.isArray(listRes.tables)) {
+      for (const t of listRes.tables) {
+        if (t.schema !== 'layer' && t.schema !== 'public_layer') continue;
+        if (!dbTableMap.has(t.table) || t.schema === 'layer') {
+          dbTableMap.set(t.table, { schema: t.schema, table: t.table });
+        }
+      }
+    }
+
     const dbConfig = getDbConfig();
     const created: Array<{ schema: string; table: string }> = [];
     const failed: Array<{ schema: string; table: string; error: string }> = [];
+    const checkedDatastores = new Set<string>();
 
-    for (const t of listRes.tables) {
-      const datastoreName = t.schema === 'layer' ? 'postgres_layer' : 'postgres';
-      const featureName = t.table;
+    const ensureDatastore = async (schema: string, datastoreName: string) => {
+      if (checkedDatastores.has(datastoreName)) return { success: true as const };
 
       const dsRes = await geoserverFetch(
         baseUrl,
@@ -510,7 +573,7 @@ export async function createGeoServerLayers(params: {
                 { '@key': 'host', $: String(dbConfig.host) },
                 { '@key': 'port', $: String(dbConfig.port) },
                 { '@key': 'database', $: dbConfig.database },
-                { '@key': 'schema', $: t.schema },
+                { '@key': 'schema', $: schema },
                 { '@key': 'user', $: dbConfig.user },
                 { '@key': 'passwd', $: dbConfig.password },
               ],
@@ -524,18 +587,97 @@ export async function createGeoServerLayers(params: {
         );
         if (!createDsRes.ok) {
           const text = await createDsRes.text();
-          failed.push({ schema: t.schema, table: t.table, error: `데이터 스토어 생성 실패: ${text}` });
-          continue;
+          return { success: false as const, error: `데이터 스토어 생성 실패: ${text}` };
         }
       } else if (!dsRes.ok) {
-        failed.push({ schema: t.schema, table: t.table, error: `데이터 스토어 조회 실패: ${dsRes.status}` });
+        return { success: false as const, error: `데이터 스토어 조회 실패: ${dsRes.status}` };
+      }
+
+      checkedDatastores.add(datastoreName);
+      return { success: true as const };
+    };
+
+    const setLayerCqlFilter = async (layerName: string, cqlFilter: string) => {
+      const getRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
+      );
+      if (!getRes.ok) {
+        const text = await getRes.text();
+        return { success: false as const, error: `레이어 조회 실패: ${getRes.status} ${text}` };
+      }
+
+      const layerData = await getRes.json();
+      const layer = layerData?.layer ?? layerData;
+      const rawEntry = layer?.metadata?.entry;
+      const entries = Array.isArray(rawEntry) ? [...rawEntry] : rawEntry ? [rawEntry] : [];
+      const filteredEntries = entries.filter(
+        (e: { '@key'?: string }) => String(e?.['@key'] ?? '').toLowerCase() !== 'cqlfilter'
+      );
+      filteredEntries.push({ '@key': 'cqlFilter', $: cqlFilter });
+
+      const putBody = JSON.stringify({
+        layer: {
+          ...layer,
+          metadata: { entry: filteredEntries },
+        },
+      });
+
+      const putRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}`,
+        { method: 'PUT', body: putBody }
+      );
+      if (!putRes.ok) {
+        const text = await putRes.text();
+        return { success: false as const, error: `CQL 적용 실패: ${putRes.status} ${text}` };
+      }
+      return { success: true as const };
+    };
+
+    for (const row of defineRes.tables) {
+      const layerName = String(row.define_table_name ?? '').trim();
+      if (!layerName) continue;
+
+      const parentLayer = String(row.define_table_parents_layer ?? '').trim();
+      const divQuery = String(row.define_table_div_query ?? '').trim();
+      const isSplitLayer = !!parentLayer && !!divQuery;
+      const sourceTableName = isSplitLayer ? parentLayer : layerName;
+      const sourceTable = dbTableMap.get(sourceTableName);
+
+      if (!sourceTable) {
+        failed.push({
+          schema: isSplitLayer ? parentLayer : '(unknown)',
+          table: layerName,
+          error: `원본 테이블 없음: ${sourceTableName}`,
+        });
+        continue;
+      }
+
+      const datastoreName =
+        sourceTable.schema === 'layer'
+          ? 'postgres_layer'
+          : sourceTable.schema === 'public_layer'
+            ? 'postgres_public_layer'
+            : '';
+      if (!datastoreName) {
+        failed.push({
+          schema: sourceTable.schema,
+          table: layerName,
+          error: `지원하지 않는 스키마: ${sourceTable.schema}`,
+        });
+        continue;
+      }
+      const dsOk = await ensureDatastore(sourceTable.schema, datastoreName);
+      if (!dsOk.success) {
+        failed.push({ schema: sourceTable.schema, table: layerName, error: dsOk.error });
         continue;
       }
 
       const ftBody = {
         featureType: {
-          name: featureName,
-          nativeName: t.table,
+          name: layerName,
+          nativeName: sourceTable.table,
           enabled: true,
           srs: 'EPSG:5181',
         },
@@ -548,10 +690,17 @@ export async function createGeoServerLayers(params: {
       );
 
       if (ftRes.ok || ftRes.status === 409) {
-        created.push({ schema: t.schema, table: t.table });
+        if (isSplitLayer) {
+          const cqlRes = await setLayerCqlFilter(layerName, divQuery);
+          if (!cqlRes.success) {
+            failed.push({ schema: sourceTable.schema, table: layerName, error: cqlRes.error });
+            continue;
+          }
+        }
+        created.push({ schema: sourceTable.schema, table: layerName });
       } else {
         const text = await ftRes.text();
-        failed.push({ schema: t.schema, table: t.table, error: `${ftRes.status} ${text}` });
+        failed.push({ schema: sourceTable.schema, table: layerName, error: `${ftRes.status} ${text}` });
       }
     }
 
@@ -790,6 +939,28 @@ const DEFINE_LAYER_TABLES_PATH = path.join(
   'tables.json'
 );
 
+/** tables.json과 동일한 프로젝트 루트 기준 data_dir/styles 경로 (cwd 의존 최소화) */
+function getStylesDir(): string {
+  const projectRoot = path.resolve(path.dirname(DEFINE_LAYER_TABLES_PATH), '..', '..', '..');
+  return path.join(projectRoot, 'geoserver_modules', 'data_dir', 'styles');
+}
+
+/** data_dir/styles 폴더에서 .css 파일이 있는 스타일 이름 Set (API 없이 사용) */
+function getCssStyleNamesFromDataDir(): Set<string> {
+  const set = new Set<string>();
+  try {
+    const stylesDir = getStylesDir();
+    if (fs.existsSync(stylesDir)) {
+      for (const f of fs.readdirSync(stylesDir)) {
+        if (f.endsWith('.css')) set.add(path.basename(f, '.css'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return set;
+}
+
 type DefineLayerRow = {
   define_table_name?: string;
   define_table_shp_type?: string;
@@ -841,7 +1012,7 @@ const VALID_GEOMETRY_TYPES = new Set<string>(['POINT', 'LINE', 'POLYGON']);
 
 /**
  * GeoServer 레이어 목록: 전체 레이어 목록은 tables.json(defineLayer) 기준으로 조회.
- * 도형 타입·제목은 tables.json, 스타일 보유 여부·layerType은 GeoServer에서 조회.
+ * 도형 타입·제목은 tables.json, 발행 여부·styleName은 GeoServer API, 스타일 보유(hasCssStyle)는 data_dir/styles 폴더 기준.
  */
 export async function getGeoServerLayersWithStyleInfo(params: {
   url?: string;
@@ -863,6 +1034,7 @@ export async function getGeoServerLayersWithStyleInfo(params: {
         .map((t) => t.table)
     );
 
+    const cssStyleNamesFromDir = getCssStyleNamesFromDataDir();
     const layers: GeoServerLayerWithStyle[] = [];
 
     for (const row of defineRes.tables) {
@@ -875,6 +1047,7 @@ export async function getGeoServerLayersWithStyleInfo(params: {
         : undefined;
       const title = String(row.define_table_kor_name ?? '').trim() || undefined;
       const group = String(row.define_table_group ?? '').trim() || undefined;
+      const hasCssStyle = cssStyleNamesFromDir.has(layerName);
 
       const layerRes = await geoserverFetch(
         baseUrl,
@@ -888,7 +1061,7 @@ export async function getGeoServerLayersWithStyleInfo(params: {
           group,
           tableExists,
           published: false,
-          hasCssStyle: false,
+          hasCssStyle,
           geometryType,
           title,
         });
@@ -906,34 +1079,13 @@ export async function getGeoServerLayersWithStyleInfo(params: {
           group,
           tableExists,
           published: true,
-          hasCssStyle: false,
+          hasCssStyle,
           geometryType,
           layerType,
           title,
         });
         continue;
       }
-      const styleRes = await geoserverFetch(
-        baseUrl,
-        `/rest/styles/${encodeURIComponent(styleName)}.json`
-      );
-      if (!styleRes.ok) {
-        layers.push({
-          name: layerName,
-          group,
-          tableExists,
-          published: true,
-          styleName,
-          hasCssStyle: false,
-          geometryType,
-          layerType,
-          title,
-        });
-        continue;
-      }
-      const styleData = await styleRes.json();
-      const format = (styleData?.style?.format ?? styleData?.format ?? 'sld').toLowerCase();
-      const hasCssStyle = format === 'css';
       layers.push({
         name: layerName,
         group,
@@ -1088,12 +1240,10 @@ export async function applyAllDefaultStyles(params: {
 
     for (let i = 0; i < toApply.length; i++) {
       const layer = toApply[i];
-      const geomRes = await getLayerGeometryType({
-        url: baseUrl,
-        workspace,
-        layerName: layer.name,
-      });
-      const geometryType = geomRes.geometryType ?? 'POLYGON';
+      const geometryType =
+        layer.geometryType && VALID_GEOMETRY_TYPES.has(layer.geometryType)
+          ? layer.geometryType
+          : 'POLYGON';
       const color = getMaterialToneColor(i);
       let styleProps: StyleProps;
 
@@ -1114,7 +1264,7 @@ export async function applyAllDefaultStyles(params: {
       } else {
         styleProps = {
           fillColor: color,
-          strokeColor: darkerHex(color, 0.55),
+          strokeColor: '#FFFFFF',
           strokeWidth: 1,
           opacity: 0.5,
         };
@@ -1169,8 +1319,25 @@ export async function applyDefaultStyleToLayer(params: {
   if (!layerName) return { success: false, error: '레이어 이름이 필요합니다.' };
 
   try {
-    const geomRes = await getLayerGeometryType({ url: baseUrl, workspace, layerName });
-    const geometryType = geomRes.geometryType ?? 'POLYGON';
+    let geometryType: GeometryType = 'POLYGON';
+    let fromTables = false;
+    const defineRes = await getDefineLayerTables();
+    if (defineRes.success && defineRes.tables?.length) {
+      const row = defineRes.tables.find(
+        (r) => String(r.define_table_name ?? '').trim() === layerName
+      );
+      const shpType = String(row?.define_table_shp_type ?? '').toUpperCase();
+      if (VALID_GEOMETRY_TYPES.has(shpType)) {
+        geometryType = shpType as GeometryType;
+        fromTables = true;
+      }
+    }
+    if (!fromTables) {
+      const geomRes = await getLayerGeometryType({ url: baseUrl, workspace, layerName });
+      if (geomRes.geometryType && VALID_GEOMETRY_TYPES.has(geomRes.geometryType)) {
+        geometryType = geomRes.geometryType;
+      }
+    }
     const hash = layerName.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
     const color = getMaterialToneColor(hash);
     let styleProps: StyleProps;
@@ -1192,7 +1359,7 @@ export async function applyDefaultStyleToLayer(params: {
     } else {
       styleProps = {
         fillColor: color,
-        strokeColor: darkerHex(color, 0.55),
+        strokeColor: '#FFFFFF',
         strokeWidth: 1,
         opacity: 0.5,
       };

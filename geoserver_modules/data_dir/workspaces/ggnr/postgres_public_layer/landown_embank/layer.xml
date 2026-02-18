@@ -1,0 +1,22 @@
+<layer>
+  <name>landown_embank</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d20</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b20</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d21</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">jimok = &apos;16&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:57.471 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:57.636 UTC</dateModified>
+</layer>

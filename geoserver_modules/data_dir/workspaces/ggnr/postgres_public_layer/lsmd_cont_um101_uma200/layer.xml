@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_um101_uma200</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d5a</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b3d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d5b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UMA200%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:52.328 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:52.512 UTC</dateModified>
+</layer>

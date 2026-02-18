@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "schema:index": "tsx scripts/update-schema-index.ts",
+    "defineLayer:rebuild": "tsx src/scripts/rebuildDefineLayerFromCsv.ts",
     "prebuild": "npm run schema:index",
     "build": "next build",
     "start": "next start",

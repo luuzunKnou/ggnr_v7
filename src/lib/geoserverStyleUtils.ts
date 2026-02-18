@@ -111,12 +111,15 @@ export function buildCssFromSimpleStyle(
   const lines: string[] = [];
 
   if (geometryType === 'POINT') {
-    lines.push(`  fill: ${f};`);
-    lines.push(`  stroke: ${s};`);
-    lines.push(`  stroke-width: ${sw};`);
-    lines.push(`  stroke-opacity: ${op};`);
-    lines.push(`  fill-opacity: ${op};`);
+    lines.push(`  mark: symbol(circle);`);
     lines.push(`  mark-size: ${size};`);
+    lines.push(`  :mark {`);
+    lines.push(`    fill: ${f};`);
+    lines.push(`    stroke: ${s};`);
+    lines.push(`    stroke-width: ${sw};`);
+    lines.push(`    stroke-opacity: ${op};`);
+    lines.push(`    fill-opacity: ${op};`);
+    lines.push(`  }`);
     if (label) {
       lines.push(`  label: [${label}];`);
       lines.push(`  font-size: ${size};`);

@@ -1,12 +1,12 @@
 <layer>
   <name>sfl_lshz_ps</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:294e</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e30</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3acd</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7ba8</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:294d</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e31</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:52.827 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:05.667 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:37.742 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:53.672 UTC</dateModified>
 </layer>

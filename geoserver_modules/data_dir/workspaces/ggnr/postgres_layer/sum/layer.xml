@@ -1,12 +1,12 @@
 <layer>
   <name>sum</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2960</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fc4</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38ad</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c72</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:295f</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fc5</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:53.658 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:52.937 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:14.712 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:31.673 UTC</dateModified>
 </layer>

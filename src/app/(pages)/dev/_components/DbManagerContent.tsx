@@ -37,6 +37,8 @@ type DiffRow = {
   isMatch: boolean
 }
 
+type TablePkStatus = { primaryKeyColumns: string[]; actualPrimaryKeyColumns: string[] }
+
 export function DbManagerContent() {
   const [modalType, setModalType] = useState<DbManagerModalType>(null)
   const [dbConfig, setDbConfig] = useState<DbConfig | null>(null)
@@ -46,6 +48,8 @@ export function DbManagerContent() {
   const [loadingDiff, setLoadingDiff] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [pkStatusByTable, setPkStatusByTable] = useState<Record<string, TablePkStatus>>({})
+  const [pkSyncingTableKey, setPkSyncingTableKey] = useState<string | null>(null)
   const diffScrollRef = useRef<HTMLDivElement>(null)
 
   const open = modalType !== null
@@ -81,6 +85,17 @@ export function DbManagerContent() {
       const dbData = dbRes?.data ?? dbRes
       const schemaRows = (schemaData?.rows ?? []) as TableColumnRow[]
       const dbRows = (dbData?.rows ?? []) as TableColumnRow[]
+      const schemaPk = (schemaData?.tablePkColumns ?? {}) as Record<string, string[]>
+      const dbPk = (dbData?.tablePkStatus ?? {}) as Record<string, string[]>
+      const pkStatus: Record<string, TablePkStatus> = {}
+      const allTableKeys = new Set([...Object.keys(schemaPk), ...Object.keys(dbPk)])
+      for (const tableKey of allTableKeys) {
+        pkStatus[tableKey] = {
+          primaryKeyColumns: schemaPk[tableKey] ?? [],
+          actualPrimaryKeyColumns: dbPk[tableKey] ?? [],
+        }
+      }
+      setPkStatusByTable(pkStatus)
 
       const schemaMap = new Map<string, TableColumnRow>()
       schemaRows.forEach((r) => {
@@ -128,6 +143,28 @@ export function DbManagerContent() {
   useEffect(() => {
     fetchDiff()
   }, [fetchDiff])
+
+  const handlePkSync = useCallback(async (tableKey: string) => {
+    const [schema, table] = tableKey.split(".")
+    if (!schema || !table) return
+    setPkSyncingTableKey(tableKey)
+    setSyncMessage(null)
+    try {
+      const res = await call("", "POST", {
+        service: "dbManagerService",
+        action: "applyPrimaryKeySync",
+        params: dbConfig ? { ...dbConfig, schema, table } : { schema, table },
+      })
+      if (!res?.success) throw new Error(res?.error ?? "PK 동기화 실패")
+      setSyncMessage(`${tableKey} PK 추가 완료`)
+      await fetchDiff()
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" ? String((err as { error?: string }).error ?? (err as { message?: string }).message ?? "PK 동기화 실패") : "PK 동기화 실패"
+      setSyncMessage(`오류: ${msg}`)
+    } finally {
+      setPkSyncingTableKey(null)
+    }
+  }, [dbConfig])
 
   /** 해당 행(필드 또는 테이블 행)만 동기화: 테이블 생성/삭제 또는 컬럼 추가/삭제/코멘트 */
   const runFieldSync = useCallback(
@@ -274,7 +311,13 @@ export function DbManagerContent() {
                 불일치 <span className="font-semibold text-red-600 dark:text-red-400">{diffRows.filter((r) => !r.isMatch).length}</span>
               </span>
             )}
-            <Button size="sm" variant="outline" className="rounded-none shrink-0" onClick={fetchDiff} disabled={loadingDiff}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-none shrink-0"
+              onClick={() => fetchDiff()}
+              disabled={loadingDiff}
+            >
               {loadingDiff ? "갱신 중..." : "갱신"}
             </Button>
             {syncMessage != null && <span className={cn("w-full", syncMessage.startsWith("오류") ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>{syncMessage}</span>}
@@ -289,23 +332,25 @@ export function DbManagerContent() {
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border truncate">필드명 (schema)</th>
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border truncate">필드영문명 (schema)</th>
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r-2 border-border truncate">데이터타입 (schema)</th>
+                  <th className="text-left py-1 px-2 w-[60px] max-w-[60px] border-r border-border truncate">PK (schema)</th>
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border border-l-2 truncate">테이블명 (DB)</th>
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border truncate">테이블영문명 (DB)</th>
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border truncate">필드명 (DB)</th>
                   <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border truncate">필드영문명 (DB)</th>
-                  <th className="text-left py-1 px-2 w-[10%] max-w-0 truncate">데이터타입 (DB)</th>
+                  <th className="text-left py-1 px-2 w-[10%] max-w-0 border-r border-border truncate">데이터타입 (DB)</th>
+                  <th className="text-left py-1 px-2 w-[80px] max-w-[80px] truncate">PK (DB)</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingDiff ? (
                   <tr>
-                    <td colSpan={11} className="py-4 px-2 text-muted-foreground text-center">
+                    <td colSpan={13} className="py-4 px-2 text-muted-foreground text-center">
                       로딩 중...
                     </td>
                   </tr>
                 ) : diffRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-4 px-2 text-muted-foreground text-center">
+                    <td colSpan={13} className="py-4 px-2 text-muted-foreground text-center">
                       데이터 없음 또는 로드 실패
                     </td>
                   </tr>
@@ -313,34 +358,74 @@ export function DbManagerContent() {
                   diffRows.map((row, index) => {
                     const prevTableKey = index > 0 ? diffRows[index - 1].tableKey : null
                     const isFirstInTable = prevTableKey !== row.tableKey
+                    const pk = pkStatusByTable[row.tableKey]
+                    const pkMissing = pk && pk.primaryKeyColumns.length > 0 && pk.actualPrimaryKeyColumns.length === 0
+                    const schemaPkCols = pk?.primaryKeyColumns ?? []
+                    const isSchemaPkRow = pk && schemaPkCols.length > 0 && (!row.schema?.columnName || schemaPkCols.includes(row.schema.columnName))
+                    const isFirstSchemaPkRow = isSchemaPkRow && !diffRows.slice(0, index).some((r) => {
+                      const p = pkStatusByTable[r.tableKey]
+                      const cols = p?.primaryKeyColumns ?? []
+                      return r.tableKey === row.tableKey && p && cols.length > 0 && (!r.schema?.columnName || cols.includes(r.schema?.columnName ?? ""))
+                    })
                     return (
                       <tr
                         key={row.key}
                         className={cn(
-                          "leading-tight border-b border-border/50",
+                          "leading-tight",
                           isFirstInTable && "border-t-2 border-border",
-                          row.isMatch
-                            ? "bg-green-50/80 dark:bg-green-950/30"
-                            : "bg-red-50/80 dark:bg-red-950/30"
+                          pkMissing
+                            ? "bg-amber-200/90 dark:bg-amber-900/40"
+                            : row.isMatch
+                              ? "bg-green-50/80 dark:bg-green-950/30"
+                              : "bg-red-50/80 dark:bg-red-950/30"
                         )}
                       >
                         <td className="py-1 px-2 w-[90px] max-w-[90px] border-r-2 border-border align-middle overflow-hidden">
-                          {!row.isMatch && (
-                            <Button size="sm" variant="outline" className="rounded-none h-5 py-1 px-1.5 text-[11px] min-w-0 leading-none" onClick={() => runFieldSync(row.key)} disabled={syncing || loadingDiff}>
-                              동기화
-                            </Button>
-                          )}
+                          <div className="flex flex-col gap-0.5">
+                            {!row.isMatch && (
+                              <Button size="sm" variant="outline" className="rounded-none h-5 py-1 px-1.5 text-[11px] min-w-0 leading-none" onClick={() => runFieldSync(row.key)} disabled={syncing || loadingDiff}>
+                                동기화
+                              </Button>
+                            )}
+                            {isFirstSchemaPkRow && pkMissing && (() => {
+                              const syncing = pkSyncingTableKey === row.tableKey
+                              return (
+                                <Button size="sm" variant="outline" className="rounded-none h-5 py-0 px-1 text-[10px] min-w-0 border-amber-500 text-amber-700 dark:text-amber-400" onClick={() => handlePkSync(row.tableKey)} disabled={syncing || !!pkSyncingTableKey}>
+                                  {syncing ? "PK 동기화 중..." : "PK 동기화"}
+                                </Button>
+                              )
+                            })()}
+                          </div>
                         </td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.schema?.tableComment ?? ""}>{row.schema?.tableComment ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.schema?.tableName ?? ""}>{row.schema?.tableName ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.schema?.columnComment ?? ""}>{row.schema?.columnComment ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.schema?.columnName ?? ""}>{row.schema?.columnName ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r-2 border-border max-w-0 truncate" title={row.schema?.columnType ?? ""}>{row.schema?.columnType ?? ""}</td>
+                        <td className="py-1 px-2 w-[60px] max-w-[60px] border-r border-border align-middle text-center">
+                          {(() => {
+                            const pk = pkStatusByTable[row.tableKey]
+                            const schemaPkCols = pk?.primaryKeyColumns ?? []
+                            const actualPkCols = pk?.actualPrimaryKeyColumns ?? []
+                            const colName = row.schema?.columnName ?? row.db?.columnName
+                            if (!colName) {
+                              const hasSchemaPk = schemaPkCols.length > 0
+                              const hasDbPk = actualPkCols.length > 0
+                              return hasSchemaPk || hasDbPk ? <span className="text-amber-600 dark:text-amber-400 text-[11px]" title={[...new Set([...schemaPkCols, ...actualPkCols])].join(", ")}>PK</span> : "—"
+                            }
+                            const isSchemaPk = schemaPkCols.includes(colName)
+                            const isDbPk = actualPkCols.includes(colName)
+                            return isSchemaPk || isDbPk ? <span className="font-medium text-amber-600 dark:text-amber-400">PK</span> : "—"
+                          })()}
+                        </td>
                         <td className="py-1 px-2 font-mono border-r border-border border-l-2 max-w-0 truncate" title={row.db?.tableComment ?? ""}>{row.db?.tableComment ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.db?.tableName ?? ""}>{row.db?.tableName ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.db?.columnComment ?? ""}>{row.db?.columnComment ?? ""}</td>
                         <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.db?.columnName ?? ""}>{row.db?.columnName ?? ""}</td>
-                        <td className="py-1 px-2 font-mono max-w-0 truncate" title={row.db?.columnType ?? ""}>{row.db?.columnType ?? ""}</td>
+                        <td className="py-1 px-2 font-mono border-r border-border max-w-0 truncate" title={row.db?.columnType ?? ""}>{row.db?.columnType ?? ""}</td>
+                        <td className="py-1 px-2 w-[80px] max-w-[80px] border-border align-middle text-center">
+                          —
+                        </td>
                       </tr>
                     )
                   })

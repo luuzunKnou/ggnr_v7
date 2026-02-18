@@ -1,12 +1,12 @@
 <layer>
   <name>sfl_flri_as</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:294a</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e36</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3aca</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7bab</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2949</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e37</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:52.609 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:05.468 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:37.342 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:53.198 UTC</dateModified>
 </layer>

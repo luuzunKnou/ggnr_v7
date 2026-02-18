@@ -1,0 +1,22 @@
+<layer>
+  <name>swl_pipe_lm_rain</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cbc</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7aee</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cbd</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">sba_cde = &apos;SBA003&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:01:09.224 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:09.258 UTC</dateModified>
+</layer>

@@ -1,12 +1,12 @@
 <layer>
   <name>cit_facilities_education</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:278e</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fb6</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38bb</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c6b</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:278d</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fb7</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:30.244 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:53.642 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:15.236 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:32.172 UTC</dateModified>
 </layer>

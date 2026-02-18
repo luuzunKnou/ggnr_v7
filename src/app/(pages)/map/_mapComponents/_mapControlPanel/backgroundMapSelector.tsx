@@ -172,7 +172,7 @@ export function BackgroundMapSelector({
   return (
     <div
       className={cn(
-        'w-56 bg-white shadow-xl overflow-hidden flex flex-col max-h-[calc(100vh-30px)] rounded-[10px]',
+        'w-56 bg-white shadow-xl overflow-hidden flex flex-col max-h-[calc(100vh-30px)] rounded-[10px] opacity-90',
         className
       )}
     >

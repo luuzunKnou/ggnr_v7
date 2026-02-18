@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_uq162_uqt222</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7f12</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c19</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7f13</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UQT222%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:24.334 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:24.450 UTC</dateModified>
+</layer>

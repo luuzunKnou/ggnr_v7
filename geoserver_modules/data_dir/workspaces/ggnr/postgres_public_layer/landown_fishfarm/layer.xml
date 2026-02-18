@@ -1,0 +1,22 @@
+<layer>
+  <name>landown_fishfarm</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d1c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b1e</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d1d</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">jimok = &apos;20&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:58.211 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:58.234 UTC</dateModified>
+</layer>

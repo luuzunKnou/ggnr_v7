@@ -1,12 +1,12 @@
 <layer>
   <name>memo_swl</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:28c2</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e94</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3a7f</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7bda</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28c1</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e95</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:45.749 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:00.879 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:31.477 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:47.885 UTC</dateModified>
 </layer>

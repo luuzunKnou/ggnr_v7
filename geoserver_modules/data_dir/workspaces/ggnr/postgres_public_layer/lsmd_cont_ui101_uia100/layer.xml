@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_ui101_uia100</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d70</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b48</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d71</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UIA100%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:50.558 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:50.701 UTC</dateModified>
+</layer>

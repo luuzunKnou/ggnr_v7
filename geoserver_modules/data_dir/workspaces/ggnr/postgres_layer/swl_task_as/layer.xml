@@ -1,12 +1,12 @@
 <layer>
   <name>swl_task_as</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2984</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cb8</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3c4c</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7aec</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2983</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cb9</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:55.406 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:18.6 UTC</dateModified>
+  <dateCreated>2026-02-11 16:01:09.765 UTC</dateCreated>
+  <dateModified>2026-02-11 16:02:17.130 UTC</dateModified>
 </layer>

@@ -779,6 +779,158 @@ export async function getTableColumnsFromDb(
   return withClient(params, (client) => getTableColumns(client, schema, table));
 }
 
+/**
+ * 실제 DB에 설정된 Primary Key 컬럼명 목록 (순서 유지)
+ * PK가 없으면 빈 배열 반환
+ */
+export async function getActualPrimaryKeyColumns(
+  params: DbConnectionParams & { schema: string; table: string }
+): Promise<string[]> {
+  const { schema, table } = params;
+  const connectionParams: DbConnectionParams = {
+    host: params.host,
+    port: params.port,
+    database: params.database,
+    username: params.username,
+    password: params.password,
+    ssl: params.ssl,
+  };
+  return withClient(connectionParams, async (client) => {
+    const res = await client.query<{ attname: string }>(
+      `
+      SELECT a.attname
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) AND a.attnum > 0 AND NOT a.attisdropped
+      WHERE c.contype = 'p' AND n.nspname = $1 AND t.relname = $2
+      ORDER BY array_position(c.conkey, a.attnum)
+      `,
+      [schema, table]
+    );
+    return res.rows.map((r) => r.attname);
+  });
+}
+
+/**
+ * 스키마에 정의된 PK 컬럼으로 DB에 PRIMARY KEY 제약 추가
+ * 이미 PK가 있거나 컬럼이 없으면 실패
+ */
+export async function applyPrimaryKeySync(
+  params: (DbConnectionParams & { schema: string; table: string }) | { schema: string; table: string }
+): Promise<SchemaSyncReport> {
+  const { schema, table } = params;
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params && 'host' in params && params.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return {
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      options: {},
+      results: [{ schema, table, action: 'failed', error: 'DB 연결 정보 없음' }],
+      executedSql: [],
+    };
+  }
+  const connectionParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+    ssl: conn.ssl,
+  };
+  const startedAt = new Date().toISOString();
+  const results: SchemaSyncReportItem[] = [];
+  const executedSql: string[] = [];
+
+  const pkColumns = getSchemaPrimaryKeyColumnNames(schema, table);
+  if (pkColumns.length === 0) {
+    return {
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      options: {},
+      results: [{ schema, table, action: 'skipped', detail: '스키마에 PK 정의 없음' }],
+      executedSql: [],
+    };
+  }
+
+  const existingPk = await getActualPrimaryKeyColumns({ ...connectionParams, schema, table });
+  if (existingPk.length > 0) {
+    const same = existingPk.length === pkColumns.length && pkColumns.every((c, i) => c === existingPk[i]);
+    return {
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      options: {},
+      results: [{ schema, table, action: 'skipped', detail: same ? '이미 PK가 설정되어 있음' : 'PK가 이미 존재함 (다른 컬럼). 수동으로 조정 필요' }],
+      executedSql: [],
+    };
+  }
+
+  await withClient(connectionParams, async (client) => {
+    const quotedCols = pkColumns.map((c) => quoteIdent(c)).join(', ');
+    const addPkSql = `ALTER TABLE ${fq(schema, table)} ADD PRIMARY KEY (${quotedCols})`;
+    executedSql.push(addPkSql);
+    await client.query(addPkSql);
+    results.push({ schema, table, action: 'columns_added', detail: `PK 추가: (${pkColumns.join(', ')})` });
+  });
+
+  return {
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    options: {},
+    results,
+    executedSql,
+  };
+}
+
+export type TablePkStatus = {
+  primaryKeyColumns: string[];
+  actualPrimaryKeyColumns: string[];
+};
+
+/**
+ * 스키마에 정의된 테이블들에 대해 DB 연결로 실제 PK 여부를 조회.
+ * 메인 DB Manager 테이블 목록에서 PK 미설정 표시용.
+ * params 없거나 host 없으면 getDefaultDbConfig() 사용 (getDbTableColumnList와 동일).
+ */
+export async function getTablesPkStatus(params?: DbConnectionParams): Promise<Record<string, TablePkStatus>> {
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params?.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return {};
+  }
+  const connectionParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+    ssl: conn.ssl,
+  };
+  const tables = getSchemaDefinedTables();
+  const result: Record<string, TablePkStatus> = {};
+
+  await withClient(connectionParams, async (client) => {
+    for (const { schema, table } of tables) {
+      const tableKey = `${schema}.${table}`;
+      const primaryKeyColumns = getSchemaPrimaryKeyColumnNames(schema, table);
+      const pkRes = await client.query<{ attname: string }>(
+        `SELECT a.attname FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) AND a.attnum > 0 AND NOT a.attisdropped
+         WHERE c.contype = 'p' AND n.nspname = $1 AND t.relname = $2
+         ORDER BY array_position(c.conkey, a.attnum)`,
+        [schema, table]
+      );
+      const actualPrimaryKeyColumns = pkRes.rows.map((r) => r.attname);
+      result[tableKey] = { primaryKeyColumns, actualPrimaryKeyColumns };
+    }
+  });
+
+  return result;
+}
+
 /** serial·integer, varchar·character varying, timestamp·timestamp without time zone 등을 동일 타입으로 취급 */
 function isSameColumnType(defType: string, actualType: string): boolean {
   return normalizeColumnTypeForCompare(defType) === normalizeColumnTypeForCompare(actualType);
@@ -938,6 +1090,8 @@ export type SchemaSyncColumnComparison = {
   toModify: Array<{ name: string; defined: SchemaDefinedColumn; actual: DbColumnDef }>;
   same: SchemaDefinedColumn[];
   primaryKeyColumns: string[];
+  /** DB에 실제 설정된 PK 컬럼명 (없으면 []) */
+  actualPrimaryKeyColumns: string[];
 };
 
 /**
@@ -984,6 +1138,7 @@ export async function getTableColumnComparison(params: DbConnectionParams & {
   }
 
   const primaryKeyColumns = getSchemaPrimaryKeyColumnNames(schema, table);
+  const actualPrimaryKeyColumns = await getActualPrimaryKeyColumns({ ...connectionParams, schema, table });
 
   return {
     schema,
@@ -995,6 +1150,7 @@ export async function getTableColumnComparison(params: DbConnectionParams & {
     toModify,
     same,
     primaryKeyColumns,
+    actualPrimaryKeyColumns,
   };
 }
 
@@ -1060,7 +1216,17 @@ async function getTableColumnComparisonWithClient(
   }
 
   const primaryKeyColumns = getSchemaPrimaryKeyColumnNames(schema, table);
-  return { schema, table, definedColumns: definedCols, actualColumns: actualCols, toAdd, toRemove, toModify, same, primaryKeyColumns };
+  const actualPkRes = await client.query<{ attname: string }>(
+    `SELECT a.attname FROM pg_constraint c
+     JOIN pg_class t ON t.oid = c.conrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
+     JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) AND a.attnum > 0 AND NOT a.attisdropped
+     WHERE c.contype = 'p' AND n.nspname = $1 AND t.relname = $2
+     ORDER BY array_position(c.conkey, a.attnum)`,
+    [schema, table]
+  );
+  const actualPrimaryKeyColumns = actualPkRes.rows.map((r) => r.attname);
+  return { schema, table, definedColumns: definedCols, actualColumns: actualCols, toAdd, toRemove, toModify, same, primaryKeyColumns, actualPrimaryKeyColumns };
 }
 
 /**
@@ -1830,11 +1996,15 @@ export type TableColumnRow = {
 /**
  * schema 정의 기준 테이블·컬럼 목록 (테이블명|테이블영문명|필드명|필드영문명)
  * diff 좌측용. schema 필드로 스키마 구분 (public, layer 등).
+ * tablePkColumns: 테이블별 스키마에 정의된 PK 컬럼명 (key: schema.table)
  */
-export function getSchemaTableColumnList(_params?: unknown): { rows: TableColumnRow[] } {
+export function getSchemaTableColumnList(_params?: unknown): { rows: TableColumnRow[]; tablePkColumns: Record<string, string[]> } {
   const rows: TableColumnRow[] = [];
+  const tablePkColumns: Record<string, string[]> = {};
   const tables = getSchemaDefinedTables();
   for (const { schema, table } of tables) {
+    const tableKey = `${schema}.${table}`;
+    tablePkColumns[tableKey] = getSchemaPrimaryKeyColumnNames(schema, table);
     const tableComment = getSchemaTableComment(schema, table) ?? '';
     const cols = getSchemaDefinedColumns(schema, table);
     if (!cols || cols.length === 0) {
@@ -1855,14 +2025,42 @@ export function getSchemaTableColumnList(_params?: unknown): { rows: TableColumn
       });
     }
   }
-  return { rows };
+  return { rows, tablePkColumns };
+}
+
+/**
+ * DB에 실제로 존재하는 테이블별 PK 컬럼 목록을 쿼리로 검증.
+ * pg_constraint(contype='p') 한 번에 조회하여 반환. key: schema.table
+ */
+async function queryActualPrimaryKeys(
+  client: Client,
+  schemaName: string
+): Promise<Record<string, string[]>> {
+  const res = await client.query<{ nspname: string; relname: string; attname: string; ord: number }>(
+    `SELECT n.nspname, t.relname, a.attname, array_position(c.conkey, a.attnum) AS ord
+     FROM pg_constraint c
+     JOIN pg_class t ON t.oid = c.conrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
+     JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) AND a.attnum > 0 AND NOT a.attisdropped
+     WHERE c.contype = 'p' AND n.nspname = $1
+     ORDER BY n.nspname, t.relname, ord`,
+    [schemaName]
+  );
+  const out: Record<string, string[]> = {};
+  for (const row of res.rows) {
+    const key = `${row.nspname}.${row.relname}`;
+    if (!out[key]) out[key] = [];
+    out[key].push(row.attname);
+  }
+  return out;
 }
 
 /**
  * DB public 스키마 기준 테이블·컬럼 목록 (테이블명|테이블영문명|필드명|필드영문명)
  * params 없거나 host 없으면 getDefaultDbConfig() 사용. diff 우측용.
+ * tablePkStatus: 테이블별 실제 PK 컬럼 목록(쿼리 검증).
  */
-export async function getDbTableColumnList(params?: DbConnectionParams): Promise<{ rows: TableColumnRow[]; error?: string }> {
+export async function getDbTableColumnList(params?: DbConnectionParams): Promise<{ rows: TableColumnRow[]; tablePkStatus?: Record<string, string[]>; error?: string }> {
   const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
   const conn = params?.host ? params : defaultCfg;
   if (!conn?.host || !conn?.database) {
@@ -1876,8 +2074,12 @@ export async function getDbTableColumnList(params?: DbConnectionParams): Promise
     password: conn.password,
   };
   const rows: TableColumnRow[] = [];
+  let tablePkStatus: Record<string, string[]> = {};
   try {
     await withClient(connParams, async (client) => {
+      // 테이블별 실제 PK 존재 여부를 한 번의 쿼리로 검증
+      tablePkStatus = await queryActualPrimaryKeys(client, 'public');
+
       const tableRes = await client.query<{ table_name: string }>(
         `SELECT table_name FROM information_schema.tables
          WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
@@ -1885,6 +2087,12 @@ export async function getDbTableColumnList(params?: DbConnectionParams): Promise
          ORDER BY table_name`
       );
       for (const { table_name: table } of tableRes.rows) {
+        const tableKey = `public.${table}`;
+        // PK 미존재 테이블도 키로 넣어서 UI에서 "PK 없음"으로 표시 (쿼리 결과에 없으면 빈 배열)
+        if (!(tableKey in tablePkStatus)) {
+          tablePkStatus[tableKey] = [];
+        }
+
         const tableComment = await getTableComment(client, 'public', table);
         const cols = await getTableColumnsWithComments(client, 'public', table);
         const tc = tableComment ?? '';
@@ -1906,7 +2114,7 @@ export async function getDbTableColumnList(params?: DbConnectionParams): Promise
         }
       }
     });
-    return { rows };
+    return { rows, tablePkStatus };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { rows: [], error: msg };

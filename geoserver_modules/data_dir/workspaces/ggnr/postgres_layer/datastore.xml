@@ -1,21 +1,21 @@
 <dataStore>
-  <id>DataStoreInfoImpl--45bf12f6:19c3705dedf:2734</id>
+  <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   <name>postgres_layer</name>
   <type>PostGIS</type>
   <enabled>true</enabled>
   <workspace>
-    <id>WorkspaceInfoImpl--5c4b2843:19c369379bc:-8000</id>
+    <id>WorkspaceInfoImpl-4bf97568:19c4d6c3053:-7ffb</id>
   </workspace>
   <connectionParameters>
     <entry key="schema">layer</entry>
     <entry key="database">postgres</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:dTCxHrNnRK/LumYCsl+CXOAXHH0rxV0C</entry>
+    <entry key="passwd">crypt1:A+Uzbw/WFtrUTse1EXsGnAW8aP9rRC3C</entry>
     <entry key="host">localhost</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="user">postgres</entry>
   </connectionParameters>
   <__default>false</__default>
-  <dateCreated>2026-02-07 13:27:24.329 UTC</dateCreated>
+  <dateCreated>2026-02-11 16:00:05.307 UTC</dateCreated>
   <disableOnConnFailure>false</disableOnConnFailure>
 </dataStore>

@@ -5,7 +5,7 @@ import OSM from 'ol/source/OSM';
 import { defaults } from 'ol/control';
 import { getTransform } from 'ol/proj';
 import '../config/projections'; // 좌표계 등록
-import { createInitialPgTileservLayers } from '../boundaryLayerFactory';
+import { createCadastralLayers } from '../boundaryLayerFactory';
 import { createServiceLayer } from '../serviceLayerFactory';
 
 // 안동 중심 (경도, 위도 WGS84)
@@ -39,7 +39,7 @@ export function useMapInstance(
           source: new OSM(),
           properties: { name: 'background' },
         }),
-        ...createInitialPgTileservLayers(),
+        ...createCadastralLayers(),
       ],
       view: new View({
         center: center3857,

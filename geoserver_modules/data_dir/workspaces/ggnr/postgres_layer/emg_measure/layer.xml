@@ -1,12 +1,12 @@
 <layer>
   <name>emg_measure</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:27ec</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7dcc</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3b6a</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b76</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:27eb</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7dcd</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:34.874 UTC</dateCreated>
-  <dateModified>2026-02-07 13:30:11.870 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:43.408 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:59.201 UTC</dateModified>
 </layer>

@@ -1,6 +1,7 @@
 import { readFileSync } from "fs"
 import { join } from "path"
 import Link from "next/link"
+import Image from "next/image"
 import { DepartmentGrid } from "@/app/(pages)/(index)/department-grid"
 import type { DepartmentData } from "@/app/(pages)/(index)/department-card"
 import { ParcelSlider } from "@/app/(pages)/(index)/parcel-slider"
@@ -216,12 +217,13 @@ export default function DashboardPage() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2a10 10 0 0 0 0 20" />
-              </svg>
-            </div>
+            <Image
+              src="/ggnr_ai.svg"
+              alt="GGNR AI"
+              width={40}
+              height={36}
+              className="object-contain"
+            />
             <h1 className="text-xl font-bold text-foreground">공간정보 통합관리 플랫폼</h1>
           </div>
           <div className="flex items-center gap-3">

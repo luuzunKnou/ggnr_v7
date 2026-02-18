@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_uq141_uqq321</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e1c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b9e</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e1d</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UQQ321%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:38.487 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:38.601 UTC</dateModified>
+</layer>

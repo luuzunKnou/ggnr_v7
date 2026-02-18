@@ -1,0 +1,19 @@
+<layer>
+  <name>emd</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7ca6</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7ae2</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7ca7</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:01:11.523 UTC</dateCreated>
+  <dateModified>2026-02-11 16:02:18.168 UTC</dateModified>
+</layer>

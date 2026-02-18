@@ -1,12 +1,12 @@
 <layer>
   <name>shg</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:295c</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fc6</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38ac</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c73</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:295b</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fc7</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:53.499 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:52.843 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:14.593 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:31.441 UTC</dateModified>
 </layer>

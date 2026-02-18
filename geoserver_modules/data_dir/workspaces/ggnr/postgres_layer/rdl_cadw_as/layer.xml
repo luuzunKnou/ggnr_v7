@@ -1,12 +1,12 @@
 <layer>
   <name>rdl_cadw_as</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:28e2</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7f8e</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38cf</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c57</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:28e1</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7f8f</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:47.377 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:55.73 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:17.293 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:34.796 UTC</dateModified>
 </layer>

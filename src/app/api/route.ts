@@ -67,10 +67,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { success: false, error: err.message || 'Unknown error occurred' },
-      { status: 500 }
-    );
+    const code = err.code;
+    const detail = err.detail;
+    const message = err.message || 'Unknown error occurred';
+    const errorPayload: Record<string, unknown> = { success: false, error: message };
+    if (code) errorPayload.code = code;
+    if (detail) errorPayload.detail = detail;
+    return NextResponse.json(errorPayload, { status: 500 });
   }
 }
 
@@ -120,9 +123,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { success: false, error: err.message || 'Unknown error occurred' },
-      { status: 500 }
-    );
+    const code = err.code;
+    const detail = err.detail;
+    const message = err.message || 'Unknown error occurred';
+    const errorPayload: Record<string, unknown> = { success: false, error: message };
+    if (code) errorPayload.code = code;
+    if (detail) errorPayload.detail = detail;
+    return NextResponse.json(errorPayload, { status: 500 });
   }
 }

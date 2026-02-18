@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Settings, ChevronDown, ChevronRight, X, Search, SlidersHorizontal, Palette, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Settings, ChevronDown, ChevronRight, X, Search, SlidersHorizontal, Palette, Trash2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WORKSPACE } from './serviceLayerFactory';
 import type { LayerFilterRow } from './map-layergroup-bar';
@@ -24,6 +24,8 @@ interface LayerManagementPanelProps {
   onClose: () => void;
   layerFilterRows?: Map<string, LayerFilterRow[]>;
   onLayerFilterRowsChange?: (layerName: string, rows: LayerFilterRow[]) => void;
+  favoriteGroupKeys?: string[];
+  onFavoriteToggle?: (category: string) => void;
 }
 
 function serviceLayersForGroup(
@@ -50,6 +52,7 @@ function getLegendGraphicUrl(layerName: string): string {
     REQUEST: 'GetLegendGraphic',
     VERSION: '1.0.0',
     LAYER: `${WORKSPACE}:${layerName}`,
+    STYLE: layerName,
     FORMAT: 'image/png',
     WIDTH: '48',
     HEIGHT: '48',
@@ -66,6 +69,8 @@ export function LayerManagementPanel({
   onClose,
   layerFilterRows = new Map(),
   onLayerFilterRowsChange,
+  favoriteGroupKeys = [],
+  onFavoriteToggle,
 }: LayerManagementPanelProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -122,6 +127,17 @@ export function LayerManagementPanel({
 
   const activeCount = visibleLayerNames.size;
 
+  const sortedCategories = useMemo(() => {
+    if (favoriteGroupKeys.length === 0) return categories;
+    return [...categories].sort((a, b) => {
+      const aFav = favoriteGroupKeys.includes(a);
+      const bFav = favoriteGroupKeys.includes(b);
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+      return 0;
+    });
+  }, [categories, favoriteGroupKeys]);
+
   const searchLower = debouncedSearchQuery.trim().toLowerCase();
   const layerMatchesSearch = (row: DefineLayerRow) => {
     if (!searchLower) return true;
@@ -146,8 +162,8 @@ export function LayerManagementPanel({
                 <Settings className="w-5 h-5 text-[#0ea5e9]" strokeWidth={1.5} />
               </div>
               <div>
-                <h2 className="text-[15px] font-semibold text-slate-800">레이어 설정</h2>
-                <p className="text-xs text-slate-500 -mt-0.5">지도에 보여줄 레이어를 설정합니다</p>
+                <h2 className="text-[14px] font-semibold text-slate-800">레이어 설정</h2>
+                <p className="text-[12px] text-slate-500 -mt-0.5">지도에 보여줄 레이어를 설정합니다</p>
               </div>
             </div>
             <button
@@ -166,7 +182,7 @@ export function LayerManagementPanel({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="레이어 검색"
-              className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[12px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
         </div>
@@ -174,7 +190,7 @@ export function LayerManagementPanel({
         {/* Content - Grid of category cards */}
         <div className="flex-1 overflow-auto p-4">
           <div key={debouncedSearchQuery} className="columns-2 md:columns-3 gap-3.5">
-            {categories.map((category, idx) => {
+            {sortedCategories.map((category, idx) => {
               const allLayers = serviceLayersForGroup(tableList, category);
               const categoryMatchesSearch =
                 !searchLower || category.toLowerCase().includes(searchLower);
@@ -194,35 +210,52 @@ export function LayerManagementPanel({
                   className="break-inside-avoid mb-3.5 rounded-lg border border-slate-200 bg-white overflow-hidden animate-layer-result-in"
                 >
                   {/* Category header */}
-                  <button
-                    type="button"
-                    onClick={() => toggleCollapse(category)}
-                    className="w-full px-3.5 py-2.5 flex items-center gap-2 hover:bg-slate-50 text-left"
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                    )}
-                    <span className="text-sm font-medium text-slate-800 flex-1 truncate">
-                      {category}
-                    </span>
-                    <span
-                      className="flex items-center gap-1.5 shrink-0 text-xs text-slate-500"
-                      onClick={(e) => e.stopPropagation()}
+                  <div className="w-full px-3.5 py-2.5 flex items-center gap-2 hover:bg-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(category)}
+                      className="flex items-center gap-2 text-left min-w-0 hover:bg-transparent py-0 shrink-0"
                     >
+                      {isCollapsed ? (
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                      <span className="text-[12px] font-medium text-slate-800 truncate">
+                        {category}
+                      </span>
+                    </button>
+                    {onFavoriteToggle && (
+                      <button
+                        type="button"
+                        onClick={() => onFavoriteToggle(category)}
+                        className={cn(
+                          'p-0 rounded hover:bg-slate-200 transition-colors shrink-0',
+                          favoriteGroupKeys.includes(category)
+                            ? 'text-amber-500 fill-amber-500'
+                            : 'text-slate-400 hover:text-amber-500'
+                        )}
+                        title={favoriteGroupKeys.includes(category) ? '즐겨찾기 해제' : '상단 버튼에 표시'}
+                        aria-label={favoriteGroupKeys.includes(category) ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                      >
+                        <Star
+                          className={cn('w-4 h-4', favoriteGroupKeys.includes(category) && 'fill-current')}
+                          strokeWidth={1.5}
+                        />
+                      </button>
+                    )}
+                    <span className="flex items-center gap-1.5 shrink-0 text-[12px] text-slate-500 ml-auto">
                       {selectedCount}/{layers.length}
                       <input
                         type="checkbox"
                         checked={layers.length > 0 && selectedCount === layers.length}
-                        onChange={(e) =>
-                          handleToggleCategory(category, e.target.checked)
-                        }
+                        onChange={(e) => handleToggleCategory(category, e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
                         className="w-4 h-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
                         title="전체 레이어 켜기/끄기"
                       />
                     </span>
-                  </button>
+                  </div>
 
                   {/* Layer list */}
                   {!isCollapsed && (
@@ -260,7 +293,7 @@ export function LayerManagementPanel({
                                 </span>
                                 <span
                                   className={cn(
-                                    'text-sm truncate flex-1',
+                                    'text-[12px] truncate flex-1',
                                     checked ? 'font-medium text-slate-800' : 'text-slate-600'
                                   )}
                                 >
@@ -310,7 +343,7 @@ export function LayerManagementPanel({
                                           next[idx] = { ...next[idx], field: e.target.value };
                                           onLayerFilterRowsChange(defineTableName, next);
                                         }}
-                                        className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-0.5 text-xs"
+                                        className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-0.5 text-[12px]"
                                       >
                                         <option value="">필드 선택</option>
                                         {fields.map((f) => (
@@ -328,7 +361,7 @@ export function LayerManagementPanel({
                                           onLayerFilterRowsChange(defineTableName, next);
                                         }}
                                         placeholder="값 입력"
-                                        className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-0.5 text-xs"
+                                        className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-0.5 text-[12px]"
                                       />
                                       <button
                                         type="button"
@@ -358,7 +391,7 @@ export function LayerManagementPanel({
 
         {/* Footer */}
         <div className="shrink-0 px-4 py-2 border-t border-slate-200 flex items-center justify-between bg-slate-50">
-          <span className="text-sm text-slate-600">
+          <span className="text-[12px] text-slate-600">
             {activeCount}개 레이어 활성화
           </span>
           <button

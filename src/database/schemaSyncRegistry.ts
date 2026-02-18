@@ -222,6 +222,7 @@ export function getSchemaColumnComment(schema: string, table: string, columnName
 
 /**
  * 지정한 테이블의 PK 컬럼명 목록 (스키마 정의 기준)
+ * - extraConfig의 primaryKey() 뿐 아니라, 컬럼 인라인 .primaryKey() 도 반영
  */
 export function getSchemaPrimaryKeyColumnNames(schema: string, table: string): string[] {
   for (const t of schemaTables) {
@@ -229,11 +230,17 @@ export function getSchemaPrimaryKeyColumnNames(schema: string, table: string): s
     const s = config.schema ?? 'public';
     if (s === schema && config.name === table) {
       const names: string[] = [];
+      // 1) explicit primaryKey() in table extraConfig
       for (const pk of config.primaryKeys ?? []) {
         for (const col of pk.columns ?? []) {
           const name = (col as { name: string }).name;
           if (name && !names.includes(name)) names.push(name);
         }
+      }
+      // 2) column inline .primaryKey() (config.columns 중 primary === true)
+      for (const col of config.columns ?? []) {
+        const c = col as { name: string; primary?: boolean };
+        if (c?.primary === true && c.name && !names.includes(c.name)) names.push(c.name);
       }
       return names;
     }

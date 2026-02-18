@@ -1,12 +1,12 @@
 <layer>
   <name>wwtl_pipe_lm</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:2a98</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7fe2</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:3854</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c81</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:2a97</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7fe3</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:28:09.234 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:47.407 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:13.129 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:30.31 UTC</dateModified>
 </layer>

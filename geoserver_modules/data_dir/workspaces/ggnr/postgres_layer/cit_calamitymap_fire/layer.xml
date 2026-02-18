@@ -1,12 +1,12 @@
 <layer>
   <name>cit_calamitymap_fire</name>
-  <id>LayerInfoImpl--45bf12f6:19c3705dedf:277c</id>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7f9c</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--45bf12f6:19c3705dedf:38c8</id>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c5e</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--45bf12f6:19c3705dedf:277b</id>
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7f9d</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-07 13:27:29.283 UTC</dateCreated>
-  <dateModified>2026-02-07 13:29:54.576 UTC</dateModified>
+  <dateCreated>2026-02-11 16:00:16.633 UTC</dateCreated>
+  <dateModified>2026-02-11 16:01:33.882 UTC</dateModified>
 </layer>

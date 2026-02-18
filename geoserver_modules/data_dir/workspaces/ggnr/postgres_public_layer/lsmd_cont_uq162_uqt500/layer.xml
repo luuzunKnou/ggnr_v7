@@ -1,0 +1,22 @@
+<layer>
+  <name>lsmd_cont_uq162_uqt500</name>
+  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7f00</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7c10</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7f01</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <metadata>
+    <entry key="cqlFilter">mnum LIKE &apos;%UQT500%&apos;</entry>
+  </metadata>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-02-11 16:00:25.255 UTC</dateCreated>
+  <dateModified>2026-02-11 16:00:25.321 UTC</dateModified>
+</layer>
