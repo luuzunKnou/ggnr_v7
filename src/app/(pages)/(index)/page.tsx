@@ -1,5 +1,3 @@
-import { readFileSync } from "fs"
-import { join } from "path"
 import Link from "next/link"
 import Image from "next/image"
 import { DepartmentGrid } from "@/app/(pages)/(index)/department-grid"
@@ -8,28 +6,16 @@ import { ParcelSlider } from "@/app/(pages)/(index)/parcel-slider"
 import { SystemManagementSection } from "@/app/(pages)/(index)/system-management-section"
 import { DevModeFooterTrigger } from "@/app/(pages)/(index)/dev-mode-footer-trigger"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
+import { getSystemList, getSystemKorName, getSystemListDebug } from "@/service/configService"
 
-type SystemConfigItem = {
-  sys_key: string
-  sys_kor: string
-  sys_eng?: string
-  sys_detail?: string
-  sys_img: string
-  sys_idx: number
-  sys_col: string
-  sys_link: string
-  serviceList: string[]
-  layerList: string[]
-}
-
-function loadSystemList(): SystemConfigItem[] {
+function loadSystemList(): { systems: Array<{ sys_key: string; sys_kor: string; sys_eng?: string }>; error?: string; debug?: string } {
   try {
-    const path = join(process.cwd(), "src/config/systemList.config")
-    const raw = readFileSync(path, "utf-8")
-    const data = JSON.parse(raw) as { sys?: SystemConfigItem[]; systems?: SystemConfigItem[] }
-    return Array.isArray(data.sys) ? data.sys : Array.isArray(data.systems) ? data.systems : []
-  } catch {
-    return []
+    const result = getSystemListDebug()
+    if (result.error) return { systems: [], error: result.error, debug: result.debug }
+    return { systems: result.systems ?? [], debug: result.debug }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { systems: [], error: msg }
   }
 }
 
@@ -208,9 +194,8 @@ const parcelSlides = [
   },
 ]
 
-const systemList = loadSystemList()
-
 export default function DashboardPage() {
+  const { systems: systemList, error: systemListError, debug: systemListDebug } = loadSystemList()
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -224,7 +209,7 @@ export default function DashboardPage() {
               height={36}
               className="object-contain"
             />
-            <h1 className="text-xl font-bold text-foreground">공간정보 통합관리 플랫폼</h1>
+            <h1 className="text-xl font-bold text-foreground">{getSystemKorName()}</h1>
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
@@ -324,6 +309,17 @@ export default function DashboardPage() {
         <section className="mb-12">
           <SystemManagementSection systems={systemList} />
         </section>
+
+        {/* systemList.config 오류 시에만 표시 */}
+        {systemListError && (
+          <section className="mb-12 rounded-lg border border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20 p-4">
+            <h2 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2">systemList.config 로드 오류</h2>
+            <p className="text-sm text-red-600 dark:text-red-400 mb-2 font-medium">{systemListError}</p>
+            {systemListDebug && (
+              <p className="text-xs text-red-700 dark:text-red-300 font-mono break-all">디버그: {systemListDebug}</p>
+            )}
+          </section>
+        )}
 
         {/* 시스템 목록 (아래쪽) - 숨김 */}
         <section className="bg-muted/30 p-0" style={{ display: "none" }}>

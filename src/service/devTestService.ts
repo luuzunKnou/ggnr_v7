@@ -16,6 +16,29 @@ import {
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
 
+/** 심볼 베이스 URL (GeoServer가 이미지를 요청할 주소). NEXT_PUBLIC_APP_URL 없으면 localhost:3000 */
+const SYMBOL_BASE_URL =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_APP_URL) || 'http://localhost:3000';
+
+/**
+ * 레이어(스타일) 이름과 동일한 심볼 파일이 public/symbol에 있는지 확인.
+ * SVG 우선, 없으면 PNG. 있으면 전체 URL 반환, 없으면 null.
+ */
+function resolveSymbolUrlForLayer(layerName: string): string | null {
+  if (!layerName?.trim()) return null;
+  const name = layerName.trim();
+  const base = path.join(process.cwd(), 'public', 'symbol');
+  const svgPath = path.join(base, `${name}.svg`);
+  const pngPath = path.join(base, `${name}.png`);
+  if (fs.existsSync(svgPath)) {
+    return `${SYMBOL_BASE_URL.replace(/\/$/, '')}/symbol/${name}.svg`;
+  }
+  if (fs.existsSync(pngPath)) {
+    return `${SYMBOL_BASE_URL.replace(/\/$/, '')}/symbol/${name}.png`;
+  }
+  return null;
+}
+
 /**
  * 데이터베이스 연결 테스트 및 정보 조회
  */
@@ -330,7 +353,25 @@ export async function setupGeoServerDb(params: {
       }
     }
 
-    const datastores: Array<{ name: string; schema: string; status: 'created' | 'exists' }> = [];
+    const datastores: Array<{ name: string; schema: string; status: 'created' | 'exists' | 'updated' }> = [];
+
+    const buildDataStoreBody = (name: string, schema: string) => ({
+      dataStore: {
+        name,
+        type: 'PostGIS',
+        enabled: true,
+        connectionParameters: {
+          entry: [
+            { '@key': 'host', $: String(db.host) },
+            { '@key': 'port', $: String(db.port) },
+            { '@key': 'database', $: db.database },
+            { '@key': 'schema', $: schema },
+            { '@key': 'user', $: db.user },
+            { '@key': 'passwd', $: db.password },
+          ],
+        },
+      },
+    });
 
     for (const target of targets) {
       const dsGetRes = await geoserverFetch(
@@ -338,7 +379,18 @@ export async function setupGeoServerDb(params: {
         `/rest/workspaces/${workspace}/datastores/${target.name}.json`
       );
       if (dsGetRes.ok) {
-        datastores.push({ name: target.name, schema: target.schema, status: 'exists' });
+        // 저장소가 이미 있으면 현재 프로젝트 env DB로 연결 정보 갱신 (run dev 시 접속 DB에 맞게 필드 반영)
+        const putBody = buildDataStoreBody(target.name, target.schema);
+        const dsPutRes = await geoserverFetch(
+          baseUrl,
+          `/rest/workspaces/${workspace}/datastores/${target.name}.json`,
+          { method: 'PUT', body: JSON.stringify(putBody) }
+        );
+        if (dsPutRes.ok) {
+          datastores.push({ name: target.name, schema: target.schema, status: 'updated' });
+        } else {
+          datastores.push({ name: target.name, schema: target.schema, status: 'exists' });
+        }
         continue;
       }
       if (dsGetRes.status !== 404) {
@@ -346,24 +398,7 @@ export async function setupGeoServerDb(params: {
         return { success: false, error: `데이터 스토어 조회 실패(${target.name}): ${dsGetRes.status} ${text}` };
       }
 
-      const dataStoreBody = {
-        dataStore: {
-          name: target.name,
-          type: 'PostGIS',
-          enabled: true,
-          connectionParameters: {
-            entry: [
-              { '@key': 'host', $: String(db.host) },
-              { '@key': 'port', $: String(db.port) },
-              { '@key': 'database', $: db.database },
-              { '@key': 'schema', $: target.schema },
-              { '@key': 'user', $: db.user },
-              { '@key': 'passwd', $: db.password },
-            ],
-          },
-        },
-      };
-
+      const dataStoreBody = buildDataStoreBody(target.name, target.schema);
       const dsRes = await geoserverFetch(
         baseUrl,
         `/rest/workspaces/${workspace}/datastores.json`,
@@ -514,6 +549,61 @@ export async function getLayerTableList() {
   }
 }
 
+/** layer 스키마 특정 테이블의 행 수 조회 */
+export async function getLayerTableRowCount(params: {
+  tableName: string;
+}): Promise<{ success: boolean; count: number; error?: string }> {
+  const name = params?.tableName?.trim();
+  if (!name) return { success: false, count: 0, error: 'tableName이 필요합니다.' };
+  const safeName = name.replace(/[^a-zA-Z0-9_]/g, '');
+  try {
+    const result = await db.execute(
+      sql.raw(`SELECT count(*)::int AS cnt FROM layer."${safeName}"`)
+    );
+    const cnt = (result.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
+    return { success: true, count: cnt };
+  } catch {
+    return { success: true, count: 0 };
+  }
+}
+
+/** layer 스키마 테이블별 지오메트리 타입 (geometry_columns.type → POINT/LINE/POLYGON) */
+export async function getLayerTableGeometryTypes(): Promise<{
+  success: boolean;
+  types: Record<string, 'POINT' | 'LINE' | 'POLYGON'>;
+  error?: string;
+}> {
+  try {
+    const result = await db.execute(
+      sql`
+        SELECT f_table_name, type
+        FROM geometry_columns
+        WHERE f_table_schema = 'layer'
+      `
+    );
+    const types: Record<string, 'POINT' | 'LINE' | 'POLYGON'> = {};
+    for (const row of (result.rows as Array<{ f_table_name: string; type: string | number }>) ?? []) {
+      const raw = row.type;
+      const t = typeof raw === 'number'
+        ? String(raw) // OGC: 1=Point,2=LineString,3=Polygon,4=MultiPoint,5=MultiLineString,6=MultiPolygon
+        : String(raw ?? '').toUpperCase().replace(/^ST_/, '');
+      if (typeof raw === 'number') {
+        if (raw === 1 || raw === 4) types[row.f_table_name] = 'POINT';
+        else if (raw === 2 || raw === 5) types[row.f_table_name] = 'LINE';
+        else if (raw === 3 || raw === 6) types[row.f_table_name] = 'POLYGON';
+      } else {
+        if (/POINT|MULTIPOINT/.test(t)) types[row.f_table_name] = 'POINT';
+        else if (/LINESTRING|MULTILINESTRING|LINE/.test(t)) types[row.f_table_name] = 'LINE';
+        else if (/POLYGON|MULTIPOLYGON/.test(t)) types[row.f_table_name] = 'POLYGON';
+      }
+    }
+    return { success: true, types };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, types: {}, error: msg };
+  }
+}
+
 /**
  * GeoServer 레이어 생성
  * - 기준: tables.json(defineLayer)
@@ -597,40 +687,39 @@ export async function createGeoServerLayers(params: {
       return { success: true as const };
     };
 
-    const setLayerCqlFilter = async (layerName: string, cqlFilter: string) => {
+    /** FeatureType에 CQL 필터 설정 — 최상위 cqlFilter 속성 사용 (GeoServer REST 규격) */
+    const setFeatureTypeCqlFilter = async (
+      datastoreName: string,
+      featureTypeName: string,
+      cqlFilter: string
+    ) => {
       const getRes = await geoserverFetch(
         baseUrl,
-        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
+        `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(featureTypeName)}.json`
       );
       if (!getRes.ok) {
         const text = await getRes.text();
-        return { success: false as const, error: `레이어 조회 실패: ${getRes.status} ${text}` };
+        return { success: false as const, error: `FeatureType 조회 실패: ${getRes.status} ${text}` };
       }
 
-      const layerData = await getRes.json();
-      const layer = layerData?.layer ?? layerData;
-      const rawEntry = layer?.metadata?.entry;
-      const entries = Array.isArray(rawEntry) ? [...rawEntry] : rawEntry ? [rawEntry] : [];
-      const filteredEntries = entries.filter(
-        (e: { '@key'?: string }) => String(e?.['@key'] ?? '').toLowerCase() !== 'cqlfilter'
-      );
-      filteredEntries.push({ '@key': 'cqlFilter', $: cqlFilter });
+      const ftData = await getRes.json();
+      const featureType = ftData?.featureType ?? ftData;
 
       const putBody = JSON.stringify({
-        layer: {
-          ...layer,
-          metadata: { entry: filteredEntries },
+        featureType: {
+          ...featureType,
+          cqlFilter,
         },
       });
 
       const putRes = await geoserverFetch(
         baseUrl,
-        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}`,
+        `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(featureTypeName)}`,
         { method: 'PUT', body: putBody }
       );
       if (!putRes.ok) {
         const text = await putRes.text();
-        return { success: false as const, error: `CQL 적용 실패: ${putRes.status} ${text}` };
+        return { success: false as const, error: `FeatureType CQL 적용 실패: ${putRes.status} ${text}` };
       }
       return { success: true as const };
     };
@@ -680,6 +769,7 @@ export async function createGeoServerLayers(params: {
           nativeName: sourceTable.table,
           enabled: true,
           srs: 'EPSG:5181',
+          ...(divQuery ? { cqlFilter: divQuery } : {}),
         },
       };
 
@@ -690,10 +780,10 @@ export async function createGeoServerLayers(params: {
       );
 
       if (ftRes.ok || ftRes.status === 409) {
-        if (isSplitLayer) {
-          const cqlRes = await setLayerCqlFilter(layerName, divQuery);
-          if (!cqlRes.success) {
-            failed.push({ schema: sourceTable.schema, table: layerName, error: cqlRes.error });
+        if (divQuery) {
+          const ftCqlRes = await setFeatureTypeCqlFilter(datastoreName, layerName, divQuery);
+          if (!ftCqlRes.success) {
+            failed.push({ schema: sourceTable.schema, table: layerName, error: ftCqlRes.error });
             continue;
           }
         }
@@ -712,6 +802,166 @@ export async function createGeoServerLayers(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg, created: [], failed: [] };
+  }
+}
+
+/**
+ * 단일 GeoServer 레이어 생성/재생성 (tables.json 기준, CQL 필터 포함)
+ * - 기존 레이어·FeatureType 삭제 후 새로 생성 (재생성 시 완전히 다시 만듦)
+ */
+export async function createOrUpdateGeoServerLayer(params: {
+  layerName: string;
+  url?: string;
+  workspace?: string;
+}) {
+  const baseUrl = (params?.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const workspace = params?.workspace?.trim() || 'ggnr';
+  const layerName = params?.layerName?.trim();
+  if (!layerName) {
+    return { success: false as const, error: 'layerName이 필요합니다.' };
+  }
+
+  try {
+    const defineRes = await getDefineLayerTables();
+    if (!defineRes.success || !defineRes.tables?.length) {
+      return { success: false as const, error: defineRes.error ?? 'defineLayer 테이블이 없습니다.' };
+    }
+
+    const row = defineRes.tables.find(
+      (r) => String(r.define_table_name ?? '').trim() === layerName
+    );
+    if (!row) {
+      return { success: false as const, error: `tables.json에 레이어 '${layerName}'가 없습니다.` };
+    }
+
+    const dbTableMap = new Map<string, { schema: string; table: string }>();
+    const listRes = await getLayerTableList();
+    if (listRes.success && Array.isArray(listRes.tables)) {
+      for (const t of listRes.tables) {
+        if (t.schema !== 'layer' && t.schema !== 'public_layer') continue;
+        if (!dbTableMap.has(t.table) || t.schema === 'layer') {
+          dbTableMap.set(t.table, { schema: t.schema, table: t.table });
+        }
+      }
+    }
+
+    const parentLayer = String(row.define_table_parents_layer ?? '').trim();
+    const divQuery = String(row.define_table_div_query ?? '').trim();
+    const isSplitLayer = !!parentLayer && !!divQuery;
+    const sourceTableName = isSplitLayer ? parentLayer : layerName;
+    const sourceTable = dbTableMap.get(sourceTableName);
+
+    if (!sourceTable) {
+      return {
+        success: false as const,
+        error: `원본 테이블 없음: ${sourceTableName}`,
+      };
+    }
+
+    const datastoreName =
+      sourceTable.schema === 'layer'
+        ? 'postgres_layer'
+        : sourceTable.schema === 'public_layer'
+          ? 'postgres_public_layer'
+          : '';
+    if (!datastoreName) {
+      return {
+        success: false as const,
+        error: `지원하지 않는 스키마: ${sourceTable.schema}`,
+      };
+    }
+
+    const dbConfig = getDbConfig();
+
+    const ensureDatastore = async (schema: string, dsName: string) => {
+      const dsRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${dsName}.json`
+      );
+      if (!dsRes.ok && dsRes.status === 404) {
+        const dsBody = {
+          dataStore: {
+            name: dsName,
+            type: 'PostGIS',
+            enabled: true,
+            connectionParameters: {
+              entry: [
+                { '@key': 'host', $: String(dbConfig.host) },
+                { '@key': 'port', $: String(dbConfig.port) },
+                { '@key': 'database', $: dbConfig.database },
+                { '@key': 'schema', $: schema },
+                { '@key': 'user', $: dbConfig.user },
+                { '@key': 'passwd', $: dbConfig.password },
+              ],
+            },
+          },
+        };
+        const createDsRes = await geoserverFetch(
+          baseUrl,
+          `/rest/workspaces/${workspace}/datastores.json`,
+          { method: 'POST', body: JSON.stringify(dsBody) }
+        );
+        if (!createDsRes.ok) {
+          const text = await createDsRes.text();
+          return { success: false as const, error: `데이터 스토어 생성 실패: ${text}` };
+        }
+      } else if (!dsRes.ok) {
+        const text = await dsRes.text();
+        return { success: false as const, error: `데이터 스토어 조회 실패: ${dsRes.status} ${text}` };
+      }
+      return { success: true as const };
+    };
+
+    const dsOk = await ensureDatastore(sourceTable.schema, datastoreName);
+    if (!dsOk.success) return { success: false as const, error: dsOk.error };
+
+    // 재생성: 기존 레이어·FeatureType 삭제 (없으면 404 무시)
+    const delLayerRes = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}`,
+      { method: 'DELETE' }
+    );
+    if (!delLayerRes.ok && delLayerRes.status !== 404) {
+      const text = await delLayerRes.text();
+      return { success: false as const, error: `레이어 삭제 실패: ${delLayerRes.status} ${text}` };
+    }
+
+    const delFtRes = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(layerName)}`,
+      { method: 'DELETE' }
+    );
+    if (!delFtRes.ok && delFtRes.status !== 404) {
+      const text = await delFtRes.text();
+      return { success: false as const, error: `FeatureType 삭제 실패: ${delFtRes.status} ${text}` };
+    }
+
+    const ftBody = {
+      featureType: {
+        name: layerName,
+        nativeName: sourceTable.table,
+        enabled: true,
+        srs: 'EPSG:5181',
+        ...(divQuery ? { cqlFilter: divQuery } : {}),
+      },
+    };
+
+    const ftRes = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes.json`,
+      { method: 'POST', body: JSON.stringify(ftBody) }
+    );
+
+    if (!ftRes.ok) {
+      const text = await ftRes.text();
+      return { success: false as const, error: `FeatureType 생성 실패: ${ftRes.status} ${text}` };
+    }
+
+    // CQL은 POST body에 이미 포함했으므로 별도 PUT 하지 않음 (PUT 시 GeoServer가 동일 경로 move 시도 → Windows AccessDeniedException)
+    return { success: true as const, layerName };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg };
   }
 }
 
@@ -1248,25 +1498,27 @@ export async function applyAllDefaultStyles(params: {
       let styleProps: StyleProps;
 
       if (geometryType === 'POINT') {
+        const symbolUrl = resolveSymbolUrlForLayer(layer.name);
         styleProps = {
           fillColor: color,
           strokeColor: '#FFFFFF',
           strokeWidth: 1.5,
-          opacity: 1,
+          opacity: 0.5,
           size: 10,
+          ...(symbolUrl ? { symbolUrl } : {}),
         };
       } else if (geometryType === 'LINE') {
         styleProps = {
           strokeColor: color,
           strokeWidth: 2,
-          opacity: 1,
+          opacity: 0.5,
         };
       } else {
         styleProps = {
           fillColor: color,
           strokeColor: '#FFFFFF',
           strokeWidth: 1,
-          opacity: 0.5,
+          opacity: 0.3,
         };
       }
 
@@ -1343,25 +1595,27 @@ export async function applyDefaultStyleToLayer(params: {
     let styleProps: StyleProps;
 
     if (geometryType === 'POINT') {
+      const symbolUrl = resolveSymbolUrlForLayer(layerName);
       styleProps = {
         fillColor: color,
         strokeColor: '#FFFFFF',
         strokeWidth: 1.5,
-        opacity: 1,
+        opacity: 0.5,
         size: 10,
+        ...(symbolUrl ? { symbolUrl } : {}),
       };
     } else if (geometryType === 'LINE') {
       styleProps = {
         strokeColor: color,
         strokeWidth: 2,
-        opacity: 1,
+        opacity: 0.5,
       };
     } else {
       styleProps = {
         fillColor: color,
         strokeColor: '#FFFFFF',
         strokeWidth: 1,
-        opacity: 0.5,
+        opacity: 0.3,
       };
     }
 
@@ -1672,22 +1926,124 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
   return result;
 }
 
-const DATA_SELECT_SCHEMA = 'public_layer';
+/**
+ * 읍면동(emd) 코드로 해당 행의 도형 WKT(5181) 조회. 지도 표시 및 공간 검색용.
+ */
+export async function getEmdGeometry(params: { schema?: string; emdCode: string } = { emdCode: '' }) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const emdCode = String(params?.emdCode ?? '').trim();
+  if (!emdCode) return { wkt: null as string | null, error: 'emdCode required' };
+
+  const esc = (s: string) => s.replace(/'/g, "''");
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'emd' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) return { wkt: null, error: 'emd geometry column not found' };
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const tableSrid = gcRow.srid ?? 4326;
+    const wktExpr = tableSrid === 5181 ? `ST_AsText("${geomCol}")` : `ST_AsText(ST_Transform("${geomCol}", 5181))`;
+    const centroidExpr =
+      tableSrid === 5181
+        ? `ST_X(ST_Centroid("${geomCol}")) AS center_x, ST_Y(ST_Centroid("${geomCol}")) AS center_y`
+        : `ST_X(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_x, ST_Y(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_y`;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ${wktExpr} AS wkt, ${centroidExpr} FROM "${schema.replace(/"/g, '""')}"."emd"
+         WHERE "emd_cd" = '${esc(emdCode)}' LIMIT 1`
+      )
+    );
+    const row = res.rows?.[0] as { wkt?: string; center_x?: number; center_y?: number } | undefined;
+    const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
+    const center =
+      row?.center_x != null && row?.center_y != null
+        ? { x: Number(row.center_x), y: Number(row.center_y) }
+        : null;
+    return { wkt, center };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { wkt: null, error: msg };
+  }
+}
 
 /**
- * 데이터 선택용 테이블 목록 (스키마 내 테이블명)
+ * 리(ri) 코드로 해당 행의 도형 WKT(5181) 조회. 지도 표시 및 공간 검색용.
+ */
+export async function getRiGeometry(params: { schema?: string; riCode: string } = { riCode: '' }) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const riCode = String(params?.riCode ?? '').trim();
+  if (!riCode) return { wkt: null as string | null, error: 'riCode required' };
+
+  const esc = (s: string) => s.replace(/'/g, "''");
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'ri' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) return { wkt: null, error: 'ri geometry column not found' };
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const tableSrid = gcRow.srid ?? 4326;
+    const wktExpr = tableSrid === 5181 ? `ST_AsText("${geomCol}")` : `ST_AsText(ST_Transform("${geomCol}", 5181))`;
+    const centroidExpr =
+      tableSrid === 5181
+        ? `ST_X(ST_Centroid("${geomCol}")) AS center_x, ST_Y(ST_Centroid("${geomCol}")) AS center_y`
+        : `ST_X(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_x, ST_Y(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_y`;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ${wktExpr} AS wkt, ${centroidExpr} FROM "${schema.replace(/"/g, '""')}"."ri"
+         WHERE "ri_cd" = '${esc(riCode)}' LIMIT 1`
+      )
+    );
+    const row = res.rows?.[0] as { wkt?: string; center_x?: number; center_y?: number } | undefined;
+    const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
+    const center =
+      row?.center_x != null && row?.center_y != null
+        ? { x: Number(row.center_x), y: Number(row.center_y) }
+        : null;
+    return { wkt, center };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { wkt: null, error: msg };
+  }
+}
+
+/** 데이터 선택(테이블/필드/값) 검색 스키마. defineLayer·GeoServer 레이어와 동일하게 layer 스키마 사용 */
+const DATA_SELECT_SCHEMA = 'layer';
+
+const DATA_SELECT_TABLES_JSON_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
+
+/**
+ * 데이터 선택용 테이블 목록. tables.json(defineLayer)의 define_table_shp_type이 POLYGON/MULTIPOLYGON인 테이블만 반환.
  */
 export async function getDataSelectTableList(params: { schema?: string } = {}) {
   const schema = (params?.schema ?? DATA_SELECT_SCHEMA).trim() || DATA_SELECT_SCHEMA;
   try {
-    const res = await db.execute(
-      sql.raw(
-        `SELECT table_name AS name FROM information_schema.tables
-         WHERE table_schema = '${schema.replace(/'/g, "''")}' AND table_type = 'BASE TABLE'
-         ORDER BY table_name`
+    if (!fs.existsSync(DATA_SELECT_TABLES_JSON_PATH)) {
+      return { tables: [], error: 'tables.json not found' };
+    }
+    const raw = fs.readFileSync(DATA_SELECT_TABLES_JSON_PATH, 'utf-8');
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return { tables: [], error: 'Invalid tables.json format' };
+    const shpTypeUpper = (v: unknown) => String(v ?? '').trim().toUpperCase();
+    const polygonTypes = new Set(['POLYGON', 'MULTIPOLYGON']);
+    const schemaUpper = schema.toUpperCase();
+    const tables = (arr as { define_table_name?: string; define_table_schema?: string; define_table_shp_type?: string }[])
+      .filter(
+        (r) =>
+          (shpTypeUpper(r.define_table_schema) || 'LAYER') === schemaUpper &&
+          polygonTypes.has(shpTypeUpper(r.define_table_shp_type))
       )
-    );
-    return { tables: (res.rows as { name: string }[]).map((r) => String(r?.name ?? '').trim()).filter(Boolean) };
+      .map((r) => String(r.define_table_name ?? '').trim())
+      .filter(Boolean);
+    tables.sort((a, b) => a.localeCompare(b));
+    return { tables: [...new Set(tables)] };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { tables: [], error: msg };
@@ -1717,6 +2073,37 @@ export async function getDataSelectFieldList(params: { schema?: string; table: s
   }
 }
 
+/** layer 등 스키마 테이블의 컬럼명·데이터타입 (defineLayer 필드 자동 생성용) */
+export async function getTableColumnInfo(params: { schema: string; table: string }): Promise<{
+  success: boolean;
+  columns: Array<{ name: string; dataType: string }>;
+  error?: string;
+}> {
+  const schema = String(params?.schema ?? '').trim();
+  const table = String(params?.table ?? '').trim();
+  if (!schema || !table) return { success: false, columns: [] };
+  const safeSchema = schema.replace(/'/g, "''");
+  const safeTable = table.replace(/'/g, "''");
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT column_name AS name, data_type AS data_type
+         FROM information_schema.columns
+         WHERE table_schema = '${safeSchema}' AND table_name = '${safeTable}'
+         ORDER BY ordinal_position`
+      )
+    );
+    const columns = (res.rows as Array<{ name: string; data_type: string }>).map((r) => ({
+      name: String(r?.name ?? '').trim(),
+      dataType: String(r?.data_type ?? '').trim(),
+    })).filter((r) => r.name.length > 0);
+    return { success: true, columns };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, columns: [], error: msg };
+  }
+}
+
 /**
  * 데이터 선택용 필드 값 목록 (DISTINCT, 필터 선택용)
  */
@@ -1740,5 +2127,60 @@ export async function getDataSelectValueList(params: { schema?: string; table: s
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { values: [], error: msg };
+  }
+}
+
+/**
+ * 테이블/필드/값 조건에 맞는 행들의 도형을 합쳐 WKT(5181)와 중심점 반환. 지도 표시 및 공간 검색용.
+ */
+export async function getGeometryByFieldValue(params: {
+  schema?: string;
+  table: string;
+  field: string;
+  value: string;
+} = { table: '', field: '', value: '' }) {
+  const schema = (params?.schema ?? DATA_SELECT_SCHEMA).trim() || DATA_SELECT_SCHEMA;
+  const table = String(params?.table ?? '').trim();
+  const field = String(params?.field ?? '').trim();
+  const value = String(params?.value ?? '').trim();
+  if (!table || !field) return { wkt: null as string | null, center: null, error: 'table and field required' };
+
+  const esc = (s: string) => s.replace(/'/g, "''");
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(table)}' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) return { wkt: null, center: null, error: 'geometry column not found' };
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const tableSrid = gcRow.srid ?? 4326;
+    const safeSchema = schema.replace(/"/g, '""');
+    const safeTable = table.replace(/"/g, '""');
+    const safeField = field.replace(/"/g, '""');
+    const geomUnion =
+      tableSrid === 5181
+        ? `ST_SimplifyPreserveTopology(ST_Union("${geomCol}"), 5)`
+        : `ST_SimplifyPreserveTopology(ST_Transform(ST_Union("${geomCol}"), 5181), 5)`;
+    const wktExpr = `ST_AsText(${geomUnion})`;
+    const centroidExpr = `ST_X(ST_Centroid(${geomUnion})) AS center_x, ST_Y(ST_Centroid(${geomUnion})) AS center_y`;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ${wktExpr} AS wkt, ${centroidExpr} FROM "${safeSchema}"."${safeTable}"
+         WHERE "${safeField}" = '${esc(value)}'`
+      )
+    );
+    const row = res.rows?.[0] as { wkt?: string; center_x?: number; center_y?: number } | undefined;
+    const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
+    const center =
+      row?.center_x != null && row?.center_y != null
+        ? { x: Number(row.center_x), y: Number(row.center_y) }
+        : null;
+    return { wkt, center };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { wkt: null, center: null, error: msg };
   }
 }

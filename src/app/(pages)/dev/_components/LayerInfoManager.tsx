@@ -49,6 +49,7 @@ type TableColumnDef =
       alignCenter?: boolean
       shapeType?: boolean
       share?: "read" | "write"
+      schemaSelect?: boolean
     }
   | { id: string; label: string; width: string; kind: "table_status" }
   | { id: string; label: string; width: string; kind: "layer_status" }
@@ -75,7 +76,13 @@ function getLegendGraphicUrl(layerName: string, styleName?: string): string {
   return `${base}/wms?${params.toString()}`
 }
 
+const SCHEMA_OPTIONS = [
+  { value: "layer", label: "layer" },
+  { value: "public_layer", label: "public_layer" },
+]
+
 const TABLE_COLUMNS: TableColumnDef[] = [
+  { id: "define_table_schema", label: "스키마", width: "120px", kind: "field", schemaSelect: true },
   { id: "define_table_group", label: "그룹", width: "200px", kind: "field" },
   { id: "define_table_name", label: "테이블명", width: "200px", kind: "field", readonly: true },
   { id: "define_table_kor_name", label: "한글명", width: "200px", kind: "field" },
@@ -973,6 +980,18 @@ export function LayerInfoManager() {
                     >
                       {col.readonly ? (
                         <span className="block truncate text-sm font-mono py-1">{val}</span>
+                      ) : col.schemaSelect ? (
+                        <select
+                          value={val || "layer"}
+                          onChange={(e) => updateCell(tableIdx, key, e.target.value)}
+                          className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
+                        >
+                          {SCHEMA_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
                       ) : col.shapeType ? (
                         <select
                           value={val}

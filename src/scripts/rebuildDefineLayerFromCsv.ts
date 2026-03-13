@@ -285,7 +285,7 @@ function main() {
         define_field_is_required: normalizeFlag(pickValue(row, "define_field_is_required")),
         define_field_show_search: normalizeFlag(pickValue(row, "define_field_show_search")),
         define_field_show_list: normalizeFlag(pickValue(row, "define_field_show_list")),
-        define_field_show_detail: normalizeFlag(pickValue(row, "define_field_show_detail")),
+        define_field_show_detail: normalizeFlag(pickValue(row, "define_field_show_detail")) || "false",
         define_field_type: pickValue(row, "define_field_type").toUpperCase(),
         define_field_sel_list: pickValue(row, "define_field_sel_list"),
         define_field_read_only: normalizeFlag(pickValue(row, "define_field_read_only")),

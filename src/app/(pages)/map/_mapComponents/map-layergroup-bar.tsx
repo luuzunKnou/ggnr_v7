@@ -31,7 +31,7 @@ import { useMapContext } from './MapContext';
 import { LayerManagementPanel } from './LayerManagementPanel';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
-import { WORKSPACE } from './serviceLayerFactory';
+import { WORKSPACE } from './layerFactory/serviceLayerFactory';
 import { getLayerGroupIconMap, defaultLayerGroupIcon } from '@/config/layerGroupIcon';
 
 function getGeoServerBase(): string {
@@ -57,17 +57,8 @@ function getLegendGraphicUrl(layerName: string): string {
   return `${base}/wms?${params.toString()}`;
 }
 
-export type LayerFilterRow = { field: string; value: string };
-
-function filterRowsToCql(rows: LayerFilterRow[]): string {
-  const valid = rows.filter((r) => String(r.field).trim() && String(r.value).trim());
-  if (valid.length === 0) return 'INCLUDE';
-  const escaped = valid.map((r) => {
-    const v = String(r.value).replace(/'/g, "''");
-    return `${String(r.field).trim()}='${v}'`;
-  });
-  return escaped.join(' AND ');
-}
+import type { LayerFilterRow } from './layerFactory/serviceLayerFactory';
+export type { LayerFilterRow };
 
 type DefineLayerRow = {
   define_table_name?: string;
@@ -178,44 +169,6 @@ export function MapLayergroupBar() {
     };
   }, []);
 
-  const updateWmsParams = useCallback(
-    (visibleNames: Set<string>, filterRowsMap?: Map<string, LayerFilterRow[]>) => {
-      const map = mapRef?.current;
-      if (!map) return;
-      const serviceLayer = map.getLayers().getArray().find((l) => l.get('serviceLayer')) as
-        | {
-            getSource(): {
-              getParams(): { LAYERS?: string; STYLES?: string; CQL_FILTER?: string };
-              changed(): void;
-            };
-            setVisible(v: boolean): void;
-          }
-        | undefined;
-      if (!serviceLayer) return;
-      const source = serviceLayer.getSource();
-      if (!source) return;
-      const params = source.getParams();
-      if (!params) return;
-      if (visibleNames.size === 0) {
-        params.LAYERS = '';
-        params.STYLES = '';
-        delete params.CQL_FILTER;
-        serviceLayer.setVisible(false);
-      } else {
-        const names = Array.from(visibleNames);
-        params.LAYERS = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-        params.STYLES = names.join(',');
-        const cqlArr = names.map((n) =>
-          filterRowsToCql(filterRowsMap?.get(n) ?? [])
-        );
-        params.CQL_FILTER = cqlArr.join(';');
-        serviceLayer.setVisible(true);
-        source.changed();
-      }
-    },
-    [mapRef]
-  );
-
   const handleCategoryClick = (category: string) => {
     const namesInGroup = tableList
       .filter((row) => (String(row.define_table_group ?? '').trim() || '(미분류)') === category)
@@ -226,7 +179,6 @@ export function MapLayergroupBar() {
     if (anyVisible) namesInGroup.forEach((n) => nextSet.delete(n));
     else namesInGroup.forEach((n) => nextSet.add(n));
     setVisibleLayerNames(nextSet);
-    updateWmsParams(nextSet, layerFilterRows);
   };
 
   const handleLayerFilterRowsChange = useCallback(
@@ -235,11 +187,10 @@ export function MapLayergroupBar() {
         const nextMap = new Map(prev);
         if (rows.length === 0) nextMap.delete(layerName);
         else nextMap.set(layerName, rows);
-        updateWmsParams(visibleLayerNames, nextMap);
         return nextMap;
       });
     },
-    [visibleLayerNames, updateWmsParams]
+    []
   );
 
   const closeDropdown = useCallback(() => {
@@ -438,20 +389,18 @@ export function MapLayergroupBar() {
                               isChecked ? 'bg-primary/[0.04]' : 'hover:bg-slate-50'
                             )}
                             onClick={() => {
+                              if (visibleLayerNames.has(defineTableName)) return;
                               const nextSet = new Set(visibleLayerNames);
-                              if (nextSet.has(defineTableName)) nextSet.delete(defineTableName);
-                              else nextSet.add(defineTableName);
+                              nextSet.add(defineTableName);
                               setVisibleLayerNames(nextSet);
-                              updateWmsParams(nextSet, layerFilterRows);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
+                                if (visibleLayerNames.has(defineTableName)) return;
                                 const nextSet = new Set(visibleLayerNames);
-                                if (nextSet.has(defineTableName)) nextSet.delete(defineTableName);
-                                else nextSet.add(defineTableName);
+                                nextSet.add(defineTableName);
                                 setVisibleLayerNames(nextSet);
-                                updateWmsParams(nextSet, layerFilterRows);
                               }
                             }}
                             style={{ animationDelay: `${index * 30}ms` }}
@@ -483,7 +432,6 @@ export function MapLayergroupBar() {
                                 if (nextSet.has(defineTableName)) nextSet.delete(defineTableName);
                                 else nextSet.add(defineTableName);
                                 setVisibleLayerNames(nextSet);
-                                updateWmsParams(nextSet, layerFilterRows);
                               }}
                               onClick={(e) => e.stopPropagation()}
                               className="w-4 h-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9] shrink-0"
@@ -511,12 +459,11 @@ export function MapLayergroupBar() {
 
       <button
         type="button"
-        className="flex items-center justify-center w-10 h-10 rounded-[10px] border border-slate-200 bg-white shadow-lg text-slate-600 hover:bg-slate-50 shrink-0"
+        className="flex items-center justify-center w-[30px] h-[30px] rounded-[10px] border border-slate-200 bg-white shadow-lg text-slate-600 hover:bg-slate-50 shrink-0"
         aria-label="모든 레이어 끄기"
         title="모든 레이어 끄기"
         onClick={() => {
           setVisibleLayerNames(new Set());
-          updateWmsParams(new Set(), layerFilterRows);
         }}
       >
         <EyeOff className="w-5 h-5" strokeWidth={2} />
@@ -538,7 +485,7 @@ export function MapLayergroupBar() {
           tableList={tableList}
           visibleLayerNames={visibleLayerNames}
           onVisibleChange={setVisibleLayerNames}
-          onUpdateWms={(nextSet) => updateWmsParams(nextSet, layerFilterRows)}
+          onUpdateWms={() => {}}
           layerFilterRows={layerFilterRows}
           onLayerFilterRowsChange={handleLayerFilterRowsChange}
           onClose={closeLayerManagement}

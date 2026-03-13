@@ -1,11 +1,5 @@
 * {
-  mark: symbol(circle);
-  mark-size: 10;
-  :mark {
-    fill: #F44336;
-    stroke: #FFFFFF;
-    stroke-width: 1.5;
-    stroke-opacity: 1;
-    fill-opacity: 1;
-  }
+  mark: url("http://localhost:3000/symbol/swl_dran_ps.png");
+  mark-mime: "image/png";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
 }

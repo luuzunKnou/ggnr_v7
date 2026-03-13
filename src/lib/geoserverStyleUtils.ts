@@ -33,13 +33,15 @@ export type StyleProps = {
   opacity?: number;
   labelField?: string;
   size?: number; // POINT: mark-size / font-size
+  /** POINT + 외부 심볼: 아이콘 URL (있으면 심볼 있는 버전 CSS 생성) */
+  symbolUrl?: string;
 };
 
 const DEFAULT_PROPS: StyleProps = {
   fillColor: '#808080',
   strokeColor: '#000000',
   strokeWidth: 1,
-  opacity: 1,
+  opacity: 0.3,
   labelField: '',
   size: 8,
 };
@@ -111,15 +113,25 @@ export function buildCssFromSimpleStyle(
   const lines: string[] = [];
 
   if (geometryType === 'POINT') {
-    lines.push(`  mark: symbol(circle);`);
-    lines.push(`  mark-size: ${size};`);
-    lines.push(`  :mark {`);
-    lines.push(`    fill: ${f};`);
-    lines.push(`    stroke: ${s};`);
-    lines.push(`    stroke-width: ${sw};`);
-    lines.push(`    stroke-opacity: ${op};`);
-    lines.push(`    fill-opacity: ${op};`);
-    lines.push(`  }`);
+    const symbolUrl = styleProps.symbolUrl?.trim();
+    if (symbolUrl) {
+      // Point - 심볼이 있을 때
+      const mime = symbolUrl.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+      lines.push(`  mark: url("${symbolUrl}");`);
+      lines.push(`  mark-mime: "${mime}";`);
+      lines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];`);
+    } else {
+      // Point - 심볼이 없을 때
+      lines.push(`  mark: symbol(circle);`);
+      lines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];`);
+      lines.push(`  :mark {`);
+      lines.push(`    fill: ${f};`);
+      lines.push(`    stroke: ${s};`);
+      lines.push(`    stroke-width: ${sw};`);
+      lines.push(`    stroke-opacity: 0.5;`);
+      lines.push(`    fill-opacity: 0.5;`);
+      lines.push(`  }`);
+    }
     if (label) {
       lines.push(`  label: [${label}];`);
       lines.push(`  font-size: ${size};`);
@@ -128,9 +140,10 @@ export function buildCssFromSimpleStyle(
       lines.push('  halo-color: #FFFFFF;');
     }
   } else if (geometryType === 'LINE') {
-    lines.push(`  stroke: ${s};`);
-    lines.push(`  stroke-width: ${sw};`);
-    lines.push(`  stroke-opacity: ${op};`);
+    // Line: 테두리 흰색(3px) + 메인 색(2px)
+    lines.push(`  stroke: #FFFFFF, ${s};`);
+    lines.push(`  stroke-width: 3, 2;`);
+    lines.push(`  stroke-opacity: 0.4, 0.5;`);
     if (label) {
       lines.push(`  label: [${label}];`);
       lines.push(`  font-size: ${size};`);

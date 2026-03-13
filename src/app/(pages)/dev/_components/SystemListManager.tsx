@@ -163,6 +163,14 @@ export function SystemListManager() {
     loadSystems()
   }, [])
 
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadSystems()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
   const openAddCommonConfirm = () => {
     setCommonConfirmTarget({ mode: "add" })
     setCommonConfirmError(null)

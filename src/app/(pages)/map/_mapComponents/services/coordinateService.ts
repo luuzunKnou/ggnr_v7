@@ -1,6 +1,7 @@
 import { get as getProjection, transform } from 'ol/proj';
 import { View } from 'ol';
 import { Map } from 'ol';
+import { RESOLUTIONS_3857 } from '../config/mapDefaults';
 
 /**
  * 좌표계 변환 서비스
@@ -164,12 +165,18 @@ export function updateViewProjection(
   }
 
   if (newCenter) {
-    const newView = new View({
+    const viewOptions: { projection: typeof targetProj; center: [number, number]; zoom: number; resolutions?: number[]; minZoom?: number; maxZoom?: number; constrainResolution?: boolean } = {
       projection: targetProj,
       center: newCenter,
       zoom: currentZoom,
-    });
-    map.setView(newView);
+    };
+    if (newProjection === 'EPSG:3857') {
+      viewOptions.resolutions = RESOLUTIONS_3857;
+      viewOptions.minZoom = 0;
+      viewOptions.maxZoom = RESOLUTIONS_3857.length - 1;
+      viewOptions.constrainResolution = true;
+    }
+    map.setView(new View(viewOptions));
   } else {
     console.error('좌표 변환 실패: 유효한 중심 좌표를 얻을 수 없습니다.');
   }

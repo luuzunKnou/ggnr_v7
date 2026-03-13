@@ -9,7 +9,7 @@ isProject: false
 
 ## 현재 구조 정리
 
-- **켜진 레이어 상태**: [map-layergroup-bar.tsx](src/app/(pages)/map/_mapComponents/map-layergroup-bar.tsx) 내부 로컬 state `visibleLayerNames` (Set&lt;string&gt;)에만 존재. StandardList와 형제 관계라 직접 공유 불가.
+- **켜진 레이어 상태**: [map-layergroup-bar.tsx](src/app/(pages)/map/_mapComponents/map-layergroup-bar.tsx) 내부 로컬 state `visibleLayerNames` (Set)에만 존재. StandardList와 형제 관계라 직접 공유 불가.
 - **defineLayer**: [tables.json](src/config/defineLayer/tables.json) (define_table_name, define_table_kor_name, define_table_group 등), 필드는 `fields/table_{tableKey}.json` ([fields API](src/app/api/config/defineLayer/fields/[tableKey]/route.ts): `tableKey`로 `table_${tableKey}.json` 로드).
 - **필드 “목록 표시” 플래그**: 각 필드의 `define_field_show_list === "true"` 인 항목만 목록 테이블 헤더/컬럼으로 사용 (예: [table_complaint_intl_lek.json](src/config/defineLayer/fields/table_complaint_intl_lek.json)).
 - **데이터 조회**: 현재는 devTestService에 `getDataSelectTableList` / `getDataSelectFieldList` / `getDataSelectValueList`만 있고, **테이블 이름만으로 행을 SELECT하는 API는 없음**.
@@ -62,7 +62,7 @@ isProject: false
 `GET /api/config/defineLayer/fields/{tableKey}`  
 (내부적으로 [fields/table_{tableKey}.json](src/app/api/config/defineLayer/fields/[tableKey]/route.ts) 사용.)
 - **헤더에 쓸 필드**:
-  - 응답 필드 배열 중 `**define_field_show_list === "true"**` 인 항목만 사용.
+  - 응답 필드 배열 중 `**define_field_show_list === "true"`** 인 항목만 사용.
   - 정렬: `define_field_idx` 또는 `define_field_sort_idx` 등 기존 정렬 규칙 유지 (필드 API sortFields 참고).
 - **매핑**:
   - 테이블 헤더 텍스트: `define_field_kor_name`
@@ -79,7 +79,7 @@ isProject: false
 - **위치**: **새 파일** [standardService.ts](src/service/standardService.ts) 생성. devTestService가 아닌 이 파일에 구현한다.
 - **새 함수 (예: `getTableData`)**:
   - **파라미터**: `{ table: string; limit?: number; offset?: number }` — 스키마 전달 기능은 없음.
-  - **스키마**: **고정값 `layer**`. 레이어 데이터는 항상 `layer` 스키마에서 가져온다. (상수로 정의, 파라미터로 받지 않음.)
+  - **스키마**: **고정값 `layer`**. 레이어 데이터는 항상 `layer` 스키마에서 가져온다. (상수로 정의, 파라미터로 받지 않음.)
   - **로직**:
     1. `information_schema.columns`에서 `table_schema = 'layer'` 및 해당 `table_name`의 컬럼 목록을 `ordinal_position` 순으로 조회.
     2. 조회된 컬럼명만으로 `SELECT "col1", "col2", ... FROM "layer"."table"` 형태의 쿼리 구성 (SQL injection 방지: 테이블/컬럼명 이스케이프).

@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cc1</id>
+  <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-5602</id>
   <name>swl_manh_ps_rain</name>
   <nativeName>swl_manh_ps</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>330816.8304119</minx>
-    <maxx>372060.01606057</maxx>
-    <miny>329687.10507637</miny>
-    <maxy>362965.21582488</maxy>
+    <minx>330831.99242105</minx>
+    <maxx>372042.87467313</maxx>
+    <miny>330107.15446855</miny>
+    <maxy>362831.33354791</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.4592912492893</minx>
-    <maxx>128.92660359830546</maxx>
-    <miny>36.44996951533603</miny>
-    <maxy>36.756264527005555</maxy>
+    <minx>128.45953126004773</minx>
+    <maxx>128.92638160724823</maxx>
+    <miny>36.45375580024768</miny>
+    <maxy>36.75505639281084</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
@@ -31,6 +31,7 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter>smu_cde = &apos;SMU001&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

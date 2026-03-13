@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { RefreshCw } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { call } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -37,7 +38,9 @@ type DiffRow = {
 
 const EXCLUDED_STYLE_NAMES = new Set(["generic", "line", "point", "polygon", "raster"])
 
-export function GeoserverManagerContent() {
+type GeoserverManagerSchema = "layer" | "public_layer"
+
+export function GeoserverManagerContent({ schema = "layer" }: { schema?: GeoserverManagerSchema }) {
   const [geoserverUrl] = useState(GEOSERVER_DEFAULT_URL)
 
   const [geoStatus, setGeoStatus] = useState<GeoStatus | null>(null)
@@ -52,6 +55,7 @@ export function GeoserverManagerContent() {
   const [dbSetupLoading, setDbSetupLoading] = useState(false)
   const [styleAutoLoading, setStyleAutoLoading] = useState(false)
   const [layerAutoCreateLoading, setLayerAutoCreateLoading] = useState(false)
+  const [regeneratingLayerKey, setRegeneratingLayerKey] = useState<string | null>(null)
   const logScrollRef = useRef<HTMLDivElement>(null)
 
   const fetchGeoStatus = useCallback(async () => {
@@ -158,6 +162,7 @@ export function GeoserverManagerContent() {
         define_table_kor_name?: string
         define_table_parents_layer?: string
         define_table_div_query?: string
+        define_table_schema?: string
       }>
       const layerTables = (layerRes?.data?.tables ?? []) as Array<{ schema: string; table: string }>
       const geoLayers = (geoRes?.data?.layers ?? []) as string[]
@@ -168,7 +173,8 @@ export function GeoserverManagerContent() {
       const defineMap = new Map<string, { kor: string; eng: string; parentsLayer: string; divQuery: string }>()
       defineTables.forEach((t) => {
         const eng = String(t.define_table_name ?? "").trim()
-        if (eng) {
+        const tableSchema = String(t.define_table_schema ?? "layer").trim() || "layer"
+        if (eng && tableSchema === schema) {
           defineMap.set(eng, {
             kor: String(t.define_table_kor_name ?? "").trim(),
             eng,
@@ -179,9 +185,7 @@ export function GeoserverManagerContent() {
       })
 
       const layerSchemaSet = new Set(
-        layerTables
-          .filter((t) => t.schema === "layer" || t.schema === "public_layer")
-          .map((t) => t.table)
+        layerTables.filter((t) => t.schema === schema).map((t) => t.table)
       )
       const geoSet = new Set(geoLayers)
       const styleSet = new Set(styleList.map((s) => s.name))
@@ -191,13 +195,8 @@ export function GeoserverManagerContent() {
           .map((v) => v.parentsLayer)
       )
 
-      const allKeys = new Set<string>([
-        ...defineMap.keys(),
-        ...layerSchemaSet,
-        ...geoSet,
-        ...styleSet,
-      ])
-      const sortedKeys = Array.from(allKeys).sort((a, b) => a.localeCompare(b, "ko"))
+      // 레이어 목록 기준: tables.json(define)만 사용. DB/GeoServer/Style은 각 행의 상태 표시용
+      const sortedKeys = Array.from(defineMap.keys()).sort((a, b) => a.localeCompare(b, "ko"))
 
       const rows: DiffRow[] = sortedKeys.map((key) => {
         const defineRow = defineMap.get(key) ?? null
@@ -228,7 +227,7 @@ export function GeoserverManagerContent() {
     } catch {
       setDiffRows([])
     }
-  }, [geoserverUrl])
+  }, [geoserverUrl, schema])
 
   useEffect(() => {
     fetchGeoStatus()
@@ -325,6 +324,23 @@ export function GeoserverManagerContent() {
       await Promise.all([fetchCounts(), fetchDiff()])
     } finally {
       setLayerAutoCreateLoading(false)
+    }
+  }
+
+  const regenerateLayer = async (layerKey: string) => {
+    setRegeneratingLayerKey(layerKey)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "createOrUpdateGeoServerLayer",
+        params: { layerName: layerKey, url: geoserverUrl },
+      })
+      const d = res?.data ?? res
+      if (d?.success) {
+        await Promise.all([fetchCounts(), fetchDiff()])
+      }
+    } finally {
+      setRegeneratingLayerKey(null)
     }
   }
 
@@ -454,16 +470,28 @@ export function GeoserverManagerContent() {
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="border-b leading-none">
-                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                <th className="sticky top-0 z-10 text-left py-1 px-1.5 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
                   tables.json (한글명 / 영문명)
                 </th>
-                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                <th className="sticky top-0 z-10 text-left py-1 px-1.5 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
                   Database
                 </th>
-                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
-                  GeoServer 레이어
+                <th className="sticky top-0 z-10 text-left py-1 px-1.5 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>GeoServer 레이어</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-5 px-1.5 text-[11px] shrink-0"
+                      onClick={autoCreateLayers}
+                      disabled={layerAutoCreateLoading}
+                      title="tables.json 기준 전체 레이어 생성/갱신 (CQL 포함)"
+                    >
+                      {layerAutoCreateLoading ? "재생성 중..." : "전체 레이어 재생성"}
+                    </Button>
+                  </div>
                 </th>
-                <th className="sticky top-0 z-10 text-left py-1.5 px-2 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+                <th className="sticky top-0 z-10 text-left py-1 px-1.5 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
                   Style
                 </th>
               </tr>
@@ -471,7 +499,7 @@ export function GeoserverManagerContent() {
             <tbody>
               {diffRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-1.5 px-2 text-muted-foreground text-center">
+                  <td colSpan={4} className="py-1 px-1.5 text-muted-foreground text-center">
                     데이터 로딩 중이거나 없습니다.
                   </td>
                 </tr>
@@ -495,12 +523,12 @@ export function GeoserverManagerContent() {
                       rowBg
                     )}
                   >
-                    <td className="py-1.5 px-2 font-mono">
+                    <td className="py-1 px-1.5 font-mono">
                       {row.tablesJson
                         ? `${row.tablesJson.kor || "-"} / ${row.tablesJson.eng}`
                         : ""}
                     </td>
-                    <td className="py-1.5 px-2 font-mono">
+                    <td className="py-1 px-1.5 font-mono">
                       {row.layerSchema ? (
                         <span className="block truncate" title={row.layerSchema}>
                           {row.layerSchema}
@@ -509,8 +537,30 @@ export function GeoserverManagerContent() {
                         ""
                       )}
                     </td>
-                    <td className="py-1.5 px-2 font-mono">{row.geoserver ?? ""}</td>
-                    <td className="py-1.5 px-2 font-mono">{row.style ?? ""}</td>
+                    <td className="py-1 px-1.5 font-mono">
+                      <div className="flex items-center gap-1">
+                        <span className="truncate">{row.geoserver ?? ""}</span>
+                        {row.tablesJson != null && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 min-w-0 px-1 shrink-0"
+                            title="레이어 재생성 (tables.json + CQL 필터 반영)"
+                            onClick={() => regenerateLayer(row.key)}
+                            disabled={regeneratingLayerKey != null}
+                          >
+                            <RefreshCw
+                              className={cn(
+                                "w-3 h-3",
+                                regeneratingLayerKey === row.key && "animate-spin"
+                              )}
+                            />
+                            <span className="sr-only">재생성</span>
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-1 px-1.5 font-mono">{row.style ?? ""}</td>
                   </tr>
                   )
                 })

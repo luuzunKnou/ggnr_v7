@@ -5,12 +5,158 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
-          <sld:LineSymbolizer>
+          <sld:MinScaleDenominator>2000.0</sld:MinScaleDenominator>
+          <sld:MaxScaleDenominator>35000.0</sld:MaxScaleDenominator>
+          <sld:PolygonSymbolizer>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#DB5E5E</sld:CssParameter>
+              <sld:CssParameter name="fill-opacity">0.0</sld:CssParameter>
+            </sld:Fill>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#F44336</sld:CssParameter>
-              <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+              <sld:CssParameter name="stroke">#DB5E5E</sld:CssParameter>
             </sld:Stroke>
-          </sld:LineSymbolizer>
+          </sld:PolygonSymbolizer>
+        </sld:Rule>
+        <sld:Rule>
+          <sld:MaxScaleDenominator>2000.0</sld:MaxScaleDenominator>
+          <sld:PolygonSymbolizer>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#DB5E5E</sld:CssParameter>
+              <sld:CssParameter name="fill-opacity">0.0</sld:CssParameter>
+            </sld:Fill>
+            <sld:Stroke>
+              <sld:CssParameter name="stroke">#DB5E5E</sld:CssParameter>
+            </sld:Stroke>
+          </sld:PolygonSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Geometry>
+              <ogc:Function name="centroid">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Geometry>
+            <sld:Label>
+              <ogc:PropertyName>jibun</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+                <sld:CssParameter name="fill-opacity">0.9</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#DB5E5E</sld:CssParameter>
+            </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
+            <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Geometry>
+              <ogc:Function name="centroid">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Geometry>
+            <sld:Label>
+              <ogc:PropertyName>jibun</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+                <sld:CssParameter name="fill-opacity">0.9</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#DB5E5E</sld:CssParameter>
+            </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
+            <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Geometry>
+              <ogc:Function name="centroid">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Geometry>
+            <sld:Label>
+              <ogc:PropertyName>jibun</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+                <sld:CssParameter name="fill-opacity">0.9</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#DB5E5E</sld:CssParameter>
+            </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
+            <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+          </sld:TextSymbolizer>
         </sld:Rule>
         <sld:VendorOption name="ruleEvaluation">first</sld:VendorOption>
       </sld:FeatureTypeStyle>

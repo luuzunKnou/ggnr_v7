@@ -1,30 +1,60 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import 'ol/ol.css';
 import { call } from '@/lib/api';
 import {
   MapControlPanel,
   defaultMapControlGroups,
-} from './_mapControlPanel/mapControlPanel';
-import { BackgroundMapSelector } from './_mapControlPanel/backgroundMapSelector';
+} from './mapControlPanel/mapControlPanel';
+import { BackgroundMapSelector } from './mapControlPanel/backgroundMapSelector';
+import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
+import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
+import { LANDOWN_LAYERS } from './layerFactory/landownLayerFactory';
 import { useMapInstance } from './hooks/useMapInstance';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
+import { useMapStatePersist, loadPersistedMapState } from './hooks/useMapStatePersist';
+import { useServiceLayerSync } from './layerFactory/serviceLayerFactory';
+import {
+  useCadastralLayerSync,
+  useBuildingRoadLayerSync,
+  CADASTRAL_LAYERS,
+  BUILDING_ROAD_LAYERS,
+} from './layerFactory/boundaryLayerFactory';
+import { useBasicSectionLayerSync } from './layerFactory/basicSectionLayerFactory';
+import { useJimokLayerSync } from './layerFactory/jimokLayerFactory';
+import { useLandownLayerSync } from './layerFactory/landownLayerFactory';
 import { useMapInteractions } from './hooks/useMapInteractions';
+import { useFeatureIdentify } from './hooks/useFeatureIdentify';
+import { useMapContextMenu } from './hooks/useMapContextMenu';
+import { getAddressFromCoord } from './addressSearch/vworldAddressSearch';
+import { transformCoordinate } from './services/coordinateService';
+import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
-import { MapView } from './MapView';
+import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { Crosshair } from 'lucide-react';
+import './config/projections';
+import Draw, { createBox } from 'ol/interaction/Draw';
+import VectorSource from 'ol/source/Vector';
+import VectorLayer from 'ol/layer/Vector';
+import WKT from 'ol/format/WKT';
+import Feature from 'ol/Feature';
+import { Style, Stroke, Fill } from 'ol/style';
 
 // 다중 선택 가능한 아이템 ID 목록
 const MULTI_SELECT_IDS = [
   'cadastral',
   'building-road',
-  'thematic',
+  'basic-section',
   'land-category',
   'ownership',
   'street-view',
 ];
+
+// 전체 레이어 끄기 버튼에서 제거할 컨트롤 ID (지적도, 건물도로, 기초구간)
+const LAYER_IDS_OFF_ON_ALL_OFF = ['cadastral', 'building-road', 'basic-section', 'land-category', 'ownership'];
 
 // 액션 전용 버튼 (토글 없이 클릭만)
 const ACTION_ONLY_IDS = ['print', 'reset-measurements'];
@@ -32,7 +62,12 @@ const ACTION_ONLY_IDS = ['print', 'reset-measurements'];
 // 측정 관련 버튼 ID 목록
 const MEASUREMENT_IDS = ['distance', 'area', 'altitude', 'slope'];
 
-export default function OpenLayersMap() {
+export type OpenLayersMapProps = {
+  /** 배경지도 버튼과 지적도 버튼 사이에 렌더할 컨트롤 (예: 2D/3D 전환 버튼) */
+  extraControls?: React.ReactNode;
+};
+
+export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapContext = useMapContext();
   const sharedMapRef = mapContext?.mapInstanceRef ?? null;
@@ -41,11 +76,77 @@ export default function OpenLayersMap() {
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
-  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
-  const [centerXY, setCenterXY] = useState<{ x: number; y: number } | null>(null);
-  const [projectionCode, setProjectionCode] = useState<string | null>(null);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
+  const [openSubPanel, setOpenSubPanel] = useState<
+    'land-category' | 'ownership' | 'cadastral' | 'building-road' | null
+  >(null);
+  /** null = 전체 표시, 빈 Set = 전체 숨김 */
+  const [visibleJimokLayerNames, setVisibleJimokLayerNames] = useState<Set<string> | null>(null);
+  const [visibleLandownLayerNames, setVisibleLandownLayerNames] = useState<Set<string> | null>(null);
+  const [visibleCadastralLayerNames, setVisibleCadastralLayerNames] = useState<Set<string> | null>(
+    null
+  );
+  const [visibleBuildingRoadLayerNames, setVisibleBuildingRoadLayerNames] = useState<
+    Set<string> | null
+  >(null);
   const [geoserverLogLines, setGeoserverLogLines] = useState<string[]>([]);
+  const { lines: consoleLines } = useConsoleCapture();
+  const consoleLogRef = useRef<HTMLDivElement>(null);
+  const backgroundPanelRef = useRef<HTMLDivElement>(null);
+  const [backgroundPanelHeight, setBackgroundPanelHeight] = useState<number | null>(null);
+  const [restored, setRestored] = useState(false);
+
+  // 자체항공영상(배경지도) 패널 높이 측정 → 지목/소유구분 maxHeight 기준으로 사용
+  const backgroundPanelVisible =
+    activeControls.includes('background-map') || isBackgroundPanelExiting;
+  useEffect(() => {
+    if (!backgroundPanelVisible || !backgroundPanelRef.current) return;
+    const el = backgroundPanelRef.current;
+    const ro = new ResizeObserver(() => {
+      setBackgroundPanelHeight(el.offsetHeight);
+    });
+    ro.observe(el);
+    setBackgroundPanelHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, [backgroundPanelVisible]);
+
+  // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
+  useEffect(() => {
+    const state = loadPersistedMapState();
+    if (state) {
+      if (state.activeControls?.length) setActiveControls(state.activeControls);
+      if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
+      if (state.visibleLayerNames?.length && mapContext?.setVisibleLayerNames) {
+        mapContext.setVisibleLayerNames(new Set(state.visibleLayerNames));
+      }
+      const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
+        JIMOK_LAYERS.some((l) => l.tableName === t)
+      );
+      if (state.visibleJimokLayerNames != null)
+        setVisibleJimokLayerNames(jimokValid.length ? new Set(jimokValid) : new Set());
+      const landownValid = (state.visibleLandownLayerNames ?? []).filter((t) =>
+        LANDOWN_LAYERS.some((l) => l.tableName === t)
+      );
+      if (state.visibleLandownLayerNames != null)
+        setVisibleLandownLayerNames(landownValid.length ? new Set(landownValid) : new Set());
+      const cadastralValid = (state.visibleCadastralLayerNames ?? []).filter((t) =>
+        CADASTRAL_LAYERS.some((l) => l.tableName === t)
+      );
+      if (state.visibleCadastralLayerNames != null)
+        setVisibleCadastralLayerNames(
+          cadastralValid.length ? new Set(cadastralValid) : new Set()
+        );
+      const buildingRoadValid = (state.visibleBuildingRoadLayerNames ?? []).filter((t) =>
+        BUILDING_ROAD_LAYERS.some((l) => l.tableName === t)
+      );
+      if (state.visibleBuildingRoadLayerNames != null)
+        setVisibleBuildingRoadLayerNames(
+          buildingRoadValid.length ? new Set(buildingRoadValid) : new Set()
+        );
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
+  }, []);
 
   const fetchGeoserverLog = useCallback(async () => {
     try {
@@ -61,11 +162,16 @@ export default function OpenLayersMap() {
     }
   }, []);
 
+  // 개발자용 로그화면(showDebugUi)이 켜져 있을 때만 GeoServer 로그 폴링
   useEffect(() => {
+    if (!showDebugUi) {
+      setGeoserverLogLines([]);
+      return;
+    }
     fetchGeoserverLog();
     const t = setInterval(fetchGeoserverLog, 2000);
     return () => clearInterval(t);
-  }, [fetchGeoserverLog]);
+  }, [showDebugUi, fetchGeoserverLog]);
 
   // 측정 타입 결정
   const measureType: MeasureType | null = activeControls.includes('distance')
@@ -77,23 +183,287 @@ export default function OpenLayersMap() {
   // 배경지도 관리
   useBackgroundLayer(mapInstanceRef.current, selectedBackgroundMap);
 
-  // 줌 레벨 + 좌표계 + x,y 표시 (맵 준비 후 구독, 뷰 변경 시마다 실시간 갱신)
+  // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
+  const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
+
+  // 맵 상태 자동 저장 (복원 완료 후에만 저장 시작 — 빈 상태 덮어쓰기 방지)
+  const layerPanelSelections = useMemo(
+    () => ({
+      visibleJimokLayerNames:
+        visibleJimokLayerNames != null ? Array.from(visibleJimokLayerNames) : null,
+      visibleLandownLayerNames:
+        visibleLandownLayerNames != null ? Array.from(visibleLandownLayerNames) : null,
+      visibleCadastralLayerNames:
+        visibleCadastralLayerNames != null
+          ? Array.from(visibleCadastralLayerNames)
+          : null,
+      visibleBuildingRoadLayerNames:
+        visibleBuildingRoadLayerNames != null
+          ? Array.from(visibleBuildingRoadLayerNames)
+          : null,
+    }),
+    [
+      visibleJimokLayerNames,
+      visibleLandownLayerNames,
+      visibleCadastralLayerNames,
+      visibleBuildingRoadLayerNames,
+    ]
+  );
+  useMapStatePersist(
+    mapInstanceRef.current,
+    mapReady && restored,
+    selectedBackgroundMap,
+    activeControls,
+    visibleLayerNames,
+    layerPanelSelections
+  );
+  const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+  useServiceLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    visibleLayerNames,
+    undefined,
+    spatialFilterWkt
+  );
+
+  // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
+  const spatialFilterLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return;
+
+    const existing = spatialFilterLayerRef.current;
+    if (existing) {
+      map.removeLayer(existing);
+      spatialFilterLayerRef.current = null;
+    }
+
+    if (!spatialFilterWkt || !spatialFilterWkt.trim()) return;
+
+    try {
+      const format = new WKT();
+      const geom = format.readGeometry(spatialFilterWkt, {
+        dataProjection: 'EPSG:5181',
+        featureProjection: 'EPSG:3857',
+      });
+      if (!geom) return;
+      const source = new VectorSource({ features: [new Feature(geom)] });
+      const layer = new VectorLayer({
+        source,
+        style: new Style({
+          stroke: new Stroke({ color: 'rgba(59, 130, 246, 0.9)', width: 2.5 }),
+          fill: new Fill({ color: 'rgba(59, 130, 246, 0.15)' }),
+        }),
+        zIndex: 500,
+      });
+      layer.set('spatialFilterLayer', true);
+      map.addLayer(layer);
+      spatialFilterLayerRef.current = layer;
+    } catch (err) {
+      console.error('[SpatialFilter] WKT parse failed', err);
+    }
+
+    return () => {
+      if (spatialFilterLayerRef.current) {
+        map.removeLayer(spatialFilterLayerRef.current);
+        spatialFilterLayerRef.current = null;
+      }
+    };
+  }, [mapReady, spatialFilterWkt]);
+
+  // 측정(거리/면적 등) 켜짐 여부를 MapContext에 동기화 (레이어 목록 도형 그리기와 배타 처리용)
+  useEffect(() => {
+    const active = activeControls.some((id) => MEASUREMENT_IDS.includes(id));
+    mapContext?.setMeasurementActive?.(active);
+  }, [activeControls, mapContext?.setMeasurementActive]);
+
+  // 레이어 목록 도형(사각형/다각형/원형) 그리기: spatialDrawRequest 시 Draw 추가, 완료 시 WKT(5181)로 onComplete 호출
+  const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
+  const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !spatialDrawRequest || !setSpatialDrawRequest) return;
+    const map = mapInstanceRef.current;
+    const source = new VectorSource();
+    const layer = new VectorLayer({ source, visible: true });
+    layer.set('spatialDrawLayer', true);
+    const { type, onComplete } = spatialDrawRequest;
+    const draw =
+      type === 'rectangle'
+        ? new Draw({ source, type: 'Circle', geometryFunction: createBox() })
+        : type === 'polygon'
+          ? new Draw({ source, type: 'Polygon' })
+          : new Draw({ source, type: 'Circle' });
+    const onDrawEnd = (e: unknown) => {
+      const evt = e as { feature: { getGeometry(): import('ol/geom').Geometry } };
+      const geom = evt.feature.getGeometry();
+      if (!geom) return;
+      try {
+        const cloned = geom.clone();
+        cloned.transform('EPSG:3857', 'EPSG:5181');
+        const wkt = new WKT().writeGeometry(cloned);
+        onComplete(wkt);
+      } catch (err) {
+        console.error('[SpatialDraw] WKT write failed', err);
+      }
+      setSpatialDrawRequest(null);
+      map.removeInteraction(draw);
+      map.removeLayer(layer);
+    };
+    draw.on('drawend', onDrawEnd);
+    map.addLayer(layer);
+    map.addInteraction(draw);
+    return () => {
+      map.removeInteraction(draw);
+      map.removeLayer(layer);
+    };
+  }, [mapReady, spatialDrawRequest, setSpatialDrawRequest]);
+
+  // 지적도 레이어 동기화 (activeControls + visibleCadastralLayerNames)
+  useCadastralLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleCadastralLayerNames
+  );
+  // 건물·도로 레이어 동기화 (activeControls + visibleBuildingRoadLayerNames)
+  useBuildingRoadLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleBuildingRoadLayerNames
+  );
+  // 기초구간 레이어 동기화 (activeControls → basic-section 레이어 visibility)
+  useBasicSectionLayerSync(mapInstanceRef.current, mapReady, activeControls);
+  // 지목 레이어 동기화 (activeControls + visibleJimokLayerNames)
+  useJimokLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleJimokLayerNames);
+  // 소유구분 레이어 동기화 (activeControls + visibleLandownLayerNames)
+  useLandownLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleLandownLayerNames);
+
+  // 주소정보 패널이 열려 있을 때 해당 좌표 필지 하이라이트
+  const addressInfoDetail = mapContext?.addressInfoDetail ?? null;
+  useAddressParcelHighlight(mapInstanceRef.current, mapReady, addressInfoDetail);
+
+  // 전체 레이어 끄기 버튼(검색창 옆)용 콜백 등록: 지적도·건물도로·기초구간 + defineLayer 레이어 모두 끔
+  useEffect(() => {
+    if (!mapContext?.allLayersOffRef) return;
+    mapContext.allLayersOffRef.current = () => {
+      setActiveControls((prev) => prev.filter((id) => !LAYER_IDS_OFF_ON_ALL_OFF.includes(id)));
+      mapContext?.setVisibleLayerNames?.(new Set());
+    };
+    return () => {
+      if (mapContext?.allLayersOffRef) mapContext.allLayersOffRef.current = null;
+    };
+  }, [mapContext]);
+
+  // 지도 클릭 → 도형 검색 (visible 레이어 대상)
+  const { popupState, popupElRef, closePopup } = useFeatureIdentify(mapInstanceRef.current, mapReady, visibleLayerNames);
+
+  // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
+  const handleContextMenu = useCallback(
+    (coordinate: [number, number], viewProjection: string) => {
+      const setAddressInfoDetail = mapContext?.setAddressInfoDetail;
+      if (!setAddressInfoDetail) return;
+
+      if (addressInfoDetail !== null) {
+        const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
+        const geomRef = mapContext?.addressParcelGeometryRef?.current as
+          | { intersectsCoordinate?(coord: number[]): boolean; containsXY?(x: number, y: number): boolean }
+          | null;
+        const inside =
+          coord3857 &&
+          geomRef &&
+          (typeof geomRef.intersectsCoordinate === 'function'
+            ? geomRef.intersectsCoordinate(coord3857)
+            : typeof geomRef.containsXY === 'function'
+              ? geomRef.containsXY(coord3857[0], coord3857[1])
+              : false);
+        if (inside) {
+          setAddressInfoDetail(null);
+          return;
+        }
+      }
+
+      const wgs84 = transformCoordinate(coordinate, viewProjection, 'EPSG:4326');
+      if (!wgs84) return;
+      setAddressInfoDetail({
+        coordinate,
+        viewProjection,
+        loading: true,
+        jibun: null,
+        road: null,
+      });
+      const [lon, lat] = wgs84;
+      getAddressFromCoord(lon, lat).then((result) => {
+        setAddressInfoDetail((prev) =>
+          prev
+            ? {
+                ...prev,
+                loading: false,
+                jibun: result?.jibun ?? null,
+                road: result?.road ?? null,
+                buildingName: result?.buildingName ?? null,
+              }
+            : null
+        );
+      });
+    },
+    [mapContext?.setAddressInfoDetail, addressInfoDetail]
+  );
+  useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const totalIdentifyCount = popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
+
+  // 지도 클릭 시 목록창(팝업) 없이 바로 '지도에서 선택된 항목' 데이터 패널로 열기
+  useEffect(() => {
+    if (totalIdentifyCount === 0 || !popupState?.results?.length || !mapContext) return;
+    const layer = popupState.results.find((r) => r.features.length > 0);
+    if (!layer) return;
+    const feature = totalIdentifyCount === 1 ? layer.features[0].data : null;
+    mapContext.setIdentifyResultList(popupState);
+    mapContext.setIdentifySelectedRow(feature);
+    const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+    const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set('opened', nextOpened.join(','));
+    next.set('dataTable', layer.tableName);
+    next.delete('dataKey');
+    router.push(`/map?${next.toString()}`);
+    closePopup();
+  }, [totalIdentifyCount, popupState, mapContext, searchParams, router, closePopup]);
+
+  // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
+  const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);
+
+  // view.padding 적용 시 화면상 중심 = view 중심 픽셀 위치. 크로스헤어를 이 좌표에 맞춤 (padding 변경 시에도 재계산)
+  const [centerPixel, setCenterPixel] = useState<{ x: number; y: number } | null>(null);
+  const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
     const view = map.getView();
-    const proj = view.getProjection();
     const update = () => {
-      const z = view.getZoom();
-      setZoomLevel(z !== undefined ? z : null);
       const center = view.getCenter();
-      if (center) setCenterXY({ x: center[0], y: center[1] });
-      if (proj) setProjectionCode(proj.getCode());
+      if (!center) return;
+      const pixel = map.getPixelFromCoordinate(center);
+      if (pixel) setCenterPixel({ x: pixel[0], y: pixel[1] });
     };
     update();
     view.on('change', update);
-    return () => view.un('change', update);
-  }, [mapReady]);
+    map.on('change:size', update);
+    return () => {
+      view.un('change', update);
+      map.un('change:size', update);
+    };
+  }, [mapReady, mapPaddingLeft]);
+
+  // console 로그 auto-scroll
+  useEffect(() => {
+    const el = consoleLogRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [consoleLines]);
 
   // 배경지도 패널: exit 애니메이션 끝난 뒤 상태 정리 (duration 400ms)
   useEffect(() => {
@@ -101,17 +471,6 @@ export default function OpenLayersMap() {
     const t = setTimeout(() => setIsBackgroundPanelExiting(false), 400);
     return () => clearTimeout(t);
   }, [isBackgroundPanelExiting]);
-
-  // 지적도 버튼 → 지적도 관련 레이어(ri, emd, jijuk) 동시 on/off
-  useEffect(() => {
-    if (!mapReady) return;
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const visible = activeControls.includes('cadastral');
-    map.getLayers().getArray().forEach((l) => {
-      if (l.get('cadastralLayer')) l.setVisible(visible);
-    });
-  }, [activeControls, mapReady]);
 
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
@@ -125,7 +484,71 @@ export default function OpenLayersMap() {
     }
   );
 
+  const handleItemRightClick = (id: string) => {
+    if (id === 'land-category') {
+      setOpenSubPanel((prev) => (prev === 'land-category' ? null : 'land-category'));
+      if (openSubPanel !== 'land-category') {
+        setVisibleJimokLayerNames((prev) => {
+          if (prev != null && prev.size > 0) return prev;
+          return new Set(JIMOK_LAYERS.map((l) => l.tableName));
+        });
+      }
+      return;
+    }
+    if (id === 'ownership') {
+      setOpenSubPanel((prev) => (prev === 'ownership' ? null : 'ownership'));
+      if (openSubPanel !== 'ownership') {
+        setVisibleLandownLayerNames((prev) => {
+          if (prev != null && prev.size > 0) return prev;
+          return new Set(LANDOWN_LAYERS.map((l) => l.tableName));
+        });
+      }
+      return;
+    }
+    if (id === 'cadastral') {
+      setOpenSubPanel((prev) => (prev === 'cadastral' ? null : 'cadastral'));
+      if (openSubPanel !== 'cadastral') {
+        setVisibleCadastralLayerNames((prev) => {
+          if (prev != null && prev.size > 0) return prev;
+          return new Set(CADASTRAL_LAYERS.map((l) => l.tableName));
+        });
+      }
+      return;
+    }
+    if (id === 'building-road') {
+      setOpenSubPanel((prev) => (prev === 'building-road' ? null : 'building-road'));
+      if (openSubPanel !== 'building-road') {
+        setVisibleBuildingRoadLayerNames((prev) => {
+          if (prev != null && prev.size > 0) return prev;
+          return new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName));
+        });
+      }
+      return;
+    }
+    if (id === 'background-map') {
+      if (activeControls.includes('background-map')) {
+        setIsBackgroundPanelExiting(true);
+        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
+      } else {
+        setActiveControls((prev) =>
+          prev.includes('background-map') ? prev : [...prev, 'background-map']
+        );
+      }
+      return;
+    }
+    setOpenSubPanel(null);
+    handleControlClick(id, activeControls.includes(id));
+  };
+
   const handleControlClick = (id: string, isActive: boolean) => {
+    // 레이어 목록 검색용 도형 그리기가 켜져 있는 중에는 거리/면적 등 다른 도형 그리기(측정) 시작 불가
+    if (MEASUREMENT_IDS.includes(id) && !isActive && mapContext?.spatialDrawRequest) {
+      if (typeof window !== 'undefined') {
+        window.alert('레이어 목록 검색용 도형 그리기가 진행 중입니다. 도형 그리기를 완료하거나 취소한 후 측정을 사용해 주세요.');
+      }
+      return;
+    }
+
     // 초기화 버튼: 측정 관련 버튼 모두 선택 해제 및 측정 결과 초기화
     if (id === 'reset-measurements') {
       setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
@@ -142,7 +565,28 @@ export default function OpenLayersMap() {
     }
 
     if (MULTI_SELECT_IDS.includes(id)) {
-      // 다중 선택 가능한 항목: 토글
+      // 다중 선택 가능한 항목: 토글. 켤 때 선택이 비어 있으면 전체로 초기화
+      if (!isActive) {
+        if (id === 'land-category') {
+          setVisibleJimokLayerNames((prev) =>
+            prev != null && prev.size > 0 ? prev : new Set(JIMOK_LAYERS.map((l) => l.tableName))
+          );
+        } else if (id === 'ownership') {
+          setVisibleLandownLayerNames((prev) =>
+            prev != null && prev.size > 0 ? prev : new Set(LANDOWN_LAYERS.map((l) => l.tableName))
+          );
+        } else if (id === 'cadastral') {
+          setVisibleCadastralLayerNames((prev) =>
+            prev != null && prev.size > 0 ? prev : new Set(CADASTRAL_LAYERS.map((l) => l.tableName))
+          );
+        } else if (id === 'building-road') {
+          setVisibleBuildingRoadLayerNames((prev) =>
+            prev != null && prev.size > 0
+              ? prev
+              : new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName))
+          );
+        }
+      }
       setActiveControls((prev) =>
         isActive ? prev.filter((item) => item !== id) : [...prev, id]
       );
@@ -172,11 +616,16 @@ export default function OpenLayersMap() {
 
   return (
     <div className="relative w-full h-full">
-      <MapView ref={mapRef} />
+      <div ref={mapRef} className="w-full h-full" />
 
-      {/* 지도 중심점 마크 (화면 중앙 고정) */}
+      {/* 지도 중심점 마크 (view 중심 = padding 반영된 보이는 영역 중심에 배치) */}
       <div
-        className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+        className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+        style={
+          centerPixel
+            ? { left: centerPixel.x, top: centerPixel.y }
+            : { left: '50%', top: '50%' }
+        }
         aria-hidden
       >
         <Crosshair
@@ -186,11 +635,12 @@ export default function OpenLayersMap() {
       </div>
 
       {/* 오른쪽 맵 컨트롤 패널 */}
-      <div className="absolute right-4 top-20 z-10 flex flex-col items-end gap-3">
+      <div className="absolute right-4 z-10 flex flex-col items-end gap-3" style={{ top: '60px' }}>
         <div className="flex items-start gap-3">
           {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
           {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
             <div
+              ref={backgroundPanelRef}
               className={
                 isBackgroundPanelExiting
                   ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
@@ -204,17 +654,115 @@ export default function OpenLayersMap() {
             </div>
           )}
 
+          {openSubPanel === 'land-category' && (
+            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+              <JimokLandownLayerSelector
+                title="지목"
+                contentSized
+                layers={JIMOK_LAYERS}
+                selectedTableNames={
+                  visibleJimokLayerNames ?? new Set(JIMOK_LAYERS.map((l) => l.tableName))
+                }
+                onSelectionChange={(next) => {
+                  setVisibleJimokLayerNames(next);
+                  setActiveControls((prev) =>
+                    next.size === 0
+                      ? prev.filter((x) => x !== 'land-category')
+                      : prev.includes('land-category')
+                        ? prev
+                        : [...prev, 'land-category']
+                  );
+                }}
+                onClose={() => setOpenSubPanel(null)}
+              />
+            </div>
+          )}
+          {openSubPanel === 'ownership' && (
+            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+              <JimokLandownLayerSelector
+                title="소유구분"
+                contentSized
+                layers={LANDOWN_LAYERS}
+                selectedTableNames={
+                  visibleLandownLayerNames ?? new Set(LANDOWN_LAYERS.map((l) => l.tableName))
+                }
+                onSelectionChange={(next) => {
+                  setVisibleLandownLayerNames(next);
+                  setActiveControls((prev) =>
+                    next.size === 0
+                      ? prev.filter((x) => x !== 'ownership')
+                      : prev.includes('ownership')
+                        ? prev
+                        : [...prev, 'ownership']
+                  );
+                }}
+                onClose={() => setOpenSubPanel(null)}
+              />
+            </div>
+          )}
+          {openSubPanel === 'cadastral' && (
+            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+              <JimokLandownLayerSelector
+                title="지적도"
+                contentSized
+                layers={CADASTRAL_LAYERS}
+                selectedTableNames={
+                  visibleCadastralLayerNames ??
+                  new Set(CADASTRAL_LAYERS.map((l) => l.tableName))
+                }
+                onSelectionChange={(next: Set<string>) => {
+                  setVisibleCadastralLayerNames(next);
+                  setActiveControls((prev) =>
+                    next.size === 0
+                      ? prev.filter((x) => x !== 'cadastral')
+                      : prev.includes('cadastral')
+                        ? prev
+                        : [...prev, 'cadastral']
+                  );
+                }}
+                onClose={() => setOpenSubPanel(null)}
+              />
+            </div>
+          )}
+          {openSubPanel === 'building-road' && (
+            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+              <JimokLandownLayerSelector
+                title="건물·도로"
+                contentSized
+                layers={BUILDING_ROAD_LAYERS}
+                selectedTableNames={
+                  visibleBuildingRoadLayerNames ??
+                  new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName))
+                }
+                onSelectionChange={(next: Set<string>) => {
+                  setVisibleBuildingRoadLayerNames(next);
+                  setActiveControls((prev) =>
+                    next.size === 0
+                      ? prev.filter((x) => x !== 'building-road')
+                      : prev.includes('building-road')
+                        ? prev
+                        : [...prev, 'building-road']
+                  );
+                }}
+                onClose={() => setOpenSubPanel(null)}
+              />
+            </div>
+          )}
+
           <MapControlPanel
             groups={defaultMapControlGroups}
             activeIds={activeControls}
             onItemClick={handleControlClick}
+            onItemRightClick={handleItemRightClick}
+            extraAfterFirstGroup={extraControls}
           />
         </div>
       </div>
 
-      {/* 하단: GeoServer 로그 (줌 레벨 위) — showDebugUi 시에만 표시 */}
+      {/* 하단 디버그 패널 스택 — showDebugUi 시에만 표시 */}
       {showDebugUi && (
-        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-10 w-full max-w-2xl px-2">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-full max-w-2xl px-2 flex flex-col gap-1">
+          {/* GeoServer 로그 */}
           <div
             className="font-mono text-xs leading-tight bg-black/70 text-green-400 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide"
             style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
@@ -229,23 +777,52 @@ export default function OpenLayersMap() {
               ))
             )}
           </div>
+
+          {/* Console 로그 */}
+          <div
+            ref={consoleLogRef}
+            className="font-mono text-xs leading-tight bg-black/70 text-cyan-300 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide"
+            style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
+          >
+            {consoleLines.length === 0 ? (
+              <span className="text-white/60">Console 로그 없음</span>
+            ) : (
+              consoleLines.map((line, i) => (
+                <div
+                  key={i}
+                  className={`break-words ${
+                    line.level === 'error'
+                      ? 'text-red-400'
+                      : line.level === 'warn'
+                      ? 'text-yellow-400'
+                      : 'text-cyan-300'
+                  }`}
+                  title={line.message}
+                >
+                  <span className="text-white/50 mr-1">{line.timestamp}</span>
+                  {line.message}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 줌 레벨, 좌표계, x, y */}
+          {viewInfo.zoomLevel !== null && (
+            <div className="w-full font-mono text-xs leading-tight bg-black/70 text-white/80 px-2 py-1 rounded shadow flex items-center gap-4">
+              <span>zoom: {Number(viewInfo.zoomLevel).toFixed(1)}</span>
+              {viewInfo.projectionCode && <span>{viewInfo.projectionCode}</span>}
+              {viewInfo.centerX != null && viewInfo.centerY != null && (
+                <span>
+                  x: {viewInfo.centerX.toFixed(0)} y: {viewInfo.centerY.toFixed(0)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 하단 중앙: 줌 레벨, 좌표계, x, y — showDebugUi 시에만 표시 */}
-      {showDebugUi && zoomLevel !== null && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-full max-w-2xl px-2">
-          <div className="w-full text-red-600 font-mono text-sm font-medium bg-white/90 px-2 py-1 rounded shadow flex items-center gap-4">
-            <span>zoomLevel: {Number(zoomLevel).toFixed(1)}</span>
-            {projectionCode && <span>{projectionCode}</span>}
-            {centerXY && (
-              <span>
-                x: {centerXY.x.toFixed(0)} y: {centerXY.y.toFixed(0)}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
+      {/* 목록창(팝업) 제거: 클릭 시 바로 '지도에서 선택된 항목' 데이터 패널로 열림 */}
+
     </div>
   );
 }

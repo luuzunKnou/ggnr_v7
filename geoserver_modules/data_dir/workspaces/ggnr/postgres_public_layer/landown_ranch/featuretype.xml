@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d03</id>
+  <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55d4</id>
   <name>landown_ranch</name>
   <nativeName>landown</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>327950.2622200436</minx>
-    <maxx>379099.47020771215</maxx>
-    <miny>312531.33963256935</miny>
-    <maxy>370905.4133164596</maxy>
+    <minx>328766.4159770926</minx>
+    <maxx>377976.9655162714</maxx>
+    <miny>316408.35507212917</miny>
+    <maxy>369323.82341858966</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.4245011389381</minx>
-    <maxx>129.00724818012225</maxx>
-    <miny>36.29417164002223</miny>
-    <maxy>36.82818315636876</maxy>
+    <minx>128.4342249232112</minx>
+    <maxx>128.99430506504655</maxx>
+    <miny>36.32929749984947</miny>
+    <maxy>36.81382514329081</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
@@ -31,6 +31,7 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter>jimok = &apos;04&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

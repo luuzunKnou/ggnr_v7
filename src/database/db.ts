@@ -1,20 +1,28 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Pool, type QueryResultRow } from 'pg';
 import * as schema from './schema';
 
-// 환경 변수에서 데이터베이스 연결 정보 가져오기
+// 환경 변수에서 데이터베이스 연결 정보 가져오기 (프로젝트 env 개별 변수가 있으면 DATABASE_URL보다 우선)
 const getDatabaseConfig = () => {
-  // DATABASE_URL이 있으면 우선 사용
-  if (process.env.DATABASE_URL) {
+  const hasIndividual =
+    process.env.DATABASE_HOST != null &&
+    process.env.DATABASE_NAME != null &&
+    process.env.DATABASE_NAME !== '';
+  if (hasIndividual) {
     return {
-      connectionString: process.env.DATABASE_URL,
+      host: process.env.DATABASE_HOST,
+      port: process.env.DATABASE_PORT ? parseInt(process.env.DATABASE_PORT, 10) : undefined,
+      database: process.env.DATABASE_NAME,
+      user: process.env.DATABASE_USER,
+      password: process.env.DATABASE_PASSWORD,
     };
   }
-
-  // 개별 환경 변수 사용
+  if (process.env.DATABASE_URL) {
+    return { connectionString: process.env.DATABASE_URL };
+  }
   return {
-    host: process.env.DATABASE_HOST || 'localhost',
-    port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+    host: process.env.DATABASE_HOST,
+    port: process.env.DATABASE_PORT ? parseInt(process.env.DATABASE_PORT, 10) : undefined,
     database: process.env.DATABASE_NAME,
     user: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
@@ -23,6 +31,35 @@ const getDatabaseConfig = () => {
 
 // PostgreSQL 연결 풀 생성
 const pool = new Pool(getDatabaseConfig());
+
+// 모든 서비스의 쿼리/결과를 서버 로그에 출력 (pool.query 래핑)
+const originalQuery = pool.query.bind(pool);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(pool as any).query = function (config: unknown, values?: unknown, callback?: unknown): unknown {
+  const first = typeof config === 'string' ? config : (config as Record<string, unknown>);
+  const text =
+    typeof first === 'string'
+      ? first
+      : first?.text != null
+        ? String(first.text)
+        : first?.sql != null
+          ? String(first.sql)
+          : typeof first === 'object' && first !== null
+            ? JSON.stringify(first).slice(0, 500)
+            : String(config);
+  console.log('[SQL]', text);
+  const result = callback != null
+    ? (originalQuery as (c: unknown, v?: unknown, cb?: unknown) => void)(config, values, callback)
+    : (originalQuery as (c: unknown, v?: unknown) => Promise<{ rows?: QueryResultRow[] }>)(config, values);
+  if (result != null && typeof (result as Promise<unknown>)?.then === 'function') {
+    return (result as Promise<{ rows?: QueryResultRow[] }>).then((res) => {
+      const rows = res?.rows ?? [];
+      console.log('[SQL Result]', Array.isArray(rows) ? rows.length : 0, 'rows');
+      return res;
+    });
+  }
+  return result;
+};
 
 // 연결 풀 이벤트 핸들러
 pool.on('error', (err) => {

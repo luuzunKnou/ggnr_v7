@@ -58,3 +58,6 @@ next-env.d.ts
 /src/config/defineLayer/
 /src/config/defineLayer.config
 /src/config/defineLayer.config.backup
+
+# LAS 파이프라인 Conda 환경 (python/env)
+/python/env/

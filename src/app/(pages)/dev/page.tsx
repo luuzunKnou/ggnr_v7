@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Lock } from "lucide-react"
+import { Lock, FlaskConical } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
@@ -15,6 +15,10 @@ import { LayerInfoManager } from "./_components/LayerInfoManager"
 import { LayerAttrManager } from "./_components/LayerAttrManager"
 import { LayerCodeManager } from "./_components/LayerCodeManager"
 import { GeoserverManagerContent } from "@/app/(pages)/dev/_components/GeoserverManagerContent"
+import { LasFileUploaderContent } from "@/app/(pages)/dev/_components/LasFileUploaderContent"
+import { ShpFileUploaderContent } from "@/app/(pages)/dev/_components/ShpFileUploaderContent"
+import { LasFixerContent } from "@/app/(pages)/dev/_components/LasFixerContent"
+import { call } from "@/lib/api"
 
 const DEV_AUTH_KEY = "dev_mode_auth"
 const DEV_PASSWORD = "admin00!!"
@@ -22,12 +26,16 @@ const DEV_PASSWORD = "admin00!!"
 const DEV_SUBMENUS = [
   { id: "systemList", label: "시스템 목록관리" },
   { id: "serviceList", label: "기능 목록관리" },
+  { id: "shpFileUploader", label: "SHP File Uploader" },
   { id: "layerInfo", label: "레이어 정보관리" },
   { id: "layerAttr", label: "레이어 속성관리" },
   { id: "layerCode", label: "레이어 코드관리" },
   { id: "systemVar", label: "시스템 변수" },
   { id: "dbManager", label: "DB Manager" },
-  { id: "geoserverManager", label: "Geoserver Manager" },
+  { id: "geoserverManagerLayer", label: "Geoserver Manager [layer]" },
+  { id: "geoserverManagerPublic", label: "Geoserver Manager [public]" },
+  { id: "fileManager", label: "LAS File Uploader" },
+  { id: "lasFixer", label: "LAS Fixer" },
 ] as const
 
 type DevSubmenuId = (typeof DEV_SUBMENUS)[number]["id"]
@@ -38,6 +46,8 @@ export default function DevPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [selectedMenu, setSelectedMenu] = useState<DevSubmenuId>("systemList")
+  const [sampleGenLoading, setSampleGenLoading] = useState(false)
+  const [sampleGenMessage, setSampleGenMessage] = useState("")
 
   useEffect(() => {
     setMounted(true)
@@ -73,6 +83,23 @@ export default function DevPage() {
     setAuthenticated(true)
     setPassword("")
     setError("")
+  }
+
+  const runSamplePipeline = async () => {
+    setSampleGenLoading(true)
+    setSampleGenMessage("")
+    try {
+      await call("", "POST", {
+        service: "pipelineService",
+        action: "runLasPipeline",
+        params: { lasRelativePath: "upload_data/las/sampleData16.las" },
+      })
+      setSampleGenMessage("파이프라인을 시작했습니다. LAS File Uploader 이력에서 결과를 확인하세요.")
+    } catch (err) {
+      setSampleGenMessage(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSampleGenLoading(false)
+    }
   }
 
   if (!mounted) {
@@ -180,7 +207,27 @@ export default function DevPage() {
         <main className="flex-1 overflow-auto p-4">
           <Card className="rounded-none min-h-full">
             <CardHeader>
-              <CardTitle>{currentLabel}</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle>{currentLabel}</CardTitle>
+                {selectedMenu === "fileManager" && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-none"
+                      onClick={runSamplePipeline}
+                      disabled={sampleGenLoading}
+                    >
+                      <FlaskConical className="w-3.5 h-3.5 mr-1" />
+                      {sampleGenLoading ? "실행 중…" : "샘플 생성 (sampleData16.las)"}
+                    </Button>
+                    {sampleGenMessage && (
+                      <span className="text-xs text-muted-foreground">{sampleGenMessage}</span>
+                    )}
+                  </>
+                )}
+              </div>
               <CardDescription>
                 {selectedMenu === "systemList"
                   ? "시스템 목록관리 설정 화면입니다."
@@ -194,9 +241,17 @@ export default function DevPage() {
                           ? "레이어 코드관리 설정 화면입니다."
                           : selectedMenu === "dbManager"
                             ? "데이터 가져오기 / 백업 / 업데이트"
-                            : selectedMenu === "geoserverManager"
-                              ? "GeoServer 연결·레이어·스타일 상태 및 로그"
-                              : `${currentLabel} 설정 화면입니다. (구현 예정)`}
+                            : selectedMenu === "geoserverManagerLayer"
+                              ? "GeoServer 연결·레이어·스타일 상태 및 로그 (스키마: layer)"
+                              : selectedMenu === "geoserverManagerPublic"
+                                ? "GeoServer 연결·레이어·스타일 상태 및 로그 (스키마: public_layer)"
+                                : selectedMenu === "fileManager"
+                                ? "LAS 파일 업로드 및 2D GeoTIFF·ECEF·3D pnts 변환 이력"
+                                : selectedMenu === "shpFileUploader"
+                                  ? "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
+                                  : selectedMenu === "lasFixer"
+                                  ? "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
+                                  : `${currentLabel} 설정 화면입니다. (구현 예정)`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -216,10 +271,24 @@ export default function DevPage() {
                 <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
                   <DbManagerContent />
                 </div>
-              ) : selectedMenu === "geoserverManager" ? (
+              ) : selectedMenu === "geoserverManagerLayer" ? (
                 <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <GeoserverManagerContent />
+                  <GeoserverManagerContent schema="layer" />
                 </div>
+              ) : selectedMenu === "geoserverManagerPublic" ? (
+                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+                  <GeoserverManagerContent schema="public_layer" />
+                </div>
+              ) : selectedMenu === "fileManager" ? (
+                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+                  <LasFileUploaderContent />
+                </div>
+              ) : selectedMenu === "shpFileUploader" ? (
+                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+                  <ShpFileUploaderContent />
+                </div>
+              ) : selectedMenu === "lasFixer" ? (
+                <LasFixerContent />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {currentLabel} 설정을 위한 화면이 여기에 표시됩니다.

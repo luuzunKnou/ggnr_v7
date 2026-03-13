@@ -5,12 +5,13 @@ import OSM from 'ol/source/OSM';
 import { defaults } from 'ol/control';
 import { getTransform } from 'ol/proj';
 import '../config/projections'; // 좌표계 등록
-import { createCadastralLayers } from '../boundaryLayerFactory';
-import { createServiceLayer } from '../serviceLayerFactory';
-
-// 안동 중심 (경도, 위도 WGS84)
-const ANDONG_LON = 128.7229;
-const ANDONG_LAT = 36.5664;
+import { DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT, DEFAULT_ZOOM_2D, RESOLUTIONS_3857 } from '../config/mapDefaults';
+import { createCadastralLayers, createBuildingRoadLayers } from '../layerFactory/boundaryLayerFactory';
+import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFactory';
+import { createJimokLayers } from '../layerFactory/jimokLayerFactory';
+import { createLandownLayers } from '../layerFactory/landownLayerFactory';
+import { createServiceLayer } from '../layerFactory/serviceLayerFactory';
+import { loadPersistedMapState } from './useMapStatePersist';
 
 /**
  * OpenLayers 지도 인스턴스 생성 및 관리 훅
@@ -20,7 +21,7 @@ const ANDONG_LAT = 36.5664;
  */
 export function useMapInstance(
   mapRef: RefObject<HTMLDivElement | null>,
-  externalMapRef?: RefObject<Map | null> | null
+  externalMapRef?: RefObject<Map | null> | null,
 ) {
   const mapInstanceRef = useRef<Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -28,9 +29,14 @@ export function useMapInstance(
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
-    // OpenLayers 지도 생성 (기본 위치: 안동)
+    // useEffect는 클라이언트에서만 실행되므로 localStorage 접근 안전
+    const persisted = loadPersistedMapState();
+
     const to3857 = getTransform('EPSG:4326', 'EPSG:3857');
-    const center3857 = to3857([ANDONG_LON, ANDONG_LAT]);
+    const defaultCenter = to3857([DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT]);
+
+    const initialCenter = persisted ? [persisted.centerX, persisted.centerY] : defaultCenter;
+    const initialZoom = persisted?.zoom ?? DEFAULT_ZOOM_2D;
 
     const map = new Map({
       target: mapRef.current,
@@ -40,10 +46,18 @@ export function useMapInstance(
           properties: { name: 'background' },
         }),
         ...createCadastralLayers(),
+        ...createBuildingRoadLayers(),
+        ...createBasicSectionLayers(),
+        ...createJimokLayers(),
+        ...createLandownLayers(),
       ],
       view: new View({
-        center: center3857,
-        zoom: 10,
+        center: initialCenter,
+        zoom: initialZoom,
+        resolutions: RESOLUTIONS_3857,
+        minZoom: 0,
+        maxZoom: RESOLUTIONS_3857.length - 1,
+        constrainResolution: true,
       }),
       controls: defaults({
         zoom: false,

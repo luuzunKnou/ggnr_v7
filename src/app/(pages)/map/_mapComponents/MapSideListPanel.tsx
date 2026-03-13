@@ -10,6 +10,8 @@ export type MapSideListPanelProps = {
   width: number;
   minWidth: number;
   maxWidth: number;
+  /** 이 패널의 왼쪽 끝 X(px). 드래그 시 새 너비 = clientX - leftOffsetPx. 미지정 시 SIDEBAR_WIDTH 사용(첫 번째 패널) */
+  leftOffsetPx?: number;
   onWidthChange: (width: number) => void;
   children: React.ReactNode;
   className?: string;
@@ -19,18 +21,26 @@ export function MapSideListPanel({
   width,
   minWidth,
   maxWidth,
+  leftOffsetPx = SIDEBAR_WIDTH,
   onWidthChange,
   children,
   className,
 }: MapSideListPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const onWidthChangeRef = useRef(onWidthChange);
+  onWidthChangeRef.current = onWidthChange;
 
   const handleResize = useCallback(
     (e: MouseEvent) => {
-      const next = Math.min(maxWidth, Math.max(minWidth, e.clientX - SIDEBAR_WIDTH));
-      onWidthChange(next);
+      const next = Math.min(maxWidth, Math.max(minWidth, e.clientX - leftOffsetPx));
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        onWidthChangeRef.current(next);
+      });
     },
-    [minWidth, maxWidth, onWidthChange]
+    [minWidth, maxWidth, leftOffsetPx]
   );
 
   const handleResizeEnd = useCallback(() => {
@@ -53,6 +63,7 @@ export function MapSideListPanel({
 
   useEffect(() => {
     return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       window.removeEventListener('mousemove', handleResize);
       window.removeEventListener('mouseup', handleResizeEnd);
     };

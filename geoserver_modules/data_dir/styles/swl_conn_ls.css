@@ -1,5 +1,5 @@
 * {
-  stroke: #FFEB3B;
-  stroke-width: 2;
-  stroke-opacity: 1;
+  stroke: #FFFFFF, #FFEB3B;
+  stroke-width: 3, 2;
+  stroke-opacity: 0.4, 0.5;
 }

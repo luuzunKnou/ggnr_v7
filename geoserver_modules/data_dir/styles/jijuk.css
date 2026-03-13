@@ -1,5 +1,36 @@
-* {
-  stroke: #F44336;
-  stroke-width: 2;
-  stroke-opacity: 1;
+/* ÁÜ 14~18: ¼±¸¸ Ç¥½Ã */
+[@sd > 2000] [@sd < 35000] {
+  fill: #DB5E5E;
+  fill-opacity: 0.0;
+  stroke: #DB5E5E;
+  stroke-width: 1;
+  stroke-opacity: 1.0;
+}
+
+/* ÁÜ 18+: ¼± + ¶óº§ */
+[@sd < 2000] {
+  fill: #DB5E5E;
+  fill-opacity: 0.0;
+  stroke: #DB5E5E;
+  stroke-width: 1;
+  stroke-opacity: 1.0;
+
+  label: [jibun];
+  label-anchor: 0.5 0.5;
+  label-geometry: [centroid(geom)];
+
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  font-size: 14;
+  font-weight: bold;
+  font-fill: #DB5E5E;
+
+  halo-color: #FFFFFF;
+  halo-radius: 1;
+  halo-opacity: 0.9;
+
+  label-conflict-resolution: true;
+  label-group: true;
+  label-max-displacement: 0;
+  label-priority: [area(geom)];
+  label-fit-goodness: 0.1;
 }

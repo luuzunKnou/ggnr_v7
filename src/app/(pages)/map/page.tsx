@@ -1,6 +1,6 @@
 // src/app/(pages)/map/page.tsx
-import OpenLayersMap from './_mapComponents/OpenLayersMap';
+import MapViewModeWrapper from './_mapComponents/MapViewModeWrapper';
 
 export default function MapPage() {
-  return <OpenLayersMap />;
+  return <MapViewModeWrapper />;
 }

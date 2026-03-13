@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Map } from 'ol';
 import { updateViewProjection } from '../services/coordinateService';
-import { createBackgroundLayerById, getProviderFromId } from '../backgroundLayerFactory';
+import { createBackgroundLayerById, getProviderFromId } from '../layerFactory/backgroundLayerFactory';
 
 /**
  * 배경지도 레이어 관리 훅

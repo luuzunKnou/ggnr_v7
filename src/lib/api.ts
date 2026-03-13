@@ -35,6 +35,7 @@ export function call(api: string, method: 'GET' | 'POST', request?: any): Promis
 
   const options: RequestInit = {
     method,
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(authToken && { 'Authorization': `Bearer ${authToken}` }),

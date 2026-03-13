@@ -463,6 +463,19 @@ export function LayerAttrManager() {
               </Button>
               <Button
                 size="sm"
+                variant="outline"
+                className="rounded-none"
+                onClick={() => {
+                  setFields((prev) =>
+                    prev.map((f) => ({ ...f, define_field_show_detail: "false" }))
+                  )
+                }}
+                title="모든 필드의 상세보기를 false로 설정합니다. 저장 버튼으로 반영하세요."
+              >
+                상세보기 전체 해제
+              </Button>
+              <Button
+                size="sm"
                 className="rounded-none"
                 onClick={() => {
                   setSearchName("")

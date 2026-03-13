@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as allServices from '@/service';
 
+/** 장시간 실행(예: 파이프라인 환경 설정) 허용. 단위: 초. */
+export const maxDuration = 600;
+
+/** config·runtime 등 실시간 반영을 위해 캐시 없이 매 요청 실행 */
+export const dynamic = 'force-dynamic';
+
 /**
  * 중앙 API 게이트웨이
  * 이 파일은 절대 수정하지 않습니다.
@@ -57,7 +63,10 @@ export async function GET(req: NextRequest) {
     // 함수 실행
     const result = await targetFn(params);
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json(
+      { success: true, data: result },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (err: any) {
     // 403 에러 처리
     if (err.status === 403) {
@@ -113,7 +122,10 @@ export async function POST(req: NextRequest) {
     // 함수 실행
     const result = await targetFn(params);
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json(
+      { success: true, data: result },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (err: any) {
     // 403 에러 처리
     if (err.status === 403) {
