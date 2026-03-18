@@ -567,19 +567,20 @@ export async function getLayerTableRowCount(params: {
   }
 }
 
-/** layer 스키마 테이블별 지오메트리 타입 (geometry_columns.type → POINT/LINE/POLYGON) */
-export async function getLayerTableGeometryTypes(): Promise<{
+/** layer / public_layer 스키마 테이블별 지오메트리 타입 */
+export async function getLayerTableGeometryTypes(params?: {
+  schema?: 'layer' | 'public_layer';
+}): Promise<{
   success: boolean;
   types: Record<string, 'POINT' | 'LINE' | 'POLYGON'>;
   error?: string;
 }> {
+  const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
   try {
     const result = await db.execute(
-      sql`
-        SELECT f_table_name, type
-        FROM geometry_columns
-        WHERE f_table_schema = 'layer'
-      `
+      sql.raw(
+        `SELECT f_table_name, type FROM geometry_columns WHERE f_table_schema = '${schema.replace(/'/g, "''")}'`
+      )
     );
     const types: Record<string, 'POINT' | 'LINE' | 'POLYGON'> = {};
     for (const row of (result.rows as Array<{ f_table_name: string; type: string | number }>) ?? []) {

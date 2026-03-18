@@ -3,6 +3,8 @@
  */
 export * from './comp';
 export * from './compd';
+export * from './excel_sync_log';
+export * from './excel_upload_history';
 export * from './gp_map';
 export * from './layer_detail_history';
 export * from './layer_history';

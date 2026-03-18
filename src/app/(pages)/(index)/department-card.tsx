@@ -37,7 +37,7 @@ export function DepartmentCard({ department }: DepartmentCardProps) {
         <div className="flex flex-col items-center gap-4">
           {/* Icon Container */}
           <div 
-            className="w-20 h-20 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+            className="w-20 h-20 flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
             style={{ 
               backgroundColor: `${color}15`,
               border: `2px solid ${color}30`

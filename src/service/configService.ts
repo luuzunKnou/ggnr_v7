@@ -68,6 +68,37 @@ export function getSystemKorName(): string {
   return name || "공간정보 통합관리 플랫폼"
 }
 
+/**
+ * 지도용 클라이언트 설정 (주소 검색 등).
+ * runtime.env 의 VWORLD_API_KEY, OPENAI_API_KEY 를 반환. 클라이언트에서 주소 검색·Excel 지오코딩 시 사용.
+ */
+export function getMapConfig(_params?: unknown): { VWORLD_API_KEY: string; OPENAI_API_KEY: string } {
+  const vars = getRuntimeEnvVars()
+  return {
+    VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
+    OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
+  }
+}
+
+/**
+ * public/image/indexImage 에서 프로젝트명_01~04 (jpg 또는 png) 경로 4개 반환.
+ * ParcelSlider 배경용. 서버에서만 호출.
+ */
+export function getIndexSliderImages(projectName: string): string[] {
+  const root = getProjectRoot()
+  const dir = join(root, "public", "image", "indexImage")
+  const out: string[] = []
+  for (let i = 1; i <= 4; i++) {
+    const base = `${projectName}_${String(i).padStart(2, "0")}`
+    const jpgPath = join(dir, `${base}.jpg`)
+    const pngPath = join(dir, `${base}.png`)
+    if (existsSync(jpgPath)) out.push(`/image/indexImage/${base}.jpg`)
+    else if (existsSync(pngPath)) out.push(`/image/indexImage/${base}.png`)
+    else out.push("")
+  }
+  return out
+}
+
 export type SystemConfigItem = {
   sys_key: string
   sys_kor: string

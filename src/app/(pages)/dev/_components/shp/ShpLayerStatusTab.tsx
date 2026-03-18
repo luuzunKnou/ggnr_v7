@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { RefreshCw, Check, X, Search } from 'lucide-react';
+import { RefreshCw, Check, X, Search, Download } from 'lucide-react';
 
 type LayerStatusRow = {
   tableName: string;
@@ -17,6 +17,7 @@ type LayerStatusRow = {
   style: boolean;
   define: boolean;
   updatedAt: string | null;
+  dbSchema?: 'layer' | 'public_layer';
 };
 
 type Props = {
@@ -50,6 +51,42 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
+  /** 레이어 상태 목록 DB 스키마: layer(기본) | public_layer만 */
+  const [statusSchema, setStatusSchema] = useState<'layer' | 'public_layer'>('layer');
+  const [downloadingShp, setDownloadingShp] = useState<string | null>(null);
+
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleShpDownload = useCallback(async (tableName: string, dbSchema: 'layer' | 'public_layer') => {
+    if (!tableName?.trim()) return;
+    setDownloadingShp(tableName);
+    try {
+      const res = await fetch('/api/download/shp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableName, schema: dbSchema }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data?.error === 'string' ? data.error : 'SHP export failed');
+      }
+      const blob = await res.blob();
+      triggerBlobDownload(blob, `${tableName}.zip`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'SHP 다운로드 실패');
+    } finally {
+      setDownloadingShp(null);
+    }
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -58,7 +95,7 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
       const res = await call('', 'POST', {
         service: 'shpUploadService',
         action: 'getLayerStatusList',
-        params: {},
+        params: { schema: statusSchema },
       });
       const d = res?.data ?? res;
       if (d?.success) {
@@ -71,7 +108,11 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statusSchema]);
+
+  useEffect(() => {
+    setGroupFilter(null);
+  }, [statusSchema]);
 
   useEffect(() => {
     fetchStatus();
@@ -99,9 +140,33 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
       <div className="shrink-0 flex items-center gap-2">
         <span className="text-sm font-medium whitespace-nowrap">레이어 상태</span>
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          총 {totalCount}개 (Layer {layerOk} / Style {styleOk} / Define {defineOk})
+          총 {totalCount}개 (Layer {layerOk} / Style {styleOk} / Define {defineOk}) ·{' '}
+          <span className="font-mono">{statusSchema}</span>
         </span>
-        <div className="flex-1" />
+        <div className="flex flex-wrap gap-1 items-center shrink-0">
+          <span className="text-[10px] text-muted-foreground mr-0.5">스키마</span>
+          <button
+            type="button"
+            onClick={() => setStatusSchema('layer')}
+            className={cn(
+              'px-2 py-0.5 rounded border text-xs',
+              statusSchema === 'layer' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+            )}
+          >
+            layer
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusSchema('public_layer')}
+            className={cn(
+              'px-2 py-0.5 rounded border text-xs',
+              statusSchema === 'public_layer' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+            )}
+          >
+            public_layer
+          </button>
+        </div>
+        <div className="flex-1 min-w-2" />
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -112,7 +177,7 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
             className="h-7 pl-7 pr-2 text-xs border rounded w-40 bg-background"
           />
         </div>
-        <Button variant="outline" size="sm" onClick={fetchStatus} className="gap-1">
+        <Button type="button" variant="outline" size="sm" onClick={fetchStatus} className="gap-1">
           <RefreshCw className="w-3.5 h-3.5" /> 새로고침
         </Button>
       </div>
@@ -169,7 +234,8 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
                 <th className="py-1.5 px-2 text-center w-14">Layer</th>
                 <th className="py-1.5 px-2 text-center w-14">Style</th>
                 <th className="py-1.5 px-2 text-center w-14">Define</th>
-                <th className="py-1.5 px-2 text-left">비고</th>
+                <th className="py-1.5 px-2 text-left min-w-[5rem]">비고</th>
+                <th className="py-1.5 px-2 text-center w-24">SHP 다운로드</th>
               </tr>
             </thead>
             <tbody>
@@ -185,7 +251,20 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
                   <td className="py-1 px-2"><StepCell ok={row.style} /></td>
                   <td className="py-1 px-2"><StepCell ok={row.define} /></td>
                   <td className="py-1 px-2 text-muted-foreground truncate" />
-
+                  <td className="py-1 px-2 text-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-1.5 gap-0.5"
+                      disabled={!row.table || downloadingShp !== null}
+                      onClick={() => handleShpDownload(row.tableName, row.dbSchema ?? 'layer')}
+                      title="DB layer 테이블을 EPSG:5181 SHP(zip)로 다운로드"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span className="text-xs">SHP</span>
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>

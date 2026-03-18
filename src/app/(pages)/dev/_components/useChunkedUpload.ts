@@ -15,7 +15,7 @@ export type ChunkedUploadState = {
 
 export type UseChunkedUploadReturn = {
   state: ChunkedUploadState;
-  upload: (file: File, uploadType: 'tif' | 'las' | 'shp', options?: { shpSavePath?: string }) => Promise<{ savedPath?: string; size?: number } | void>;
+  upload: (file: File, uploadType: 'tif' | 'las' | 'shp' | 'excel', options?: { shpSavePath?: string }) => Promise<{ savedPath?: string; size?: number; error?: string } | void>;
   cancel: () => void;
   reset: () => void;
 };
@@ -45,12 +45,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
   }, [cancel]);
 
   const upload = useCallback(
-    async (file: File, uploadType: 'tif' | 'las' | 'shp', options?: { shpSavePath?: string }): Promise<{ savedPath?: string; size?: number } | void> => {
-      const hasNonAscii = [...file.name].some((c) => (c.codePointAt(0) ?? 0) > 127);
-      if (hasNonAscii) {
-        setState((s) => ({ ...s, status: 'error', error: '한글 파일명은 사용할 수 없습니다.' }));
-        return;
-      }
+    async (file: File, uploadType: 'tif' | 'las' | 'shp' | 'excel', options?: { shpSavePath?: string }): Promise<{ savedPath?: string; size?: number; error?: string } | void> => {
       cancel();
       abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
@@ -82,8 +77,9 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
         const base = `${API_BASE || ''}/api/upload/chunk`;
         for (let chunkIndex = 0; chunkIndex < expectedChunks; chunkIndex++) {
           if (signal.aborted) {
-            setState((s) => ({ ...s, status: 'idle', error: '취소됨' }));
-            return;
+            const msg = '취소됨';
+            setState((s) => ({ ...s, status: 'idle', error: msg }));
+            return { error: msg };
           }
           const start = chunkIndex * chunkSize;
           const end = Math.min(start + chunkSize, file.size);
@@ -130,8 +126,9 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
         };
       } catch (err) {
         if (signal.aborted) {
-          setState((s) => ({ ...s, status: 'idle', error: '취소됨' }));
-          return;
+          const msg = '취소됨';
+          setState((s) => ({ ...s, status: 'idle', error: msg }));
+          return { error: msg };
         }
         const message = err instanceof Error ? err.message : String(err);
         setState((s) => ({
@@ -139,6 +136,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
           status: 'error',
           error: message,
         }));
+        return { error: message };
       } finally {
         abortRef.current = null;
       }

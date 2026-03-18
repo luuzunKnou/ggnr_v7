@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 
 interface ParcelSlide {
@@ -29,6 +29,15 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
     setCurrentIndex((prev) => (prev === slides.length - 1 ? 0 : prev + 1))
   }
 
+  // 1초마다 다음 슬라이드로 자동 전환
+  useEffect(() => {
+    if (slides.length <= 1) return
+    const id = setInterval(() => {
+      setCurrentIndex((prev) => (prev === slides.length - 1 ? 0 : prev + 1))
+    }, 3000)
+    return () => clearInterval(id)
+  }, [slides.length])
+
   return (
     <div className="relative overflow-hidden min-h-[280px] rounded">
       {/* Slides */}
@@ -43,7 +52,7 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
               backgroundImage: slide.image
                 ? `url("${slide.image}")`
                 : undefined,
-              background: slide.gradient || "linear-gradient(to bottom right, #1e293b, #0f172a)",
+              background: slide.image ? undefined : (slide.gradient || "linear-gradient(to bottom right, #1e293b, #0f172a)"),
               backgroundSize: slide.image ? "cover" : undefined,
               backgroundPosition: slide.image ? "center" : undefined,
             }}
@@ -102,7 +111,7 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
       </button>
 
       {/* 바로가기 버튼 */}
-      <button className="absolute bottom-[calc(1rem+30px+0.5rem)] left-1/2 -translate-x-1/2 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur px-6 py-3 text-sm font-medium transition-colors text-white">
+      <button className="absolute bottom-[calc(1rem+30px+0.5rem)] left-1/2 -translate-x-1/2 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur px-6 py-3 text-sm font-medium transition-colors text-white rounded-[5px]">
         바로가기
         <svg
           className="w-4 h-4"

@@ -17,6 +17,7 @@ import { LayerCodeManager } from "./_components/LayerCodeManager"
 import { GeoserverManagerContent } from "@/app/(pages)/dev/_components/GeoserverManagerContent"
 import { LasFileUploaderContent } from "@/app/(pages)/dev/_components/LasFileUploaderContent"
 import { ShpFileUploaderContent } from "@/app/(pages)/dev/_components/ShpFileUploaderContent"
+import { ExlFileUploaderContent } from "@/app/(pages)/dev/_components/ExlFileUploaderContent"
 import { LasFixerContent } from "@/app/(pages)/dev/_components/LasFixerContent"
 import { call } from "@/lib/api"
 
@@ -27,6 +28,7 @@ const DEV_SUBMENUS = [
   { id: "systemList", label: "시스템 목록관리" },
   { id: "serviceList", label: "기능 목록관리" },
   { id: "shpFileUploader", label: "SHP File Uploader" },
+  { id: "exlFileUploader", label: "Excel File Uploader" },
   { id: "layerInfo", label: "레이어 정보관리" },
   { id: "layerAttr", label: "레이어 속성관리" },
   { id: "layerCode", label: "레이어 코드관리" },
@@ -286,6 +288,10 @@ export default function DevPage() {
               ) : selectedMenu === "shpFileUploader" ? (
                 <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
                   <ShpFileUploaderContent />
+                </div>
+              ) : selectedMenu === "exlFileUploader" ? (
+                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+                  <ExlFileUploaderContent />
                 </div>
               ) : selectedMenu === "lasFixer" ? (
                 <LasFixerContent />

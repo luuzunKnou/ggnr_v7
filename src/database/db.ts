@@ -70,6 +70,9 @@ pool.on('error', (err) => {
 // Drizzle 클라이언트 생성
 export const db = drizzle(pool, { schema });
 
+/** 파라미터 바인딩 쿼리용 (예: 긴 INSERT 시 쿼리 절단 방지) */
+export { pool };
+
 // 연결 풀 종료 함수
 export async function closePool(): Promise<void> {
   await pool.end();

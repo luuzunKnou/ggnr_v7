@@ -89,7 +89,7 @@ function ColorPreview({ value }: { value: string }) {
   )
 }
 
-function SvgPreview({ value }: { value: string }) {
+function SvgPreview({ value, color }: { value: string; color?: string }) {
   const raw = (value ?? "").trim()
   if (!raw) {
     return (
@@ -102,8 +102,28 @@ function SvgPreview({ value }: { value: string }) {
   if (isInlineSvg) {
     return (
       <div
-        className="w-7 h-6 flex items-center justify-center rounded border border-border bg-muted/20 overflow-hidden [&_svg]:w-5 [&_svg]:h-5 [&_svg]:max-w-full [&_svg]:max-h-full"
+        className="w-7 h-6 flex items-center justify-center rounded border border-border bg-muted/20 overflow-hidden [&_svg]:w-5 [&_svg]:h-5 [&_svg]:max-w-full [&_svg]:max-h-full [&_svg]:fill-none [&_svg]:stroke-current"
+        style={color ? { color } : undefined}
         dangerouslySetInnerHTML={{ __html: raw }}
+        title="SVG 미리보기"
+      />
+    )
+  }
+  if (color) {
+    return (
+      <div
+        className="w-7 h-6 shrink-0 rounded border border-border overflow-hidden"
+        style={{
+          backgroundColor: color,
+          WebkitMaskImage: `url(${raw})`,
+          maskImage: `url(${raw})`,
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+        }}
         title="SVG 미리보기"
       />
     )
@@ -463,7 +483,7 @@ export function SystemListManager() {
                   <TableCell className="text-sm text-muted-foreground">{s.sys_eng ?? "-"}</TableCell>
                   <TableCell className="align-middle">
                     <div className="flex justify-center items-center">
-                      <SvgPreview value={s.sys_img ?? ""} />
+                      <SvgPreview value={(s.sys_img ?? "").trim() || `/image/systemlistIcon/${s.sys_key}.svg`} color={s.sys_col || undefined} />
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs">{s.sys_idx}</TableCell>

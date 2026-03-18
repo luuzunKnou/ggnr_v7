@@ -12,6 +12,8 @@ import * as fileManagerService from './fileManagerService';
 import * as uploadService from './uploadService';
 import * as pipelineService from './pipelineService';
 import * as shpUploadService from './shpUploadService';
+import * as excelHistoryService from './excelHistoryService';
+import * as excelUploadService from './excelUploadService';
 import * as layerHistoryService from './layerHistoryService';
 
-export { configService, devTestService, dbManagerService, sysService, serService, standardService, complaintService, fileManagerService, uploadService, pipelineService, shpUploadService, layerHistoryService };
+export { configService, devTestService, dbManagerService, sysService, serService, standardService, complaintService, fileManagerService, uploadService, pipelineService, shpUploadService, excelUploadService, excelHistoryService, layerHistoryService };

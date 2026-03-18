@@ -94,6 +94,9 @@ export type MapContextValue = {
   /** 뷰 왼쪽 패딩(px). 레이아웃에서 설정. 크로스헤어 위치 재계산용 */
   mapPaddingLeft: number;
   setMapPaddingLeft: Dispatch<SetStateAction<number>>;
+  /** VWorld API 키 (주소 검색·역지오코딩). 서버 getMapConfig로 조회 후 설정 */
+  vworldApiKey: string;
+  setVworldApiKey: Dispatch<SetStateAction<string>>;
 } | null;
 
 const MapContext = createContext<MapContextValue>(null);
@@ -117,6 +120,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   } | null>(null);
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
+  const [vworldApiKey, setVworldApiKey] = useState('');
 
   return (
     <MapContext.Provider
@@ -148,6 +152,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setMeasurementActive,
         mapPaddingLeft,
         setMapPaddingLeft,
+        vworldApiKey,
+        setVworldApiKey,
       }}
     >
       {children}

@@ -81,6 +81,7 @@ export function MapSearchBar({
   const [addressPanelOpen, setAddressPanelOpen] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
   const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
+  const vworldApiKey = mapContext?.vworldApiKey ?? '';
 
   const addRecentQuery = useCallback((trimmed: string) => {
     if (!trimmed) return;
@@ -114,10 +115,11 @@ export function MapSearchBar({
       setAddressResults([]);
       return;
     }
+    if (!vworldApiKey) return;
     const t = setTimeout(() => {
       setAddressSearchLoading(true);
       const trimmed = query.trim();
-      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address' })
+      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
         .then((items) => {
           setAddressResults(items);
           setAddressPanelOpen(true);
@@ -125,7 +127,7 @@ export function MapSearchBar({
         .finally(() => setAddressSearchLoading(false));
     }, ADDRESS_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, vworldApiKey]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -158,6 +160,20 @@ export function MapSearchBar({
     fetchSystemList();
   }, [fetchSystemList]);
 
+  /** 지도 주소 검색·역지오코딩용 VWorld API 키는 서버(runtime.env)에서만 읽히므로 API로 조회 후 context에 저장 */
+  const fetchMapConfig = useCallback(() => {
+    call('', 'POST', { service: 'configService', action: 'getMapConfig', params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        const key = (data?.VWORLD_API_KEY ?? '').trim();
+        mapContext?.setVworldApiKey?.(key);
+      })
+      .catch(() => mapContext?.setVworldApiKey?.(''));
+  }, [mapContext]);
+  useEffect(() => {
+    fetchMapConfig();
+  }, [fetchMapConfig]);
+
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') fetchSystemList();
@@ -185,13 +201,13 @@ export function MapSearchBar({
   /** 검색 버튼 클릭 시 VWorld 주소 검색 실행 */
   const runAddressSearch = useCallback(() => {
     const trimmed = query.trim();
-    if (!trimmed) return;
+    if (!trimmed || !vworldApiKey) return;
     setAddressSearchLoading(true);
     setAddressPanelOpen(true);
-    searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address' })
+    searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
       .then((items) => setAddressResults(items))
       .finally(() => setAddressSearchLoading(false));
-  }, [query]);
+  }, [query, vworldApiKey]);
 
   const leftOffset = SIDEBAR_WIDTH + listPanelWidth + SEARCH_BAR_MARGIN;
 
@@ -314,8 +330,9 @@ export function MapSearchBar({
                             type="button"
                             onClick={() => {
                               setQuery(q);
+                              if (!vworldApiKey) return;
                               setAddressSearchLoading(true);
-                              searchAddress(q, { maxResults: ADDRESS_RESULT_MAX, type: 'address' })
+                              searchAddress(q, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
                                 .then((items) => setAddressResults(items))
                                 .finally(() => setAddressSearchLoading(false));
                             }}

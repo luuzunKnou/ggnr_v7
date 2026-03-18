@@ -393,7 +393,12 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
         road: null,
       });
       const [lon, lat] = wgs84;
-      getAddressFromCoord(lon, lat).then((result) => {
+      const apiKey = mapContext?.vworldApiKey?.trim();
+      if (!apiKey) {
+        setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: null, road: null } : null));
+        return;
+      }
+      getAddressFromCoord(lon, lat, { apiKey }).then((result) => {
         setAddressInfoDetail((prev) =>
           prev
             ? {
@@ -407,7 +412,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
         );
       });
     },
-    [mapContext?.setAddressInfoDetail, addressInfoDetail]
+    [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );
   useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
 

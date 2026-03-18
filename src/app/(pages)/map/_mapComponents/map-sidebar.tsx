@@ -4,7 +4,6 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LayoutList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from './MapContext';
 import { call } from '@/lib/api';
@@ -169,15 +168,35 @@ export function MapSidebar() {
   };
 
   const renderServiceIcon = (item: ServiceItem) => {
-    if (item.ser_svg?.trim()) {
+    const svgRaw = item.ser_svg?.trim() ?? '';
+    const serEng = item.ser_eng ?? '';
+    const isInlineSvg = svgRaw.startsWith('<');
+    if (svgRaw && isInlineSvg) {
       return (
         <span
-          className="w-6 h-6 [&_svg]:w-full [&_svg]:h-full [&_svg]:stroke-current"
-          dangerouslySetInnerHTML={{ __html: item.ser_svg }}
+          className="w-6 h-6 [&_svg]:w-full [&_svg]:h-full [&_svg]:fill-none [&_svg]:stroke-current"
+          dangerouslySetInnerHTML={{ __html: svgRaw }}
         />
       );
     }
-    return <LayoutList className="w-6 h-6" />;
+    const iconSrc = `/image/serviceListIcon/${serEng}.svg`;
+    return (
+      <span
+        className="w-6 h-6 shrink-0 inline-block bg-current"
+        style={{
+          WebkitMaskImage: `url(${iconSrc})`,
+          maskImage: `url(${iconSrc})`,
+          WebkitMaskSize: 'contain',
+          maskSize: 'contain',
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskPosition: 'center',
+          maskPosition: 'center',
+        }}
+        role="img"
+        aria-hidden
+      />
+    );
   };
 
   return (

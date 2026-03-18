@@ -5,6 +5,7 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { call } from "@/lib/api"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -170,6 +171,10 @@ export function LayerAttrManager() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [searchName, setSearchName] = useState("")
   const [debouncedSearchName, setDebouncedSearchName] = useState("")
+  const [showPublicLayer, setShowPublicLayer] = useState(false)
+  const [showAllLayers, setShowAllLayers] = useState(false)
+  const [tableExistenceSet, setTableExistenceSet] = useState<Set<string>>(new Set())
+  const [tableExistenceLoading, setTableExistenceLoading] = useState(false)
   const parentRef = useRef<HTMLDivElement>(null)
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
@@ -194,6 +199,28 @@ export function LayerAttrManager() {
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
       .finally(() => !cancelled && setLoadingTables(false))
+    return () => { cancelled = true }
+  }, [])
+
+  // DB에 테이블 존재 여부 로드 (layer, public_layer 스키마)
+  useEffect(() => {
+    let cancelled = false
+    setTableExistenceLoading(true)
+    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        if (data?.success && Array.isArray(data.tables)) {
+          const set = new Set<string>(
+            data.tables.map(
+              (t: { schema?: string; table?: string }) => `${t.schema ?? "layer"}.${t.table ?? ""}`
+            )
+          )
+          setTableExistenceSet(set)
+        }
+      })
+      .catch(() => !cancelled && setTableExistenceSet(new Set()))
+      .finally(() => !cancelled && setTableExistenceLoading(false))
     return () => { cancelled = true }
   }, [])
 
@@ -291,10 +318,24 @@ export function LayerAttrManager() {
     return () => clearTimeout(timer)
   }, [searchName])
 
-  /** 왼쪽 패널: 그룹/테이블명/한글명으로 필터링된 레이어 목록 */
+  /** 왼쪽 패널: 스키마/전체 레이어(DB 테이블 존재) 필터 + 그룹/테이블명/한글명 검색 */
   const filteredTables = useMemo(() => {
     if (!tables.length) return []
     let list = [...tables]
+    if (!showPublicLayer) {
+      list = list.filter(
+        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
+      )
+    }
+    if (!showAllLayers) {
+      list = list.filter((t) => {
+        const schema = String((t as Record<string, unknown>).define_table_schema ?? "layer")
+        const tableName = String((t as Record<string, unknown>).define_table_name ?? "")
+        if (!tableName) return true
+        const key = `${schema}.${tableName}`
+        return tableExistenceLoading || tableExistenceSet.has(key)
+      })
+    }
     if (debouncedLayerListSearch.trim()) {
       const q = debouncedLayerListSearch.trim().toLowerCase()
       list = list.filter((t) => {
@@ -306,7 +347,7 @@ export function LayerAttrManager() {
       })
     }
     return list
-  }, [tables, debouncedLayerListSearch])
+  }, [tables, debouncedLayerListSearch, showPublicLayer, showAllLayers, tableExistenceSet, tableExistenceLoading])
 
   const filteredFields = useMemo(() => {
     if (!fields.length) return []
@@ -395,14 +436,34 @@ export function LayerAttrManager() {
         className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden max-h-[calc(100vh-14rem)]"
         style={{ width: LAYER_LIST_WIDTH }}
       >
-        <div className="shrink-0 p-2 border-b bg-muted/50">
+        <div className="shrink-0 p-2 border-b bg-muted/50 space-y-2">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPublicLayer}
+                onChange={(e) => setShowPublicLayer(e.target.checked)}
+                className="rounded border-input"
+              />
+              public_layer 포함
+            </label>
+            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllLayers}
+                onChange={(e) => setShowAllLayers(e.target.checked)}
+                className="rounded border-input"
+              />
+              전체 레이어 보기
+            </label>
+          </div>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="레이어 검색 (그룹/테이블명/한글명)"
               value={layerListSearch}
               onChange={(e) => setLayerListSearch(e.target.value)}
-              className="h-9 pl-8 rounded-none text-sm bg-background"
+              className="h-9 pl-8 rounded-md text-sm bg-background"
             />
           </div>
         </div>
@@ -453,18 +514,19 @@ export function LayerAttrManager() {
           <>
             <div className="flex items-center gap-3 flex-wrap shrink-0">
               <Button
+                variant="outline"
                 size="sm"
-                className="rounded-none"
+                className="rounded-md"
                 onClick={saveConfig}
                 disabled={saving}
               >
-                <Save className="w-4 h-4 mr-1.5" />
+                <Save className="w-4 h-4 mr-1.5 opacity-70" />
                 {saving ? "저장 중..." : "저장"}
               </Button>
               <Button
-                size="sm"
                 variant="outline"
-                className="rounded-none"
+                size="sm"
+                className="rounded-md"
                 onClick={() => {
                   setFields((prev) =>
                     prev.map((f) => ({ ...f, define_field_show_detail: "false" }))
@@ -475,14 +537,15 @@ export function LayerAttrManager() {
                 상세보기 전체 해제
               </Button>
               <Button
+                variant="outline"
                 size="sm"
-                className="rounded-none"
+                className="rounded-md"
                 onClick={() => {
                   setSearchName("")
                   setDebouncedSearchName("")
                 }}
               >
-                <RotateCcw className="w-4 h-4 mr-1.5" />
+                <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
                 초기화
               </Button>
               {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
@@ -494,7 +557,7 @@ export function LayerAttrManager() {
                 placeholder="필드명/한글명 검색"
                 value={searchName}
                 onChange={(e) => setSearchName(e.target.value)}
-                className="h-8 w-48 rounded-none text-sm"
+                className="h-8 w-48 rounded-md text-sm"
               />
             </div>
 

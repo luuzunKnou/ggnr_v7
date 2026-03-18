@@ -1,0 +1,19 @@
+<layer>
+  <name>test16</name>
+  <id>LayerInfoImpl--60cb52a7:19cdc4f170d:-55e0</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--60cb52a7:19cdc4f170d:-55df</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:-55e1</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-15 12:02:55.922 UTC</dateCreated>
+  <dateModified>2026-03-15 12:02:55.960 UTC</dateModified>
+</layer>

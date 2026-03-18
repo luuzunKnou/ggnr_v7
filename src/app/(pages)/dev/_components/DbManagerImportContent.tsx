@@ -29,7 +29,10 @@ type SrcEndpoint = DbConnection & {
   selectedTables: SchemaTable[]; // 체크박스 다중선택
 };
 
-type DestEndpoint = DbConnection;
+type DestEndpoint = DbConnection & {
+  /** 데이터 적재할 스키마 (비어 있으면 SRC와 동일 스키마명 사용) */
+  selectedSchema: string;
+};
 
 type DestCheckResult = {
   checkedAt: string;
@@ -425,6 +428,7 @@ function DestEndpointCard({
   isConnecting,
   isConnected,
   connectError,
+  schemas,
   srcSelectedTables,
   onCheckExists,
   isChecking,
@@ -442,6 +446,8 @@ function DestEndpointCard({
   isConnecting: boolean;
   isConnected: boolean;
   connectError: string | null;
+  /** DEST DB 스키마 목록 (연결 후 조회) */
+  schemas: string[];
   srcSelectedTables: SchemaTable[];
   onCheckExists: () => Promise<void>;
   isChecking: boolean;
@@ -594,6 +600,31 @@ function DestEndpointCard({
               disabled={isConnected}
             />
           </div>
+
+          {/* DEST 스키마 선택 (연결 후 표시, 비어 있으면 SRC와 동일 스키마명 사용) */}
+          {isConnected && schemas.length > 0 && (
+            <div className="space-y-1 md:col-span-2">
+              <label htmlFor={`${title}-schema`} className="text-sm font-medium text-slate-700">
+                적재 스키마 (선택)
+              </label>
+              <select
+                id={`${title}-schema`}
+                value={endpoint.selectedSchema}
+                onChange={(e) => onChange({ ...endpoint, selectedSchema: e.target.value })}
+                className="w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">SRC와 동일 스키마 사용</option>
+                {schemas.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                선택 시 모든 테이블을 해당 스키마에 적재합니다. 비우면 SRC의 스키마명을 그대로 사용합니다.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="text-sm text-slate-600">
@@ -721,6 +752,7 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
     database: '',
     username: '',
     password: '',
+    selectedSchema: '',
   });
 
   // SRC state
@@ -732,6 +764,7 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
   const [srcConnected, setSrcConnected] = useState(false);
 
   // DESC state
+  const [destSchemas, setDestSchemas] = useState<string[]>([]);
   const [destConnecting, setDestConnecting] = useState(false);
   const [destError, setDestError] = useState<string | null>(null);
   const [destChecking, setDestChecking] = useState(false);
@@ -771,7 +804,7 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
           password: d.password ?? '',
         };
         setSrc((prev) => ({ ...prev, ...base, selectedSchemas: prev.selectedSchemas, selectedTables: prev.selectedTables }));
-        setDest((prev) => ({ ...prev, ...base }));
+        setDest((prev) => ({ ...prev, ...base, selectedSchema: prev.selectedSchema ?? '' }));
       } catch {
         // 무시
       }
@@ -806,6 +839,7 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
             username: dest.username,
             password: dest.password || undefined,
           },
+          destSchema: dest.selectedSchema?.trim() || undefined,
         },
       });
 
@@ -903,10 +937,11 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  // DEST: 단순 연결 테스트
+  // DEST: 연결 테스트 후 스키마 목록 조회
   const connectDest = async () => {
     setDestError(null);
     setDestCheckResult(null);
+    setDestSchemas([]);
     setDestConnecting(true);
     setDestConnected(false);
     try {
@@ -924,6 +959,21 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
 
       if (!response?.success) throw new Error(response?.error || 'Connection failed');
       setDestConnected(true);
+
+      const schemaRes = await call('', 'POST', {
+        service: 'dbManagerService',
+        action: 'getSchemas',
+        params: {
+          host: dest.host,
+          port: dest.port,
+          database: dest.database,
+          username: dest.username,
+          password: dest.password || undefined,
+        },
+      });
+      if (schemaRes?.success && Array.isArray(schemaRes.data?.schemas)) {
+        setDestSchemas(schemaRes.data.schemas);
+      }
     } catch (e: any) {
       setDestError(e?.message || 'Connection failed');
       setDestConnected(false);
@@ -936,6 +986,8 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
     setDestConnected(false);
     setDestError(null);
     setDestCheckResult(null);
+    setDestSchemas([]);
+    setDest((prev) => ({ ...prev, selectedSchema: '' }));
   };
 
   // DEST: SRC 선택 항목 존재 여부 확인
@@ -954,6 +1006,7 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
           username: dest.username,
           password: dest.password || undefined,
           items: src.selectedTables,
+          targetSchema: dest.selectedSchema?.trim() || undefined,
         },
       });
 
@@ -1010,9 +1063,18 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
             description="데이터를 적재할 DB (SRC 선택 항목 존재 여부 확인)"
             endpoint={dest}
             onChange={(next) => {
-              // 접속정보가 바뀌면 기존 검증 결과는 무효화(재검증 필요)
-              setDestCheckResult(null);
-              setDestConnected(false);
+              const connectionChanged =
+                next.host !== dest.host ||
+                next.port !== dest.port ||
+                next.database !== dest.database ||
+                next.username !== dest.username ||
+                next.password !== dest.password;
+              if (connectionChanged) {
+                setDestCheckResult(null);
+                setDestConnected(false);
+              } else {
+                setDestCheckResult(null);
+              }
               setDest(next);
             }}
             onTestConnection={connectDest}
@@ -1020,6 +1082,7 @@ export function DbManagerImportContent({ onBack }: { onBack?: () => void }) {
             isConnecting={destConnecting}
             isConnected={destConnected}
             connectError={destError}
+            schemas={destSchemas}
             srcSelectedTables={src.selectedTables}
             onCheckExists={checkDestHasSrc}
             isChecking={destChecking}

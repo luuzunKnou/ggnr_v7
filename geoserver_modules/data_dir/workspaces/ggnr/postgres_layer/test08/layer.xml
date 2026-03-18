@@ -1,0 +1,19 @@
+<layer>
+  <name>test08</name>
+  <id>LayerInfoImpl--60cb52a7:19cdc4f170d:-7da6</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--60cb52a7:19cdc4f170d:-7da5</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:-7da7</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-15 05:23:58.611 UTC</dateCreated>
+  <dateModified>2026-03-15 05:23:58.683 UTC</dateModified>
+</layer>

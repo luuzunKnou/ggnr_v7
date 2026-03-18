@@ -8,6 +8,9 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
+import { finished } from 'node:stream/promises';
+import archiver from 'archiver';
 import iconv from 'iconv-lite';
 import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, getTableColumnInfo, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
 
@@ -461,7 +464,7 @@ function ensureDefineLayerEntry(layerName: string, geometryType?: ShpGeometryTyp
     let tables: Record<string, unknown>[] = defineRes.success && Array.isArray(defineRes.tables) ? defineRes.tables : [];
     const existing = tables.find((r) => String(r.define_table_name ?? '').trim() === layerName);
     if (!existing) {
-      tables = [...tables, { define_table_name: layerName, define_table_schema: 'layer', define_table_shp_type: shpType, define_table_kor_name: layerName, define_table_group: group ?? '', define_table_idx: 999 }];
+      tables = [...tables, { define_table_name: layerName, define_table_schema: 'layer', define_table_shp_type: shpType, define_table_kor_name: layerName, define_table_group: group ?? '', define_table_idx: 999, define_table_source: 'shp' }];
       return fs.mkdir(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true }).then(() =>
         fs.writeFile(DEFINE_LAYER_TABLES_PATH, JSON.stringify(tables, null, 2), 'utf-8')
       );
@@ -653,6 +656,8 @@ export async function createGeoServerStyleForShp(params: {
 
 export type ShpBatchResultItem = {
   file: string;
+  /** 상대 경로 (GGNR_DATA_DIR 기준). 이력 dhShpPath 저장 및 동기화 상세 변경값 지도 좌표계용 */
+  pathOrResult?: string;
   table: { success: boolean; skipped?: boolean; error?: string };
   layer: { success: boolean; skipped?: boolean; error?: string };
   style: { success: boolean; skipped?: boolean; error?: string };
@@ -699,6 +704,7 @@ export async function processShpBatch(params: {
   for (const row of rows) {
     const item: ShpBatchResultItem = {
       file: row.sourceFile,
+      pathOrResult: row.pathOrResult,
       table: { success: false },
       layer: { success: false },
       style: { success: false },
@@ -775,6 +781,7 @@ export async function processShpBatch(params: {
           type: r.table.skipped ? '업데이트' : '신규',
           contents: allOk ? '모두 완료' : errors.join(' / '),
           result: allOk ? '성공' : '실패',
+          shpPath: r.pathOrResult ?? undefined,
         };
       });
       await createLayerDetailHistoryBatch({ lhKey: histRes.lhKey, details });
@@ -937,33 +944,42 @@ export type LayerStatusRow = {
   style: boolean;
   define: boolean;
   updatedAt: string | null;
+  /** DB 스키마 (레이어 상태 필터용) */
+  dbSchema: 'layer' | 'public_layer';
 };
 
 /**
- * layer 스키마의 전체 테이블 기준 레이어 상태 목록.
+ * layer 또는 public_layer 스키마 테이블 기준 레이어 상태 목록.
  * DB table, GeoServer layer/style, defineLayer 존재 여부를 종합.
  */
-export async function getLayerStatusList(): Promise<{
+export async function getLayerStatusList(params?: {
+  schema?: 'layer' | 'public_layer';
+}): Promise<{
   success: boolean;
   rows: LayerStatusRow[];
   error?: string;
 }> {
+  const dbSchema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
   try {
     const [tableListRes, geomTypesRes, defineRes] = await Promise.all([
       getLayerTableList(),
-      getLayerTableGeometryTypes(),
+      getLayerTableGeometryTypes({ schema: dbSchema }),
       getDefineLayerTables(),
     ]);
 
-    const layerTables = (tableListRes.tables ?? []).filter((t) => t.schema === 'layer');
+    const layerTables = (tableListRes.tables ?? []).filter((t) => t.schema === dbSchema);
     const geomTypes = geomTypesRes.success ? geomTypesRes.types : {};
 
     const defineMap = new Map<string, { korName: string; group: string; shpType: string }>();
     const defineFieldSet = new Set<string>();
+    const excelSourceTableSet = new Set<string>();
     if (defineRes.success && Array.isArray(defineRes.tables)) {
       for (const row of defineRes.tables) {
         const name = String(row.define_table_name ?? '').trim();
         if (!name) continue;
+        if (String((row as Record<string, unknown>).define_table_source ?? '').toLowerCase() === 'excel') {
+          excelSourceTableSet.add(name);
+        }
         defineMap.set(name, {
           korName: String(row.define_table_kor_name ?? '').trim() || name,
           group: String(row.define_table_group ?? '').trim(),
@@ -1013,21 +1029,24 @@ export async function getLayerStatusList(): Promise<{
       }
     } catch { /* ignore */ }
 
-    const rows: LayerStatusRow[] = layerTables.map((t) => {
-      const def = defineMap.get(t.table);
-      return {
-        tableName: t.table,
-        korName: def?.korName ?? t.table,
-        group: def?.group ?? '',
-        geometryType: geomTypes[t.table] ?? null,
-        shpType: def?.shpType ?? '',
-        table: true,
-        layer: geoLayerSet.has(t.table),
-        style: geoStyleSet.has(t.table),
-        define: defineMap.has(t.table) && defineFieldSet.has(t.table),
-        updatedAt: updateDates[t.table] ?? null,
-      };
-    });
+    let rows: LayerStatusRow[] = layerTables
+      .filter((t) => dbSchema === 'public_layer' || !excelSourceTableSet.has(t.table))
+      .map((t) => {
+        const def = defineMap.get(t.table);
+        return {
+          tableName: t.table,
+          korName: def?.korName ?? t.table,
+          group: def?.group ?? '',
+          geometryType: geomTypes[t.table] ?? null,
+          shpType: def?.shpType ?? '',
+          table: true,
+          layer: geoLayerSet.has(t.table),
+          style: geoStyleSet.has(t.table),
+          define: defineMap.has(t.table) && defineFieldSet.has(t.table),
+          updatedAt: updateDates[t.table] ?? null,
+          dbSchema,
+        };
+      });
 
     rows.sort((a, b) => (a.group || 'zzz').localeCompare(b.group || 'zzz') || a.tableName.localeCompare(b.tableName));
     return { success: true, rows };
@@ -1553,6 +1572,70 @@ export async function rollbackSyncRows(params: {
 }
 
 /**
+ * 롤백된(sl_rolled_back=true) 항목을 다시 적용한다.
+ * sl_operation 기준으로 INSERT/UPDATE/DELETE 수행 후 sl_rolled_back 해제.
+ */
+export async function reapplySyncRows(params: {
+  slKeys: number[];
+}): Promise<{ success: boolean; reappliedCount: number; error?: string }> {
+  const slKeys = params?.slKeys;
+  if (!slKeys?.length) return { success: false, reappliedCount: 0, error: 'slKeys가 필요합니다.' };
+
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+
+    const keyList = slKeys.join(', ');
+    const logRes = await db.execute(sql.raw(
+      `SELECT sl_key, sl_table_name, sl_key_field, sl_key_value, sl_operation, sl_old_data, sl_new_data
+       FROM sync_log WHERE sl_key IN (${keyList}) AND sl_rolled_back = true AND sl_operation IN ('append','conflict','remove') ORDER BY sl_key`
+    ));
+    const logs = logRes.rows as Array<{
+      sl_key: number; sl_table_name: string; sl_key_field: string;
+      sl_key_value: string; sl_operation: string;
+      sl_old_data: Record<string, unknown> | null; sl_new_data: Record<string, unknown> | null;
+    }>;
+
+    if (logs.length === 0) return { success: true, reappliedCount: 0 };
+
+    let reappliedCount = 0;
+
+    for (const log of logs) {
+      const { sl_table_name: tbl, sl_key_field: kf, sl_key_value: kv, sl_operation: op, sl_old_data: oldData, sl_new_data: newData } = log;
+      const safeKv = kv.replace(/'/g, "''");
+
+      if (op === 'append' && newData) {
+        const cols = Object.keys(newData).filter((c) => c !== 'ogc_fid');
+        const colNames = cols.map((c) => `"${c}"`).join(', ');
+        const vals = cols.map((c) => sqlVal(c, newData[c])).join(', ');
+        await db.execute(sql.raw(`INSERT INTO layer."${tbl}" (${colNames}) VALUES (${vals})`));
+      } else if (op === 'conflict' && oldData && newData) {
+        const cols = Object.keys(newData).filter((c) => c !== 'ogc_fid' && c !== kf && c !== 'geom');
+        if (cols.length > 0) {
+          const setClauses = cols.map((c) => `"${c}" = ${sqlVal(c, newData[c])}`).join(', ');
+          await db.execute(sql.raw(
+            `UPDATE layer."${tbl}" SET ${setClauses} WHERE "${kf}"::text = '${safeKv}'`
+          ));
+        }
+      } else if (op === 'remove') {
+        await db.execute(sql.raw(
+          `DELETE FROM layer."${tbl}" WHERE "${kf}"::text = '${safeKv}'`
+        ));
+      }
+
+      await db.execute(sql.raw(
+        `UPDATE sync_log SET sl_rolled_back = false, sl_rolled_back_at = NULL WHERE sl_key = ${log.sl_key}`
+      ));
+      reappliedCount++;
+    }
+
+    return { success: true, reappliedCount };
+  } catch (e: unknown) {
+    return { success: false, reappliedCount: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
  * SHP 파일에서 특정 키 값의 행 데이터를 읽어온다.
  * kept 항목에 sl_new_data가 없을 때 SHP에서 직접 값을 조회하는 용도.
  */
@@ -1623,6 +1706,106 @@ export async function readShpValues(params: {
     await db.execute(sql.raw(`DROP TABLE IF EXISTS layer."${syncTableName}"`)).catch(() => {});
     return { success: false, rows: {}, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * layer 스키마 테이블을 EPSG:5181 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
+ * Excel 데이터 상태 탭 등에서 SHP 다운로드용.
+ */
+export async function exportLayerTableToShp(params: {
+  tableName: string;
+  schema?: 'layer' | 'public_layer';
+}): Promise<{ success: boolean; zipBuffer?: Buffer; error?: string }> {
+  const tableName = (params?.tableName ?? '').trim().replace(/[^a-zA-Z0-9_]/g, '_') || undefined;
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
+
+  const tmpBase = path.join(GGNR_DATA_DIR, 'tmp');
+  const tempDir = path.join(tmpBase, `shp_export_${schema}_${tableName}_${Date.now()}`);
+  const outShp = path.join(tempDir, `${tableName}.shp`);
+
+  try {
+    await fs.mkdir(tempDir, { recursive: true });
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const dbCfg = getDbConfig();
+  const pgConn = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
+  const layerTable = `${schema}.${tableName}`;
+
+  /**
+   * public_layer.jijuk 등: geometry_columns SRID=0인데 실제 좌표는 5181 → -s_srs로 소스 고정.
+   * layer 스키마(엑셀 등 4326→5181 저장)는 DB 메타 SRID를 따름.
+   */
+  const ogrBase: string[] = [
+    '-f', 'ESRI Shapefile',
+    outShp,
+    pgConn,
+    layerTable,
+  ];
+  if (schema === 'public_layer') {
+    ogrBase.push('-s_srs', 'EPSG:5181');
+  }
+  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', 'ENCODING=UTF-8');
+  const result = await runOgr2ogr(ogrBase);
+
+  let shpSize = 0;
+  try {
+    shpSize = (await fs.stat(outShp)).size;
+  } catch {
+    shpSize = 0;
+  }
+  if (shpSize < 100) {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fs.mkdir(tempDir, { recursive: true }).catch(() => {});
+    const sql = `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
+    const retryArgs: string[] = ['-f', 'ESRI Shapefile', outShp, pgConn, '-sql', sql];
+    if (schema === 'public_layer') {
+      retryArgs.push('-s_srs', 'EPSG:5181');
+    }
+    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', 'ENCODING=UTF-8');
+    const result2 = await runOgr2ogr(retryArgs);
+    try {
+      shpSize = (await fs.stat(outShp)).size;
+    } catch {
+      shpSize = 0;
+    }
+    if (shpSize < 100) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      const tail =
+        (result2.stderr ?? result.stderr ?? '').split(/\r?\n/).filter(Boolean).slice(-4).join(' ').slice(-450) ||
+        `ogr2ogr 코드 ${result2.code}`;
+      return {
+        success: false,
+        error: `SHP 생성 실패(jijuk 등 일부 행 좌표계·지오메트리 오류). ${tail}`,
+      };
+    }
+    if (result2.code !== 0) {
+      console.warn(`[exportLayerTableToShp] ${schema}.${tableName} 2차(SQL) ogr2ogr exit ${result2.code} (일부 행 생략)`);
+    }
+  } else if (result.code !== 0) {
+    console.warn(`[exportLayerTableToShp] ${schema}.${tableName} ogr2ogr exit ${result.code} (일부 행 생략, shp ${shpSize}b)`);
+  }
+
+  const chunks: Buffer[] = [];
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  const out = new PassThrough();
+  out.on('data', (c: Buffer) => chunks.push(c));
+  archive.on('error', (err: Error) => {
+    console.error('[exportLayerTableToShp] archiver error:', err);
+  });
+  archive.pipe(out);
+  archive.directory(tempDir, false);
+  await archive.finalize();
+  await finished(out);
+  const zipBuffer = Buffer.concat(chunks);
+  console.log(`[exportLayerTableToShp] ${tableName} zip ${zipBuffer.length} bytes`);
+
+  await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  await fs.mkdir(tmpBase, { recursive: true }).catch(() => {});
+
+  return { success: true, zipBuffer };
 }
 
 

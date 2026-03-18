@@ -307,6 +307,28 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
     }
   };
 
+  const handleReapplyOne = async (slKey: number) => {
+    if (!confirm('이 항목을 다시 적용하시겠습니까?')) return;
+    setBusyKey(slKey);
+    try {
+      const res = await call('', 'POST', {
+        service: 'shpUploadService',
+        action: 'reapplySyncRows',
+        params: { slKeys: [slKey] },
+      });
+      const d = res?.data ?? res;
+      if (d?.success) {
+        await afterAction();
+      } else {
+        alert(d?.error ?? '다시 적용 실패');
+      }
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const handleApplyAll = async () => {
     if (!confirm(`미결 ${pendingRows.length}건을 모두 SHP 값으로 반영하시겠습니까?`)) return;
     setBulkBusy(true);
@@ -521,41 +543,51 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
                             </span>
                           </td>
                           <td className="py-1.5 px-2 text-center align-top" rowSpan={fr.rowSpan} onClick={(e) => e.stopPropagation()}>
-                            {!fr.isRolledBack && (
-                              fr.isPending ? (
-                                <div className="flex items-center justify-center gap-1">
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center gap-0.5 text-[10px] text-orange-600 hover:underline font-medium disabled:opacity-40"
-                                    onClick={() => handleApplyOne(fr.slKey)}
-                                    disabled={isBusy || bulkBusy}
-                                  >
-                                    {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                                    반영
-                                  </button>
-                                  <span className="text-muted-foreground">|</span>
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:underline font-medium disabled:opacity-40"
-                                    onClick={() => handleKeepOne(fr.slKey)}
-                                    disabled={isBusy || bulkBusy}
-                                  >
-                                    {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                    유지
-                                  </button>
-                                </div>
-                              ) : fr.operation !== 'kept' ? (
+                            {fr.isRolledBack ? (
+                              fr.operation !== 'kept' ? (
                                 <button
                                   type="button"
-                                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-red-500 hover:underline font-medium disabled:opacity-40"
-                                  onClick={() => handleRollbackOne(fr.slKey)}
+                                  className="inline-flex items-center gap-0.5 text-[10px] text-green-600 hover:underline font-medium disabled:opacity-40"
+                                  onClick={() => handleReapplyOne(fr.slKey)}
                                   disabled={isBusy}
                                 >
-                                  {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                                  롤백
+                                  {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                                  다시 적용
                                 </button>
                               ) : null
-                            )}
+                            ) : fr.isPending ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-0.5 text-[10px] text-orange-600 hover:underline font-medium disabled:opacity-40"
+                                  onClick={() => handleApplyOne(fr.slKey)}
+                                  disabled={isBusy || bulkBusy}
+                                >
+                                  {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                                  반영
+                                </button>
+                                <span className="text-muted-foreground">|</span>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:underline font-medium disabled:opacity-40"
+                                  onClick={() => handleKeepOne(fr.slKey)}
+                                  disabled={isBusy || bulkBusy}
+                                >
+                                  {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                                  유지
+                                </button>
+                              </div>
+                            ) : fr.operation !== 'kept' ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-red-500 hover:underline font-medium disabled:opacity-40"
+                                onClick={() => handleRollbackOne(fr.slKey)}
+                                disabled={isBusy}
+                              >
+                                {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                                롤백
+                              </button>
+                            ) : null}
                           </td>
                           <td className="py-1.5 px-2 font-mono text-[10px] align-top truncate min-w-[200px] max-w-[200px]" rowSpan={fr.rowSpan} title={fr.keyValue}>
                             {fr.keyValue}
@@ -745,43 +777,54 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
               </div>
               <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t">
                 <div className="flex items-center gap-2">
-                  {!detailLog.sl_rolled_back && (
-                    isPending ? (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={async (e) => { e.stopPropagation(); await handleApplyOne(detailLog.sl_key); closeDetail(); }}
-                          disabled={isBusyDetail || bulkBusy}
-                        >
-                          {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />}
-                          반영
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={async (e) => { e.stopPropagation(); await handleKeepOne(detailLog.sl_key); closeDetail(); }}
-                          disabled={isBusyDetail || bulkBusy}
-                        >
-                          {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
-                          유지
-                        </Button>
-                      </>
-                    ) : op !== 'kept' ? (
+                  {detailLog.sl_rolled_back ? (
+                    op !== 'kept' ? (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs"
-                        onClick={async (e) => { e.stopPropagation(); await handleRollbackOne(detailLog.sl_key); closeDetail(); }}
+                        onClick={async (e) => { e.stopPropagation(); await handleReapplyOne(detailLog.sl_key); closeDetail(); }}
                         disabled={isBusyDetail}
                       >
-                        {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RotateCcw className="w-3 h-3 mr-1" />}
-                        롤백
+                        {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />}
+                        다시 적용
                       </Button>
                     ) : null
-                  )}
+                  ) : isPending ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={async (e) => { e.stopPropagation(); await handleApplyOne(detailLog.sl_key); closeDetail(); }}
+                        disabled={isBusyDetail || bulkBusy}
+                      >
+                        {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />}
+                        반영
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={async (e) => { e.stopPropagation(); await handleKeepOne(detailLog.sl_key); closeDetail(); }}
+                        disabled={isBusyDetail || bulkBusy}
+                      >
+                        {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
+                        유지
+                      </Button>
+                    </>
+                  ) : op !== 'kept' ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={async (e) => { e.stopPropagation(); await handleRollbackOne(detailLog.sl_key); closeDetail(); }}
+                      disabled={isBusyDetail}
+                    >
+                      {isBusyDetail ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RotateCcw className="w-3 h-3 mr-1" />}
+                      롤백
+                    </Button>
+                  ) : null}
                 </div>
                 <Button variant="outline" size="sm" onClick={closeDetail}>닫기</Button>
               </div>

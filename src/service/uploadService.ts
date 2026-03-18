@@ -21,7 +21,7 @@ function getUploadTempDir(uploadId: string): string {
 }
 
 type UploadMeta = {
-  uploadType: 'tif' | 'las' | 'shp';
+  uploadType: 'tif' | 'las' | 'shp' | 'excel';
   fileName: string;
   totalSize: number;
   expectedChunks: number;
@@ -38,13 +38,13 @@ export type InitChunkedUploadResult = {
  * 청크 업로드 초기화. uploadId와 메타데이터 저장.
  */
 export async function initChunkedUpload(params: {
-  uploadType: 'tif' | 'las' | 'shp';
+  uploadType: 'tif' | 'las' | 'shp' | 'excel';
   fileName: string;
   totalSize: number;
 }): Promise<InitChunkedUploadResult> {
   const { uploadType, fileName, totalSize } = params;
-  if (uploadType !== 'tif' && uploadType !== 'las' && uploadType !== 'shp') {
-    throw new Error('uploadType must be tif, las, or shp');
+  if (uploadType !== 'tif' && uploadType !== 'las' && uploadType !== 'shp' && uploadType !== 'excel') {
+    throw new Error('uploadType must be tif, las, shp, or excel');
   }
   const expectedChunks = Math.ceil(totalSize / CHUNK_SIZE) || 1;
   const uploadId = nanoid();
@@ -124,12 +124,19 @@ export async function completeChunkedUpload(params: {
     subDir = 'upload_data/tif';
   } else if (meta.uploadType === 'shp') {
     subDir = 'service_data/shp_data';
+  } else if (meta.uploadType === 'excel') {
+    subDir = 'service_data/excel_data';
   } else {
     subDir = 'upload_data/las';
   }
   const targetDir = path.join(base, subDir);
-  const targetPath = path.join(targetDir, meta.fileName);
-  const normalized = path.normalize(meta.fileName).replace(/\\/g, '/');
+  // Excel: 파일명 앞에 YYYYMMDDHHmmss 접두어로 덮어쓰기 방지
+  const saveFileName =
+    meta.uploadType === 'excel'
+      ? `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}_${meta.fileName}`
+      : meta.fileName;
+  const targetPath = path.join(targetDir, saveFileName);
+  const normalized = path.normalize(saveFileName).replace(/\\/g, '/');
   if (normalized.includes('..') || path.isAbsolute(normalized)) {
     throw new Error('Invalid fileName path');
   }
@@ -145,7 +152,7 @@ export async function completeChunkedUpload(params: {
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   const savedPath = `${subDir}/${normalized}`;
 
-  if (meta.uploadType !== 'shp') {
+  if (meta.uploadType !== 'shp' && meta.uploadType !== 'excel') {
     await appendUploadConvertHistory({
       at: new Date().toISOString(),
       kind: 'upload',

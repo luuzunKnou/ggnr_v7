@@ -26,6 +26,7 @@ const BASE_STRUCTURE = [
   'upload_data/tif',
   'upload_data/las',
   'service_data/shp_data',
+  'service_data/excel_data',
   '.meta',
 ] as const;
 
@@ -78,7 +79,7 @@ export async function listDirectory(params: {
     if (code === 'ENOENT') {
       const base = getBaseDir();
       const rel = path.relative(base, dir).replace(/\\/g, '/');
-      if (rel.startsWith('service_data/shp_data') && !rel.includes('..')) {
+      if ((rel.startsWith('service_data/shp_data') || rel.startsWith('service_data/excel_data')) && !rel.includes('..')) {
         await fs.mkdir(dir, { recursive: true });
         stat = await fs.stat(dir);
       } else {
