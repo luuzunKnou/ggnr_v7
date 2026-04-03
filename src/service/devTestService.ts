@@ -15,6 +15,7 @@ import {
   type GeometryType,
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
+import { normalizeDefineTableSource } from '@/lib/defineLayerTablesNormalize';
 
 /** 심볼 베이스 URL (GeoServer가 이미지를 요청할 주소). NEXT_PUBLIC_APP_URL 없으면 localhost:3000 */
 const SYMBOL_BASE_URL =
@@ -1218,6 +1219,7 @@ type DefineLayerRow = {
   define_table_kor_name?: string;
   define_table_group?: string;
   define_table_idx?: string | number;
+  define_table_source?: string;
   [key: string]: unknown;
 };
 
@@ -1252,6 +1254,7 @@ export async function getDefineLayerTables(): Promise<{
     if (!Array.isArray(tables)) {
       return { success: false, error: 'Invalid tables format', tables: [] };
     }
+    normalizeDefineTableSource(tables as Record<string, unknown>[]);
     return { success: true, tables: sortDefineLayerTables(tables) };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1264,6 +1267,8 @@ const VALID_GEOMETRY_TYPES = new Set<string>(['POINT', 'LINE', 'POLYGON']);
 /**
  * GeoServer 레이어 목록: 전체 레이어 목록은 tables.json(defineLayer) 기준으로 조회.
  * 도형 타입·제목은 tables.json, 발행 여부·styleName은 GeoServer API, 스타일 보유(hasCssStyle)는 data_dir/styles 폴더 기준.
+ * 분할 레이어(define_table_parents_layer + define_table_div_query)는 자식 이름에 해당하는 물리 테이블이 없어도
+ * 부모 테이블이 layer 스키마에 있으면 tableExists를 true로 둔다(레이어 정보관리 기본 목록 노출용).
  */
 export async function getGeoServerLayersWithStyleInfo(params: {
   url?: string;
@@ -1292,6 +1297,13 @@ export async function getGeoServerLayersWithStyleInfo(params: {
       const layerName = String(row.define_table_name ?? '').trim();
       if (!layerName) continue;
 
+      const parentLayer = String(row.define_table_parents_layer ?? '').trim();
+      const divQ = String(row.define_table_div_query ?? '').trim();
+      const isSplitChild = Boolean(parentLayer && divQ);
+      const tableExists =
+        dbLayerTableSet.has(layerName) ||
+        (isSplitChild && dbLayerTableSet.has(parentLayer));
+
       const shpType = String(row.define_table_shp_type ?? '').toUpperCase();
       const geometryType = VALID_GEOMETRY_TYPES.has(shpType)
         ? (shpType as GeometryType)
@@ -1304,7 +1316,6 @@ export async function getGeoServerLayersWithStyleInfo(params: {
         baseUrl,
         `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
       );
-      const tableExists = dbLayerTableSet.has(layerName);
 
       if (!layerRes.ok) {
         layers.push({

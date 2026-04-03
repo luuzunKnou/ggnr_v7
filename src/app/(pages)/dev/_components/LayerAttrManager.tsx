@@ -605,7 +605,7 @@ export function LayerAttrManager() {
 
                     return (
                       <div
-                        key={String(row.define_field_name ?? listIndex)}
+                        key={fieldIdx}
                         className="grid border-b hover:bg-muted/50 w-full min-w-0"
                         style={{
                           gridTemplateColumns: getGridTemplateColumns(),

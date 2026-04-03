@@ -101,7 +101,7 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<CesiumViewer | null>(null);
-  const tilesetsRef = useRef<Map<string, Cesium3DTileset>>(new Map());
+  const tilesetsRef = useRef<globalThis.Map<string, Cesium3DTileset>>(new Map());
   const visibleRef = useRef<Set<string>>(new Set());
   const globeVisibleRef = useRef(globeVisible);
   const [viewerReady, setViewerReady] = useState(false);

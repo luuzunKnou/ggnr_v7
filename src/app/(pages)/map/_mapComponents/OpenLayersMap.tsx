@@ -31,6 +31,17 @@ import { useFeatureIdentify } from './hooks/useFeatureIdentify';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
 import { getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
+import { collectOpenScanLayerTableNames } from '@/lib/mapServiceOpened';
+import {
+  isRiverBasicPlanMapAttachmentDefineTable,
+  riverBasicPlanIdentifyGeometryRank,
+  RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE,
+} from '@/lib/riverBasicPlanMapAttachmentLayers';
+import {
+  compareFeaturesByGeometryStackOrder,
+  mergeDefineLayerShpTypesIntoGeometryMap,
+  type LayerDbGeometryKind,
+} from '@/lib/mapLayerGeometryOrder';
 import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
@@ -42,6 +53,20 @@ import VectorLayer from 'ol/layer/Vector';
 import WKT from 'ol/format/WKT';
 import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
+
+function pickIdentifyOgcFid(data: Record<string, unknown> | undefined): number | null {
+  if (!data) return null;
+  const raw =
+    data.ogc_fid ??
+    data.OGC_FID ??
+    data.ogc_Fid ??
+    data.gid ??
+    data.GID ??
+    data.fid ??
+    data.FID;
+  const n = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
 
 // 다중 선택 가능한 아이템 ID 목록
 const MULTI_SELECT_IDS = [
@@ -95,6 +120,10 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   const backgroundPanelRef = useRef<HTMLDivElement>(null);
   const [backgroundPanelHeight, setBackgroundPanelHeight] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
+  /** PostGIS geometry_columns 기반 — WMS 다중 레이어 시 면→선→점 순으로 쌓기 */
+  const [layerGeometryTypes, setLayerGeometryTypes] = useState<
+    Record<string, LayerDbGeometryKind>
+  >({});
 
   // 자체항공영상(배경지도) 패널 높이 측정 → 지목/소유구분 maxHeight 기준으로 사용
   const backgroundPanelVisible =
@@ -218,12 +247,52 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
     layerPanelSelections
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+
+  useEffect(() => {
+    if (!mapReady) return;
+    let cancelled = false;
+    Promise.all([
+      call('', 'POST', {
+        service: 'devTestService',
+        action: 'getLayerTableGeometryTypes',
+        params: { schema: 'public_layer' },
+      }),
+      call('', 'POST', {
+        service: 'devTestService',
+        action: 'getLayerTableGeometryTypes',
+        params: {},
+      }),
+      fetch('/api/config/defineLayer').then((r) => r.json()),
+    ])
+      .then(([pubRes, layerRes, defineBody]) => {
+        if (cancelled) return;
+        const t0 =
+          (pubRes?.data?.types as Record<string, LayerDbGeometryKind> | undefined) ??
+          (pubRes?.types as Record<string, LayerDbGeometryKind> | undefined) ??
+          {};
+        const t1 =
+          (layerRes?.data?.types as Record<string, LayerDbGeometryKind> | undefined) ??
+          (layerRes?.types as Record<string, LayerDbGeometryKind> | undefined) ??
+          {};
+        const fromDb: Record<string, LayerDbGeometryKind> = { ...t0, ...t1 };
+        const tables = Array.isArray(defineBody?.data) ? defineBody.data : [];
+        setLayerGeometryTypes(mergeDefineLayerShpTypesIntoGeometryMap(fromDb, tables));
+      })
+      .catch(() => {
+        if (!cancelled) setLayerGeometryTypes({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady]);
+
   useServiceLayerSync(
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
     undefined,
-    spatialFilterWkt
+    spatialFilterWkt,
+    layerGeometryTypes
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -284,7 +353,11 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
     if (!mapReady || !mapInstanceRef.current || !spatialDrawRequest || !setSpatialDrawRequest) return;
     const map = mapInstanceRef.current;
     const source = new VectorSource();
-    const layer = new VectorLayer({ source, visible: true });
+    const layer = new VectorLayer({
+      source,
+      visible: true,
+      renderOrder: compareFeaturesByGeometryStackOrder,
+    });
     layer.set('spatialDrawLayer', true);
     const { type, onComplete } = spatialDrawRequest;
     const draw =
@@ -424,19 +497,164 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   // 지도 클릭 시 목록창(팝업) 없이 바로 '지도에서 선택된 항목' 데이터 패널로 열기
   useEffect(() => {
     if (totalIdentifyCount === 0 || !popupState?.results?.length || !mapContext) return;
-    const layer = popupState.results.find((r) => r.features.length > 0);
-    if (!layer) return;
-    const feature = totalIdentifyCount === 1 ? layer.features[0].data : null;
-    mapContext.setIdentifyResultList(popupState);
-    mapContext.setIdentifySelectedRow(feature);
-    const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
-    const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
-    const next = new URLSearchParams(Array.from(searchParams.entries()));
-    next.set('opened', nextOpened.join(','));
-    next.set('dataTable', layer.tableName);
-    next.delete('dataKey');
-    router.push(`/map?${next.toString()}`);
-    closePopup();
+    let cancelled = false;
+
+    const run = async () => {
+      const withFeat = popupState.results.filter((r) => r.features.length > 0);
+      if (withFeat.length === 0) return;
+
+      const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+      const openedTokens = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
+
+      let openScanLayers = new Set<string>();
+      try {
+        const res = await call('', 'POST', {
+          service: 'configService',
+          action: 'getServiceList',
+          params: {},
+        });
+        if (cancelled) return;
+        const body = res?.data ?? res;
+        const ser = Array.isArray(body?.ser) ? body.ser : [];
+        openScanLayers = collectOpenScanLayerTableNames(openedTokens, ser);
+      } catch {
+        if (cancelled) return;
+        openScanLayers = new Set();
+      }
+
+      const hitOpenScan = withFeat.some((r) => openScanLayers.has(String(r.tableName ?? '').trim()));
+
+      /** 패널 열림: 색인도 + 종·횡단 + 구조물 — 겹치면 포인트 → 라인 → 폴리곤. 구조물 분할은 open_scan 미등록이어도 식별되면 처리 */
+      if (mapContext?.riverBasicPlanPanelOpen) {
+        type RbpHit = (typeof withFeat)[number];
+        const cands: { tableName: string; rank: number; wi: number; layer: RbpHit }[] = [];
+        for (let wi = 0; wi < withFeat.length; wi++) {
+          const r = withFeat[wi];
+          const tn = String(r.tableName ?? '').trim();
+          if (!tn) continue;
+          if (tn === RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE && openScanLayers.has(tn)) {
+            cands.push({
+              tableName: tn,
+              rank: riverBasicPlanIdentifyGeometryRank(tn),
+              wi,
+              layer: r,
+            });
+          } else if (isRiverBasicPlanMapAttachmentDefineTable(tn)) {
+            cands.push({
+              tableName: tn,
+              rank: riverBasicPlanIdentifyGeometryRank(tn),
+              wi,
+              layer: r,
+            });
+          }
+        }
+        if (cands.length > 0) {
+          cands.sort((a, b) => {
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            return a.wi - b.wi;
+          });
+          const best = cands[0]!;
+          const hitLayer = best.layer;
+
+          if (best.tableName === RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE) {
+            const fid = pickIdentifyOgcFid(hitLayer.features[0]?.data);
+            if (fid == null) {
+              if (cancelled) return;
+              window.alert('식별된 색인도 도형의 고유 ID(ogc_fid)를 읽을 수 없습니다.');
+              closePopup();
+              return;
+            }
+            try {
+              const pickRes = await call('', 'POST', {
+                service: 'riverBasicPlanService',
+                action: 'getRiverBasicPlanPickFromIndex',
+                params: { indexOgcFid: fid },
+              });
+              if (cancelled) return;
+              const pdata = pickRes?.data ?? pickRes;
+              const riverName = String(pdata?.riverName ?? '').trim();
+              if (!riverName) {
+                window.alert(
+                  '클릭한 색인도와 겹치는 기본계획(폴리곤)을 찾지 못했습니다. 하천·연도 데이터를 확인해 주세요.',
+                );
+                closePopup();
+                return;
+              }
+              const tab = pdata?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+              mapContext.applyRiverBasicPlanMapPickRef.current?.({
+                riverName,
+                tab,
+              });
+              mapContext.setRiverBasicPlanIndexFromMap({
+                indexOgcFid: fid,
+                planYear: String(pdata?.planYear ?? '').trim(),
+                planName: String(pdata?.planName ?? '').trim(),
+              });
+            } catch (e) {
+              if (cancelled) return;
+              window.alert(e instanceof Error ? e.message : '색인도 연계 정보를 불러오지 못했습니다.');
+            }
+            closePopup();
+            return;
+          }
+
+          const tableName = String(hitLayer.tableName ?? '').trim();
+          const row = hitLayer.features[0]?.data;
+          const drawingOgcFid = pickIdentifyOgcFid(row);
+          try {
+            const pickRes = await call('', 'POST', {
+              service: 'riverBasicPlanService',
+              action: 'getRiverBasicPlanDrawingPickFromIdentify',
+              params: {
+                defineTableName: tableName,
+                ogcFid: drawingOgcFid ?? undefined,
+                row: row ?? null,
+              },
+            });
+            if (cancelled) return;
+            const pick = pickRes?.data ?? pickRes;
+            const fileLayer = String(pick?.fileLayer ?? '').trim();
+            const fileKey = String(pick?.fileKey ?? '').trim();
+            if (!fileLayer || !fileKey) {
+              window.alert('첨부 경로를 확인할 수 없습니다. 피처 속성·키 필드 설정을 확인해 주세요.');
+              closePopup();
+              return;
+            }
+            mapContext.setRiverBasicPlanDrawingFromMap({ fileLayer, fileKey });
+          } catch (e) {
+            if (cancelled) return;
+            window.alert(e instanceof Error ? e.message : '도면 첨부 정보를 불러오지 못했습니다.');
+          }
+          closePopup();
+          return;
+        }
+      }
+
+      if (hitOpenScan) {
+        if (cancelled) return;
+        window.alert('하천 기본계획 패널이 열린 상태입니다. 스캔 보기는 추후 구현 예정입니다.');
+        closePopup();
+        return;
+      }
+
+      const layer = withFeat.find((r) => r.isSplitLayer) ?? withFeat[0];
+      if (!layer) return;
+      const feature = totalIdentifyCount === 1 ? layer.features[0].data : null;
+      mapContext.setIdentifyResultList(popupState);
+      mapContext.setIdentifySelectedRow(feature);
+      const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
+      const next = new URLSearchParams(Array.from(searchParams.entries()));
+      next.set('opened', nextOpened.join(','));
+      next.set('dataTable', layer.tableName);
+      next.delete('dataKey');
+      router.push(`/map?${next.toString()}`);
+      closePopup();
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [totalIdentifyCount, popupState, mapContext, searchParams, router, closePopup]);
 
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적

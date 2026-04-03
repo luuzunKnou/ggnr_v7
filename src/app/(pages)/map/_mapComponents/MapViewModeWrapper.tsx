@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Map, Box, Crosshair, Globe } from 'lucide-react';
 import OpenLayersMap from './OpenLayersMap';
 import type { CesiumMapRef } from '../../3dMap/CesiumMap';
-import { useSearchBarOffset } from '../layout';
+import { useSearchBarOffset } from '../map-layout-client';
 import { call } from '@/lib/api';
 
 const CesiumMap = dynamic(() => import('../../3dMap/CesiumMap'), { ssr: false });

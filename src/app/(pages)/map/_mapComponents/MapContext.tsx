@@ -14,7 +14,7 @@ export type SelectedDetail = {
   layerName: string;
   tableName: string;
   row: Record<string, unknown>;
-  fields: { define_field_name?: string; define_field_kor_name?: string }[];
+  fields: { define_field_name?: string; define_field_kor_name?: string; define_field_is_key?: string }[];
 } | null;
 
 /** 우클릭 주소정보 패널 상태 */
@@ -97,6 +97,38 @@ export type MapContextValue = {
   /** VWorld API 키 (주소 검색·역지오코딩). 서버 getMapConfig로 조회 후 설정 */
   vworldApiKey: string;
   setVworldApiKey: Dispatch<SetStateAction<string>>;
+  /** 하천기본계획 패널(URL opened) 열림 — 지도 식별 시 색인도 처리 분기용 */
+  riverBasicPlanPanelOpen: boolean;
+  setRiverBasicPlanPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 하천기본계획 목록에서 선택된 하천명 (상세 패널 표시 시) */
+  riverBasicPlanSelectedRiver: string;
+  setRiverBasicPlanSelectedRiver: Dispatch<SetStateAction<string>>;
+  /**
+   * 지도 색인도 식별 직후 레이아웃이 하천·탭을 먼저 반영하도록 호출 (렌더마다 MapLayout에서 할당)
+   */
+  applyRiverBasicPlanMapPickRef: MutableRefObject<
+    ((pick: { riverName: string; tab: 'river' | 'smallRiver' }) => void) | null
+  >;
+  /** 지도에서 색인도(river_d_index) 클릭 시 상세 패널이 소비 후 null로 초기화 */
+  riverBasicPlanIndexFromMap: {
+    indexOgcFid: number;
+    planYear?: string;
+    planName?: string;
+  } | null;
+  setRiverBasicPlanIndexFromMap: Dispatch<
+    SetStateAction<{
+      indexOgcFid: number;
+      planYear?: string;
+      planName?: string;
+    } | null>
+  >;
+  /** 종단·횡단·구조물도 지도 식별 시 도면보기 — RiverBasicPlanMapDrawingFromMapHandler가 소비 */
+  riverBasicPlanDrawingFromMap: { fileLayer: string; fileKey: string } | null;
+  setRiverBasicPlanDrawingFromMap: Dispatch<
+    SetStateAction<{ fileLayer: string; fileKey: string } | null>
+  >;
+  /** 상세목록 도면보기 열 때 지도 식별로 연 전체화면 미리보기 닫기 */
+  riverBasicPlanMapDrawingPreviewControllerRef: MutableRefObject<{ close: () => void } | null>;
 } | null;
 
 const MapContext = createContext<MapContextValue>(null);
@@ -121,6 +153,21 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
   const [vworldApiKey, setVworldApiKey] = useState('');
+  const [riverBasicPlanPanelOpen, setRiverBasicPlanPanelOpen] = useState(false);
+  const [riverBasicPlanSelectedRiver, setRiverBasicPlanSelectedRiver] = useState('');
+  const applyRiverBasicPlanMapPickRef = useRef<
+    ((pick: { riverName: string; tab: 'river' | 'smallRiver' }) => void) | null
+  >(null);
+  const [riverBasicPlanIndexFromMap, setRiverBasicPlanIndexFromMap] = useState<{
+    indexOgcFid: number;
+    planYear?: string;
+    planName?: string;
+  } | null>(null);
+  const [riverBasicPlanDrawingFromMap, setRiverBasicPlanDrawingFromMap] = useState<{
+    fileLayer: string;
+    fileKey: string;
+  } | null>(null);
+  const riverBasicPlanMapDrawingPreviewControllerRef = useRef<{ close: () => void } | null>(null);
 
   return (
     <MapContext.Provider
@@ -154,6 +201,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setMapPaddingLeft,
         vworldApiKey,
         setVworldApiKey,
+        riverBasicPlanPanelOpen,
+        setRiverBasicPlanPanelOpen,
+        riverBasicPlanSelectedRiver,
+        setRiverBasicPlanSelectedRiver,
+        applyRiverBasicPlanMapPickRef,
+        riverBasicPlanIndexFromMap,
+        setRiverBasicPlanIndexFromMap,
+        riverBasicPlanDrawingFromMap,
+        setRiverBasicPlanDrawingFromMap,
+        riverBasicPlanMapDrawingPreviewControllerRef,
       }}
     >
       {children}

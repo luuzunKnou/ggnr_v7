@@ -5,6 +5,11 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {
+  assertSafeServiceFileBasename,
+  fileDataRelativeDir,
+  isServiceFileDataTmpMarkedFileName,
+} from '@/lib/serviceFileData';
 
 // 사업명 폴더 없이 데이터 루트가 곧 베이스. 환경변수 GGNR_DATA_DIR로 덮을 수 있음.
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
@@ -79,7 +84,12 @@ export async function listDirectory(params: {
     if (code === 'ENOENT') {
       const base = getBaseDir();
       const rel = path.relative(base, dir).replace(/\\/g, '/');
-      if ((rel.startsWith('service_data/shp_data') || rel.startsWith('service_data/excel_data')) && !rel.includes('..')) {
+      if (
+        (rel.startsWith('service_data/shp_data') ||
+          rel.startsWith('service_data/excel_data') ||
+          rel.startsWith('service_data/file_data')) &&
+        !rel.includes('..')
+      ) {
         await fs.mkdir(dir, { recursive: true });
         stat = await fs.stat(dir);
       } else {
@@ -115,6 +125,111 @@ export async function listDirectory(params: {
   directories.sort((a, b) => a.localeCompare(b));
   files.sort((a, b) => a.name.localeCompare(b.name));
   return { directories, files };
+}
+
+/**
+ * service_data/file_data/{layerName}/{keyValue}/ 내 파일 목록 (첨부 공통).
+ * 폴더가 없으면 빈 배열.
+ */
+export async function listServiceFileDataFiles(params: {
+  layerName: string;
+  keyValue: string;
+}): Promise<ListDirectoryResult['files']> {
+  const rel = fileDataRelativeDir(params.layerName, params.keyValue);
+  if (!rel) return [];
+  try {
+    const r = await listDirectory({ relativePath: rel });
+    return r.files.filter((f) => !isServiceFileDataTmpMarkedFileName(f.name));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 첨부파일 소프트 삭제: 원본을 `{파일명}.tmp` 로 rename (목록에서 제외).
+ */
+export async function softDeleteServiceFileDataItem(params: {
+  layerName: string;
+  keyValue: string;
+  fileName: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const safeName = assertSafeServiceFileBasename(params.fileName);
+  if (!safeName || isServiceFileDataTmpMarkedFileName(safeName)) {
+    return { ok: false, error: '유효하지 않은 파일명입니다.' };
+  }
+  const rel = fileDataRelativeDir(params.layerName, params.keyValue);
+  if (!rel) return { ok: false, error: '유효하지 않은 경로입니다.' };
+  const base = getBaseDir();
+  const dirAbs = path.resolve(path.join(base, ...rel.split('/')));
+  const baseResolved = path.resolve(base);
+  if (!dirAbs.startsWith(baseResolved)) {
+    return { ok: false, error: 'Forbidden' };
+  }
+  const srcAbs = path.resolve(path.join(dirAbs, safeName));
+  if (!srcAbs.startsWith(dirAbs + path.sep) && srcAbs !== dirAbs) {
+    return { ok: false, error: 'Forbidden' };
+  }
+  const dstAbs = srcAbs + '.tmp';
+  try {
+    const st = await fs.stat(srcAbs);
+    if (!st.isFile()) return { ok: false, error: '파일만 삭제할 수 있습니다.' };
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { ok: false, error: '파일을 찾을 수 없습니다.' };
+    return { ok: false, error: '확인 실패' };
+  }
+  try {
+    await fs.rename(srcAbs, dstAbs);
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'EEXIST') return { ok: false, error: '이미 삭제된 파일이 있습니다.' };
+    throw e;
+  }
+  return { ok: true };
+}
+
+const FILE_DATA_ROOT_REL = 'service_data/file_data';
+
+/**
+ * 개발자 모드 file_data 탐색기: 파일 또는 폴더(비어 있지 않아도) 삭제. file_data 루트 자체는 불가.
+ */
+export async function deleteFileDataPath(params: {
+  relativePath: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const raw = String(params?.relativePath ?? '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  if (!raw || raw.includes('..')) return { ok: false, error: '유효하지 않은 경로입니다.' };
+  if (!raw.startsWith(FILE_DATA_ROOT_REL)) {
+    return { ok: false, error: 'service_data/file_data 하위만 삭제할 수 있습니다.' };
+  }
+
+  const base = path.resolve(getBaseDir());
+  const prefixResolved = path.resolve(base, 'service_data', 'file_data');
+  const full = path.resolve(base, ...raw.split('/').filter(Boolean));
+
+  if (full === prefixResolved) {
+    return { ok: false, error: 'file_data 루트 폴더는 삭제할 수 없습니다.' };
+  }
+  const sep = path.sep;
+  if (!full.startsWith(prefixResolved + sep)) {
+    return { ok: false, error: 'Forbidden' };
+  }
+
+  try {
+    const st = await fs.stat(full);
+    if (st.isDirectory()) {
+      await fs.rm(full, { recursive: true, force: true });
+    } else {
+      await fs.unlink(full);
+    }
+    return { ok: true };
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code === 'ENOENT') return { ok: false, error: '대상을 찾을 수 없습니다.' };
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**

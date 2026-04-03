@@ -25,8 +25,13 @@ type LayerSchemaTable = { schema: string; table: string };
 interface LayerItemMeta {
   id: string;
   name: string;
+  /** URL·WMS·표시 키 (분할 레이어는 define_table_name) */
   tableName: string;
   schema: string;
+  /** PostGIS 조회용 테이블 (분할 시 부모) */
+  physicalTableName: string;
+  /** define_table_div_query → standardService에서 SQL 검증 */
+  rowFilterSql: string | null;
 }
 
 interface LayerGroupMeta {
@@ -171,12 +176,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           define_table_group?: string;
           define_table_schema?: string;
           define_table_idx?: string | number;
+          define_table_parents_layer?: string;
+          define_table_div_query?: string;
         };
         const metaArr: TableMeta[] = Array.isArray(metaRes?.data) ? metaRes.data : [];
 
         const metaMap = new Map<string, TableMeta>();
         for (const m of metaArr) {
-          const name = String(m.define_table_name ?? '').toLowerCase();
+          const name = String(m.define_table_name ?? '').trim().toLowerCase();
           if (name && (m.define_table_schema || 'layer').toLowerCase() === 'layer') {
             metaMap.set(name, m);
           }
@@ -185,7 +192,16 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         const groupMap = new Map<string, LayerItemMeta[]>();
         const groupOrder: string[] = [];
 
+        const parentTablesWithSplitDefs = new Set<string>();
+        for (const m of metaArr) {
+          if ((m.define_table_schema || 'layer').toLowerCase() !== 'layer') continue;
+          const p = String(m.define_table_parents_layer ?? '').trim().toLowerCase();
+          const divQ = String(m.define_table_div_query ?? '').trim();
+          if (p && divQ) parentTablesWithSplitDefs.add(p);
+        }
+
         for (const tblName of dbSet) {
+          if (parentTablesWithSplitDefs.has(tblName)) continue;
           const meta = metaMap.get(tblName);
           const groupName = meta?.define_table_group?.trim() || '기타';
           const korName = meta?.define_table_kor_name?.trim() || tblName;
@@ -198,6 +214,36 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             name: korName,
             tableName: tblName,
             schema: 'layer',
+            physicalTableName: tblName,
+            rowFilterSql: null,
+          });
+        }
+
+        for (const m of metaArr) {
+          const schemaM = (m.define_table_schema || 'layer').toLowerCase();
+          if (schemaM !== 'layer') continue;
+          const eng = String(m.define_table_name ?? '').trim();
+          if (!eng) continue;
+          const engLower = eng.toLowerCase();
+          const parent = String(m.define_table_parents_layer ?? '').trim();
+          const divQ = String(m.define_table_div_query ?? '').trim();
+          if (!parent || !divQ) continue;
+          const parentLower = parent.toLowerCase();
+          if (!dbSet.has(parentLower)) continue;
+          if (dbSet.has(engLower)) continue;
+          const groupName = String(m.define_table_group ?? '').trim() || '기타';
+          const korName = String(m.define_table_kor_name ?? '').trim() || eng;
+          if (!groupMap.has(groupName)) {
+            groupMap.set(groupName, []);
+            groupOrder.push(groupName);
+          }
+          groupMap.get(groupName)!.push({
+            id: engLower,
+            name: korName,
+            tableName: engLower,
+            schema: 'layer',
+            physicalTableName: parentLower,
+            rowFilterSql: divQ,
           });
         }
 
@@ -238,6 +284,20 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   const allTableNamesRef = useRef<string[]>(allTableNames);
   allTableNamesRef.current = allTableNames;
 
+  const layerTargets = useMemo(
+    () =>
+      layerGroups.flatMap((g) =>
+        g.layers.map((l) => ({
+          name: l.tableName,
+          table: l.physicalTableName,
+          rowFilter: l.rowFilterSql,
+        }))
+      ),
+    [layerGroups]
+  );
+  const layerTargetsRef = useRef(layerTargets);
+  layerTargetsRef.current = layerTargets;
+
   const startSpatialDraw = useCallback(
     (type: 'rectangle' | 'polygon' | 'circle') => {
       if (!setSpatialDrawRequest || !setSpatialFilterWkt || !setSpatialFilteredLayerNames) return;
@@ -248,8 +308,8 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         }
         return;
       }
-      const tables = allTableNamesRef.current;
-      if (tables.length === 0) return;
+      const targets = layerTargetsRef.current;
+      if (targets.length === 0) return;
       setActiveTool(type);
       setSpatialDrawRequest({
         type,
@@ -257,7 +317,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           call('', 'POST', {
             service: 'standardService',
             action: 'getLayersInGeometry',
-            params: { wkt: wkt5181, srid: 5181, tables, schema: 'layer' },
+            params: { wkt: wkt5181, srid: 5181, layerTargets: targets, schema: 'layer' },
           })
             .then((res) => {
               const data = res?.data ?? res;
@@ -287,14 +347,19 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   }, [setSpatialFilterWkt, setSpatialFilteredLayerNames]);
 
   useEffect(() => {
-    const tableNames = layerGroups.flatMap((g) => g.layers.map((l) => l.tableName));
-    const toFetch = tableNames.filter((t) => t && layerTotals[t] === undefined);
+    const flat = layerGroups.flatMap((g) => g.layers);
+    const toFetch = flat.filter((l) => l.tableName && layerTotals[l.tableName] === undefined);
     if (toFetch.length === 0) return;
-    toFetch.forEach((tableName) => {
+    toFetch.forEach((l) => {
+      const tableName = l.tableName;
       call('', 'POST', {
         service: 'standardService',
         action: 'getTableCount',
-        params: { table: tableName, schema: layerSchemaMap.get(tableName) ?? 'layer' },
+        params: {
+          table: l.physicalTableName,
+          schema: l.schema,
+          ...(l.rowFilterSql ? { rowFilter: l.rowFilterSql } : {}),
+        },
       })
         .then((res) => {
           const data = res?.data ?? res;
@@ -358,12 +423,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         return;
       }
       setSpatialFilterWkt(wkt);
-      const tables = allTableNamesRef.current;
-      if (tables.length === 0) return;
+      const targets = layerTargetsRef.current;
+      if (targets.length === 0) return;
       call('', 'POST', {
         service: 'standardService',
         action: 'getLayersInGeometry',
-        params: { wkt, srid: 5181, tables, schema: 'layer' },
+        params: { wkt, srid: 5181, layerTargets: targets, schema: 'layer' },
       })
         .then((res) => {
           const data = res?.data ?? res;
@@ -523,12 +588,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         return;
       }
       setSpatialFilterWkt(wkt);
-      const tables = allTableNamesRef.current;
-      if (tables.length === 0) return;
+      const targets = layerTargetsRef.current;
+      if (targets.length === 0) return;
       call('', 'POST', {
         service: 'standardService',
         action: 'getLayersInGeometry',
-        params: { wkt, srid: 5181, tables, schema: 'layer' },
+        params: { wkt, srid: 5181, layerTargets: targets, schema: 'layer' },
       })
         .then((res) => {
           const data = res?.data ?? res;

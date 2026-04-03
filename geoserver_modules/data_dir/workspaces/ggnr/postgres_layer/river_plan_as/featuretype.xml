@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4e575fd4:19d2eef647c:-7f98</id>
+  <name>river_plan_as</name>
+  <nativeName>river_plan_as</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>river_plan_as</title>
+  <keywords>
+    <string>features</string>
+    <string>river_plan_as</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>379534.65625</minx>
+    <maxx>397455.71875</maxx>
+    <miny>345574.59375</miny>
+    <maxy>368532.9375</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.00618221588195</minx>
+    <maxx>129.212227152662</maxx>
+    <miny>36.58814534314524</miny>
+    <maxy>36.79844005099662</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -1,0 +1,33 @@
+/* 폴리곤: 모든 축척 */
+* {
+  fill: #ffffff;
+  fill-opacity: 0.0;
+  stroke: #5aa8cf;
+  stroke-width: 3;
+  stroke-opacity: 1.0;
+}
+
+/* 줌 14 이상: 내부 기준점 + 낮은 적합도 + 대칭 변위로 생략 최소화, 가능한 한 중앙 */
+[@z >= 14] * {
+  label: [parseInt(strSubstring(draw_name, 11, 14))];
+  label-anchor: 0.5 0.5;
+  label-offset: 0 0;
+  label-rotation: 0;
+  label-geometry: [interiorPoint(geom)];
+
+  font-family: "Yu Gothic Bold";
+  font-size: 18;
+  font-weight: bold;
+  font-fill: #3D7FA0;
+
+  halo-color: #FFFFFF;
+  halo-radius: 2;
+  halo-opacity: 0.8;
+
+  label-conflict-resolution: false;
+  label-group: false;
+  label-max-displacement: 120;
+  label-priority: [area(geom)];
+  label-fit-goodness: 0;
+  -gt-label-polygon-align: false;
+}

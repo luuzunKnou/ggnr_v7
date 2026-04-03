@@ -1,0 +1,16 @@
+/* 횡단면 라인(항상) + draw_name 라벨(줌 16+). 생략 최소화: 충돌 해제·낮은 적합도·변위 허용 */
+* {
+  stroke-geometry: [geom];
+  stroke: #ffffff, #e91e63;
+  stroke-width: 3, 2;
+  stroke-opacity: 0.0, 1.0;
+  stroke-linecap: butt, butt;
+
+  mark-geometry: [startPoint(geom)], [endPoint(geom)];
+  mark: url("river_plan_jd_lm_capline.svg"), url("river_plan_jd_lm_capline.svg");
+  mark-mime: "image/svg+xml", "image/svg+xml";
+  mark-size: 20, 20;
+  /* SVG가 수직 막대 → 선 방향에 맞춤 */
+  mark-rotation: [startAngle(geom)], [endAngle(geom)];
+  mark-anchor: 0.5 0.5, 0.5 0.5;
+}

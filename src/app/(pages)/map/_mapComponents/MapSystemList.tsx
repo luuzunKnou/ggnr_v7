@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { LayoutGrid, Check } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { canAccessPrivateSystem, type ClientAccessSnapshot } from '@/lib/accessClient';
+import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
+import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 
 type SystemItem = {
   sys_key: string;
@@ -14,6 +17,7 @@ type SystemItem = {
   sys_idx?: number;
   sys_col?: string;
   serviceList?: string[];
+  sys_is_private?: boolean | null;
 };
 
 const SYSTEM_LIST_WIDTH = 200;
@@ -23,12 +27,20 @@ const SYSTEM_LIST_WIDTH = 200;
  * - URL query `system`으로 현재 시스템 구분
  * - 클릭 시 해당 시스템으로 이동(URL 갱신)
  */
+function firstAllowedSystemKey(list: SystemItem[], snap: ClientAccessSnapshot): string {
+  const row = list.find((s) => canAccessPrivateSystem(snap, s.sys_key, s.sys_is_private));
+  return row?.sys_key ?? '';
+}
+
 export function MapSystemList() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const systemKeyFromUrl = searchParams.get('system') ?? '';
+  const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
 
   const [systemList, setSystemList] = useState<SystemItem[]>([]);
+  const [deniedOpen, setDeniedOpen] = useState(false);
+  const [deniedSysKey, setDeniedSysKey] = useState('');
 
   const fetchSystemList = useCallback(() => {
     call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} })
@@ -48,15 +60,26 @@ export function MapSystemList() {
   }, [fetchSystemList]);
 
   useEffect(() => {
-    if (systemList.length > 0 && !systemKeyFromUrl) {
-      const firstKey = systemList[0]?.sys_key;
-      if (firstKey) {
-        const current = new URLSearchParams(Array.from(searchParams.entries()));
-        current.set('system', firstKey);
-        router.replace(`/map?${current.toString()}`);
-      }
+    if (accessLoading || systemList.length === 0) return;
+    const firstAllowed = firstAllowedSystemKey(systemList, snapshot);
+    const currentMeta = systemList.find((s) => s.sys_key === systemKeyFromUrl);
+    const urlAllowed =
+      !systemKeyFromUrl ||
+      !currentMeta ||
+      canAccessPrivateSystem(snapshot, systemKeyFromUrl, currentMeta.sys_is_private);
+
+    if (!systemKeyFromUrl && firstAllowed) {
+      const current = new URLSearchParams(Array.from(searchParams.entries()));
+      current.set('system', firstAllowed);
+      router.replace(`/map?${current.toString()}`);
+      return;
     }
-  }, [systemList, systemKeyFromUrl, searchParams, router]);
+    if (systemKeyFromUrl && !urlAllowed && firstAllowed) {
+      const current = new URLSearchParams(Array.from(searchParams.entries()));
+      current.set('system', firstAllowed);
+      router.replace(`/map?${current.toString()}`);
+    }
+  }, [accessLoading, snapshot, systemList, systemKeyFromUrl, searchParams, router]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -74,6 +97,15 @@ export function MapSystemList() {
       current.delete('system');
     }
     router.push(`/map?${current.toString()}`);
+  };
+
+  const trySelectSystem = (sys: SystemItem) => {
+    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
+      setDeniedSysKey(sys.sys_key);
+      setDeniedOpen(true);
+      return;
+    }
+    selectSystem(sys.sys_key);
   };
 
   if (systemList.length === 0) return null;
@@ -95,7 +127,7 @@ export function MapSystemList() {
             <li key={sys.sys_key}>
               <button
                 type="button"
-                onClick={() => selectSystem(sys.sys_key)}
+                onClick={() => trySelectSystem(sys)}
                 className={cn(
                   'w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-200 border',
                   isSelected
@@ -129,6 +161,12 @@ export function MapSystemList() {
           );
         })}
       </ul>
+      <ResourceAccessDeniedDialog
+        open={deniedOpen}
+        onOpenChange={setDeniedOpen}
+        resource="system"
+        sysKey={deniedSysKey}
+      />
     </div>
   );
 }

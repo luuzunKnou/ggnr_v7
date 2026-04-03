@@ -1,9 +1,9 @@
 /* ¡‹ 18+: º± + ∂Û∫ß */
-[@sd < 35000] {
+* {
   mark: symbol(circle);
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 0.5)];
   :mark {
-    fill: #C8C8C8;
+    fill: #FF0000;
     stroke: #FFFFFF;
     stroke-width: 1.5;
     stroke-opacity: 0.5;

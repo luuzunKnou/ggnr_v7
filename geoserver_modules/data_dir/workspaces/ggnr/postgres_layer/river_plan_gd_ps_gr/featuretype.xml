@@ -1,0 +1,42 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4e575fd4:19d2eef647c:-7df9</id>
+  <name>river_plan_gd_ps_gr</name>
+  <nativeName>river_plan_gd_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>river_plan_gd_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>river_plan_gd_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>379677.57814848504</minx>
+    <maxx>397311.1075387315</maxx>
+    <miny>345642.74186929606</miny>
+    <maxy>368230.34288366867</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.0077942921929</minx>
+    <maxx>129.21052974799412</maxx>
+    <miny>36.58878889322842</miny>
+    <maxy>36.79568792887175</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter>gd_type = &apos;교량&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -50,6 +50,7 @@ type TableColumnDef =
       shapeType?: boolean
       share?: "read" | "write"
       schemaSelect?: boolean
+      tableSourceSelect?: boolean
     }
   | { id: string; label: string; width: string; kind: "table_status" }
   | { id: string; label: string; width: string; kind: "layer_status" }
@@ -81,8 +82,14 @@ const SCHEMA_OPTIONS = [
   { value: "public_layer", label: "public_layer" },
 ]
 
+const TABLE_SOURCE_OPTIONS = [
+  { value: "shp", label: "SHP" },
+  { value: "excel", label: "Excel" },
+] as const
+
 const TABLE_COLUMNS: TableColumnDef[] = [
   { id: "define_table_schema", label: "스키마", width: "120px", kind: "field", schemaSelect: true },
+  { id: "define_table_source", label: "출처", width: "88px", kind: "field", tableSourceSelect: true },
   { id: "define_table_group", label: "그룹", width: "130px", kind: "field" },
   { id: "define_table_name", label: "테이블명", width: "flex", kind: "field", readonly: true },
   { id: "define_table_kor_name", label: "한글명", width: "200px", kind: "field" },
@@ -99,12 +106,13 @@ const TABLE_COLUMNS: TableColumnDef[] = [
   //{ id: "define_table_etc", label: "비고", width: "flex", kind: "field" },
 ]
 
-/** px 컬럼은 고정 너비, "flex"는 남은 공간 채움 (스크롤 없이) */
-function getColumnStyle(width: string): React.CSSProperties {
-  if (width === "flex") {
-    return { flex: 1, minWidth: 0, flexShrink: 1 }
+/** px 컬럼은 고정 너비, "flex"는 남은 공간 채움. 테이블명만 살짝 최소 너비(과도한 압축 방지) */
+function getColumnStyle(col: Pick<TableColumnDef, "id" | "width">): React.CSSProperties {
+  if (col.width === "flex") {
+    const minW = col.id === "define_table_name" ? 200 : 0
+    return { flex: 1, minWidth: minW, flexShrink: 1 }
   }
-  return { width, flexShrink: 0 }
+  return { width: col.width, flexShrink: 0 }
 }
 
 const TABLE_KEYS = TABLE_COLUMNS.filter((c): c is TableColumnDef & { kind: "field" } => c.kind === "field").map(
@@ -798,7 +806,7 @@ export function LayerInfoManager() {
               <div
                 key={col.id}
                 className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${col.kind === "field" && col.alignCenter ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
-                style={getColumnStyle(col.width)}
+                style={getColumnStyle(col)}
               >
                 {col.label}
               </div>
@@ -829,7 +837,7 @@ export function LayerInfoManager() {
                 {TABLE_COLUMNS.map((col, colIndex) => {
                   const isLast = colIndex === TABLE_COLUMNS.length - 1
                   const cellClass = `py-0 px-1 overflow-hidden border-r flex items-center min-h-[28px] min-w-0 ${isLast ? "border-r-0" : ""}`
-                  const cellStyle = getColumnStyle(col.width)
+                  const cellStyle = getColumnStyle(col)
 
                   if (col.kind === "table_status") {
                     return (
@@ -985,7 +993,9 @@ export function LayerInfoManager() {
                       style={cellStyle}
                     >
                       {col.readonly ? (
-                        <span className="block truncate text-sm font-mono py-1">{val}</span>
+                        <span className="block min-w-0 w-full truncate text-sm font-mono py-1" title={val}>
+                          {val}
+                        </span>
                       ) : col.schemaSelect ? (
                         <select
                           value={val || "layer"}
@@ -993,6 +1003,22 @@ export function LayerInfoManager() {
                           className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
                         >
                           {SCHEMA_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : col.tableSourceSelect ? (
+                        <select
+                          value={
+                            String(row.define_table_source ?? "").toLowerCase() === "excel"
+                              ? "excel"
+                              : "shp"
+                          }
+                          onChange={(e) => updateCell(tableIdx, key, e.target.value)}
+                          className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
+                        >
+                          {TABLE_SOURCE_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
                               {opt.label}
                             </option>

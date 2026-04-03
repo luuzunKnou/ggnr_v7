@@ -6,48 +6,19 @@ import Link from "next/link"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { Input } from "@/app/shadcnComponents/ui/input"
-import { cn } from "@/lib/utils"
-import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
-import { DbManagerContent } from "./_components/DbManagerContent"
-import { SystemListManager } from "./_components/SystemListManager"
-import { ServiceListManager } from "./_components/ServiceListManager"
-import { LayerInfoManager } from "./_components/LayerInfoManager"
-import { LayerAttrManager } from "./_components/LayerAttrManager"
-import { LayerCodeManager } from "./_components/LayerCodeManager"
-import { GeoserverManagerContent } from "@/app/(pages)/dev/_components/GeoserverManagerContent"
-import { LasFileUploaderContent } from "@/app/(pages)/dev/_components/LasFileUploaderContent"
-import { ShpFileUploaderContent } from "@/app/(pages)/dev/_components/ShpFileUploaderContent"
-import { ExlFileUploaderContent } from "@/app/(pages)/dev/_components/ExlFileUploaderContent"
-import { LasFixerContent } from "@/app/(pages)/dev/_components/LasFixerContent"
+import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
+import { DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
 import { call } from "@/lib/api"
+import { signOut } from "next-auth/react"
 
 const DEV_AUTH_KEY = "dev_mode_auth"
 const DEV_PASSWORD = "admin00!!"
-
-const DEV_SUBMENUS = [
-  { id: "systemList", label: "시스템 목록관리" },
-  { id: "serviceList", label: "기능 목록관리" },
-  { id: "shpFileUploader", label: "SHP File Uploader" },
-  { id: "exlFileUploader", label: "Excel File Uploader" },
-  { id: "layerInfo", label: "레이어 정보관리" },
-  { id: "layerAttr", label: "레이어 속성관리" },
-  { id: "layerCode", label: "레이어 코드관리" },
-  { id: "systemVar", label: "시스템 변수" },
-  { id: "dbManager", label: "DB Manager" },
-  { id: "geoserverManagerLayer", label: "Geoserver Manager [layer]" },
-  { id: "geoserverManagerPublic", label: "Geoserver Manager [public]" },
-  { id: "fileManager", label: "LAS File Uploader" },
-  { id: "lasFixer", label: "LAS Fixer" },
-] as const
-
-type DevSubmenuId = (typeof DEV_SUBMENUS)[number]["id"]
 
 export default function DevPage() {
   const [mounted, setMounted] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
-  const [selectedMenu, setSelectedMenu] = useState<DevSubmenuId>("systemList")
   const [sampleGenLoading, setSampleGenLoading] = useState(false)
   const [sampleGenMessage, setSampleGenMessage] = useState("")
 
@@ -73,11 +44,12 @@ export default function DevPage() {
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (typeof window !== "undefined") sessionStorage.removeItem(DEV_AUTH_KEY)
     setAuthenticated(false)
     setPassword("")
     setError("")
+    await signOut({ redirect: false })
   }
 
   const handleLockDoubleClick = () => {
@@ -170,140 +142,34 @@ export default function DevPage() {
     )
   }
 
-  const currentLabel = DEV_SUBMENUS.find((m) => m.id === selectedMenu)?.label ?? selectedMenu
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
-        <h1 className="text-lg font-semibold text-foreground">개발자 모드</h1>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button variant="outline" size="sm" className="rounded-none" onClick={handleLogout}>
-            로그아웃
-          </Button>
-          <Button asChild variant="outline" size="sm" className="rounded-none">
-            <Link href="/">메인으로</Link>
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex flex-1 min-h-0">
-        <aside className="w-52 shrink-0 border-r bg-muted/30 flex flex-col py-2">
-          {DEV_SUBMENUS.map((menu) => (
-            <button
-              key={menu.id}
+    <AdminConsoleLayout
+      title="개발자 모드"
+      menus={DEV_SUBMENUS}
+      defaultMenuId="systemList"
+      getDescription={getDevMenuDescription}
+      renderContent={renderDevMenuContent}
+      renderTitleExtra={(menuId) =>
+        menuId === "fileManager" ? (
+          <>
+            <Button
               type="button"
-              onClick={() => setSelectedMenu(menu.id)}
-              className={cn(
-                "w-full text-left px-4 py-2.5 text-sm font-medium transition-colors",
-                selectedMenu === menu.id
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
+              variant="outline"
+              size="sm"
+              className="rounded-none"
+              onClick={runSamplePipeline}
+              disabled={sampleGenLoading}
             >
-              {menu.label}
-            </button>
-          ))}
-        </aside>
-
-        <main className="flex-1 overflow-auto p-4">
-          <Card className="rounded-none min-h-full">
-            <CardHeader>
-              <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle>{currentLabel}</CardTitle>
-                {selectedMenu === "fileManager" && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-none"
-                      onClick={runSamplePipeline}
-                      disabled={sampleGenLoading}
-                    >
-                      <FlaskConical className="w-3.5 h-3.5 mr-1" />
-                      {sampleGenLoading ? "실행 중…" : "샘플 생성 (sampleData16.las)"}
-                    </Button>
-                    {sampleGenMessage && (
-                      <span className="text-xs text-muted-foreground">{sampleGenMessage}</span>
-                    )}
-                  </>
-                )}
-              </div>
-              <CardDescription>
-                {selectedMenu === "systemList"
-                  ? "시스템 목록관리 설정 화면입니다."
-                  : selectedMenu === "serviceList"
-                    ? "기능 목록관리 설정 화면입니다."
-                    : selectedMenu === "layerInfo"
-                      ? "레이어 정보관리 설정 화면입니다."
-                      : selectedMenu === "layerAttr"
-                        ? "레이어 속성관리 설정 화면입니다."
-                        : selectedMenu === "layerCode"
-                          ? "레이어 코드관리 설정 화면입니다."
-                          : selectedMenu === "dbManager"
-                            ? "데이터 가져오기 / 백업 / 업데이트"
-                            : selectedMenu === "geoserverManagerLayer"
-                              ? "GeoServer 연결·레이어·스타일 상태 및 로그 (스키마: layer)"
-                              : selectedMenu === "geoserverManagerPublic"
-                                ? "GeoServer 연결·레이어·스타일 상태 및 로그 (스키마: public_layer)"
-                                : selectedMenu === "fileManager"
-                                ? "LAS 파일 업로드 및 2D GeoTIFF·ECEF·3D pnts 변환 이력"
-                                : selectedMenu === "shpFileUploader"
-                                  ? "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
-                                  : selectedMenu === "lasFixer"
-                                  ? "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
-                                  : `${currentLabel} 설정 화면입니다. (구현 예정)`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {selectedMenu === "systemList" ? (
-                <SystemListManager />
-              ) : selectedMenu === "serviceList" ? (
-                <ServiceListManager />
-              ) : selectedMenu === "layerInfo" ? (
-                <LayerInfoManager />
-              ) : selectedMenu === "layerAttr" ? (
-                <LayerAttrManager />
-              ) : selectedMenu === "layerCode" ? (
-                <div className="overflow-hidden max-h-[calc(100vh-10rem)] min-h-0">
-                  <LayerCodeManager />
-                </div>
-              ) : selectedMenu === "dbManager" ? (
-                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <DbManagerContent />
-                </div>
-              ) : selectedMenu === "geoserverManagerLayer" ? (
-                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <GeoserverManagerContent schema="layer" />
-                </div>
-              ) : selectedMenu === "geoserverManagerPublic" ? (
-                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <GeoserverManagerContent schema="public_layer" />
-                </div>
-              ) : selectedMenu === "fileManager" ? (
-                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <LasFileUploaderContent />
-                </div>
-              ) : selectedMenu === "shpFileUploader" ? (
-                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <ShpFileUploaderContent />
-                </div>
-              ) : selectedMenu === "exlFileUploader" ? (
-                <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-                  <ExlFileUploaderContent />
-                </div>
-              ) : selectedMenu === "lasFixer" ? (
-                <LasFixerContent />
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {currentLabel} 설정을 위한 화면이 여기에 표시됩니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    </div>
+              <FlaskConical className="w-3.5 h-3.5 mr-1" />
+              {sampleGenLoading ? "실행 중…" : "샘플 생성 (sampleData16.las)"}
+            </Button>
+            {sampleGenMessage && (
+              <span className="text-xs text-muted-foreground">{sampleGenMessage}</span>
+            )}
+          </>
+        ) : null
+      }
+      onLogout={handleLogout}
+    />
   )
 }

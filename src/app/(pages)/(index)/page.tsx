@@ -4,16 +4,24 @@ import { Layers, Mouse } from "lucide-react"
 import { DepartmentGrid } from "@/app/(pages)/(index)/department-grid"
 import type { DepartmentData } from "@/app/(pages)/(index)/department-card"
 import { ParcelSlider } from "@/app/(pages)/(index)/parcel-slider"
-import { SystemManagementSection } from "@/app/(pages)/(index)/system-management-section"
+import { SystemManagementSection, type SystemItem } from "@/app/(pages)/(index)/system-management-section"
 import { DevModeFooterTrigger } from "@/app/(pages)/(index)/dev-mode-footer-trigger"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
-import { getSystemList, getSystemKorName, getSystemListDebug, getIndexSliderImages } from "@/service/configService"
+import { HeaderAuthLinks } from "@/app/(pages)/(index)/header-auth-links"
+import {
+  getSystemList,
+  getSystemKorName,
+  getSystemListDebug,
+  getIndexSliderImages,
+  getIndexLogoSrc,
+  getIndexFooterConfig,
+} from "@/service/configService"
 
-function loadSystemList(): { systems: Array<{ sys_key: string; sys_kor: string; sys_eng?: string }>; error?: string; debug?: string } {
+function loadSystemList(): { systems: SystemItem[]; error?: string; debug?: string } {
   try {
     const result = getSystemListDebug()
     if (result.error) return { systems: [], error: result.error, debug: result.debug }
-    return { systems: result.systems ?? [], debug: result.debug }
+    return { systems: (result.systems ?? []) as SystemItem[], debug: result.debug }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     return { systems: [], error: msg }
@@ -55,6 +63,10 @@ function buildParcelSlides(): Array<{ title: string; description: string; image?
 
 export default function DashboardPage() {
   const { systems: systemList, error: systemListError, debug: systemListDebug } = loadSystemList()
+  const projectName = typeof process !== "undefined" ? (process.env.GGNR_PROJECT ?? "build_yy") : "build_yy"
+  const indexLogoSrc = getIndexLogoSrc(projectName)
+  const siteTitle = getSystemKorName()
+  const { footerAddr, footerRss } = getIndexFooterConfig()
   return (
     <div className="min-h-screen bg-background pb-[20px]">
       {/* Header */}
@@ -62,13 +74,14 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Image
-              src="/ggnr_ai.svg"
-              alt="GGNR AI"
-              width={40}
-              height={36}
-              className="object-contain"
+              src={indexLogoSrc}
+              alt={siteTitle}
+              width={100}
+              height={38}
+              className="h-9 w-auto max-w-[100px] max-h-[30px] object-contain object-left"
+              priority
             />
-            <h1 className="text-xl font-bold text-foreground">{getSystemKorName()}</h1>
+            <h1 className="text-xl font-bold text-foreground">{siteTitle}</h1>
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
@@ -82,14 +95,7 @@ export default function DashboardPage() {
               </svg>
               <span className="text-[13px]">시스템 관리</span>
             </Link>
-            <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
-              <svg className="w-4.5 h-4.5" viewBox="0 1 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" x2="9" y1="12" y2="12" />
-              </svg>
-              <span className="text-[13px]">로그인</span>
-            </button>
+            <HeaderAuthLinks />
           </div>
         </div>
       </header>
@@ -101,32 +107,34 @@ export default function DashboardPage() {
           {/* Left: 필지정보조회 & 지도보기 */}
           <div className="lg:col-span-2 grid md:grid-cols-2 gap-6 max-h-[355px]">
             <ParcelSlider slides={buildParcelSlides()} />
-            
+
             <Link
               href="/map"
-              className="relative overflow-hidden bg-blue-600 p-8 text-white min-h-[280px] flex flex-col items-center justify-center text-center hover:bg-blue-700/90 transition-colors cursor-pointer block rounded-[5px]"
+              className="group relative block min-h-[280px] cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
             >
-              {/* 배경 영상 */}
               <video
                 src="/image/indexImage/backgroundVideo_02.mp4"
-                className="absolute inset-0 w-full h-full object-cover"
+                className="pointer-events-none absolute inset-0 z-0 h-full w-full origin-center object-cover scale-[1.02]"
                 muted
                 loop
                 autoPlay
                 playsInline
+                preload="auto"
                 aria-hidden
               />
-              <div className="absolute inset-0 bg-gray-900/40" aria-hidden />
+              <div
+                className="absolute inset-0 z-[1] bg-gray-950/45 transition-colors group-hover:bg-gray-900/55"
+                aria-hidden
+              />
               <div className="relative z-10 flex flex-col items-center justify-center">
-                <div className="w-24 h-24 mb-4 mt-4 flex items-center justify-center">
-                  <Layers className="w-full h-full" strokeWidth={1.5} />
+                <div className="mb-4 mt-4 flex h-24 w-24 items-center justify-center">
+                  <Layers className="h-full w-full" strokeWidth={1.5} />
                 </div>
-                <h2 className="text-2xl font-bold mt-4 mb-4">지도보기</h2>
-                <p className="text-gray-100 text-sm leading-relaxed">
-                  사용자가 원하는 위치를 직관적으로 확인<br />
-                  하고 데이터를 시각화합니다.
+                <h2 className="mb-4 mt-4 text-2xl font-bold">지도보기</h2>
+                <p className="text-sm leading-relaxed text-gray-100">
+                  사용자가 원하는 위치를 직관적으로 확인하고 <br />데이터를 시각화합니다.
                 </p>
-                <Mouse className="w-5 h-5 mt-10" />
+                <Mouse className="mt-10 h-5 w-5" />
               </div>
             </Link>
           </div>
@@ -194,8 +202,8 @@ export default function DashboardPage() {
       <div className="fixed bottom-0 left-0 right-0 z-10 max-h-[110px]">
         <DevModeFooterTrigger>
           <div className="container mx-auto text-center text-sm">
-            <p className="-mt-[11px]">안동시 토지정보과 | 054-840-6371 | 36691 경상북도 안동시 퇴계로 115 (명륜동)</p>
-            <p className="py-1 text-slate-400">Copyright (c) 2024. ALL RIGHTS RESERVED</p>
+            <p className="-mt-[11px]">{footerAddr}</p>
+            <p className="py-1 text-slate-400">{footerRss}</p>
           </div>
         </DevModeFooterTrigger>
       </div>

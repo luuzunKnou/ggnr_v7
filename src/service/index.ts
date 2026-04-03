@@ -15,5 +15,30 @@ import * as shpUploadService from './shpUploadService';
 import * as excelHistoryService from './excelHistoryService';
 import * as excelUploadService from './excelUploadService';
 import * as layerHistoryService from './layerHistoryService';
+import * as permissionService from './permissionService';
+import * as usrService from './usrService';
+import * as riverBasicPlanService from './riverBasicPlanService';
+import * as fileDataUploadService from './fileDataUploadService';
+import * as integrationService from './integrationService';
 
-export { configService, devTestService, dbManagerService, sysService, serService, standardService, complaintService, fileManagerService, uploadService, pipelineService, shpUploadService, excelUploadService, excelHistoryService, layerHistoryService };
+export {
+  configService,
+  devTestService,
+  dbManagerService,
+  sysService,
+  serService,
+  standardService,
+  complaintService,
+  fileManagerService,
+  uploadService,
+  pipelineService,
+  shpUploadService,
+  excelUploadService,
+  excelHistoryService,
+  layerHistoryService,
+  permissionService,
+  usrService,
+  riverBasicPlanService,
+  fileDataUploadService,
+  integrationService,
+};

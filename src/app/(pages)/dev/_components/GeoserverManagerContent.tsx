@@ -54,8 +54,10 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
   const [geoStopLoading, setGeoStopLoading] = useState(false)
   const [dbSetupLoading, setDbSetupLoading] = useState(false)
   const [styleAutoLoading, setStyleAutoLoading] = useState(false)
+  const [styleBulkRecreateLoading, setStyleBulkRecreateLoading] = useState(false)
   const [layerAutoCreateLoading, setLayerAutoCreateLoading] = useState(false)
   const [regeneratingLayerKey, setRegeneratingLayerKey] = useState<string | null>(null)
+  const [regeneratingStyleKey, setRegeneratingStyleKey] = useState<string | null>(null)
   const logScrollRef = useRef<HTMLDivElement>(null)
 
   const fetchGeoStatus = useCallback(async () => {
@@ -344,6 +346,41 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
     }
   }
 
+  const regenerateStyle = async (layerKey: string) => {
+    setRegeneratingStyleKey(layerKey)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "applyDefaultStyleToLayer",
+        params: { layerName: layerKey, url: geoserverUrl },
+      })
+      const d = res?.data ?? res
+      if (d?.success) {
+        await Promise.all([fetchCounts(), fetchDiff()])
+      }
+    } finally {
+      setRegeneratingStyleKey(null)
+    }
+  }
+
+  const recreateAllStyles = async () => {
+    if (diffRows.length === 0) return
+    setStyleBulkRecreateLoading(true)
+    try {
+      for (const row of diffRows) {
+        if (!row.tablesJson) continue
+        await call("", "POST", {
+          service: "devTestService",
+          action: "applyDefaultStyleToLayer",
+          params: { layerName: row.key, url: geoserverUrl },
+        })
+      }
+      await Promise.all([fetchCounts(), fetchDiff()])
+    } finally {
+      setStyleBulkRecreateLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* 상단: GeoServer 상태 (콘텐츠 높이만 사용, 여백은 diff로) */}
@@ -484,7 +521,7 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
                       variant="outline"
                       className="h-5 px-1.5 text-[11px] shrink-0"
                       onClick={autoCreateLayers}
-                      disabled={layerAutoCreateLoading}
+                      disabled={layerAutoCreateLoading || styleBulkRecreateLoading}
                       title="tables.json 기준 전체 레이어 생성/갱신 (CQL 포함)"
                     >
                       {layerAutoCreateLoading ? "재생성 중..." : "전체 레이어 재생성"}
@@ -492,7 +529,24 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
                   </div>
                 </th>
                 <th className="sticky top-0 z-10 text-left py-1 px-1.5 w-[25%] bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
-                  Style
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>Style</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-5 px-1.5 text-[11px] shrink-0"
+                      onClick={recreateAllStyles}
+                      disabled={
+                        styleBulkRecreateLoading ||
+                        diffRows.length === 0 ||
+                        regeneratingStyleKey != null ||
+                        regeneratingLayerKey != null
+                      }
+                      title="tables.json 목록(현재 스키마)의 모든 레이어에 기본 CSS 스타일 생성·덮어쓰기 후 기본 스타일 지정"
+                    >
+                      {styleBulkRecreateLoading ? "재생성 중..." : "전체 스타일 재생성"}
+                    </Button>
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -547,7 +601,11 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
                             className="h-5 min-w-0 px-1 shrink-0"
                             title="레이어 재생성 (tables.json + CQL 필터 반영)"
                             onClick={() => regenerateLayer(row.key)}
-                            disabled={regeneratingLayerKey != null}
+                            disabled={
+                              regeneratingLayerKey != null ||
+                              styleBulkRecreateLoading ||
+                              regeneratingStyleKey != null
+                            }
                           >
                             <RefreshCw
                               className={cn(
@@ -560,7 +618,33 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
                         )}
                       </div>
                     </td>
-                    <td className="py-1 px-1.5 font-mono">{row.style ?? ""}</td>
+                    <td className="py-1 px-1.5 font-mono">
+                      <div className="flex items-center gap-1">
+                        <span className="truncate">{row.style ?? ""}</span>
+                        {row.tablesJson != null && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 min-w-0 px-1 shrink-0"
+                            title="스타일 재생성 (기본 CSS 생성·덮어쓰기, 레이어 기본 스타일 지정)"
+                            onClick={() => regenerateStyle(row.key)}
+                            disabled={
+                              regeneratingStyleKey != null ||
+                              styleBulkRecreateLoading ||
+                              regeneratingLayerKey != null
+                            }
+                          >
+                            <RefreshCw
+                              className={cn(
+                                "w-3 h-3",
+                                regeneratingStyleKey === row.key && "animate-spin"
+                              )}
+                            />
+                            <span className="sr-only">스타일 재생성</span>
+                          </Button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                   )
                 })

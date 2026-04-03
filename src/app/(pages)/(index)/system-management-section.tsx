@@ -1,9 +1,12 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import { Card } from "@/app/shadcnComponents/ui/card"
-import { ChevronRight, Droplets, CloudRain, Waves, Plane, Settings2 } from "lucide-react"
+import { ChevronRight, Droplets, CloudRain, Waves, Plane } from "lucide-react"
+import { canAccessPrivateSystem } from "@/lib/accessClient"
+import { useMyAccessSnapshot } from "@/hooks/useMyAccessSnapshot"
+import { ResourceAccessDeniedDialog } from "@/app/(pages)/_components/AccessRequest"
 
 export type SystemItem = {
   sys_key: string
@@ -16,6 +19,7 @@ export type SystemItem = {
   sys_link: string
   serviceList: string[]
   layerList: string[]
+  sys_is_private?: boolean | null
 }
 
 interface SystemManagementSectionProps {
@@ -38,6 +42,10 @@ const DEFAULT_ICONS: Record<string, React.ReactNode> = {
 }
 
 export function SystemManagementSection({ systems }: SystemManagementSectionProps) {
+  const { snapshot, loading: accessLoading } = useMyAccessSnapshot()
+  const [deniedOpen, setDeniedOpen] = useState(false)
+  const [deniedSysKey, setDeniedSysKey] = useState("")
+
   if (systems.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -49,7 +57,7 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
   const sorted = [...systems].sort((a, b) => a.sys_idx - b.sys_idx)
 
   return (
-    <section className="w-full">
+    <section className="w-full relative">
       {/* <div className="mb-6 flex items-center gap-2">
         <Settings2 className="w-5 h-5 text-muted-foreground" />
         <h2 className="text-xl font-bold text-foreground">시스템 목록</h2>
@@ -58,15 +66,22 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
         {sorted.map((sys) => {
           const color = sys.sys_col || DEFAULT_COLORS[sys.sys_key] || "#64748b"
           const href = sys.sys_link || `/map?system=${sys.sys_key}`
-          return (
-            <Link key={sys.sys_key} href={href} className="block group">
-              <Card
-                className="px-5 py-3.5 h-full transition-all duration-300 rounded-[5px] hover:shadow-lg hover:-translate-y-0.5 border border-border flex flex-row items-center gap-4"
-                style={{
-                  borderLeftWidth: "4px",
-                  borderLeftColor: color,
-                }}
-              >
+          const isPrivate = sys.sys_is_private === true
+          const allowed = !isPrivate || canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)
+          const gated = isPrivate && accessLoading
+          const cardClass =
+            "px-5 py-3.5 h-full transition-all duration-300 rounded-[5px] border border-border flex flex-row items-center gap-4"
+          const cardHover = allowed && !gated ? "hover:shadow-lg hover:-translate-y-0.5" : ""
+          const cardMuted = gated ? "opacity-60" : ""
+
+          const inner = (
+            <Card
+              className={`${cardClass} ${cardHover} ${cardMuted}`}
+              style={{
+                borderLeftWidth: "4px",
+                borderLeftColor: color,
+              }}
+            >
                 <div className="flex flex-col gap-2 flex-1 min-w-0">
                   <span
                     className="text-[10px] font-medium text-muted-foreground/55 uppercase tracking-wide"
@@ -131,10 +146,45 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
                   })()}
                 </div>
               </Card>
-            </Link>
+          )
+
+          if (gated) {
+            return (
+              <div key={sys.sys_key} className="block w-full">
+                {inner}
+              </div>
+            )
+          }
+
+          if (allowed) {
+            return (
+              <Link key={sys.sys_key} href={href} className="block group">
+                {inner}
+              </Link>
+            )
+          }
+
+          return (
+            <button
+              key={sys.sys_key}
+              type="button"
+              className="block w-full text-left group"
+              onClick={() => {
+                setDeniedSysKey(sys.sys_key)
+                setDeniedOpen(true)
+              }}
+            >
+              {inner}
+            </button>
           )
         })}
       </div>
+      <ResourceAccessDeniedDialog
+        open={deniedOpen}
+        onOpenChange={setDeniedOpen}
+        resource="system"
+        sysKey={deniedSysKey}
+      />
     </section>
   )
 }

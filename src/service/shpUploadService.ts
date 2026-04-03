@@ -13,6 +13,7 @@ import { finished } from 'node:stream/promises';
 import archiver from 'archiver';
 import iconv from 'iconv-lite';
 import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, getTableColumnInfo, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
+import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const GEOSERVER_DEFAULT_URL = 'http://localhost:8080/geoserver';
@@ -63,6 +64,22 @@ function parseEpsgFromBasename(basename: string): string | null {
   return null;
 }
 
+async function resolveShpSrs(dir: string, basename: string): Promise<{ sourceSrs: string | null; targetSrs: string }> {
+  const folderName = path.basename(dir);
+  let sourceSrs: string | null = null;
+  try {
+    const prjPath = path.join(dir, `${basename}.prj`);
+    const prjContent = await fs.readFile(prjPath, 'utf-8').catch(() => '');
+    sourceSrs =
+      parseEpsgFromPrj(prjContent) ??
+      parseEpsgFromBasename(basename) ??
+      parseEpsgFromBasename(folderName);
+  } catch {
+    sourceSrs = parseEpsgFromBasename(basename) ?? parseEpsgFromBasename(folderName);
+  }
+  return { sourceSrs, targetSrs: sourceSrs ?? 'EPSG:5187' };
+}
+
 /**
  * SHP 파일 경로에서 좌표계(EPSG 코드) 조회. .prj → shp 파일명 → 상위 폴더명 순으로 파싱.
  * 동기화 상세 모달에서 변경값(SHP) 지도 뷰 중심용.
@@ -111,7 +128,18 @@ function getDefineFieldsFilePath(tableKey: string): string {
 
 /** PostGIS 테이블명: 영문/숫자/언더스코어만 (createTableFromShp와 동일 규칙) */
 function safeTableName(basename: string): string {
-  return basename.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'layer_table';
+  return (basename.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '').toLowerCase()) || 'layer_table';
+}
+
+function equalsTableName(a: string, b: string): boolean {
+  return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+}
+
+function findLayerTableByName(
+  tables: Array<{ schema: string; table: string }>,
+  wanted: string
+): { schema: string; table: string } | null {
+  return tables.find((t) => t.schema === 'layer' && equalsTableName(t.table, wanted)) ?? null;
 }
 
 /**
@@ -370,6 +398,7 @@ export async function createTableFromShp(params: {
 
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
+  const normalizedName = safeTableName(basename);
   const tableName = safeTableName(basename);
 
   try {
@@ -380,15 +409,7 @@ export async function createTableFromShp(params: {
   }
 
   const dir = path.dirname(absolutePath);
-  let targetSrs = 'EPSG:5187';
-  try {
-    const prjPath = path.join(dir, `${basename}.prj`);
-    const prjContent = await fs.readFile(prjPath, 'utf-8').catch(() => '');
-    const epsg = parseEpsgFromPrj(prjContent) ?? parseEpsgFromBasename(basename);
-    if (epsg) targetSrs = epsg;
-  } catch {
-    // keep default
-  }
+  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
 
   const db = getDbConfig();
   const pgConnection = `PG:host=${db.host} port=${db.port} dbname=${db.database} user=${db.user} password=${db.password}`;
@@ -399,7 +420,10 @@ export async function createTableFromShp(params: {
     '-f', 'PostgreSQL',
     pgConnection,
     absolutePath,
+    '-oo', 'ENCODING=CP949',
+    '-nlt', 'PROMOTE_TO_MULTI',
     '-nln', layerTable,
+    ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
     '-t_srs', targetSrs,
     '-lco', 'GEOMETRY_NAME=geom',
     '-overwrite',
@@ -441,7 +465,7 @@ export async function createTableFromShp(params: {
   });
 
   if (result.code !== 0) {
-    const raw = result.stderr?.trim().slice(-500) || `ogr2ogr 종료 코드 ${result.code}`;
+    const raw = result.stderr?.trim() || `ogr2ogr 종료 코드 ${result.code}`;
     const notFound =
       /내부\s*또는\s*외부\s*명령|not recognized|not found|실행할 수 있는 프로그램|배치 파일이 아닙니다/i.test(raw);
     const noPgDriver = /Unable to find driver\s*[`']?PostgreSQL|PostgreSQL.*driver/i.test(raw);
@@ -458,19 +482,72 @@ export async function createTableFromShp(params: {
 
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
 
+/** defineLayer tables.json 기본값 (기존 도로 레이어 등과 동일한 형태) */
+const DEFINE_TABLE_DEFAULT_READ_SHARE = 'P';
+const DEFINE_TABLE_DEFAULT_WRITE_SHARE = 'P';
+const DEFINE_TABLE_DEFAULT_IDX = '0';
+const DEFINE_TABLE_DEFAULT_ETC = '';
+
+function buildShpDefineLayerTableRow(layerName: string, shpType: string, group: string): Record<string, unknown> {
+  return reorderDefineLayerTableRow({
+    define_table_name: layerName,
+    define_table_kor_name: layerName,
+    define_table_shp_type: shpType,
+    define_table_read_share: DEFINE_TABLE_DEFAULT_READ_SHARE,
+    define_table_write_share: DEFINE_TABLE_DEFAULT_WRITE_SHARE,
+    define_table_group: group,
+    define_table_idx: DEFINE_TABLE_DEFAULT_IDX,
+    define_table_etc: DEFINE_TABLE_DEFAULT_ETC,
+    define_table_schema: 'layer',
+    define_table_source: 'shp',
+  });
+}
+
 function ensureDefineLayerEntry(layerName: string, geometryType?: ShpGeometryType, group?: string): Promise<void> {
   const shpType = geometryType ?? 'POLYGON';
+  const groupVal = group ?? '';
   return getDefineLayerTables().then((defineRes) => {
     let tables: Record<string, unknown>[] = defineRes.success && Array.isArray(defineRes.tables) ? defineRes.tables : [];
     const existing = tables.find((r) => String(r.define_table_name ?? '').trim() === layerName);
     if (!existing) {
-      tables = [...tables, { define_table_name: layerName, define_table_schema: 'layer', define_table_shp_type: shpType, define_table_kor_name: layerName, define_table_group: group ?? '', define_table_idx: 999, define_table_source: 'shp' }];
+      tables = reorderDefineLayerTablesArray([...tables, buildShpDefineLayerTableRow(layerName, shpType, groupVal)]);
       return fs.mkdir(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true }).then(() =>
         fs.writeFile(DEFINE_LAYER_TABLES_PATH, JSON.stringify(tables, null, 2), 'utf-8')
       );
-    } else if (group && !String(existing.define_table_group ?? '').trim()) {
-      existing.define_table_group = group;
-      return fs.writeFile(DEFINE_LAYER_TABLES_PATH, JSON.stringify(tables, null, 2), 'utf-8');
+    }
+    const row = existing as Record<string, unknown>;
+    let mutated = false;
+    if (groupVal && !String(row.define_table_group ?? '').trim()) {
+      row.define_table_group = groupVal;
+      mutated = true;
+    }
+    if (!('define_table_read_share' in row)) {
+      row.define_table_read_share = DEFINE_TABLE_DEFAULT_READ_SHARE;
+      mutated = true;
+    }
+    if (!('define_table_write_share' in row)) {
+      row.define_table_write_share = DEFINE_TABLE_DEFAULT_WRITE_SHARE;
+      mutated = true;
+    }
+    if (!('define_table_etc' in row)) {
+      row.define_table_etc = DEFINE_TABLE_DEFAULT_ETC;
+      mutated = true;
+    }
+    if (row.define_table_idx === 999) {
+      row.define_table_idx = DEFINE_TABLE_DEFAULT_IDX;
+      mutated = true;
+    }
+    const srcNorm = String(row.define_table_source ?? '').toLowerCase();
+    if (srcNorm !== 'excel' && row.define_table_source !== 'shp') {
+      row.define_table_source = 'shp';
+      mutated = true;
+    }
+    if (mutated) {
+      return fs.writeFile(
+        DEFINE_LAYER_TABLES_PATH,
+        JSON.stringify(reorderDefineLayerTablesArray(tables), null, 2),
+        'utf-8'
+      );
     }
   });
 }
@@ -533,21 +610,28 @@ export async function createDefineTableAndFields(params: {
   if (!listRes.success || !listRes.tables) {
     return { success: false, error: listRes.error ?? 'DB 테이블 목록을 가져올 수 없습니다.' };
   }
-  const hasTable = listRes.tables.some((t) => t.schema === 'layer' && t.table === layerName);
-  if (!hasTable) {
+  const matched = findLayerTableByName(listRes.tables, layerName);
+  if (!matched) {
     return { success: false, error: `layer 스키마에 '${layerName}' 테이블이 없습니다. 먼저 테이블 생성을 실행하세요.` };
   }
+  const dbLayerTableName = matched.table;
 
   let geometryType = params.geometryType ?? null;
   if (geometryType === null) {
     const typeRes = await getLayerTableGeometryTypes();
-    if (typeRes.success && typeRes.types[layerName]) geometryType = typeRes.types[layerName];
+    if (typeRes.success) {
+      geometryType =
+        typeRes.types[layerName] ??
+        typeRes.types[layerName.toLowerCase()] ??
+        typeRes.types[dbLayerTableName] ??
+        null;
+    }
   }
 
   try {
     await ensureDefineLayerEntry(layerName, geometryType ?? 'POLYGON', params.group);
 
-    const colRes = await getTableColumnInfo({ schema: 'layer', table: layerName });
+    const colRes = await getTableColumnInfo({ schema: 'layer', table: dbLayerTableName });
     if (!colRes.success || !colRes.columns?.length) {
       return { success: false, error: colRes.error ?? '컬럼 정보를 가져올 수 없습니다.' };
     }
@@ -607,8 +691,8 @@ export async function createGeoServerLayer(params: {
   if (!listRes.success || !listRes.tables) {
     return { success: false, error: listRes.error ?? 'DB 테이블 목록을 가져올 수 없습니다.' };
   }
-  const hasTable = listRes.tables.some((t) => t.schema === 'layer' && t.table === layerName);
-  if (!hasTable) {
+  const matched = findLayerTableByName(listRes.tables, layerName);
+  if (!matched) {
     return { success: false, error: `layer 스키마에 '${layerName}' 테이블이 없습니다. 먼저 테이블 생성을 실행하세요.` };
   }
 
@@ -728,15 +812,29 @@ export async function processShpBatch(params: {
     try {
       const typeRes = await getLayerTableGeometryTypes();
       const layerName = safeTableName(path.basename(row.sourceFile, '.shp'));
-      if (typeRes.success && typeRes.types[layerName]) geometryType = typeRes.types[layerName];
+      if (typeRes.success) {
+        geometryType =
+          typeRes.types[layerName] ??
+          typeRes.types[layerName.toLowerCase()] ??
+          undefined;
+      }
     } catch { /* ignore */ }
 
-    // 2. Layer
+    // 2. Layer (Table 완료 후에만 실행)
     if (row.layer) {
       item.layer = { success: true, skipped: true };
     } else {
       const res = await createGeoServerLayer({ pathOrResult: row.pathOrResult, geometryType });
       item.layer = { success: res.success, error: res.error };
+    }
+
+    // 레이어 실패 시 이후 GeoServer 단계는 건너뜀 (순차 파이프라인 보장)
+    if (!item.layer.success) {
+      item.style = { success: false, skipped: true, error: '레이어 생성 실패로 스타일 단계를 건너뜀' };
+      const defRes = await createDefineTableAndFields({ pathOrResult: row.pathOrResult, geometryType });
+      item.define = { success: defRes.success, skipped: row.define, error: defRes.error };
+      results.push(item);
+      continue;
     }
 
     // 3. Style
@@ -806,6 +904,7 @@ export async function runShpPostProcess(params: {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
+  const normalizedName = safeTableName(basename);
 
   try {
     const stat = await fs.stat(absolutePath);
@@ -820,7 +919,7 @@ export async function runShpPostProcess(params: {
     // PUT .../datastores/{name}/external — body = file:// URL to .shp
     const putRes = await geoserverFetch(
       baseUrl,
-      `/rest/workspaces/${WORKSPACE}/datastores/${encodeURIComponent(basename)}/external`,
+      `/rest/workspaces/${WORKSPACE}/datastores/${encodeURIComponent(normalizedName)}/external`,
       {
         method: 'PUT',
         contentType: 'text/plain',
@@ -838,7 +937,7 @@ export async function runShpPostProcess(params: {
     const { createGeoServerStyle, setLayerDefaultStyle } = await import('./devTestService');
     const styleRes = await createGeoServerStyle({
       url: baseUrl,
-      name: basename,
+      name: normalizedName,
       geometryType: 'POLYGON',
       styleProps: {
         fillColor: '#4a90d9',
@@ -853,8 +952,8 @@ export async function runShpPostProcess(params: {
     const setRes = await setLayerDefaultStyle({
       url: baseUrl,
       workspace: WORKSPACE,
-      layerName: basename,
-      styleName: basename,
+      layerName: normalizedName,
+      styleName: normalizedName,
     });
     if (!setRes.success) {
       return { success: true, error: undefined };
@@ -1177,27 +1276,24 @@ export async function compareShpWithTable(params: {
   if (!keyField) return { ...empty, error: `key 필드가 설정되어 있지 않습니다. 레이어 속성정보에서 key를 설정하세요. (${tableName})` };
 
   const dir = path.dirname(absolutePath);
-  let targetSrs = 'EPSG:5187';
-  try {
-    const prjPath = path.join(dir, `${basename}.prj`);
-    const prjContent = await fs.readFile(prjPath, 'utf-8').catch(() => '');
-    const epsg = parseEpsgFromPrj(prjContent) ?? parseEpsgFromBasename(basename);
-    if (epsg) targetSrs = epsg;
-  } catch { /* keep default */ }
+  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
 
   const dbCfg = getDbConfig();
   const pgConnection = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
 
   const importResult = await runOgr2ogr([
     '-f', 'PostgreSQL', pgConnection, absolutePath,
+    '-oo', 'ENCODING=CP949',
+    '-nlt', 'PROMOTE_TO_MULTI',
     '-nln', `layer.${syncTableName}`,
+    ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
     '-t_srs', targetSrs,
     '-lco', 'GEOMETRY_NAME=geom',
     '-overwrite',
   ]);
 
   if (importResult.code !== 0) {
-    return { ...empty, error: `임시 테이블 import 실패: ${importResult.stderr.slice(-300)}` };
+    return { ...empty, error: `임시 테이블 import 실패: ${importResult.stderr}` };
   }
 
   try {
@@ -1659,27 +1755,24 @@ export async function readShpValues(params: {
 
   const dir = path.dirname(absolutePath);
   const basename = path.basename(shpPath, '.shp');
-  let targetSrs = 'EPSG:5187';
-  try {
-    const prjPath = path.join(dir, `${basename}.prj`);
-    const prjContent = await fs.readFile(prjPath, 'utf-8').catch(() => '');
-    const epsg = parseEpsgFromPrj(prjContent) ?? parseEpsgFromBasename(basename);
-    if (epsg) targetSrs = epsg;
-  } catch { /* keep default */ }
+  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
 
   const dbCfg = getDbConfig();
   const pgConn = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
 
   const importRes = await runOgr2ogr([
     '-f', 'PostgreSQL', pgConn, absolutePath,
+    '-oo', 'ENCODING=CP949',
+    '-nlt', 'PROMOTE_TO_MULTI',
     '-nln', `layer.${syncTableName}`,
+    ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
     '-t_srs', targetSrs,
     '-lco', 'GEOMETRY_NAME=geom',
     '-overwrite',
   ]);
 
   if (importRes.code !== 0) {
-    return { success: false, rows: {}, error: `SHP import 실패: ${importRes.stderr.slice(-200)}` };
+    return { success: false, rows: {}, error: `SHP import 실패: ${importRes.stderr}` };
   }
 
   try {
@@ -1773,9 +1866,7 @@ export async function exportLayerTableToShp(params: {
     }
     if (shpSize < 100) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      const tail =
-        (result2.stderr ?? result.stderr ?? '').split(/\r?\n/).filter(Boolean).slice(-4).join(' ').slice(-450) ||
-        `ogr2ogr 코드 ${result2.code}`;
+      const tail = (result2.stderr ?? result.stderr ?? '').trim() || `ogr2ogr 코드 ${result2.code}`;
       return {
         success: false,
         error: `SHP 생성 실패(jijuk 등 일부 행 좌표계·지오메트리 오류). ${tail}`,
@@ -1792,7 +1883,7 @@ export async function exportLayerTableToShp(params: {
   const archive = archiver('zip', { zlib: { level: 9 } });
   const out = new PassThrough();
   out.on('data', (c: Buffer) => chunks.push(c));
-  archive.on('error', (err: Error) => {
+  archive.on('error', (err: unknown) => {
     console.error('[exportLayerTableToShp] archiver error:', err);
   });
   archive.pipe(out);

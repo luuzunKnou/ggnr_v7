@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { reorderDefineLayerTableRow } from "../lib/defineLayerTableRowOrder"
 
 type RowRecord = Record<string, string>
 
@@ -12,6 +13,8 @@ const TABLE_OUTPUT_KEYS = [
   "define_table_group",
   "define_table_idx",
   "define_table_etc",
+  "define_table_schema",
+  "define_table_source",
 ] as const
 
 const FIELD_OUTPUT_KEYS = [
@@ -258,6 +261,7 @@ function main() {
     const tableName = pickValue(row, "define_table_name")
     if (!tableName) continue
 
+    const srcRaw = pickValue(row, "define_table_source").toLowerCase()
     const tableObj = compactObject(
       {
         define_table_name: tableName,
@@ -268,6 +272,8 @@ function main() {
         define_table_group: pickValue(row, "define_table_group"),
         define_table_idx: pickValue(row, "define_table_idx"),
         define_table_etc: pickValue(row, "define_table_etc"),
+        define_table_schema: pickValue(row, "define_table_schema") || "layer",
+        define_table_source: srcRaw === "excel" ? "excel" : "shp",
       },
       TABLE_OUTPUT_KEYS
     )
@@ -361,13 +367,15 @@ function main() {
   fs.mkdirSync(fieldsDir, { recursive: true })
   fs.mkdirSync(codesDir, { recursive: true })
 
-  const tables = Array.from(tableMap.values()).sort(sortTables)
+  const tables = Array.from(tableMap.values())
+    .sort(sortTables)
+    .map((t) => reorderDefineLayerTableRow(t as Record<string, unknown>))
   writeJson(path.join(defineLayerDir, "tables.json"), tables)
 
   let totalFields = 0
   const codeFieldKeys = new Set<string>()
   for (const table of tables) {
-    const tableName = table.define_table_name
+    const tableName = String((table as Record<string, unknown>)?.define_table_name ?? '')
     const fieldMap = fieldsMap.get(tableName)
     const fields = fieldMap ? Array.from(fieldMap.values()).sort(sortFields) : []
     totalFields += fields.length

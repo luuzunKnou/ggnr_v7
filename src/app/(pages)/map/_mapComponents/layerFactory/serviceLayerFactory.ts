@@ -3,6 +3,10 @@ import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import type { Map as OLMap } from 'ol';
 import { getTileGrid3857 } from '../config/mapDefaults';
+import {
+  sortLayerNamesForWmsStack,
+  type LayerDbGeometryKind,
+} from '@/lib/mapLayerGeometryOrder';
 
 const WORKSPACE = 'ggnr';
 
@@ -105,6 +109,7 @@ export function createServiceLayer(): TileLayer<TileWMS> {
 /**
  * visibleLayerNames / layerFilterRows / spatialFilterWkt 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.
+ * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점(아래→위)으로 맞춘다.
  */
 export function useServiceLayerSync(
   map: OLMap | null,
@@ -112,6 +117,7 @@ export function useServiceLayerSync(
   visibleLayerNames: Set<string>,
   layerFilterRows?: Map<string, LayerFilterRow[]>,
   spatialFilterWkt?: string | null,
+  layerGeometryTypes?: Record<string, LayerDbGeometryKind>,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
@@ -133,7 +139,11 @@ export function useServiceLayerSync(
       delete params.CQL_FILTER;
       serviceLayer.setVisible(false);
     } else {
-      const names = Array.from(visibleLayerNames);
+      const rawNames = Array.from(visibleLayerNames);
+      const names =
+        layerGeometryTypes && Object.keys(layerGeometryTypes).length > 0
+          ? sortLayerNamesForWmsStack(rawNames, layerGeometryTypes)
+          : rawNames;
       params.LAYERS = names.map((n) => `${WORKSPACE}:${n}`).join(',');
       params.STYLES = names.join(',');
       const filters = filterRef.current;
@@ -148,7 +158,7 @@ export function useServiceLayerSync(
       serviceLayer.setVisible(true);
       source.changed();
     }
-  }, [map, mapReady, visibleLayerNames, spatialFilterWkt]);
+  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes]);
 }
 
 export { WORKSPACE };

@@ -1,0 +1,19 @@
+<layer>
+  <name>river_plan_gd_ps_bsag</name>
+  <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7e08</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4e575fd4:19d2eef647c:-7dea</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4e575fd4:19d2eef647c:-7e09</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-28 05:56:21.868 UTC</dateCreated>
+  <dateModified>2026-03-28 06:00:10.40 UTC</dateModified>
+</layer>

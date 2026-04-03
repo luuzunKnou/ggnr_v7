@@ -86,7 +86,7 @@ export function MapLayergroupBar() {
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames ?? (() => {});
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
-  const [layerFilterRows, setLayerFilterRows] = useState<Map<string, LayerFilterRow[]>>(() => new Map());
+  const [layerFilterRows, setLayerFilterRows] = useState<globalThis.Map<string, LayerFilterRow[]>>(() => new Map());
   const [favoriteGroupKeys, setFavoriteGroupKeys] = useState<string[]>(() => loadFavoriteGroupKeys());
   const panelRef = useRef<HTMLDivElement>(null);
   const barWrapperRef = useRef<HTMLDivElement>(null);
@@ -138,9 +138,18 @@ export function MapLayergroupBar() {
       .then(([defineBody, layerSchemaTableSet]) => {
         if (cancelled) return;
         const list = defineBody?.data ?? [];
+        const parentTablesWithSplitDefs = new Set<string>();
+        for (const row of list) {
+          if (String(row.define_table_schema ?? 'layer').toLowerCase() !== 'layer') continue;
+          const p = String(row.define_table_parents_layer ?? '').trim().toLowerCase();
+          const divQ = String(row.define_table_div_query ?? '').trim();
+          if (p && divQ) parentTablesWithSplitDefs.add(p);
+        }
         const filtered = list.filter((row) => {
           const name = String(row.define_table_name ?? '').trim();
-          return name && layerSchemaTableSet.has(name);
+          if (!name || !layerSchemaTableSet.has(name)) return false;
+          if (parentTablesWithSplitDefs.has(name.toLowerCase())) return false;
+          return true;
         });
         const seen = new Set<string>();
         const ordered: string[] = [];

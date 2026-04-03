@@ -13,6 +13,8 @@ export interface IdentifyLayerResult {
   tableName: string;
   korName: string;
   titleField: string | null;
+  /** 분할 레이어 식별 결과(부모 테이블+CQL). 목록·자동 패널에서 부모보다 우선 */
+  isSplitLayer?: boolean;
   features: IdentifyFeatureItem[];
 }
 

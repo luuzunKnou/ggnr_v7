@@ -64,7 +64,6 @@ const originalQuery = pool.query.bind(pool);
 // 연결 풀 이벤트 핸들러
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
-  process.exit(-1);
 });
 
 // Drizzle 클라이언트 생성

@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import { sql } from 'drizzle-orm';
 import { db, pool } from '@/database/db';
 import { getLayerTableList, getDefineLayerTables, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
+import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 import { getLatestExcelHistoryByTables } from './excelHistoryService';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
@@ -65,7 +66,7 @@ export async function parseExcelFile(params: { pathOrResult: string }): Promise<
 
     const firstSheetName = sheetNames[0];
     const ws = wb.Sheets[firstSheetName];
-    const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { header: 1, defval: '' }) as unknown[][];
+    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
 
     if (!data || data.length === 0) {
       return { success: false, error: '데이터가 없습니다.', sheetCount, hasSingleSheet };
@@ -693,20 +694,33 @@ export async function createDefineTableAndFieldsForExcel(params: {
     }
     const existing = tables.find((r) => String(r.define_table_name ?? '').trim() === tableName);
     if (!existing) {
-      tables.push({
-        define_table_name: tableName,
-        define_table_schema: 'layer',
-        define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
-        define_table_kor_name: params.tableKorName || tableName,
-        define_table_group: '',
-        define_table_idx: 999,
-        define_table_source: 'excel',
-      });
+      tables.push(
+        reorderDefineLayerTableRow({
+          define_table_name: tableName,
+          define_table_kor_name: params.tableKorName || tableName,
+          define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
+          define_table_read_share: 'P',
+          define_table_write_share: 'P',
+          define_table_group: '',
+          define_table_idx: '0',
+          define_table_etc: '',
+          define_table_schema: 'layer',
+          define_table_source: 'excel',
+        })
+      );
       await fs.mkdir(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
-      await fs.writeFile(DEFINE_LAYER_TABLES_PATH, JSON.stringify(tables, null, 2), 'utf-8');
+      await fs.writeFile(
+        DEFINE_LAYER_TABLES_PATH,
+        JSON.stringify(reorderDefineLayerTablesArray(tables), null, 2),
+        'utf-8'
+      );
     } else {
       (existing as Record<string, unknown>).define_table_source = 'excel';
-      await fs.writeFile(DEFINE_LAYER_TABLES_PATH, JSON.stringify(tables, null, 2), 'utf-8');
+      await fs.writeFile(
+        DEFINE_LAYER_TABLES_PATH,
+        JSON.stringify(reorderDefineLayerTablesArray(tables), null, 2),
+        'utf-8'
+      );
     }
 
     const fieldsPath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${tableName}.json`);

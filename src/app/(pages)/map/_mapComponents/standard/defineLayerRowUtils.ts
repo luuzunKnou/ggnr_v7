@@ -13,3 +13,11 @@ export function getRowValueByField(row: Record<string, unknown>, fieldName: stri
   const found = Object.keys(row).find((k) => k.toLowerCase() === lower);
   return found != null ? row[found] : undefined;
 }
+
+/** define_field_is_key 로 지정된 컬럼명으로 행 키값 추출 */
+export function getRowKey(row: Record<string, unknown>, keyFieldName: string | null): string | number | null {
+  if (!keyFieldName) return null;
+  const v = getRowValueByField(row, keyFieldName);
+  if (v == null || v === '') return null;
+  return typeof v === 'number' ? v : String(v);
+}

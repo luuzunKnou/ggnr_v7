@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Button } from "@/app/shadcnComponents/ui/button"
 
 interface ParcelSlide {
   title: string
@@ -40,23 +39,33 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
 
   return (
     <div className="relative overflow-hidden min-h-[280px] rounded">
-      {/* Slides */}
-      <div className="relative h-full">
+      {/* Slides — z-0으로 두고 컨트롤(z-10)이 항상 위에 오게 함 */}
+      <div className="relative z-0 min-h-[280px] h-full">
         {slides.map((slide, index) => (
           <div
             key={index}
             className={`absolute inset-0 transition-opacity duration-500 ${
-              index === currentIndex ? "opacity-100" : "opacity-0"
+              index === currentIndex
+                ? "z-[1] opacity-100"
+                : "z-0 opacity-0 pointer-events-none"
             }`}
-            style={{
-              backgroundImage: slide.image
-                ? `url("${slide.image}")`
-                : undefined,
-              background: slide.image ? undefined : (slide.gradient || "linear-gradient(to bottom right, #1e293b, #0f172a)"),
-              backgroundSize: slide.image ? "cover" : undefined,
-              backgroundPosition: slide.image ? "center" : undefined,
-            }}
           >
+            {slide.image ? (
+              <img
+                src={slide.image}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover pointer-events-none select-none"
+                draggable={false}
+                decoding="async"
+              />
+            ) : (
+              <div
+                className="absolute inset-0 h-full w-full"
+                style={{
+                  background: slide.gradient || "linear-gradient(to bottom right, #1e293b, #0f172a)",
+                }}
+              />
+            )}
             <div className="absolute inset-0 bg-black/50"></div>
             <div className="relative h-full p-8 flex flex-col text-white">
               <div>
@@ -72,8 +81,9 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
 
       {/* Navigation Buttons */}
       <button
+        type="button"
         onClick={goToPrevious}
-        className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 backdrop-blur rounded-full p-2 transition-colors"
+        className="absolute z-10 left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 backdrop-blur rounded-full p-2 transition-colors"
         aria-label="Previous slide"
       >
         <svg
@@ -91,8 +101,9 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
         </svg>
       </button>
       <button
+        type="button"
         onClick={goToNext}
-        className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 backdrop-blur rounded-full p-2 transition-colors"
+        className="absolute z-10 right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 backdrop-blur rounded-full p-2 transition-colors"
         aria-label="Next slide"
       >
         <svg
@@ -111,7 +122,10 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
       </button>
 
       {/* 바로가기 버튼 */}
-      <button className="absolute bottom-[calc(1rem+30px+0.5rem)] left-1/2 -translate-x-1/2 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur px-6 py-3 text-sm font-medium transition-colors text-white rounded-[5px]">
+      <button
+        type="button"
+        className="absolute z-10 bottom-[calc(1rem+30px+0.5rem)] left-1/2 -translate-x-1/2 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur px-6 py-3 text-sm font-medium transition-colors text-white rounded-[5px]"
+      >
         바로가기
         <svg
           className="w-4 h-4"
@@ -127,9 +141,10 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
       </button>
 
       {/* Indicators */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+      <div className="absolute z-10 bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
         {slides.map((_, index) => (
           <button
+            type="button"
             key={index}
             onClick={() => goToSlide(index)}
             className={`h-2 rounded-full transition-all ${

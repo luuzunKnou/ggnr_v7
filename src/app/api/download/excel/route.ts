@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 export async function GET(req: NextRequest) {
+  const usrId = await getSessionUsrId();
+  if (!usrId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!(await userHasSerAccess(usrId, 'dataQuery', 'read'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
   const pathParam = req.nextUrl.searchParams.get('path');
   if (!pathParam || typeof pathParam !== 'string') {
     return NextResponse.json({ error: 'path 쿼리가 필요합니다.' }, { status: 400 });

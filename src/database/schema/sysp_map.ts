@@ -1,12 +1,16 @@
-import { pgTable, serial, integer } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, uniqueIndex, text } from 'drizzle-orm/pg-core';
 import { perm } from './perm';
-import { sys } from './sys';
 
-export const syspMap = pgTable('sysp_map', {
-  syspKey: serial('sysp_key').primaryKey().notNull(),
-  permKey: integer('perm_key').references(() => perm.permKey, { onDelete: 'cascade' }),
-  sysKey: integer('sys_key').references(() => sys.sysKey, { onDelete: 'cascade' }),
-});
+export const syspMap = pgTable(
+  'sysp_map',
+  {
+    syspKey: serial('sysp_key').primaryKey().notNull(),
+    permKey: integer('perm_key').references(() => perm.permKey, { onDelete: 'cascade' }),
+    /** DB serial 또는 systemList.config 의 sys_key 문자열 */
+    sysKey: text('sys_key'),
+  },
+  (t) => [uniqueIndex('sysp_map_perm_sys_uq').on(t.permKey, t.sysKey)]
+);
 
 /** 테이블 코멘트 (동기화·DB COMMENT ON TABLE 에 사용) */
 export const syspMapTableComment = '시스템 접근권한';

@@ -22,7 +22,7 @@ interface LayerManagementPanelProps {
   onVisibleChange: (next: Set<string>) => void;
   onUpdateWms: (visible: Set<string>) => void;
   onClose: () => void;
-  layerFilterRows?: Map<string, LayerFilterRow[]>;
+  layerFilterRows?: globalThis.Map<string, LayerFilterRow[]>;
   onLayerFilterRowsChange?: (layerName: string, rows: LayerFilterRow[]) => void;
   favoriteGroupKeys?: string[];
   onFavoriteToggle?: (category: string) => void;

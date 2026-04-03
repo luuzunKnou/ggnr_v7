@@ -174,6 +174,7 @@ export default function ComplaintDetail() {
     compKey: complaintDetail.compKey,
     compDate: complaintDetail.compDate,
     compCu: complaintDetail.compCu,
+    compCt: complaintDetail.compCt,
     compCg: complaintDetail.compCg,
     compAdr: complaintDetail.compAdr,
     compName: complaintDetail.compName,
@@ -217,6 +218,7 @@ export default function ComplaintDetail() {
           onDeleteHistory={handleDeleteHistory}
           onSave={handleSave}
           onDelete={handleDelete}
+          onClose={handleClose}
           saving={saving}
           deleting={deleting}
         />

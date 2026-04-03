@@ -5,7 +5,7 @@ import { call } from '@/lib/api';
 import { useMapContext } from './MapContext';
 import { RefreshCw, Box, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type Map from 'ol/Map';
+import type OLMap from 'ol/Map';
 import GeoTIFF from 'ol/source/GeoTIFF';
 import WebGLTileLayer from 'ol/layer/WebGLTile';
 import { transformExtent } from 'ol/proj';
@@ -19,7 +19,7 @@ export default function Map3DDataPanel({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visible, setVisible] = useState<Set<string>>(() => new Set());
-  const layersRef = useRef<Map<string, WebGLTileLayer<GeoTIFF>>>(new Map());
+  const layersRef = useRef<globalThis.Map<string, WebGLTileLayer>>(new Map());
 
   const itemKey = (item: TifItem) => `${item.folder}/${item.name}`;
 
@@ -63,7 +63,7 @@ export default function Map3DDataPanel({ onClose }: { onClose: () => void }) {
     fetchList();
   }, [fetchList]);
 
-  const addLayer = useCallback((map: Map, key: string) => {
+  const addLayer = useCallback((map: OLMap, key: string) => {
     if (layersRef.current.has(key)) return;
     const [folder, ...rest] = key.split('/');
     const fileName = rest.join('/');
@@ -160,7 +160,7 @@ export default function Map3DDataPanel({ onClose }: { onClose: () => void }) {
     tryFitToExtent();
   }, []);
 
-  const removeLayer = useCallback((map: Map, key: string) => {
+  const removeLayer = useCallback((map: OLMap, key: string) => {
     const layer = layersRef.current.get(key);
     if (layer) {
       map.removeLayer(layer);

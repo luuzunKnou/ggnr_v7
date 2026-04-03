@@ -1,0 +1,42 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4e575fd4:19d2eef647c:-7e09</id>
+  <name>river_plan_gd_ps_bsag</name>
+  <nativeName>river_plan_gd_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>river_plan_gd_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>river_plan_gd_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>380070.2099799457</minx>
+    <maxx>397085.4778393754</maxx>
+    <miny>345639.5059755197</miny>
+    <maxy>367837.94849083805</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.012178524624</minx>
+    <maxx>129.207902224997</maxx>
+    <miny>36.58880635214267</miny>
+    <maxy>36.79207968374155</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter>gd_type = &apos;배수암거&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

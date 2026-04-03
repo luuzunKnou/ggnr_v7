@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as fs from "fs"
 import * as path from "path"
+import { normalizeDefineTableSource } from "@/lib/defineLayerTablesNormalize"
+import { reorderDefineLayerTablesArray } from "@/lib/defineLayerTableRowOrder"
 
 const TABLES_PATH = path.join(process.cwd(), "src", "config", "defineLayer", "tables.json")
 
@@ -30,7 +32,9 @@ export async function GET(request: NextRequest) {
     if (!Array.isArray(tables)) {
       return NextResponse.json({ success: false, error: "Invalid tables format" }, { status: 500 })
     }
-    const sorted = sortTables(tables)
+    normalizeDefineTableSource(tables as Record<string, unknown>[])
+    const reordered = reorderDefineLayerTablesArray(tables as Record<string, unknown>[])
+    const sorted = sortTables(reordered)
 
     const pageParam = request.nextUrl.searchParams.get("page")
     const limitParam = request.nextUrl.searchParams.get("limit")
@@ -60,8 +64,10 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
+    normalizeDefineTableSource(tables as Record<string, unknown>[])
+    const reordered = reorderDefineLayerTablesArray(tables as Record<string, unknown>[])
     fs.mkdirSync(path.dirname(TABLES_PATH), { recursive: true })
-    fs.writeFileSync(TABLES_PATH, JSON.stringify(tables, null, 2), "utf-8")
+    fs.writeFileSync(TABLES_PATH, JSON.stringify(reordered, null, 2), "utf-8")
     return NextResponse.json({ success: true })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)

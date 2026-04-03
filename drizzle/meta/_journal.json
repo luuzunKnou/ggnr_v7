@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1774955006386,
+      "tag": "0000_add_log_kais",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774955420752,
+      "tag": "0001_add_integration_job_log",
+      "breakpoints": true
+    }
+  ]
+}

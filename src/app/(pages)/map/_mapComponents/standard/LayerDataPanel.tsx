@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { call } from '@/lib/api';
 import {
   FileText,
-  FileImage,
   History,
   Paperclip,
   Wrench,
@@ -13,11 +12,28 @@ import {
   Download,
   ChevronDown,
   ChevronRight,
+  X,
+  Upload,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
+import { cn, formatFileSize } from '@/lib/utils';
+import {
+  isImageServiceFileName,
+  isPdfServiceFileName,
+  requestServiceFileDataDelete,
+  serviceFileDataDownloadUrl,
+  serviceFileDataZipDownloadUrl,
+  triggerServiceFileDownload,
+  useServiceFileChunkedUpload,
+  useServiceFileData,
+} from './useServiceFileData';
 import { useMapContext } from '../MapContext';
-import { getRowValueByField } from './defineLayerRowUtils';
+import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
+import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
+import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
+import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
 import { getLegendUrl, type IdentifyLayerResult, type IdentifyFeatureItem } from '../hooks/useFeatureIdentify';
+import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -60,21 +76,6 @@ const SAMPLE_HISTORY: TimelineEvent[] = [
   { id: 2, date: '2025-09-03', type: '보수', title: '밸브 교체 작업', description: '노후 밸브 2개소 교체 완료', author: '박정비' },
   { id: 3, date: '2025-06-20', type: '이상발생', title: '미세 누수 발견', description: '연결부 미세 누수 확인, 긴급 보수 필요', author: '이점검' },
   { id: 4, date: '2024-03-10', type: '준공', title: '시설물 설치 준공', description: '안동 광역상수도 1구간 관로 설치 완료', author: '최공사' },
-];
-
-interface AttachmentItem {
-  id: number;
-  name: string;
-  type: 'image' | 'document';
-  size: string;
-  date: string;
-}
-
-const SAMPLE_ATTACHMENTS: AttachmentItem[] = [
-  { id: 1, name: '관로_현황사진_001.jpg', type: 'image', size: '2.4 MB', date: '2025-12-15' },
-  { id: 2, name: '관로_현황사진_002.jpg', type: 'image', size: '1.8 MB', date: '2025-12-15' },
-  { id: 3, name: '점검보고서_202512.pdf', type: 'document', size: '540 KB', date: '2025-12-15' },
-  { id: 4, name: '준공도면_1구간.pdf', type: 'document', size: '12.3 MB', date: '2024-03-10' },
 ];
 
 interface InfoField {
@@ -124,14 +125,6 @@ function InfoSection({ title, fields, defaultOpen = true }: { title: string; fie
 const PAGE_SIZE_LIST = 30;
 const PAGE_SIZE_DETAIL = 7;
 
-/** 데이터 설정(define_field_is_key)에 지정된 키 필드명으로 행에서 키값 추출 */
-function getRowKey(row: Record<string, unknown>, keyFieldName: string | null): string | number | null {
-  if (!keyFieldName) return null;
-  const v = row[keyFieldName];
-  if (v == null || v === '') return null;
-  return typeof v === 'number' ? v : String(v);
-}
-
 type LayerDataPanelProps = {
   dataTable: string;
   onClose?: () => void;
@@ -140,7 +133,7 @@ type LayerDataPanelProps = {
 };
 
 function flattenIdentifyResults(
-  results: { tableName: string; korName: string; features: { titleValue: string; data: Record<string, unknown> }[] }[]
+  results: IdentifyLayerResult[]
 ): { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }[] {
   const out: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }[] = [];
   let index = 0;
@@ -153,7 +146,13 @@ function flattenIdentifyResults(
   return out;
 }
 
-type ActiveLayerInfo = { tableName: string; name: string; schema: string };
+type ActiveLayerInfo = {
+  tableName: string;
+  name: string;
+  schema: string;
+  physicalTableName: string;
+  rowFilterSql: string | null;
+};
 
 export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDataKey }: LayerDataPanelProps) {
   const mapContext = useMapContext();
@@ -179,6 +178,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
   const [selectedRowData, setSelectedRowData] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('basic');
   const listScrollRef = useRef<HTMLDivElement>(null);
+  const attachUploadInputRef = useRef<HTMLInputElement>(null);
   const selectedIdentifyRowRef = useRef<HTMLButtonElement | null>(null);
   const highlightSourceRef = useRef<VectorSource | null>(null);
   const highlightLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
@@ -188,71 +188,104 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
   const [radarActive, setRadarActive] = useState(false);
   const prevLayerRef = useRef<string | null>(null);
   const [selectedIdentifyIndex, setSelectedIdentifyIndex] = useState<number | null>(null);
-  const [identifyPage, setIdentifyPage] = useState(1);
-  const prevIdentifyListSizeRef = useRef<number>(PAGE_SIZE_LIST);
-  const prevIdentifyPageRef = useRef<number>(1);
+  const [attachListRefreshNonce, setAttachListRefreshNonce] = useState(0);
+  const [attachmentImagePreview, setAttachmentImagePreview] = useState<{
+    items: ServiceFilePreviewItem[];
+    initialIndex: number;
+  } | null>(null);
+
+  /** 식별 목록에서 다른 레이어를 선택하면 URL의 dataTable은 그대로일 수 있음 → 필드/헤더는 선택 항목의 테이블 기준 */
+  const tableForLayerConfig =
+    isIdentifyMode && selectedIdentifyIndex != null && identifyFlat[selectedIdentifyIndex]
+      ? String(identifyFlat[selectedIdentifyIndex].layer.tableName ?? '').trim()
+      : dataTable.trim();
 
   useEffect(() => {
-    if (!isIdentifyMode || identifyFlat.length <= 1) return;
-    setIdentifyPage(1);
-    prevIdentifyListSizeRef.current = PAGE_SIZE_LIST;
-    prevIdentifyPageRef.current = 1;
-  }, [isIdentifyMode, identifyFlat.length]);
-
-  // identifyPage가 바뀔 때마다 ref 동기화 (이전/다음 클릭 등). prevIdentifyListSizeRef는 상세 토글 effect에서만 갱신
-  useEffect(() => {
-    if (isIdentifyMode && identifyFlat.length > 1) prevIdentifyPageRef.current = identifyPage;
-  }, [identifyPage, isIdentifyMode, identifyFlat.length]);
-
-  // 상세 열림/닫힘 시 7↔30 전환: 선택된 항목이 있으면 그 페이지로, 없으면 이전에 보던 첫 항목이 포함된 페이지로 이동
-  useEffect(() => {
-    if (!isIdentifyMode || identifyFlat.length <= 1) return;
-    const listSize = selectedRowData != null ? PAGE_SIZE_DETAIL : PAGE_SIZE_LIST;
-    const total = identifyFlat.length;
-    const maxPage = Math.max(1, Math.ceil(total / listSize));
-
-    let targetPage: number;
-    if (selectedIdentifyIndex != null) {
-      targetPage = Math.min(maxPage, Math.floor(selectedIdentifyIndex / listSize) + 1);
-      setIdentifyPage(targetPage);
-    } else {
-      const prevSize = prevIdentifyListSizeRef.current;
-      const prevPage = prevIdentifyPageRef.current;
-      const firstVisibleIndex = (prevPage - 1) * prevSize;
-      targetPage = Math.min(maxPage, Math.max(1, Math.floor(firstVisibleIndex / listSize) + 1));
-      setIdentifyPage(targetPage);
-    }
-    prevIdentifyListSizeRef.current = listSize;
-    prevIdentifyPageRef.current = targetPage;
-  }, [selectedRowData, isIdentifyMode, identifyFlat.length, selectedIdentifyIndex]);
-
-  useEffect(() => {
-    if (!dataTable) { setActiveLayer(null); return; }
+    if (!tableForLayerConfig) { setActiveLayer(null); return; }
     let cancelled = false;
     fetch('/api/config/defineLayer')
       .then((r) => r.json())
-      .then((res: { data?: { define_table_name?: string; define_table_kor_name?: string; define_table_schema?: string }[] }) => {
+      .then(
+        (res: {
+          data?: {
+            define_table_name?: string;
+            define_table_kor_name?: string;
+            define_table_schema?: string;
+            define_table_parents_layer?: string;
+            define_table_div_query?: string;
+          }[];
+        }) => {
         if (cancelled) return;
         const tables = Array.isArray(res?.data) ? res.data : [];
-        const row = tables.find((t) => String(t?.define_table_name ?? '').trim() === dataTable.trim());
+        const row = tables.find((t) => String(t?.define_table_name ?? '').trim() === tableForLayerConfig);
         if (row) {
+          const schema = String(row.define_table_schema ?? 'layer').trim() || 'layer';
+          const parent = String(row.define_table_parents_layer ?? '').trim();
+          const divQ = String(row.define_table_div_query ?? '').trim();
+          const isSplit = !!parent && !!divQ;
+          const physical = (isSplit ? parent : tableForLayerConfig).trim().toLowerCase();
           setActiveLayer({
-            tableName: dataTable.trim(),
-            name: String(row.define_table_kor_name ?? row.define_table_name ?? dataTable).trim() || dataTable,
-            schema: String(row.define_table_schema ?? 'layer').trim() || 'layer',
+            tableName: tableForLayerConfig,
+            name: String(row.define_table_kor_name ?? row.define_table_name ?? tableForLayerConfig).trim() || tableForLayerConfig,
+            schema,
+            physicalTableName: physical,
+            rowFilterSql: isSplit ? divQ : null,
           });
         } else {
-          setActiveLayer({ tableName: dataTable.trim(), name: dataTable.trim(), schema: 'layer' });
+          const tn = tableForLayerConfig.toLowerCase();
+          setActiveLayer({
+            tableName: tableForLayerConfig,
+            name: tableForLayerConfig,
+            schema: 'layer',
+            physicalTableName: tn,
+            rowFilterSql: null,
+          });
         }
-      })
+      }
+      )
       .catch(() => {
-        if (!cancelled) setActiveLayer({ tableName: dataTable.trim(), name: dataTable.trim(), schema: 'layer' });
+        if (!cancelled) {
+          const tn = tableForLayerConfig.toLowerCase();
+          setActiveLayer({
+            tableName: tableForLayerConfig,
+            name: tableForLayerConfig,
+            schema: 'layer',
+            physicalTableName: tn,
+            rowFilterSql: null,
+          });
+        }
       });
     return () => { cancelled = true; };
-  }, [dataTable]);
+  }, [tableForLayerConfig]);
 
   const selectedRow = selectedRowData;
   const pageSize = selectedRow != null ? PAGE_SIZE_DETAIL : PAGE_SIZE_LIST;
+
+  const rowKeyForAttachments =
+    selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
+  const attachmentQuery = useServiceFileData({
+    serEng: SER_FILE_ENG.dataQuery,
+    enabled: activeTab === 'attach' && selectedRow != null && activeLayer != null,
+    layerSegment: activeLayer?.physicalTableName ?? null,
+    keyValue: rowKeyForAttachments,
+    refreshNonce: attachListRefreshNonce,
+  });
+  const attachmentPreviewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
+    if (activeLayer == null || rowKeyForAttachments == null) return [];
+    return attachmentQuery.files
+      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
+      .map((f) => ({
+        url: serviceFileDataDownloadUrl(
+          SER_FILE_ENG.dataQuery,
+          activeLayer.physicalTableName,
+          rowKeyForAttachments,
+          f.name
+        ),
+        fileName: f.name,
+        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
+      }));
+  }, [attachmentQuery.files, activeLayer, rowKeyForAttachments]);
+  const attachChunkUpload = useServiceFileChunkedUpload();
 
   const map = mapContext?.mapInstanceRef?.current;
 
@@ -262,6 +295,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     highlightSourceRef.current = source;
     const layer = new VectorLayer({
       source,
+      renderOrder: compareFeaturesByGeometryStackOrder,
       style: (feature) => {
         const geom = feature.getGeometry();
         if (!geom) return undefined;
@@ -291,6 +325,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     selectionSourceRef.current = selSource;
     const selectionLayer = new VectorLayer({
       source: selSource,
+      renderOrder: compareFeaturesByGeometryStackOrder,
       style: (feature) => {
         const phase = pulsePhaseRef.current;
         const pulse = 0.7 + 0.4 * Math.sin(phase);
@@ -442,9 +477,6 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
 
   useEffect(() => {
     if (selectedIdentifyIndex == null) return;
-    const listSize = selectedRowData != null ? PAGE_SIZE_DETAIL : PAGE_SIZE_LIST;
-    const targetPage = Math.floor(selectedIdentifyIndex / listSize) + 1;
-    setIdentifyPage((p) => (p !== targetPage ? targetPage : p));
     selectedIdentifyRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [selectedIdentifyIndex, selectedRowData]);
 
@@ -476,13 +508,16 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     }
 
     const tableDataParams = {
-      table: activeLayer.tableName,
+      table: activeLayer.physicalTableName,
       schema: activeLayer.schema,
       limit: PAGE_SIZE_LIST,
       offset: 0,
       ...(spatialFilterWkt ? { spatialWkt: spatialFilterWkt, spatialSrid: 5181 } : {}),
+      ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
     };
-    const fieldsPromise = fetch(`/api/config/defineLayer/fields/${encodeURIComponent(activeLayer.tableName)}`).then((r) => r.json());
+    const fieldsPromise = fetch(
+      `/api/config/defineLayer/fields/${encodeURIComponent(activeLayer.physicalTableName)}`
+    ).then((r) => r.json());
     const useKey = !isIdentify && initialDataKey != null && String(initialDataKey).trim() !== '';
     const dataPromise = isIdentify
       ? Promise.resolve({ rows: [] as Record<string, unknown>[], total: 0 })
@@ -491,9 +526,10 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
           service: 'standardService',
           action: 'getTableRowByKey',
           params: {
-            table: activeLayer.tableName,
+            table: activeLayer.physicalTableName,
             schema: activeLayer.schema,
             keyValue: initialDataKey!.trim(),
+            ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
           },
         })
       : call('', 'POST', {
@@ -573,7 +609,8 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     if (idx >= 0) {
       setSelectedRowData(rows[idx] as Record<string, unknown>);
       setHighlightedRow(idx);
-      setActiveTab('basic');
+      // 첨부파일 탭을 보던 중 다른 행(URL dataKey)으로 바뀌어도 탭 유지
+      setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
     }
   }, [activeLayer, isIdentifyMode, keyFieldName, initialDataKey, rows]);
 
@@ -609,11 +646,12 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
         service: 'standardService',
         action: 'getTableData',
         params: {
-          table: activeLayer.tableName,
+          table: activeLayer.physicalTableName,
           schema: activeLayer.schema,
           limit: ps,
           offset: (newPage - 1) * ps,
           ...(mapContext?.spatialFilterWkt ? { spatialWkt: mapContext.spatialFilterWkt, spatialSrid: 5181 } : {}),
+          ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
         },
       })
         .then((res) => {
@@ -682,7 +720,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
       if (wasDetailOpen) {
         setHighlightedRow(rowIndex);
         setSelectedRowData(rowData);
-        setActiveTab('basic');
+        setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
         onDataKeyChange?.(keyVal);
       } else {
         const absoluteOffset = (page - 1) * PAGE_SIZE_LIST + rowIndex;
@@ -724,13 +762,27 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
   ];
 
   return (
+    <>
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* Header (닫기 버튼은 페이징 영역 다음 버튼 뒤로 이동) */}
-      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0 bg-white">
-        <div className="min-w-0">
+      {/* 상세 열림 시 패널 닫기는 레이어 목록과 동일하게 헤더 우측 X */}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0 bg-white">
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-slate-800 truncate">{activeLayer.name}</h3>
-          <span className="text-[11px] text-slate-500">{activeLayer.tableName}</span>
+          {!isIdentifyMode && (
+            <span className="text-[11px] text-slate-500">{activeLayer.tableName}</span>
+          )}
         </div>
+        {hasDetail && (
+          <button
+            type="button"
+            onClick={handleClose}
+            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            title="닫기"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* List section (1건 선택 시 목록 숨기고 상세만 표시) */}
@@ -747,13 +799,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
           {error && (
             <div className="px-4 py-6 text-center text-[12px] text-red-600">{error}</div>
           )}
-          {isIdentifyMode && identifyFlat.length > 1 && (() => {
-            const identifyListSize = selectedRowData != null ? PAGE_SIZE_DETAIL : PAGE_SIZE_LIST;
-            const identifyTotal = identifyFlat.length;
-            const offset = (identifyPage - 1) * identifyListSize;
-            const visibleItems = identifyFlat.slice(offset, offset + identifyListSize);
-            const maxIdentifyPage = Math.max(1, Math.ceil(identifyTotal / identifyListSize));
-            return (
+          {isIdentifyMode && identifyFlat.length > 1 && (
             <>
               <div className="flex items-center border-b border-slate-200 bg-slate-100/60 px-4 py-1.5 text-[12px] text-[#666] shrink-0">
                 지도에서 선택된 항목
@@ -761,16 +807,8 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                   ({identifyResultList?.results?.length ?? 0}개 레이어, {identifyFlat.length}개 데이터)
                 </span>
               </div>
-              <div
-                className="flex-1 min-h-0 overflow-y-auto"
-                style={{ display: 'grid', gridTemplateRows: `repeat(${identifyListSize}, 1fr)` }}
-              >
-                {Array.from({ length: identifyListSize }, (_, i) => {
-                  const item = visibleItems[i];
-                  if (item == null) {
-                    return <div key={`empty-${i}`} className="min-h-0" />;
-                  }
-                  const { layer, feature, index: idx } = item;
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {identifyFlat.map(({ layer, feature, index: idx }) => {
                   const isHighlighted = selectedIdentifyIndex === idx;
                   return (
                     <button
@@ -779,7 +817,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                       ref={isHighlighted ? selectedIdentifyRowRef : undefined}
                       onClick={() => handleIdentifyItemClick({ layer, feature, index: idx })}
                       className={cn(
-                        'flex w-full items-center gap-2 border-b border-slate-100 px-4 py-2.5 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
+                        'flex w-full items-center gap-2 border-b border-slate-100 px-4 py-1 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
                         isHighlighted && 'bg-primary/10'
                       )}
                     >
@@ -804,28 +842,9 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-1.5 bg-slate-50/80 shrink-0">
                 <span className="text-[11px] text-[#666]">
-                  {identifyTotal === 0
-                    ? '0건'
-                    : `${offset + 1}–${offset + visibleItems.length} / ${identifyTotal.toLocaleString()}건`}
+                  총 {identifyFlat.length.toLocaleString()}건
                 </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={identifyPage <= 1}
-                    onClick={() => setIdentifyPage((p) => Math.max(1, p - 1))}
-                    className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#666] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
-                  >
-                    이전
-                  </button>
-                  <span className="px-1.5 text-[11px] text-[#666]">{identifyPage}페이지</span>
-                  <button
-                    type="button"
-                    disabled={identifyPage >= maxIdentifyPage}
-                    onClick={() => setIdentifyPage((p) => Math.min(maxIdentifyPage, p + 1))}
-                    className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#666] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
-                  >
-                    다음
-                  </button>
+                {!hasDetail && (
                   <button
                     type="button"
                     onClick={handleClose}
@@ -833,11 +852,10 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                   >
                     닫기
                   </button>
-                </div>
+                )}
               </div>
             </>
-            );
-          })()}
+          )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (
             <>
               <div className="flex items-center border-b border-slate-200 bg-slate-100/60 px-4 py-1.5 text-[12px] font-semibold text-[#666] shrink-0">
@@ -913,17 +931,19 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
               >
                 다음
               </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="rounded border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] text-[#666] transition-colors hover:bg-slate-100"
-              >
-                닫기
-              </button>
+              {!hasDetail && (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] text-[#666] transition-colors hover:bg-slate-100"
+                >
+                  닫기
+                </button>
+              )}
             </div>
           </div>
         )}
-        {!isIdentifyMode && listFields.length === 0 && rows.length === 0 && !loading && (
+        {!isIdentifyMode && listFields.length === 0 && rows.length === 0 && !loading && !hasDetail && (
           <div className="flex items-center justify-end border-t border-slate-200 px-4 py-1.5 bg-slate-50/80 shrink-0">
             <button
               type="button"
@@ -1045,25 +1065,187 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
 
             {activeTab === 'attach' && (
               <div className="px-3 py-2">
-                {SAMPLE_ATTACHMENTS.length === 0 ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center">첨부파일 없음</div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {SAMPLE_ATTACHMENTS.map((file) => (
-                      <div key={file.id} className="flex items-center gap-2.5 rounded border border-slate-200 bg-white p-2.5 transition-colors hover:bg-slate-50">
-                        <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', file.type === 'image' ? 'bg-sky-100' : 'bg-amber-100')}>
-                          {file.type === 'image' ? <FileImage className="h-3.5 w-3.5 text-sky-600" /> : <FileText className="h-3.5 w-3.5 text-amber-600" />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[11px] font-medium text-[#666]">{file.name}</p>
-                          <p className="text-[10px] text-[#666]">{file.size} | {file.date}</p>
-                        </div>
-                        <button type="button" className="h-6 w-6 shrink-0 rounded text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900" title="다운로드">
-                          <Download className="h-3 w-3 mx-auto" />
-                        </button>
-                      </div>
-                    ))}
+                <input
+                  ref={attachUploadInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file || !activeLayer || rowKeyForAttachments == null) return;
+                    void attachChunkUpload
+                      .upload({
+                        file,
+                        serEng: SER_FILE_ENG.dataQuery,
+                        layerSegment: activeLayer.physicalTableName,
+                        keyValue: rowKeyForAttachments,
+                      })
+                      .then((res) => {
+                        if (res && 'error' in res && res.error) return;
+                        setAttachListRefreshNonce((n) => n + 1);
+                        attachChunkUpload.reset();
+                      });
+                  }}
+                />
+                {keyFieldName == null || rowKeyForAttachments == null ? (
+                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                    레이어 데이터 설정에서 키 필드(define_field_is_key)가 지정되어 있어야 첨부폴더를 조회할 수 있습니다.
                   </div>
+                ) : (
+                  <>
+                    {attachChunkUpload.state.status === 'uploading' && (
+                      <div className="mb-2 rounded border border-slate-200 bg-slate-50 px-2.5 py-2">
+                        <div className="mb-1 flex justify-between text-[10px] text-[#666]">
+                          <span className="flex items-center gap-1">
+                            <Upload className="h-3 w-3 shrink-0" aria-hidden />
+                            업로드 중…
+                          </span>
+                          <span>{attachChunkUpload.state.progress}%</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full bg-primary transition-[width] duration-150"
+                            style={{ width: `${attachChunkUpload.state.progress}%` }}
+                          />
+                        </div>
+                        {attachChunkUpload.state.totalChunks > 0 && (
+                          <p className="mt-1 text-[10px] text-slate-500">
+                            청크 {attachChunkUpload.state.currentChunk} / {attachChunkUpload.state.totalChunks}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {attachChunkUpload.state.status === 'error' && attachChunkUpload.state.error && (
+                      <div className="mb-2 rounded border border-red-200 bg-red-50 px-2.5 py-2 text-[10px] text-red-700">
+                        {attachChunkUpload.state.error}
+                      </div>
+                    )}
+                    {attachmentQuery.loading ? (
+                      <div className="py-6 text-[11px] text-slate-500 text-center">불러오는 중…</div>
+                    ) : attachmentQuery.error ? (
+                      <div className="py-6 text-[11px] text-red-600 text-center">{attachmentQuery.error}</div>
+                    ) : attachmentQuery.files.length === 0 ? (
+                      <div className="py-6 text-[11px] text-slate-500 text-center">첨부파일 없음</div>
+                    ) : (
+                  <div className="space-y-1.5">
+                    {attachmentQuery.files.map((file) => {
+                      const isImg = isImageServiceFileName(file.name);
+                      const isPdf = isPdfServiceFileName(file.name);
+                      const dateStr =
+                        file.modified != null
+                          ? (() => {
+                              const d = new Date(file.modified);
+                              return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('ko-KR');
+                            })()
+                          : '—';
+                      const downloadUrl = serviceFileDataDownloadUrl(
+                        SER_FILE_ENG.dataQuery,
+                        activeLayer!.physicalTableName,
+                        rowKeyForAttachments,
+                        file.name
+                      );
+                      const activateRow = () => {
+                        if (isImg || isPdf) {
+                          const idx = attachmentPreviewGalleryItems.findIndex((i) => i.fileName === file.name);
+                          setAttachmentImagePreview({
+                            items: attachmentPreviewGalleryItems,
+                            initialIndex: idx >= 0 ? idx : 0,
+                          });
+                        } else {
+                          triggerServiceFileDownload(downloadUrl, file.name);
+                        }
+                      };
+                      return (
+                        <div
+                          key={file.name}
+                          tabIndex={0}
+                          role="group"
+                          aria-label={
+                            isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
+                          }
+                          className="flex cursor-pointer items-center gap-2.5 rounded border border-slate-200 bg-white p-2.5 pr-1 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                          onClick={activateRow}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              activateRow();
+                            }
+                          }}
+                        >
+                          {isImg ? (
+                            <ServiceFileAttachmentThumb
+                              serEng={SER_FILE_ENG.dataQuery}
+                              layerSegment={activeLayer!.physicalTableName}
+                              keyValue={rowKeyForAttachments}
+                              fileName={file.name}
+                              size="sm"
+                            />
+                          ) : isPdf ? (
+                            <ServiceFilePdfThumb
+                              serEng={SER_FILE_ENG.dataQuery}
+                              layerSegment={activeLayer!.physicalTableName}
+                              keyValue={rowKeyForAttachments}
+                              fileName={file.name}
+                              size="sm"
+                            />
+                          ) : (
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-amber-100">
+                              <FileText className="h-3.5 w-3.5 text-amber-600" />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[11px] font-medium text-[#666]">{file.name}</p>
+                            <p className="text-[10px] text-[#666]">
+                              {formatFileSize(file.size)} | {dateStr}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                triggerServiceFileDownload(downloadUrl, file.name);
+                              }}
+                              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
+                              title="다운로드"
+                            >
+                              <Download className="h-3 w-3" />
+                              <span className="sr-only">다운로드</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (
+                                  !window.confirm(
+                                    `「${file.name}」을(를) 삭제할까요?\n`
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void requestServiceFileDataDelete({
+                                  serEng: SER_FILE_ENG.dataQuery,
+                                  layerSegment: activeLayer!.physicalTableName,
+                                  keyValue: rowKeyForAttachments,
+                                  fileName: file.name,
+                                }).then((r) => {
+                                  if (r.ok) setAttachListRefreshNonce((n) => n + 1);
+                                  else window.alert(r.error);
+                                });
+                              }}
+                              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-red-100 hover:text-red-700"
+                              title="삭제"
+                            >
+                              <X className="h-3 w-3" />
+                              <span className="sr-only">삭제</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1092,9 +1274,47 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
             )}
             {activeTab === 'attach' && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-[#666]">첨부파일 {SAMPLE_ATTACHMENTS.length}건</span>
-                <div className="flex gap-1.5">
-                  <button type="button" className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">파일 추가</button>
+                <span className="text-[10px] text-[#666]">
+                  첨부파일{' '}
+                  {keyFieldName != null && rowKeyForAttachments != null ? `${attachmentQuery.files.length}건` : '—'}
+                </span>
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    disabled={
+                      keyFieldName == null ||
+                      rowKeyForAttachments == null ||
+                      attachChunkUpload.state.status === 'uploading'
+                    }
+                    onClick={() => {
+                      attachChunkUpload.reset();
+                      attachUploadInputRef.current?.click();
+                    }}
+                    className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    파일 추가
+                  </button>
+                  {keyFieldName != null &&
+                  rowKeyForAttachments != null &&
+                  activeLayer != null &&
+                  attachmentQuery.files.length > 0 ? (
+                    <a
+                      href={serviceFileDataZipDownloadUrl(
+                        SER_FILE_ENG.dataQuery,
+                        activeLayer.physicalTableName,
+                        rowKeyForAttachments,
+                        { layerDisplayName: activeLayer.name }
+                      )}
+                      download
+                      className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50"
+                    >
+                      전체 다운로드
+                    </a>
+                  ) : (
+                    <span className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-400 cursor-not-allowed">
+                      전체 다운로드
+                    </span>
+                  )}
                   <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
                 </div>
               </div>
@@ -1103,5 +1323,13 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
         </div>
       )}
     </div>
+    {attachmentImagePreview != null && (
+      <ServiceFileImagePreview
+        items={attachmentImagePreview.items}
+        initialIndex={attachmentImagePreview.initialIndex}
+        onClose={() => setAttachmentImagePreview(null)}
+      />
+    )}
+    </>
   );
 }

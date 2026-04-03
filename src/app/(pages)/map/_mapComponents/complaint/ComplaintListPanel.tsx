@@ -348,6 +348,7 @@ export default function ComplaintListPanel() {
               histories={[]}
               files={[]}
               onSave={handleCreateComplaint}
+              onClose={() => setAddDialogOpen(false)}
               saving={saving}
             />
           </div>

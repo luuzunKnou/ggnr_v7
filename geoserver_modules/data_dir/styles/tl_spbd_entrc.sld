@@ -5,13 +5,12 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
-          <sld:MaxScaleDenominator>35000.0</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
-                  <sld:CssParameter name="fill">#C8C8C8</sld:CssParameter>
+                  <sld:CssParameter name="fill">#FF0000</sld:CssParameter>
                   <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>

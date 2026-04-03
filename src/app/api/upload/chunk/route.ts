@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadChunk } from '@/service/uploadService';
+import { getSessionUsrId } from '@/lib/auth/guard';
 
 /**
  * POST: 청크 바이너리 본문 저장.
@@ -7,6 +8,10 @@ import { uploadChunk } from '@/service/uploadService';
  */
 export async function POST(request: NextRequest) {
   try {
+    const usrId = await getSessionUsrId();
+    if (!usrId) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     const { searchParams } = new URL(request.url);
     const uploadId = searchParams.get('uploadId');
     const chunkIndexStr = searchParams.get('chunkIndex');
@@ -31,10 +36,12 @@ export async function POST(request: NextRequest) {
       chunkIndex,
       totalChunks,
       chunkData: Buffer.from(buffer),
+      sessionUsrId: usrId,
     });
     return NextResponse.json({ success: true, data: { ok: true } });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload chunk failed';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const status = message === 'Forbidden' ? 403 : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

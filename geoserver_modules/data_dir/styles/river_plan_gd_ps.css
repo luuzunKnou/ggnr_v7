@@ -1,0 +1,7 @@
+/* 구조물도 부모(river_plan_gd_ps) — WMS용 시 기본 아이콘 */
+* {
+  mark: url("river_plan_gd_ps_others.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
+  mark-anchor: 0.5 0.5;
+}

@@ -16,6 +16,9 @@ import { MapLayergroupBar } from './map-layergroup-bar';
 import { searchAddress, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
 import { useMapContext } from './MapContext';
 import { transform } from 'ol/proj';
+import { canAccessPrivateSystem } from '@/lib/accessClient';
+import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
+import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 
 type SystemOption = {
   sys_key: string;
@@ -25,6 +28,7 @@ type SystemOption = {
   sys_idx?: number;
   sys_col?: string;
   serviceList?: string[];
+  sys_is_private?: boolean | null;
 };
 
 const SIDEBAR_WIDTH = 65;
@@ -75,6 +79,9 @@ export function MapSearchBar({
 
   const [systemList, setSystemList] = useState<SystemOption[]>([]);
   const [systemModalOpen, setSystemModalOpen] = useState(false);
+  const [deniedOpen, setDeniedOpen] = useState(false);
+  const [deniedSysKey, setDeniedSysKey] = useState('');
+  const { snapshot } = useMyAccessSnapshot();
 
   const [addressResults, setAddressResults] = useState<VWorldAddressItem[]>([]);
   const [addressSearchLoading, setAddressSearchLoading] = useState(false);
@@ -188,6 +195,15 @@ export function MapSearchBar({
     else current.delete('system');
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
+  };
+
+  const trySelectSystem = (sys: SystemOption) => {
+    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
+      setDeniedSysKey(sys.sys_key);
+      setDeniedOpen(true);
+      return;
+    }
+    selectSystem(sys.sys_key);
   };
 
   const submit = (nextQuery: string) => {
@@ -406,7 +422,7 @@ export function MapSearchBar({
                         <li key={sys.sys_key}>
                           <button
                             type="button"
-                            onClick={() => selectSystem(sys.sys_key)}
+                            onClick={() => trySelectSystem(sys)}
                             className={cn(
                               'w-full flex items-center gap-4 rounded-xl px-4 py-3 text-left transition-all duration-200 border',
                               isSelected
@@ -442,6 +458,12 @@ export function MapSearchBar({
                   </footer>
                 </DialogContent>
               </Dialog>
+              <ResourceAccessDeniedDialog
+                open={deniedOpen}
+                onOpenChange={setDeniedOpen}
+                resource="system"
+                sysKey={deniedSysKey}
+              />
             </>
           );
         })()}
