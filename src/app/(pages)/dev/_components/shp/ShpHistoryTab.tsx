@@ -211,10 +211,11 @@ export function ShpHistoryTab() {
                                     <th className="py-1 px-2">레이어 한글명</th>
                                     <th className="py-1 px-2">레이어 영문명</th>
                                     <th className="py-1 px-2 w-16">구분</th>
-                                    <th className="py-1 px-2 w-20 text-right">이전</th>
-                                    <th className="py-1 px-2 w-16 text-right text-green-700">신규</th>
-                                    <th className="py-1 px-2 w-16 text-right text-orange-600">충돌</th>
-                                    <th className="py-1 px-2 w-16 text-right text-red-500">삭제</th>
+                                    <th className="py-1 px-2 w-14 text-right" title="처리 전 DB 행 수">이전</th>
+                                    <th className="py-1 px-2 w-14 text-right" title="처리 후 DB 행 수">현재</th>
+                                    <th className="py-1 px-2 w-14 text-right text-emerald-700 dark:text-emerald-400" title="SHP 기준 추가 행">추가</th>
+                                    <th className="py-1 px-2 w-14 text-right text-orange-600" title="속성 충돌(변경 필요)">변경</th>
+                                    <th className="py-1 px-2 w-14 text-right text-red-500" title="삭제 대상">삭제</th>
                                     <th className="py-1 px-2">업데이트 내용</th>
                                     <th className="py-1 px-2 w-24 text-center">액션</th>
                                   </tr>
@@ -236,10 +237,11 @@ export function ShpHistoryTab() {
                                       <td className="py-1 px-2 truncate max-w-[8rem]" title={d.dhKorName ?? ''}>{d.dhKorName ?? '—'}</td>
                                       <td className="py-1 px-2 font-mono truncate max-w-[8rem]" title={d.dhName ?? ''}>{d.dhName ?? '—'}</td>
                                       <td className="py-1 px-2">{d.dhType ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right">{d.dhOldData ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right text-green-700">{d.dhAppendCount ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right text-orange-600">{d.dhConflictCount ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right text-red-500">{d.dhRemoveCount ?? '—'}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{d.dhOldData ?? '—'}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{d.dhNewData ?? '—'}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{d.dhAppendCount ?? '—'}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums text-orange-600">{d.dhConflictCount ?? '—'}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums text-red-500">{d.dhRemoveCount ?? '—'}</td>
                                       <td className="py-1 px-2 truncate max-w-[10rem]" title={d.dhContents ?? ''}>{d.dhContents ?? '—'}</td>
                                       <td className="py-1 px-2 text-center">
                                         {showSyncBtn(d) && (

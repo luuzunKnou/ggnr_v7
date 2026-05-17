@@ -29,7 +29,7 @@ type BaseMeta = {
 };
 
 type UploadMetaStandard = BaseMeta & {
-  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData';
+  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source';
 };
 
 type UploadMetaServiceFileData = BaseMeta & {
@@ -55,13 +55,21 @@ export type InitChunkedUploadResult = {
  * serviceFileData 타입은 사용할 수 없습니다 — initServiceFileDataUpload 를 사용하세요.
  */
 export async function initChunkedUpload(params: {
-  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData';
+  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source';
   fileName: string;
   totalSize: number;
 }): Promise<InitChunkedUploadResult> {
   const { uploadType, fileName, totalSize } = params;
-  if (uploadType !== 'tif' && uploadType !== 'las' && uploadType !== 'shp' && uploadType !== 'excel' && uploadType !== 'fileData') {
-    throw new Error('uploadType must be tif, las, shp, excel, or fileData');
+  if (
+    uploadType !== 'tif' &&
+    uploadType !== 'las' &&
+    uploadType !== 'shp' &&
+    uploadType !== 'excel' &&
+    uploadType !== 'fileData' &&
+    uploadType !== 'satelliteTif' &&
+    uploadType !== 'source'
+  ) {
+    throw new Error('uploadType must be tif, las, shp, excel, fileData, satelliteTif, or source');
   }
   const expectedChunks = Math.ceil(totalSize / CHUNK_SIZE) || 1;
   const uploadId = nanoid();
@@ -209,6 +217,9 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   } else if (meta.uploadType === 'tif') {
     subDir = 'upload_data/tif';
     saveFileName = meta.fileName;
+  } else if (meta.uploadType === 'satelliteTif') {
+    subDir = 'upload_data/satellite_tif';
+    saveFileName = meta.fileName;
   } else if (meta.uploadType === 'shp') {
     subDir = 'service_data/shp_data';
     saveFileName = meta.fileName;
@@ -217,6 +228,9 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     saveFileName = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}_${meta.fileName}`;
   } else if (meta.uploadType === 'fileData') {
     subDir = 'service_data/file_data';
+    saveFileName = meta.fileName;
+  } else if (meta.uploadType === 'source') {
+    subDir = 'upload_data/source_upload';
     saveFileName = meta.fileName;
   } else {
     subDir = 'upload_data/las';
@@ -232,10 +246,15 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   if (segments.some((p) => p === '..')) {
     throw new Error('Invalid fileName path');
   }
-  const targetPath =
-    meta.uploadType === 'fileData'
-      ? path.join(targetDir, ...segments)
-      : path.join(targetDir, segments[segments.length - 1] ?? normalized);
+  /** 폴더 선택 업로드(webkitRelativePath) 시 하위 경로 유지. 루트만 저장하면 후처리가 service_data/shp_data/폴더/파일.shp 를 찾다가 실패함. */
+  const preserveRelativePath =
+    meta.uploadType === 'fileData' ||
+    meta.uploadType === 'shp' ||
+    meta.uploadType === 'satelliteTif' ||
+    meta.uploadType === 'source';
+  const targetPath = preserveRelativePath
+    ? path.join(targetDir, ...segments)
+    : path.join(targetDir, segments[segments.length - 1] ?? normalized);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   const buffers: Buffer[] = [];
   for (let i = 0; i < meta.expectedChunks; i++) {
@@ -246,16 +265,16 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   await fs.writeFile(targetPath, Buffer.concat(buffers));
   const stat = await fs.stat(targetPath);
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  const savedPath =
-    meta.uploadType === 'fileData'
-      ? `${subDir}/${segments.join('/')}`
-      : `${subDir}/${segments[segments.length - 1] ?? path.basename(normalized)}`;
+  const savedPath = preserveRelativePath
+    ? `${subDir}/${segments.join('/')}`
+    : `${subDir}/${segments[segments.length - 1] ?? path.basename(normalized)}`;
 
   if (
     meta.uploadType !== 'shp' &&
     meta.uploadType !== 'excel' &&
     meta.uploadType !== 'serviceFileData' &&
-    meta.uploadType !== 'fileData'
+    meta.uploadType !== 'fileData' &&
+    meta.uploadType !== 'source'
   ) {
     await appendUploadConvertHistory({
       at: new Date().toISOString(),

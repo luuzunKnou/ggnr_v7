@@ -51,6 +51,8 @@ interface VWorldSearchResponse {
 
 /** 역지오코딩(좌표→주소) API 응답 */
 export interface GetAddressFromCoordResult {
+  /** 필지고유번호(PNU) */
+  pnu?: string;
   /** 지번 주소 */
   jibun?: string;
   /** 도로명 주소 */
@@ -65,6 +67,21 @@ interface VWorldAddressResponse {
     status?: string;
     result?: unknown;
   };
+}
+
+function buildPnuFromLevel4Lc(baseCode: unknown, parcelText: unknown): string | undefined {
+  const lc = typeof baseCode === 'string' ? baseCode.trim() : '';
+  if (!/^\d{10}$/.test(lc)) return undefined;
+  const raw = typeof parcelText === 'string' ? parcelText.trim() : '';
+  if (!raw) return undefined;
+  const isMountain = /(^|\s)산\s*\d|산\d/.test(raw);
+  const nums = raw.match(/\d+/g) ?? [];
+  if (nums.length === 0) return undefined;
+  const bonbun = nums[0]?.padStart(4, '0').slice(-4) ?? '0000';
+  const bubun = (nums[1] ?? '0').padStart(4, '0').slice(-4);
+  // PNU 11번째 자리: 1=대지, 2=산
+  const landType = isMountain ? '2' : '1';
+  return `${lc}${landType}${bonbun}${bubun}`;
 }
 
 export interface SearchAddressOptions {
@@ -216,21 +233,49 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
   if (!result || typeof result !== 'object') return null;
 
   const obj = result as Record<string, unknown>;
+  const pnuFromObj = (() => {
+    const direct = obj.pnu;
+    if (typeof direct === 'string' && direct.trim()) return direct.trim();
+    const land = obj.land as Record<string, unknown> | undefined;
+    const fromLand = land?.pnu;
+    if (typeof fromLand === 'string' && fromLand.trim()) return fromLand.trim();
+    return undefined;
+  })();
 
   // 1) 배열 형식: [{ type: 'parcel'|'road', text: '...' }, ...]
   if (Array.isArray(result)) {
-    const parcelItem = result.find((r: { type?: string }) => r?.type === 'parcel');
+    const parcelItem = result.find((r: { type?: string }) => r?.type === 'parcel') as
+      | Record<string, unknown>
+      | undefined;
     const roadItem = result.find((r: { type?: string }) => r?.type === 'road');
+    const pnuFromArrayItem = (() => {
+      if (!parcelItem) return undefined;
+      const direct = parcelItem.pnu;
+      if (typeof direct === 'string' && direct.trim()) return direct.trim();
+      const upper = parcelItem.PNU;
+      if (typeof upper === 'string' && upper.trim()) return upper.trim();
+      const land = parcelItem.land as Record<string, unknown> | undefined;
+      const fromLand = land?.pnu ?? land?.PNU;
+      if (typeof fromLand === 'string' && fromLand.trim()) return fromLand.trim();
+      const structure = parcelItem.structure as Record<string, unknown> | undefined;
+      const pnuFromLc = buildPnuFromLevel4Lc(
+        structure?.level4LC,
+        (parcelItem.text as string | undefined) ?? (structure?.level5 as string | undefined)
+      );
+      if (pnuFromLc) return pnuFromLc;
+      return undefined;
+    })();
     const jibun = (parcelItem as { text?: string })?.text;
     const road = (roadItem as { text?: string })?.text;
-    if (jibun || road) return { jibun, road };
+    if (jibun || road || pnuFromArrayItem || pnuFromObj)
+      return { pnu: pnuFromArrayItem ?? pnuFromObj, jibun, road };
     return null;
   }
 
   // 2) 단일 주소 필드 (문서상 result.ADDR 또는 result.addr)
   const singleAddr = (obj.ADDR as string) ?? (obj.addr as string);
   if (typeof singleAddr === 'string' && singleAddr.trim()) {
-    return { jibun: singleAddr.trim() };
+    return { pnu: pnuFromObj, jibun: singleAddr.trim() };
   }
 
   // 3) result.parcel / result.road 문자열 (일부 버전)
@@ -238,6 +283,7 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
   const roadStr = obj.road as string | undefined;
   if (typeof parcelStr === 'string' || typeof roadStr === 'string') {
     return {
+      pnu: pnuFromObj,
       jibun: typeof parcelStr === 'string' ? parcelStr.trim() || undefined : undefined,
       road: typeof roadStr === 'string' ? roadStr.trim() || undefined : undefined,
     };
@@ -272,9 +318,14 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
   const buildingName =
     (road?.bldnm as string) ?? (land?.bldnm as string) ?? (obj.bldnm as string);
   const hasBuilding = typeof buildingName === 'string' && buildingName.trim();
+  const pnuFromStructure = buildPnuFromLevel4Lc(
+    structure?.level4LC,
+    jibun ?? (structure?.level5 as string | undefined)
+  );
 
   if (jibun || roadAddr || hasBuilding)
     return {
+      pnu: pnuFromObj ?? pnuFromStructure,
       jibun,
       road: roadAddr,
       buildingName: hasBuilding ? buildingName.trim() : undefined,
@@ -347,6 +398,118 @@ export function getAddressFromCoord(
       cleanup();
       console.warn('[vworldAddressSearch] getAddressFromCoord JSONP failed');
       resolve(null);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+export type VWorldGetCoordAddressType = 'ROAD' | 'PARCEL';
+
+export type GetCoordFromAddressResult =
+  | { ok: true; lon: number; lat: number; raw: unknown }
+  | { ok: false; message: string; status?: string; raw?: unknown };
+
+interface VWorldGetCoordResponse {
+  response?: {
+    status?: string;
+    result?: unknown;
+    [key: string]: unknown;
+  };
+}
+
+function parseGetCoordResult(result: unknown): { lon: number; lat: number } | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+  const point = r.point as Record<string, unknown> | undefined;
+  if (point && point.x != null && point.y != null) {
+    const lon = Number(point.x);
+    const lat = Number(point.y);
+    if (!Number.isNaN(lon) && !Number.isNaN(lat)) return { lon, lat };
+  }
+  return null;
+}
+
+/**
+ * 도로명/지번 주소 문자열 → 좌표 (VWorld Address API 2.0 `GetCoord`).
+ * 공식 예제와 동일 파라미터. CORS 회피를 위해 JSONP.
+ * @see https://www.vworld.kr/dev/v4dv_address2_s001.do
+ */
+export function getCoordFromAddress(
+  address: string,
+  options: { apiKey: string; type?: VWorldGetCoordAddressType }
+): Promise<GetCoordFromAddressResult> {
+  const trimmed = address?.trim() ?? '';
+  const apiKey = options.apiKey?.trim() ?? '';
+  if (!trimmed) {
+    return Promise.resolve({ ok: false, message: '주소가 비어 있습니다.' });
+  }
+  if (!apiKey) {
+    return Promise.resolve({ ok: false, message: 'VWorld 인증키가 없습니다.' });
+  }
+
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined' || !document.head) {
+      resolve({ ok: false, message: '브라우저 환경에서만 호출할 수 있습니다.' });
+      return;
+    }
+
+    const addrType = options.type ?? 'ROAD';
+    const params = new URLSearchParams({
+      service: 'address',
+      request: 'GetCoord',
+      version: '2.0',
+      crs: 'EPSG:4326',
+      type: addrType,
+      address: trimmed,
+      format: 'json',
+      errorformat: 'json',
+      key: apiKey,
+    });
+
+    const callbackName = `__vworldGetCoord_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement('script');
+
+    const cleanup = () => {
+      delete (window as unknown as Record<string, unknown>)[callbackName];
+      if (script.parentNode) script.remove();
+    };
+
+    (window as unknown as Record<string, (data: VWorldGetCoordResponse) => void>)[callbackName] = (data: VWorldGetCoordResponse) => {
+      cleanup();
+      try {
+        const status = data?.response?.status;
+        const raw = data?.response ?? data;
+        if (status !== 'OK') {
+          const msg =
+            status === 'NOT_FOUND'
+              ? '검색 결과가 없습니다 (NOT_FOUND).'
+              : `VWorld 응답 상태: ${status ?? '(없음)'}`;
+          resolve({ ok: false, message: msg, status, raw });
+          return;
+        }
+        const parsed = parseGetCoordResult(data?.response?.result);
+        if (!parsed) {
+          resolve({
+            ok: false,
+            message: '응답에 좌표(point)를 찾지 못했습니다.',
+            status,
+            raw: data?.response?.result,
+          });
+          return;
+        }
+        resolve({ ok: true, lon: parsed.lon, lat: parsed.lat, raw: data });
+      } catch (err) {
+        console.warn('[vworldAddressSearch] getCoordFromAddress parse error', err);
+        resolve({ ok: false, message: err instanceof Error ? err.message : '파싱 오류' });
+      }
+    };
+
+    script.src = `${VWORLD_ADDRESS_BASE}?${params.toString()}&callback=${encodeURIComponent(callbackName)}`;
+    script.async = true;
+    script.onerror = () => {
+      cleanup();
+      console.warn('[vworldAddressSearch] getCoordFromAddress JSONP failed');
+      resolve({ ok: false, message: 'JSONP 스크립트 로드에 실패했습니다.' });
     };
     document.head.appendChild(script);
   });

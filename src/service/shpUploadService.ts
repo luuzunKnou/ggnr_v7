@@ -40,6 +40,9 @@ async function geoserverFetch(
   });
 }
 
+/** SHP → PostGIS 업로드 시 ogr2ogr `-t_srs` 목표 좌표계 (Korea 2000 / Unified) */
+const SHP_UPLOAD_TARGET_SRS = 'EPSG:5181';
+
 /** .prj 파일에서 EPSG 코드 추출. 마지막 AUTHORITY 사용 (타원체 7019보다 좌표계 5187 등이 뒤에 옴) */
 function parseEpsgFromPrj(content: string): string | null {
   if (!content || typeof content !== 'string') return null;
@@ -77,7 +80,101 @@ async function resolveShpSrs(dir: string, basename: string): Promise<{ sourceSrs
   } catch {
     sourceSrs = parseEpsgFromBasename(basename) ?? parseEpsgFromBasename(folderName);
   }
-  return { sourceSrs, targetSrs: sourceSrs ?? 'EPSG:5187' };
+  /** 소스는 .prj → 파일명 → 폴더명 순으로만 결정. DB 적재 시에는 항상 5181로 변환 */
+  return { sourceSrs, targetSrs: SHP_UPLOAD_TARGET_SRS };
+}
+
+/** DBF 본문(레코드 필드 바이트) 일부를 모아 UTF-8(strict) 여부로 UTF-8 vs CP949를 가늠 */
+function sampleDbfRecordDataBytes(buf: Buffer, maxSample: number): Buffer {
+  if (buf.length < 32) return Buffer.alloc(0);
+  const headerSize = buf.readUInt16LE(8);
+  const recordLen = buf.readUInt16LE(10);
+  if (headerSize < 32 || headerSize > buf.length || recordLen < 2) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  let total = 0;
+  let offset = headerSize;
+  const maxRecords = 600;
+  for (let i = 0; i < maxRecords && offset + recordLen <= buf.length && total < maxSample; i++) {
+    const slice = buf.subarray(offset + 1, offset + recordLen);
+    const take = Math.min(slice.length, maxSample - total);
+    if (take > 0) chunks.push(slice.subarray(0, take));
+    total += take;
+    offset += recordLen;
+  }
+  if (chunks.length === 0) return Buffer.alloc(0);
+  return Buffer.concat(chunks, total);
+}
+
+function sniffDbfBytesEncoding(sample: Buffer): 'UTF-8' | 'CP949' {
+  if (sample.length === 0) return 'CP949';
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(sample);
+    return 'UTF-8';
+  } catch {
+    return 'CP949';
+  }
+}
+
+/**
+ * Shapefile 속성(.dbf) 문자 인코딩 → ogr2ogr `-oo ENCODING=…`
+ * - 같은 이름의 `.cpg`에 한 줄 이상 있으면 그대로(예: UTF-8, CP949)
+ * - `.cpg`가 없거나 비어 있으면 `GGNR_SHP_DBF_ENCODING` (전역 강제)
+ * - 그다음 `.dbf` 샘플을 UTF-8(strict)로 읽을 수 있으면 UTF-8, 아니면 CP949 (자동; `GGNR_SHP_DBF_AUTO=0` 이면 생략)
+ * - 최종 기본값 `CP949`
+ */
+function resolveShapefileDbfEncoding(dir: string, basename: string): string {
+  const fromEnv = process.env.GGNR_SHP_DBF_ENCODING?.trim();
+  const cpgPath = path.join(dir, `${basename}.cpg`);
+  try {
+    if (fsSync.existsSync(cpgPath)) {
+      const raw = fsSync.readFileSync(cpgPath);
+      let line =
+        raw
+          .toString('utf8')
+          .replace(/^\uFEFF/, '')
+          .split(/\r?\n/)[0]
+          ?.trim() ?? '';
+      if (!line && raw.length > 0) {
+        line = raw.toString('ascii').split(/\r?\n/)[0]?.trim() ?? '';
+      }
+      if (line) {
+        const norm = line.replace(/\s+/g, '').toUpperCase().replace(/_/g, '');
+        const aliases: Record<string, string> = {
+          UTF8: 'UTF-8',
+          UTF8BIT: 'UTF-8',
+          CP949: 'CP949',
+          WINDOWS949: 'CP949',
+          MS949: 'CP949',
+          EUCKR: 'EUC-KR',
+          KS56011987: 'EUC-KR',
+          KSC56011987: 'EUC-KR',
+          LATIN1: 'ISO-8859-1',
+          ISO88591: 'ISO-8859-1',
+        };
+        if (aliases[norm]) return aliases[norm];
+        if (/^UTF-?8$/i.test(line.trim())) return 'UTF-8';
+        return line.trim();
+      }
+    }
+  } catch {
+    // ignore, fall through
+  }
+  if (fromEnv) return fromEnv;
+
+  const autoOff = /^(0|false|no)$/i.test(process.env.GGNR_SHP_DBF_AUTO?.trim() ?? '');
+  if (!autoOff) {
+    const dbfPath = path.join(dir, `${basename}.dbf`);
+    try {
+      if (fsSync.existsSync(dbfPath)) {
+        const buf = fsSync.readFileSync(dbfPath);
+        const sample = sampleDbfRecordDataBytes(buf, 65536);
+        if (sample.length > 0) return sniffDbfBytesEncoding(sample);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return 'CP949';
 }
 
 /**
@@ -122,7 +219,7 @@ export type ShpStatusRow = {
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 
 function getDefineFieldsFilePath(tableKey: string): string {
-  const safe = String(tableKey).replace(/[^a-zA-Z0-9_-]/g, '');
+  const safe = String(tableKey).replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
   return path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
 }
 
@@ -410,6 +507,7 @@ export async function createTableFromShp(params: {
 
   const dir = path.dirname(absolutePath);
   const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
+  const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const db = getDbConfig();
   const pgConnection = `PG:host=${db.host} port=${db.port} dbname=${db.database} user=${db.user} password=${db.password}`;
@@ -420,7 +518,7 @@ export async function createTableFromShp(params: {
     '-f', 'PostgreSQL',
     pgConnection,
     absolutePath,
-    '-oo', 'ENCODING=CP949',
+    '-oo', `ENCODING=${dbfEncoding}`,
     '-nlt', 'PROMOTE_TO_MULTI',
     '-nln', layerTable,
     ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
@@ -488,7 +586,12 @@ const DEFINE_TABLE_DEFAULT_WRITE_SHARE = 'P';
 const DEFINE_TABLE_DEFAULT_IDX = '0';
 const DEFINE_TABLE_DEFAULT_ETC = '';
 
-function buildShpDefineLayerTableRow(layerName: string, shpType: string, group: string): Record<string, unknown> {
+function buildShpDefineLayerTableRow(
+  layerName: string,
+  shpType: string,
+  group: string,
+  dbSchema: 'layer' | 'public_layer' = 'layer'
+): Record<string, unknown> {
   return reorderDefineLayerTableRow({
     define_table_name: layerName,
     define_table_kor_name: layerName,
@@ -498,19 +601,29 @@ function buildShpDefineLayerTableRow(layerName: string, shpType: string, group: 
     define_table_group: group,
     define_table_idx: DEFINE_TABLE_DEFAULT_IDX,
     define_table_etc: DEFINE_TABLE_DEFAULT_ETC,
-    define_table_schema: 'layer',
+    define_table_schema: dbSchema,
     define_table_source: 'shp',
   });
 }
 
-function ensureDefineLayerEntry(layerName: string, geometryType?: ShpGeometryType, group?: string): Promise<void> {
+function ensureDefineLayerEntry(
+  layerName: string,
+  geometryType?: ShpGeometryType,
+  group?: string,
+  dbSchema: 'layer' | 'public_layer' = 'layer'
+): Promise<void> {
   const shpType = geometryType ?? 'POLYGON';
   const groupVal = group ?? '';
   return getDefineLayerTables().then((defineRes) => {
     let tables: Record<string, unknown>[] = defineRes.success && Array.isArray(defineRes.tables) ? defineRes.tables : [];
-    const existing = tables.find((r) => String(r.define_table_name ?? '').trim() === layerName);
+    const existing = tables.find(
+      (r) => String(r.define_table_name ?? '').trim().toLowerCase() === layerName.toLowerCase()
+    );
     if (!existing) {
-      tables = reorderDefineLayerTablesArray([...tables, buildShpDefineLayerTableRow(layerName, shpType, groupVal)]);
+      tables = reorderDefineLayerTablesArray([
+        ...tables,
+        buildShpDefineLayerTableRow(layerName, shpType, groupVal, dbSchema),
+      ]);
       return fs.mkdir(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true }).then(() =>
         fs.writeFile(DEFINE_LAYER_TABLES_PATH, JSON.stringify(tables, null, 2), 'utf-8')
       );
@@ -542,6 +655,10 @@ function ensureDefineLayerEntry(layerName: string, geometryType?: ShpGeometryTyp
       row.define_table_source = 'shp';
       mutated = true;
     }
+    if (!String(row.define_table_schema ?? '').trim()) {
+      row.define_table_schema = dbSchema;
+      mutated = true;
+    }
     if (mutated) {
       return fs.writeFile(
         DEFINE_LAYER_TABLES_PATH,
@@ -562,9 +679,10 @@ function mapDataTypeToDefineFieldType(dataType: string): string {
 }
 
 function buildDefaultField(col: { name: string; dataType: string }, idx: number): Record<string, unknown> {
+  const fn = String(col.name ?? '').toLowerCase();
   return {
-    define_field_name: col.name,
-    define_field_kor_name: col.name,
+    define_field_name: fn,
+    define_field_kor_name: fn,
     define_field_type: mapDataTypeToDefineFieldType(col.dataType),
     define_field_idx: idx,
     define_field_is_required: false,
@@ -591,34 +709,37 @@ function buildDefaultField(col: { name: string; dataType: string }, idx: number)
 
 /**
  * defineLayer Table(tables.json) + Field(fields/table_xxx.json) 자동 생성.
- * - layer 스키마에 해당 테이블이 있어야 함.
+ * - layer / public_layer 스키마에 해당 테이블이 있어야 함.
  * - tables.json에 없으면 항목 추가 (이미 있으면 스킵).
  * - fields: 기존 파일이 있으면 DB 컬럼 중 기존에 없는 것만 추가(upsert). 없으면 전체 생성.
  */
-export async function createDefineTableAndFields(params: {
-  pathOrResult: string;
+async function createDefineTableAndFieldsCore(params: {
+  layerName: string;
+  dbSchema: 'layer' | 'public_layer';
   geometryType?: ShpGeometryType;
   group?: string;
 }): Promise<{ success: boolean; error?: string }> {
-  const pathOrResult = params?.pathOrResult?.trim();
-  if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
-
-  const basename = path.basename(pathOrResult, '.shp');
-  const layerName = safeTableName(basename);
+  const rawName = params.layerName?.trim();
+  if (!rawName) return { success: false, error: 'layerName(테이블명)이 필요합니다.' };
+  const layerName = safeTableName(rawName);
+  const dbSchema = params.dbSchema;
 
   const listRes = await getLayerTableList();
   if (!listRes.success || !listRes.tables) {
     return { success: false, error: listRes.error ?? 'DB 테이블 목록을 가져올 수 없습니다.' };
   }
-  const matched = findLayerTableByName(listRes.tables, layerName);
+  const matched = listRes.tables.find((t) => t.schema === dbSchema && equalsTableName(t.table, layerName));
   if (!matched) {
-    return { success: false, error: `layer 스키마에 '${layerName}' 테이블이 없습니다. 먼저 테이블 생성을 실행하세요.` };
+    return {
+      success: false,
+      error: `${dbSchema} 스키마에 '${layerName}' 테이블이 없습니다. 먼저 테이블 생성을 실행하세요.`,
+    };
   }
   const dbLayerTableName = matched.table;
 
   let geometryType = params.geometryType ?? null;
   if (geometryType === null) {
-    const typeRes = await getLayerTableGeometryTypes();
+    const typeRes = await getLayerTableGeometryTypes({ schema: dbSchema });
     if (typeRes.success) {
       geometryType =
         typeRes.types[layerName] ??
@@ -629,14 +750,14 @@ export async function createDefineTableAndFields(params: {
   }
 
   try {
-    await ensureDefineLayerEntry(layerName, geometryType ?? 'POLYGON', params.group);
+    await ensureDefineLayerEntry(dbLayerTableName, geometryType ?? 'POLYGON', params.group, dbSchema);
 
-    const colRes = await getTableColumnInfo({ schema: 'layer', table: dbLayerTableName });
+    const colRes = await getTableColumnInfo({ schema: dbSchema, table: dbLayerTableName });
     if (!colRes.success || !colRes.columns?.length) {
       return { success: false, error: colRes.error ?? '컬럼 정보를 가져올 수 없습니다.' };
     }
 
-    const fieldsPath = getDefineFieldsFilePath(layerName);
+    const fieldsPath = getDefineFieldsFilePath(dbLayerTableName);
     await fs.mkdir(path.dirname(fieldsPath), { recursive: true });
 
     let existing: Record<string, unknown>[] = [];
@@ -667,6 +788,42 @@ export async function createDefineTableAndFields(params: {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
   }
+}
+
+export async function createDefineTableAndFields(params: {
+  pathOrResult: string;
+  geometryType?: ShpGeometryType;
+  group?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const pathOrResult = params?.pathOrResult?.trim();
+  if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+
+  const basename = path.basename(pathOrResult, '.shp');
+  const layerName = safeTableName(basename);
+  return createDefineTableAndFieldsCore({
+    layerName,
+    dbSchema: 'layer',
+    geometryType: params.geometryType,
+    group: params.group,
+  });
+}
+
+/**
+ * 레이어 상태 화면 등: DB 테이블명으로 defineLayer(tables + fields) 생성/보강.
+ */
+export async function createDefineTableAndFieldsByTableName(params: {
+  tableName: string;
+  dbSchema?: 'layer' | 'public_layer';
+  geometryType?: ShpGeometryType;
+  group?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const dbSchema = params.dbSchema === 'public_layer' ? 'public_layer' : 'layer';
+  return createDefineTableAndFieldsCore({
+    layerName: params.tableName,
+    dbSchema,
+    geometryType: params.geometryType,
+    group: params.group,
+  });
 }
 
 /**
@@ -735,6 +892,104 @@ export async function createGeoServerStyleForShp(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
+  }
+}
+
+/**
+ * 레이어 상태 탭 등: SHP 경로 없이 테이블명으로 GeoServer FeatureType 발행.
+ * - tables.json 최소 항목이 없으면 추가
+ */
+export async function createGeoServerLayerForTableName(params: {
+  tableName: string;
+  dbSchema?: 'layer' | 'public_layer';
+  url?: string;
+  geometryType?: ShpGeometryType;
+  group?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const raw = params.tableName?.trim();
+  if (!raw) return { success: false, error: 'tableName이 필요합니다.' };
+  const layerName = safeTableName(raw);
+  const dbSchema = params.dbSchema === 'public_layer' ? 'public_layer' : 'layer';
+
+  const listRes = await getLayerTableList();
+  if (!listRes.success || !listRes.tables) {
+    return { success: false, error: listRes.error ?? 'DB 테이블 목록을 가져올 수 없습니다.' };
+  }
+  const matched = listRes.tables.find((t) => t.schema === dbSchema && equalsTableName(t.table, layerName));
+  if (!matched) {
+    return {
+      success: false,
+      error: `${dbSchema} 스키마에 '${layerName}' 테이블이 없습니다.`,
+    };
+  }
+
+  let geometryType: ShpGeometryType | null = params.geometryType ?? null;
+  if (!geometryType) {
+    const typeRes = await getLayerTableGeometryTypes({ schema: dbSchema });
+    if (typeRes.success) {
+      geometryType =
+        typeRes.types[matched.table] ??
+        typeRes.types[matched.table.toLowerCase()] ??
+        null;
+    }
+  }
+
+  try {
+    await ensureDefineLayerEntry(matched.table, geometryType ?? 'POLYGON', params.group, dbSchema);
+    const layerRes = await createOrUpdateGeoServerLayer({ layerName: matched.table, url: params.url });
+    if (!layerRes.success) return { success: false, error: layerRes.error };
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 레이어 상태 탭 등: 테이블명으로 GeoServer CSS 스타일 생성 후 레이어 기본 스타일 지정.
+ * - GeoServer에 레이어(FeatureType)가 먼저 있어야 정상 동작
+ */
+export async function createGeoServerStyleForTableName(params: {
+  tableName: string;
+  dbSchema?: 'layer' | 'public_layer';
+  url?: string;
+  geometryType?: ShpGeometryType;
+  group?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const raw = params.tableName?.trim();
+  if (!raw) return { success: false, error: 'tableName이 필요합니다.' };
+  const layerName = safeTableName(raw);
+  const dbSchema = params.dbSchema === 'public_layer' ? 'public_layer' : 'layer';
+
+  const listRes = await getLayerTableList();
+  if (!listRes.success || !listRes.tables) {
+    return { success: false, error: listRes.error ?? 'DB 테이블 목록을 가져올 수 없습니다.' };
+  }
+  const matched = listRes.tables.find((t) => t.schema === dbSchema && equalsTableName(t.table, layerName));
+  if (!matched) {
+    return {
+      success: false,
+      error: `${dbSchema} 스키마에 '${layerName}' 테이블이 없습니다.`,
+    };
+  }
+
+  let geometryType: ShpGeometryType | null = params.geometryType ?? null;
+  if (!geometryType) {
+    const typeRes = await getLayerTableGeometryTypes({ schema: dbSchema });
+    if (typeRes.success) {
+      geometryType =
+        typeRes.types[matched.table] ??
+        typeRes.types[matched.table.toLowerCase()] ??
+        null;
+    }
+  }
+
+  try {
+    await ensureDefineLayerEntry(matched.table, geometryType ?? 'POLYGON', params.group, dbSchema);
+    const styleRes = await applyDefaultStyleToLayer({ layerName: matched.table, url: params.url });
+    if (!styleRes.success) return { success: false, error: styleRes.error };
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -978,6 +1233,11 @@ export async function savePostProcessLog(params: {
     style: string;
     define: string;
     error?: string;
+    oldData?: number;
+    newData?: number;
+    appendCount?: number;
+    conflictCount?: number;
+    removeCount?: number;
   }>;
 }): Promise<{ success: boolean; logPath?: string; error?: string }> {
   try {
@@ -1009,19 +1269,21 @@ export async function savePostProcessLog(params: {
     const failCount = params.results.length - successCount;
     lines.push(`성공: ${successCount}건 / 실패: ${failCount}건`);
     lines.push('');
-    lines.push('\u2500'.repeat(80));
+    lines.push('\u2500'.repeat(120));
     lines.push(
-      `${'파일'.padEnd(30)}${'Table'.padEnd(10)}${'Layer'.padEnd(10)}${'Style'.padEnd(10)}${'Define'.padEnd(10)}비고`
+      `${'파일'.padEnd(26)}${'Table'.padEnd(8)}${'Layer'.padEnd(8)}${'Style'.padEnd(8)}${'Define'.padEnd(8)}${'이전'.padEnd(8)}${'현재'.padEnd(8)}${'추가'.padEnd(8)}${'변경'.padEnd(8)}${'삭제'.padEnd(8)}비고`
     );
-    lines.push('\u2500'.repeat(80));
+    lines.push('\u2500'.repeat(120));
+
+    const num = (n: number | undefined) => (n === undefined ? '—' : String(n));
 
     for (const r of params.results) {
       const name = r.file.replace(/\.shp$/i, '');
-      const line = `${name.padEnd(30)}${statusLabel(r.table).padEnd(10)}${statusLabel(r.layer).padEnd(10)}${statusLabel(r.style).padEnd(10)}${statusLabel(r.define).padEnd(10)}${r.error ?? ''}`;
+      const line = `${name.padEnd(26)}${statusLabel(r.table).padEnd(8)}${statusLabel(r.layer).padEnd(8)}${statusLabel(r.style).padEnd(8)}${statusLabel(r.define).padEnd(8)}${num(r.oldData).padEnd(8)}${num(r.newData).padEnd(8)}${num(r.appendCount).padEnd(8)}${num(r.conflictCount).padEnd(8)}${num(r.removeCount).padEnd(8)}${r.error ?? ''}`;
       lines.push(line);
     }
 
-    lines.push('\u2500'.repeat(80));
+    lines.push('\u2500'.repeat(120));
     lines.push('');
 
     await fs.writeFile(logPath, lines.join('\n'), 'utf-8');
@@ -1159,7 +1421,7 @@ export async function getLayerStatusList(params?: {
 
 /** defineLayer fields에서 key 필드명 조회 */
 function getKeyFieldName(tableName: string): string | null {
-  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '');
+  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
   const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
   try {
     if (!fsSync.existsSync(filePath)) return null;
@@ -1178,7 +1440,7 @@ export async function getTitleFieldName(params: { tableName: string }): Promise<
   const tableName = params?.tableName?.trim();
   if (!tableName) return { success: false, titleField: null, error: 'tableName이 필요합니다.' };
   try {
-    const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '');
+    const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
     const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
     if (!fsSync.existsSync(filePath)) return { success: true, titleField: null };
     const fields: Record<string, string>[] = JSON.parse(fsSync.readFileSync(filePath, 'utf-8'));
@@ -1277,13 +1539,14 @@ export async function compareShpWithTable(params: {
 
   const dir = path.dirname(absolutePath);
   const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
+  const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const dbCfg = getDbConfig();
   const pgConnection = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
 
   const importResult = await runOgr2ogr([
     '-f', 'PostgreSQL', pgConnection, absolutePath,
-    '-oo', 'ENCODING=CP949',
+    '-oo', `ENCODING=${dbfEncoding}`,
     '-nlt', 'PROMOTE_TO_MULTI',
     '-nln', `layer.${syncTableName}`,
     ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
@@ -1313,11 +1576,45 @@ export async function compareShpWithTable(params: {
       return { ...empty, error: `key 필드 '${keyField}'가 테이블에 존재하지 않습니다.` };
     }
 
+    let geometryColumn: string | null = null;
+    try {
+      const gCol = await db.execute(sql.raw(
+        `SELECT f_geometry_column::text AS col FROM geometry_columns
+         WHERE f_table_schema = 'layer' AND f_table_name = '${tableName}' LIMIT 1`
+      ));
+      const c = (gCol.rows as Array<{ col: string }>)[0]?.col;
+      if (c?.trim()) geometryColumn = c.trim();
+    } catch {
+      geometryColumn = null;
+    }
+    if (!geometryColumn) {
+      const hasGeom = await db.execute(sql.raw(
+        `SELECT 1 AS ok FROM information_schema.columns
+         WHERE table_schema = 'layer' AND table_name = '${tableName}' AND column_name = 'geom' LIMIT 1`
+      ));
+      if ((hasGeom.rows as Array<{ ok: number }>).length > 0) geometryColumn = 'geom';
+    }
+
     const compareCols = columns.filter((c) => c !== keyField);
 
-    const whereClause = compareCols.length > 0
-      ? compareCols.map((c) => `t."${c}" IS DISTINCT FROM e."${c}"`).join(' OR ')
-      : '1=0';
+    const attrClause =
+      compareCols.length > 0
+        ? compareCols.map((c) => `t."${c}" IS DISTINCT FROM e."${c}"`).join(' OR ')
+        : 'FALSE';
+
+    const geomClause = geometryColumn
+      ? `(
+  (e."${geometryColumn}" IS NULL) IS DISTINCT FROM (t."${geometryColumn}" IS NULL)
+  OR (
+    e."${geometryColumn}" IS NOT NULL AND t."${geometryColumn}" IS NOT NULL
+    AND NOT ST_Equals(e."${geometryColumn}"::geometry, t."${geometryColumn}"::geometry)
+  )
+)`
+      : 'FALSE';
+
+    const whereClause = `(${attrClause}) OR (${geomClause})`;
+
+    const unchangedWhere = `NOT ((${attrClause}) OR (${geomClause}))`;
 
     const [appendRes, conflictRes, removeRes, unchangedRes] = await Promise.all([
       db.execute(sql.raw(
@@ -1338,7 +1635,7 @@ export async function compareShpWithTable(params: {
       db.execute(sql.raw(
         `SELECT count(*)::int AS cnt FROM layer."${syncTableName}" t
          JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE NOT (${whereClause.replace(/1=0/, 'FALSE')})`
+         WHERE ${unchangedWhere}`
       )),
     ]);
 
@@ -1352,8 +1649,12 @@ export async function compareShpWithTable(params: {
       const selectCols = compareCols.flatMap((c) => [
         `e."${c}" AS "db_${c}"`, `t."${c}" AS "shp_${c}"`
       ]).join(', ');
+      const geomSelect = geometryColumn ? `, (${geomClause}) AS _geom_mismatch` : '';
+      const geomPair = geometryColumn
+        ? `, e."${geometryColumn}" AS "db_${geometryColumn}", t."${geometryColumn}" AS "shp_${geometryColumn}"`
+        : '';
       const conflictRows = await db.execute(sql.raw(
-        `SELECT t."${keyField}" AS key_val, ${selectCols}
+        `SELECT t."${keyField}" AS key_val${selectCols ? `, ${selectCols}` : ''}${geomPair}${geomSelect}
          FROM layer."${syncTableName}" t
          JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
          WHERE ${whereClause}
@@ -1371,6 +1672,14 @@ export async function compareShpWithTable(params: {
           shpValues[c] = shpVal;
           if (JSON.stringify(dbVal) !== JSON.stringify(shpVal)) {
             diffFields.push(c);
+          }
+        }
+        if (geometryColumn) {
+          const gm = r._geom_mismatch;
+          if (gm === true || gm === 't') {
+            diffFields.push(geometryColumn);
+            dbValues[geometryColumn] = r[`db_${geometryColumn}`];
+            shpValues[geometryColumn] = r[`shp_${geometryColumn}`];
           }
         }
         return { key, diffFields, dbValues, shpValues };
@@ -1512,7 +1821,7 @@ export async function applySyncEntries(params: {
         ));
         appendedCount++;
       } else if (oldData && newData) {
-        const cols = Object.keys(newData).filter((c) => c !== 'ogc_fid' && c !== kf && c !== 'geom');
+        const cols = Object.keys(newData).filter((c) => c !== 'ogc_fid' && c !== kf);
         if (cols.length > 0) {
           const setClauses = cols.map((c) => `"${c}" = ${sqlVal(c, newData[c])}`).join(', ');
           await db.execute(sql.raw(
@@ -1639,7 +1948,7 @@ export async function rollbackSyncRows(params: {
           `DELETE FROM layer."${tbl}" WHERE "${kf}"::text = '${safeKv}'`
         ));
       } else if (op === 'conflict' && oldData) {
-        const cols = Object.keys(oldData).filter((c) => c !== 'ogc_fid' && c !== kf && c !== 'geom');
+        const cols = Object.keys(oldData).filter((c) => c !== 'ogc_fid' && c !== kf);
         if (cols.length > 0) {
           const setClauses = cols.map((c) => `"${c}" = ${sqlVal(c, oldData[c])}`).join(', ');
           await db.execute(sql.raw(
@@ -1706,7 +2015,7 @@ export async function reapplySyncRows(params: {
         const vals = cols.map((c) => sqlVal(c, newData[c])).join(', ');
         await db.execute(sql.raw(`INSERT INTO layer."${tbl}" (${colNames}) VALUES (${vals})`));
       } else if (op === 'conflict' && oldData && newData) {
-        const cols = Object.keys(newData).filter((c) => c !== 'ogc_fid' && c !== kf && c !== 'geom');
+        const cols = Object.keys(newData).filter((c) => c !== 'ogc_fid' && c !== kf);
         if (cols.length > 0) {
           const setClauses = cols.map((c) => `"${c}" = ${sqlVal(c, newData[c])}`).join(', ');
           await db.execute(sql.raw(
@@ -1756,13 +2065,14 @@ export async function readShpValues(params: {
   const dir = path.dirname(absolutePath);
   const basename = path.basename(shpPath, '.shp');
   const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
+  const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const dbCfg = getDbConfig();
   const pgConn = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
 
   const importRes = await runOgr2ogr([
     '-f', 'PostgreSQL', pgConn, absolutePath,
-    '-oo', 'ENCODING=CP949',
+    '-oo', `ENCODING=${dbfEncoding}`,
     '-nlt', 'PROMOTE_TO_MULTI',
     '-nln', `layer.${syncTableName}`,
     ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),

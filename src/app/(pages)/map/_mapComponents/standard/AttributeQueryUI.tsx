@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { call } from '@/lib/api';
 import {
   ChevronDown,
@@ -8,16 +8,19 @@ import {
   Square,
   Circle,
   Pentagon,
+  Plus,
   RefreshCw,
+  Search,
   Database,
-  Landmark,
   SlidersHorizontal,
   Palette,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import { transformCoordinate } from '../services/coordinateService';
+import type { IdentifyLayerResult } from '../hooks/useFeatureIdentify';
 
 /** layer 스키마 테이블 목록 (DB 기준) */
 type LayerSchemaTable = { schema: string; table: string };
@@ -42,23 +45,54 @@ interface LayerGroupMeta {
 
 type SpatialSearchTool = 'rectangle' | 'circle' | 'polygon' | 'emdRi' | 'dataSelect';
 
-const SPATIAL_TOOLS: { id: SpatialSearchTool; icon: typeof Square; label: string }[] = [
+type AttributeQuerySearchTab = 'keyword' | 'shape' | 'boundary';
+
+/** 도형검색 탭 — 읍면동·리는 행정경계 검색 탭 */
+const SPATIAL_SHAPE_TOOLS: { id: SpatialSearchTool; icon: typeof Square; label: string }[] = [
   { id: 'rectangle', icon: Square, label: '사각형' },
   { id: 'polygon', icon: Pentagon, label: '다각형' },
   { id: 'circle', icon: Circle, label: '원형' },
-  { id: 'emdRi', icon: Landmark, label: '행정경계' },
   { id: 'dataSelect', icon: Database, label: '데이터 선택' },
 ];
 
 const SPATIAL_SEARCH_FORM_STORAGE_KEY = 'ggnr_spatial_search_form';
 
+/** 도형 그리기·데이터선택 — 동일 WKT로 `searchDefineLayersByGeometry` (시설관리 도형검색과 동일 헤더) */
+const SPATIAL_SHAPE_SEARCH_HEADER = '도형검색 결과';
+
+const KEYWORD_SEARCH_HEADER = '통합검색 결과';
+const BOUNDARY_SEARCH_HEADER = '행정경계 검색 결과';
+
+type BoundaryBadgeItem = { key: string; kind: 'emd' | 'ri'; code: string; label: string };
+
 type PersistedSearchForm = {
   emdSelected?: string;
   riSelected?: string;
+  boundaryBadges?: { kind: 'emd' | 'ri'; code: string; label: string }[];
   dataSelectTable?: string;
   dataSelectField?: string;
   dataSelectValue?: string;
 };
+
+function normalizeBoundaryBadgesFromPersist(p: PersistedSearchForm): BoundaryBadgeItem[] {
+  const raw = p.boundaryBadges;
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw
+      .filter((x) => x && typeof x === 'object')
+      .map((x): BoundaryBadgeItem => {
+        const kind: 'emd' | 'ri' = x.kind === 'ri' ? 'ri' : 'emd';
+        const code = String(x.code ?? '').trim();
+        const label = String(x.label ?? code).trim() || code;
+        return { key: `${kind}:${code}`, kind, code, label };
+      })
+      .filter((x) => x.code);
+  }
+  const legacyRi = String(p.riSelected ?? '').trim();
+  if (legacyRi) return [{ key: `ri:${legacyRi}`, kind: 'ri', code: legacyRi, label: legacyRi }];
+  const legacyEmd = String(p.emdSelected ?? '').trim();
+  if (legacyEmd) return [{ key: `emd:${legacyEmd}`, kind: 'emd', code: legacyEmd, label: legacyEmd }];
+  return [];
+}
 
 function loadPersistedSearchForm(): PersistedSearchForm {
   if (typeof window === 'undefined') return {};
@@ -66,9 +100,19 @@ function loadPersistedSearchForm(): PersistedSearchForm {
     const raw = localStorage.getItem(SPATIAL_SEARCH_FORM_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as PersistedSearchForm;
+    const boundaryBadges = Array.isArray(parsed.boundaryBadges)
+      ? parsed.boundaryBadges.filter(
+          (b): b is { kind: 'emd' | 'ri'; code: string; label: string } =>
+            !!b &&
+            typeof b === 'object' &&
+            (b.kind === 'emd' || b.kind === 'ri') &&
+            typeof b.code === 'string'
+        )
+      : undefined;
     return {
       emdSelected: typeof parsed.emdSelected === 'string' ? parsed.emdSelected : '',
       riSelected: typeof parsed.riSelected === 'string' ? parsed.riSelected : '',
+      boundaryBadges,
       dataSelectTable: typeof parsed.dataSelectTable === 'string' ? parsed.dataSelectTable : '',
       dataSelectField: typeof parsed.dataSelectField === 'string' ? parsed.dataSelectField : '',
       dataSelectValue: typeof parsed.dataSelectValue === 'string' ? parsed.dataSelectValue : '',
@@ -93,8 +137,35 @@ type AttributeQueryUIProps = {
   onClearDataSelection?: () => void;
 };
 
+function totalFeatureHits(results: IdentifyLayerResult[]): number {
+  return results.reduce((sum, r) => sum + r.features.length, 0);
+}
+
+function firstDefineTableFromResults(results: IdentifyLayerResult[]): string | null {
+  for (const layer of results) {
+    const t = String(layer.tableName ?? '').trim();
+    if (t && layer.features.length > 0) return t;
+  }
+  return null;
+}
+
 export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearDataSelection }: AttributeQueryUIProps) {
-  const [activeTool, setActiveTool] = useState<SpatialSearchTool>('rectangle');
+  const [searchTab, setSearchTab] = useState<AttributeQuerySearchTab>(() => {
+    const p = loadPersistedSearchForm();
+    if (p.dataSelectTable?.trim()) return 'shape';
+    if (normalizeBoundaryBadgesFromPersist(p).length > 0) return 'boundary';
+    return 'keyword';
+  });
+  const [keywordInput, setKeywordInput] = useState('');
+  const [activeTool, setActiveTool] = useState<SpatialSearchTool>(() => {
+    const p = loadPersistedSearchForm();
+    if (p.dataSelectTable?.trim()) return 'dataSelect';
+    if (normalizeBoundaryBadgesFromPersist(p).length > 0) return 'emdRi';
+    return 'rectangle';
+  });
+  const [boundaryBadges, setBoundaryBadges] = useState<BoundaryBadgeItem[]>(() =>
+    normalizeBoundaryBadgesFromPersist(loadPersistedSearchForm())
+  );
   const [emdSelected, setEmdSelected] = useState('');
   const [riSelected, setRiSelected] = useState('');
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([]);
@@ -115,6 +186,8 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [layerTotals, setLayerTotals] = useState<Record<string, number>>({});
   const [failedLegendLayers, setFailedLegendLayers] = useState<Set<string>>(new Set());
+  /** 도형검색 API(searchDefineLayersByGeometry) 진행 중 — 시설관리 도형검색과 동일 UX */
+  const [geometrySearchLoading, setGeometrySearchLoading] = useState(false);
   const onLegendError = useCallback((tableName: string) => {
     setFailedLegendLayers((prev) => new Set(prev).add(tableName));
   }, []);
@@ -128,6 +201,13 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   const spatialFilteredLayerNames = mapContext?.spatialFilteredLayerNames ?? null;
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
+  /** Provider value 객체는 매 렌더 새 참조 → useCallback deps에 mapContext 전체 넣으면 무한 effect 유발 */
+  const setIdentifyResultList = mapContext?.setIdentifyResultList;
+  /** 부모가 매 렌더 새 함수를 넘기는 경우(map-layout handleOpenDataPanel 등) → 검색 콜백 체인이 흔들려 읍면동 effect 무한루프 */
+  const onOpenDataPanelRef = useRef(onOpenDataPanel);
+  useLayoutEffect(() => {
+    onOpenDataPanelRef.current = onOpenDataPanel;
+  }, [onOpenDataPanel]);
   /** 도형 검색 중(그리기 대기/진행)이거나 검색결과가 표시된 상태일 때만 도형 버튼 on */
   const isSpatialSearchActive = !!(spatialFilterWkt || spatialDrawRequest);
 
@@ -146,11 +226,24 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     savePersistedSearchForm({
       emdSelected,
       riSelected,
+      boundaryBadges: boundaryBadges.map(({ kind, code, label }) => ({ kind, code, label })),
       dataSelectTable,
       dataSelectField,
       dataSelectValue,
     });
-  }, [emdSelected, riSelected, dataSelectTable, dataSelectField, dataSelectValue]);
+  }, [emdSelected, riSelected, boundaryBadges, dataSelectTable, dataSelectField, dataSelectValue]);
+
+  /** 행정경계 검색 탭에서 다른 탭으로 이동하면 검색 결과·뱃지·읍면동·리 선택 초기화 */
+  useEffect(() => {
+    if (searchTab !== 'boundary') return;
+    return () => {
+      setIdentifyResultList?.(null);
+      setGeometrySearchLoading(false);
+      setBoundaryBadges([]);
+      setEmdSelected('');
+      setRiSelected('');
+    };
+  }, [searchTab, setIdentifyResultList]);
 
   // 데이터 조회 레이어 목록: DB 테이블 목록 + tables.json 메타(그룹, 한글명) 병합
   useEffect(() => {
@@ -281,22 +374,329 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     () => layerGroups.flatMap((g) => g.layers.map((l) => l.tableName)),
     [layerGroups]
   );
-  const allTableNamesRef = useRef<string[]>(allTableNames);
-  allTableNamesRef.current = allTableNames;
 
-  const layerTargets = useMemo(
+  /** 통합·도형·행정경계 검색 — 체크된(지도에 켜진) 레이어만 */
+  const visibleSearchTableNames = useMemo(
+    () => allTableNames.filter((t) => visibleLayerNames.has(t)),
+    [allTableNames, visibleLayerNames]
+  );
+  const visibleSearchTableNamesRef = useRef(visibleSearchTableNames);
+  visibleSearchTableNamesRef.current = visibleSearchTableNames;
+
+  const visibleLayerTargets = useMemo(
     () =>
       layerGroups.flatMap((g) =>
-        g.layers.map((l) => ({
-          name: l.tableName,
-          table: l.physicalTableName,
-          rowFilter: l.rowFilterSql,
-        }))
+        g.layers
+          .filter((l) => visibleLayerNames.has(l.tableName))
+          .map((l) => ({
+            name: l.tableName,
+            table: l.physicalTableName,
+            rowFilter: l.rowFilterSql,
+          }))
       ),
-    [layerGroups]
+    [layerGroups, visibleLayerNames]
   );
-  const layerTargetsRef = useRef(layerTargets);
-  layerTargetsRef.current = layerTargets;
+  const visibleLayerTargetsRef = useRef(visibleLayerTargets);
+  visibleLayerTargetsRef.current = visibleLayerTargets;
+
+  /** 레이어 목록 로드 전에 WKT가 먼저 오면 `searchDefineLayersByGeometry`만 잠시 보류 */
+  type PendingGeometrySearchAttr = { wkt: string; listHeader?: string };
+  const pendingGeometrySearchRef = useRef<PendingGeometrySearchAttr | null>(null);
+
+  const applySearchToRightPanel = useCallback(
+    (results: IdentifyLayerResult[], listHeaderLabel: string) => {
+      const hits = totalFeatureHits(results);
+      const firstFromHits = firstDefineTableFromResults(results);
+      const tables = visibleSearchTableNamesRef.current;
+      const fallbackTable =
+        firstFromHits ?? (tables.length > 0 ? tables[0] : null);
+      if (hits === 0) {
+        if (fallbackTable) {
+          setIdentifyResultList?.({
+            coordinate: [0, 0],
+            results: [],
+            listHeaderLabel,
+          });
+          onOpenDataPanelRef.current?.(fallbackTable);
+        } else {
+          setIdentifyResultList?.(null);
+        }
+        return;
+      }
+      const firstTable = firstFromHits;
+      if (!firstTable) {
+        if (fallbackTable) {
+          setIdentifyResultList?.({
+            coordinate: [0, 0],
+            results: [],
+            listHeaderLabel,
+          });
+          onOpenDataPanelRef.current?.(fallbackTable);
+        } else {
+          setIdentifyResultList?.(null);
+        }
+        return;
+      }
+      setIdentifyResultList?.({
+        coordinate: [0, 0],
+        results,
+        listHeaderLabel,
+      });
+      onOpenDataPanelRef.current?.(firstTable);
+    },
+    [setIdentifyResultList]
+  );
+
+  const runKeywordSearch = useCallback(() => {
+    const kw = keywordInput.trim();
+    if (!kw) {
+      if (typeof window !== 'undefined') {
+        window.alert('검색어를 입력하세요.');
+      }
+      return;
+    }
+    const tables = visibleSearchTableNamesRef.current;
+    if (tables.length === 0) return;
+    setGeometrySearchLoading(true);
+    setSearchTab('keyword');
+    void call('', 'POST', {
+      service: 'standardService',
+      action: 'searchDefineLayersByKeyword',
+      params: { keyword: kw, tables, schema: 'layer' },
+    })
+      .then((res) => {
+        const data = res?.data ?? res;
+        const results = Array.isArray(data?.results) ? (data.results as IdentifyLayerResult[]) : [];
+        applySearchToRightPanel(results, KEYWORD_SEARCH_HEADER);
+      })
+      .catch(() => setIdentifyResultList?.(null))
+      .finally(() => setGeometrySearchLoading(false));
+  }, [keywordInput, applySearchToRightPanel, setIdentifyResultList]);
+
+  const runGeometrySearchToPanel = useCallback(
+    (wkt: string, listHeader?: string) => {
+      const header = listHeader ?? SPATIAL_SHAPE_SEARCH_HEADER;
+      const tables = visibleSearchTableNamesRef.current;
+      if (!wkt.trim() || tables.length === 0) return;
+      setGeometrySearchLoading(true);
+      void call('', 'POST', {
+        service: 'standardService',
+        action: 'searchDefineLayersByGeometry',
+        params: { wkt, srid: 5181, tables, schema: 'layer' },
+      })
+        .then((res) => {
+          const data = res?.data ?? res;
+          const results = Array.isArray(data?.results) ? (data.results as IdentifyLayerResult[]) : [];
+          applySearchToRightPanel(results, header);
+        })
+        .catch(() => setIdentifyResultList?.(null))
+        .finally(() => setGeometrySearchLoading(false));
+    },
+    [applySearchToRightPanel, setIdentifyResultList]
+  );
+
+  const queueOrRunGeometrySearchToPanel = useCallback(
+    (wkt: string, listHeader?: string) => {
+      if (!wkt.trim()) return;
+      const tables = visibleSearchTableNamesRef.current;
+      if (tables.length === 0) {
+        pendingGeometrySearchRef.current = { wkt, listHeader };
+        setGeometrySearchLoading(true);
+        return;
+      }
+      pendingGeometrySearchRef.current = null;
+      runGeometrySearchToPanel(wkt, listHeader);
+    },
+    [runGeometrySearchToPanel]
+  );
+
+  useEffect(() => {
+    const p = pendingGeometrySearchRef.current;
+    if (!p?.wkt || visibleSearchTableNames.length === 0) return;
+    pendingGeometrySearchRef.current = null;
+    runGeometrySearchToPanel(p.wkt, p.listHeader);
+  }, [visibleSearchTableNames, runGeometrySearchToPanel]);
+
+  /**
+   * 도형 그리기 완료·데이터선택: WKT → 지도 도형 + 오른쪽 패널 `searchDefineLayersByGeometry` + (기본) 왼쪽 레이어 목록 공간필터(`getLayersInGeometry`).
+   * 읍면동·리: 도형 그리기와 동일하게 지도·오른쪽 패널만 쓰고, 레이어 목록을 도형으로 걸러 쓰지 않을 때 `skipLayerListFilter: true`.
+   */
+  const applySpatialSearchFromWkt5181 = useCallback(
+    (wkt: string, options?: { skipLayerListFilter?: boolean; listHeader?: string }) => {
+      if (!setSpatialFilterWkt) return;
+      setSpatialFilterWkt(wkt);
+      queueOrRunGeometrySearchToPanel(wkt, options?.listHeader);
+      if (options?.skipLayerListFilter) {
+        setSpatialFilteredLayerNames?.(null);
+        return;
+      }
+      if (!setSpatialFilteredLayerNames) return;
+      const targets = visibleLayerTargetsRef.current;
+      if (targets.length === 0) return;
+      void call('', 'POST', {
+        service: 'standardService',
+        action: 'getLayersInGeometry',
+        params: { wkt, srid: 5181, layerTargets: targets, schema: 'layer' },
+      })
+        .then((res) => {
+          const data = res?.data ?? res;
+          const layers = Array.isArray(data?.layers) ? (data.layers as { tableName: string; count: number }[]) : [];
+          const names = new Set(layers.map((l) => l.tableName));
+          setSpatialFilteredLayerNames(names);
+          setLayerTotals((prev) => {
+            const next = { ...prev };
+            layers.forEach((l) => {
+              next[l.tableName] = l.count;
+            });
+            return next;
+          });
+        })
+        .catch(() => {});
+    },
+    [setSpatialFilterWkt, setSpatialFilteredLayerNames, queueOrRunGeometrySearchToPanel]
+  );
+
+  const clearEmdRiMapSearch = useCallback(() => {
+    pendingGeometrySearchRef.current = null;
+    setGeometrySearchLoading(false);
+    setSpatialFilterWkt?.(null);
+    setSpatialFilteredLayerNames?.(null);
+    setIdentifyResultList?.(null);
+  }, [setIdentifyResultList, setSpatialFilterWkt, setSpatialFilteredLayerNames]);
+
+  const moveMapToCenter = useCallback(
+    (center: { x: number; y: number } | null) => {
+      if (!center) return;
+      const map = mapContext?.mapInstanceRef?.current;
+      if (!map) return;
+      const center3857 = transformCoordinate([center.x, center.y], 'EPSG:5181', 'EPSG:3857');
+      if (center3857) map.getView().setCenter(center3857);
+    },
+    [mapContext?.mapInstanceRef]
+  );
+
+  const addBoundaryBadgeFromDraft = useCallback(() => {
+    if (riSelected) {
+      const label = riOptions.find((o) => o.code === riSelected)?.name ?? riSelected;
+      const item: BoundaryBadgeItem = { key: `ri:${riSelected}`, kind: 'ri', code: riSelected, label };
+      setBoundaryBadges((prev) => {
+        if (prev.some((p) => p.key === item.key)) return prev;
+        return [...prev, item];
+      });
+      return;
+    }
+    if (emdSelected) {
+      const label = emdOptions.find((o) => o.code === emdSelected)?.name ?? emdSelected;
+      const item: BoundaryBadgeItem = { key: `emd:${emdSelected}`, kind: 'emd', code: emdSelected, label };
+      setBoundaryBadges((prev) => {
+        if (prev.some((p) => p.key === item.key)) return prev;
+        return [...prev, item];
+      });
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.alert('읍면동 또는 리를 선택한 뒤 + 를 눌러 주세요.');
+    }
+  }, [riSelected, emdSelected, riOptions, emdOptions]);
+
+  const clearBoundaryTab = useCallback(() => {
+    setBoundaryBadges([]);
+    setEmdSelected('');
+    setRiSelected('');
+    pendingGeometrySearchRef.current = null;
+    setSpatialFilterWkt?.(null);
+    setSpatialFilteredLayerNames?.(null);
+    setIdentifyResultList?.(null);
+    setGeometrySearchLoading(false);
+  }, [setIdentifyResultList, setSpatialFilterWkt, setSpatialFilteredLayerNames]);
+
+  /** 레이어 목록(데이터조회) 패널을 닫거나 다른 사이드 메뉴로 전환 시 — 시설관리와 동일 storage 정리 */
+  useEffect(() => {
+    return () => {
+      const p = loadPersistedSearchForm();
+      savePersistedSearchForm({
+        ...p,
+        emdSelected: '',
+        riSelected: '',
+        boundaryBadges: [],
+      });
+      pendingGeometrySearchRef.current = null;
+      setSpatialFilterWkt?.(null);
+      setSpatialFilteredLayerNames?.(null);
+      setSpatialDrawRequest?.(null);
+      setIdentifyResultList?.(null);
+      setGeometrySearchLoading(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 언마운트 시에만 정리
+  }, []);
+
+  const runBoundaryBadgeSearch = useCallback(async () => {
+    if (boundaryBadges.length === 0) {
+      if (typeof window !== 'undefined') {
+        window.alert('추가된 읍면동·리가 없습니다. 선택 후 + 를 눌러 추가하세요.');
+      }
+      return;
+    }
+    if (!setSpatialFilterWkt) return;
+    setGeometrySearchLoading(true);
+    setSearchTab('boundary');
+    try {
+      const wktParts: string[] = [];
+      let lastCenter: { x: number; y: number } | null = null;
+      for (const b of boundaryBadges) {
+        const res = await call('', 'POST', {
+          service: 'devTestService',
+          action: b.kind === 'emd' ? 'getEmdGeometry' : 'getRiGeometry',
+          params: b.kind === 'emd' ? { emdCode: b.code } : { riCode: b.code },
+        });
+        const data = res?.data ?? res;
+        const w = data?.wkt != null ? String(data.wkt).trim() : '';
+        if (w) {
+          wktParts.push(w);
+          const c = data?.center as { x?: number; y?: number } | null | undefined;
+          if (c?.x != null && c?.y != null) lastCenter = { x: Number(c.x), y: Number(c.y) };
+        }
+      }
+      if (wktParts.length === 0) {
+        clearEmdRiMapSearch();
+        setGeometrySearchLoading(false);
+        return;
+      }
+      let unionWkt: string | null = wktParts[0] ?? null;
+      let center: { x: number; y: number } | null = lastCenter;
+      if (wktParts.length > 1) {
+        const ures = await call('', 'POST', {
+          service: 'devTestService',
+          action: 'unionWkts5181',
+          params: { wkts: wktParts },
+        });
+        const udata = ures?.data ?? ures;
+        unionWkt = udata?.wkt != null ? String(udata.wkt).trim() : null;
+        const uc = udata?.center as { x?: number; y?: number } | null | undefined;
+        if (uc?.x != null && uc?.y != null) center = { x: Number(uc.x), y: Number(uc.y) };
+      }
+      if (!unionWkt) {
+        clearEmdRiMapSearch();
+        setGeometrySearchLoading(false);
+        return;
+      }
+      setSpatialFilterWkt(unionWkt);
+      moveMapToCenter(center);
+      applySpatialSearchFromWkt5181(unionWkt, {
+        skipLayerListFilter: true,
+        listHeader: BOUNDARY_SEARCH_HEADER,
+      });
+    } catch {
+      clearEmdRiMapSearch();
+      setGeometrySearchLoading(false);
+    }
+  }, [
+    boundaryBadges,
+    setSpatialFilterWkt,
+    applySpatialSearchFromWkt5181,
+    moveMapToCenter,
+    clearEmdRiMapSearch,
+  ]);
 
   const startSpatialDraw = useCallback(
     (type: 'rectangle' | 'polygon' | 'circle') => {
@@ -308,43 +708,32 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         }
         return;
       }
-      const targets = layerTargetsRef.current;
+      const targets = visibleLayerTargetsRef.current;
       if (targets.length === 0) return;
+      setSearchTab('shape');
       setActiveTool(type);
       setSpatialDrawRequest({
         type,
         onComplete: (wkt5181: string) => {
-          call('', 'POST', {
-            service: 'standardService',
-            action: 'getLayersInGeometry',
-            params: { wkt: wkt5181, srid: 5181, layerTargets: targets, schema: 'layer' },
-          })
-            .then((res) => {
-              const data = res?.data ?? res;
-              const layers = Array.isArray(data?.layers) ? (data.layers as { tableName: string; count: number }[]) : [];
-              const names = new Set(layers.map((l) => l.tableName));
-              setSpatialFilterWkt(wkt5181);
-              setSpatialFilteredLayerNames(names);
-              setLayerTotals((prev) => {
-                const next = { ...prev };
-                layers.forEach((l) => { next[l.tableName] = l.count; });
-                return next;
-              });
-            })
-            .catch(() => {});
+          applySpatialSearchFromWkt5181(wkt5181);
         },
       });
     },
-    [setSpatialDrawRequest, setSpatialFilterWkt, setSpatialFilteredLayerNames, mapContext?.measurementActive]
+    [setSpatialDrawRequest, mapContext?.measurementActive, applySpatialSearchFromWkt5181]
   );
 
   const clearSpatialFilter = useCallback(() => {
+    pendingGeometrySearchRef.current = null;
+    setGeometrySearchLoading(false);
+    setIdentifyResultList?.(null);
+    setSearchTab('shape');
     setActiveTool('rectangle');
     setSpatialFilterWkt?.(null);
     setSpatialFilteredLayerNames?.(null);
     setEmdSelected('');
     setRiSelected('');
-  }, [setSpatialFilterWkt, setSpatialFilteredLayerNames]);
+    setBoundaryBadges([]);
+  }, [setIdentifyResultList, setSpatialFilterWkt, setSpatialFilteredLayerNames]);
 
   useEffect(() => {
     const flat = layerGroups.flatMap((g) => g.layers);
@@ -370,25 +759,25 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     });
   }, [layerGroups, layerSchemaMap]);
 
+  /** 읍면동 코드 목록 — 행정경계 도구 전환 시마다 호출하지 않고 마운트 시 1회 */
   useEffect(() => {
-    if (activeTool !== 'emdRi') return;
     let cancelled = false;
     call('', 'POST', { service: 'devTestService', action: 'getEmdRiOptions', params: {} })
       .then((res) => {
         if (cancelled) return;
         const data = res?.data ?? res;
         setEmdOptions(Array.isArray(data?.emd) ? data.emd : []);
-        setRiOptions([]);
-        setRiSelected('');
       })
       .catch(() => {
         if (!cancelled) setEmdOptions([]);
       });
-    return () => { cancelled = true; };
-  }, [activeTool]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    if (activeTool !== 'emdRi' || !emdSelected) {
+    if (searchTab !== 'boundary' || !emdSelected) {
       setRiOptions([]);
       setRiSelected('');
       return;
@@ -409,81 +798,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         if (!cancelled) setRiOptions([]);
       });
     return () => { cancelled = true; };
-  }, [activeTool, emdSelected]);
-
-  // 읍면동/리 선택 시 해당 도형(emd 또는 ri 테이블) 조회 → 지도에 표시 후 동일하게 공간 검색. 리 선택 시 emd 대신 ri 도형만 표시
-  useEffect(() => {
-    if (activeTool !== 'emdRi') return;
-    if (!setSpatialFilterWkt || !setSpatialFilteredLayerNames) return;
-
-    const applyWkt = (wkt: string | null) => {
-      if (!wkt) {
-        setSpatialFilterWkt(null);
-        setSpatialFilteredLayerNames(null);
-        return;
-      }
-      setSpatialFilterWkt(wkt);
-      const targets = layerTargetsRef.current;
-      if (targets.length === 0) return;
-      call('', 'POST', {
-        service: 'standardService',
-        action: 'getLayersInGeometry',
-        params: { wkt, srid: 5181, layerTargets: targets, schema: 'layer' },
-      })
-        .then((res) => {
-          const data = res?.data ?? res;
-          const layers = Array.isArray(data?.layers) ? (data.layers as { tableName: string; count: number }[]) : [];
-          const names = new Set(layers.map((l) => l.tableName));
-          setSpatialFilteredLayerNames(names);
-          setLayerTotals((prev) => {
-            const next = { ...prev };
-            layers.forEach((l) => { next[l.tableName] = l.count; });
-            return next;
-          });
-        })
-        .catch(() => {});
-    };
-
-    const moveMapToCenter = (center: { x: number; y: number } | null) => {
-      if (!center) return;
-      const map = mapContext?.mapInstanceRef?.current;
-      if (!map) return;
-      const center3857 = transformCoordinate([center.x, center.y], 'EPSG:5181', 'EPSG:3857');
-      if (center3857) map.getView().setCenter(center3857);
-    };
-
-    if (riSelected) {
-      call('', 'POST', {
-        service: 'devTestService',
-        action: 'getRiGeometry',
-        params: { riCode: riSelected },
-      })
-        .then((res) => {
-          const data = res?.data ?? res;
-          const wkt = data?.wkt ?? null;
-          applyWkt(wkt);
-          moveMapToCenter(data?.center ?? null);
-        })
-        .catch(() => applyWkt(null));
-      return;
-    }
-    if (emdSelected) {
-      call('', 'POST', {
-        service: 'devTestService',
-        action: 'getEmdGeometry',
-        params: { emdCode: emdSelected },
-      })
-        .then((res) => {
-          const data = res?.data ?? res;
-          const wkt = data?.wkt ?? null;
-          applyWkt(wkt);
-          moveMapToCenter(data?.center ?? null);
-        })
-        .catch(() => applyWkt(null));
-      return;
-    }
-    applyWkt(null);
-  }, [activeTool, emdSelected, riSelected, setSpatialFilterWkt, setSpatialFilteredLayerNames]);
+  }, [searchTab, emdSelected]);
 
   useEffect(() => {
     if (activeTool !== 'dataSelect') return;
@@ -583,30 +898,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
 
     const applyWkt = (wkt: string | null) => {
       if (!wkt) {
+        pendingGeometrySearchRef.current = null;
+        setGeometrySearchLoading(false);
         setSpatialFilterWkt(null);
         setSpatialFilteredLayerNames(null);
+        setIdentifyResultList?.(null);
         return;
       }
-      setSpatialFilterWkt(wkt);
-      const targets = layerTargetsRef.current;
-      if (targets.length === 0) return;
-      call('', 'POST', {
-        service: 'standardService',
-        action: 'getLayersInGeometry',
-        params: { wkt, srid: 5181, layerTargets: targets, schema: 'layer' },
-      })
-        .then((res) => {
-          const data = res?.data ?? res;
-          const layers = Array.isArray(data?.layers) ? (data.layers as { tableName: string; count: number }[]) : [];
-          const names = new Set(layers.map((l) => l.tableName));
-          setSpatialFilteredLayerNames(names);
-          setLayerTotals((prev) => {
-            const next = { ...prev };
-            layers.forEach((l) => { next[l.tableName] = l.count; });
-            return next;
-          });
-        })
-        .catch(() => {});
+      applySpatialSearchFromWkt5181(wkt);
     };
 
     const moveMapToCenter = (center: { x: number; y: number } | null) => {
@@ -638,17 +937,17 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     } else {
       applyWkt(null);
     }
-  // allTableNames는 allTableNamesRef.current로 참조. mapContext 제외 시 무한루프 방지.
+  // visibleSearchTableNamesRef는 렌더마다 갱신. mapContext 대신 setIdentifyResultList만 deps (Provider value 참조 변경 방지).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTool, dataSelectTable, dataSelectField, dataSelectValue]);
+  }, [activeTool, dataSelectTable, dataSelectField, dataSelectValue, applySpatialSearchFromWkt5181, setIdentifyResultList]);
 
   const handleLayerClick = (layer: LayerItemMeta) => {
     if (activeTableName === layer.tableName) {
-      mapContext?.setIdentifyResultList?.(null);
+      setIdentifyResultList?.(null);
       onClearDataSelection?.();
     } else {
-      mapContext?.setIdentifyResultList?.(null);
-      onOpenDataPanel?.(layer.tableName);
+      setIdentifyResultList?.(null);
+      onOpenDataPanelRef.current?.(layer.tableName);
       if (setVisibleLayerNames && !visibleLayerNames.has(layer.tableName)) {
         setVisibleLayerNames((prev) => new Set(prev).add(layer.tableName));
       }
@@ -665,127 +964,268 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden opacity-[0.95]">
       {/* 공간검색 */}
       <div className="border-b border-slate-200 px-4 py-3 shrink-0">
-        <div className="flex items-stretch w-full gap-2">
-          {SPATIAL_TOOLS.map((tool) => {
-            const ToolIcon = tool.icon;
-            const isShapeTool = tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle';
-            const isActive = isShapeTool
-              ? isSpatialSearchActive && activeTool === tool.id
-              : activeTool === tool.id;
-            return (
-              <button
-                key={tool.id}
-                type="button"
-                onClick={() => {
-                  if ((tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle') && setSpatialDrawRequest) {
-                    startSpatialDraw(tool.id);
-                  } else {
-                    setActiveTool(tool.id);
-                  }
-                }}
-                className={cn(
-                  'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 py-2 rounded border transition-colors bg-white',
-                  isActive
-                    ? 'border-primary text-primary'
-                    : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600'
-                )}
-                title={tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle' ? `지도에 ${tool.label} 그리기` : tool.label}
-              >
-                <ToolIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
-              </button>
-            );
-          })}
+        <div className="mb-2 flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
           <button
             type="button"
-            onClick={() => (spatialFilterWkt ? clearSpatialFilter() : setActiveTool('rectangle'))}
+            onClick={() => setSearchTab('keyword')}
             className={cn(
-              'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 py-2 rounded border transition-colors bg-white',
-              spatialFilterWkt ? 'border-amber-300 text-amber-600 hover:border-amber-400' : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-primary'
+              'flex-1 rounded py-1.5 text-[11px] font-medium transition-colors',
+              searchTab === 'keyword' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
             )}
-            title={spatialFilterWkt ? '공간 필터 해제' : '초기화'}
           >
-            <RefreshCw className="h-5 w-5 shrink-0" strokeWidth={2} />
+            통합검색
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTab('shape');
+              setActiveTool((prev) => (prev === 'emdRi' ? 'rectangle' : prev));
+            }}
+            className={cn(
+              'flex-1 rounded py-1.5 text-[11px] font-medium transition-colors',
+              searchTab === 'shape' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            )}
+          >
+            도형검색
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTab('boundary');
+              setActiveTool('emdRi');
+            }}
+            className={cn(
+              'flex-1 rounded px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors',
+              searchTab === 'boundary' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            )}
+          >
+            행정경계 검색
           </button>
         </div>
-        {activeTool === 'emdRi' && (
-          <div className="mt-3 flex items-end gap-2">
-            <div className="flex-1 min-w-0">
-              <select
-                value={emdSelected}
-                onChange={(e) => setEmdSelected(e.target.value)}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary"
+        {searchTab === 'keyword' && (
+          <div className="flex items-stretch gap-2">
+            <input
+              type="search"
+              value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') runKeywordSearch();
+              }}
+              placeholder="레이어 속성 검색"
+              className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25"
+            />
+            <button
+              type="button"
+              onClick={runKeywordSearch}
+              disabled={geometrySearchLoading}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Search className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              검색
+            </button>
+          </div>
+        )}
+        {searchTab === 'shape' && (
+          <>
+            <div className="flex items-stretch w-full gap-2">
+              {SPATIAL_SHAPE_TOOLS.map((tool) => {
+                const ToolIcon = tool.icon;
+                const isShapeTool = tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle';
+                const isActive = isShapeTool
+                  ? isSpatialSearchActive && activeTool === tool.id
+                  : activeTool === tool.id;
+                return (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    onClick={() => {
+                      setSearchTab('shape');
+                      if (
+                        (tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle') &&
+                        setSpatialDrawRequest
+                      ) {
+                        startSpatialDraw(tool.id);
+                      } else {
+                        setActiveTool(tool.id);
+                      }
+                    }}
+                    disabled={geometrySearchLoading}
+                    className={cn(
+                      'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-white py-2 transition-colors disabled:opacity-50',
+                      isActive
+                        ? 'border-primary text-primary'
+                        : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                    )}
+                    title={
+                      tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle'
+                        ? `지도에 ${tool.label} 그리기`
+                        : tool.label
+                    }
+                  >
+                    <ToolIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  if (spatialFilterWkt) clearSpatialFilter();
+                  else setActiveTool('rectangle');
+                }}
+                className={cn(
+                  'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-white py-2 transition-colors',
+                  spatialFilterWkt
+                    ? 'border-amber-300 text-amber-600 hover:border-amber-400'
+                    : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-primary'
+                )}
+                title={spatialFilterWkt ? '공간 필터 해제' : '초기화'}
               >
-                <option value="">읍면동 선택</option>
-                {emdOptions.map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
+                <RefreshCw className="h-5 w-5 shrink-0" strokeWidth={2} />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <select
-                value={riSelected}
-                onChange={(e) => setRiSelected(e.target.value)}
-                disabled={!emdSelected}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            {activeTool === 'dataSelect' && (
+              <div className="mt-3 flex items-end gap-2">
+                <div className="flex-1 min-w-0">
+                  <select
+                    value={dataSelectTable}
+                    onChange={(e) => setDataSelectTable(e.target.value)}
+                    disabled={geometrySearchLoading}
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                  >
+                    <option value="">테이블 선택</option>
+                    {dataSelectTableOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <select
+                    value={dataSelectField}
+                    onChange={(e) => setDataSelectField(e.target.value)}
+                    disabled={!dataSelectTable || geometrySearchLoading}
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">필드 선택</option>
+                    {dataSelectFieldOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {dataSelectFieldLabels[name] ?? name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <select
+                    value={dataSelectValue}
+                    onChange={(e) => setDataSelectValue(e.target.value)}
+                    disabled={!dataSelectField || geometrySearchLoading}
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">값 선택</option>
+                    {dataSelectValueOptions.map((val) => (
+                      <option key={val} value={val}>
+                        {dataSelectValueLabels[val] ?? val}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {searchTab === 'boundary' && (
+          <div className="space-y-2">
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <select
+                  value={emdSelected}
+                  onChange={(e) => {
+                    setEmdSelected(e.target.value);
+                    setRiSelected('');
+                  }}
+                  disabled={geometrySearchLoading}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                >
+                  <option value="">읍면동 선택</option>
+                  {emdOptions.map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0 flex-1">
+                <select
+                  value={riSelected}
+                  onChange={(e) => setRiSelected(e.target.value)}
+                  disabled={!emdSelected || geometrySearchLoading}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="">리 선택</option>
+                  {riOptions.map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                title="선택 항목을 목록에 추가"
+                onClick={addBoundaryBadgeFromDraft}
+                disabled={geometrySearchLoading}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                <option value="">리 선택</option>
-                {riOptions.map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.name}
-                  </option>
+                <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+            {boundaryBadges.length > 0 && (
+              <div className="grid grid-cols-4 gap-x-1 gap-y-1.5">
+                {boundaryBadges.map((b) => (
+                  <span
+                    key={b.key}
+                    className="flex min-h-[1.375rem] min-w-0 w-full max-w-full items-center justify-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1 pr-0.5 text-[11px] leading-none text-slate-800"
+                  >
+                    <span className="min-w-0 max-w-[3em] flex-1 truncate text-center" title={b.label}>
+                      {b.label}
+                    </span>
+                    <button
+                      type="button"
+                      title="목록에서 제거"
+                      onClick={() => setBoundaryBadges((prev) => prev.filter((x) => x.key !== b.key))}
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-primary/15 hover:text-primary"
+                    >
+                      <X className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
+                    </button>
+                  </span>
                 ))}
-              </select>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void runBoundaryBadgeSearch()}
+                disabled={geometrySearchLoading || boundaryBadges.length === 0}
+                className="min-h-9 flex-1 rounded-md border border-primary bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+              >
+                검색
+              </button>
+              <button
+                type="button"
+                title="선택·목록·지도 필터 초기화"
+                onClick={clearBoundaryTab}
+                disabled={geometrySearchLoading}
+                className="min-h-9 flex-1 rounded-md border border-slate-200 bg-white py-2 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:text-primary disabled:opacity-50"
+              >
+                초기화
+              </button>
             </div>
           </div>
         )}
-        {activeTool === 'dataSelect' && (
-          <div className="mt-3 flex items-end gap-2">
-            <div className="flex-1 min-w-0">
-              <select
-                value={dataSelectTable}
-                onChange={(e) => setDataSelectTable(e.target.value)}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary"
-              >
-                <option value="">테이블 선택</option>
-                {dataSelectTableOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1 min-w-0">
-              <select
-                value={dataSelectField}
-                onChange={(e) => setDataSelectField(e.target.value)}
-                disabled={!dataSelectTable}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <option value="">필드 선택</option>
-                {dataSelectFieldOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {dataSelectFieldLabels[name] ?? name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1 min-w-0">
-              <select
-                value={dataSelectValue}
-                onChange={(e) => setDataSelectValue(e.target.value)}
-                disabled={!dataSelectField}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <option value="">값 선택</option>
-                {dataSelectValueOptions.map((val) => (
-                  <option key={val} value={val}>
-                    {dataSelectValueLabels[val] ?? val}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {geometrySearchLoading && (
+          <div className="mt-2 shrink-0 border-t border-slate-100 bg-slate-50/80 px-1 py-1.5 text-center text-[11px] text-slate-500">
+            검색 중…
           </div>
         )}
       </div>
@@ -931,9 +1371,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                             onChange={(e) => {
                               e.stopPropagation();
                               if (!setVisibleLayerNames) return;
+                              const checked = e.target.checked;
                               setVisibleLayerNames((prev) => {
                                 const next = new Set(prev);
-                                if (e.target.checked) next.add(layer.tableName);
+                                if (checked) next.add(layer.tableName);
                                 else next.delete(layer.tableName);
                                 return next;
                               });

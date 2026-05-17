@@ -7,6 +7,12 @@ import { call } from '@/lib/api';
 export interface IdentifyFeatureItem {
   titleValue: string;
   data: Record<string, unknown>;
+  /** 통합검색: 키워드와 맞은 첫 속성(서버가 채움) */
+  keywordMatch?: {
+    fieldName: string;
+    fieldKorName?: string;
+    valuePreview: string;
+  };
 }
 
 export interface IdentifyLayerResult {
@@ -21,6 +27,8 @@ export interface IdentifyLayerResult {
 export interface IdentifyPopupState {
   coordinate: [number, number];
   results: IdentifyLayerResult[];
+  /** 시설관리 검색 등 — 다중 식별 목록 헤더 문구 오버라이드 */
+  listHeaderLabel?: string;
 }
 
 /** d = 300000 * 0.54^z  (z = zoom level) */
@@ -65,9 +73,13 @@ export function useFeatureIdentify(
   map: Map | null,
   mapReady: boolean,
   visibleLayerNames: Set<string>,
+  /** true이면 지도 클릭 식별(identifyFeatures)을 수행하지 않음 (예: CCTV 패널 열림) */
+  identifyDisabled = false,
 ) {
   const visibleRef = useRef(visibleLayerNames);
   visibleRef.current = visibleLayerNames;
+  const disabledRef = useRef(identifyDisabled);
+  disabledRef.current = identifyDisabled;
 
   const [popupState, setPopupState] = useState<IdentifyPopupState | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
@@ -103,6 +115,10 @@ export function useFeatureIdentify(
   const handleClick = useCallback(
     async (evt: MapBrowserEvent<PointerEvent>) => {
       if (!evt.map) return;
+      if (disabledRef.current) {
+        closePopup();
+        return;
+      }
       const tables = Array.from(visibleRef.current);
       if (tables.length === 0) {
         closePopup();
@@ -137,6 +153,10 @@ export function useFeatureIdentify(
     },
     [closePopup],
   );
+
+  useEffect(() => {
+    if (identifyDisabled) closePopup();
+  }, [identifyDisabled, closePopup]);
 
   useEffect(() => {
     if (!mapReady || !map) return;

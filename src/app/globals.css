@@ -208,6 +208,19 @@
   animation: layer-result-in 0.22s ease-out both;
 }
 
+/* 재난안전 safemap 단일 이미지 로드 중 — 레이어 행 프로그레스 바 */
+@keyframes safemap-wms-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+.animate-safemap-wms-indeterminate {
+  animation: safemap-wms-indeterminate 1.15s ease-in-out infinite;
+}
+
 /* 스크롤은 되지만 스크롤바 숨김 (Chrome, Safari, Firefox, Edge) */
 @layer utilities {
   .scrollbar-hide {

@@ -27,9 +27,13 @@ const BASE_STRUCTURE = [
   'service_data/3dtiles_tiff',
   'service_data/3dtiles_ecef',
   'service_data/3dtiles_pnts',
+  'service_data/3dtiles_b3dm',
+  'service_data/2dtiles',
   'upload_data',
   'upload_data/tif',
   'upload_data/las',
+  'upload_data/source_upload',
+  'upload_data/satellite_tif',
   'service_data/shp_data',
   'service_data/excel_data',
   '.meta',
@@ -233,13 +237,12 @@ export async function deleteFileDataPath(params: {
 }
 
 /**
- * service_data/3dtiles_pnts 하위 폴더 중 tileset.json이 있는 폴더 이름만 반환.
- * 3D 지도 타일 목록용 (tileset.json 없는 폴더는 제외).
+ * service_data/3dtiles/<데이터셋>/pnts/tileset.json 이 있는 데이터셋 폴더명만 반환.
  */
 export async function list3DTilesetDirs(): Promise<{ directories: string[] }> {
   await ensureBaseStructure();
   const base = getBaseDir();
-  const dir = path.join(base, 'service_data', '3dtiles_pnts');
+  const dir = path.join(base, 'service_data', '3dtiles');
   try {
     const stat = await fs.stat(dir);
     if (!stat.isDirectory()) return { directories: [] };
@@ -250,7 +253,7 @@ export async function list3DTilesetDirs(): Promise<{ directories: string[] }> {
   const directories: string[] = [];
   for (const e of entries) {
     if (!e.isDirectory()) continue;
-    const tilesetPath = path.join(dir, e.name, 'tileset.json');
+    const tilesetPath = path.join(dir, e.name, 'pnts', 'tileset.json');
     try {
       const st = await fs.stat(tilesetPath);
       if (st.isFile()) directories.push(e.name);
@@ -262,10 +265,46 @@ export async function list3DTilesetDirs(): Promise<{ directories: string[] }> {
   return { directories };
 }
 
+/**
+ * service_data/3dtiles/<데이터셋>/b3dm/tileset.json 이 있는 데이터셋 폴더명만 반환.
+ */
+export async function list3DB3dmTilesetDirs(): Promise<{ directories: string[] }> {
+  await ensureBaseStructure();
+  const base = getBaseDir();
+  const dir = path.join(base, 'service_data', '3dtiles');
+  try {
+    const stat = await fs.stat(dir);
+    if (!stat.isDirectory()) return { directories: [] };
+  } catch {
+    return { directories: [] };
+  }
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const directories: string[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const tilesetPath = path.join(dir, e.name, 'b3dm', 'tileset.json');
+    try {
+      const st = await fs.stat(tilesetPath);
+      if (st.isFile()) directories.push(e.name);
+    } catch {
+      /* tileset.json 없음 */
+    }
+  }
+  directories.sort((a, b) => a.localeCompare(b));
+  return { directories };
+}
+
 /** 업로드·변환 이력 한 건 */
 export type UploadConvertHistoryEntry = {
   at: string;
-  kind: 'upload' | 'convert_hillshade' | 'convert_b3dm' | 'convert_cog' | 'convert_geotiff' | 'convert_ecef';
+  kind:
+    | 'upload'
+    | 'convert_hillshade'
+    | 'convert_b3dm'
+    | 'convert_cog'
+    | 'convert_geotiff'
+    | 'convert_ecef'
+    | 'convert_orthophoto_xyz';
   sourceFile: string;
   pathOrResult: string;
   status: '완료' | '변환 중' | '실패';
@@ -466,9 +505,11 @@ export async function getUploadConvertHistoryAggregated(params?: {
 
     let pnts: AggregatedStepStatus = '실패';
     try {
-      const pntsTileset = path.join(base, 'service_data', '3dtiles_pnts', basename, 'tileset.json');
-      const st = await fs.stat(pntsTileset);
-      pnts = st.isFile() ? '완료' : '실패';
+      const pntsNew = path.join(base, 'service_data', '3dtiles', basename, 'pnts', 'tileset.json');
+      const pntsOld = path.join(base, 'service_data', '3dtiles_pnts', basename, 'tileset.json');
+      const stN = await fs.stat(pntsNew).catch(() => null);
+      const stO = await fs.stat(pntsOld).catch(() => null);
+      pnts = stN?.isFile() || stO?.isFile() ? '완료' : '실패';
     } catch {
       pnts = '실패';
     }

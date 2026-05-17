@@ -20,6 +20,9 @@
 # production
 /build
 
+# CAD 미리보기 작업 파일 (roadDocCadPreviewPng)
+/.cad-preview-work/
+
 # misc
 .DS_Store
 *.pem

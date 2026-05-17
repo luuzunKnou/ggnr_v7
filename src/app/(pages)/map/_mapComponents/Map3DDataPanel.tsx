@@ -9,6 +9,8 @@ import type OLMap from 'ol/Map';
 import GeoTIFF from 'ol/source/GeoTIFF';
 import WebGLTileLayer from 'ol/layer/WebGLTile';
 import { transformExtent } from 'ol/proj';
+import { MAP_AUTO_NAV_MAX_ZOOM } from './config/mapDefaults';
+import { getFitPaddingWithView } from './config/mapFitPadding';
 
 type TifItem = { folder: string; name: string };
 const LAYER_KEY = 'geotiffLayer';
@@ -143,7 +145,11 @@ export default function Map3DDataPanel({ onClose }: { onClose: () => void }) {
           유효: extView.every(Number.isFinite),
         });
         if (extView.every(Number.isFinite)) {
-          view.fit(extView, { padding: [80, 80, 80, 80], maxZoom: 18, duration: 500 });
+          view.fit(extView, {
+            padding: getFitPaddingWithView(view, [80, 80, 80, 80]),
+            maxZoom: Math.min(18, MAP_AUTO_NAV_MAX_ZOOM),
+            duration: 500,
+          });
         }
       } catch (e) {
         console.log('[Map3DDataPanel] 좌표이동 실패 (transform/fit 에러)', e);

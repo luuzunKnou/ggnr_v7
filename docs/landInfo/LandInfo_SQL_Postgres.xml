@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN" "http://www.ibatis.com/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="LandInfoDAO">
+	<typeAlias  alias="LandInfoVO" type="component.landInfo.service.LandInfoVO"/>	
+	<typeAlias  alias="LandOwnInfoVO" type="component.landInfo.service.LandOwnInfoVO"/>	
+	<typeAlias  alias="LandInfoCodeVO" type="component.landInfo.service.LandInfoCodeVO"/>	
+	<typeAlias  alias="SaeolLandInfoVO" type="component.contextListener.saeolSOAP.service.SaeolLandInfoVO"/>	
+	<typeAlias  alias="SaeolRealityInfoVO" type="component.contextListener.saeolSOAP.service.SaeolRealityInfoVO"/>	
+	<typeAlias  alias="SaeolVarianceInfoVO" type="component.contextListener.saeolSOAP.service.SaeolVarianceInfoVO"/>	
+	<typeAlias  alias="SaeolLoanInfoVO" type="component.contextListener.saeolSOAP.service.SaeolLoanInfoVO"/>	
+	<typeAlias  alias="SaeolOccuInfoVO" type="component.contextListener.saeolSOAP.service.SaeolOccuInfoVO"/>
+		
+	<typeAlias  alias="LayerVO" type="component.admin.layerPerm.service.LayerVO"/>
+
+	<select id="LandInfoDAO.getLandInfoList" parameterClass="String" resultClass="LandInfoVO"> 
+		select * from land_info where pnu = #pnu#
+	</select>
+	
+	<select id="LandInfoDAO.getLandOwnInfoList" parameterClass="String" resultClass="LandOwnInfoVO"> 
+		select * from land_own_info where pnu = #pnu#
+	</select>
+	
+	<select id="LandInfoDAO.landInfoCodeChange"  parameterClass="LandInfoCodeVO" resultClass="LandInfoCodeVO">
+		select code_name,  code_kor_name,  code_number,  number_kor_name
+		from land_info_code
+	</select>
+		
+	<delete id="landInfoDAO.landInfoDelete">
+		delete from land_info
+	</delete>
+	
+	<insert id="LandInfoDAO.landInfoInsert" parameterClass="java.util.List">
+		INSERT INTO
+			land_info (pnu,  administrative_district,  issan, bon, bu,  jimok_cd,  jimok,  area,  land_move_reason_cd, 
+					   land_move_reason,  land_move_date , soyu_address, soyu_name, soyu_cd, soyu_gubun, soyu_trans_date, 
+					   soyu_trans_reason_cd, soyu_trans_reason, sharing_num, pnilp, pnlip_susi, pnlip_1y_ago, pnlip_1y_ago_susi, 
+					   pnlip_2y_ago, pnlip_2y_ago_susi, pnlip_3y_ago, pnlip_3y_ago_susi, pnlip_4y_ago, pnlip_4y_ago_susi,insert_date)
+		VALUES
+			<iterate conjunction=", ">
+				(
+		            #[].pnu#,
+					#[].administrative_district#,
+					#[].issan#,
+					#[].bon#,
+					#[].bu#,
+					#[].jimok_cd#,
+					#[].jimok#,
+					#[].area#,
+					#[].land_move_reason_cd#,
+					#[].land_move_reason#,
+					#[].land_move_date#,
+					#[].soyu_address#,
+					#[].soyu_name#,
+					#[].soyu_cd#,
+					#[].soyu_gubun#,
+					#[].soyu_trans_date#,
+					#[].soyu_trans_reason_cd#,
+					#[].soyu_trans_reason#,
+					#[].sharing_num#,
+					#[].pnilp#,
+					#[].pnlip_susi#,
+					#[].pnlip_1y_ago#,
+					#[].pnlip_1y_ago_susi#,
+					#[].pnlip_2y_ago#,
+					#[].pnlip_2y_ago_susi#,
+					#[].pnlip_3y_ago#,
+					#[].pnlip_3y_ago_susi#,
+					#[].pnlip_4y_ago#,
+					#[].pnlip_4y_ago_susi#,
+					now()
+		        )
+		    </iterate>		
+	</insert>
+	
+	<delete id="landInfoDAO.landOwnDelete">
+		delete from land_own_info
+	</delete>
+	
+	<insert id="LandInfoDAO.landOwnInsert" parameterClass="java.util.List">
+		INSERT INTO
+			land_own_info (pnu,soyu_address,soyu_name,soyu_cd,soyu_gubun,soyu_share,soyu_trans_date,soyu_trans_reason,soyu_trans_reason_cd,insert_date)		
+		VALUES
+			<iterate conjunction=", ">
+				(
+					#[].pnu#,
+					#[].soyu_address#,
+					#[].soyu_name#,
+					#[].soyu_cd#,
+					#[].soyu_gubun#,
+					#[].soyu_share#,
+					#[].soyu_trans_date#,
+					#[].soyu_trans_reason#,
+					#[].soyu_trans_reason_cd#,
+					now()
+		        )
+		    </iterate>		
+	</insert>
+	
+	<delete id="LandInfoDAO.deleteDuplicateData">
+		DELETE FROM land_info
+		WHERE land_key IN (
+			select land_key
+			FROM (
+				SELECT land_key
+				, ROW_NUMBER() OVER(PARTITION BY pnu,  administrative_district,  issan, bon, bu,  jimok_cd,  jimok,  area,  land_move_reason_cd, 
+							   land_move_reason,  land_move_date , soyu_address, soyu_name, soyu_cd, soyu_gubun, soyu_trans_date, 
+							   soyu_trans_reason_cd, soyu_trans_reason, sharing_num, pnilp, pnlip_susi, pnlip_1y_ago, pnlip_1y_ago_susi, 
+							   pnlip_2y_ago, pnlip_2y_ago_susi, pnlip_3y_ago, pnlip_3y_ago_susi, pnlip_4y_ago, pnlip_4y_ago_susi,insert_date ORDER BY land_key) AS rows
+				FROM land_info
+			) as T
+			WHERE T.rows > 1
+		);
+	</delete>
+	
+	<select id="LandInfoDAO.saeolLandInfoData" parameterClass="String" resultClass="SaeolLandInfoVO"> 
+		select distinct  means_no , means_srv_code_nm, acct_se_code_nm, rdn_whl_addr, gain_dep_nm, sil_limit_yn_nm, develop_bsns, regt_yn,
+						 pln_bsns, develop_bsns, rm, means_nm, gsjg, land_jimk_code_nm, real_jimk_code_nm, sha_quota1, sha_quota2, means_pc, acct_crit_pc,
+		                 gain_met_nm, gain_ymd, gain_why, gain_dep_nm, gain_pc, gain_ar, srv_regn, city_pln_zone, pln_facil, develop_bsns, pln_bsns, own_code_nm
+		                 gain_met_se, gain_met_nm, ar, real_ar, address
+		from sa_land_info sli 
+		where regn_code||san||LPAD(bunji, 4, '0')||LPAD(ho, 4, '0') = #pnu#
+		order by gain_ymd desc
+		FETCH NEXT 1 ROWS ONLY;
+	</select>
+	
+	<select id="LandInfoDAO.saeolRealityInfoData" parameterClass="String" resultClass="SaeolRealityInfoVO"> 
+		select distinct use_situ_jimk , use_tot_ar , use_bdng_owner_nm, confrm_ymd
+		from sa_reality_info sri 
+		where means_no = #means_no#::integer
+		order by confrm_ymd desc 
+		FETCH NEXT 1 ROWS ONLY;
+	</select>
+	
+	<select id="LandInfoDAO.saeolVarianceInfoList" parameterClass="String" resultClass="SaeolVarianceInfoVO"> 
+		select distinct apply_ymd , his_se_nm , wrk_bf_vlu , wrk_atf_value , rm 
+		from sa_variance_info svi 
+		where means_no = #means_no#::integer
+		order by apply_ymd desc;
+	</select>
+	
+	<select id="LandInfoDAO.saeolLoanInfoList" parameterClass="String" resultClass="SaeolLoanInfoVO"> 
+		select distinct usr_nm , loan_perm_gigan_st_ymd , loan_perm_gigan_end_ymd , loan_perm_daycnt , bdng_loan_use_ar , per_amt , ctr_ymd
+		from sa_loan_info sli 
+		where means_no = #means_no#::integer
+		order by ctr_ymd desc;
+	</select>
+	
+	<select id="LandInfoDAO.saeolOccuInfoList" parameterClass="String" resultClass="SaeolOccuInfoVO"> 
+		select distinct usr_nm, poss_st_ymd , poss_end_ymd, poss_ar1 
+		from sa_occu_info soi 
+		where means_no = #means_no#::integer
+		order by poss_st_ymd desc;
+	</select>
+	
+	<!-- 2025.03.28 김재운 - 주제도 레이어 리스트 가져오기 위해 추가 -->
+	<select id="LandInfoDAO.tgLayerManager" resultClass="LayerVO">
+		select layer_code
+		from layermanager l 
+		where layer_cat = '주제도'
+	</select>
+	
+	<select id="LandInfoDAO.usePlanList" parameterClass="java.util.HashMap" resultClass="java.util.LinkedHashMap">
+		WITH 
+		select_jijuk AS (
+			SELECT geom
+			FROM jijuk j
+			WHERE pnu = #pnu#
+		),
+		lt_c_data AS (
+			$query$
+		)
+		SELECT distinct lt.alias3 as alias, lt.remark,
+	    CASE 
+	        WHEN ST_Within(lt.geom, sj.geom) THEN '포함'
+	        WHEN ST_Touches(sj.geom, lt.geom) THEN '접합'
+	        WHEN ST_Intersects(sj.geom, lt.geom) THEN '저촉'
+        ELSE '무관'
+    	END AS relation_type
+		FROM lt_c_data lt join select_jijuk sj on ST_Intersects(lt.geom, sj.geom)
+		WHERE lt.alias3 is not null and lt.alias3 != ''
+		ORDER BY alias
+	</select>
+</sqlMap>

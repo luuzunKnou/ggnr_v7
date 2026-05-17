@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-59b0</id>
+  <name>road_use_ledger</name>
+  <nativeName>road_use_ledger</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>road_use_ledger</title>
+  <keywords>
+    <string>features</string>
+    <string>road_use_ledger</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>378292.99110522</minx>
+    <maxx>402936.14500534</maxx>
+    <miny>336568.64671092</miny>
+    <maxy>375983.78556201</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.99023349308698</minx>
+    <maxx>129.27557155827637</maxx>
+    <miny>36.50590282771533</miny>
+    <maxy>36.86577371978702</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

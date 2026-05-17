@@ -1,0 +1,19 @@
+<layer>
+  <name>20260420_ad_junghwajo</name>
+  <id>LayerInfoImpl--4fde225b:19da052eb3b:-6e4f</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4fde225b:19da052eb3b:-6e4e</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-6e50</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-20 04:52:55.983 UTC</dateCreated>
+  <dateModified>2026-04-20 04:52:56.71 UTC</dateModified>
+</layer>

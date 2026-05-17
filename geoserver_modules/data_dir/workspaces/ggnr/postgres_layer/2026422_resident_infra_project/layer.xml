@@ -1,0 +1,19 @@
+<layer>
+  <name>2026422_resident_infra_project</name>
+  <id>LayerInfoImpl--4fde225b:19da052eb3b:-5bf9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4fde225b:19da052eb3b:-5bf8</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-5bfa</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-23 00:16:54.204 UTC</dateCreated>
+  <dateModified>2026-04-23 00:16:54.507 UTC</dateModified>
+</layer>

@@ -1,7 +1,7 @@
 <featureType>
   <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55d2</id>
   <name>landown_recreation</name>
-  <nativeName>landown</nativeName>
+  <nativeName>jijuk</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
@@ -31,7 +31,7 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
-  <cqlFilter>jimok = &apos;24&apos;</cqlFilter>
+  <cqlFilter><![CDATA[jibun LIKE '%원']]></cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

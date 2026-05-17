@@ -27,7 +27,7 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
       { id: 'aerial-2021', label: '항공영상(2021)' },
       { id: 'aerial-2022', label: '항공영상(2022)' },
       { id: 'high-res-2024', label: '고정밀영상(2024)' },
-      { id: 'fire-nir', label: '산불영상(근적외)' },
+      { id: 'fire-nir',   label: '산불영상(근적외)' },
       { id: 'fire-ortho', label: '산불영상(정사)' },
       { id: 'fire-drone', label: '산불영상(드론)' },
     ],
@@ -37,7 +37,7 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
     title: '항공영상',
     options: [
       { id: 'aerial-vworld', label: '항공영상(vworld)' },
-      { id: 'aerial-daum', label: '항공영상(다음)' },
+      // { id: 'aerial-daum', label: '항공영상(다음)' },
       { id: 'aerial-google', label: '항공영상(구글)' },
     ],
   },
@@ -46,7 +46,7 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
     title: '일반영상',
     options: [
       { id: 'general-vworld', label: '일반지도(vworld)' },
-      { id: 'general-daum', label: '일반지도(다음)' },
+      // { id: 'general-daum', label: '일반지도(다음)' },
       { id: 'general-google-building', label: '일반지도(구글건물)' },
       { id: 'general-google', label: '일반지도(구글)' },
       { id: 'general-osm', label: '일반지도(OSM)' },
@@ -113,33 +113,35 @@ function BackgroundMapGroupSection({
       {isExpanded && (
         <div className="pb-1">
           {group.options.map((option) => (
-            <label
+            <div
               key={option.id}
               className={cn(
-                'flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors',
+                'flex items-center px-3 py-1.5 transition-colors',
                 'hover:bg-slate-50',
                 selectedValue === option.id && 'bg-blue-50'
               )}
             >
-              <input
-                type="radio"
-                name="background-map"
-                value={option.id}
-                checked={selectedValue === option.id}
-                onChange={() => onValueChange(option.id)}
-                className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-              />
-              <span
-                className={cn(
-                  'text-xs',
-                  selectedValue === option.id
-                    ? 'text-blue-600 font-medium'
-                    : 'text-slate-700'
-                )}
-              >
-                {option.label}
-              </span>
-            </label>
+              <label className="flex items-center gap-2 flex-1 cursor-pointer min-w-0">
+                <input
+                  type="radio"
+                  name="background-map"
+                  value={option.id}
+                  checked={selectedValue === option.id}
+                  onChange={() => onValueChange(option.id)}
+                  className="w-4 h-4 shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500"
+                />
+                <span
+                  className={cn(
+                    'text-xs truncate',
+                    selectedValue === option.id
+                      ? 'text-blue-600 font-medium'
+                      : 'text-slate-700'
+                  )}
+                >
+                  {option.label}
+                </span>
+              </label>
+            </div>
           ))}
         </div>
       )}

@@ -20,7 +20,7 @@ function isValidationIgnoredFileName(name: string): boolean {
 }
 
 function getKeyFieldName(tableName: string): string | null {
-  const safe = String(tableName).replace(/[^a-zA-Z0-9_-]/g, '');
+  const safe = String(tableName).replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
   const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
   try {
     if (!fsSync.existsSync(filePath)) return null;

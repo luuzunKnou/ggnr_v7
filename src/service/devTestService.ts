@@ -25,6 +25,24 @@ const SYMBOL_BASE_URL =
  * 레이어(스타일) 이름과 동일한 심볼 파일이 public/symbol에 있는지 확인.
  * SVG 우선, 없으면 PNG. 있으면 전체 URL 반환, 없으면 null.
  */
+/**
+ * PostGIS 테이블 목록 Map에서 논리 이름 대소문자 무관 조회 (레거시 혼합 대소문자 테이블 호환).
+ */
+function resolveDbTableCaseInsensitive(
+  dbTableMap: Map<string, { schema: string; table: string }>,
+  logicalName: string
+): { schema: string; table: string } | undefined {
+  const key = String(logicalName ?? '').trim();
+  if (!key) return undefined;
+  const direct = dbTableMap.get(key);
+  if (direct) return direct;
+  const kl = key.toLowerCase();
+  for (const [k, v] of dbTableMap.entries()) {
+    if (k.toLowerCase() === kl) return v;
+  }
+  return undefined;
+}
+
 function resolveSymbolUrlForLayer(layerName: string): string | null {
   if (!layerName?.trim()) return null;
   const name = layerName.trim();
@@ -521,8 +539,12 @@ export async function getGeoServerLayerList(params: {
   }
 }
 
+/** 백업 테이블명 예: roadUseLedger_BAK20260423 (`_BAK` + 선택 숫자로 끝남, 대소문자 무시) */
+const LAYER_BACKUP_TABLE_NAME_RE = /_bak\d*$/i;
+
 /**
  * layer, public_layer 스키마의 geometry 테이블 목록 조회
+ * 백업용 `…_BAK`, `…_BAK20260423` 형태 테이블은 레이어 목록·발행 UI에서 제외
  */
 export async function getLayerTableList() {
   try {
@@ -538,11 +560,13 @@ export async function getLayerTableList() {
       f_table_schema: string;
       f_table_name: string;
       f_geometry_column: string;
-    }>).map((r) => ({
-      schema: r.f_table_schema,
-      table: r.f_table_name,
-      geometryColumn: r.f_geometry_column,
-    }));
+    }>)
+      .map((r) => ({
+        schema: r.f_table_schema,
+        table: r.f_table_name,
+        geometryColumn: r.f_geometry_column,
+      }))
+      .filter((r) => !LAYER_BACKUP_TABLE_NAME_RE.test(String(r.table ?? '')));
     return { success: true, tables };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -727,19 +751,20 @@ export async function createGeoServerLayers(params: {
     };
 
     for (const row of defineRes.tables) {
-      const layerName = String(row.define_table_name ?? '').trim();
-      if (!layerName) continue;
+      const defineLayerName = String(row.define_table_name ?? '').trim();
+      if (!defineLayerName) continue;
+      const publishName = defineLayerName.toLowerCase();
 
       const parentLayer = String(row.define_table_parents_layer ?? '').trim();
       const divQuery = String(row.define_table_div_query ?? '').trim();
       const isSplitLayer = !!parentLayer && !!divQuery;
-      const sourceTableName = isSplitLayer ? parentLayer : layerName;
-      const sourceTable = dbTableMap.get(sourceTableName);
+      const sourceTableName = isSplitLayer ? parentLayer : defineLayerName;
+      const sourceTable = resolveDbTableCaseInsensitive(dbTableMap, sourceTableName);
 
       if (!sourceTable) {
         failed.push({
           schema: isSplitLayer ? parentLayer : '(unknown)',
-          table: layerName,
+          table: defineLayerName,
           error: `원본 테이블 없음: ${sourceTableName}`,
         });
         continue;
@@ -754,20 +779,20 @@ export async function createGeoServerLayers(params: {
       if (!datastoreName) {
         failed.push({
           schema: sourceTable.schema,
-          table: layerName,
+          table: defineLayerName,
           error: `지원하지 않는 스키마: ${sourceTable.schema}`,
         });
         continue;
       }
       const dsOk = await ensureDatastore(sourceTable.schema, datastoreName);
       if (!dsOk.success) {
-        failed.push({ schema: sourceTable.schema, table: layerName, error: dsOk.error });
+        failed.push({ schema: sourceTable.schema, table: defineLayerName, error: dsOk.error });
         continue;
       }
 
       const ftBody = {
         featureType: {
-          name: layerName,
+          name: publishName,
           nativeName: sourceTable.table,
           enabled: true,
           srs: 'EPSG:5181',
@@ -783,16 +808,20 @@ export async function createGeoServerLayers(params: {
 
       if (ftRes.ok || ftRes.status === 409) {
         if (divQuery) {
-          const ftCqlRes = await setFeatureTypeCqlFilter(datastoreName, layerName, divQuery);
+          const ftCqlRes = await setFeatureTypeCqlFilter(datastoreName, publishName, divQuery);
           if (!ftCqlRes.success) {
-            failed.push({ schema: sourceTable.schema, table: layerName, error: ftCqlRes.error });
+            failed.push({ schema: sourceTable.schema, table: defineLayerName, error: ftCqlRes.error });
             continue;
           }
         }
-        created.push({ schema: sourceTable.schema, table: layerName });
+        created.push({ schema: sourceTable.schema, table: publishName });
       } else {
         const text = await ftRes.text();
-        failed.push({ schema: sourceTable.schema, table: layerName, error: `${ftRes.status} ${text}` });
+        failed.push({
+          schema: sourceTable.schema,
+          table: defineLayerName,
+          error: `${ftRes.status} ${text}`,
+        });
       }
     }
 
@@ -818,7 +847,7 @@ export async function createOrUpdateGeoServerLayer(params: {
 }) {
   const baseUrl = (params?.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const layerName = params?.layerName?.trim();
+  const layerName = params?.layerName?.trim().toLowerCase();
   if (!layerName) {
     return { success: false as const, error: 'layerName이 필요합니다.' };
   }
@@ -830,7 +859,7 @@ export async function createOrUpdateGeoServerLayer(params: {
     }
 
     const row = defineRes.tables.find(
-      (r) => String(r.define_table_name ?? '').trim() === layerName
+      (r) => String(r.define_table_name ?? '').trim().toLowerCase() === layerName
     );
     if (!row) {
       return { success: false as const, error: `tables.json에 레이어 '${layerName}'가 없습니다.` };
@@ -850,8 +879,9 @@ export async function createOrUpdateGeoServerLayer(params: {
     const parentLayer = String(row.define_table_parents_layer ?? '').trim();
     const divQuery = String(row.define_table_div_query ?? '').trim();
     const isSplitLayer = !!parentLayer && !!divQuery;
-    const sourceTableName = isSplitLayer ? parentLayer : layerName;
-    const sourceTable = dbTableMap.get(sourceTableName);
+    const defineLayerName = String(row.define_table_name ?? '').trim();
+    const sourceTableName = isSplitLayer ? parentLayer : defineLayerName;
+    const sourceTable = resolveDbTableCaseInsensitive(dbTableMap, sourceTableName);
 
     if (!sourceTable) {
       return {
@@ -1284,10 +1314,10 @@ export async function getGeoServerLayersWithStyleInfo(params: {
     }
 
     const dbTableRes = await getLayerTableList();
-    const dbLayerTableSet = new Set<string>(
+    const dbLayerTableSetLc = new Set<string>(
       (dbTableRes.tables ?? [])
         .filter((t) => t.schema === 'layer')
-        .map((t) => t.table)
+        .map((t) => String(t.table).toLowerCase())
     );
 
     const cssStyleNamesFromDir = getCssStyleNamesFromDataDir();
@@ -1296,13 +1326,14 @@ export async function getGeoServerLayersWithStyleInfo(params: {
     for (const row of defineRes.tables) {
       const layerName = String(row.define_table_name ?? '').trim();
       if (!layerName) continue;
+      const geoLayerKey = layerName.toLowerCase();
 
       const parentLayer = String(row.define_table_parents_layer ?? '').trim();
       const divQ = String(row.define_table_div_query ?? '').trim();
       const isSplitChild = Boolean(parentLayer && divQ);
       const tableExists =
-        dbLayerTableSet.has(layerName) ||
-        (isSplitChild && dbLayerTableSet.has(parentLayer));
+        dbLayerTableSetLc.has(layerName.toLowerCase()) ||
+        (isSplitChild && dbLayerTableSetLc.has(parentLayer.toLowerCase()));
 
       const shpType = String(row.define_table_shp_type ?? '').toUpperCase();
       const geometryType = VALID_GEOMETRY_TYPES.has(shpType)
@@ -1310,11 +1341,12 @@ export async function getGeoServerLayersWithStyleInfo(params: {
         : undefined;
       const title = String(row.define_table_kor_name ?? '').trim() || undefined;
       const group = String(row.define_table_group ?? '').trim() || undefined;
-      const hasCssStyle = cssStyleNamesFromDir.has(layerName);
+      const hasCssStyle =
+        cssStyleNamesFromDir.has(geoLayerKey) || cssStyleNamesFromDir.has(layerName);
 
       const layerRes = await geoserverFetch(
         baseUrl,
-        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
+        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(geoLayerKey)}.json`
       );
 
       if (!layerRes.ok) {
@@ -1428,8 +1460,9 @@ export async function getLayerGeometryType(params: {
 }): Promise<{ success: boolean; geometryType?: GeometryType; error?: string }> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const layerName = params?.layerName?.trim();
-  if (!layerName) return { success: false, error: '레이어 이름이 필요합니다.' };
+  const layerNameRaw = params?.layerName?.trim();
+  if (!layerNameRaw) return { success: false, error: '레이어 이름이 필요합니다.' };
+  const layerName = layerNameRaw.toLowerCase();
 
   try {
     const layerRes = await geoserverFetch(
@@ -1579,7 +1612,7 @@ export async function applyDefaultStyleToLayer(params: {
 }) {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const layerName = params?.layerName?.trim();
+  const layerName = params?.layerName?.trim().toLowerCase();
   if (!layerName) return { success: false, error: '레이어 이름이 필요합니다.' };
 
   try {
@@ -1588,7 +1621,7 @@ export async function applyDefaultStyleToLayer(params: {
     const defineRes = await getDefineLayerTables();
     if (defineRes.success && defineRes.tables?.length) {
       const row = defineRes.tables.find(
-        (r) => String(r.define_table_name ?? '').trim() === layerName
+        (r) => String(r.define_table_name ?? '').trim().toLowerCase() === layerName
       );
       const shpType = String(row?.define_table_shp_type ?? '').toUpperCase();
       if (VALID_GEOMETRY_TYPES.has(shpType)) {
@@ -1851,7 +1884,37 @@ export async function getGeoServerLog(params: { maxLines?: number } = {}) {
 }
 
 const EMD_RI_SCHEMA = 'public_layer';
-const EMD_RI_NAME_COLUMNS = ['adm_nm', 'name', 'emd_nm', 'ri_nm'];
+/** emd 테이블 한글명 후보 (컬럼이 없으면 다음 시도) */
+const EMD_LIST_NAME_COLUMNS = ['adm_nm', 'emd_nm', 'name', 'ri_nm'];
+/** ri 테이블 표시명은 리명 컬럼 우선 (emd_nm 만 있으면 잘못된 라벨·빈 결과로 끊길 수 있음) */
+const RI_LIST_NAME_COLUMNS = ['ri_nm', 'name', 'adm_nm', 'emd_nm'];
+
+/**
+ * geometry_columns.srid 이 0·NULL·음수면 PostGIS가 원본 SRID를 모름 → ST_Transform 불가.
+ * 이 프로젝트는 행정경계·레이어 실좌표가 EPSG:5181인 경우가 많아 5181로 간주한다.
+ */
+function normalizedLayerSrid5181(catalogSrid: unknown): number {
+  const n = Number(catalogSrid);
+  if (catalogSrid == null || !Number.isFinite(n) || n <= 0) return 5181;
+  return Math.floor(n);
+}
+
+/** geometry 컬럼명(따옴표 이스케이프만 된 식별자) 기준 5181 WKT·centroid SELECT 식 */
+function sqlExprsGeometryTo5181Wkt(geomColEscaped: string, catalogSrid: unknown): { wktExpr: string; centroidExpr: string } {
+  const srid = normalizedLayerSrid5181(catalogSrid);
+  const col = `"${geomColEscaped}"`;
+  if (srid === 5181) {
+    return {
+      wktExpr: `ST_AsText(${col})`,
+      centroidExpr: `ST_X(ST_Centroid(${col})) AS center_x, ST_Y(ST_Centroid(${col})) AS center_y`,
+    };
+  }
+  const g = `ST_SetSRID(${col}, ${srid})`;
+  return {
+    wktExpr: `ST_AsText(ST_Transform(${g}, 5181))`,
+    centroidExpr: `ST_X(ST_Transform(ST_Centroid(${g}), 5181)) AS center_x, ST_Y(ST_Transform(ST_Centroid(${g}), 5181)) AS center_y`,
+  };
+}
 
 export type EmdRiOption = { code: string; name: string };
 
@@ -1862,7 +1925,7 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
   const result: { emd: EmdRiOption[]; error?: string } = { emd: [] };
 
-  for (const nameCol of EMD_RI_NAME_COLUMNS) {
+  for (const nameCol of EMD_LIST_NAME_COLUMNS) {
     try {
       const res = await db.execute(
         sql.raw(
@@ -1881,7 +1944,7 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
         seen.add(r.code);
         return true;
       });
-      break;
+      if (result.emd.length > 0) break;
     } catch {
       continue;
     }
@@ -1907,7 +1970,7 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
   }
 
   const safeEmdCode = emdCode.replace(/'/g, "''");
-  for (const nameCol of EMD_RI_NAME_COLUMNS) {
+  for (const nameCol of RI_LIST_NAME_COLUMNS) {
     try {
       const res = await db.execute(
         sql.raw(
@@ -1927,7 +1990,7 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
         seen.add(r.code);
         return true;
       });
-      break;
+      if (result.ri.length > 0) break;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       result.error = msg;
@@ -1957,12 +2020,7 @@ export async function getEmdGeometry(params: { schema?: string; emdCode: string 
     const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
     if (!gcRow?.name) return { wkt: null, error: 'emd geometry column not found' };
     const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
-    const tableSrid = gcRow.srid ?? 4326;
-    const wktExpr = tableSrid === 5181 ? `ST_AsText("${geomCol}")` : `ST_AsText(ST_Transform("${geomCol}", 5181))`;
-    const centroidExpr =
-      tableSrid === 5181
-        ? `ST_X(ST_Centroid("${geomCol}")) AS center_x, ST_Y(ST_Centroid("${geomCol}")) AS center_y`
-        : `ST_X(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_x, ST_Y(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_y`;
+    const { wktExpr, centroidExpr } = sqlExprsGeometryTo5181Wkt(geomCol, gcRow.srid);
     const res = await db.execute(
       sql.raw(
         `SELECT ${wktExpr} AS wkt, ${centroidExpr} FROM "${schema.replace(/"/g, '""')}"."emd"
@@ -1979,6 +2037,143 @@ export async function getEmdGeometry(params: { schema?: string; emdCode: string 
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { wkt: null, error: msg };
+  }
+}
+
+/**
+ * schema.emd 테이블의 모든 읍면동 도형 envelope를 WGS84(4326) 경위도 bbox로 반환.
+ * ITS CCTV 등 bbox 고정용 — geometry_columns 기준으로 SRID 처리(getEmdGeometry와 동일).
+ */
+export async function getEmdExtentWgs84(params: { schema?: string } = {}) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const qSchema = `"${schema.replace(/"/g, '""')}"`;
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'emd' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) {
+      return { minX: null as number | null, maxX: null, minY: null, maxY: null, error: 'emd geometry column not found' };
+    }
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const colRef = `"${geomCol}"`;
+    const srid = normalizedLayerSrid5181(gcRow.srid);
+
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           ST_XMin(env4326)::float8 AS min_x,
+           ST_XMax(env4326)::float8 AS max_x,
+           ST_YMin(env4326)::float8 AS min_y,
+           ST_YMax(env4326)::float8 AS max_y
+         FROM (
+           SELECT ST_Transform(ST_SetSRID(ST_Extent(${colRef}), ${srid}), 4326) AS env4326
+           FROM ${qSchema}."emd"
+           WHERE ${colRef} IS NOT NULL
+         ) sub
+         WHERE env4326 IS NOT NULL`
+      )
+    );
+    const row = res.rows?.[0] as
+      | { min_x?: unknown; max_x?: unknown; min_y?: unknown; max_y?: unknown }
+      | undefined;
+    if (!row) {
+      return {
+        minX: null as number | null,
+        maxX: null,
+        minY: null,
+        maxY: null,
+        error: 'emd 테이블에 유효한 도형이 없거나 범위를 계산할 수 없습니다.',
+      };
+    }
+    const minX = Number(row.min_x);
+    const maxX = Number(row.max_x);
+    const minY = Number(row.min_y);
+    const maxY = Number(row.max_y);
+    if (![minX, maxX, minY, maxY].every((n) => Number.isFinite(n))) {
+      return { minX: null, maxX: null, minY: null, maxY: null, error: 'emd 범위 좌표가 유효하지 않습니다.' };
+    }
+    if (minX >= maxX || minY >= maxY) {
+      return { minX: null, maxX: null, minY: null, maxY: null, error: 'emd envelope 가 역전되었습니다.' };
+    }
+    return { minX, maxX, minY, maxY, error: undefined as string | undefined };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { minX: null, maxX: null, minY: null, maxY: null, error: msg };
+  }
+}
+
+/**
+ * schema.emd 모든 도형의 envelope 를 EPSG:5181 평면으로 반환.
+ * EMD 도형이 5181 로 저장되어 있으므로 `ST_Extent` 를 5181 그대로 사용. SRID 가 다르면 5181 로 변환.
+ */
+export async function getEmdExtent5181(params: { schema?: string } = {}) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const qSchema = `"${schema.replace(/"/g, '""')}"`;
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'emd' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) {
+      return { minX: null as number | null, maxX: null, minY: null, maxY: null, error: 'emd geometry column not found' };
+    }
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const colRef = `"${geomCol}"`;
+    const srid = normalizedLayerSrid5181(gcRow.srid);
+    const env5181Expr =
+      srid === 5181
+        ? `ST_SetSRID(ST_Extent(${colRef}), 5181)`
+        : `ST_Transform(ST_SetSRID(ST_Extent(${colRef}), ${srid}), 5181)`;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           ST_XMin(env5181)::float8 AS min_x,
+           ST_XMax(env5181)::float8 AS max_x,
+           ST_YMin(env5181)::float8 AS min_y,
+           ST_YMax(env5181)::float8 AS max_y
+         FROM (
+           SELECT ${env5181Expr} AS env5181
+           FROM ${qSchema}."emd"
+           WHERE ${colRef} IS NOT NULL
+         ) sub
+         WHERE env5181 IS NOT NULL`
+      )
+    );
+    const row = res.rows?.[0] as
+      | { min_x?: unknown; max_x?: unknown; min_y?: unknown; max_y?: unknown }
+      | undefined;
+    if (!row) {
+      return {
+        minX: null as number | null,
+        maxX: null,
+        minY: null,
+        maxY: null,
+        error: 'emd 테이블에 유효한 도형이 없거나 범위를 계산할 수 없습니다.',
+      };
+    }
+    const minX = Number(row.min_x);
+    const maxX = Number(row.max_x);
+    const minY = Number(row.min_y);
+    const maxY = Number(row.max_y);
+    if (![minX, maxX, minY, maxY].every((n) => Number.isFinite(n))) {
+      return { minX: null, maxX: null, minY: null, maxY: null, error: 'emd 5181 범위 좌표가 유효하지 않습니다.' };
+    }
+    if (minX >= maxX || minY >= maxY) {
+      return { minX: null, maxX: null, minY: null, maxY: null, error: 'emd 5181 envelope 가 역전되었습니다.' };
+    }
+    return { minX, maxX, minY, maxY, error: undefined as string | undefined };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { minX: null, maxX: null, minY: null, maxY: null, error: msg };
   }
 }
 
@@ -2001,18 +2196,50 @@ export async function getRiGeometry(params: { schema?: string; riCode: string } 
     const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
     if (!gcRow?.name) return { wkt: null, error: 'ri geometry column not found' };
     const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
-    const tableSrid = gcRow.srid ?? 4326;
-    const wktExpr = tableSrid === 5181 ? `ST_AsText("${geomCol}")` : `ST_AsText(ST_Transform("${geomCol}", 5181))`;
-    const centroidExpr =
-      tableSrid === 5181
-        ? `ST_X(ST_Centroid("${geomCol}")) AS center_x, ST_Y(ST_Centroid("${geomCol}")) AS center_y`
-        : `ST_X(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_x, ST_Y(ST_Transform(ST_Centroid("${geomCol}"), 5181)) AS center_y`;
+    const { wktExpr, centroidExpr } = sqlExprsGeometryTo5181Wkt(geomCol, gcRow.srid);
     const res = await db.execute(
       sql.raw(
         `SELECT ${wktExpr} AS wkt, ${centroidExpr} FROM "${schema.replace(/"/g, '""')}"."ri"
          WHERE "ri_cd" = '${esc(riCode)}' LIMIT 1`
       )
     );
+    const row = res.rows?.[0] as { wkt?: string; center_x?: number; center_y?: number } | undefined;
+    const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
+    const center =
+      row?.center_x != null && row?.center_y != null
+        ? { x: Number(row.center_x), y: Number(row.center_y) }
+        : null;
+    return { wkt, center };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { wkt: null, error: msg };
+  }
+}
+
+/**
+ * EPSG:5181 WKT 여러 개를 DB에서 합쳐 단일 도형 WKT로 반환(지도·공간검색용).
+ * 빈 항목·실패 시 null.
+ */
+export async function unionWkts5181(params: { wkts?: string[] } = {}) {
+  const wkts = Array.isArray(params?.wkts)
+    ? params.wkts.map((w) => String(w ?? '').trim()).filter(Boolean)
+    : [];
+  if (wkts.length === 0) return { wkt: null as string | null, error: 'wkts required' as string | undefined };
+  if (wkts.length === 1) {
+    return { wkt: wkts[0], center: null as { x: number; y: number } | null };
+  }
+  const max = 30;
+  if (wkts.length > max) {
+    return { wkt: null, error: `wkts length exceeds ${max}` };
+  }
+  const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "''");
+  const geomExprs = wkts.map((w) => `ST_SetSRID(ST_GeomFromText('${esc(w)}'), 5181)`);
+  const arr = geomExprs.join(', ');
+  const q = `SELECT ST_AsText(ST_UnaryUnion(ST_Collect(ARRAY[${arr}]::geometry[]))) AS wkt,
+    ST_X(ST_Centroid(ST_UnaryUnion(ST_Collect(ARRAY[${arr}]::geometry[])))) AS center_x,
+    ST_Y(ST_Centroid(ST_UnaryUnion(ST_Collect(ARRAY[${arr}]::geometry[])))) AS center_y`;
+  try {
+    const res = await db.execute(sql.raw(q));
     const row = res.rows?.[0] as { wkt?: string; center_x?: number; center_y?: number } | undefined;
     const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
     const center =
@@ -2168,14 +2395,16 @@ export async function getGeometryByFieldValue(params: {
     const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
     if (!gcRow?.name) return { wkt: null, center: null, error: 'geometry column not found' };
     const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
-    const tableSrid = gcRow.srid ?? 4326;
+    const srid = normalizedLayerSrid5181(gcRow.srid);
     const safeSchema = schema.replace(/"/g, '""');
     const safeTable = table.replace(/"/g, '""');
     const safeField = field.replace(/"/g, '""');
-    const geomUnion =
-      tableSrid === 5181
-        ? `ST_SimplifyPreserveTopology(ST_Union("${geomCol}"), 5)`
-        : `ST_SimplifyPreserveTopology(ST_Transform(ST_Union("${geomCol}"), 5181), 5)`;
+    const col = `"${geomCol}"`;
+    const geomCore5181 =
+      srid === 5181
+        ? `ST_SetSRID(ST_Union(${col}), 5181)`
+        : `ST_Transform(ST_SetSRID(ST_Union(${col}), ${srid}), 5181)`;
+    const geomUnion = `ST_SimplifyPreserveTopology(${geomCore5181}, 5)`;
     const wktExpr = `ST_AsText(${geomUnion})`;
     const centroidExpr = `ST_X(ST_Centroid(${geomUnion})) AS center_x, ST_Y(ST_Centroid(${geomUnion})) AS center_y`;
     const res = await db.execute(

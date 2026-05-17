@@ -225,6 +225,19 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
     const entry: FileLogEntry = { file: fileName, shpPath: pathOrResult, table: 'pending', layer: 'pending', style: 'pending', define: 'pending' };
     const baseName = fileName.replace(/\.shp$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '');
 
+    const flushCounts = () => {
+      updateFileLog(logIndex, {
+        oldData: entry.oldData,
+        newData: entry.newData,
+        appendCount: entry.appendCount,
+        conflictCount: entry.conflictCount,
+        removeCount: entry.removeCount,
+        syncData: entry.syncData,
+        shpPath: entry.shpPath,
+        error: entry.error,
+      });
+    };
+
     let geometryType: string | undefined = pre?.geometryType;
 
     if (pre?.table) {
@@ -253,6 +266,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
           entry.table = 'fail';
           entry.error = d?.error ?? '실패';
           updateFileLog(logIndex, { table: 'fail', error: d?.error });
+          flushCounts();
           return entry;
         }
       } catch (err: unknown) {
@@ -260,6 +274,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
         entry.table = 'fail';
         entry.error = msg;
         updateFileLog(logIndex, { table: 'fail', error: msg });
+        flushCounts();
         return entry;
       }
     } else {
@@ -290,6 +305,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
                   entry.table = 'fail';
                   entry.error = ad?.error ?? '동기화 적용 실패';
                   updateFileLog(logIndex, { table: 'fail', error: entry.error });
+                  flushCounts();
                   return entry;
                 }
               } else {
@@ -318,6 +334,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
             entry.syncData = sd;
             entry.table = 'sync';
             updateFileLog(logIndex, { table: 'sync' as StepStatus, syncData: sd });
+            flushCounts();
           }
         } else if (cmp?.error?.includes('key 필드가 설정되어 있지 않습니다')) {
           entry.table = 'existed';
@@ -327,6 +344,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
           entry.table = 'fail';
           entry.error = cmp?.error ?? '비교 실패';
           updateFileLog(logIndex, { table: 'fail', error: entry.error });
+          flushCounts();
           return entry;
         }
       } catch (err: unknown) {
@@ -334,6 +352,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
         entry.table = 'fail';
         entry.error = msg;
         updateFileLog(logIndex, { table: 'fail', error: msg });
+        flushCounts();
         return entry;
       }
     }
@@ -379,6 +398,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
       }
     }
 
+    flushCounts();
     return entry;
   }
 
@@ -443,6 +463,11 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
             style: r.style,
             define: r.define,
             error: r.error,
+            oldData: r.oldData,
+            newData: r.newData,
+            appendCount: r.appendCount,
+            conflictCount: r.conflictCount,
+            removeCount: r.removeCount,
           })),
         },
       });
@@ -695,7 +720,10 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
                 <th className="py-1 px-2 w-20">Layer</th>
                 <th className="py-1 px-2 w-20">Style</th>
                 <th className="py-1 px-2 w-20">Define</th>
-                <th className="py-1 px-2 text-left">비고</th>
+                <th className="py-1 px-2 w-14 text-right" title="처리 후 DB 행 수(동기화 대기 시 동기화 전 DB)">현재</th>
+                <th className="py-1 px-2 w-12 text-right" title="속성 충돌(변경 필요) 건수">변경</th>
+                <th className="py-1 px-2 w-12 text-right" title="SHP 기준 신규 행(추가) 건수">추가</th>
+                <th className="py-1 px-2 text-left min-w-[8rem]">비고</th>
               </tr>
             </thead>
             <tbody>
@@ -706,6 +734,19 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
                   <td className="py-1 px-2"><StepBadge status={log.layer} /></td>
                   <td className="py-1 px-2"><StepBadge status={log.style} /></td>
                   <td className="py-1 px-2"><StepBadge status={log.define} /></td>
+                  <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                    {formatCountCell(
+                      log.newData !== undefined
+                        ? log.newData
+                        : (log.table === 'sync' && log.oldData !== undefined ? log.oldData : undefined)
+                    )}
+                  </td>
+                  <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                    {formatCountCell(log.conflictCount ?? log.syncData?.conflictCount)}
+                  </td>
+                  <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                    {formatCountCell(log.appendCount ?? log.syncData?.appendCount)}
+                  </td>
                   <td className="py-1 px-2 truncate max-w-[12rem]">
                     {log.syncData ? (
                       <button
@@ -789,4 +830,8 @@ function formatSize(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatCountCell(n: number | undefined) {
+  return n === undefined ? '—' : String(n);
 }

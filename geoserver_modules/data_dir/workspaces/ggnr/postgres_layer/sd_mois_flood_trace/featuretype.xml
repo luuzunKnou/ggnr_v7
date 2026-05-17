@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30e5</id>
+  <name>sd_mois_flood_trace</name>
+  <nativeName>sd_mois_flood_trace</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>sd_mois_flood_trace</title>
+  <keywords>
+    <string>features</string>
+    <string>sd_mois_flood_trace</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>119784.9296875</minx>
+    <maxx>425815.15625</maxx>
+    <miny>-35389.2109375</miny>
+    <maxy>535559.3125</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>126.08277603574919</minx>
+    <maxx>129.5810383070167</maxx>
+    <miny>33.151045103031244</miny>
+    <maxy>38.32034795447069</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

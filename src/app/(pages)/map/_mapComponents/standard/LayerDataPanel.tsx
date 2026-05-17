@@ -16,6 +16,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
+import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
 import { cn, formatFileSize } from '@/lib/utils';
 import {
   isImageServiceFileName,
@@ -32,12 +33,23 @@ import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
-import { getLegendUrl, type IdentifyLayerResult, type IdentifyFeatureItem } from '../hooks/useFeatureIdentify';
+import type { IdentifyLayerResult, IdentifyFeatureItem } from '../hooks/useFeatureIdentify';
+import { IdentifyHitListBlock } from './IdentifyHitListBlock';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
+import {
+  createDataQueryBulkListHighlightStyle,
+  createDataQuerySelectionRowHighlightStyle,
+  DATA_QUERY_SELECTION_PULSE_STEP,
+} from '@/lib/mapDataQueryMapHighlight';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
-import { Style, Stroke, Fill, Circle as CircleStyle, Icon } from 'ol/style';
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
+import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
+import {
+  formatRoadLedgerFacilityCellValue,
+  getRoadLedgerFacilityColumnKeys,
+} from '../../_mapContents/road/roadLedger/roadLedgerTableDisplayFields';
 
 type DefineFieldRow = {
   define_field_name?: string;
@@ -103,11 +115,16 @@ function InfoSection({ title, fields, defaultOpen = true }: { title: string; fie
         <div className="px-3 pb-2">
           <div className="overflow-hidden rounded border border-slate-200">
             {fields.map((field, index) => (
-              <div key={field.fieldKey} className={cn('flex', index !== fields.length - 1 && 'border-b border-slate-200')}>
-                <div className="flex w-[100px] shrink-0 items-center bg-slate-100 px-2.5 py-1.5">
-                  <span className="text-[11px] text-[#666]">{field.label}</span>
+              <div
+                key={field.fieldKey}
+                className={cn('flex items-stretch', index !== fields.length - 1 && 'border-b border-slate-200')}
+              >
+                <div className="flex min-w-0 w-[100px] shrink-0 items-start bg-slate-100 px-2.5 py-1.5">
+                  <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-[#666]">
+                    {field.label}
+                  </span>
                 </div>
-                <div className="flex min-w-0 flex-1 items-center px-2.5 py-1.5">
+                <div className="flex min-w-0 flex-1 items-start px-2.5 py-1.5">
                   <span className={cn('text-[11px]', field.highlight ? 'font-medium text-primary' : 'text-[#666]')}>
                     {field.value}
                     {field.unit != null && field.unit !== '' && <span className="ml-0.5 text-slate-500">{field.unit}</span>}
@@ -130,6 +147,8 @@ type LayerDataPanelProps = {
   onClose?: () => void;
   onDataKeyChange?: (keyValue: string | number | null) => void;
   initialDataKey?: string;
+  /** true: 도로대장 시설 목록과 동일한 컬럼·표시(코드표 기반). 시설관리에서 연 경우에만 켬 */
+  useRoadLedgerFacilityListColumns?: boolean;
 };
 
 function flattenIdentifyResults(
@@ -154,7 +173,13 @@ type ActiveLayerInfo = {
   rowFilterSql: string | null;
 };
 
-export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDataKey }: LayerDataPanelProps) {
+export function LayerDataPanel({
+  dataTable,
+  onClose,
+  onDataKeyChange,
+  initialDataKey,
+  useRoadLedgerFacilityListColumns = false,
+}: LayerDataPanelProps) {
   const mapContext = useMapContext();
   const mapInstanceRef = mapContext?.mapInstanceRef;
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
@@ -162,8 +187,16 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
   const identifyResultList = mapContext?.identifyResultList ?? null;
   const identifySelectedRow = mapContext?.identifySelectedRow ?? null;
   const setIdentifySelectedRow = mapContext?.setIdentifySelectedRow;
-  const isIdentifyMode = identifyResultList != null && identifyResultList.results.length > 0;
-  const identifyFlat = isIdentifyMode ? flattenIdentifyResults(identifyResultList.results) : [];
+  const identifyFeatureTotal =
+    identifyResultList?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
+  /** 지도 식별·검색: 행이 있거나, 검색 완료 후 0건이어도 listHeaderLabel 이 있으면 결과 패널(빈 목록) 표시 */
+  const isIdentifyMode =
+    identifyResultList != null &&
+    (identifyFeatureTotal > 0 ||
+      (Boolean(identifyResultList.listHeaderLabel?.trim()) && identifyFeatureTotal === 0));
+  const identifyFlat = isIdentifyMode && identifyResultList
+    ? flattenIdentifyResults(identifyResultList.results)
+    : [];
 
   const [fields, setFields] = useState<DefineFieldRow[]>([]);
   /** 상세보기 기본정보/상세정보에 쓸 전체 필드(목록 노출 여부와 무관) */
@@ -188,6 +221,27 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
   const [radarActive, setRadarActive] = useState(false);
   const prevLayerRef = useRef<string | null>(null);
   const [selectedIdentifyIndex, setSelectedIdentifyIndex] = useState<number | null>(null);
+
+  const prevHadIdentifyRef = useRef(false);
+  /** 새 식별·검색 결과 시 목록 선택 초기화. 식별 종료 시에만 상세 상태 정리(일반 목록 조회와 충돌 방지). */
+  useEffect(() => {
+    const total =
+      identifyResultList?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
+    const hasIdentify =
+      identifyResultList != null &&
+      (total > 0 || (Boolean(identifyResultList.listHeaderLabel?.trim()) && total === 0));
+    if (hasIdentify) {
+      setSelectedIdentifyIndex(null);
+      setSelectedRowData(null);
+    } else if (prevHadIdentifyRef.current) {
+      setSelectedIdentifyIndex(null);
+      setSelectedRowData(null);
+      selectionSourceRef.current?.clear();
+      setRadarActive(false);
+    }
+    prevHadIdentifyRef.current = hasIdentify;
+  }, [identifyResultList]);
+
   const [attachListRefreshNonce, setAttachListRefreshNonce] = useState(0);
   const [attachmentImagePreview, setAttachmentImagePreview] = useState<{
     items: ServiceFilePreviewItem[];
@@ -296,70 +350,19 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     const layer = new VectorLayer({
       source,
       renderOrder: compareFeaturesByGeometryStackOrder,
-      style: (feature) => {
-        const geom = feature.getGeometry();
-        if (!geom) return undefined;
-        const type = geom.getType();
-        if (type === 'Point' || type === 'MultiPoint') {
-          return new Style({
-            image: new CircleStyle({ radius: 6, fill: new Fill({ color: 'rgba(220, 00, 00, 0.55)' }), stroke: new Stroke({ color: '#ffffff', width: 2 }) }),
-          });
-        }
-        if (type === 'LineString' || type === 'MultiLineString') {
-          return [
-            new Style({ stroke: new Stroke({ color: '#ffffff', width: 7 }) }),
-            new Style({ stroke: new Stroke({ color: 'rgba(220, 00, 00, 0.55)', width: 5 }) }),
-          ];
-        }
-        return new Style({ stroke: new Stroke({ color: '#ffffff', width: 3 }), fill: new Fill({ color: 'rgba(220, 00, 00, 0.55)' }) });
-      },
+      style: createDataQueryBulkListHighlightStyle(),
       properties: { listHighlightLayer: true },
     });
     layer.set('listHighlightLayer', true);
     map.getLayers().push(layer);
     highlightLayerRef.current = layer;
 
-    const RADAR_CANVAS_SIZE = 120;
-    const RADAR_RADIUS = 52;
     const selSource = new VectorSource();
     selectionSourceRef.current = selSource;
     const selectionLayer = new VectorLayer({
       source: selSource,
       renderOrder: compareFeaturesByGeometryStackOrder,
-      style: (feature) => {
-        const phase = pulsePhaseRef.current;
-        const pulse = 0.7 + 0.4 * Math.sin(phase);
-        if (feature.get('isRadarPoint')) {
-          const canvas = document.createElement('canvas');
-          canvas.width = RADAR_CANVAS_SIZE;
-          canvas.height = RADAR_CANVAS_SIZE;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return new Style({});
-          const cx = RADAR_CANVAS_SIZE / 2;
-          const cy = RADAR_CANVAS_SIZE / 2;
-          const r = RADAR_RADIUS * pulse;
-          const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-          gradient.addColorStop(0, `rgba(220, 38, 38, ${0.5 + 0.3 * Math.sin(phase)})`);
-          gradient.addColorStop(0.5, 'rgba(220, 38, 38, 0.2)');
-          gradient.addColorStop(1, 'rgba(220, 38, 38, 0)');
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(cx, cy, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          return new Style({ image: new Icon({ img: canvas, width: RADAR_CANVAS_SIZE, height: RADAR_CANVAS_SIZE, anchor: [0.5, 0.5] }) });
-        }
-        const geomType = feature.getGeometry()?.getType();
-        const isLineOrPolygon = geomType === 'LineString' || geomType === 'MultiLineString' || geomType === 'Polygon' || geomType === 'MultiPolygon';
-        if (isLineOrPolygon) {
-          const whiteGlow = 0.6 + 0.4 * Math.sin(phase);
-          return new Style({ stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteGlow})`, width: 6 }), fill: new Fill({ color: 'rgba(255, 255, 255, 0.08)' }) });
-        }
-        const strokeOpacity = 0.5 + 0.4 * Math.sin(phase);
-        return new Style({ stroke: new Stroke({ color: `rgba(220, 38, 38, ${strokeOpacity})`, width: 6 }), fill: new Fill({ color: 'rgba(220, 38, 38, 0.15)' }) });
-      },
+      style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
     });
     selectionLayer.set('listSelectionLayer', true);
     map.getLayers().push(selectionLayer);
@@ -379,7 +382,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     if (!radarActive) return;
     let rafId: number;
     const loop = () => {
-      pulsePhaseRef.current += 0.08;
+      pulsePhaseRef.current += DATA_QUERY_SELECTION_PULSE_STEP;
       selectionSourceRef.current?.changed();
       rafId = requestAnimationFrame(loop);
     };
@@ -434,7 +437,11 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
       const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v))) mapInstance.getView().fit(ext, { padding: [80, 80, 80, 80], maxZoom: 16 });
+      if (ext.every((v) => isFinite(v)))
+        mapInstance.getView().fit(ext, {
+          padding: [80, 80, 80, 80],
+          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+        });
       setRadarActive(true);
     },
     [mapContext, rows]
@@ -482,7 +489,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
 
   useEffect(() => {
     if (!activeLayer) return;
-    const isIdentify = identifyResultList != null && identifyResultList.results.length > 0;
+    const isIdentify = isIdentifyMode;
     // 같은 테이블이면 재조회하지 않음 (앱 안에서 행 선택 시 전체 목록 유지)
     if (prevLayerRef.current === activeLayer.tableName && !isIdentify) return;
     prevLayerRef.current = activeLayer.tableName;
@@ -736,6 +743,19 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
     }
   };
 
+  const roadLedgerFacilityTableSet = useMemo(
+    () => new Set(getAllRoadLedgerDocLayerIds().map((x) => String(x).trim().toLowerCase())),
+    []
+  );
+
+  const facilityColumnKeys = useMemo(() => {
+    if (!activeLayer || !useRoadLedgerFacilityListColumns) return [];
+    const tn = activeLayer.physicalTableName.trim().toLowerCase();
+    if (!roadLedgerFacilityTableSet.has(tn)) return [];
+    const sample = (rows[0] as Record<string, unknown> | undefined) ?? {};
+    return getRoadLedgerFacilityColumnKeys(tn, sample);
+  }, [activeLayer, useRoadLedgerFacilityListColumns, rows, roadLedgerFacilityTableSet]);
+
   if (!activeLayer) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-slate-400 px-4">
@@ -746,6 +766,9 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
 
   const hasDetail = selectedRow != null;
 
+  const useFacilityCols =
+    Boolean(useRoadLedgerFacilityListColumns) && facilityColumnKeys.length > 0;
+
   /** 목록 컬럼: '목록 표시' 필드 > detailFields > rows의 키에서 gid/geom 제외한 자동 생성 */
   const autoFields: DefineFieldRow[] = (fields.length === 0 && detailFields.length === 0 && rows.length > 0)
     ? Object.keys(rows[0] as Record<string, unknown>)
@@ -753,7 +776,13 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
         .map((k) => ({ define_field_name: k, define_field_kor_name: k }))
     : [];
   const listFieldsAll = fields.length > 0 ? fields : detailFields.length > 0 ? detailFields : autoFields;
-  const listFields = listFieldsAll.slice(0, 5);
+  /** 데이터 조회와 동일: 최대 5열. 시설관리(도로대장 시설 컬럼)도 같은 레이아웃·클래스만 사용 */
+  const listFields = useFacilityCols
+    ? facilityColumnKeys.slice(0, 5).map((k) => ({
+        define_field_name: k,
+        define_field_kor_name: k,
+      }))
+    : listFieldsAll.slice(0, 5);
 
   const detailTabs: { id: DetailTab; label: string; icon: React.ElementType }[] = [
     { id: 'basic', label: '기본정보', icon: FileText },
@@ -789,7 +818,13 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
       <div
         className={cn(
           'flex flex-col overflow-hidden',
-          isIdentifyMode && identifyFlat.length === 1 ? 'flex-0 min-h-0' : hasDetail ? 'flex-[3] min-h-0' : 'flex-1 min-h-0'
+          isIdentifyMode
+            ? hasDetail
+              ? 'flex-[3] min-h-0'
+              : 'flex-1 min-h-0'
+            : hasDetail
+              ? 'flex-[3] min-h-0'
+              : 'flex-1 min-h-0'
         )}
       >
         <div ref={listScrollRef} className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -799,70 +834,24 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
           {error && (
             <div className="px-4 py-6 text-center text-[12px] text-red-600">{error}</div>
           )}
-          {isIdentifyMode && identifyFlat.length > 1 && (
-            <>
-              <div className="flex items-center border-b border-slate-200 bg-slate-100/60 px-4 py-1.5 text-[12px] text-[#666] shrink-0">
-                지도에서 선택된 항목
-                <span className="ml-1.5 text-[11px] text-slate-500">
-                  ({identifyResultList?.results?.length ?? 0}개 레이어, {identifyFlat.length}개 데이터)
-                </span>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {identifyFlat.map(({ layer, feature, index: idx }) => {
-                  const isHighlighted = selectedIdentifyIndex === idx;
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      ref={isHighlighted ? selectedIdentifyRowRef : undefined}
-                      onClick={() => handleIdentifyItemClick({ layer, feature, index: idx })}
-                      className={cn(
-                        'flex w-full items-center gap-2 border-b border-slate-100 px-4 py-1 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
-                        isHighlighted && 'bg-primary/10'
-                      )}
-                    >
-                      <img
-                        src={getLegendUrl(layer.tableName)}
-                        alt=""
-                        className="w-5 h-5 shrink-0 object-contain"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                      <span className="min-w-0 truncate text-[#666]">
-                        <span className="text-slate-700">{layer.korName}</span>
-                        {feature.titleValue && (
-                          <>
-                            <span className="mx-1 text-slate-400">|</span>
-                            <span>{feature.titleValue}</span>
-                          </>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-1.5 bg-slate-50/80 shrink-0">
-                <span className="text-[11px] text-[#666]">
-                  총 {identifyFlat.length.toLocaleString()}건
-                </span>
-                {!hasDetail && (
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="rounded border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] text-[#666] transition-colors hover:bg-slate-100"
-                  >
-                    닫기
-                  </button>
-                )}
-              </div>
-            </>
+          {isIdentifyMode && identifyResultList && (
+            <IdentifyHitListBlock
+              results={identifyResultList.results}
+              headerLabel={identifyResultList.listHeaderLabel ?? '지도에서 선택된 항목'}
+              selectedIndex={selectedIdentifyIndex}
+              selectedRowRef={selectedIdentifyRowRef}
+              onItemClick={handleIdentifyItemClick}
+              onClose={handleClose}
+              showFooterClose={!hasDetail}
+            />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (
             <>
-              <div className="flex items-center border-b border-slate-200 bg-slate-100/60 px-4 py-1.5 text-[12px] font-semibold text-[#666] shrink-0">
+              <div className="flex items-start border-b border-slate-200 bg-slate-100/60 px-4 py-2 text-[12px] font-semibold text-[#666] shrink-0">
                 {listFields.map((f) => (
                   <span
                     key={String(f.define_field_name)}
-                    className="flex-1 min-w-0 truncate pl-2 first:pl-0"
+                    className="flex-1 min-w-0 whitespace-normal break-words pl-2 text-left leading-tight first:pl-0"
                     title={String(f.define_field_kor_name ?? f.define_field_name)}
                   >
                     {String(f.define_field_kor_name ?? f.define_field_name)}
@@ -889,10 +878,18 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                       )}
                     >
                       {listFields.map((f) => {
-                        const value = getRowValueByField(row, String(f.define_field_name));
+                        const display = useFacilityCols
+                          ? formatRoadLedgerFacilityCellValue(
+                              String(f.define_field_name),
+                              row as Record<string, unknown>
+                            )
+                          : (() => {
+                              const v = getRowValueByField(row, String(f.define_field_name));
+                              return formatDetailScalarValue(v);
+                            })();
                         return (
                           <span key={String(f.define_field_name)} className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-[#666]">
-                            {value != null ? String(value) : '-'}
+                            {display}
                           </span>
                         );
                       })}
@@ -991,7 +988,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                       .map(([k, v], i) => ({
                         fieldKey: k || `auto-${i}`,
                         label: k,
-                        value: v != null ? String(v) : '-',
+                        value: formatDetailScalarValue(v),
                         highlight: i === 0,
                       }))}
                     defaultOpen={true}
@@ -1006,7 +1003,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                           const key = String(f.define_field_name ?? '');
                           const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                           const raw = getRowValueByField(selectedRow, key);
-                          const value = raw != null ? String(raw) : '-';
+                          const value = formatDetailScalarValue(raw);
                           return { fieldKey: key || `basic-${i}`, label, value, highlight: i === 0 };
                         })}
                       defaultOpen={true}
@@ -1019,7 +1016,7 @@ export function LayerDataPanel({ dataTable, onClose, onDataKeyChange, initialDat
                           const key = String(f.define_field_name ?? '');
                           const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                           const raw = getRowValueByField(selectedRow, key);
-                          const value = raw != null ? String(raw) : '-';
+                          const value = formatDetailScalarValue(raw);
                           return { fieldKey: key || `detail-${i}`, label, value };
                         })}
                       defaultOpen={true}

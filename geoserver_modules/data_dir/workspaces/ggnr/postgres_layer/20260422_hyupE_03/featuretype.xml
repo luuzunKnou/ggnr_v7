@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-5c03</id>
+  <name>20260422_hyupE_03</name>
+  <nativeName>20260422_hyupE_03</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>20260422_hyupE_03</title>
+  <keywords>
+    <string>features</string>
+    <string>20260422_hyupE_03</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>329379.78125</minx>
+    <maxx>378589.25</maxx>
+    <miny>319677.78125</miny>
+    <maxy>368718.40625</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.44159780782138</minx>
+    <maxx>129.0010202588618</maxx>
+    <miny>36.35862991462378</miny>
+    <maxy>36.80828780820372</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

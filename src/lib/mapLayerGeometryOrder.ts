@@ -12,6 +12,25 @@ export function wmsLayerSortRank(t: LayerDbGeometryKind | undefined): number {
 }
 
 /**
+ * 지도 식별(클릭) 결과 정렬 — 점 → 선 → 면 (작을수록 목록 상단·우선).
+ * `geometry_columns.type` 또는 PostGIS OGC 타입 코드(숫자)에 대응.
+ */
+export function identifyHitPriorityRank(geometryColumnsType: string | number | undefined | null): number {
+  if (geometryColumnsType == null) return 1;
+  if (typeof geometryColumnsType === 'number') {
+    if (geometryColumnsType === 1 || geometryColumnsType === 4) return 0;
+    if (geometryColumnsType === 2 || geometryColumnsType === 5) return 1;
+    if (geometryColumnsType === 3 || geometryColumnsType === 6) return 2;
+    return 1;
+  }
+  const t = String(geometryColumnsType).toUpperCase().replace(/^ST_/, '');
+  if (/POINT|MULTIPOINT/.test(t)) return 0;
+  if (/LINESTRING|MULTILINESTRING|CIRCULARSTRING|COMPOUNDCURVE|CURVE/.test(t)) return 1;
+  if (/POLYGON|MULTIPOLYGON|TRIANGLE|TIN/.test(t)) return 2;
+  return 1;
+}
+
+/**
  * geometry_columns에 없는 레이어(분할 자식 등)는 defineLayer tables.json의 define_table_shp_type으로 보강.
  * DB에 이미 있으면 그대로 둔다.
  */

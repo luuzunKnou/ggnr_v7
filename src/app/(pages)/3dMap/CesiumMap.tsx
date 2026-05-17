@@ -2,11 +2,42 @@
 
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT, DEFAULT_CAMERA_HEIGHT_3D, TILESET_HEIGHT_OFFSET_M } from '../map/_mapComponents/config/mapDefaults';
+import {
+  DEFAULT_CENTER_LON,
+  DEFAULT_CENTER_LAT,
+  DEFAULT_CAMERA_HEIGHT_3D,
+  TILESET_CACHE_BYTES,
+  TILESET_DYNAMIC_SCREEN_SPACE_ERROR,
+  TILESET_FOVEATED_SCREEN_SPACE_ERROR,
+  TILESET_HEIGHT_OFFSET_M,
+  TILESET_MAX_CACHE_OVERFLOW_BYTES,
+  TILESET_MAX_SCREEN_SPACE_ERROR,
+  TILESET_POINT_CLOUD_POINT_SIZE,
+} from '../map/_mapComponents/config/mapDefaults';
 import { getCesium } from './cesiumLoader';
+import { useCadastralWmsImagery } from './hooks/useCadastralWmsImagery';
+import { useCesiumBasemapImagery } from './hooks/useCesiumBasemapImagery';
+import {
+  useCesiumTileFeaturePick,
+  type TileFeaturePickResult,
+} from './hooks/useCesiumTileFeaturePick';
+
+export type { TileFeaturePickResult };
 
 type CesiumViewer = import('cesium').Viewer;
 type Cesium3DTileset = import('cesium').Cesium3DTileset;
+
+function formatPickPropertyValue(val: unknown): string {
+  if (val === null || val === undefined) return String(val);
+  if (typeof val === 'object') {
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+  return String(val);
+}
 
 /**
  * [위치이동] 타일셋의 위치로 카메라 이동
@@ -82,21 +113,53 @@ async function safeZoomToTileset(
   }
 }
 
+export type Visible3DTilesetEntry = {
+  kind: 'pnts' | 'b3dm';
+  name: string;
+};
+
+/** Cesium primitives 맵 키 (충돌 방지) */
+export function tilesetLayerKey(kind: 'pnts' | 'b3dm', name: string): string {
+  return `${kind}:${name}`;
+}
+
 export type CesiumMapProps = {
-  visibleTilesetNames: string[];
+  /** 표시할 3D Tiles — 디스크: service_data/3dtiles/(이름)/pnts 또는 …/b3dm */
+  visibleTilesets: Visible3DTilesetEntry[];
   onTilesetLoadError?: (name: string, message: string) => void;
   /** 배경 지도(글로브/이미지) 표시 여부. 기본 true */
   globeVisible?: boolean;
+  /** GeoServer WMS 지적도 오버레이 (2D와 동일 레이어 소스) */
+  cadastralWmsEnabled?: boolean;
+  /** null 이면 지적도 전 테이블, 아니면 해당 tableName 만 */
+  cadastralVisibleTableNames?: readonly string[] | null;
+  /** 2D MapContext 배경 id와 맞춤 — 자체항공영상이면 /api/2dtiles XYZ 로 최하단 배경 */
+  backgroundMapId?: string;
+  /** 최하단 배경 래스터(항공·XYZ 등). 끄면 글로브만 보임. 지적도 WMS 등 상위 레이어는 유지 */
+  basemapImageryVisible?: boolean;
   /** dynamic()으로 로드 시 ref가 전달되지 않으므로, 마운트 후 API를 이 콜백으로 전달 */
   onReady?: (api: CesiumMapRef) => void;
+  /** b3dm/pnts 피처 클릭 시 배치 속성(변경될 때마다 호출, 닫기 시 null) */
+  onTileFeaturePick?: (detail: TileFeaturePickResult | null) => void;
 };
 
 export type CesiumMapRef = {
-  flyToTileset: (name: string) => void;
+  /** `tilesetLayerKey(kind, name)` 형식, 예: pnts:mydata / b3dm:mydata */
+  flyToTileset: (layerKey: string) => void;
 };
 
 const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
-  { visibleTilesetNames, onTilesetLoadError, globeVisible = true, onReady },
+  {
+    visibleTilesets,
+    onTilesetLoadError,
+    globeVisible = true,
+    cadastralWmsEnabled = false,
+    cadastralVisibleTableNames = null,
+    backgroundMapId = 'aerial-2022',
+    basemapImageryVisible = true,
+    onReady,
+    onTileFeaturePick,
+  },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,24 +170,24 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
   const [viewerReady, setViewerReady] = useState(false);
 
   const apiRef = useRef<CesiumMapRef>({
-    flyToTileset(name: string) {
+    flyToTileset(layerKey: string) {
       const v = viewerRef.current;
       const currentMap = tilesetsRef.current;
       const loadedNames = Array.from(currentMap.keys());
-      const t = currentMap.get(name);
+      const t = currentMap.get(layerKey);
 
       console.info('[CesiumMap] 위치이동 버튼 클릭', {
         로드된_타일_목록: loadedNames,
-        이동_대상: name,
+        이동_대상: layerKey,
         viewer_준비: !!v,
         tileset_존재: !!t,
       });
 
       if (v && t) {
-        safeZoomToTileset(v, t, name);
+        safeZoomToTileset(v, t, layerKey);
       } else {
         if (!v) console.warn('[CesiumMap] 위치이동 불가: viewer 미준비');
-        if (!t) console.warn('[CesiumMap] 위치이동 불가: 타일 미로드', name);
+        if (!t) console.warn('[CesiumMap] 위치이동 불가: 타일 미로드', layerKey);
       }
     },
   });
@@ -142,30 +205,104 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
     onReady?.(apiRef.current);
   }, [onReady]);
 
+  useCesiumBasemapImagery(viewerRef, viewerReady, backgroundMapId, basemapImageryVisible);
+
+  useCadastralWmsImagery(
+    viewerRef.current,
+    viewerReady,
+    cadastralWmsEnabled,
+    cadastralVisibleTableNames
+  );
+
+  const { pickResult, clearPick } = useCesiumTileFeaturePick(
+    viewerRef,
+    viewerReady,
+    tilesetsRef
+  );
+
+  useEffect(() => {
+    onTileFeaturePick?.(pickResult);
+  }, [pickResult, onTileFeaturePick]);
+
   // ========== 맵 초기화 ==========
   useEffect(() => {
-    if (!containerRef.current) return;
-    let viewer: CesiumViewer;
+    const container = containerRef.current;
+    if (!container) return;
 
-    (async () => {
+    let cancelled = false;
+    /** viewer 생성 직후 · viewerRef 할당 전에 cleanup 이 들어오는 구간 대비 */
+    let createdViewer: CesiumViewer | null = null;
+
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+
+    function destroyViewerInstance(v: CesiumViewer | null | undefined): void {
+      if (!v) return;
+      try {
+        v.destroy();
+      } catch {
+        /* 이미 destroy 된 인스턴스 등 */
+      }
+    }
+
+    void (async () => {
       const Cesium = await getCesium();
+      if (cancelled) return;
+
       if (typeof window !== 'undefined' && !(window as any).CESIUM_BASE_URL) {
         (window as any).CESIUM_BASE_URL = '/cesiumStatic';
       }
 
-      viewer = new Cesium.Viewer(containerRef.current!, {
-        terrainProvider: await Cesium.createWorldTerrainAsync(),
+      const ionToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
+      if (ionToken) {
+        Cesium.Ion.defaultAccessToken = ionToken;
+      }
+
+      const terrainProvider = await Cesium.createWorldTerrainAsync();
+      if (cancelled) return;
+
+      const viewer = new Cesium.Viewer(container, {
+        terrainProvider,
         animation: false,
         timeline: false,
         navigationHelpButton: false,
         sceneModePicker: false,
+        baseLayerPicker: false,
+        // skyBox 객체가 있으면 backgroundColor가 무시됨(show만 끄는 것으로는 부족). 문서: skyBox false 시 별·태양·달 미추가
+        skyBox: false,
+        skyAtmosphere: false,
       });
+      createdViewer = viewer;
+
+      if (cancelled) {
+        destroyViewerInstance(viewer);
+        createdViewer = null;
+        return;
+      }
 
       viewerRef.current = viewer;
+      const scene = viewer.scene;
       viewer.scene.globe.show = globeVisibleRef.current;
       // 지형/수면(저수지 등)에 가려지지 않도록 끔 → 포인트 클라우드가 지형 아래 있어도 보임
       viewer.scene.globe.depthTestAgainstTerrain = false;
-      
+
+      // 우주/대기: Viewer 옵션으로 skyBox·skyAtmosphere 미생성 → scene.backgroundColor 가 실제로 보임
+      scene.backgroundColor = Cesium.Color.BLACK;
+      // 타일 사이·해저 등 이미지 없을 때 기본 타일 색이 파란 바다 톤으로 보이는 것 완화
+      scene.globe.baseColor = Cesium.Color.BLACK;
+      if (scene.skyBox) scene.skyBox.show = false;
+      if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+      if (scene.sun) scene.sun.show = false;
+      if (scene.moon) scene.moon.show = false;
+      if (scene.fog) scene.fog.enabled = false;
+      scene.globe.showGroundAtmosphere = false;
+      scene.atmosphere.dynamicLighting = Cesium.DynamicAtmosphereLightingType.NONE;
+      scene.atmosphere.brightnessShift = -1.0;
+      if (scene.highDynamicRangeSupported) {
+        scene.highDynamicRange = false;
+      }
+
       // 포인트 클라우드 최적화
       const pcs = (viewer.scene as any).pointCloudShading;
       if (pcs) {
@@ -181,15 +318,33 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
         ),
       });
 
+      if (cancelled) {
+        destroyViewerInstance(viewer);
+        if (viewerRef.current === viewer) {
+          viewerRef.current = null;
+        }
+        createdViewer = null;
+        return;
+      }
+
       setViewerReady(true);
     })();
 
     return () => {
+      cancelled = true;
       setViewerReady(false);
-      if (viewerRef.current) {
-        viewerRef.current.destroy();
-        viewerRef.current = null;
+      const toDestroy = viewerRef.current ?? createdViewer;
+      destroyViewerInstance(toDestroy);
+      viewerRef.current = null;
+      createdViewer = null;
+
+      const el = containerRef.current;
+      if (el) {
+        while (el.firstChild) {
+          el.removeChild(el.firstChild);
+        }
       }
+
       tilesetsRef.current.clear();
     };
   }, []);
@@ -201,37 +356,55 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
     const viewer = viewerRef.current;
     const primitives = viewer.scene.primitives;
     const currentMap = tilesetsRef.current;
-    const nextVisibleNames = new Set(visibleTilesetNames);
+    const nextVisibleKeys = new Set(
+      visibleTilesets.map((e) => tilesetLayerKey(e.kind, e.name))
+    );
 
     // 1. 이미 로드된 타일셋은 show만 토글 (remove/destroy 없이 → 에러 방지, 끄면 화면에서 숨김)
-    for (const [name, tileset] of currentMap) {
-      const show = nextVisibleNames.has(name);
+    for (const [layerKey, tileset] of currentMap) {
+      const show = nextVisibleKeys.has(layerKey);
       tileset.show = show;
     }
     console.info('[CesiumMap] 타일 표시/숨김', {
-      표시할_목록: visibleTilesetNames,
+      표시할_목록: Array.from(nextVisibleKeys),
       현재_로드된_목록: Array.from(currentMap.keys()),
     });
-    visibleRef.current = nextVisibleNames;
+    visibleRef.current = nextVisibleKeys;
 
-    // 2. 아직 로드 안 된 이름만 추가
-    visibleTilesetNames.forEach(async (name) => {
-      if (currentMap.has(name)) return;
+    // 2. 아직 로드 안 된 항목만 추가
+    visibleTilesets.forEach(async ({ kind, name }) => {
+      const layerKey = tilesetLayerKey(kind, name);
+      if (currentMap.has(layerKey)) return;
 
-      const url = `/api/3dtiles/${encodeURIComponent(name)}/tileset.json`;
-      
+      const url =
+        kind === 'pnts'
+          ? `/api/3dtiles/${encodeURIComponent(name)}/tileset.json`
+          : `/api/3dtiles_b3dm/${encodeURIComponent(name)}/tileset.json`;
+
       try {
         const Cesium = await getCesium();
         const tileset = await Cesium.Cesium3DTileset.fromUrl(url, {
-          maximumScreenSpaceError: 16,
+          maximumScreenSpaceError: TILESET_MAX_SCREEN_SPACE_ERROR,
+          dynamicScreenSpaceError: TILESET_DYNAMIC_SCREEN_SPACE_ERROR,
+          foveatedScreenSpaceError: TILESET_FOVEATED_SCREEN_SPACE_ERROR,
+          cacheBytes: TILESET_CACHE_BYTES,
+          maximumCacheOverflowBytes: TILESET_MAX_CACHE_OVERFLOW_BYTES,
         });
 
-        if (!viewerRef.current || !visibleRef.current.has(name)) return;
+        if (kind === 'pnts') {
+          tileset.style = new Cesium.Cesium3DTileStyle({
+            pointSize: TILESET_POINT_CLOUD_POINT_SIZE,
+          });
+        }
+
+        if (!viewerRef.current || !visibleRef.current.has(layerKey)) return;
 
         primitives.add(tileset);
-        currentMap.set(name, tileset);
+        currentMap.set(layerKey, tileset);
 
         console.info('[CesiumMap] 타일 로드 완료', {
+          layerKey,
+          kind,
           name,
           url,
           로드된_타일_목록: Array.from(currentMap.keys()),
@@ -256,7 +429,7 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
                   const lonDeg = (carto.longitude * 180) / Math.PI;
                   const latDeg = (carto.latitude * 180) / Math.PI;
                   console.info('[CesiumMap] 타일 boundingSphere (로드 검증)', {
-                    name,
+                    layerKey,
                     ECEF: { x: bs.center.x, y: bs.center.y, z: bs.center.z },
                     경위도: { longitude: lonDeg, latitude: latDeg, height: carto.height },
                     radius: bs.radius,
@@ -267,18 +440,76 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
           }
         }
 
-        // 타일셋이 로드된 후 위치로 이동
-        await safeZoomToTileset(viewer, tileset, name);
-
+        await safeZoomToTileset(viewer, tileset, layerKey);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[CesiumMap] ${name} 로드 실패:`, msg);
-        onTilesetLoadError?.(name, msg);
+        console.error(`[CesiumMap] ${layerKey} 로드 실패:`, msg);
+        onTilesetLoadError?.(layerKey, msg);
       }
     });
-  }, [viewerReady, visibleTilesetNames]);
+  }, [viewerReady, visibleTilesets]);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {pickResult && (
+        <div
+          className="pointer-events-auto absolute bottom-4 right-4 z-[70] max-h-[min(50vh,22rem)] w-[min(22rem,calc(100vw-5rem))] overflow-hidden rounded-md border border-border bg-background/95 text-sm shadow-lg"
+          role="dialog"
+          aria-label="선택한 3D 객체 속성"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <span className="font-medium truncate">
+              3D 객체{' '}
+              {pickResult.kind === 'b3dm'
+                ? '(메시)'
+                : pickResult.kind === 'pnts'
+                  ? '(포인트)'
+                  : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => clearPick()}
+              className="shrink-0 rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              닫기
+            </button>
+          </div>
+          <div className="max-h-[min(46vh,18rem)] overflow-y-auto px-3 py-2 space-y-2 text-xs">
+            {pickResult.datasetName && (
+              <p className="text-muted-foreground">
+                데이터셋:{' '}
+                <span className="font-mono text-foreground">{pickResult.datasetName}</span>
+              </p>
+            )}
+            <p className="text-muted-foreground">
+              featureId / batch:{' '}
+              <span className="font-mono text-foreground">{pickResult.featureId}</span>
+            </p>
+            {Object.keys(pickResult.properties).length === 0 ? (
+              <p className="text-muted-foreground">
+                배치 테이블·메타데이터 속성이 없습니다. (단순 메시 타일일 수 있음)
+              </p>
+            ) : (
+              <dl className="space-y-1.5">
+                {Object.entries(pickResult.properties).map(([key, val]) => (
+                  <div key={key}>
+                    <dt className="font-mono text-[11px] text-muted-foreground">{key}</dt>
+                    <dd className="break-all font-mono text-[11px] text-foreground">
+                      {formatPickPropertyValue(val)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+          <p className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
+            다른 객체를 클릭하면 선택이 바뀝니다. 하늘·빈 화면 클릭 시 선택이 해제됩니다.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 });
 
 export default CesiumMap;

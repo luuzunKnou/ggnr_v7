@@ -61,6 +61,13 @@ function saveMapState(state: PersistedMapState) {
   } catch { /* storage full or unavailable */ }
 }
 
+/** 3D 배경 선택 등 — 기존 ggnr_map_state 유지한 채 backgroundMap 만 갱신 */
+export function patchPersistedBackgroundMap(backgroundMap: string): void {
+  const prev = loadPersistedMapState();
+  if (!prev) return;
+  saveMapState({ ...prev, backgroundMap });
+}
+
 /** 지목/소유구분/지적도/건물도로 체크박스 상태 (null이면 저장 시 빈 배열로 저장하지 않음) */
 export type PersistedLayerPanelSelections = {
   visibleJimokLayerNames: string[] | null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,31 @@ function StepCell({ ok }: { ok: boolean }) {
   return ok ? <Check className="w-3.5 h-3.5 text-green-600 mx-auto" /> : <X className="w-3.5 h-3.5 text-red-400 mx-auto" />;
 }
 
+function RepairableStepCell({
+  ok,
+  label,
+  busy,
+  onRepair,
+}: {
+  ok: boolean;
+  label: string;
+  busy: boolean;
+  onRepair?: () => void;
+}) {
+  if (ok) return <Check className="w-3.5 h-3.5 text-green-600 mx-auto" />;
+  return (
+    <button
+      type="button"
+      className="mx-auto flex h-7 w-7 items-center justify-center rounded-md border border-transparent hover:bg-muted hover:border-border disabled:opacity-40"
+      disabled={busy || !onRepair}
+      onClick={onRepair}
+      title={`${label} 생성 (GeoServer / defineLayer)`}
+    >
+      <X className="w-3.5 h-3.5 text-red-400" />
+    </button>
+  );
+}
+
 function GeomBadge({ type }: { type: string | null }) {
   if (!type) return <span className="text-muted-foreground">—</span>;
   return (
@@ -54,6 +79,8 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
   /** 레이어 상태 목록 DB 스키마: layer(기본) | public_layer만 */
   const [statusSchema, setStatusSchema] = useState<'layer' | 'public_layer'>('layer');
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null);
+  const [repairingKey, setRepairingKey] = useState<string | null>(null);
+  const repairingRef = useRef(false);
 
   const triggerBlobDownload = (blob: Blob, filename: string) => {
     const a = document.createElement('a');
@@ -117,6 +144,45 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  const repairStep = useCallback(
+    async (row: LayerStatusRow, step: 'layer' | 'style' | 'define') => {
+      const key = `${row.tableName}:${step}`;
+      if (repairingRef.current) return;
+      repairingRef.current = true;
+      setRepairingKey(key);
+      try {
+        const action =
+          step === 'layer'
+            ? 'createGeoServerLayerForTableName'
+            : step === 'style'
+              ? 'createGeoServerStyleForTableName'
+              : 'createDefineTableAndFieldsByTableName';
+        const res = await call('', 'POST', {
+          service: 'shpUploadService',
+          action,
+          params: {
+            tableName: row.tableName,
+            dbSchema: row.dbSchema ?? statusSchema,
+            geometryType: row.geometryType ?? undefined,
+            group: row.group?.trim() ? row.group : undefined,
+          },
+        });
+        const d = res?.data ?? res;
+        if (!d?.success) {
+          alert(typeof d?.error === 'string' ? d.error : '처리 실패');
+          return;
+        }
+        await fetchStatus();
+      } catch (e: unknown) {
+        alert(e instanceof Error ? e.message : String(e));
+      } finally {
+        repairingRef.current = false;
+        setRepairingKey(null);
+      }
+    },
+    [fetchStatus, statusSchema]
+  );
 
   const groups = Array.from(new Set(rows.map((r) => r.group).filter(Boolean))).sort();
 
@@ -247,9 +313,48 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
                   <td className="py-1 px-2 text-center"><GeomBadge type={row.geometryType} /></td>
                   <td className="py-1 px-2 text-center whitespace-nowrap text-muted-foreground">{row.updatedAt ?? '—'}</td>
                   <td className="py-1 px-2"><StepCell ok={row.table} /></td>
-                  <td className="py-1 px-2"><StepCell ok={row.layer} /></td>
-                  <td className="py-1 px-2"><StepCell ok={row.style} /></td>
-                  <td className="py-1 px-2"><StepCell ok={row.define} /></td>
+                  <td className="py-1 px-2">
+                    <RepairableStepCell
+                      ok={row.layer}
+                      label="Layer"
+                      busy={repairingKey !== null}
+                      onRepair={
+                        !row.layer
+                          ? () => {
+                              void repairStep(row, 'layer');
+                            }
+                          : undefined
+                      }
+                    />
+                  </td>
+                  <td className="py-1 px-2">
+                    <RepairableStepCell
+                      ok={row.style}
+                      label="Style"
+                      busy={repairingKey !== null}
+                      onRepair={
+                        !row.style
+                          ? () => {
+                              void repairStep(row, 'style');
+                            }
+                          : undefined
+                      }
+                    />
+                  </td>
+                  <td className="py-1 px-2">
+                    <RepairableStepCell
+                      ok={row.define}
+                      label="Define"
+                      busy={repairingKey !== null}
+                      onRepair={
+                        !row.define
+                          ? () => {
+                              void repairStep(row, 'define');
+                            }
+                          : undefined
+                      }
+                    />
+                  </td>
                   <td className="py-1 px-2 text-muted-foreground truncate" />
                   <td className="py-1 px-2 text-center">
                     <Button

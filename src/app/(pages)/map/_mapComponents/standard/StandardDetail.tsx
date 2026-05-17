@@ -11,11 +11,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
-  ChevronDown,
-  ChevronRight,
   Upload,
 } from 'lucide-react';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
+import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
 import { cn, formatFileSize } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
 import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
@@ -30,6 +29,7 @@ import {
   useServiceFileData,
 } from './useServiceFileData';
 import { MapFloatingPanel } from '../MapFloatingPanel';
+import { InfoSection } from './DetailInfoSection';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
@@ -99,73 +99,6 @@ const SAMPLE_HISTORY: TimelineEvent[] = [
     author: '최공사',
   },
 ];
-
-interface InfoField {
-  label: string;
-  value: string | number;
-  unit?: string;
-  highlight?: boolean;
-}
-
-function InfoSection({
-  title,
-  fields,
-  defaultOpen = true,
-}: {
-  title: string;
-  fields: InfoField[];
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  return (
-    <div className="border-b border-slate-200">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 px-4 py-2.5 text-left transition-colors hover:bg-slate-50"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-primary" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-slate-500" />
-        )}
-        <span className="text-[13px] font-semibold text-slate-900">{title}</span>
-      </button>
-      {isOpen && (
-        <div className="px-4 pb-3">
-          <div className="overflow-hidden rounded border border-slate-200">
-            {fields.map((field, index) => (
-              <div
-                key={field.label}
-                className={cn(
-                  'flex',
-                  index !== fields.length - 1 && 'border-b border-slate-200'
-                )}
-              >
-                <div className="flex w-[120px] shrink-0 items-center bg-slate-100 px-3 py-2">
-                  <span className="text-xs text-slate-500">{field.label}</span>
-                </div>
-                <div className="flex min-w-0 flex-1 items-center px-3 py-2">
-                  <span
-                    className={cn(
-                      'text-xs',
-                      field.highlight ? 'font-medium text-primary' : 'text-slate-900'
-                    )}
-                  >
-                    {field.value}
-                    {field.unit != null && field.unit !== '' && (
-                      <span className="ml-0.5 text-slate-500">{field.unit}</span>
-                    )}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function StandardDetail() {
   const mapContext = useMapContext();
@@ -293,7 +226,7 @@ export default function StandardDetail() {
                       const key = String(f.define_field_name ?? '');
                       const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                       const raw = getRowValueByField(row, key);
-                      const value = raw != null ? String(raw) : '-';
+                      const value = formatDetailScalarValue(raw);
                       return { label, value, highlight: i === 0 };
                     });
                   })()}
@@ -308,7 +241,7 @@ export default function StandardDetail() {
                         const key = String(f.define_field_name ?? '');
                         const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                         const raw = getRowValueByField(row, key);
-                        const value = raw != null ? String(raw) : '-';
+                        const value = formatDetailScalarValue(raw);
                         return { label, value };
                       });
                     })()}

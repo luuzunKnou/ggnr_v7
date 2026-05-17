@@ -24,21 +24,24 @@ interface SidebarButtonProps {
   label: string;
   onClick?: () => void;
   isActive?: boolean;
+  disabled?: boolean;
 }
 
-function SidebarButton({ icon, label, onClick, isActive }: SidebarButtonProps) {
+function SidebarButton({ icon, label, onClick, isActive, disabled }: SidebarButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       title={label}
       className={cn(
-        'flex flex-col items-center justify-center pt-[5px] pb-[5px] w-[65px] text-white/80 hover:text-white hover:bg-white/10 transition-colors',
-        isActive && 'bg-white/20 text-white'
+        'flex flex-col items-center justify-center pt-[7px] pb-[7px] w-[65px] text-white/90 hover:text-white hover:bg-white/10 transition-colors',
+        isActive && 'bg-white/20 text-white',
+        disabled && 'opacity-35 pointer-events-none cursor-not-allowed hover:bg-transparent'
       )}
     >
       {icon}
-      <span className="text-[9px] pt-[8px] break-keep text-center leading-none max-w-[62px] line-clamp-2">{label}</span>
+      <span className="text-[10.5px] pt-[4px] break-keep text-center font-light">{label}</span>
     </button>
   );
 }
@@ -137,6 +140,8 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
   });
 
+  const roadDataFlowSidebarLock = openedWindows.includes('roadDataFlow');
+
   const handleDebugZoneClick = useCallback(() => {
     if (debugClickTimeoutRef.current) {
       clearTimeout(debugClickTimeoutRef.current);
@@ -199,55 +204,63 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[65px] bg-black/70 backdrop-blur-sm flex flex-col items-center pt-2 z-50">
-      <div className="flex flex-col flex-1 min-h-0 w-full">
-        <div className="flex flex-col flex-1 min-h-0">
-          <Link
-            href="/"
-            className="flex items-center justify-center w-[65px] h-[38px] shrink-0 mb-1.5 hover:bg-white/10 transition-colors rounded"
-            title="메인으로"
-          >
-            <Image
-              src={indexLogoSrc}
-              alt="메인으로"
-              width={40}
-              height={40}
-              className="max-h-10 max-w-[35px] w-auto h-auto object-contain"
-            />
-          </Link>
-          {sidebarItems.map((item) => {
-            const serEng = item.ser_eng ?? '';
-            const openedKey = getOpenedKeyForSerEng(serEng);
-            const label = item.ser_kor ?? serEng;
-            const isPriv = item.ser_is_private === true;
-            const policy = isPriv ? sidebarServicePolicy(snapshot, serEng, true) : 'open';
-            const onSvcClick =
-              policy === 'block'
+    <aside className="fixed left-0 top-0 flex h-screen w-[65px] flex-col items-center overflow-hidden bg-black/40 pt-2 backdrop-blur-sm z-50">
+      <Link
+        href="/"
+        className="mb-1.5 flex h-[38px] w-[65px] shrink-0 items-center justify-center rounded transition-colors hover:bg-white/10"
+        title="메인으로"
+      >
+        <Image
+          src={indexLogoSrc}
+          alt="메인으로"
+          width={40}
+          height={40}
+          className="max-h-10 max-w-[35px] h-auto w-auto object-contain"
+        />
+      </Link>
+      <nav className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto" aria-label="서비스 메뉴">
+        {sidebarItems.map((item) => {
+          const serEng = item.ser_eng ?? '';
+          const openedKey = getOpenedKeyForSerEng(serEng);
+          const label = item.ser_kor ?? serEng;
+          const isPriv = item.ser_is_private === true;
+          const policy = isPriv ? sidebarServicePolicy(snapshot, serEng, true) : 'open';
+          const onSvcClick =
+            policy === 'block'
+              ? () => {
+                  setDeniedSerEng(serEng);
+                  setDeniedSerOpen(true);
+                }
+              : serEng === 'parcelAnalysis'
                 ? () => {
-                    setDeniedSerEng(serEng);
-                    setDeniedSerOpen(true);
+                    /* 필지분석: UI만 유지, 패널/URL 토글 없음 */
                   }
                 : () => toggleWindow(openedKey);
-            return (
-              <SidebarButton
-                key={serEng}
-                icon={renderServiceIcon(item)}
-                label={label}
-                onClick={onSvcClick}
-                isActive={policy !== 'block' && openedWindows.includes(openedKey)}
-              />
-            );
-          })}
-        </div>
-        <div className="flex-1 min-h-0 w-full shrink-0" aria-hidden />
-        <button
-          type="button"
-          onClick={handleDebugZoneClick}
-          className="w-full shrink-0 h-[50px] cursor-default"
-          style={{ minHeight: '50px' }}
-          aria-label="디버그 패널 토글 (5회 연속 클릭)"
-        />
-      </div>
+          const svcDisabled =
+            policy !== 'block' && roadDataFlowSidebarLock && openedKey !== 'roadDataFlow';
+          return (
+            <SidebarButton
+              key={serEng}
+              icon={renderServiceIcon(item)}
+              label={label}
+              onClick={onSvcClick}
+              isActive={
+                policy !== 'block' &&
+                serEng !== 'parcelAnalysis' &&
+                openedWindows.includes(openedKey)
+              }
+              disabled={policy === 'block' ? false : svcDisabled}
+            />
+          );
+        })}
+      </nav>
+      <button
+        type="button"
+        onClick={handleDebugZoneClick}
+        className="h-[50px] w-full shrink-0 cursor-default"
+        style={{ minHeight: '50px' }}
+        aria-label="디버그 패널 토글 (5회 연속 클릭)"
+      />
       <ResourceAccessDeniedDialog
         open={deniedSerOpen}
         onOpenChange={setDeniedSerOpen}

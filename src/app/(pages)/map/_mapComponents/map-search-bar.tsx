@@ -13,7 +13,7 @@ import {
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MapLayergroupBar } from './map-layergroup-bar';
-import { searchAddress, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
+import { getAddressFromCoord, searchAddress, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
 import { useMapContext } from './MapContext';
 import { transform } from 'ol/proj';
 import { canAccessPrivateSystem } from '@/lib/accessClient';
@@ -87,7 +87,9 @@ export function MapSearchBar({
   const [addressSearchLoading, setAddressSearchLoading] = useState(false);
   const [addressPanelOpen, setAddressPanelOpen] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
+  const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번 검색');
   const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
+  const centerPlaceholderReqIdRef = useRef(0);
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
 
   const addRecentQuery = useCallback((trimmed: string) => {
@@ -149,6 +151,45 @@ export function MapSearchBar({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [addressPanelOpen]);
+
+  const updateCenterPlaceholderFromMap = useCallback(async () => {
+    const map = mapContext?.mapInstanceRef?.current;
+    const apiKey = vworldApiKey.trim();
+    if (!map || !apiKey) return;
+    const center = map.getView().getCenter();
+    if (!center) return;
+    const [lon, lat] = transform(center, 'EPSG:3857', 'EPSG:4326');
+    if (![lon, lat].every((v) => Number.isFinite(v))) return;
+    const reqId = ++centerPlaceholderReqIdRef.current;
+    try {
+      const addr = await getAddressFromCoord(lon, lat, { apiKey });
+      if (reqId !== centerPlaceholderReqIdRef.current) return;
+      const jibun = String(addr?.jibun ?? '').trim();
+      const road = String(addr?.road ?? '').trim();
+      setCenterPlaceholder(jibun || road || '주소/지번 검색');
+    } catch {
+      if (reqId !== centerPlaceholderReqIdRef.current) return;
+      setCenterPlaceholder('주소/지번 검색');
+    }
+  }, [mapContext, vworldApiKey]);
+
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map || !vworldApiKey.trim()) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onMoveEnd = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void updateCenterPlaceholderFromMap();
+      }, 150);
+    };
+    void updateCenterPlaceholderFromMap();
+    map.on('moveend', onMoveEnd);
+    return () => {
+      if (timer) clearTimeout(timer);
+      map.un('moveend', onMoveEnd);
+    };
+  }, [mapContext, vworldApiKey, updateCenterPlaceholderFromMap]);
 
   const fetchSystemList = useCallback(() => {
     call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} })
@@ -256,7 +297,7 @@ export function MapSearchBar({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setAddressPanelOpen(true)}
-              placeholder="주소/지번 검색"
+              placeholder={centerPlaceholder}
               className="h-[20px] min-h-[20px] text-[12px] border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-0"
             />
 

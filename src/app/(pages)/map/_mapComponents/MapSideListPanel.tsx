@@ -15,6 +15,8 @@ export type MapSideListPanelProps = {
   onWidthChange: (width: number) => void;
   children: React.ReactNode;
   className?: string;
+  /** 본문 래퍼(flex-1)에 추가 클래스. 예: `overflow-y-auto`로 패널 전체 스크롤 */
+  contentClassName?: string;
 };
 
 export function MapSideListPanel({
@@ -25,6 +27,7 @@ export function MapSideListPanel({
   onWidthChange,
   children,
   className,
+  contentClassName,
 }: MapSideListPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -89,7 +92,12 @@ export function MapSideListPanel({
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div
+        className={cn(
+          'flex-1 min-h-0 flex flex-col',
+          contentClassName ?? 'overflow-hidden',
+        )}
+      >
         {children}
       </div>
     </div>

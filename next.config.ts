@@ -9,6 +9,18 @@ const cesiumStatic = path.join(__dirname, "public/cesiumStatic");
 const nextConfig: NextConfig = {
   devIndicators: false,
   turbopack: {},
+  async rewrites() {
+    return [
+      { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },
+      { source: '/vworldLandCharacteristics_https.api', destination: '/api/vworld/land-characteristics' },
+      { source: '/vworldLandUseAttr.api', destination: '/api/vworld/land-use' },
+      { source: '/vworldLandUseAttr_https.api', destination: '/api/vworld/land-use' },
+      { source: '/vworldIndvdLandPriceAttr.api', destination: '/api/vworld/land-price' },
+      { source: '/vworldIndvdLandPriceAttr_https.api', destination: '/api/vworld/land-price' },
+      { source: '/vworldPossessionAttr.api', destination: '/api/vworld/possession' },
+      { source: '/vworldPossessionAttr_https.api', destination: '/api/vworld/possession' },
+    ];
+  },
   // 개발 서버에서 /api 요청 로그 비표시 (POST /api 200 in ... 제거)
   logging: {
     incomingRequests: { ignore: [/\/api/] },

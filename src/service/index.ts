@@ -11,6 +11,7 @@ import * as complaintService from './complaintService';
 import * as fileManagerService from './fileManagerService';
 import * as uploadService from './uploadService';
 import * as pipelineService from './pipelineService';
+import * as orthophotoService from './orthophotoService';
 import * as shpUploadService from './shpUploadService';
 import * as excelHistoryService from './excelHistoryService';
 import * as excelUploadService from './excelUploadService';
@@ -18,6 +19,10 @@ import * as layerHistoryService from './layerHistoryService';
 import * as permissionService from './permissionService';
 import * as usrService from './usrService';
 import * as riverBasicPlanService from './riverBasicPlanService';
+import * as roadLedgerService from './roadLedgerService';
+import * as roadUseLedgerService from './roadUseLedgerService';
+import * as roadUseAndongService from './roadUseAndongService';
+import * as buildPublicLandService from './buildPublicLandService';
 import * as fileDataUploadService from './fileDataUploadService';
 import * as integrationService from './integrationService';
 
@@ -32,6 +37,7 @@ export {
   fileManagerService,
   uploadService,
   pipelineService,
+  orthophotoService,
   shpUploadService,
   excelUploadService,
   excelHistoryService,
@@ -39,6 +45,10 @@ export {
   permissionService,
   usrService,
   riverBasicPlanService,
+  roadLedgerService,
+  roadUseLedgerService,
+  roadUseAndongService,
+  buildPublicLandService,
   fileDataUploadService,
   integrationService,
 };

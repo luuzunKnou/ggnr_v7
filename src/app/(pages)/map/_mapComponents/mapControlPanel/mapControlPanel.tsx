@@ -5,6 +5,7 @@ import {
   Globe,
   Grid3X3,
   Building2,
+  Layers2,
   Route,
   SquareStack,
   Users,
@@ -138,6 +139,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
     items: [
       { id: "cadastral", icon: Grid3X3, label: "지적도", allowMultiple: true },
       { id: "building-road", icon: Building2, label: "건물·도로", allowMultiple: true },
+      { id: "thematic-map", icon: Layers2, label: "주제도", allowMultiple: true },
       { id: "basic-section", icon: Route, label: "기초구간", allowMultiple: true },
       { id: "land-category", icon: SquareStack, label: "지목", allowMultiple: true },
       { id: "ownership", icon: Users, label: "소유구분", allowMultiple: true },

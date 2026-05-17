@@ -1,0 +1,41 @@
+diff --git a/node_modules/dxf-parser/dist/entities/mtext.js b/node_modules/dxf-parser/dist/entities/mtext.js
+index 1fc47f6..c6f3389 100644
+--- a/node_modules/dxf-parser/dist/entities/mtext.js
++++ b/node_modules/dxf-parser/dist/entities/mtext.js
+@@ -22,6 +22,9 @@ export default class Mtext {
+                 case 11:
+                     entity.directionVector = helpers.parsePoint(scanner);
+                     break;
++                case 210:
++                    entity.extrusionDirection = helpers.parsePoint(scanner);
++                    break;
+                 case 40:
+                     //Note: this is the text height
+                     entity.height = curr.value;
+@@ -38,6 +41,12 @@ export default class Mtext {
+                 case 72:
+                     entity.drawingDirection = curr.value;
+                     break;
++                case 73:
++                    entity.lineSpacingStyle = curr.value;
++                    break;
++                case 44:
++                    entity.lineSpacingFactor = curr.value;
++                    break;
+                 default:
+                     helpers.checkCommonEntityProperties(entity, curr, scanner);
+                     break;
+diff --git a/node_modules/dxf-parser/dist/entities/text.js b/node_modules/dxf-parser/dist/entities/text.js
+index 79a4855..d14db18 100644
+--- a/node_modules/dxf-parser/dist/entities/text.js
++++ b/node_modules/dxf-parser/dist/entities/text.js
+@@ -25,6 +25,9 @@ export default class Text {
+                 case 50: // Rotation in degrees
+                     entity.rotation = curr.value;
+                     break;
++                case 210:
++                    entity.extrusionDirection = helpers.parsePoint(scanner);
++                    break;
+                 case 1: // Text
+                     entity.text = curr.value;
+                     break;

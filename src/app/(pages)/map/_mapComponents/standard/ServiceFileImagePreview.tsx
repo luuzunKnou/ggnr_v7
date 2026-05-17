@@ -311,6 +311,10 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const wheelTargetRef = useRef<HTMLDivElement>(null);
+  /** 휠로 PDF 페이지 넘길 때 최신 index/items/pdfNumPages 참조 */
+  const wheelNavRef = useRef({ index: 0, items, pdfNumPages: 1 });
+  wheelNavRef.current = { index, items, pdfNumPages };
+  const lastPdfWheelNavAtRef = useRef(0);
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
 
@@ -348,12 +352,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       const isPdf = cur?.kind === 'pdf';
 
       if (isPdf && pdfNumPages > 1) {
-        if (e.key === 'PageDown') {
+        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
           e.preventDefault();
           setPdfPage((p) => Math.min(pdfNumPages, p + 1));
           return;
         }
-        if (e.key === 'PageUp') {
+        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
           e.preventDefault();
           setPdfPage((p) => Math.max(1, p - 1));
           return;
@@ -466,6 +470,25 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     const el = wheelTargetRef.current;
     if (!el) return;
     const onWheelNative = (e: WheelEvent) => {
+      const { index: idx, items: list, pdfNumPages: totalPages } = wheelNavRef.current;
+      const cur = list[idx];
+      const isPdfMulti = cur?.kind === 'pdf' && totalPages > 1;
+      const zoomWithWheel = e.ctrlKey || e.metaKey;
+
+      if (isPdfMulti && !zoomWithWheel) {
+        e.preventDefault();
+        if (Math.abs(e.deltaY) < 2) return;
+        const now = performance.now();
+        if (now - lastPdfWheelNavAtRef.current < 120) return;
+        lastPdfWheelNavAtRef.current = now;
+        if (e.deltaY > 0) {
+          setPdfPage((p) => Math.min(wheelNavRef.current.pdfNumPages, p + 1));
+        } else {
+          setPdfPage((p) => Math.max(1, p - 1));
+        }
+        return;
+      }
+
       e.preventDefault();
       const delta = e.deltaY > 0 ? -ZOOM_STEP_WHEEL : ZOOM_STEP_WHEEL;
       setScale((s) => clamp(s + delta, MIN_SCALE, MAX_SCALE));
@@ -474,17 +497,13 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     return () => el.removeEventListener('wheel', onWheelNative);
   }, [mounted]);
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (scale <= 1) return;
-      if (e.button !== 0) return;
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      draggingRef.current = true;
-      setDragging(true);
-      lastPointerRef.current = { x: e.clientX, y: e.clientY };
-    },
-    [scale]
-  );
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    draggingRef.current = true;
+    setDragging(true);
+    lastPointerRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!draggingRef.current) return;
@@ -584,7 +603,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         ref={wheelTargetRef}
         className={cn(
           'relative flex min-h-0 flex-1 touch-none select-none',
-          scale > 1 && (dragging ? 'cursor-grabbing' : 'cursor-grab')
+          dragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -653,7 +672,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
           className={toolbarBtnClass(!canPdfPage)}
           onClick={pdfPagePrev}
           disabled={!canPdfPage}
-          title="PDF 이전 페이지 (Page Up)"
+          title="PDF 이전 페이지 (↑ / Page Up)"
           aria-label="PDF 이전 페이지"
         >
           <ChevronUp className="h-5 w-5" />
@@ -663,7 +682,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
           className={toolbarBtnClass(!canPdfPage)}
           onClick={pdfPageNext}
           disabled={!canPdfPage}
-          title="PDF 다음 페이지 (Page Down)"
+          title="PDF 다음 페이지 (↓ / Page Down)"
           aria-label="PDF 다음 페이지"
         >
           <ChevronDown className="h-5 w-5" />
@@ -694,9 +713,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         </button>
       </div>
       <p className="shrink-0 px-3 pb-2 text-center text-[10px] text-white/45">
-        휠로 확대·축소 · 확대 시 끌어서 이동 · 더블클릭 시 초기화
+        {canPdfPage
+          ? '휠로 이전·다음 페이지 · Ctrl+휠 확대·축소'
+          : '휠로 확대·축소'}
+        {' · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
         {canNav ? ' · ← → 이전·다음 파일' : ''}
-        {canPdfPage ? ' · PDF Page Up / Down' : ''}
+        {canPdfPage ? ' · PDF ↑↓ 또는 Page Up / Down' : ''}
       </p>
     </div>,
     document.body

@@ -17,8 +17,13 @@ export type UseChunkedUploadReturn = {
   state: ChunkedUploadState;
   upload: (
     file: File,
-    uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData',
-    options?: { shpSavePath?: string; fileDataSavePath?: string }
+    uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source',
+    options?: {
+      shpSavePath?: string;
+      fileDataSavePath?: string;
+      satelliteTifSavePath?: string;
+      sourceSavePath?: string;
+    }
   ) => Promise<{ savedPath?: string; size?: number; error?: string } | void>;
   cancel: () => void;
   reset: () => void;
@@ -51,8 +56,13 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
   const upload = useCallback(
     async (
       file: File,
-      uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData',
-      options?: { shpSavePath?: string; fileDataSavePath?: string }
+      uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source',
+      options?: {
+        shpSavePath?: string;
+        fileDataSavePath?: string;
+        satelliteTifSavePath?: string;
+        sourceSavePath?: string;
+      }
     ): Promise<{ savedPath?: string; size?: number; error?: string } | void> => {
       cancel();
       abortRef.current = new AbortController();
@@ -69,7 +79,11 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
           ? options.shpSavePath
           : uploadType === 'fileData' && options?.fileDataSavePath
             ? options.fileDataSavePath
-            : file.name;
+            : uploadType === 'satelliteTif' && options?.satelliteTifSavePath
+              ? options.satelliteTifSavePath.replace(/\\/g, '/')
+              : uploadType === 'source' && options?.sourceSavePath
+                ? options.sourceSavePath.replace(/\\/g, '/')
+              : file.name;
       try {
         const initRes = await call('', 'POST', {
           service: 'uploadService',

@@ -8,7 +8,12 @@ import {
   MapControlPanel,
   defaultMapControlGroups,
 } from './mapControlPanel/mapControlPanel';
-import { BackgroundMapSelector } from './mapControlPanel/backgroundMapSelector';
+import {
+  BackgroundMapSelector,
+  defaultBackgroundMapGroups,
+  type BackgroundMapGroup,
+  type BackgroundMapOption,
+} from './mapControlPanel/backgroundMapSelector';
 import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
 import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
 import { LANDOWN_LAYERS } from './layerFactory/landownLayerFactory';
@@ -26,6 +31,10 @@ import {
 import { useBasicSectionLayerSync } from './layerFactory/basicSectionLayerFactory';
 import { useJimokLayerSync } from './layerFactory/jimokLayerFactory';
 import { useLandownLayerSync } from './layerFactory/landownLayerFactory';
+import {
+  getVisibleSafetyMapGeoTables,
+  useSafetydataMapLayerSync,
+} from './layerFactory/safetydataMapLayerFactory';
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useFeatureIdentify } from './hooks/useFeatureIdentify';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
@@ -45,6 +54,14 @@ import {
 import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
+import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
+import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
+import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
+import {
+  getAllRoadLedgerDocLayerIds,
+  ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
+} from '../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
+import { pickRoadLedgerField } from '../_mapContents/road/roadLedger/roadLedgerFormat';
 import { Crosshair } from 'lucide-react';
 import './config/projections';
 import Draw, { createBox } from 'ol/interaction/Draw';
@@ -53,6 +70,18 @@ import VectorLayer from 'ol/layer/Vector';
 import WKT from 'ol/format/WKT';
 import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
+import { isEmpty as isEmptyExtent } from 'ol/extent';
+
+/** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
+function normalizeSpatialFilterWktForOl(wkt: string): string {
+  let s = wkt.trim();
+  s = s.replace(/^SRID=\d+;/i, '');
+  s = s.replace(
+    /\b(POLYGON|MULTIPOLYGON|POINT|MULTIPOINT|LINESTRING|MULTILINESTRING)(\s+Z(?:M)?|\s+M)\b/gi,
+    '$1'
+  );
+  return s.trim();
+}
 
 function pickIdentifyOgcFid(data: Record<string, unknown> | undefined): number | null {
   if (!data) return null;
@@ -72,6 +101,7 @@ function pickIdentifyOgcFid(data: Record<string, unknown> | undefined): number |
 const MULTI_SELECT_IDS = [
   'cadastral',
   'building-road',
+  'thematic-map',
   'basic-section',
   'land-category',
   'ownership',
@@ -79,7 +109,14 @@ const MULTI_SELECT_IDS = [
 ];
 
 // 전체 레이어 끄기 버튼에서 제거할 컨트롤 ID (지적도, 건물도로, 기초구간)
-const LAYER_IDS_OFF_ON_ALL_OFF = ['cadastral', 'building-road', 'basic-section', 'land-category', 'ownership'];
+const LAYER_IDS_OFF_ON_ALL_OFF = [
+  'cadastral',
+  'building-road',
+  'thematic-map',
+  'basic-section',
+  'land-category',
+  'ownership',
+];
 
 // 액션 전용 버튼 (토글 없이 클릭만)
 const ACTION_ONLY_IDS = ['print', 'reset-measurements'];
@@ -100,10 +137,16 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
+  const [backgroundMapGroups, setBackgroundMapGroups] = useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
   const [openSubPanel, setOpenSubPanel] = useState<
-    'land-category' | 'ownership' | 'cadastral' | 'building-road' | null
+    | 'land-category'
+    | 'ownership'
+    | 'cadastral'
+    | 'building-road'
+    | 'thematic-map'
+    | null
   >(null);
   /** null = 전체 표시, 빈 Set = 전체 숨김 */
   const [visibleJimokLayerNames, setVisibleJimokLayerNames] = useState<Set<string> | null>(null);
@@ -212,6 +255,69 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   // 배경지도 관리
   useBackgroundLayer(mapInstanceRef.current, selectedBackgroundMap);
 
+  useEffect(() => {
+    const r = mapContext?.mapBackgroundMapIdRef;
+    if (r) r.current = selectedBackgroundMap;
+  }, [mapContext?.mapBackgroundMapIdRef, selectedBackgroundMap]);
+
+  /** 변동이력 분석 타임라인 등에서 배경 강제 */
+  useEffect(() => {
+    const forced = mapContext?.dataFlowForcedBackgroundMapId;
+    if (forced != null && String(forced).length > 0) {
+      setSelectedBackgroundMap(forced);
+    }
+  }, [mapContext?.dataFlowForcedBackgroundMapId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const buildLabelFromOrthoFolder = (id: string): string | null => {
+      // satellite_YYYY[_CRS[_이름] | _이름]
+      const m = /^satellite_(\d{4})(?:_([^_]+)(?:_(.+))?)?$/i.exec(id);
+      if (!m) return null;
+      const year = m[1];
+      const seg3 = (m[2] ?? '').trim();
+      const seg4 = (m[3] ?? '').trim();
+      // 3번째 세그먼트가 순수 숫자 → CRS 코드, 표시명은 4번째
+      if (/^\d+$/.test(seg3)) {
+        return seg4 || `항공영상(${year})`;
+      }
+      // 3번째가 이름
+      return seg3 || `항공영상(${year})`;
+    };
+    const run = async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'orthophotoService',
+          action: 'listOrthophotoTileOutputs',
+          params: {},
+        });
+        if (cancelled) return;
+        const d = (res?.data ?? res) as {
+          groups?: { groupName: string; tileSetIds: string[] }[];
+          legacyTileSetIds?: string[];
+        };
+        const idSet = new Set<string>();
+        for (const id of d.legacyTileSetIds ?? []) idSet.add(id);
+        for (const g of d.groups ?? []) idSet.add(g.groupName);
+        const opts: BackgroundMapOption[] = Array.from(idSet)
+          .map((id) => ({ id, label: buildLabelFromOrthoFolder(id) }))
+          .filter((x): x is { id: string; label: string } => !!x.label)
+          .sort((a, b) => b.id.localeCompare(a.id))
+          .map((x) => ({ id: x.id, label: x.label }));
+        if (opts.length === 0) return;
+        setBackgroundMapGroups((prev) =>
+          prev.map((g) => (g.id === 'custom-aerial' ? { ...g, options: opts } : g))
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
 
@@ -310,8 +416,9 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
     if (!spatialFilterWkt || !spatialFilterWkt.trim()) return;
 
     try {
+      const normalized = normalizeSpatialFilterWktForOl(spatialFilterWkt);
       const format = new WKT();
-      const geom = format.readGeometry(spatialFilterWkt, {
+      const geom = format.readGeometry(normalized, {
         dataProjection: 'EPSG:5181',
         featureProjection: 'EPSG:3857',
       });
@@ -328,6 +435,15 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
       layer.set('spatialFilterLayer', true);
       map.addLayer(layer);
       spatialFilterLayerRef.current = layer;
+
+      const extent = geom.getExtent();
+      if (!isEmptyExtent(extent)) {
+        map.getView().fit(extent, {
+          padding: [48, 48, 48, 48],
+          maxZoom: 17,
+          duration: 350,
+        });
+      }
     } catch (err) {
       console.error('[SpatialFilter] WKT parse failed', err);
     }
@@ -412,9 +528,44 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   // 소유구분 레이어 동기화 (activeControls + visibleLandownLayerNames)
   useLandownLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleLandownLayerNames);
 
+  const safetyMapLayerVisibility = mapContext?.safetyMapLayerVisibility ?? {};
+  const visibleSafetyMapGeoTables = useMemo(
+    () => getVisibleSafetyMapGeoTables(safetyMapLayerVisibility),
+    [safetyMapLayerVisibility]
+  );
+  useSafetydataMapLayerSync(mapInstanceRef.current, mapReady, visibleSafetyMapGeoTables);
+
   // 주소정보 패널이 열려 있을 때 해당 좌표 필지 하이라이트
   const addressInfoDetail = mapContext?.addressInfoDetail ?? null;
   useAddressParcelHighlight(mapInstanceRef.current, mapReady, addressInfoDetail);
+  useRoadLedgerMapHighlight(mapReady);
+
+  const roadCctvOverlay = mapContext?.roadCctvOverlay ?? null;
+  const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay;
+  const roadCctvPanelOpen = mapContext?.roadCctvPanelOpen ?? false;
+  const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? 'traffic';
+  const onRoadCctvSelectKey = useCallback(
+    (key: string) => {
+      setRoadCctvOverlay?.((prev) => (prev ? { ...prev, selectedKey: key } : null));
+    },
+    [setRoadCctvOverlay]
+  );
+  useRoadCctvMapLayer(
+    mapReady,
+    mapInstanceRef.current,
+    Boolean(roadCctvOverlay),
+    roadCctvOverlay?.items ?? [],
+    roadCctvOverlay?.selectedKey ?? null,
+    onRoadCctvSelectKey
+  );
+
+  const roadCctvExtentWgs84 = mapContext?.roadCctvExtentWgs84 ?? null;
+  useItsTrafficTileLayer(
+    mapReady,
+    mapInstanceRef.current,
+    roadCctvPanelOpen && roadCctvUnderlayMode === 'traffic' && roadCctvExtentWgs84 != null,
+    roadCctvExtentWgs84
+  );
 
   // 전체 레이어 끄기 버튼(검색창 옆)용 콜백 등록: 지적도·건물도로·기초구간 + defineLayer 레이어 모두 끔
   useEffect(() => {
@@ -429,7 +580,12 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   }, [mapContext]);
 
   // 지도 클릭 → 도형 검색 (visible 레이어 대상)
-  const { popupState, popupElRef, closePopup } = useFeatureIdentify(mapInstanceRef.current, mapReady, visibleLayerNames);
+  const { popupState, popupElRef, closePopup } = useFeatureIdentify(
+    mapInstanceRef.current,
+    mapReady,
+    visibleLayerNames,
+    roadCctvPanelOpen
+  );
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
   const handleContextMenu = useCallback(
@@ -462,13 +618,43 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
         coordinate,
         viewProjection,
         loading: true,
+        pnu: null,
         jibun: null,
         road: null,
       });
+      const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
+      if (coord3857) {
+        const [x, y] = coord3857;
+        call('', 'POST', {
+          service: 'standardService',
+          action: 'getJijukParcelAtPoint',
+          params: { x, y },
+        })
+          .then((res) => {
+            const payload = (res?.data ?? res) as {
+              results?: { tableName?: string; features?: { data?: Record<string, unknown> }[] }[];
+            };
+            const results = Array.isArray(payload?.results) ? payload.results : [];
+            const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
+            const row = jijukResult?.features?.[0]?.data;
+            const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
+            setAddressInfoDetail((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    pnu: prev.pnu ?? (pnu || null),
+                    jibun: prev.jibun ?? (parcelJibun || null),
+                  }
+                : null
+            );
+          })
+          .catch(() => undefined);
+      }
       const [lon, lat] = wgs84;
       const apiKey = mapContext?.vworldApiKey?.trim();
       if (!apiKey) {
-        setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: null, road: null } : null));
+        setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null));
         return;
       }
       getAddressFromCoord(lon, lat, { apiKey }).then((result) => {
@@ -477,6 +663,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
             ? {
                 ...prev,
                 loading: false,
+                pnu: prev.pnu ?? (result?.pnu?.trim() || null),
                 jibun: result?.jibun ?? null,
                 road: result?.road ?? null,
                 buildingName: result?.buildingName ?? null,
@@ -630,6 +817,93 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
         }
       }
 
+      /** 도로대장: 시설 define 레이어 → 모달·줌 / a0020000 노선 → 상세 패널 */
+      if (mapContext?.roadLedgerPanelOpen && mapContext.setRoadLedgerIdentifyRow) {
+        const facilityIdSet = new Set(getAllRoadLedgerDocLayerIds());
+        const facilityHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return facilityIdSet.has(tn) && r.features.length > 0;
+        });
+        if (facilityHit && mapContext.setRoadLedgerFacilityModal) {
+          const shouldOpenRouteDetail = !mapContext.roadLedgerIdentifyRow;
+          const tableName = String(facilityHit.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          const raw = facilityHit.features[0]?.data;
+          const dataRow =
+            raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+          const ogc = pickIdentifyOgcFid(dataRow ?? undefined);
+          if (ogc != null) {
+            try {
+              const pickRes = await call('', 'POST', {
+                service: 'roadLedgerService',
+                action: 'getRoadLedgerFacilityFeatureByOgcFid',
+                params: { defineTableName: tableName, ogcFid: ogc },
+              });
+              if (cancelled) return;
+              const pdata = pickRes?.data ?? pickRes;
+              const fullRow = pdata?.row as Record<string, unknown> | null | undefined;
+              const kor = String(pdata?.defineTableKorName ?? '').trim();
+              if (fullRow && typeof fullRow === 'object') {
+                if (shouldOpenRouteDetail && mapContext.setRoadLedgerIdentifyRow) {
+                  const facilityRdid = String(pickRoadLedgerField(fullRow, 'rdid') ?? '').trim();
+                  if (facilityRdid.length >= ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN) {
+                    try {
+                      const masterRes = await call('', 'POST', {
+                        service: 'roadLedgerService',
+                        action: 'getRoadLedgerMasterRowForFacilityRdid',
+                        params: { facilityRdid },
+                      });
+                      if (!cancelled) {
+                        const mdata = masterRes?.data ?? masterRes;
+                        const masterRow = mdata?.row as Record<string, unknown> | null | undefined;
+                        if (masterRow && typeof masterRow === 'object') {
+                          mapContext.setRoadLedgerIdentifyRow(masterRow);
+                        }
+                      }
+                    } catch {
+                      // 노선 상세 없이 시설 모달만
+                    }
+                  }
+                }
+                mapContext.setRoadLedgerFacilityModal({
+                  row: fullRow,
+                  defineTableName: tableName,
+                  defineTableTitle: kor || tableName,
+                  pickFromMap: true,
+                });
+              }
+            } catch (e) {
+              if (!cancelled) {
+                window.alert(
+                  e instanceof Error ? e.message : '시설 정보를 불러오지 못했습니다.',
+                );
+              }
+            }
+            closePopup();
+            return;
+          }
+        }
+
+        const roadHit = withFeat.find(
+          (r) =>
+            String(r.tableName ?? '')
+              .trim()
+              .toLowerCase() === 'a0020000' && r.features.length > 0
+        );
+        if (roadHit) {
+          mapContext.setRoadLedgerFacilityModal?.(null);
+          const row = roadHit.features[0]?.data;
+          if (row && typeof row === 'object') {
+            mapContext.setRoadLedgerIdentifyRow(row as Record<string, unknown>);
+          }
+          closePopup();
+          return;
+        }
+      }
+
       if (hitOpenScan) {
         if (cancelled) return;
         window.alert('하천 기본계획 패널이 열린 상태입니다. 스캔 보기는 추후 구현 예정입니다.');
@@ -660,7 +934,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
   const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);
 
-  // view.padding 적용 시 화면상 중심 = view 중심 픽셀 위치. 크로스헤어를 이 좌표에 맞춤 (padding 변경 시에도 재계산)
+  // view.padding 반영 "시각적 중심" 픽셀에 크로스헤어를 고정
   const [centerPixel, setCenterPixel] = useState<{ x: number; y: number } | null>(null);
   const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
   useEffect(() => {
@@ -668,17 +942,20 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
     const map = mapInstanceRef.current;
     const view = map.getView();
     const update = () => {
-      const center = view.getCenter();
-      if (!center) return;
-      const pixel = map.getPixelFromCoordinate(center);
-      if (pixel) setCenterPixel({ x: pixel[0], y: pixel[1] });
+      const size = map.getSize();
+      if (!size) return;
+      const padding = (view as unknown as { padding?: number[] }).padding ?? [0, 0, 0, 0];
+      const [top, right, bottom, left] = padding;
+      const x = (size[0] - right + left) / 2;
+      const y = (size[1] - bottom + top) / 2;
+      setCenterPixel({ x, y });
     };
     update();
-    view.on('change', update);
     map.on('change:size', update);
+    map.on('postrender', update);
     return () => {
-      view.un('change', update);
       map.un('change:size', update);
+      map.un('postrender', update);
     };
   }, [mapReady, mapPaddingLeft]);
 
@@ -746,6 +1023,10 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
           return new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName));
         });
       }
+      return;
+    }
+    if (id === 'thematic-map') {
+      setOpenSubPanel((prev) => (prev === 'thematic-map' ? null : 'thematic-map'));
       return;
     }
     if (id === 'background-map') {
@@ -839,7 +1120,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
 
   return (
     <div className="relative w-full h-full">
-      <div ref={mapRef} className="w-full h-full" />
+      <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
 
       {/* 지도 중심점 마크 (view 중심 = padding 반영된 보이는 영역 중심에 배치) */}
       <div
@@ -871,6 +1152,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
               }
             >
               <BackgroundMapSelector
+                groups={backgroundMapGroups}
                 value={selectedBackgroundMap}
                 onValueChange={setSelectedBackgroundMap}
               />
@@ -969,6 +1251,26 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
                 }}
                 onClose={() => setOpenSubPanel(null)}
               />
+            </div>
+          )}
+          {openSubPanel === 'thematic-map' && (
+            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+              <div className="w-56 bg-white shadow-xl overflow-hidden flex flex-col rounded-[5px] opacity-90">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
+                  <span className="text-[13px] font-medium">주제도</span>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSubPanel(null)}
+                    className="text-slate-500 hover:text-slate-700 text-xs"
+                    aria-label="닫기"
+                  >
+                    닫기
+                  </button>
+                </div>
+                <div className="px-3 py-3 text-[11px] text-slate-600 leading-snug">
+                  주제도 레이어 목록·표시는 곧 연결됩니다.
+                </div>
+              </div>
             </div>
           )}
 

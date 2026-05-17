@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const BASE_DIR = path.join(GGNR_DATA_DIR, 'service_data', '3dtiles_pnts');
+/** service_data/3dtiles/<데이터셋>/pnts/... */
+const TILES_ROOT = path.join(GGNR_DATA_DIR, 'service_data', '3dtiles');
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -100,13 +101,19 @@ export async function GET(
 ) {
   const { path: pathSegments } = await context.params;
   
-  if (!pathSegments || pathSegments.length === 0) {
-    return NextResponse.json({ error: 'Path required' }, { status: 400 });
+  if (!pathSegments || pathSegments.length < 2) {
+    return NextResponse.json({ error: 'Path required: /데이터셋/…파일' }, { status: 400 });
   }
 
-  const resolved = path.normalize(path.join(BASE_DIR, ...pathSegments));
+  const dataset = pathSegments[0];
+  if (!dataset || dataset.includes('..')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
-  if (!resolved.startsWith(BASE_DIR)) {
+  const pntsDir = path.join(TILES_ROOT, dataset, 'pnts');
+  const resolved = path.normalize(path.join(pntsDir, ...pathSegments.slice(1)));
+
+  if (!resolved.startsWith(pntsDir)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

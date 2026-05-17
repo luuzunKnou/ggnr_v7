@@ -30,14 +30,20 @@ function clearSession(): void {
 /**
  * 기본 API 호출 함수
  */
-export function call(api: string, method: 'GET' | 'POST', request?: any): Promise<any> {
+export function call(
+  api: string,
+  method: 'GET' | 'POST',
+  request?: any,
+  requestOptions?: { signal?: AbortSignal }
+): Promise<any> {
   const authToken = getAuthToken();
   const url = API_BASE_URL + api;
 
-  const options: RequestInit = {
+  const fetchOptions: RequestInit = {
     method,
     cache: 'no-store',
     credentials: 'include',
+    signal: requestOptions?.signal,
     headers: {
       'Content-Type': 'application/json',
       ...(authToken && { Authorization: `Bearer ${authToken}` }),
@@ -59,14 +65,14 @@ export function call(api: string, method: 'GET' | 'POST', request?: any): Promis
     } else {
       // POST 요청은 body로 전달
       if (typeof request === 'object') {
-        options.body = JSON.stringify(request);
+        fetchOptions.body = JSON.stringify(request);
       } else {
-        options.body = request;
+        fetchOptions.body = request;
       }
     }
   }
 
-  return fetch(url, options)
+  return fetch(url, fetchOptions)
     .then((response) => {
       if (response.status === 401 || response.status === 403) {
         clearSession();
@@ -125,6 +131,9 @@ export function call(api: string, method: 'GET' | 'POST', request?: any): Promis
       });
     })
     .catch((error) => {
+      if (error?.name === 'AbortError') {
+        return Promise.reject(error);
+      }
       if (error?.status === 401 || error?.status === 403) {
         return Promise.reject(error);
       }

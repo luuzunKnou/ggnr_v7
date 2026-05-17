@@ -3,6 +3,23 @@
 import React, { createContext, useContext, useRef, useState, type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import type Map from 'ol/Map';
 import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
+import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
+
+export type RoadCctvOverlayState = {
+  items: ItsCctvItem[];
+  selectedKey: string | null;
+};
+
+/** CCTV·통행 타일 등 ITS 요청에 쓰는 emd 기준 WGS84 bbox (화상자료와 동일) */
+export type RoadCctvExtentWgs84 = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+/** CCTV 패널 지도 부가 표시 — 통행 타일과 도로대장 총괄(a0020000) 배타 */
+export type RoadCctvUnderlayMode = 'traffic' | 'roadLedgerSummary';
 
 export type ActiveDataLayer = {
   tableName: string;
@@ -22,6 +39,7 @@ export type AddressInfoDetailState = {
   coordinate: [number, number];
   viewProjection: string;
   loading: boolean;
+  pnu?: string | null;
   jibun: string | null;
   road: string | null;
   buildingName?: string | null;
@@ -51,6 +69,12 @@ export type ComplaintDetail = {
     compdExtra: Record<string, unknown> | null;
   }[];
 } | null;
+
+export type DataFlowReportSnapshot = {
+  extentWkt5181: string;
+  preReportVisibleLayerNames: string[];
+  preReportBackgroundMapId: string;
+};
 
 export type MapContextValue = {
   mapInstanceRef: RefObject<Map | null>;
@@ -129,6 +153,58 @@ export type MapContextValue = {
   >;
   /** 상세목록 도면보기 열 때 지도 식별로 연 전체화면 미리보기 닫기 */
   riverBasicPlanMapDrawingPreviewControllerRef: MutableRefObject<{ close: () => void } | null>;
+  /**
+   * 목록에서 하천을 다시 클릭할 때 색인 상세(썸네일·상세목록)를 끄고
+   * 하천기본계획+색인도 목록이 보이는 기본 상세로 복귀 — RiverBasicPlanDetailPanel이 등록
+   */
+  riverBasicPlanExitIndexViewToDetailRef: MutableRefObject<(() => void) | null>;
+  /** 재난안전지도 패널 레이어 토글 (safemap WMS + GeoServer 연계 Polygon 등) */
+  safetyMapLayerVisibility: Record<string, boolean>;
+  setSafetyMapLayerVisibility: Dispatch<SetStateAction<Record<string, boolean>>>;
+  /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
+  roadLedgerPanelOpen: boolean;
+  setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 지도 클릭으로 식별된 도로대장(a0020000) 피처 속성 — 상세 패널 표시 */
+  roadLedgerIdentifyRow: Record<string, unknown> | null;
+  setRoadLedgerIdentifyRow: Dispatch<SetStateAction<Record<string, unknown> | null>>;
+  /** 시설 하위 레이어 1건 — 모달 속성 + 지도 강조(geom). pickFromMap: 지도 클릭(줌 생략), 목록은 false */
+  roadLedgerFacilityModal: {
+    row: Record<string, unknown>;
+    defineTableName: string;
+    defineTableTitle: string;
+    pickFromMap?: boolean;
+  } | null;
+  setRoadLedgerFacilityModal: Dispatch<
+    SetStateAction<{
+      row: Record<string, unknown>;
+      defineTableName: string;
+      defineTableTitle: string;
+      pickFromMap?: boolean;
+    } | null>
+  >;
+  /** ITS CCTV 패널 — 지도 벡터 레이어·목록 동기화 */
+  roadCctvOverlay: RoadCctvOverlayState | null;
+  setRoadCctvOverlay: Dispatch<SetStateAction<RoadCctvOverlayState | null>>;
+  /** URL 기준 CCTV 패널 열림 — 지도 레이어 식별 비활성화용 */
+  roadCctvPanelOpen: boolean;
+  setRoadCctvPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** CCTV 패널: 통행 타일 vs 도로대장 총괄 레이어(배타, 기본 통행) */
+  roadCctvUnderlayMode: RoadCctvUnderlayMode;
+  setRoadCctvUnderlayMode: Dispatch<SetStateAction<RoadCctvUnderlayMode>>;
+  /** emd envelope WGS84 — CCTV 목록·통행 타일 요청에 동일 적용 */
+  roadCctvExtentWgs84: RoadCctvExtentWgs84 | null;
+  setRoadCctvExtentWgs84: Dispatch<SetStateAction<RoadCctvExtentWgs84 | null>>;
+  /** OpenLayersMap이 배경지도 id를 매 갱신 — 변동이력 분석 직전 스냅샷용 */
+  mapBackgroundMapIdRef: MutableRefObject<string>;
+  /** 변동이력 분석 보고서(사각형 완료 후) */
+  dataFlowReport: DataFlowReportSnapshot | null;
+  setDataFlowReport: Dispatch<SetStateAction<DataFlowReportSnapshot | null>>;
+  /** 보고서에서 타임라인 시점 외, 분석 전 켜 두었던 레이어를 겹쳐 표시 */
+  dataFlowCompareWithCurrentLayers: boolean;
+  setDataFlowCompareWithCurrentLayers: Dispatch<SetStateAction<boolean>>;
+  /** 변동이력 분석이 배경지도를 강제할 때(타임라인·복원). OpenLayersMap에서 소비 */
+  dataFlowForcedBackgroundMapId: string | null;
+  setDataFlowForcedBackgroundMapId: Dispatch<SetStateAction<string | null>>;
 } | null;
 
 const MapContext = createContext<MapContextValue>(null);
@@ -168,6 +244,24 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     fileKey: string;
   } | null>(null);
   const riverBasicPlanMapDrawingPreviewControllerRef = useRef<{ close: () => void } | null>(null);
+  const riverBasicPlanExitIndexViewToDetailRef = useRef<(() => void) | null>(null);
+  const [safetyMapLayerVisibility, setSafetyMapLayerVisibility] = useState<Record<string, boolean>>({});
+  const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
+  const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
+  const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
+    row: Record<string, unknown>;
+    defineTableName: string;
+    defineTableTitle: string;
+    pickFromMap?: boolean;
+  } | null>(null);
+  const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
+  const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
+  const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
+  const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
+  const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
+  const [dataFlowReport, setDataFlowReport] = useState<DataFlowReportSnapshot | null>(null);
+  const [dataFlowCompareWithCurrentLayers, setDataFlowCompareWithCurrentLayers] = useState(false);
+  const [dataFlowForcedBackgroundMapId, setDataFlowForcedBackgroundMapId] = useState<string | null>(null);
 
   return (
     <MapContext.Provider
@@ -211,6 +305,30 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         riverBasicPlanDrawingFromMap,
         setRiverBasicPlanDrawingFromMap,
         riverBasicPlanMapDrawingPreviewControllerRef,
+        riverBasicPlanExitIndexViewToDetailRef,
+        safetyMapLayerVisibility,
+        setSafetyMapLayerVisibility,
+        roadLedgerPanelOpen,
+        setRoadLedgerPanelOpen,
+        roadLedgerIdentifyRow,
+        setRoadLedgerIdentifyRow,
+        roadLedgerFacilityModal,
+        setRoadLedgerFacilityModal,
+        roadCctvOverlay,
+        setRoadCctvOverlay,
+        roadCctvPanelOpen,
+        setRoadCctvPanelOpen,
+        roadCctvUnderlayMode,
+        setRoadCctvUnderlayMode,
+        roadCctvExtentWgs84,
+        setRoadCctvExtentWgs84,
+        mapBackgroundMapIdRef,
+        dataFlowReport,
+        setDataFlowReport,
+        dataFlowCompareWithCurrentLayers,
+        setDataFlowCompareWithCurrentLayers,
+        dataFlowForcedBackgroundMapId,
+        setDataFlowForcedBackgroundMapId,
       }}
     >
       {children}

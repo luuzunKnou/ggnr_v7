@@ -32,26 +32,34 @@ const getDatabaseConfig = () => {
 // PostgreSQL 연결 풀 생성
 const pool = new Pool(getDatabaseConfig());
 
-// 모든 서비스의 쿼리/결과를 서버 로그에 출력 (pool.query 래핑)
+/** SQL 콘솔 로그는 기본 비활성. 필요할 때만 env로 켬. */
+const SQL_LOG_ENABLED = (() => {
+  const v = String(process.env.DB_QUERY_LOG ?? process.env.SQL_LOG ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+})();
+
+// 모든 서비스의 pool.query를 래핑 (SQL 로그는 옵션)
 const originalQuery = pool.query.bind(pool);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (pool as any).query = function (config: unknown, values?: unknown, callback?: unknown): unknown {
-  const first = typeof config === 'string' ? config : (config as Record<string, unknown>);
-  const text =
-    typeof first === 'string'
-      ? first
-      : first?.text != null
-        ? String(first.text)
-        : first?.sql != null
-          ? String(first.sql)
-          : typeof first === 'object' && first !== null
-            ? JSON.stringify(first).slice(0, 500)
-            : String(config);
-  console.log('[SQL]', text);
+  if (SQL_LOG_ENABLED) {
+    const first = typeof config === 'string' ? config : (config as Record<string, unknown>);
+    const text =
+      typeof first === 'string'
+        ? first
+        : first?.text != null
+          ? String(first.text)
+          : first?.sql != null
+            ? String(first.sql)
+            : typeof first === 'object' && first !== null
+              ? JSON.stringify(first).slice(0, 500)
+              : String(config);
+    console.log('[SQL]', text);
+  }
   const result = callback != null
     ? (originalQuery as (c: unknown, v?: unknown, cb?: unknown) => void)(config, values, callback)
     : (originalQuery as (c: unknown, v?: unknown) => Promise<{ rows?: QueryResultRow[] }>)(config, values);
-  if (result != null && typeof (result as Promise<unknown>)?.then === 'function') {
+  if (SQL_LOG_ENABLED && result != null && typeof (result as Promise<unknown>)?.then === 'function') {
     return (result as Promise<{ rows?: QueryResultRow[] }>).then((res) => {
       const rows = res?.rows ?? [];
       console.log('[SQL Result]', Array.isArray(rows) ? rows.length : 0, 'rows');

@@ -156,12 +156,23 @@ export function updateViewProjection(
       currentCenter as [number, number] | null,
       currentProjection || 'EPSG:3857'
     );
-  } else {
-    // 일반 좌표계로 변경
+  } else if (newProjection === 'EPSG:3857') {
+    // 일반 (3857) 좌표계로 변경
     newCenter = transformToStandardProjection(
       currentCenter as [number, number] | null,
       currentProjection || 'EPSG:3857'
     );
+  } else {
+    // 그 외 한국 평면/위경도 좌표계 (자체영상 view 좌표계 등). proj4 일반 변환 후 실패시 서울 중심 폴백
+    const cur = currentProjection || 'EPSG:3857';
+    newCenter = transformCoordinate(
+      currentCenter as [number, number] | null,
+      cur,
+      newProjection
+    );
+    if (!newCenter) {
+      newCenter = getSeoulCenter(newProjection);
+    }
   }
 
   if (newCenter) {

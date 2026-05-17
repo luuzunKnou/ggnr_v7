@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-5bf4</id>
+  <name>20260422_huga_04</name>
+  <nativeName>20260422_huga_04</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>20260422_huga_04</title>
+  <keywords>
+    <string>features</string>
+    <string>20260422_huga_04</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>328712.84375</minx>
+    <maxx>377790.84375</maxx>
+    <miny>317058.21875</miny>
+    <maxy>369115.34375</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.43373571809556</minx>
+    <maxx>128.99217198414897</maxx>
+    <miny>36.33518480868565</miny>
+    <maxy>36.81195439069194</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

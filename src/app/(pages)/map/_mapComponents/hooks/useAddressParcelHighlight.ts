@@ -52,7 +52,7 @@ export function useAddressParcelHighlight(
         fill: new Fill({ color: 'rgba(251, 146, 60, 0.4)' }),
         stroke: new Stroke({ color: 'rgb(234, 88, 12)', width: 3 }),
       }),
-      zIndex: 1000,
+      zIndex: 999999,
     });
     layer.set('addressParcelHighlight', true);
     map.getLayers().push(layer);
@@ -74,7 +74,6 @@ export function useAddressParcelHighlight(
     if (!source) return;
 
     source.clear();
-    if (mapContext?.addressParcelGeometryRef) mapContext.addressParcelGeometryRef.current = null;
     if (!coordinate || !viewProjection) return;
 
     const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
@@ -110,13 +109,15 @@ export function useAddressParcelHighlight(
         });
         source.clear();
         source.addFeatures(olFeatures);
+        // 레이어 동기화(use*LayerSync)로 다른 레이어가 추가되어도 항상 하이라이트가 최상단에 보이도록 보장
+        layerRef.current?.setZIndex(999999);
+        map?.render();
         const olGeom = olFeatures[0]?.getGeometry?.();
         if (mapContext?.addressParcelGeometryRef && olGeom)
           mapContext.addressParcelGeometryRef.current = (olGeom as { clone(): import('ol/geom').Geometry }).clone();
       })
       .catch(() => {
         source.clear();
-        if (mapContext?.addressParcelGeometryRef) mapContext.addressParcelGeometryRef.current = null;
       });
-  }, [coordinate, viewProjection]);
+  }, [coordinate, map, mapContext, viewProjection]);
 }

@@ -7,7 +7,7 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
-import { DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
+import { DEV_MENU_GROUPS, DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
 import { call } from "@/lib/api"
 import { signOut } from "next-auth/react"
 
@@ -146,6 +146,8 @@ export default function DevPage() {
     <AdminConsoleLayout
       title="개발자 모드"
       menus={DEV_SUBMENUS}
+      menuGroups={DEV_MENU_GROUPS}
+      stateStorageKey="devConsoleMenu"
       defaultMenuId="systemList"
       getDescription={getDevMenuDescription}
       renderContent={renderDevMenuContent}

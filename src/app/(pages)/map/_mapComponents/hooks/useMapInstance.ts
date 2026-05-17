@@ -10,6 +10,7 @@ import { createCadastralLayers, createBuildingRoadLayers } from '../layerFactory
 import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '../layerFactory/jimokLayerFactory';
 import { createLandownLayers } from '../layerFactory/landownLayerFactory';
+import { createSafetydataMapLayers } from '../layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from './useMapStatePersist';
 
@@ -50,6 +51,7 @@ export function useMapInstance(
         ...createBasicSectionLayers(),
         ...createJimokLayers(),
         ...createLandownLayers(),
+        ...createSafetydataMapLayers(),
       ],
       view: new View({
         center: initialCenter,

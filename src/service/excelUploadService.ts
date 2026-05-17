@@ -14,6 +14,11 @@ import { db, pool } from '@/database/db';
 import { getLayerTableList, getDefineLayerTables, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 import { getLatestExcelHistoryByTables } from './excelHistoryService';
+import {
+  parseExcelMatrix,
+  coerceExcelDateCellsInAoa,
+  SHEET_TO_JSON_HEADER1_DISPLAY,
+} from '@/lib/excelSheetParse';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
@@ -21,11 +26,18 @@ const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defin
 const EXCEL_FIELD_NAME_MAP_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'excelFieldNameMap.json');
 
 function safeTableName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'layer_table';
+  const s = name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'layer_table';
+  return s.toLowerCase();
 }
 
 function safeColumnName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'col';
+  const s = name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'col';
+  return s.toLowerCase();
+}
+
+/** PostgreSQL 문자열 리터럴용 (COMMENT ON … IS '…') */
+function escapePostgresStringLiteral(text: string): string {
+  return String(text ?? '').replace(/'/g, "''");
 }
 
 export type ParseExcelResult = {
@@ -41,11 +53,12 @@ export type ParseExcelResult = {
 };
 
 /**
- * Excel 파일 파싱. 첫 시트만 사용, 첫 행을 헤더로.
+ * Excel 파일 파싱. 첫 시트만 사용, 타이틀 1~3행 헤더 선택.
  */
-export async function parseExcelFile(params: { pathOrResult: string }): Promise<ParseExcelResult> {
+export async function parseExcelFile(params: { pathOrResult: string; titleRowLines?: 1 | 2 | 3 }): Promise<ParseExcelResult> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+  const titleRowLines = params?.titleRowLines === 3 ? 3 : params?.titleRowLines === 2 ? 2 : 1;
 
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   try {
@@ -57,7 +70,7 @@ export async function parseExcelFile(params: { pathOrResult: string }): Promise<
 
   try {
     const buf = await fs.readFile(absolutePath);
-    const wb = XLSX.read(buf, { type: 'buffer' });
+    const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
     const sheetNames = wb.SheetNames;
     const sheetCount = sheetNames.length;
     const hasSingleSheet = sheetCount === 1;
@@ -66,38 +79,20 @@ export async function parseExcelFile(params: { pathOrResult: string }): Promise<
 
     const firstSheetName = sheetNames[0];
     const ws = wb.Sheets[firstSheetName];
-    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+    const data = XLSX.utils.sheet_to_json(ws, { ...SHEET_TO_JSON_HEADER1_DISPLAY }) as unknown[][];
+    coerceExcelDateCellsInAoa(data);
 
     if (!data || data.length === 0) {
       return { success: false, error: '데이터가 없습니다.', sheetCount, hasSingleSheet };
     }
 
-    const headerRow = data[0] as unknown[];
-    const headerStrings = headerRow.map((c) => String(c ?? '').trim());
-    const hasSingleHeader = true;
-
-    const rows: Record<string, unknown>[] = [];
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i] as unknown[];
-      const obj: Record<string, unknown> = {};
-      headerStrings.forEach((h, j) => {
-        const key = h || `col_${j}`;
-        obj[key] = row[j] ?? '';
-      });
-      rows.push(obj);
-    }
-
-    const samples: Record<string, unknown[]> = {};
-    headerStrings.forEach((h, j) => {
-      const key = h || `col_${j}`;
-      samples[key] = rows.slice(0, 3).map((r) => r[key]);
-    });
+    const { headers: headerStrings, rows, samples, hasSingleTitleRow } = parseExcelMatrix(data, titleRowLines);
 
     return {
       success: true,
       sheetCount,
       hasSingleSheet,
-      hasSingleHeader,
+      hasSingleHeader: hasSingleTitleRow,
       headers: headerStrings,
       rows,
       samples,
@@ -187,7 +182,7 @@ export async function getExlStatusList(params?: { relativePath?: string }): Prom
   const layerTableSet = new Set<string>();
   if (listRes.success && Array.isArray(listRes.tables)) {
     for (const t of listRes.tables) {
-      if (t.schema === 'layer') layerTableSet.add(t.table);
+      if (t.schema === 'layer') layerTableSet.add(String(t.table).toLowerCase());
     }
   }
 
@@ -195,7 +190,7 @@ export async function getExlStatusList(params?: { relativePath?: string }): Prom
   const defineTableSet = new Set<string>();
   if (defineRes.success && Array.isArray(defineRes.tables)) {
     for (const row of defineRes.tables) {
-      const name = String(row.define_table_name ?? '').trim();
+      const name = String(row.define_table_name ?? '').trim().toLowerCase();
       if (name) defineTableSet.add(name);
     }
   }
@@ -210,8 +205,8 @@ export async function getExlStatusList(params?: { relativePath?: string }): Prom
       pathOrResult,
       mtime: mtime.toISOString(),
       table: layerTableSet.has(tableName),
-      layer: layerNames.includes(tableName),
-      style: styleNames.includes(tableName),
+      layer: layerNames.some((n) => String(n).toLowerCase() === tableName),
+      style: styleNames.some((n) => String(n).toLowerCase() === tableName),
       define: defineTableSet.has(tableName),
     });
   }
@@ -279,7 +274,7 @@ export async function getExcelDataStatusList(): Promise<{
     const layerTableSet = new Set<string>();
     if (listRes.success && Array.isArray(listRes.tables)) {
       for (const t of listRes.tables) {
-        if (t.schema === 'layer') layerTableSet.add(t.table);
+        if (t.schema === 'layer') layerTableSet.add(String(t.table).toLowerCase());
       }
     }
 
@@ -288,14 +283,15 @@ export async function getExcelDataStatusList(): Promise<{
 
     const rows: ExcelDataStatusRow[] = tables.map((row) => {
       const tableName = String(row.define_table_name ?? '').trim();
+      const tableKeyLc = tableName.toLowerCase();
       const korName = String(row.define_table_kor_name ?? '').trim();
       const latest = historyMap[tableName];
       return {
         tableName,
         tableKorName: korName || tableName,
-        table: layerTableSet.has(tableName),
-        layer: layerNames.includes(tableName),
-        style: styleNames.includes(tableName),
+        table: layerTableSet.has(tableKeyLc),
+        layer: layerNames.some((n) => String(n).toLowerCase() === tableKeyLc),
+        style: styleNames.some((n) => String(n).toLowerCase() === tableKeyLc),
         define: true,
         lastSourcePath: latest?.sourcePath ?? null,
         lastCreateDate: latest?.createDate != null ? String(latest.createDate) : null,
@@ -331,10 +327,65 @@ export async function readExcelFieldNameMap(): Promise<{ success: boolean; map?:
 export async function writeExcelFieldNameMap(params: { entries: Record<string, string> }): Promise<{ success: boolean; error?: string }> {
   try {
     const { map: existing } = await readExcelFieldNameMap();
-    const merged = { ...(existing ?? {}), ...(params.entries ?? {}) };
+    const merged = { ...(existing ?? {}) };
+    for (const [k, v] of Object.entries(params.entries ?? {})) {
+      const raw = String(v ?? '').trim();
+      if (!raw) continue;
+      merged[k] = safeColumnName(raw);
+    }
     await fs.mkdir(path.dirname(EXCEL_FIELD_NAME_MAP_PATH), { recursive: true });
     await fs.writeFile(EXCEL_FIELD_NAME_MAP_PATH, JSON.stringify(merged, null, 2), 'utf-8');
     return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const EXCEL_LAYER_SYSTEM_COLUMNS = new Set(['id', 'geom', 'parcel_address']);
+
+/**
+ * layer 스키마에 동일 영문 테이블이 있는지와 컬럼·코멘트 목록 반환 (엑셀 재업로드 DIFF용).
+ */
+export async function getExcelLayerTableColumnMeta(params: {
+  tableName: string;
+}): Promise<{
+  success: boolean;
+  exists?: boolean;
+  normalizedTableName?: string;
+  columns?: { name: string; comment: string | null }[];
+  error?: string;
+}> {
+  const tableName = safeTableName(params.tableName ?? '');
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  const esc = tableName.replace(/'/g, "''");
+  try {
+    const exRes = await db.execute(
+      sql.raw(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables t
+          WHERE t.table_schema = 'layer' AND t.table_name = '${esc}'
+        ) AS ex`
+      )
+    );
+    const exists = Boolean((exRes.rows as { ex?: boolean }[])[0]?.ex);
+    if (!exists) {
+      return { success: true, exists: false, normalizedTableName: tableName, columns: [] };
+    }
+    const colRes = await db.execute(
+      sql.raw(`SELECT a.attname::text AS name,
+        col_description(a.attrelid, a.attnum) AS comment
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'layer' AND c.relname = '${esc}'
+        AND a.attnum > 0 AND NOT a.attisdropped
+      ORDER BY a.attnum`)
+    );
+    const rows = colRes.rows as { name?: string; comment?: string | null }[];
+    const columns = rows
+      .map((r) => ({ name: String(r.name ?? ''), comment: r.comment != null ? String(r.comment) : null }))
+      .filter((r) => r.name);
+    return { success: true, exists: true, normalizedTableName: tableName, columns };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -348,9 +399,47 @@ export type ExcelColumnDef = {
   define_field_is_key?: boolean;
 };
 
+/**
+ * 기존 엑셀 레이어 테이블에 컬럼 추가·삭제 (재업로드 시 사용자 선택 DIFF 반영).
+ */
+export async function applyExcelLayerTableSchemaDiff(params: {
+  tableName: string;
+  addColumns: ExcelColumnDef[];
+  dropColumnNames: string[];
+}): Promise<{ success: boolean; error?: string }> {
+  const tableName = safeTableName(params.tableName ?? '');
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  const quotedTable = `"${tableName.replace(/"/g, '""')}"`;
+  const fq = `layer.${quotedTable}`;
+  try {
+    for (const raw of params.dropColumnNames ?? []) {
+      const c = safeColumnName(raw);
+      if (!c || EXCEL_LAYER_SYSTEM_COLUMNS.has(c)) continue;
+      await db.execute(sql.raw(`ALTER TABLE ${fq} DROP COLUMN IF EXISTS ${c}`));
+    }
+    for (const col of params.addColumns ?? []) {
+      const c = safeColumnName(col.define_field_name);
+      if (!c || EXCEL_LAYER_SYSTEM_COLUMNS.has(c)) continue;
+      await db.execute(sql.raw(`ALTER TABLE ${fq} ADD COLUMN IF NOT EXISTS ${c} text`));
+      const kor = escapePostgresStringLiteral(String(col.define_field_kor_name ?? col.define_field_name ?? c));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fq}.${c} IS '${kor}'`));
+    }
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export type ExcelRowInput = {
   attrs: Record<string, unknown>;
   parcels: Array<{ address?: string; x?: number; y?: number; geom?: string }>;
+  mulgunjis?: Array<{ address?: string; x?: number; y?: number; geom?: string }>;
+};
+
+type ResolvedParcelGeom = {
+  geomWkt: string | null;
+  geomInputSrid: 4326 | 5181;
+  parcelAddr: string;
 };
 
 /** Excel 디노멀라이징 시 각 필지 주소(필지이름) 저장용 고정 컬럼명 */
@@ -452,8 +541,9 @@ export async function getJijukGeomByPnu(pnu: string, geomSrid: number = 5181): P
 
 /**
  * 단일 테이블(denormalize) 생성 및 Excel 유래 데이터 삽입.
- * - 테이블: id SERIAL PRIMARY KEY, geom geometry(Geometry, 4326), + 각 column (text)
- * - 각 row의 각 parcel당 1행 삽입, attrs denormalize
+ * - 테이블: id SERIAL PRIMARY KEY, geom, parcel_address + 각 column (text)
+ * - separateJijukTable=false: 각 parcel당 1행(attrs 복제)
+ * - separateJijukTable=true: 엑셀 행당 부모 1행(parcel_address=첫 필지, geom=자식 geom 합집합) + layer.{name}_jijuk 자식 N행
  */
 export async function createTableFromExcel(params: {
   pathOrResult?: string;
@@ -465,6 +555,14 @@ export async function createTableFromExcel(params: {
   rows: ExcelRowInput[];
   /** true면 CREATE TABLE IF NOT EXISTS만 하고 TRUNCATE 생략 → 행 단위 추가 삽입용 */
   appendOnly?: boolean;
+  /** true면 부모 1행 + 지적 전용 자식 테이블 `{table}_jijuk`에 필지별 1행 */
+  separateJijukTable?: boolean;
+  /** separateJijukTable 시 layer.{name}_jijuk 테이블 COMMENT (예: 한글레이어명_필지목록) */
+  jijukTableComment?: string;
+  /** true면 부모 1행 + 물건지 전용 자식 테이블 `{table}_mulgunji`에 물건지별 1행 */
+  separateMulgunjiTable?: boolean;
+  /** separateMulgunjiTable 시 layer.{name}_mulgunji 테이블 COMMENT (예: 한글레이어명_물건지) */
+  mulgunjiTableComment?: string;
 }): Promise<{ success: boolean; error?: string; rowCount?: number; polygonMatchedCount?: number; polygonNullCount?: number }> {
   const tableName = safeTableName(params.tableName);
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
@@ -473,6 +571,14 @@ export async function createTableFromExcel(params: {
   const geometryType = params.geometryType ?? 'Point';
   const rows = params.rows ?? [];
   const appendOnly = params.appendOnly === true;
+  const separateJijukTable = params.separateJijukTable === true;
+  const jijukTableName = separateJijukTable ? safeTableName(`${tableName}_jijuk`) : null;
+  const jijukTableComment =
+    (params.jijukTableComment ?? `${params.tableKorName || tableName}_필지목록`).trim() || `${tableName}_필지목록`;
+  const separateMulgunjiTable = params.separateMulgunjiTable === true;
+  const mulgunjiTableName = separateMulgunjiTable ? safeTableName(`${tableName}_mulgunji`) : null;
+  const mulgunjiTableComment =
+    (params.mulgunjiTableComment ?? `${params.tableKorName || tableName}_물건지`).trim() || `${tableName}_물건지`;
 
   // 동일 영문명이 여러 Excel 열에 매핑되면 중복 컬럼 방지 (첫 번째만 사용)
   const colNames = Array.from(
@@ -482,7 +588,10 @@ export async function createTableFromExcel(params: {
 
   try {
     const quotedTable = `"${tableName.replace(/"/g, '""')}"`;
-    const geomType = geometryType === 'Point' ? 'Point' : 'Geometry';
+    const quotedJijuk = jijukTableName ? `"${jijukTableName.replace(/"/g, '""')}"` : '';
+    const quotedMulgunji = mulgunjiTableName ? `"${mulgunjiTableName.replace(/"/g, '""')}"` : '';
+    /** 자식 합집합·복수 필지를 허용하려면 Geometry 컬럼 사용 */
+    const geomType = separateJijukTable ? 'Geometry' : geometryType === 'Point' ? 'Point' : 'Geometry';
     // 엑셀 업로드 결과 테이블은 jijuk과 동일하게 EPSG:5181(Korea 2000) 저장
     const geomSrid = 5181;
     const createParts = ['id SERIAL PRIMARY KEY', `geom geometry(${geomType}, ${geomSrid})`, `${PARCEL_ADDRESS_COL} text`];
@@ -496,9 +605,60 @@ export async function createTableFromExcel(params: {
     }
     const createSql = `CREATE TABLE IF NOT EXISTS layer.${quotedTable} (${createParts.join(', ')})`;
     await db.execute(sql.raw(createSql));
+
+    const fqTable = `layer.${quotedTable}`;
+    const setColumnComment = async (colIdent: string, korLabel: string) => {
+      const body = escapePostgresStringLiteral(korLabel);
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqTable}.${colIdent} IS '${body}'`));
+    };
+    await setColumnComment('id', 'id');
+    await setColumnComment('geom', 'geom');
+    await setColumnComment(PARCEL_ADDRESS_COL, '필지이름');
+    const commentedCols = new Set<string>();
+    for (const col of columns) {
+      const cname = safeColumnName(col.define_field_name);
+      if (!cname || commentedCols.has(cname)) continue;
+      commentedCols.add(cname);
+      const kor = String(col.define_field_kor_name ?? col.define_field_name ?? cname);
+      await setColumnComment(cname, kor);
+    }
+
+    if (separateJijukTable && quotedJijuk) {
+      const jijukCreate = `CREATE TABLE IF NOT EXISTS layer.${quotedJijuk} (
+        id SERIAL PRIMARY KEY,
+        parent_id integer NOT NULL REFERENCES layer.${quotedTable}(id) ON DELETE CASCADE,
+        geom geometry(Geometry, ${geomSrid}),
+        ${PARCEL_ADDRESS_COL} text
+      )`;
+      await db.execute(sql.raw(jijukCreate));
+      const fqJijuk = `layer.${quotedJijuk}`;
+      const jc = escapePostgresStringLiteral(jijukTableComment);
+      await db.execute(sql.raw(`COMMENT ON TABLE ${fqJijuk} IS '${jc}'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqJijuk}.id IS 'id'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqJijuk}.parent_id IS '부모 행 id'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqJijuk}.geom IS 'geom'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqJijuk}.${PARCEL_ADDRESS_COL} IS '필지이름'`));
+    }
+    if (separateMulgunjiTable && quotedMulgunji) {
+      const mulgunjiCreate = `CREATE TABLE IF NOT EXISTS layer.${quotedMulgunji} (
+        id SERIAL PRIMARY KEY,
+        parent_id integer NOT NULL REFERENCES layer.${quotedTable}(id) ON DELETE CASCADE,
+        geom geometry(Geometry, ${geomSrid}),
+        ${PARCEL_ADDRESS_COL} text
+      )`;
+      await db.execute(sql.raw(mulgunjiCreate));
+      const fqMulgunji = `layer.${quotedMulgunji}`;
+      const mc = escapePostgresStringLiteral(mulgunjiTableComment);
+      await db.execute(sql.raw(`COMMENT ON TABLE ${fqMulgunji} IS '${mc}'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqMulgunji}.id IS 'id'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqMulgunji}.parent_id IS '부모 행 id'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqMulgunji}.geom IS 'geom'`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN ${fqMulgunji}.${PARCEL_ADDRESS_COL} IS '물건지주소'`));
+    }
+
     // appendOnly가 아니면 기존 데이터 삭제 후 INSERT(전체 덮어쓰기)
     if (!appendOnly) {
-      await db.execute(sql.raw(`TRUNCATE TABLE layer.${quotedTable}`));
+      await db.execute(sql.raw(`TRUNCATE TABLE layer.${quotedTable} RESTART IDENTITY CASCADE`));
     }
 
     const pathOrResult = params.pathOrResult?.trim();
@@ -557,49 +717,34 @@ export async function createTableFromExcel(params: {
     const colList = ['geom', PARCEL_ADDRESS_COL, ...colNames].join(', ');
     const valuePlaceholders = ['$3', ...colNames.map((_, i) => `$${4 + i}`)].join(', ');
     const insertText = `INSERT INTO layer.${quotedTable} (${colList}) VALUES (${geomCaseExpr}, ${valuePlaceholders})`;
+    const insertParentReturning = `${insertText} RETURNING id`;
 
-    let insertCount = 0;
-    for (const row of rows) {
-      const attrs = row.attrs ?? {};
-      const parcelList = Array.isArray(row.parcels) ? row.parcels : [];
-      const toInsert = parcelList.length > 0 ? parcelList : [{ address: '' }];
-      for (const parcel of toInsert) {
-        let geomWkt: string | null = null;
-        let geomInputSrid: 4326 | 5181 = 4326;
-        if (parcel.geom) {
-          geomWkt = String(parcel.geom);
+    const resolveOneParcel = async (parcel: {
+      address?: string;
+      x?: number;
+      y?: number;
+      geom?: string;
+    }): Promise<ResolvedParcelGeom> => {
+      let geomWkt: string | null = null;
+      let geomInputSrid: 4326 | 5181 = 4326;
+      if (parcel.geom) {
+        geomWkt = String(parcel.geom);
+        geomInputSrid = 4326;
+      } else if (parcel.x != null && parcel.y != null) {
+        if (geometryType === 'Point') {
+          geomWkt = `POINT(${Number(parcel.x)} ${Number(parcel.y)})`;
           geomInputSrid = 4326;
-        } else if (parcel.x != null && parcel.y != null) {
-          if (geometryType === 'Point') {
-            geomWkt = `POINT(${Number(parcel.x)} ${Number(parcel.y)})`;
-            geomInputSrid = 4326;
-          } else {
-            let wkt = await getJijukGeom(parcel.x, parcel.y, parcel.address);
-            if (!wkt && parcel.address?.trim()) {
-              const parsed = parseAddressForPnu(parcel.address);
-              const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
-              if (pnu) wkt = await getJijukGeomByPnu(pnu, geomSrid);
-              const parseStr = parsed ? `parse=ok emd=${parsed.emdName} ri=${parsed.riName} bonbun=${parsed.bonbun} bubun=${parsed.bubun}` : 'parse=fail';
-              const pnuStr = pnu ?? 'pnu=fail';
-              const jijukStr = wkt ? 'jijuk=found' : 'jijuk=not_found';
-              await appendPnuLog(`${parcel.address} | ${parseStr} | pnu=${pnuStr} | ${jijukStr}`);
-            }
-            if (wkt) {
-              geomWkt = wkt;
-              geomInputSrid = 5181;
-              polygonMatchedCount++;
-            } else {
-              polygonNullCount++;
-            }
+        } else {
+          let wkt = await getJijukGeom(parcel.x, parcel.y, parcel.address);
+          if (!wkt && parcel.address?.trim()) {
+            const parsed = parseAddressForPnu(parcel.address);
+            const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
+            if (pnu) wkt = await getJijukGeomByPnu(pnu, geomSrid);
+            const parseStr = parsed ? `parse=ok emd=${parsed.emdName} ri=${parsed.riName} bonbun=${parsed.bonbun} bubun=${parsed.bubun}` : 'parse=fail';
+            const pnuStr = pnu ?? 'pnu=fail';
+            const jijukStr = wkt ? 'jijuk=found' : 'jijuk=not_found';
+            await appendPnuLog(`${parcel.address} | ${parseStr} | pnu=${pnuStr} | ${jijukStr}`);
           }
-        } else if (geometryType === 'Polygon' && parcel.address?.trim()) {
-          const parsed = parseAddressForPnu(parcel.address);
-          const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
-          const wkt = pnu ? await getJijukGeomByPnu(pnu, geomSrid) : null;
-          const parseStr = parsed ? `parse=ok emd=${parsed.emdName} ri=${parsed.riName} bonbun=${parsed.bonbun} bubun=${parsed.bubun}` : 'parse=fail';
-          const pnuStr = pnu ?? 'pnu=fail';
-          const jijukStr = wkt ? 'jijuk=found' : 'jijuk=not_found';
-          await appendPnuLog(`${parcel.address} | ${parseStr} | pnu=${pnuStr} | ${jijukStr}`);
           if (wkt) {
             geomWkt = wkt;
             geomInputSrid = 5181;
@@ -608,11 +753,134 @@ export async function createTableFromExcel(params: {
             polygonNullCount++;
           }
         }
-        const parcelAddr = parcel.address != null ? String(parcel.address) : '';
+      } else if (geometryType === 'Polygon' && parcel.address?.trim()) {
+        const parsed = parseAddressForPnu(parcel.address);
+        const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
+        const wkt = pnu ? await getJijukGeomByPnu(pnu, geomSrid) : null;
+        const parseStr = parsed ? `parse=ok emd=${parsed.emdName} ri=${parsed.riName} bonbun=${parsed.bonbun} bubun=${parsed.bubun}` : 'parse=fail';
+        const pnuStr = pnu ?? 'pnu=fail';
+        const jijukStr = wkt ? 'jijuk=found' : 'jijuk=not_found';
+        await appendPnuLog(`${parcel.address} | ${parseStr} | pnu=${pnuStr} | ${jijukStr}`);
+        if (wkt) {
+          geomWkt = wkt;
+          geomInputSrid = 5181;
+          polygonMatchedCount++;
+        } else {
+          polygonNullCount++;
+        }
+      }
+      const parcelAddr = parcel.address != null ? String(parcel.address) : '';
+      return { geomWkt, geomInputSrid, parcelAddr };
+    };
+
+    const geomWktsTo5181 = async (resolved: ResolvedParcelGeom[]): Promise<string[]> => {
+      const out: string[] = [];
+      for (const r of resolved) {
+        if (!r.geomWkt) continue;
+        if (r.geomInputSrid === 5181) {
+          out.push(r.geomWkt);
+          continue;
+        }
+        const tr = await pool.query(
+          `SELECT ST_AsText(ST_Transform(ST_GeomFromText($1::text, 4326), $2::int)) AS wkt`,
+          [r.geomWkt, geomSrid]
+        );
+        const w = tr.rows[0]?.wkt;
+        if (w) out.push(String(w));
+      }
+      return out;
+    };
+
+    const mergeGeoms5181 = async (wkts5181: string[]): Promise<string | null> => {
+      if (wkts5181.length === 0) return null;
+      if (wkts5181.length === 1) return wkts5181[0]!;
+      const esc = (w: string) => w.replace(/'/g, "''");
+      const literals = wkts5181.map((w) => `ST_GeomFromText('${esc(w)}', ${geomSrid})`);
+      const unionSql = `SELECT ST_AsText(ST_UnaryUnion(ST_Collect(ARRAY[${literals.join(', ')}]::geometry[]))) AS wkt`;
+      const mr = await pool.query(unionSql);
+      const mw = mr.rows[0]?.wkt;
+      return mw != null ? String(mw) : null;
+    };
+
+    const joinParcelAddresses = (resolved: ResolvedParcelGeom[]): string => {
+      return resolved
+        .map((r) => String(r.parcelAddr ?? '').trim())
+        .filter(Boolean)
+        .join(', ');
+    };
+
+    const childGeomCase = `CASE WHEN $2::text IS NULL THEN NULL WHEN $3::int = 4326 THEN ST_Transform(ST_GeomFromText($2::text, 4326), ${geomSrid}) ELSE ST_GeomFromText($2::text, 5181) END`;
+    const insertChildText =
+      separateJijukTable && quotedJijuk
+        ? `INSERT INTO layer.${quotedJijuk} (parent_id, geom, ${PARCEL_ADDRESS_COL}) VALUES ($1, ${childGeomCase}, $4)`
+        : '';
+    const insertMulgunjiText =
+      separateMulgunjiTable && quotedMulgunji
+        ? `INSERT INTO layer.${quotedMulgunji} (parent_id, geom, ${PARCEL_ADDRESS_COL}) VALUES ($1, ${childGeomCase}, $4)`
+        : '';
+
+    let insertCount = 0;
+    for (const row of rows) {
+      const attrs = row.attrs ?? {};
+      const parcelList = Array.isArray(row.parcels) ? row.parcels : [];
+      const toInsert = parcelList.length > 0 ? parcelList : [{ address: '' }];
+      const mulgunjiList = Array.isArray(row.mulgunjis) ? row.mulgunjis : [];
+      const toInsertMulgunji = mulgunjiList.length > 0 ? mulgunjiList : [];
+
+      if (separateJijukTable && quotedJijuk) {
+        const resolved: ResolvedParcelGeom[] = [];
+        for (const parcel of toInsert) {
+          resolved.push(await resolveOneParcel(parcel));
+        }
+        const wkts5181 = await geomWktsTo5181(resolved);
+        const mergedWkt = await mergeGeoms5181(wkts5181);
+        const mergedInputSrid: 4326 | 5181 = mergedWkt ? 5181 : 4326;
+        const parentParcelAddr = joinParcelAddresses(resolved);
         const colValues = colNames.map((c) => (attrs[c] == null ? '' : String(attrs[c])));
-        const params = [geomWkt, geomInputSrid, parcelAddr, ...colValues];
-        await pool.query(insertText, params);
-        insertCount++;
+        const parentParams = [mergedWkt, mergedInputSrid, parentParcelAddr, ...colValues];
+        const pr = await pool.query(insertParentReturning, parentParams);
+        const parentId = (pr.rows[0] as { id?: number } | undefined)?.id;
+        insertCount += 1;
+        if (parentId != null) {
+          for (const r of resolved) {
+            const qparams = [parentId, r.geomWkt, r.geomInputSrid, r.parcelAddr];
+            await pool.query(insertChildText, qparams);
+            insertCount += 1;
+          }
+          if (insertMulgunjiText) {
+            for (const mg of toInsertMulgunji) {
+              const r = await resolveOneParcel(mg);
+              const qparams = [parentId, r.geomWkt, r.geomInputSrid, r.parcelAddr];
+              await pool.query(insertMulgunjiText, qparams);
+              insertCount += 1;
+            }
+          }
+        }
+        continue;
+      }
+
+      const resolved: ResolvedParcelGeom[] = [];
+      for (const parcel of toInsert) {
+        resolved.push(await resolveOneParcel(parcel));
+      }
+      const wkts5181 = await geomWktsTo5181(resolved);
+      const mergedWkt = await mergeGeoms5181(wkts5181);
+      const mergedInputSrid: 4326 | 5181 = mergedWkt ? 5181 : 4326;
+      const parentParcelAddr = joinParcelAddresses(resolved);
+      const colValues = colNames.map((c) => (attrs[c] == null ? '' : String(attrs[c])));
+      const qparams = [mergedWkt, mergedInputSrid, parentParcelAddr, ...colValues];
+      const pr = await pool.query(insertParentReturning, qparams);
+      insertCount++;
+      if (insertMulgunjiText) {
+        const parentId = (pr.rows[0] as { id?: number } | undefined)?.id;
+        if (parentId != null) {
+          for (const mg of toInsertMulgunji) {
+            const r = await resolveOneParcel(mg);
+            const mgParams = [parentId, r.geomWkt, r.geomInputSrid, r.parcelAddr];
+            await pool.query(insertMulgunjiText, mgParams);
+            insertCount += 1;
+          }
+        }
       }
     }
 
@@ -679,6 +947,10 @@ export async function createDefineTableAndFieldsForExcel(params: {
   tableKorName: string;
   geometryType: 'Point' | 'Polygon';
   columns: ExcelColumnDef[];
+  /** 부모와 함께 등록할 지적 자식 테이블 (layer.{parent}_jijuk) */
+  jijukChild?: { tableName: string; tableKorName: string };
+  /** 부모와 함께 등록할 물건지 자식 테이블 (layer.{parent}_mulgunji) */
+  mulgunjiChild?: { tableName: string; tableKorName: string };
 }): Promise<{ success: boolean; error?: string }> {
   const tableName = safeTableName(params.tableName);
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
@@ -692,7 +964,9 @@ export async function createDefineTableAndFieldsForExcel(params: {
     } catch {
       // file missing
     }
-    const existing = tables.find((r) => String(r.define_table_name ?? '').trim() === tableName);
+    const existing = tables.find(
+      (r) => String(r.define_table_name ?? '').trim().toLowerCase() === tableName
+    );
     if (!existing) {
       tables.push(
         reorderDefineLayerTableRow({
@@ -830,6 +1104,299 @@ export async function createDefineTableAndFieldsForExcel(params: {
       });
     }
     await fs.writeFile(fieldsPath, JSON.stringify(fieldList, null, 2), 'utf-8');
+
+    const jChild = params.jijukChild;
+    if (jChild?.tableName) {
+      const jName = safeTableName(jChild.tableName);
+      if (jName) {
+        let tablesJ: Record<string, unknown>[] = [];
+        try {
+          const rawJ = await fs.readFile(DEFINE_LAYER_TABLES_PATH, 'utf-8');
+          const parsedJ = JSON.parse(rawJ);
+          if (Array.isArray(parsedJ)) tablesJ = parsedJ;
+        } catch {
+          tablesJ = [];
+        }
+        const existingJ = tablesJ.find(
+          (r) => String(r.define_table_name ?? '').trim().toLowerCase() === jName
+        );
+        const jKor = (jChild.tableKorName ?? `${params.tableKorName}_필지목록`).trim() || jName;
+        if (!existingJ) {
+          tablesJ.push(
+            reorderDefineLayerTableRow({
+              define_table_name: jName,
+              define_table_kor_name: jKor,
+              define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
+              define_table_read_share: 'P',
+              define_table_write_share: 'P',
+              define_table_group: '',
+              define_table_idx: '0',
+              define_table_etc: '',
+              define_table_schema: 'layer',
+              define_table_source: 'excel',
+            })
+          );
+          await fs.mkdir(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
+          await fs.writeFile(
+            DEFINE_LAYER_TABLES_PATH,
+            JSON.stringify(reorderDefineLayerTablesArray(tablesJ), null, 2),
+            'utf-8'
+          );
+        }
+
+        const jFieldsPath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${jName}.json`);
+        await fs.mkdir(path.dirname(jFieldsPath), { recursive: true });
+        let jIdx = 1;
+        const jFields: Record<string, unknown>[] = [];
+        const pushJ = (row: Record<string, unknown>) => {
+          jFields.push({ ...row, define_field_idx: jIdx++ });
+        };
+        pushJ({
+          define_field_name: 'id',
+          define_field_kor_name: 'id',
+          define_field_type: 'integer',
+          define_field_is_required: false,
+          define_field_show_search: false,
+          define_field_show_list: true,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        pushJ({
+          define_field_name: 'parent_id',
+          define_field_kor_name: '부모 id',
+          define_field_type: 'integer',
+          define_field_is_required: true,
+          define_field_show_search: false,
+          define_field_show_list: true,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        pushJ({
+          define_field_name: 'geom',
+          define_field_kor_name: 'geom',
+          define_field_type: 'text',
+          define_field_is_required: false,
+          define_field_show_search: false,
+          define_field_show_list: false,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        pushJ({
+          define_field_name: PARCEL_ADDRESS_COL,
+          define_field_kor_name: '필지이름',
+          define_field_type: 'text',
+          define_field_is_required: false,
+          define_field_show_search: true,
+          define_field_show_list: true,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        await fs.writeFile(jFieldsPath, JSON.stringify(jFields, null, 2), 'utf-8');
+      }
+    }
+
+    const mChild = params.mulgunjiChild;
+    if (mChild?.tableName) {
+      const mName = safeTableName(mChild.tableName);
+      if (mName) {
+        let tablesM: Record<string, unknown>[] = [];
+        try {
+          const rawM = await fs.readFile(DEFINE_LAYER_TABLES_PATH, 'utf-8');
+          const parsedM = JSON.parse(rawM);
+          if (Array.isArray(parsedM)) tablesM = parsedM;
+        } catch {
+          tablesM = [];
+        }
+        const existingM = tablesM.find(
+          (r) => String(r.define_table_name ?? '').trim().toLowerCase() === mName
+        );
+        const mKor = (mChild.tableKorName ?? `${params.tableKorName}_물건지`).trim() || mName;
+        if (!existingM) {
+          tablesM.push(
+            reorderDefineLayerTableRow({
+              define_table_name: mName,
+              define_table_kor_name: mKor,
+              define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
+              define_table_read_share: 'P',
+              define_table_write_share: 'P',
+              define_table_group: '',
+              define_table_idx: '0',
+              define_table_etc: '',
+              define_table_schema: 'layer',
+              define_table_source: 'excel',
+            })
+          );
+          await fs.mkdir(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
+          await fs.writeFile(
+            DEFINE_LAYER_TABLES_PATH,
+            JSON.stringify(reorderDefineLayerTablesArray(tablesM), null, 2),
+            'utf-8'
+          );
+        }
+
+        const mFieldsPath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${mName}.json`);
+        await fs.mkdir(path.dirname(mFieldsPath), { recursive: true });
+        let mIdx = 1;
+        const mFields: Record<string, unknown>[] = [];
+        const pushM = (row: Record<string, unknown>) => {
+          mFields.push({ ...row, define_field_idx: mIdx++ });
+        };
+        pushM({
+          define_field_name: 'id',
+          define_field_kor_name: 'id',
+          define_field_type: 'integer',
+          define_field_is_required: false,
+          define_field_show_search: false,
+          define_field_show_list: true,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        pushM({
+          define_field_name: 'parent_id',
+          define_field_kor_name: '부모 id',
+          define_field_type: 'integer',
+          define_field_is_required: true,
+          define_field_show_search: false,
+          define_field_show_list: true,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        pushM({
+          define_field_name: 'geom',
+          define_field_kor_name: 'geom',
+          define_field_type: 'text',
+          define_field_is_required: false,
+          define_field_show_search: false,
+          define_field_show_list: false,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        pushM({
+          define_field_name: PARCEL_ADDRESS_COL,
+          define_field_kor_name: '물건지주소',
+          define_field_type: 'text',
+          define_field_is_required: false,
+          define_field_show_search: true,
+          define_field_show_list: true,
+          define_field_show_detail: true,
+          define_field_read_only: false,
+          define_field_is_key: false,
+          define_field_show_search_detail: false,
+          define_field_max_length: '',
+          define_field_sort_idx: '',
+          define_field_sort_type: '',
+          define_field_sel_list: '',
+          define_field_sel_table: '',
+          define_field_sel_query: '',
+          define_field_sel_url: '',
+          define_field_show_detail_list: false,
+          define_field_sel_key_field: '',
+          define_field_sel_label_field: '',
+          define_field_default_value: '',
+          define_field_show_title: false,
+        });
+        await fs.writeFile(mFieldsPath, JSON.stringify(mFields, null, 2), 'utf-8');
+      }
+    }
+
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -839,19 +1406,37 @@ export async function createDefineTableAndFieldsForExcel(params: {
 
 /**
  * GeoServer 레이어 및 스타일 생성 (Excel 테이블용).
+ * jijukTableName 이 있으면 부모 발행·스타일 후 지적 자식 테이블도 동일 처리.
  */
 export async function createGeoServerLayerForExcel(params: {
   tableName: string;
   geometryType: 'Point' | 'Polygon';
+  /** layer.{parent}_jijuk 등 — define/DB가 이미 준비된 경우에만 의미 있음 */
+  jijukTableName?: string | null;
+  /** layer.{parent}_mulgunji 등 — define/DB가 이미 준비된 경우에만 의미 있음 */
+  mulgunjiTableName?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
-  const layerName = safeTableName(params.tableName);
-  if (!layerName) return { success: false, error: 'tableName이 필요합니다.' };
-  try {
+  const publishOne = async (rawName: string) => {
+    const layerName = safeTableName(rawName);
+    if (!layerName) return { success: false as const, error: 'tableName이 필요합니다.' };
     const layerRes = await createOrUpdateGeoServerLayer({ layerName });
-    if (!layerRes.success) return { success: false, error: layerRes.error };
+    if (!layerRes.success) return { success: false as const, error: layerRes.error };
     const styleRes = await applyDefaultStyleToLayer({ layerName });
-    if (!styleRes.success) return { success: false, error: styleRes.error };
-    return { success: true };
+    if (!styleRes.success) return { success: false as const, error: styleRes.error };
+    return { success: true as const };
+  };
+
+  try {
+    const parent = await publishOne(params.tableName);
+    if (!parent.success) return parent;
+    const jRaw = params.jijukTableName?.trim();
+    if (jRaw) {
+      const jr = await publishOne(jRaw);
+      if (!jr.success) return jr;
+    }
+    const mRaw = params.mulgunjiTableName?.trim();
+    if (!mRaw) return { success: true };
+    return publishOne(mRaw);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -860,7 +1445,7 @@ export async function createGeoServerLayerForExcel(params: {
 
 /** defineLayer fields에서 key 필드명(영문) 및 한글명 조회 */
 function getKeyFieldFromDefine(tableName: string): { keyField: string; keyHeaderKor: string } | null {
-  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '');
+  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
   const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
   try {
     if (!fsSync.existsSync(filePath)) return null;
@@ -898,6 +1483,8 @@ export async function compareExcelWithTable(params: {
   pathOrResult: string;
   tableName: string;
   ehKey?: number;
+  /** define/엑셀 헤더 행 수(1~3) */
+  titleRowLines?: 1 | 2 | 3;
 }): Promise<CompareExcelResult> {
   const empty: CompareExcelResult = { success: false, appendCount: 0, conflictCount: 0, removeCount: 0, unchangedCount: 0, conflicts: [], removes: [] };
   const pathOrResult = params?.pathOrResult?.trim();
@@ -908,7 +1495,7 @@ export async function compareExcelWithTable(params: {
   const keyInfo = getKeyFieldFromDefine(tableName);
   if (!keyInfo) return { ...empty, error: 'defineLayer에 key 필드가 없습니다.' };
 
-  const parseRes = await parseExcelFile({ pathOrResult });
+  const parseRes = await parseExcelFile({ pathOrResult, titleRowLines: params.titleRowLines });
   if (!parseRes.success || !parseRes.headers?.length || !parseRes.rows?.length) {
     return { ...empty, error: parseRes.error ?? 'Excel 파싱 실패' };
   }

@@ -152,12 +152,12 @@ export function buildCssFromSimpleStyle(
       lines.push('  halo-color: #FFFFFF;');
     }
   } else {
-    // POLYGON
+    // POLYGON — 테두리는 항상 불투명, 면만 fill-opacity로 조절
     lines.push(`  fill: ${f};`);
     lines.push(`  stroke: ${s};`);
     lines.push(`  stroke-width: ${sw};`);
     lines.push(`  fill-opacity: ${op};`);
-    lines.push(`  stroke-opacity: ${op};`);
+    lines.push(`  stroke-opacity: 1.0;`);
     if (label) {
       lines.push(`  label: [${label}];`);
       lines.push(`  font-size: ${size};`);

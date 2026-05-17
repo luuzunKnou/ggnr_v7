@@ -237,6 +237,164 @@ export async function getRiverBasicPlanExtent(params?: {
   return { extent3857: [xmin, ymin, xmax, ymax] };
 }
 
+/**
+ * 하천명·탭(지방/소하천)에 해당하는 색인도(river_d_index) 전체 피처의 3857 bbox.
+ * (기본계획 polygon extent가 아닌, 색인도 도형 기준)
+ */
+export async function getRiverBasicPlanIndexExtent(params?: {
+  tab?: RiverType;
+  riverName?: string;
+}): Promise<{ extent3857: [number, number, number, number] | null }> {
+  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const riverName = String(params?.riverName ?? '').trim();
+  if (!riverName) return { extent3857: null };
+  const tableName = await resolveLayerTableName('river_d_index');
+
+  const res = await db.execute(
+    sql.raw(
+      `SELECT
+         ST_XMin(ext)::float8 AS xmin,
+         ST_YMin(ext)::float8 AS ymin,
+         ST_XMax(ext)::float8 AS xmax,
+         ST_YMax(ext)::float8 AS ymax
+       FROM (
+         SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS ext
+         FROM layer."${tableName.replace(/"/g, '""')}"
+         WHERE COALESCE(river_name, '') = '${esc(riverName)}'
+           AND ${riverTypeWhere(tab)}
+           AND geom IS NOT NULL
+       ) s
+       WHERE ext IS NOT NULL`
+    )
+  );
+
+  const row = res.rows?.[0] as
+    | { xmin?: number | string; ymin?: number | string; xmax?: number | string; ymax?: number | string }
+    | undefined;
+  const xmin = Number(row?.xmin);
+  const ymin = Number(row?.ymin);
+  const xmax = Number(row?.xmax);
+  const ymax = Number(row?.ymax);
+  if (![xmin, ymin, xmax, ymax].every((v) => Number.isFinite(v))) {
+    return { extent3857: null };
+  }
+  return { extent3857: [xmin, ymin, xmax, ymax] };
+}
+
+/**
+ * cons 관련 필드(프로젝트마다 `cons_code` / `cons_cdoe` 등) 문자열에서
+ * 마지막 연속 숫자 구간만 사용(앞자리 0 제거) → 표시·정렬(1,2,3…)
+ */
+function indexNoFromConsCode(consCode: string, ogcFid: number): { label: string; order: number } {
+  const s = String(consCode ?? '').trim();
+  const groups = s.match(/\d+/g);
+  if (!groups || groups.length === 0) {
+    return { label: String(ogcFid), order: ogcFid };
+  }
+  const last = groups[groups.length - 1] ?? '';
+  const n = parseInt(last, 10);
+  if (!Number.isFinite(n)) {
+    const stripped = last.replace(/^0+/, '') || '0';
+    const ord = parseInt(stripped, 10);
+    return { label: stripped, order: Number.isFinite(ord) ? ord : 0 };
+  }
+  return { label: String(n), order: n };
+}
+
+/**
+ * 선택한 기본계획(river_plan_as)과 교차하는 색인도(river_d_index) 목록.
+ * 하천 상세에서 색인도 목록 UI에 사용.
+ */
+export async function getRiverBasicPlanIndexList(params?: {
+  tab?: RiverType;
+  riverName?: string;
+  planYear?: string;
+  planName?: string;
+}): Promise<{
+  indexes: {
+    ogcFid: number;
+    label: string;
+    order: number;
+    badge: string;
+    extent3857: [number, number, number, number] | null;
+  }[];
+}> {
+  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const riverName = String(params?.riverName ?? '').trim();
+  const planYear = String(params?.planYear ?? '').trim();
+  const planName = String(params?.planName ?? '').trim();
+  if (!riverName) return { indexes: [] };
+
+  const asTable = await resolveLayerTableName('river_plan_as');
+  const idxTable = await resolveLayerTableName('river_d_index');
+  const safeAs = asTable.replace(/"/g, '""');
+  const safeIdx = idxTable.replace(/"/g, '""');
+
+  const planWhere = [
+    `river_name = '${esc(riverName)}'`,
+    riverTypeWhere(tab),
+    planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
+    planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
+  ]
+    .filter(Boolean)
+    .join(' AND ');
+
+  const res = await db.execute(
+    sql.raw(
+      `WITH plan_geom AS (
+         SELECT geom
+         FROM layer."${safeAs}" p
+         WHERE ${planWhere}
+         ORDER BY p.ogc_fid ASC
+         LIMIT 1
+       )
+       SELECT
+         i.ogc_fid AS "ogcFid",
+         TRIM(
+           COALESCE(
+             NULLIF((to_jsonb(i) - 'geom')->>'cons_code', ''),
+             NULLIF((to_jsonb(i) - 'geom')->>'cons_cdoe', '')
+           , '')
+         ) AS "consCode",
+         ST_XMin(ST_Transform(i.geom, 3857))::float8 AS xmin,
+         ST_YMin(ST_Transform(i.geom, 3857))::float8 AS ymin,
+         ST_XMax(ST_Transform(i.geom, 3857))::float8 AS xmax,
+         ST_YMax(ST_Transform(i.geom, 3857))::float8 AS ymax
+       FROM layer."${safeIdx}" i
+       CROSS JOIN plan_geom pg
+       WHERE pg.geom IS NOT NULL
+         AND i.geom IS NOT NULL
+         AND ST_Intersects(i.geom, pg.geom)
+       ORDER BY i.ogc_fid ASC`
+    )
+  );
+
+  const indexes = (res.rows ?? []).flatMap((row) => {
+    const r = row as {
+      ogcFid?: unknown;
+      consCode?: unknown;
+      xmin?: unknown;
+      ymin?: unknown;
+      xmax?: unknown;
+      ymax?: unknown;
+    };
+    const fid = Number(r.ogcFid);
+    if (!Number.isFinite(fid)) return [];
+    const code = String(r.consCode ?? '').trim();
+    const { label, order } = indexNoFromConsCode(code, fid);
+    return [{
+      ogcFid: fid,
+      label,
+      order,
+      badge: '색인도',
+      extent3857: parseExtent3857(r),
+    }];
+  });
+  indexes.sort((a, b) => a.order - b.order || a.ogcFid - b.ogcFid);
+
+  return { indexes };
+}
+
 /** define 키 컬럼명만 SQL 식별자로 허용 */
 function safeSqlColumnName(name: string): string | null {
   const t = name.trim();

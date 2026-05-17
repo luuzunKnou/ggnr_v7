@@ -5,7 +5,6 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   dataQuery: 'standardList',
   mapState: 'standardList',
   data3d: 'map3dData',
-  parcelAnalysis: 'landInfo',
   tifManager: 'highQualityVideo',
   complaint: 'complaintManagement',
   memo: 'memoManagement',

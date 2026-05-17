@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30dd</id>
+  <name>sd_heat_mitigation_facility</name>
+  <nativeName>sd_heat_mitigation_facility</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>sd_heat_mitigation_facility</title>
+  <keywords>
+    <string>features</string>
+    <string>sd_heat_mitigation_facility</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>100920.828125</minx>
+    <maxx>432569.125</maxx>
+    <miny>-14026.919921875</miny>
+    <maxy>552505.3125</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>125.86472443785708</minx>
+    <maxx>129.6637471814693</maxx>
+    <miny>33.34204590200197</miny>
+    <maxy>38.47294304762885</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

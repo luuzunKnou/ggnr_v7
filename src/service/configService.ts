@@ -147,14 +147,184 @@ export function getIndexFooterConfig(_params?: unknown): {
 
 /**
  * 지도용 클라이언트 설정 (주소 검색 등).
- * runtime.env 의 VWORLD_API_KEY, OPENAI_API_KEY 를 반환. 클라이언트에서 주소 검색·Excel 지오코딩 시 사용.
+ * runtime.env 의 지도/외부연계 키를 반환.
  */
-export function getMapConfig(_params?: unknown): { VWORLD_API_KEY: string; OPENAI_API_KEY: string } {
+export function getMapConfig(_params?: unknown): {
+  VWORLD_API_KEY: string
+  OPENAI_API_KEY: string
+  SAFEMAP_API_KEY: string
+  SAFETYDATA_API_KEY: string
+  DATA_PORTAL_KEY: string
+  dataPotalKey: string
+} {
   const vars = getRuntimeEnvVars()
+  const dataPortalKey =
+    vars.DATA_PORTAL_KEY?.trim() ??
+    vars.dataPotalKey?.trim() ??
+    vars.DATA_POTAL_KEY?.trim() ??
+    vars.PUBLIC_DATA_KEY?.trim() ??
+    vars.DATA_GO_KR_KEY?.trim() ??
+    ""
   return {
     VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
     OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
+    SAFEMAP_API_KEY: vars.SAFEMAP_API_KEY?.trim() ?? '',
+    SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
+    DATA_PORTAL_KEY: dataPortalKey,
+    dataPotalKey: dataPortalKey,
   }
+}
+
+const SAFETYDATA_DSSP_IF_00117 = "https://www.safetydata.go.kr/V2/api/DSSP-IF-00117"
+
+/** 침수흔적도 DSSP-IF-00117 기본 serviceKey (`SAFETYDATA_API_KEY`가 있으면 그 값을 우선) */
+const SAFETYDATA_DSSP_FALLBACK_SERVICE_KEY = "QOS949Q69S3P539V"
+
+/**
+ * 행정안전부_침수흔적도 오픈API (DSSP-IF-00117) 테스트 호출.
+ * CORS·키 노출 회피를 위해 서버에서만 요청합니다.
+ */
+export async function fetchSafetydataDssp00117Test(params?: {
+  pageNo?: number
+  numOfRows?: number
+  returnType?: "json" | "xml"
+}): Promise<{
+  httpStatus: number
+  requestUrlMasked: string
+  bodyPreview: string
+}> {
+  const vars = getRuntimeEnvVars()
+  const serviceKey =
+    vars.SAFETYDATA_API_KEY?.trim() || SAFETYDATA_DSSP_FALLBACK_SERVICE_KEY
+  const pageNo = params?.pageNo ?? 1
+  const numOfRows = Math.min(30, Math.max(1, params?.numOfRows ?? 5))
+  const returnType = params?.returnType ?? "json"
+  const u = new URL(SAFETYDATA_DSSP_IF_00117)
+  u.searchParams.set("serviceKey", serviceKey)
+  u.searchParams.set("pageNo", String(pageNo))
+  u.searchParams.set("numOfRows", String(numOfRows))
+  u.searchParams.set("returnType", returnType)
+  const res = await fetch(u.toString(), { method: "GET", cache: "no-store" })
+  const text = await res.text()
+  const max = 6000
+  const bodyPreview =
+    text.length > max ? `${text.slice(0, max)}\n…(truncated, ${text.length} chars total)` : text
+  const requestUrlMasked = `${SAFETYDATA_DSSP_IF_00117}?serviceKey=***&pageNo=${pageNo}&numOfRows=${numOfRows}&returnType=${returnType}`
+  return { httpStatus: res.status, requestUrlMasked, bodyPreview }
+}
+
+const SAFETYDATA_DSSP_IF_00247 = "https://www.safetydata.go.kr/V2/api/DSSP-IF-00247"
+
+/**
+ * 행정안전부_긴급재난문자 오픈API (DSSP-IF-00247) 테스트 호출.
+ */
+export async function fetchSafetydataDssp00247Test(params?: {
+  pageNo?: number
+  numOfRows?: number
+  returnType?: "json" | "xml"
+  /** 조회시작일자 YYYYMMDD */
+  crtDt?: string
+  /** 지역명(시도명, 시군구명) */
+  rgnNm?: string
+}): Promise<{
+  httpStatus: number
+  requestUrlMasked: string
+  bodyPreview: string
+}> {
+  const vars = getRuntimeEnvVars()
+  const serviceKey =
+    vars.SAFETYDATA_API_KEY?.trim() || SAFETYDATA_DSSP_FALLBACK_SERVICE_KEY
+  const pageNo = params?.pageNo ?? 1
+  const numOfRows = Math.min(30, Math.max(1, params?.numOfRows ?? 10))
+  const returnType = params?.returnType ?? "json"
+  const u = new URL(SAFETYDATA_DSSP_IF_00247)
+  u.searchParams.set("serviceKey", serviceKey)
+  u.searchParams.set("pageNo", String(pageNo))
+  u.searchParams.set("numOfRows", String(numOfRows))
+  u.searchParams.set("returnType", returnType)
+  const crtDt = params?.crtDt?.trim()
+  const rgnNm = params?.rgnNm?.trim()
+  if (crtDt) u.searchParams.set("crtDt", crtDt)
+  if (rgnNm) u.searchParams.set("rgnNm", rgnNm)
+  const res = await fetch(u.toString(), { method: "GET", cache: "no-store" })
+  const text = await res.text()
+  const max = 6000
+  const bodyPreview =
+    text.length > max ? `${text.slice(0, max)}\n…(truncated, ${text.length} chars total)` : text
+  const q = new URLSearchParams({
+    serviceKey: "***",
+    pageNo: String(pageNo),
+    numOfRows: String(numOfRows),
+    returnType,
+  })
+  if (crtDt) q.set("crtDt", crtDt)
+  if (rgnNm) q.set("rgnNm", rgnNm)
+  const requestUrlMasked = `${SAFETYDATA_DSSP_IF_00247}?${q.toString()}`
+  return { httpStatus: res.status, requestUrlMasked, bodyPreview }
+}
+
+const SAFETYDATA_DSSP_IF_10941 = "https://www.safetydata.go.kr/V2/api/DSSP-IF-10941"
+
+/** 통합대피소 DSSP-IF-10941 (`SAFETYDATA_SHELTER_API_KEY`가 있으면 우선) */
+const SAFETYDATA_DSSP_IF10941_FALLBACK_SERVICE_KEY = "4LA6W582X92XQUO8"
+
+/**
+ * 통합대피소 오픈API (DSSP-IF-10941) 테스트 호출.
+ */
+export async function fetchSafetydataDssp10941Test(params?: {
+  pageNo?: number
+  numOfRows?: number
+  returnType?: "json" | "xml"
+  startLot?: string
+  endLot?: string
+  startLat?: string
+  endLat?: string
+  shlt_se_cd?: string
+}): Promise<{
+  httpStatus: number
+  requestUrlMasked: string
+  bodyPreview: string
+}> {
+  const vars = getRuntimeEnvVars()
+  const serviceKey =
+    vars.SAFETYDATA_SHELTER_API_KEY?.trim() ||
+    SAFETYDATA_DSSP_IF10941_FALLBACK_SERVICE_KEY
+  const pageNo = params?.pageNo ?? 1
+  const numOfRows = Math.min(30, Math.max(1, params?.numOfRows ?? 10))
+  const returnType = params?.returnType ?? "json"
+  const u = new URL(SAFETYDATA_DSSP_IF_10941)
+  u.searchParams.set("serviceKey", serviceKey)
+  u.searchParams.set("pageNo", String(pageNo))
+  u.searchParams.set("numOfRows", String(numOfRows))
+  u.searchParams.set("returnType", returnType)
+  const startLot = params?.startLot?.trim()
+  const endLot = params?.endLot?.trim()
+  const startLat = params?.startLat?.trim()
+  const endLat = params?.endLat?.trim()
+  const shlt_se_cd = params?.shlt_se_cd?.trim()
+  if (startLot) u.searchParams.set("startLot", startLot)
+  if (endLot) u.searchParams.set("endLot", endLot)
+  if (startLat) u.searchParams.set("startLat", startLat)
+  if (endLat) u.searchParams.set("endLat", endLat)
+  if (shlt_se_cd) u.searchParams.set("shlt_se_cd", shlt_se_cd)
+  const res = await fetch(u.toString(), { method: "GET", cache: "no-store" })
+  const text = await res.text()
+  const max = 6000
+  const bodyPreview =
+    text.length > max ? `${text.slice(0, max)}\n…(truncated, ${text.length} chars total)` : text
+  const q = new URLSearchParams({
+    serviceKey: "***",
+    pageNo: String(pageNo),
+    numOfRows: String(numOfRows),
+    returnType,
+  })
+  if (startLot) q.set("startLot", startLot)
+  if (endLot) q.set("endLot", endLot)
+  if (startLat) q.set("startLat", startLat)
+  if (endLat) q.set("endLat", endLat)
+  if (shlt_se_cd) q.set("shlt_se_cd", shlt_se_cd)
+  const requestUrlMasked = `${SAFETYDATA_DSSP_IF_10941}?${q.toString()}`
+  return { httpStatus: res.status, requestUrlMasked, bodyPreview }
 }
 
 /**
