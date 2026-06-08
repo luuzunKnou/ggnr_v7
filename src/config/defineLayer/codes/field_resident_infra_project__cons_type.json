@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "65678",
+    "define_code_field_key": "13836",
+    "define_code_name": "[도]새마을주민숙원사업",
+    "define_code_kor_name": "[도]새마을주민숙원사업"
+  },
+  {
+    "define_code_key": "65679",
+    "define_code_field_key": "13836",
+    "define_code_name": "[도]호우피해복구사업",
+    "define_code_kor_name": "[도]호우피해복구사업"
+  },
+  {
+    "define_code_key": "65680",
+    "define_code_field_key": "13836",
+    "define_code_name": "소규모공공시설정비사업",
+    "define_code_kor_name": "소규모공공시설정비사업"
+  },
+  {
+    "define_code_key": "65681",
+    "define_code_field_key": "13836",
+    "define_code_name": "소규모주민숙원사업",
+    "define_code_kor_name": "소규모주민숙원사업"
+  },
+  {
+    "define_code_key": "65682",
+    "define_code_field_key": "13836",
+    "define_code_name": "호우피해복구사업",
+    "define_code_kor_name": "호우피해복구사업"
+  }
+]

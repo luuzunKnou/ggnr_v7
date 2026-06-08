@@ -1,0 +1,42 @@
+[
+  {
+    "define_code_name": "0701",
+    "define_code_kor_name": "상수도"
+  },
+  {
+    "define_code_name": "0702",
+    "define_code_kor_name": "하수도"
+  },
+  {
+    "define_code_name": "0703",
+    "define_code_kor_name": "통신케이블"
+  },
+  {
+    "define_code_name": "0704",
+    "define_code_kor_name": "전력케이블"
+  },
+  {
+    "define_code_name": "0705",
+    "define_code_kor_name": "각종용수"
+  },
+  {
+    "define_code_name": "0706",
+    "define_code_kor_name": "송유관"
+  },
+  {
+    "define_code_name": "0707",
+    "define_code_kor_name": "도시가스관"
+  },
+  {
+    "define_code_name": "0708",
+    "define_code_kor_name": "공업용수관"
+  },
+  {
+    "define_code_name": "0709",
+    "define_code_kor_name": "ITS"
+  },
+  {
+    "define_code_name": "0799",
+    "define_code_kor_name": "기타"
+  }
+]

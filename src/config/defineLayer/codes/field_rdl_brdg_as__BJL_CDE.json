@@ -1,0 +1,224 @@
+[
+  {
+    "define_code_key": "70569",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70570",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL001",
+    "define_code_kor_name": "강교"
+  },
+  {
+    "define_code_key": "70571",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL002",
+    "define_code_kor_name": "철근콘크리트교"
+  },
+  {
+    "define_code_key": "70572",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL003",
+    "define_code_kor_name": "목교"
+  },
+  {
+    "define_code_key": "70573",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL004",
+    "define_code_kor_name": "혼성교"
+  },
+  {
+    "define_code_key": "70574",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL005",
+    "define_code_kor_name": "미가설교"
+  },
+  {
+    "define_code_key": "70575",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70576",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL900",
+    "define_code_kor_name": "1등도로"
+  },
+  {
+    "define_code_key": "70577",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL901",
+    "define_code_kor_name": "2등도로"
+  },
+  {
+    "define_code_key": "70578",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL902",
+    "define_code_kor_name": "2층교"
+  },
+  {
+    "define_code_key": "70579",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL903",
+    "define_code_kor_name": "3등도로"
+  },
+  {
+    "define_code_key": "70580",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL904",
+    "define_code_kor_name": "4등도로"
+  },
+  {
+    "define_code_key": "70581",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL905",
+    "define_code_kor_name": "5등도로"
+  },
+  {
+    "define_code_key": "70582",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL906",
+    "define_code_kor_name": "6등도로"
+  },
+  {
+    "define_code_key": "70583",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL907",
+    "define_code_kor_name": "7등도로"
+  },
+  {
+    "define_code_key": "70584",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL908",
+    "define_code_kor_name": "8등도로"
+  },
+  {
+    "define_code_key": "70585",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL909",
+    "define_code_kor_name": "고속국도"
+  },
+  {
+    "define_code_key": "70586",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL910",
+    "define_code_kor_name": "군(구)도"
+  },
+  {
+    "define_code_key": "70587",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL911",
+    "define_code_kor_name": "군사도로"
+  },
+  {
+    "define_code_key": "70588",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL912",
+    "define_code_kor_name": "면리간도로"
+  },
+  {
+    "define_code_key": "70589",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL913",
+    "define_code_kor_name": "부지안도로"
+  },
+  {
+    "define_code_key": "70590",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL914",
+    "define_code_kor_name": "사도(개인용)"
+  },
+  {
+    "define_code_key": "70591",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL915",
+    "define_code_kor_name": "상로교"
+  },
+  {
+    "define_code_key": "70592",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL916",
+    "define_code_kor_name": "시도중고가도로"
+  },
+  {
+    "define_code_key": "70593",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL917",
+    "define_code_kor_name": "시도중도시고속도로"
+  },
+  {
+    "define_code_key": "70594",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL918",
+    "define_code_kor_name": "시도중보행자전용도로"
+  },
+  {
+    "define_code_key": "70595",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL919",
+    "define_code_kor_name": "시도중일반도로"
+  },
+  {
+    "define_code_key": "70596",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL920",
+    "define_code_kor_name": "시도중자동차전용도로"
+  },
+  {
+    "define_code_key": "70597",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL921",
+    "define_code_kor_name": "시도중자전거전용도로"
+  },
+  {
+    "define_code_key": "70598",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL922",
+    "define_code_kor_name": "시도중지하차도"
+  },
+  {
+    "define_code_key": "70599",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL923",
+    "define_code_kor_name": "아파트부속도로"
+  },
+  {
+    "define_code_key": "70600",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL924",
+    "define_code_kor_name": "일반국도"
+  },
+  {
+    "define_code_key": "70601",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL925",
+    "define_code_kor_name": "중로교"
+  },
+  {
+    "define_code_key": "70602",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL926",
+    "define_code_kor_name": "지방도"
+  },
+  {
+    "define_code_key": "70603",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL927",
+    "define_code_kor_name": "철교"
+  },
+  {
+    "define_code_key": "70604",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL928",
+    "define_code_kor_name": "하로교"
+  },
+  {
+    "define_code_key": "70605",
+    "define_code_field_key": "7380",
+    "define_code_name": "BJL929",
+    "define_code_kor_name": "호텔부속도로"
+  }
+]

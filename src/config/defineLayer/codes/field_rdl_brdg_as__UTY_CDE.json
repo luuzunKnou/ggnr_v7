@@ -1,0 +1,308 @@
+[
+  {
+    "define_code_key": "70650",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70651",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY011",
+    "define_code_kor_name": "RC슬래브교"
+  },
+  {
+    "define_code_key": "70652",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY012",
+    "define_code_kor_name": "RC공중슬래브교"
+  },
+  {
+    "define_code_key": "70653",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY013",
+    "define_code_kor_name": "RCT형교"
+  },
+  {
+    "define_code_key": "70654",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY014",
+    "define_code_kor_name": "강I형교"
+  },
+  {
+    "define_code_key": "70655",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY015",
+    "define_code_kor_name": "PC박스형교"
+  },
+  {
+    "define_code_key": "70656",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY016",
+    "define_code_kor_name": "강판형교"
+  },
+  {
+    "define_code_key": "70657",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY017",
+    "define_code_kor_name": "라멘교"
+  },
+  {
+    "define_code_key": "70658",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY018",
+    "define_code_kor_name": "트러스교"
+  },
+  {
+    "define_code_key": "70659",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY019",
+    "define_code_kor_name": "아치교"
+  },
+  {
+    "define_code_key": "70660",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY020",
+    "define_code_kor_name": "사장교"
+  },
+  {
+    "define_code_key": "70661",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY021",
+    "define_code_kor_name": "현수교"
+  },
+  {
+    "define_code_key": "70662",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY022",
+    "define_code_kor_name": "프리플렉스교"
+  },
+  {
+    "define_code_key": "70663",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY023",
+    "define_code_kor_name": "PC I형교"
+  },
+  {
+    "define_code_key": "70664",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY024",
+    "define_code_kor_name": "목교"
+  },
+  {
+    "define_code_key": "70665",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY025",
+    "define_code_kor_name": "PC 슬래브교"
+  },
+  {
+    "define_code_key": "70666",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY026",
+    "define_code_kor_name": "PC공중슬래브교"
+  },
+  {
+    "define_code_key": "70667",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY027",
+    "define_code_kor_name": "RC박스형교"
+  },
+  {
+    "define_code_key": "70668",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY028",
+    "define_code_kor_name": "강박스형교"
+  },
+  {
+    "define_code_key": "70669",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70670",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY900",
+    "define_code_kor_name": "(콘크리트)박스가더교"
+  },
+  {
+    "define_code_key": "70671",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY901",
+    "define_code_kor_name": "강형교 PSC BEAM"
+  },
+  {
+    "define_code_key": "70672",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY902",
+    "define_code_kor_name": "강I-BEAM"
+  },
+  {
+    "define_code_key": "70673",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY903",
+    "define_code_kor_name": "거더교"
+  },
+  {
+    "define_code_key": "70674",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY904",
+    "define_code_kor_name": "게르버교"
+  },
+  {
+    "define_code_key": "70675",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY905",
+    "define_code_kor_name": "규모이하"
+  },
+  {
+    "define_code_key": "70676",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY906",
+    "define_code_kor_name": "단순교"
+  },
+  {
+    "define_code_key": "70677",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY907",
+    "define_code_kor_name": "스틸BOX형교"
+  },
+  {
+    "define_code_key": "70678",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY908",
+    "define_code_kor_name": "연속교"
+  },
+  {
+    "define_code_key": "70679",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY909",
+    "define_code_kor_name": "프리플렉스형교"
+  },
+  {
+    "define_code_key": "70680",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY910",
+    "define_code_kor_name": "AR아치교"
+  },
+  {
+    "define_code_key": "70681",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY911",
+    "define_code_kor_name": "BG박스거더"
+  },
+  {
+    "define_code_key": "70682",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY912",
+    "define_code_kor_name": "CS사장교"
+  },
+  {
+    "define_code_key": "70683",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY913",
+    "define_code_kor_name": "GER게르바교"
+  },
+  {
+    "define_code_key": "70684",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY914",
+    "define_code_kor_name": "I빔교"
+  },
+  {
+    "define_code_key": "70685",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY915",
+    "define_code_kor_name": "P/F Beam"
+  },
+  {
+    "define_code_key": "70686",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY916",
+    "define_code_kor_name": "PC빔교"
+  },
+  {
+    "define_code_key": "70687",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY917",
+    "define_code_kor_name": "PC-U빔"
+  },
+  {
+    "define_code_key": "70688",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY918",
+    "define_code_kor_name": "PREFLEX BEAM"
+  },
+  {
+    "define_code_key": "70689",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY919",
+    "define_code_kor_name": "PSC 슬래브교"
+  },
+  {
+    "define_code_key": "70690",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY920",
+    "define_code_kor_name": "PSC BEAM"
+  },
+  {
+    "define_code_key": "70691",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY921",
+    "define_code_kor_name": "PSCI형교"
+  },
+  {
+    "define_code_key": "70692",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY922",
+    "define_code_kor_name": "RA"
+  },
+  {
+    "define_code_key": "70693",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY923",
+    "define_code_kor_name": "RA라멘교"
+  },
+  {
+    "define_code_key": "70694",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY924",
+    "define_code_kor_name": "RCS"
+  },
+  {
+    "define_code_key": "70695",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY925",
+    "define_code_kor_name": "RF프리플렉스"
+  },
+  {
+    "define_code_key": "70696",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY926",
+    "define_code_kor_name": "SBG강박스교"
+  },
+  {
+    "define_code_key": "70697",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY927",
+    "define_code_kor_name": "SU현수교"
+  },
+  {
+    "define_code_key": "70698",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY928",
+    "define_code_kor_name": "T빔교"
+  },
+  {
+    "define_code_key": "70699",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY929",
+    "define_code_kor_name": "TR트러스교"
+  },
+  {
+    "define_code_key": "70700",
+    "define_code_field_key": "7392",
+    "define_code_name": "UTY930",
+    "define_code_kor_name": "W목조교"
+  }
+]

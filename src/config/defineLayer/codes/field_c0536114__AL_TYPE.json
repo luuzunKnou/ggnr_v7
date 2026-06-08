@@ -1,0 +1,42 @@
+[
+  {
+    "define_code_name": "5101",
+    "define_code_kor_name": "비상경보설비"
+  },
+  {
+    "define_code_name": "5102",
+    "define_code_kor_name": "자동화재 탐지설비"
+  },
+  {
+    "define_code_name": "5103",
+    "define_code_kor_name": "비상방송설비"
+  },
+  {
+    "define_code_name": "5104",
+    "define_code_kor_name": "긴급전화"
+  },
+  {
+    "define_code_name": "5105",
+    "define_code_kor_name": "CCTV(감시용 텔레비전 설비)"
+  },
+  {
+    "define_code_name": "5106",
+    "define_code_kor_name": "자동사고감지설비"
+  },
+  {
+    "define_code_name": "5107",
+    "define_code_kor_name": "재방송 설비"
+  },
+  {
+    "define_code_name": "5108",
+    "define_code_kor_name": "정보표지판"
+  },
+  {
+    "define_code_name": "5109",
+    "define_code_kor_name": "터널진입차단설비"
+  },
+  {
+    "define_code_name": "5199",
+    "define_code_kor_name": "기타"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "define_code_key": "1021",
+    "define_code_field_key": "4625",
+    "define_code_name": "IVT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1022",
+    "define_code_field_key": "4625",
+    "define_code_name": "IVT001",
+    "define_code_kor_name": "유"
+  },
+  {
+    "define_code_key": "1023",
+    "define_code_field_key": "4625",
+    "define_code_name": "IVT002",
+    "define_code_kor_name": "무"
+  },
+  {
+    "define_code_key": "1024",
+    "define_code_field_key": "4625",
+    "define_code_name": "IVT900",
+    "define_code_kor_name": "개폐불가"
+  },
+  {
+    "define_code_key": "1025",
+    "define_code_field_key": "4625",
+    "define_code_name": "IVT901",
+    "define_code_kor_name": "매몰"
+  },
+  {
+    "define_code_key": "1026",
+    "define_code_field_key": "4625",
+    "define_code_name": "IVT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "65672",
+    "define_code_field_key": "4625",
+    "define_code_name": "VT002",
+    "define_code_kor_name": "VT002"
+  }
+]

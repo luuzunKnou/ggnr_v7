@@ -1,0 +1,70 @@
+[
+  {
+    "define_code_name": "3101",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_name": "3102",
+    "define_code_kor_name": "가드펜스"
+  },
+  {
+    "define_code_name": "3103",
+    "define_code_kor_name": "가드파이프"
+  },
+  {
+    "define_code_name": "3104",
+    "define_code_kor_name": "가드케이블"
+  },
+  {
+    "define_code_name": "3105",
+    "define_code_kor_name": "콘크리트방호 울타리"
+  },
+  {
+    "define_code_name": "3106",
+    "define_code_kor_name": "낙석방호 울타리"
+  },
+  {
+    "define_code_name": "3107",
+    "define_code_kor_name": "박스형 보형"
+  },
+  {
+    "define_code_name": "3108",
+    "define_code_kor_name": "콘크리트 보형"
+  },
+  {
+    "define_code_name": "3109",
+    "define_code_kor_name": "연석형"
+  },
+  {
+    "define_code_name": "3110",
+    "define_code_kor_name": "광폭형"
+  },
+  {
+    "define_code_name": "3111",
+    "define_code_kor_name": "가드레일(옹벽설치)"
+  },
+  {
+    "define_code_name": "3112",
+    "define_code_kor_name": "강재방호책"
+  },
+  {
+    "define_code_name": "3199",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "철근콘크리트"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "콘크리트연석"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_name": "EC11",
+    "define_code_kor_name": "방호벽"
+  }
+]

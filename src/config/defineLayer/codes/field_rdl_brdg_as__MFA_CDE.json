@@ -1,0 +1,50 @@
+[
+  {
+    "define_code_key": "70624",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70625",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA001",
+    "define_code_kor_name": "고속도로"
+  },
+  {
+    "define_code_key": "70626",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA002",
+    "define_code_kor_name": "일반도로"
+  },
+  {
+    "define_code_key": "70627",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA003",
+    "define_code_kor_name": "하천"
+  },
+  {
+    "define_code_key": "70628",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA004",
+    "define_code_kor_name": "철도"
+  },
+  {
+    "define_code_key": "70629",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70630",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA900",
+    "define_code_kor_name": "바다"
+  },
+  {
+    "define_code_key": "70631",
+    "define_code_field_key": "7424",
+    "define_code_name": "MFA901",
+    "define_code_kor_name": "안전밸브"
+  }
+]

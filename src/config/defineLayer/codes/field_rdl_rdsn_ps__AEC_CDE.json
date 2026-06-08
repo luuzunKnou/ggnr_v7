@@ -1,0 +1,206 @@
+[
+  {
+    "define_code_key": "71562",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71563",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC001",
+    "define_code_kor_name": "도로정보판"
+  },
+  {
+    "define_code_key": "71564",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC002",
+    "define_code_kor_name": "도로안내(이정)"
+  },
+  {
+    "define_code_key": "71565",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC003",
+    "define_code_kor_name": "도로안내(경계)"
+  },
+  {
+    "define_code_key": "71566",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC004",
+    "define_code_kor_name": "도로안내(방향)"
+  },
+  {
+    "define_code_key": "71567",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC005",
+    "define_code_kor_name": "도로안내(보조)"
+  },
+  {
+    "define_code_key": "71568",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC006",
+    "define_code_kor_name": "도로안내(노선)"
+  },
+  {
+    "define_code_key": "71569",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC007",
+    "define_code_kor_name": "도로안내(기타)"
+  },
+  {
+    "define_code_key": "71570",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71571",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC900",
+    "define_code_kor_name": "2방향본표지(안내)"
+  },
+  {
+    "define_code_key": "71572",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC901",
+    "define_code_kor_name": "2방향예고표지(안내)"
+  },
+  {
+    "define_code_key": "71573",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC902",
+    "define_code_kor_name": "3방향본표지(안내)"
+  },
+  {
+    "define_code_key": "71574",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC903",
+    "define_code_kor_name": "3방향예고표지(안내)"
+  },
+  {
+    "define_code_key": "71575",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC904",
+    "define_code_kor_name": "경찰서"
+  },
+  {
+    "define_code_key": "71576",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC905",
+    "define_code_kor_name": "관광"
+  },
+  {
+    "define_code_key": "71577",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC906",
+    "define_code_kor_name": "광고표지"
+  },
+  {
+    "define_code_key": "71578",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC907",
+    "define_code_kor_name": "교통안전(규제)"
+  },
+  {
+    "define_code_key": "71579",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC908",
+    "define_code_kor_name": "교통안전(기타)"
+  },
+  {
+    "define_code_key": "71580",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC909",
+    "define_code_kor_name": "교통안전(보조)"
+  },
+  {
+    "define_code_key": "71581",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC910",
+    "define_code_kor_name": "교통안전(주의)"
+  },
+  {
+    "define_code_key": "71582",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC911",
+    "define_code_kor_name": "교통안전(지시)"
+  },
+  {
+    "define_code_key": "71583",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC912",
+    "define_code_kor_name": "도경계표지(이정)"
+  },
+  {
+    "define_code_key": "71584",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC913",
+    "define_code_kor_name": "도로안내(관광)"
+  },
+  {
+    "define_code_key": "71585",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC914",
+    "define_code_kor_name": "도로안내(분기점)"
+  },
+  {
+    "define_code_key": "71586",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC915",
+    "define_code_kor_name": "도로안내(주의)"
+  },
+  {
+    "define_code_key": "71587",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC916",
+    "define_code_kor_name": "보행자안내표지"
+  },
+  {
+    "define_code_key": "71588",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC917",
+    "define_code_kor_name": "분기"
+  },
+  {
+    "define_code_key": "71589",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC918",
+    "define_code_kor_name": "새주소도로안내"
+  },
+  {
+    "define_code_key": "71590",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC919",
+    "define_code_kor_name": "소방서"
+  },
+  {
+    "define_code_key": "71591",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC920",
+    "define_code_kor_name": "시경계표지(이정)"
+  },
+  {
+    "define_code_key": "71592",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC921",
+    "define_code_kor_name": "예고"
+  },
+  {
+    "define_code_key": "71593",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC922",
+    "define_code_kor_name": "접도구역표지"
+  },
+  {
+    "define_code_key": "71594",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC923",
+    "define_code_kor_name": "주차장표지"
+  },
+  {
+    "define_code_key": "71595",
+    "define_code_field_key": "7808",
+    "define_code_name": "AEC924",
+    "define_code_kor_name": "터널표지"
+  }
+]

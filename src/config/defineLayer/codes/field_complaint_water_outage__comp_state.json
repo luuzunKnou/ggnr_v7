@@ -1,0 +1,14 @@
+[
+  {
+    "define_code_key": "65585",
+    "define_code_field_key": "10106",
+    "define_code_name": "false",
+    "define_code_kor_name": "미처리"
+  },
+  {
+    "define_code_key": "65586",
+    "define_code_field_key": "10106",
+    "define_code_name": "true",
+    "define_code_kor_name": "처리완료"
+  }
+]

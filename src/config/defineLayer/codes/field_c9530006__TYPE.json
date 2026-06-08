@@ -1,0 +1,10 @@
+[
+  {
+    "define_code_name": "0",
+    "define_code_kor_name": "고정검문소"
+  },
+  {
+    "define_code_name": "1",
+    "define_code_kor_name": "이동검문소"
+  }
+]

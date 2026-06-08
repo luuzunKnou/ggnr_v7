@@ -1,0 +1,164 @@
+[
+  {
+    "define_code_key": "67441",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "67442",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE001",
+    "define_code_kor_name": "상업지역"
+  },
+  {
+    "define_code_key": "67443",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE002",
+    "define_code_kor_name": "주거지역"
+  },
+  {
+    "define_code_key": "67444",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE003",
+    "define_code_kor_name": "준공업지역"
+  },
+  {
+    "define_code_key": "67445",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE004",
+    "define_code_kor_name": "공업지역"
+  },
+  {
+    "define_code_key": "67446",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE005",
+    "define_code_kor_name": "녹지지역"
+  },
+  {
+    "define_code_key": "67447",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "67448",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE900",
+    "define_code_kor_name": "근린상업지역"
+  },
+  {
+    "define_code_key": "67449",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE901",
+    "define_code_kor_name": "도시지역"
+  },
+  {
+    "define_code_key": "67450",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE902",
+    "define_code_kor_name": "도시지역기타"
+  },
+  {
+    "define_code_key": "67451",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE903",
+    "define_code_kor_name": "도시지역미분류"
+  },
+  {
+    "define_code_key": "67452",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE904",
+    "define_code_kor_name": "보전녹지지역"
+  },
+  {
+    "define_code_key": "67453",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE905",
+    "define_code_kor_name": "생산녹지지역"
+  },
+  {
+    "define_code_key": "67454",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE906",
+    "define_code_kor_name": "유통상업지역"
+  },
+  {
+    "define_code_key": "67455",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE907",
+    "define_code_kor_name": "일반공업지역"
+  },
+  {
+    "define_code_key": "67456",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE908",
+    "define_code_kor_name": "일반상업지역"
+  },
+  {
+    "define_code_key": "67457",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE909",
+    "define_code_kor_name": "일반주거지역"
+  },
+  {
+    "define_code_key": "67458",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE910",
+    "define_code_kor_name": "자연녹지지역"
+  },
+  {
+    "define_code_key": "67459",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE911",
+    "define_code_kor_name": "전용공업지역"
+  },
+  {
+    "define_code_key": "67460",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE912",
+    "define_code_kor_name": "전용주거지역"
+  },
+  {
+    "define_code_key": "67461",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE913",
+    "define_code_kor_name": "제1종일반주거지역"
+  },
+  {
+    "define_code_key": "67462",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE914",
+    "define_code_kor_name": "제1종전용주거지역"
+  },
+  {
+    "define_code_key": "67463",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE915",
+    "define_code_kor_name": "제2종일반주거지역"
+  },
+  {
+    "define_code_key": "67464",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE916",
+    "define_code_kor_name": "제2종전용주거지역"
+  },
+  {
+    "define_code_key": "67465",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE917",
+    "define_code_kor_name": "제3종일반주거지역"
+  },
+  {
+    "define_code_key": "67466",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE918",
+    "define_code_kor_name": "준주거지역"
+  },
+  {
+    "define_code_key": "67467",
+    "define_code_field_key": "4467",
+    "define_code_name": "USE919",
+    "define_code_kor_name": "중심상업지역"
+  }
+]

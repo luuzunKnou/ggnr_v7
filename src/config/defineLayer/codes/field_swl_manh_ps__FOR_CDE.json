@@ -1,0 +1,392 @@
+[
+  {
+    "define_code_key": "1155",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1156",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR001",
+    "define_code_kor_name": "원형"
+  },
+  {
+    "define_code_key": "1157",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR002",
+    "define_code_kor_name": "원추형"
+  },
+  {
+    "define_code_key": "1158",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR003",
+    "define_code_kor_name": "원통형"
+  },
+  {
+    "define_code_key": "1159",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR004",
+    "define_code_kor_name": "구형"
+  },
+  {
+    "define_code_key": "1160",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR005",
+    "define_code_kor_name": "타원형"
+  },
+  {
+    "define_code_key": "1161",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR006",
+    "define_code_kor_name": "난원"
+  },
+  {
+    "define_code_key": "1162",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR007",
+    "define_code_kor_name": "반원형"
+  },
+  {
+    "define_code_key": "1163",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR010",
+    "define_code_kor_name": "피라미드형"
+  },
+  {
+    "define_code_key": "1164",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR011",
+    "define_code_kor_name": "사면체형"
+  },
+  {
+    "define_code_key": "1165",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR012",
+    "define_code_kor_name": "기둥,축"
+  },
+  {
+    "define_code_key": "1166",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR013",
+    "define_code_kor_name": "돛대,활대처럼 둥글고 긴 원재"
+  },
+  {
+    "define_code_key": "1167",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR014",
+    "define_code_kor_name": "아치형"
+  },
+  {
+    "define_code_key": "1168",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR015",
+    "define_code_kor_name": "다중아치형"
+  },
+  {
+    "define_code_key": "1169",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR016",
+    "define_code_kor_name": "돔형"
+  },
+  {
+    "define_code_key": "1170",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR017",
+    "define_code_kor_name": "고형체형"
+  },
+  {
+    "define_code_key": "1171",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR020",
+    "define_code_kor_name": "사각형"
+  },
+  {
+    "define_code_key": "1172",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR021",
+    "define_code_kor_name": "평방형"
+  },
+  {
+    "define_code_key": "1173",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR022",
+    "define_code_kor_name": "다이아몬드형"
+  },
+  {
+    "define_code_key": "1174",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR023",
+    "define_code_kor_name": "사다리꼴"
+  },
+  {
+    "define_code_key": "1175",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR024",
+    "define_code_kor_name": "각형"
+  },
+  {
+    "define_code_key": "1176",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR025",
+    "define_code_kor_name": "마제형관"
+  },
+  {
+    "define_code_key": "1177",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR026",
+    "define_code_kor_name": "태형"
+  },
+  {
+    "define_code_key": "1178",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR030",
+    "define_code_kor_name": "A형"
+  },
+  {
+    "define_code_key": "1179",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR031",
+    "define_code_kor_name": "H형"
+  },
+  {
+    "define_code_key": "1180",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR032",
+    "define_code_kor_name": "I형"
+  },
+  {
+    "define_code_key": "1181",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR033",
+    "define_code_kor_name": "Y형"
+  },
+  {
+    "define_code_key": "1182",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR034",
+    "define_code_kor_name": "T형"
+  },
+  {
+    "define_code_key": "1183",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR050",
+    "define_code_kor_name": "불규칙한 형태"
+  },
+  {
+    "define_code_key": "1184",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR900",
+    "define_code_kor_name": "계란형"
+  },
+  {
+    "define_code_key": "1185",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR901",
+    "define_code_kor_name": "구(사각)형"
+  },
+  {
+    "define_code_key": "1186",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR902",
+    "define_code_kor_name": "높이조절철개형"
+  },
+  {
+    "define_code_key": "1187",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR903",
+    "define_code_kor_name": "박스형(RCB)"
+  },
+  {
+    "define_code_key": "1188",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR904",
+    "define_code_kor_name": "반월개거"
+  },
+  {
+    "define_code_key": "1189",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR905",
+    "define_code_kor_name": "반월개거(측구)"
+  },
+  {
+    "define_code_key": "1190",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR906",
+    "define_code_kor_name": "벽돌조"
+  },
+  {
+    "define_code_key": "1191",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR907",
+    "define_code_kor_name": "사각철판"
+  },
+  {
+    "define_code_key": "1192",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR908",
+    "define_code_kor_name": "석축개거"
+  },
+  {
+    "define_code_key": "1193",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR909",
+    "define_code_kor_name": "석축개거(측구)"
+  },
+  {
+    "define_code_key": "1194",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR910",
+    "define_code_kor_name": "승수로"
+  },
+  {
+    "define_code_key": "1195",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR911",
+    "define_code_kor_name": "옹벽개거"
+  },
+  {
+    "define_code_key": "1196",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR912",
+    "define_code_kor_name": "옹벽개거(측구)"
+  },
+  {
+    "define_code_key": "1197",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR913",
+    "define_code_kor_name": "이단"
+  },
+  {
+    "define_code_key": "1198",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR914",
+    "define_code_kor_name": "이중침전형"
+  },
+  {
+    "define_code_key": "1199",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR915",
+    "define_code_kor_name": "자연개거"
+  },
+  {
+    "define_code_key": "1200",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR916",
+    "define_code_kor_name": "자연개거(측구)"
+  },
+  {
+    "define_code_key": "1201",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR917",
+    "define_code_kor_name": "조립식"
+  },
+  {
+    "define_code_key": "1202",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR918",
+    "define_code_kor_name": "지상관"
+  },
+  {
+    "define_code_key": "1203",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR919",
+    "define_code_kor_name": "지상단구"
+  },
+  {
+    "define_code_key": "1204",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR920",
+    "define_code_kor_name": "지상쌍구"
+  },
+  {
+    "define_code_key": "1205",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR921",
+    "define_code_kor_name": "지하단구"
+  },
+  {
+    "define_code_key": "1206",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR922",
+    "define_code_kor_name": "지하쌍구"
+  },
+  {
+    "define_code_key": "1207",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR923",
+    "define_code_kor_name": "직사각형"
+  },
+  {
+    "define_code_key": "1208",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR924",
+    "define_code_kor_name": "타설식"
+  },
+  {
+    "define_code_key": "1209",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR925",
+    "define_code_kor_name": "토류형"
+  },
+  {
+    "define_code_key": "1210",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR926",
+    "define_code_kor_name": "흄관원형"
+  },
+  {
+    "define_code_key": "1211",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR927",
+    "define_code_kor_name": "L형측구"
+  },
+  {
+    "define_code_key": "1212",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR928",
+    "define_code_kor_name": "LO형측구"
+  },
+  {
+    "define_code_key": "1213",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR929",
+    "define_code_kor_name": "LU형측구"
+  },
+  {
+    "define_code_key": "1214",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR930",
+    "define_code_kor_name": "PVC이중벽관"
+  },
+  {
+    "define_code_key": "1215",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR931",
+    "define_code_kor_name": "RCB 맨홀"
+  },
+  {
+    "define_code_key": "1216",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR932",
+    "define_code_kor_name": "U형"
+  },
+  {
+    "define_code_key": "1217",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR933",
+    "define_code_kor_name": "U형측구(미복개)"
+  },
+  {
+    "define_code_key": "1218",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR934",
+    "define_code_kor_name": "U형측구(복개)"
+  },
+  {
+    "define_code_key": "1219",
+    "define_code_field_key": "4619",
+    "define_code_name": "FOR999",
+    "define_code_kor_name": "기타"
+  }
+]

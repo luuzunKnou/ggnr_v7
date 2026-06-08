@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "0901",
+    "define_code_kor_name": "고정단"
+  },
+  {
+    "define_code_name": "0902",
+    "define_code_kor_name": "일방향가동단"
+  },
+  {
+    "define_code_name": "0903",
+    "define_code_kor_name": "이방향가동단"
+  },
+  {
+    "define_code_name": "0999",
+    "define_code_kor_name": "기타"
+  }
+]

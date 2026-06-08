@@ -1,0 +1,50 @@
+[
+  {
+    "define_code_key": "72442",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72443",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC001",
+    "define_code_kor_name": "1종"
+  },
+  {
+    "define_code_key": "72444",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC002",
+    "define_code_kor_name": "2종"
+  },
+  {
+    "define_code_key": "72445",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC003",
+    "define_code_kor_name": "법정외"
+  },
+  {
+    "define_code_key": "72446",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC004",
+    "define_code_kor_name": "일반"
+  },
+  {
+    "define_code_key": "72447",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72448",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC900",
+    "define_code_kor_name": "3종"
+  },
+  {
+    "define_code_key": "72449",
+    "define_code_field_key": "8010",
+    "define_code_name": "FAC901",
+    "define_code_kor_name": "규모이하"
+  }
+]

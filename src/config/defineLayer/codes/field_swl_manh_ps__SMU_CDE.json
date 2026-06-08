@@ -1,0 +1,152 @@
+[
+  {
+    "define_code_key": "1059",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1060",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU001",
+    "define_code_kor_name": "우수"
+  },
+  {
+    "define_code_key": "1061",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU002",
+    "define_code_kor_name": "오수"
+  },
+  {
+    "define_code_key": "1062",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU003",
+    "define_code_kor_name": "집수"
+  },
+  {
+    "define_code_key": "1063",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU004",
+    "define_code_kor_name": "합류"
+  },
+  {
+    "define_code_key": "1064",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU005",
+    "define_code_kor_name": "차집"
+  },
+  {
+    "define_code_key": "1065",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU900",
+    "define_code_kor_name": "1호"
+  },
+  {
+    "define_code_key": "1066",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU901",
+    "define_code_kor_name": "2호"
+  },
+  {
+    "define_code_key": "1067",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU902",
+    "define_code_kor_name": "3호"
+  },
+  {
+    "define_code_key": "1068",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU903",
+    "define_code_kor_name": "4호"
+  },
+  {
+    "define_code_key": "1069",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU904",
+    "define_code_kor_name": "5호"
+  },
+  {
+    "define_code_key": "1070",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU905",
+    "define_code_kor_name": "6호"
+  },
+  {
+    "define_code_key": "1071",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU906",
+    "define_code_kor_name": "7호"
+  },
+  {
+    "define_code_key": "1072",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU907",
+    "define_code_kor_name": "8호"
+  },
+  {
+    "define_code_key": "1073",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU908",
+    "define_code_kor_name": "구거용맨홀"
+  },
+  {
+    "define_code_key": "1074",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU909",
+    "define_code_kor_name": "부관부착맨홀"
+  },
+  {
+    "define_code_key": "1075",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU910",
+    "define_code_kor_name": "조립식맨홀"
+  },
+  {
+    "define_code_key": "1076",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU911",
+    "define_code_kor_name": "특1호"
+  },
+  {
+    "define_code_key": "1077",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU912",
+    "define_code_kor_name": "특2호"
+  },
+  {
+    "define_code_key": "1078",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU913",
+    "define_code_kor_name": "특3호"
+  },
+  {
+    "define_code_key": "1079",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU914",
+    "define_code_kor_name": "특4호"
+  },
+  {
+    "define_code_key": "1080",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU915",
+    "define_code_kor_name": "특5호"
+  },
+  {
+    "define_code_key": "1081",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU916",
+    "define_code_kor_name": "하수맨홀용도"
+  },
+  {
+    "define_code_key": "1082",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU917",
+    "define_code_kor_name": "현장타설관거용"
+  },
+  {
+    "define_code_key": "1083",
+    "define_code_field_key": "4618",
+    "define_code_name": "SMU999",
+    "define_code_kor_name": "기타"
+  }
+]

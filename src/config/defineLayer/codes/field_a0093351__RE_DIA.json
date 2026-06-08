@@ -1,0 +1,14 @@
+[
+  {
+    "define_code_name": "2701",
+    "define_code_kor_name": "양호"
+  },
+  {
+    "define_code_name": "2702",
+    "define_code_kor_name": "보통"
+  },
+  {
+    "define_code_name": "2703",
+    "define_code_kor_name": "불량"
+  }
+]

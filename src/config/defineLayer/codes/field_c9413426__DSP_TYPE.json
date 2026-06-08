@@ -1,0 +1,30 @@
+[
+  {
+    "define_code_name": "3801",
+    "define_code_kor_name": "반사형(원형)"
+  },
+  {
+    "define_code_name": "3802",
+    "define_code_kor_name": "반사형(사각)"
+  },
+  {
+    "define_code_name": "3803",
+    "define_code_kor_name": "반사형(입방체)"
+  },
+  {
+    "define_code_name": "3804",
+    "define_code_kor_name": "발광형(전구)"
+  },
+  {
+    "define_code_name": "3805",
+    "define_code_kor_name": "발광형(광섬유)"
+  },
+  {
+    "define_code_name": "3806",
+    "define_code_kor_name": "발광형(LED)"
+  },
+  {
+    "define_code_name": "3899",
+    "define_code_kor_name": "기타"
+  }
+]

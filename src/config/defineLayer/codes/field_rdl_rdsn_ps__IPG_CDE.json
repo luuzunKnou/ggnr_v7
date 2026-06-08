@@ -1,0 +1,296 @@
+[
+  {
+    "define_code_key": "71596",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71597",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG001",
+    "define_code_kor_name": "단주식"
+  },
+  {
+    "define_code_key": "71598",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG002",
+    "define_code_kor_name": "편지식"
+  },
+  {
+    "define_code_key": "71599",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG003",
+    "define_code_kor_name": "현수식"
+  },
+  {
+    "define_code_key": "71600",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG004",
+    "define_code_kor_name": "한전주 병설식"
+  },
+  {
+    "define_code_key": "71601",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG005",
+    "define_code_kor_name": "신호등 병설식"
+  },
+  {
+    "define_code_key": "71602",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG006",
+    "define_code_kor_name": "가로등 병설식"
+  },
+  {
+    "define_code_key": "71603",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG007",
+    "define_code_kor_name": "이정표 병설식"
+  },
+  {
+    "define_code_key": "71604",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG008",
+    "define_code_kor_name": "복주식"
+  },
+  {
+    "define_code_key": "71605",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG009",
+    "define_code_kor_name": "벽부착식"
+  },
+  {
+    "define_code_key": "71606",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG010",
+    "define_code_kor_name": "보안등 병설식"
+  },
+  {
+    "define_code_key": "71607",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71608",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG900",
+    "define_code_kor_name": "견착식(가로등)"
+  },
+  {
+    "define_code_key": "71609",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG901",
+    "define_code_kor_name": "견착식(전주)"
+  },
+  {
+    "define_code_key": "71610",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG902",
+    "define_code_kor_name": "경광등부착식"
+  },
+  {
+    "define_code_key": "71611",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG903",
+    "define_code_kor_name": "교량부착식"
+  },
+  {
+    "define_code_key": "71612",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG904",
+    "define_code_kor_name": "기둥"
+  },
+  {
+    "define_code_key": "71613",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG905",
+    "define_code_kor_name": "내민형"
+  },
+  {
+    "define_code_key": "71614",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG906",
+    "define_code_kor_name": "문주식"
+  },
+  {
+    "define_code_key": "71615",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG907",
+    "define_code_kor_name": "문형식"
+  },
+  {
+    "define_code_key": "71616",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG908",
+    "define_code_kor_name": "방음벽부착식"
+  },
+  {
+    "define_code_key": "71617",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG909",
+    "define_code_kor_name": "밴드식"
+  },
+  {
+    "define_code_key": "71618",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG910",
+    "define_code_kor_name": "병설"
+  },
+  {
+    "define_code_key": "71619",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG911",
+    "define_code_kor_name": "보조"
+  },
+  {
+    "define_code_key": "71620",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG912",
+    "define_code_kor_name": "보행자안내표지_문주형"
+  },
+  {
+    "define_code_key": "71621",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG913",
+    "define_code_kor_name": "보행자안내표지_지주형"
+  },
+  {
+    "define_code_key": "71622",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG914",
+    "define_code_kor_name": "복합식"
+  },
+  {
+    "define_code_key": "71623",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG915",
+    "define_code_kor_name": "부착식"
+  },
+  {
+    "define_code_key": "71624",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG916",
+    "define_code_kor_name": "부착식(가로등)"
+  },
+  {
+    "define_code_key": "71625",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG917",
+    "define_code_kor_name": "부착식(교통지주)"
+  },
+  {
+    "define_code_key": "71626",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG918",
+    "define_code_kor_name": "부착식(기타)"
+  },
+  {
+    "define_code_key": "71627",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG919",
+    "define_code_kor_name": "부착식(도로명주)"
+  },
+  {
+    "define_code_key": "71628",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG920",
+    "define_code_kor_name": "부착식(도로지주)"
+  },
+  {
+    "define_code_key": "71629",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG921",
+    "define_code_kor_name": "부착식(벽면)"
+  },
+  {
+    "define_code_key": "71630",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG922",
+    "define_code_kor_name": "부착식(사설주)"
+  },
+  {
+    "define_code_key": "71631",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG923",
+    "define_code_kor_name": "부착식(신호등)"
+  },
+  {
+    "define_code_key": "71632",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG924",
+    "define_code_kor_name": "부착식(옹벽)"
+  },
+  {
+    "define_code_key": "71633",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG925",
+    "define_code_kor_name": "부착식(전주)"
+  },
+  {
+    "define_code_key": "71634",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG926",
+    "define_code_kor_name": "부착식(통신주)"
+  },
+  {
+    "define_code_key": "71635",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG927",
+    "define_code_kor_name": "비석"
+  },
+  {
+    "define_code_key": "71636",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG928",
+    "define_code_kor_name": "신호등"
+  },
+  {
+    "define_code_key": "71637",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG929",
+    "define_code_kor_name": "육교부착식"
+  },
+  {
+    "define_code_key": "71638",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG930",
+    "define_code_kor_name": "전주걸이"
+  },
+  {
+    "define_code_key": "71639",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG931",
+    "define_code_kor_name": "전주걸이(가로등)"
+  },
+  {
+    "define_code_key": "71640",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG932",
+    "define_code_kor_name": "전주부착식"
+  },
+  {
+    "define_code_key": "71641",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG933",
+    "define_code_kor_name": "정주식"
+  },
+  {
+    "define_code_key": "71642",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG934",
+    "define_code_kor_name": "철주"
+  },
+  {
+    "define_code_key": "71643",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG935",
+    "define_code_kor_name": "측주식"
+  },
+  {
+    "define_code_key": "71644",
+    "define_code_field_key": "7809",
+    "define_code_name": "IPG936",
+    "define_code_kor_name": "통로박스"
+  }
+]

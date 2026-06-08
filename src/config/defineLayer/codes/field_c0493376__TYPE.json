@@ -1,0 +1,54 @@
+[
+  {
+    "define_code_name": "4101",
+    "define_code_kor_name": "4색등"
+  },
+  {
+    "define_code_name": "4102",
+    "define_code_kor_name": "3색등"
+  },
+  {
+    "define_code_name": "4103",
+    "define_code_kor_name": "2색등"
+  },
+  {
+    "define_code_name": "4104",
+    "define_code_kor_name": "2색 가변등"
+  },
+  {
+    "define_code_name": "4105",
+    "define_code_kor_name": "2색 보행등"
+  },
+  {
+    "define_code_name": "4106",
+    "define_code_kor_name": "2색 보행등+잔여시간표시기"
+  },
+  {
+    "define_code_name": "4107",
+    "define_code_kor_name": "5색등"
+  },
+  {
+    "define_code_name": "4108",
+    "define_code_kor_name": "6색등"
+  },
+  {
+    "define_code_name": "4109",
+    "define_code_kor_name": "단색등"
+  },
+  {
+    "define_code_name": "4110",
+    "define_code_kor_name": "경광등"
+  },
+  {
+    "define_code_name": "4111",
+    "define_code_kor_name": "시선유도장치"
+  },
+  {
+    "define_code_name": "4112",
+    "define_code_kor_name": "경보등"
+  },
+  {
+    "define_code_name": "4199",
+    "define_code_kor_name": "기타"
+  }
+]

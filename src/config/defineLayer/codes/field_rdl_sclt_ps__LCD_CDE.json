@@ -1,0 +1,248 @@
+[
+  {
+    "define_code_key": "71763",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71764",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD001",
+    "define_code_kor_name": "수은램프"
+  },
+  {
+    "define_code_key": "71765",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD002",
+    "define_code_kor_name": "메탈할라이드"
+  },
+  {
+    "define_code_key": "71766",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD003",
+    "define_code_kor_name": "고압나트륨램프"
+  },
+  {
+    "define_code_key": "71767",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD004",
+    "define_code_kor_name": "저압나트륨램프"
+  },
+  {
+    "define_code_key": "71768",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71769",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD900",
+    "define_code_kor_name": "고압나트륨1000W"
+  },
+  {
+    "define_code_key": "71770",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD901",
+    "define_code_kor_name": "고압나트륨100W"
+  },
+  {
+    "define_code_key": "71771",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD902",
+    "define_code_kor_name": "고압나트륨200W"
+  },
+  {
+    "define_code_key": "71772",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD903",
+    "define_code_kor_name": "고압나트륨400W"
+  },
+  {
+    "define_code_key": "71773",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD904",
+    "define_code_kor_name": "나트륨+삼파장"
+  },
+  {
+    "define_code_key": "71774",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD905",
+    "define_code_kor_name": "나트륨등"
+  },
+  {
+    "define_code_key": "71775",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD906",
+    "define_code_kor_name": "나트륨전구(150(2)W)"
+  },
+  {
+    "define_code_key": "71776",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD907",
+    "define_code_kor_name": "나트륨전구(150W)"
+  },
+  {
+    "define_code_key": "71777",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD908",
+    "define_code_kor_name": "나트륨전구(250(2)W)"
+  },
+  {
+    "define_code_key": "71778",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD909",
+    "define_code_kor_name": "나트륨전구(250W)"
+  },
+  {
+    "define_code_key": "71779",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD910",
+    "define_code_kor_name": "독립주"
+  },
+  {
+    "define_code_key": "71780",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD911",
+    "define_code_kor_name": "메탈전구(175W)"
+  },
+  {
+    "define_code_key": "71781",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD912",
+    "define_code_kor_name": "메탈전구(250W)"
+  },
+  {
+    "define_code_key": "71782",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD913",
+    "define_code_kor_name": "메탈할라이드등"
+  },
+  {
+    "define_code_key": "71783",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD914",
+    "define_code_kor_name": "메탈할라이트1000W"
+  },
+  {
+    "define_code_key": "71784",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD915",
+    "define_code_kor_name": "메탈할라이트100W"
+  },
+  {
+    "define_code_key": "71785",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD916",
+    "define_code_kor_name": "메탈할라이트150W"
+  },
+  {
+    "define_code_key": "71786",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD917",
+    "define_code_kor_name": "메탈할라이트400W"
+  },
+  {
+    "define_code_key": "71787",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD918",
+    "define_code_kor_name": "무전극"
+  },
+  {
+    "define_code_key": "71788",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD919",
+    "define_code_kor_name": "백열100W"
+  },
+  {
+    "define_code_key": "71789",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD920",
+    "define_code_kor_name": "백열램프"
+  },
+  {
+    "define_code_key": "71790",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD921",
+    "define_code_kor_name": "삼파장(55W)"
+  },
+  {
+    "define_code_key": "71791",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD922",
+    "define_code_kor_name": "삼파장램프"
+  },
+  {
+    "define_code_key": "71792",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD923",
+    "define_code_kor_name": "삼파장전구(070W)"
+  },
+  {
+    "define_code_key": "71793",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD924",
+    "define_code_kor_name": "삼파장전구(075W)"
+  },
+  {
+    "define_code_key": "71794",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD925",
+    "define_code_kor_name": "수은100W"
+  },
+  {
+    "define_code_key": "71795",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD926",
+    "define_code_kor_name": "수은200W"
+  },
+  {
+    "define_code_key": "71796",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD927",
+    "define_code_kor_name": "수은나트륨겸용램프"
+  },
+  {
+    "define_code_key": "71797",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD928",
+    "define_code_kor_name": "수은등"
+  },
+  {
+    "define_code_key": "71798",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD929",
+    "define_code_kor_name": "할로겐램프"
+  },
+  {
+    "define_code_key": "71799",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD930",
+    "define_code_kor_name": "형광등"
+  },
+  {
+    "define_code_key": "71800",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD931",
+    "define_code_kor_name": "CDM"
+  },
+  {
+    "define_code_key": "71801",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD932",
+    "define_code_kor_name": "CPO"
+  },
+  {
+    "define_code_key": "71802",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD933",
+    "define_code_kor_name": "FRP"
+  },
+  {
+    "define_code_key": "71803",
+    "define_code_field_key": "7827",
+    "define_code_name": "LCD934",
+    "define_code_kor_name": "SUS"
+  }
+]

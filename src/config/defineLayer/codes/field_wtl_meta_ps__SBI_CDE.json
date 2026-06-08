@@ -1,0 +1,218 @@
+[
+  {
+    "define_code_key": "65464",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65465",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI001",
+    "define_code_kor_name": "일반용"
+  },
+  {
+    "define_code_key": "65466",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI002",
+    "define_code_kor_name": "산업용"
+  },
+  {
+    "define_code_key": "65467",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI003",
+    "define_code_kor_name": "공공용"
+  },
+  {
+    "define_code_key": "65468",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI004",
+    "define_code_kor_name": "공중용"
+  },
+  {
+    "define_code_key": "65469",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI005",
+    "define_code_kor_name": "일시용"
+  },
+  {
+    "define_code_key": "65470",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI100",
+    "define_code_kor_name": "가정용"
+  },
+  {
+    "define_code_key": "65471",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI101",
+    "define_code_kor_name": "영업1종"
+  },
+  {
+    "define_code_key": "65472",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI102",
+    "define_code_kor_name": "영업2종"
+  },
+  {
+    "define_code_key": "65473",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI103",
+    "define_code_kor_name": "욕탕1종"
+  },
+  {
+    "define_code_key": "65474",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI104",
+    "define_code_kor_name": "욕탕2종"
+  },
+  {
+    "define_code_key": "65475",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI105",
+    "define_code_kor_name": "공단공업용"
+  },
+  {
+    "define_code_key": "65476",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66298",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66299",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI001",
+    "define_code_kor_name": "일반용"
+  },
+  {
+    "define_code_key": "66300",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI002",
+    "define_code_kor_name": "산업용"
+  },
+  {
+    "define_code_key": "66301",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI003",
+    "define_code_kor_name": "공공용"
+  },
+  {
+    "define_code_key": "66302",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI004",
+    "define_code_kor_name": "공중용"
+  },
+  {
+    "define_code_key": "66303",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI005",
+    "define_code_kor_name": "일시용"
+  },
+  {
+    "define_code_key": "66304",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI100",
+    "define_code_kor_name": "가정용"
+  },
+  {
+    "define_code_key": "66305",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI101",
+    "define_code_kor_name": "영업1종"
+  },
+  {
+    "define_code_key": "66306",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI102",
+    "define_code_kor_name": "영업2종"
+  },
+  {
+    "define_code_key": "66307",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI103",
+    "define_code_kor_name": "욕탕1종"
+  },
+  {
+    "define_code_key": "66308",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI104",
+    "define_code_kor_name": "욕탕2종"
+  },
+  {
+    "define_code_key": "66309",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI105",
+    "define_code_kor_name": "공단공업용"
+  },
+  {
+    "define_code_key": "66310",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66311",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI900",
+    "define_code_kor_name": "가정2용"
+  },
+  {
+    "define_code_key": "66312",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI901",
+    "define_code_kor_name": "겸업1종"
+  },
+  {
+    "define_code_key": "66313",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI902",
+    "define_code_kor_name": "겸업2종"
+  },
+  {
+    "define_code_key": "66314",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI903",
+    "define_code_kor_name": "목욕용"
+  },
+  {
+    "define_code_key": "66315",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI904",
+    "define_code_kor_name": "업무 3종"
+  },
+  {
+    "define_code_key": "66316",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI905",
+    "define_code_kor_name": "업무용"
+  },
+  {
+    "define_code_key": "66317",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI906",
+    "define_code_kor_name": "영업3종"
+  },
+  {
+    "define_code_key": "66318",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI907",
+    "define_code_kor_name": "영업용"
+  },
+  {
+    "define_code_key": "66319",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI908",
+    "define_code_kor_name": "욕탕 3종"
+  },
+  {
+    "define_code_key": "66320",
+    "define_code_field_key": "4245",
+    "define_code_name": "SBI909",
+    "define_code_kor_name": "일반욕탕용"
+  }
+]

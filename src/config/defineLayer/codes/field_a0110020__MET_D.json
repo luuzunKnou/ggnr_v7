@@ -1,0 +1,30 @@
+[
+  {
+    "define_code_name": "4701",
+    "define_code_kor_name": "재래식"
+  },
+  {
+    "define_code_name": "4702",
+    "define_code_kor_name": "침매"
+  },
+  {
+    "define_code_name": "4703",
+    "define_code_kor_name": "NATM"
+  },
+  {
+    "define_code_name": "4704",
+    "define_code_kor_name": "TBM"
+  },
+  {
+    "define_code_name": "4799",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC002",
+    "define_code_kor_name": "개착식"
+  },
+  {
+    "define_code_name": "EC005",
+    "define_code_kor_name": "NATM+TBM"
+  }
+]

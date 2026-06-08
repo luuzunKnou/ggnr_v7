@@ -1,0 +1,92 @@
+[
+  {
+    "define_code_key": "70812",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70813",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG001",
+    "define_code_kor_name": "우선도로(구간속성)"
+  },
+  {
+    "define_code_key": "70814",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG002",
+    "define_code_kor_name": "우선도로(구간속성아님)"
+  },
+  {
+    "define_code_key": "70815",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG003",
+    "define_code_kor_name": "부속도로(구간속성)"
+  },
+  {
+    "define_code_key": "70816",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG004",
+    "define_code_kor_name": "부속도로(구간속성아님)"
+  },
+  {
+    "define_code_key": "70817",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG005",
+    "define_code_kor_name": "일반도로(구간속성)"
+  },
+  {
+    "define_code_key": "70818",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG006",
+    "define_code_kor_name": "일반도로(구간속성아님)"
+  },
+  {
+    "define_code_key": "70819",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG007",
+    "define_code_kor_name": "연결선(가노선)"
+  },
+  {
+    "define_code_key": "70820",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70821",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG900",
+    "define_code_kor_name": "4M이하도로"
+  },
+  {
+    "define_code_key": "70822",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG901",
+    "define_code_kor_name": "부속도로"
+  },
+  {
+    "define_code_key": "70823",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG902",
+    "define_code_kor_name": "우선도로"
+  },
+  {
+    "define_code_key": "70824",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG903",
+    "define_code_kor_name": "일반노선(연장없음)"
+  },
+  {
+    "define_code_key": "70825",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG904",
+    "define_code_kor_name": "중용구간"
+  },
+  {
+    "define_code_key": "70826",
+    "define_code_field_key": "7538",
+    "define_code_name": "JYG905",
+    "define_code_kor_name": "중용도로"
+  }
+]

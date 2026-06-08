@@ -1,0 +1,14 @@
+[
+  {
+    "define_code_name": "7101",
+    "define_code_kor_name": "무정전 전원설비"
+  },
+  {
+    "define_code_name": "7102",
+    "define_code_kor_name": "비상발전설비"
+  },
+  {
+    "define_code_name": "7199",
+    "define_code_kor_name": "기타"
+  }
+]

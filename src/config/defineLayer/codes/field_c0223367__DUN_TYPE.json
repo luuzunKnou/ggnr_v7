@@ -1,0 +1,22 @@
+[
+  {
+    "define_code_name": "3201",
+    "define_code_kor_name": "기본형"
+  },
+  {
+    "define_code_name": "3202",
+    "define_code_kor_name": "2등형"
+  },
+  {
+    "define_code_name": "3203",
+    "define_code_kor_name": "3등형"
+  },
+  {
+    "define_code_name": "3204",
+    "define_code_kor_name": "4등형"
+  },
+  {
+    "define_code_name": "3299",
+    "define_code_kor_name": "기타"
+  }
+]

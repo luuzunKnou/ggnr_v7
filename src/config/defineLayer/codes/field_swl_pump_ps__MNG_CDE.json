@@ -1,0 +1,80 @@
+[
+  {
+    "define_code_key": "61189",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "61190",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG001",
+    "define_code_kor_name": "안동시"
+  },
+  {
+    "define_code_key": "61191",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG101",
+    "define_code_kor_name": "정보통신과"
+  },
+  {
+    "define_code_key": "61192",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG102",
+    "define_code_kor_name": "건설과"
+  },
+  {
+    "define_code_key": "61193",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG103",
+    "define_code_kor_name": "도시과"
+  },
+  {
+    "define_code_key": "61194",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG104",
+    "define_code_kor_name": "재난관리과"
+  },
+  {
+    "define_code_key": "61195",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG105",
+    "define_code_kor_name": "상하수도과"
+  },
+  {
+    "define_code_key": "61196",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG106",
+    "define_code_kor_name": "교통행정과"
+  },
+  {
+    "define_code_key": "61197",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG107",
+    "define_code_kor_name": "산림녹지과"
+  },
+  {
+    "define_code_key": "61198",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG200",
+    "define_code_kor_name": "수자원공사"
+  },
+  {
+    "define_code_key": "61199",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG300",
+    "define_code_kor_name": "경찰서"
+  },
+  {
+    "define_code_key": "61200",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG400",
+    "define_code_kor_name": "소방서"
+  },
+  {
+    "define_code_key": "61201",
+    "define_code_field_key": "4690",
+    "define_code_name": "MNG999",
+    "define_code_kor_name": "기타"
+  }
+]

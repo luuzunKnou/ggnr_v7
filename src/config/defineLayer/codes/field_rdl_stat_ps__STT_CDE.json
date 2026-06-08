@@ -1,0 +1,152 @@
+[
+  {
+    "define_code_key": "71851",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71852",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT001",
+    "define_code_kor_name": "표지설치"
+  },
+  {
+    "define_code_key": "71853",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT002",
+    "define_code_kor_name": "지붕설치"
+  },
+  {
+    "define_code_key": "71854",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71855",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT900",
+    "define_code_kor_name": "개방형"
+  },
+  {
+    "define_code_key": "71856",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT901",
+    "define_code_kor_name": "농촌형"
+  },
+  {
+    "define_code_key": "71857",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT902",
+    "define_code_kor_name": "농촌형(셀타)"
+  },
+  {
+    "define_code_key": "71858",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT903",
+    "define_code_kor_name": "농촌형(조적조)"
+  },
+  {
+    "define_code_key": "71859",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT904",
+    "define_code_kor_name": "대기소+표지판"
+  },
+  {
+    "define_code_key": "71860",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT905",
+    "define_code_kor_name": "돔형"
+  },
+  {
+    "define_code_key": "71861",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT906",
+    "define_code_kor_name": "무개(표지판)"
+  },
+  {
+    "define_code_key": "71862",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT907",
+    "define_code_kor_name": "무개형"
+  },
+  {
+    "define_code_key": "71863",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT908",
+    "define_code_kor_name": "바람막이"
+  },
+  {
+    "define_code_key": "71864",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT909",
+    "define_code_kor_name": "버스공용"
+  },
+  {
+    "define_code_key": "71865",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT910",
+    "define_code_kor_name": "스탠밀러형"
+  },
+  {
+    "define_code_key": "71866",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT911",
+    "define_code_kor_name": "승강장설치"
+  },
+  {
+    "define_code_key": "71867",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT912",
+    "define_code_kor_name": "유개(지붕+기둥)"
+  },
+  {
+    "define_code_key": "71868",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT913",
+    "define_code_kor_name": "유개형(농촌형)"
+  },
+  {
+    "define_code_key": "71869",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT914",
+    "define_code_kor_name": "유개형(도시형)"
+  },
+  {
+    "define_code_key": "71870",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT915",
+    "define_code_kor_name": "일반형"
+  },
+  {
+    "define_code_key": "71871",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT916",
+    "define_code_kor_name": "폴대형"
+  },
+  {
+    "define_code_key": "71872",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT917",
+    "define_code_kor_name": "표지,지붕설치"
+  },
+  {
+    "define_code_key": "71873",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT918",
+    "define_code_kor_name": "표지/승강장설치"
+  },
+  {
+    "define_code_key": "71874",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT919",
+    "define_code_kor_name": "표지판"
+  },
+  {
+    "define_code_key": "71875",
+    "define_code_field_key": "7899",
+    "define_code_name": "STT920",
+    "define_code_kor_name": "혼합형"
+  }
+]

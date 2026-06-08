@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "3501",
+    "define_code_kor_name": "50"
+  },
+  {
+    "define_code_name": "3502",
+    "define_code_kor_name": "100"
+  },
+  {
+    "define_code_name": "3503",
+    "define_code_kor_name": "150"
+  },
+  {
+    "define_code_name": "3504",
+    "define_code_kor_name": "175"
+  },
+  {
+    "define_code_name": "3505",
+    "define_code_kor_name": "200"
+  },
+  {
+    "define_code_name": "3506",
+    "define_code_kor_name": "250"
+  },
+  {
+    "define_code_name": "3507",
+    "define_code_kor_name": "400"
+  },
+  {
+    "define_code_name": "3508",
+    "define_code_kor_name": "1000"
+  },
+  {
+    "define_code_name": "3599",
+    "define_code_kor_name": "기타"
+  }
+]

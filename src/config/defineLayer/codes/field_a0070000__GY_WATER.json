@@ -1,0 +1,30 @@
+[
+  {
+    "define_code_name": "2401",
+    "define_code_kor_name": "모르터방수"
+  },
+  {
+    "define_code_name": "2402",
+    "define_code_kor_name": "아스팔트 방수"
+  },
+  {
+    "define_code_name": "2403",
+    "define_code_kor_name": "시트방수"
+  },
+  {
+    "define_code_name": "2404",
+    "define_code_kor_name": "도막방수"
+  },
+  {
+    "define_code_name": "2499",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "침투식방수"
+  },
+  {
+    "define_code_name": "EC06",
+    "define_code_kor_name": "미시공"
+  }
+]

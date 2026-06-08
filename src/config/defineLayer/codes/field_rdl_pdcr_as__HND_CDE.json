@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "71536",
+    "define_code_field_key": "7781",
+    "define_code_name": "HND000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71537",
+    "define_code_field_key": "7781",
+    "define_code_name": "HND001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71538",
+    "define_code_field_key": "7781",
+    "define_code_name": "HND002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71539",
+    "define_code_field_key": "7781",
+    "define_code_name": "HND003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71540",
+    "define_code_field_key": "7781",
+    "define_code_name": "HND999",
+    "define_code_kor_name": "기타"
+  }
+]

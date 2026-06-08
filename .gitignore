@@ -72,10 +72,9 @@ next-env.d.ts
 /pg_map_modules/services/*.zip
 /pg_map_modules/services/*.exe
 
-# defineLayer config files (분할된 설정 파일들)
-/src/config/defineLayer/
-/src/config/defineLayer.config
+# defineLayer 백업 파일만 제외 (분할 설정은 Git 관리)
 /src/config/defineLayer.config.backup
+/src/config/defineLayer/_backup*/
 
 # LAS 파이프라인 Conda 환경 (python/env)
 /python/env/

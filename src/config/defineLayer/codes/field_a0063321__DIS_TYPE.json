@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "5301",
+    "define_code_kor_name": "턱낮추기"
+  },
+  {
+    "define_code_name": "5302",
+    "define_code_kor_name": "점자블럭"
+  },
+  {
+    "define_code_name": "5303",
+    "define_code_kor_name": "경사로"
+  },
+  {
+    "define_code_name": "5304",
+    "define_code_kor_name": "승강기"
+  },
+  {
+    "define_code_name": "5305",
+    "define_code_kor_name": "에스컬레이터"
+  },
+  {
+    "define_code_name": "5306",
+    "define_code_kor_name": "손잡이"
+  },
+  {
+    "define_code_name": "5307",
+    "define_code_kor_name": "휠체어 리프트"
+  },
+  {
+    "define_code_name": "5308",
+    "define_code_kor_name": "핸드레일 촉지판"
+  },
+  {
+    "define_code_name": "5399",
+    "define_code_kor_name": "기타"
+  }
+]

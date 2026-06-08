@@ -1,0 +1,44 @@
+[
+  {
+    "define_code_key": "1236",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1237",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE001",
+    "define_code_kor_name": "배수펌프장"
+  },
+  {
+    "define_code_key": "1238",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE002",
+    "define_code_kor_name": "중계펌프장"
+  },
+  {
+    "define_code_key": "1239",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE003",
+    "define_code_kor_name": "처리장내펌프장"
+  },
+  {
+    "define_code_key": "1240",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE900",
+    "define_code_kor_name": "오수배제"
+  },
+  {
+    "define_code_key": "1241",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE901",
+    "define_code_kor_name": "우수배제"
+  },
+  {
+    "define_code_key": "1242",
+    "define_code_field_key": "4695",
+    "define_code_name": "SBE999",
+    "define_code_kor_name": "기타"
+  }
+]

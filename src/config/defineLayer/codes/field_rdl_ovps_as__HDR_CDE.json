@@ -1,0 +1,86 @@
+[
+  {
+    "define_code_key": "71251",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71252",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR001",
+    "define_code_kor_name": "콘크리트(방호벽)"
+  },
+  {
+    "define_code_key": "71253",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR002",
+    "define_code_kor_name": "강재(강재파이프)"
+  },
+  {
+    "define_code_key": "71254",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR003",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_key": "71255",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR004",
+    "define_code_kor_name": "철제"
+  },
+  {
+    "define_code_key": "71256",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR005",
+    "define_code_kor_name": "알루미늄합금"
+  },
+  {
+    "define_code_key": "71257",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR006",
+    "define_code_kor_name": "스테인레스"
+  },
+  {
+    "define_code_key": "71258",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR007",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_key": "71259",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71260",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR900",
+    "define_code_kor_name": "규모이하"
+  },
+  {
+    "define_code_key": "71261",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR901",
+    "define_code_kor_name": "목재"
+  },
+  {
+    "define_code_key": "71262",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR902",
+    "define_code_kor_name": "주철"
+  },
+  {
+    "define_code_key": "71263",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR903",
+    "define_code_kor_name": "철근콘크리트"
+  },
+  {
+    "define_code_key": "71264",
+    "define_code_field_key": "7680",
+    "define_code_name": "HDR904",
+    "define_code_kor_name": "화강석"
+  }
+]

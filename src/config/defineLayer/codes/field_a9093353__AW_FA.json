@@ -1,0 +1,30 @@
+[
+  {
+    "define_code_name": "4910",
+    "define_code_kor_name": "종류환기"
+  },
+  {
+    "define_code_name": "4911",
+    "define_code_kor_name": "종류환기(제트팬)"
+  },
+  {
+    "define_code_name": "4920",
+    "define_code_kor_name": "횡류환기"
+  },
+  {
+    "define_code_name": "4921",
+    "define_code_kor_name": "횡류환기(배기)"
+  },
+  {
+    "define_code_name": "4922",
+    "define_code_kor_name": "횡류환기(급배기)"
+  },
+  {
+    "define_code_name": "4930",
+    "define_code_kor_name": "반횡류환기"
+  },
+  {
+    "define_code_name": "4999",
+    "define_code_kor_name": "기타"
+  }
+]

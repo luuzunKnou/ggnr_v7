@@ -1,0 +1,106 @@
+[
+  {
+    "define_code_name": "2901",
+    "define_code_kor_name": "트럼펫형"
+  },
+  {
+    "define_code_name": "2902",
+    "define_code_kor_name": "Y 자형"
+  },
+  {
+    "define_code_name": "2903",
+    "define_code_kor_name": "다이아몬드형"
+  },
+  {
+    "define_code_name": "2904",
+    "define_code_kor_name": "클로버형"
+  },
+  {
+    "define_code_name": "2905",
+    "define_code_kor_name": "더블트럼펫형"
+  },
+  {
+    "define_code_name": "2906",
+    "define_code_kor_name": "직결형(다이렉셔널형)"
+  },
+  {
+    "define_code_name": "2999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC02",
+    "define_code_kor_name": "준클로우버형"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "반클로우버형"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "부분클로우버형"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "불완전클로우버형"
+  },
+  {
+    "define_code_name": "EC06",
+    "define_code_kor_name": "변형클로우버형"
+  },
+  {
+    "define_code_name": "EC08",
+    "define_code_kor_name": "반다이아몬드형"
+  },
+  {
+    "define_code_name": "EC09",
+    "define_code_kor_name": "불완전다이아몬드형"
+  },
+  {
+    "define_code_name": "EC10",
+    "define_code_kor_name": "삼지다이아몬드형"
+  },
+  {
+    "define_code_name": "EC11",
+    "define_code_kor_name": "사진다이아몬드형"
+  },
+  {
+    "define_code_name": "EC13",
+    "define_code_kor_name": "이중트럼펫형"
+  },
+  {
+    "define_code_name": "EC14",
+    "define_code_kor_name": "변형트럼펫형"
+  },
+  {
+    "define_code_name": "EC16",
+    "define_code_kor_name": "준직결형"
+  },
+  {
+    "define_code_name": "EC18",
+    "define_code_kor_name": "준직결Y형"
+  },
+  {
+    "define_code_name": "EC19",
+    "define_code_kor_name": "트럼펫형+직결Y형"
+  },
+  {
+    "define_code_name": "EC20",
+    "define_code_kor_name": "간이입체교차"
+  },
+  {
+    "define_code_name": "EC21",
+    "define_code_kor_name": "평면교차(T형)"
+  },
+  {
+    "define_code_name": "EC22",
+    "define_code_kor_name": "평면교차(+형)"
+  },
+  {
+    "define_code_name": "EC23",
+    "define_code_kor_name": "평면교차(-형)"
+  },
+  {
+    "define_code_name": "EC24",
+    "define_code_kor_name": "평면교차(*형)"
+  }
+]

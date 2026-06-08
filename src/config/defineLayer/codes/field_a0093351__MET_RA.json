@@ -1,0 +1,42 @@
+[
+  {
+    "define_code_name": "0101",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_name": "0102",
+    "define_code_kor_name": "강재(파이프)"
+  },
+  {
+    "define_code_name": "0103",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_name": "0104",
+    "define_code_kor_name": "철재"
+  },
+  {
+    "define_code_name": "0105",
+    "define_code_kor_name": "알루미늄 합금"
+  },
+  {
+    "define_code_name": "0106",
+    "define_code_kor_name": "스테인레스"
+  },
+  {
+    "define_code_name": "0107",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_name": "0199",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "콘크리트(방호벽)"
+  },
+  {
+    "define_code_name": "EC09",
+    "define_code_kor_name": "콘크리트+강재"
+  }
+]

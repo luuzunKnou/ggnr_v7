@@ -1,0 +1,182 @@
+[
+  {
+    "define_code_name": "0210",
+    "define_code_kor_name": "맹죠인트형식(불명확)"
+  },
+  {
+    "define_code_name": "0211",
+    "define_code_kor_name": "맹죠인트"
+  },
+  {
+    "define_code_name": "0212",
+    "define_code_kor_name": "절삭죠인트"
+  },
+  {
+    "define_code_name": "0220",
+    "define_code_kor_name": "맺댐선시공형식(불명확)"
+  },
+  {
+    "define_code_name": "0221",
+    "define_code_kor_name": "즐눈판 죠인트"
+  },
+  {
+    "define_code_name": "0222",
+    "define_code_kor_name": "앵글보강 죠인트"
+  },
+  {
+    "define_code_name": "0223",
+    "define_code_kor_name": "보강강재 죠인트"
+  },
+  {
+    "define_code_name": "0230",
+    "define_code_kor_name": "맞댐 후시공형식(불명확)"
+  },
+  {
+    "define_code_name": "0231",
+    "define_code_kor_name": "CUT OFF 죠인트"
+  },
+  {
+    "define_code_name": "0232",
+    "define_code_kor_name": "COUPLING 죠인트"
+  },
+  {
+    "define_code_name": "0233",
+    "define_code_kor_name": "HAMA HIGHWAY 죠인트"
+  },
+  {
+    "define_code_name": "0234",
+    "define_code_kor_name": "RUBBER TOP 조인트"
+  },
+  {
+    "define_code_name": "0240",
+    "define_code_kor_name": "고무조인트 형식(불명확)"
+  },
+  {
+    "define_code_name": "0241",
+    "define_code_kor_name": "HAMA HIGHWAY 죠인트(YY형)"
+  },
+  {
+    "define_code_name": "0242",
+    "define_code_kor_name": "샌드위치 조인트"
+  },
+  {
+    "define_code_name": "0243",
+    "define_code_kor_name": "TRANS FLEX 죠인트"
+  },
+  {
+    "define_code_name": "0244",
+    "define_code_kor_name": "ACE 조인트"
+  },
+  {
+    "define_code_name": "0245",
+    "define_code_kor_name": "FRESSYNET 죠인트"
+  },
+  {
+    "define_code_name": "0250",
+    "define_code_kor_name": "강제형식 (불명확)"
+  },
+  {
+    "define_code_name": "0251",
+    "define_code_kor_name": "강핑거 죠인트"
+  },
+  {
+    "define_code_name": "0252",
+    "define_code_kor_name": "강겹침 죠인트"
+  },
+  {
+    "define_code_name": "0253",
+    "define_code_kor_name": "MAGEBA 죠인트"
+  },
+  {
+    "define_code_name": "0260",
+    "define_code_kor_name": "특수형식(불명확)"
+  },
+  {
+    "define_code_name": "0261",
+    "define_code_kor_name": "DEMAG식 죠인트"
+  },
+  {
+    "define_code_name": "0262",
+    "define_code_kor_name": "GAI TOP 죠인트"
+  },
+  {
+    "define_code_name": "0299",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC10",
+    "define_code_kor_name": "Hama Highway 조인트(YS형)"
+  },
+  {
+    "define_code_name": "EC20",
+    "define_code_kor_name": "SHW"
+  },
+  {
+    "define_code_name": "EC21",
+    "define_code_kor_name": "마우라"
+  },
+  {
+    "define_code_name": "EC22",
+    "define_code_kor_name": "그리샤"
+  },
+  {
+    "define_code_name": "EC23",
+    "define_code_kor_name": "One Joint"
+  },
+  {
+    "define_code_name": "EC24",
+    "define_code_kor_name": "스트립 씰"
+  },
+  {
+    "define_code_name": "EC25",
+    "define_code_kor_name": "모노셀"
+  },
+  {
+    "define_code_name": "EC26",
+    "define_code_kor_name": "레일식"
+  },
+  {
+    "define_code_name": "EC27",
+    "define_code_kor_name": "고무판형식"
+  },
+  {
+    "define_code_name": "EC28",
+    "define_code_kor_name": "NB TYPE"
+  },
+  {
+    "define_code_name": "EC29",
+    "define_code_kor_name": "레일식+모노셀"
+  },
+  {
+    "define_code_name": "EC30",
+    "define_code_kor_name": "레일식+NB"
+  },
+  {
+    "define_code_name": "EC31",
+    "define_code_kor_name": "레일식+고무판식"
+  },
+  {
+    "define_code_name": "EC32",
+    "define_code_kor_name": "강핑거+고무판식"
+  },
+  {
+    "define_code_name": "EC33",
+    "define_code_kor_name": "강핑거+레일식"
+  },
+  {
+    "define_code_name": "EC34",
+    "define_code_kor_name": "강핑거+모노셀"
+  },
+  {
+    "define_code_name": "EC35",
+    "define_code_kor_name": "강핑거+NB"
+  },
+  {
+    "define_code_name": "EC36",
+    "define_code_kor_name": "모노셀+ACE"
+  },
+  {
+    "define_code_name": "EC37",
+    "define_code_kor_name": "핑거식"
+  }
+]

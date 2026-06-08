@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "65673",
+    "define_code_field_key": "12407",
+    "define_code_name": "1",
+    "define_code_kor_name": "실시간 스트리밍(HLS)"
+  },
+  {
+    "define_code_key": "65674",
+    "define_code_field_key": "12407",
+    "define_code_name": "2",
+    "define_code_kor_name": "동영상(mp4)"
+  },
+  {
+    "define_code_key": "65675",
+    "define_code_field_key": "12407",
+    "define_code_name": "3",
+    "define_code_kor_name": "정지 영상"
+  },
+  {
+    "define_code_key": "65676",
+    "define_code_field_key": "12407",
+    "define_code_name": "4",
+    "define_code_kor_name": "실시간 스트리밍(HLS)(HTTPS)"
+  },
+  {
+    "define_code_key": "65677",
+    "define_code_field_key": "12407",
+    "define_code_name": "5",
+    "define_code_kor_name": "동영상(mp4)(HTTPS)"
+  }
+]

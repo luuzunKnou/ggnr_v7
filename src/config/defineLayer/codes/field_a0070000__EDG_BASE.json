@@ -1,0 +1,94 @@
+[
+  {
+    "define_code_name": "1701",
+    "define_code_kor_name": "독립(직접)기초"
+  },
+  {
+    "define_code_name": "1702",
+    "define_code_kor_name": "확대(전면)기초"
+  },
+  {
+    "define_code_name": "1703",
+    "define_code_kor_name": "우물통 기초 (오픈케이스)"
+  },
+  {
+    "define_code_name": "1704",
+    "define_code_kor_name": "현장타설 콘크리트 말뚝기초"
+  },
+  {
+    "define_code_name": "1705",
+    "define_code_kor_name": "기성 PC 말뚝기초"
+  },
+  {
+    "define_code_name": "1706",
+    "define_code_kor_name": "기성 RC말뚝기초"
+  },
+  {
+    "define_code_name": "1707",
+    "define_code_kor_name": "강재 말뚝기초"
+  },
+  {
+    "define_code_name": "1799",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "독립기초(교각)"
+  },
+  {
+    "define_code_name": "EC02",
+    "define_code_kor_name": "확대(전면기초)"
+  },
+  {
+    "define_code_name": "EC07",
+    "define_code_kor_name": "강관말뚝기초"
+  },
+  {
+    "define_code_name": "EC08",
+    "define_code_kor_name": "H형강 말뚝기초"
+  },
+  {
+    "define_code_name": "EC09",
+    "define_code_kor_name": "확대+강관말뚝 기초"
+  },
+  {
+    "define_code_name": "EC10",
+    "define_code_kor_name": "기성PHC 말뚝기초(매입)"
+  },
+  {
+    "define_code_name": "EC11",
+    "define_code_kor_name": "기성PHC 말뚝기초(항타)"
+  },
+  {
+    "define_code_name": "EC12",
+    "define_code_kor_name": "강관말뚝기초(매입)"
+  },
+  {
+    "define_code_name": "EC13",
+    "define_code_kor_name": "강관말뚝기초(항타)"
+  },
+  {
+    "define_code_name": "EC14",
+    "define_code_kor_name": "H형강 말뚝기초(매입)"
+  },
+  {
+    "define_code_name": "EC15",
+    "define_code_kor_name": "H형강 말뚝기초(항타)"
+  },
+  {
+    "define_code_name": "EC16",
+    "define_code_kor_name": "복합말뚝(PHC+강관,매입)"
+  },
+  {
+    "define_code_name": "EC17",
+    "define_code_kor_name": "복합말뚝(PHC+RC,매입)"
+  },
+  {
+    "define_code_name": "EC18",
+    "define_code_kor_name": "복합말뚝(PHC+강관,항타)"
+  },
+  {
+    "define_code_name": "EC19",
+    "define_code_kor_name": "복합말뚝(PHC+RC,항타)"
+  }
+]

@@ -1,0 +1,254 @@
+[
+  {
+    "define_code_key": "1113",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1114",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM001",
+    "define_code_kor_name": "1호"
+  },
+  {
+    "define_code_key": "1115",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM002",
+    "define_code_kor_name": "2호"
+  },
+  {
+    "define_code_key": "1116",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM003",
+    "define_code_kor_name": "3호"
+  },
+  {
+    "define_code_key": "1117",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM004",
+    "define_code_kor_name": "4호"
+  },
+  {
+    "define_code_key": "1118",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM005",
+    "define_code_kor_name": "5호"
+  },
+  {
+    "define_code_key": "1119",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM006",
+    "define_code_kor_name": "6호"
+  },
+  {
+    "define_code_key": "1120",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM007",
+    "define_code_kor_name": "7호"
+  },
+  {
+    "define_code_key": "1121",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM008",
+    "define_code_kor_name": "8호"
+  },
+  {
+    "define_code_key": "1122",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM011",
+    "define_code_kor_name": "특1호"
+  },
+  {
+    "define_code_key": "1123",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM012",
+    "define_code_kor_name": "특2호"
+  },
+  {
+    "define_code_key": "1124",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM013",
+    "define_code_kor_name": "특3호"
+  },
+  {
+    "define_code_key": "1125",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM014",
+    "define_code_kor_name": "특4호"
+  },
+  {
+    "define_code_key": "1126",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM015",
+    "define_code_kor_name": "특5호"
+  },
+  {
+    "define_code_key": "1127",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM020",
+    "define_code_kor_name": "구거용맨홀"
+  },
+  {
+    "define_code_key": "1128",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM030",
+    "define_code_kor_name": "부관부착맨홀"
+  },
+  {
+    "define_code_key": "1129",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM040",
+    "define_code_kor_name": "현장타설관거용"
+  },
+  {
+    "define_code_key": "1130",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM050",
+    "define_code_kor_name": "조립식맨홀"
+  },
+  {
+    "define_code_key": "1131",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM900",
+    "define_code_kor_name": "268mm"
+  },
+  {
+    "define_code_key": "1132",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM901",
+    "define_code_kor_name": "648mm"
+  },
+  {
+    "define_code_key": "1133",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM902",
+    "define_code_kor_name": "감압변실"
+  },
+  {
+    "define_code_key": "1134",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM903",
+    "define_code_kor_name": "배기변실"
+  },
+  {
+    "define_code_key": "1135",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM904",
+    "define_code_kor_name": "소화전실"
+  },
+  {
+    "define_code_key": "1136",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM905",
+    "define_code_kor_name": "신축관실"
+  },
+  {
+    "define_code_key": "1137",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM906",
+    "define_code_kor_name": "신축변실"
+  },
+  {
+    "define_code_key": "1138",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM907",
+    "define_code_kor_name": "안전변실"
+  },
+  {
+    "define_code_key": "1139",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM908",
+    "define_code_kor_name": "암거용"
+  },
+  {
+    "define_code_key": "1140",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM909",
+    "define_code_kor_name": "역지변실"
+  },
+  {
+    "define_code_key": "1141",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM910",
+    "define_code_kor_name": "원형(100cm)"
+  },
+  {
+    "define_code_key": "1142",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM911",
+    "define_code_kor_name": "원형(160cm)"
+  },
+  {
+    "define_code_key": "1143",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM912",
+    "define_code_kor_name": "원형(55cm)"
+  },
+  {
+    "define_code_key": "1144",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM913",
+    "define_code_kor_name": "유량계실"
+  },
+  {
+    "define_code_key": "1145",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM914",
+    "define_code_kor_name": "이토변실"
+  },
+  {
+    "define_code_key": "1146",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM915",
+    "define_code_kor_name": "제수변실"
+  },
+  {
+    "define_code_key": "1147",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM916",
+    "define_code_kor_name": "집수"
+  },
+  {
+    "define_code_key": "1148",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM917",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "1149",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM918",
+    "define_code_kor_name": "특6호"
+  },
+  {
+    "define_code_key": "1150",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM919",
+    "define_code_kor_name": "특7호"
+  },
+  {
+    "define_code_key": "1151",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM920",
+    "define_code_kor_name": "특8호"
+  },
+  {
+    "define_code_key": "1152",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM921",
+    "define_code_kor_name": "특9호"
+  },
+  {
+    "define_code_key": "1153",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM922",
+    "define_code_kor_name": "RCB 맨홀"
+  },
+  {
+    "define_code_key": "1154",
+    "define_code_field_key": "4620",
+    "define_code_name": "SOM999",
+    "define_code_kor_name": "기타"
+  }
+]

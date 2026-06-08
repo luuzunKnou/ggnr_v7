@@ -1,0 +1,116 @@
+[
+  {
+    "define_code_key": "70203",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70204",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED001",
+    "define_code_kor_name": "낙석방지"
+  },
+  {
+    "define_code_key": "70205",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED002",
+    "define_code_kor_name": "방호"
+  },
+  {
+    "define_code_key": "70206",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED003",
+    "define_code_kor_name": "차광"
+  },
+  {
+    "define_code_key": "70207",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED004",
+    "define_code_kor_name": "소화"
+  },
+  {
+    "define_code_key": "70208",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED005",
+    "define_code_kor_name": "소음방지"
+  },
+  {
+    "define_code_key": "70209",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70210",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED900",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_key": "70211",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED901",
+    "define_code_kor_name": "가드케이블"
+  },
+  {
+    "define_code_key": "70212",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED902",
+    "define_code_kor_name": "가드파이프"
+  },
+  {
+    "define_code_key": "70213",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED903",
+    "define_code_kor_name": "가드펜스"
+  },
+  {
+    "define_code_key": "70214",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED904",
+    "define_code_kor_name": "고리식방호책"
+  },
+  {
+    "define_code_key": "70215",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED905",
+    "define_code_kor_name": "교량난간"
+  },
+  {
+    "define_code_key": "70216",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED906",
+    "define_code_kor_name": "롤링베리어"
+  },
+  {
+    "define_code_key": "70217",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED907",
+    "define_code_kor_name": "오토가이드"
+  },
+  {
+    "define_code_key": "70218",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED908",
+    "define_code_kor_name": "철재"
+  },
+  {
+    "define_code_key": "70219",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED909",
+    "define_code_kor_name": "철판식방호책"
+  },
+  {
+    "define_code_key": "70220",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED910",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "70221",
+    "define_code_field_key": "11333",
+    "define_code_name": "AED911",
+    "define_code_kor_name": "콘크리트방호책"
+  }
+]

@@ -1,0 +1,106 @@
+[
+  {
+    "define_code_name": "1901",
+    "define_code_kor_name": "평면받침"
+  },
+  {
+    "define_code_name": "1902",
+    "define_code_kor_name": "선받침"
+  },
+  {
+    "define_code_name": "1903",
+    "define_code_kor_name": "고무받침"
+  },
+  {
+    "define_code_name": "1904",
+    "define_code_kor_name": "고력황동 받침판 받침"
+  },
+  {
+    "define_code_name": "1905",
+    "define_code_kor_name": "포트받침"
+  },
+  {
+    "define_code_name": "1906",
+    "define_code_kor_name": "로울러받침"
+  },
+  {
+    "define_code_name": "1907",
+    "define_code_kor_name": "라카받침"
+  },
+  {
+    "define_code_name": "1908",
+    "define_code_kor_name": "피봇받침"
+  },
+  {
+    "define_code_name": "1909",
+    "define_code_kor_name": "핀받침"
+  },
+  {
+    "define_code_name": "1910",
+    "define_code_kor_name": "일방향 수평저항 받침"
+  },
+  {
+    "define_code_name": "1911",
+    "define_code_kor_name": "메나제 힌지"
+  },
+  {
+    "define_code_name": "1999",
+    "define_code_kor_name": "기타미상"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "탄성받침"
+  },
+  {
+    "define_code_name": "EC11",
+    "define_code_kor_name": "스페리클(Spherical)받침"
+  },
+  {
+    "define_code_name": "EC12",
+    "define_code_kor_name": "고무패드"
+  },
+  {
+    "define_code_name": "EC13",
+    "define_code_kor_name": "납면진받침(L.R.B)"
+  },
+  {
+    "define_code_name": "EC14",
+    "define_code_kor_name": "강재댐퍼"
+  },
+  {
+    "define_code_name": "EC16",
+    "define_code_kor_name": "감쇠형탄성받침(SRB)"
+  },
+  {
+    "define_code_name": "EC17",
+    "define_code_kor_name": "스프링복원형 디스크받침(EQS)"
+  },
+  {
+    "define_code_name": "EC18",
+    "define_code_kor_name": "고력황동받침"
+  },
+  {
+    "define_code_name": "EC19",
+    "define_code_kor_name": "스페리커러받침"
+  },
+  {
+    "define_code_name": "EC20",
+    "define_code_kor_name": "면진받침(LRB)"
+  },
+  {
+    "define_code_name": "EC21",
+    "define_code_kor_name": "면진받침(HDRB)"
+  },
+  {
+    "define_code_name": "EC22",
+    "define_code_kor_name": "면진받침(SRB)"
+  },
+  {
+    "define_code_name": "EC23",
+    "define_code_kor_name": "면진받침(EQS)"
+  },
+  {
+    "define_code_name": "EC24",
+    "define_code_kor_name": "면진받침(마찰형)"
+  }
+]

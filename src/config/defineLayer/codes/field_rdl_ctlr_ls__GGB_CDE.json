@@ -1,0 +1,104 @@
+[
+  {
+    "define_code_key": "70795",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70796",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB001",
+    "define_code_kor_name": "차도구간"
+  },
+  {
+    "define_code_key": "70797",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB002",
+    "define_code_kor_name": "교량구간"
+  },
+  {
+    "define_code_key": "70798",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB003",
+    "define_code_kor_name": "터널구간"
+  },
+  {
+    "define_code_key": "70799",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB004",
+    "define_code_kor_name": "고가도로"
+  },
+  {
+    "define_code_key": "70800",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB005",
+    "define_code_kor_name": "지하차도"
+  },
+  {
+    "define_code_key": "70801",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70802",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB900",
+    "define_code_kor_name": "곡선구간"
+  },
+  {
+    "define_code_key": "70803",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB901",
+    "define_code_kor_name": "곡선구간(중심선교점)"
+  },
+  {
+    "define_code_key": "70804",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB902",
+    "define_code_kor_name": "교통광장"
+  },
+  {
+    "define_code_key": "70805",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB903",
+    "define_code_kor_name": "보도구간"
+  },
+  {
+    "define_code_key": "70806",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB904",
+    "define_code_kor_name": "보행자전용구간"
+  },
+  {
+    "define_code_key": "70807",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB905",
+    "define_code_kor_name": "복개도로"
+  },
+  {
+    "define_code_key": "70808",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB906",
+    "define_code_kor_name": "일방통행로"
+  },
+  {
+    "define_code_key": "70809",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB907",
+    "define_code_kor_name": "입체교차로"
+  },
+  {
+    "define_code_key": "70810",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB908",
+    "define_code_kor_name": "접속도로"
+  },
+  {
+    "define_code_key": "70811",
+    "define_code_field_key": "7537",
+    "define_code_name": "GGB909",
+    "define_code_kor_name": "차도구간+보도구간"
+  }
+]

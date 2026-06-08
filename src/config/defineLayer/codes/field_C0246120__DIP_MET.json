@@ -1,0 +1,126 @@
+[
+  {
+    "define_code_name": "1201",
+    "define_code_kor_name": "흄관"
+  },
+  {
+    "define_code_name": "1202",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_name": "1203",
+    "define_code_kor_name": "오지토관"
+  },
+  {
+    "define_code_name": "1204",
+    "define_code_kor_name": "염화비닐"
+  },
+  {
+    "define_code_name": "1205",
+    "define_code_kor_name": "철근콘크리트"
+  },
+  {
+    "define_code_name": "1206",
+    "define_code_kor_name": "주철관"
+  },
+  {
+    "define_code_name": "1207",
+    "define_code_kor_name": "강관"
+  },
+  {
+    "define_code_name": "1208",
+    "define_code_kor_name": "폴리에틸렌"
+  },
+  {
+    "define_code_name": "1209",
+    "define_code_kor_name": "스테인레스관"
+  },
+  {
+    "define_code_name": "1210",
+    "define_code_kor_name": "동관"
+  },
+  {
+    "define_code_name": "1211",
+    "define_code_kor_name": "닥타일 주철관"
+  },
+  {
+    "define_code_name": "1212",
+    "define_code_kor_name": "연관"
+  },
+  {
+    "define_code_name": "1213",
+    "define_code_kor_name": "석면시멘트관"
+  },
+  {
+    "define_code_name": "1214",
+    "define_code_kor_name": "철재"
+  },
+  {
+    "define_code_name": "1215",
+    "define_code_kor_name": "고무몰딩"
+  },
+  {
+    "define_code_name": "1216",
+    "define_code_kor_name": "PVC"
+  },
+  {
+    "define_code_name": "1217",
+    "define_code_kor_name": "주강"
+  },
+  {
+    "define_code_name": "1218",
+    "define_code_kor_name": "HDPE관"
+  },
+  {
+    "define_code_name": "1219",
+    "define_code_kor_name": "FP"
+  },
+  {
+    "define_code_name": "1220",
+    "define_code_kor_name": "FC"
+  },
+  {
+    "define_code_name": "1221",
+    "define_code_kor_name": "FD"
+  },
+  {
+    "define_code_name": "1222",
+    "define_code_kor_name": "탄소강"
+  },
+  {
+    "define_code_name": "1223",
+    "define_code_kor_name": "CIP"
+  },
+  {
+    "define_code_name": "1224",
+    "define_code_kor_name": "COD"
+  },
+  {
+    "define_code_name": "1225",
+    "define_code_kor_name": "VR"
+  },
+  {
+    "define_code_name": "1226",
+    "define_code_kor_name": "보강VR"
+  },
+  {
+    "define_code_name": "1227",
+    "define_code_kor_name": "라이닝관"
+  },
+  {
+    "define_code_name": "1228",
+    "define_code_kor_name": "PC 실린더관"
+  },
+  {
+    "define_code_name": "1229",
+    "define_code_kor_name": "벨로우즈 신축관"
+  },
+  {
+    "define_code_name": "1230",
+    "define_code_kor_name": "유리섬유 복합관"
+  },
+  {
+    "define_code_name": "1299",
+    "define_code_kor_name": "기타"
+  }
+]

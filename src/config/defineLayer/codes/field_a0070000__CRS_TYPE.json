@@ -1,0 +1,70 @@
+[
+  {
+    "define_code_name": "1501",
+    "define_code_kor_name": "고속국도"
+  },
+  {
+    "define_code_name": "1502",
+    "define_code_kor_name": "일반국도"
+  },
+  {
+    "define_code_name": "1503",
+    "define_code_kor_name": "특별시도"
+  },
+  {
+    "define_code_name": "1504",
+    "define_code_kor_name": "광역시도"
+  },
+  {
+    "define_code_name": "1505",
+    "define_code_kor_name": "지방도"
+  },
+  {
+    "define_code_name": "1506",
+    "define_code_kor_name": "시도"
+  },
+  {
+    "define_code_name": "1507",
+    "define_code_kor_name": "군도"
+  },
+  {
+    "define_code_name": "1508",
+    "define_code_kor_name": "구도"
+  },
+  {
+    "define_code_name": "1599",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "4601",
+    "define_code_kor_name": "교량"
+  },
+  {
+    "define_code_name": "4602",
+    "define_code_kor_name": "보도육교"
+  },
+  {
+    "define_code_name": "4603",
+    "define_code_kor_name": "지하차도"
+  },
+  {
+    "define_code_name": "4604",
+    "define_code_kor_name": "지하보도"
+  },
+  {
+    "define_code_name": "4605",
+    "define_code_kor_name": "고가도로"
+  },
+  {
+    "define_code_name": "4606",
+    "define_code_kor_name": "생태통로"
+  },
+  {
+    "define_code_name": "4607",
+    "define_code_kor_name": "과선교"
+  },
+  {
+    "define_code_name": "4699",
+    "define_code_kor_name": "기타"
+  }
+]

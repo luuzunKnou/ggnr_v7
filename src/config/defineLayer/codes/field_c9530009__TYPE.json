@@ -1,0 +1,50 @@
+[
+  {
+    "define_code_name": "6201",
+    "define_code_kor_name": "육교형"
+  },
+  {
+    "define_code_name": "6202",
+    "define_code_kor_name": "터널형(도로전용 터널)"
+  },
+  {
+    "define_code_name": "6203",
+    "define_code_kor_name": "터널형(수로겸용 터널)"
+  },
+  {
+    "define_code_name": "6204",
+    "define_code_kor_name": "터널형(양수파충류 전용터널)"
+  },
+  {
+    "define_code_name": "6205",
+    "define_code_kor_name": "교량하부형 통로"
+  },
+  {
+    "define_code_name": "6206",
+    "define_code_kor_name": "기타시설(교량하부형 통로)"
+  },
+  {
+    "define_code_name": "6299",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "터널형"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "교량하부"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "터널상부"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "터널형(포)"
+  },
+  {
+    "define_code_name": "EC06",
+    "define_code_kor_name": "터널형(양)"
+  }
+]

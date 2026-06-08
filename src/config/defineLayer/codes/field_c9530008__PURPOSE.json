@@ -1,0 +1,118 @@
+[
+  {
+    "define_code_name": "1101",
+    "define_code_kor_name": "전"
+  },
+  {
+    "define_code_name": "1102",
+    "define_code_kor_name": "답"
+  },
+  {
+    "define_code_name": "1103",
+    "define_code_kor_name": "과수원"
+  },
+  {
+    "define_code_name": "1104",
+    "define_code_kor_name": "목장"
+  },
+  {
+    "define_code_name": "1105",
+    "define_code_kor_name": "임야"
+  },
+  {
+    "define_code_name": "1106",
+    "define_code_kor_name": "광천지"
+  },
+  {
+    "define_code_name": "1107",
+    "define_code_kor_name": "염전"
+  },
+  {
+    "define_code_name": "1108",
+    "define_code_kor_name": "대지"
+  },
+  {
+    "define_code_name": "1109",
+    "define_code_kor_name": "공장"
+  },
+  {
+    "define_code_name": "1110",
+    "define_code_kor_name": "학교용지"
+  },
+  {
+    "define_code_name": "1111",
+    "define_code_kor_name": "도로"
+  },
+  {
+    "define_code_name": "1112",
+    "define_code_kor_name": "철도"
+  },
+  {
+    "define_code_name": "1113",
+    "define_code_kor_name": "하천"
+  },
+  {
+    "define_code_name": "1114",
+    "define_code_kor_name": "제방"
+  },
+  {
+    "define_code_name": "1115",
+    "define_code_kor_name": "구거"
+  },
+  {
+    "define_code_name": "1116",
+    "define_code_kor_name": "유지"
+  },
+  {
+    "define_code_name": "1117",
+    "define_code_kor_name": "수도용지"
+  },
+  {
+    "define_code_name": "1118",
+    "define_code_kor_name": "공원"
+  },
+  {
+    "define_code_name": "1119",
+    "define_code_kor_name": "체육용지"
+  },
+  {
+    "define_code_name": "1120",
+    "define_code_kor_name": "유원지"
+  },
+  {
+    "define_code_name": "1121",
+    "define_code_kor_name": "종교용지"
+  },
+  {
+    "define_code_name": "1122",
+    "define_code_kor_name": "사적지"
+  },
+  {
+    "define_code_name": "1124",
+    "define_code_kor_name": "잡종지"
+  },
+  {
+    "define_code_name": "1125",
+    "define_code_kor_name": "묘지"
+  },
+  {
+    "define_code_name": "1126",
+    "define_code_kor_name": "주차장"
+  },
+  {
+    "define_code_name": "1127",
+    "define_code_kor_name": "주유소"
+  },
+  {
+    "define_code_name": "1128",
+    "define_code_kor_name": "창고"
+  },
+  {
+    "define_code_name": "1129",
+    "define_code_kor_name": "양어장"
+  },
+  {
+    "define_code_name": "1199",
+    "define_code_kor_name": "기타"
+  }
+]

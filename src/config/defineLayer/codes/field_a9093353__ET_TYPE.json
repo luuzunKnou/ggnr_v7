@@ -1,0 +1,34 @@
+[
+  {
+    "define_code_name": "5010",
+    "define_code_kor_name": "소화기"
+  },
+  {
+    "define_code_name": "5011",
+    "define_code_kor_name": "이산화탄소소화기"
+  },
+  {
+    "define_code_name": "5012",
+    "define_code_kor_name": "할론소화기"
+  },
+  {
+    "define_code_name": "5013",
+    "define_code_kor_name": "분말소화기"
+  },
+  {
+    "define_code_name": "5014",
+    "define_code_kor_name": "강화액소화기"
+  },
+  {
+    "define_code_name": "5020",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_name": "5030",
+    "define_code_kor_name": "물분무설비"
+  },
+  {
+    "define_code_name": "5099",
+    "define_code_kor_name": "기타"
+  }
+]

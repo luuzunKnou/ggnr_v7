@@ -1,0 +1,326 @@
+[
+  {
+    "define_code_key": "71088",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71089",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP001",
+    "define_code_kor_name": "공중전화박스"
+  },
+  {
+    "define_code_key": "71090",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP002",
+    "define_code_kor_name": "사설안내표지판"
+  },
+  {
+    "define_code_key": "71091",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP003",
+    "define_code_kor_name": "우체통"
+  },
+  {
+    "define_code_key": "71092",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP004",
+    "define_code_kor_name": "자동판매기"
+  },
+  {
+    "define_code_key": "71093",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP005",
+    "define_code_kor_name": "전주"
+  },
+  {
+    "define_code_key": "71094",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP006",
+    "define_code_kor_name": "가판대"
+  },
+  {
+    "define_code_key": "71095",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP901",
+    "define_code_kor_name": "공주"
+  },
+  {
+    "define_code_key": "71096",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP902",
+    "define_code_kor_name": "통신주"
+  },
+  {
+    "define_code_key": "71097",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP903",
+    "define_code_kor_name": "지지주"
+  },
+  {
+    "define_code_key": "71098",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71099",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP900",
+    "define_code_kor_name": "가건물"
+  },
+  {
+    "define_code_key": "71100",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP904",
+    "define_code_kor_name": "가스맨홀"
+  },
+  {
+    "define_code_key": "71101",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP905",
+    "define_code_kor_name": "고가도로 노면 밑"
+  },
+  {
+    "define_code_key": "71102",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP906",
+    "define_code_kor_name": "공사(기타)"
+  },
+  {
+    "define_code_key": "71103",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP907",
+    "define_code_kor_name": "공사(일시점용)"
+  },
+  {
+    "define_code_key": "71104",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP908",
+    "define_code_kor_name": "공작물(기타)"
+  },
+  {
+    "define_code_key": "71105",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP909",
+    "define_code_kor_name": "공작물(농업,주택 및 식물재배)"
+  },
+  {
+    "define_code_key": "71106",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP910",
+    "define_code_kor_name": "광고탑,광고판(기타)"
+  },
+  {
+    "define_code_key": "71107",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP911",
+    "define_code_kor_name": "광고탑,광고판(일시)"
+  },
+  {
+    "define_code_key": "71108",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP912",
+    "define_code_kor_name": "광고표지판"
+  },
+  {
+    "define_code_key": "71109",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP913",
+    "define_code_kor_name": "기타맨홀"
+  },
+  {
+    "define_code_key": "71110",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP914",
+    "define_code_kor_name": "기타유선주"
+  },
+  {
+    "define_code_key": "71111",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP915",
+    "define_code_kor_name": "난방맨홀"
+  },
+  {
+    "define_code_key": "71112",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP916",
+    "define_code_kor_name": "도로반사경"
+  },
+  {
+    "define_code_key": "71113",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP917",
+    "define_code_kor_name": "무인단속카메라"
+  },
+  {
+    "define_code_key": "71114",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP918",
+    "define_code_kor_name": "배전함"
+  },
+  {
+    "define_code_key": "71115",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP919",
+    "define_code_kor_name": "버스표판매대,구두수선대"
+  },
+  {
+    "define_code_key": "71116",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP920",
+    "define_code_kor_name": "벤치"
+  },
+  {
+    "define_code_key": "71117",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP921",
+    "define_code_kor_name": "변압기"
+  },
+  {
+    "define_code_key": "71118",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP922",
+    "define_code_kor_name": "변압탑,기지국,우체통"
+  },
+  {
+    "define_code_key": "71119",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP923",
+    "define_code_kor_name": "보조지주"
+  },
+  {
+    "define_code_key": "71120",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP924",
+    "define_code_kor_name": "분전함"
+  },
+  {
+    "define_code_key": "71121",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP925",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_key": "71122",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP926",
+    "define_code_kor_name": "송유맨홀"
+  },
+  {
+    "define_code_key": "71123",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP927",
+    "define_code_kor_name": "송전탑"
+  },
+  {
+    "define_code_key": "71124",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP928",
+    "define_code_kor_name": "송전탑 및 기타"
+  },
+  {
+    "define_code_key": "71125",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP929",
+    "define_code_kor_name": "시경맨홀"
+  },
+  {
+    "define_code_key": "71126",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP930",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "71127",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP931",
+    "define_code_kor_name": "아취(기타)"
+  },
+  {
+    "define_code_key": "71128",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP932",
+    "define_code_kor_name": "아취(도로횡단)"
+  },
+  {
+    "define_code_key": "71129",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP933",
+    "define_code_kor_name": "유선주"
+  },
+  {
+    "define_code_key": "71130",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP934",
+    "define_code_kor_name": "이동중계기"
+  },
+  {
+    "define_code_key": "71131",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP935",
+    "define_code_kor_name": "자동판매기,상품진열대,노점"
+  },
+  {
+    "define_code_key": "71132",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP936",
+    "define_code_kor_name": "전기맨홀"
+  },
+  {
+    "define_code_key": "71133",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP937",
+    "define_code_kor_name": "전력맨홀"
+  },
+  {
+    "define_code_key": "71134",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP938",
+    "define_code_kor_name": "전주,가로등"
+  },
+  {
+    "define_code_key": "71135",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP939",
+    "define_code_kor_name": "전주와 유사한 시설"
+  },
+  {
+    "define_code_key": "71136",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP940",
+    "define_code_kor_name": "지역난방맨홀"
+  },
+  {
+    "define_code_key": "71137",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP941",
+    "define_code_kor_name": "통신맨홀"
+  },
+  {
+    "define_code_key": "71138",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP942",
+    "define_code_kor_name": "현수막(기타용도)"
+  },
+  {
+    "define_code_key": "71139",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP943",
+    "define_code_kor_name": "현수막(일시)"
+  },
+  {
+    "define_code_key": "71140",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP944",
+    "define_code_kor_name": "현수막게시대"
+  },
+  {
+    "define_code_key": "71141",
+    "define_code_field_key": "7649",
+    "define_code_name": "JYP945",
+    "define_code_kor_name": "CCTV"
+  }
+]

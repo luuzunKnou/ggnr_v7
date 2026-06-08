@@ -1,0 +1,22 @@
+[
+  {
+    "define_code_name": "6401",
+    "define_code_kor_name": "모래더미"
+  },
+  {
+    "define_code_name": "6402",
+    "define_code_kor_name": "골재부설형식(하향경사)"
+  },
+  {
+    "define_code_name": "6403",
+    "define_code_kor_name": "골재부설형식(수평경사)"
+  },
+  {
+    "define_code_name": "6404",
+    "define_code_kor_name": "골재부설형식(상향경사)"
+  },
+  {
+    "define_code_name": "6499",
+    "define_code_kor_name": "기타"
+  }
+]

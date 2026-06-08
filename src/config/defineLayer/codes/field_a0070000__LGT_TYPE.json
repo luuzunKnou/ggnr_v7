@@ -1,0 +1,34 @@
+[
+  {
+    "define_code_name": "3401",
+    "define_code_kor_name": "수은램프"
+  },
+  {
+    "define_code_name": "3402",
+    "define_code_kor_name": "메탈할라이드램프"
+  },
+  {
+    "define_code_name": "3403",
+    "define_code_kor_name": "고압나트륨램프"
+  },
+  {
+    "define_code_name": "3404",
+    "define_code_kor_name": "저압나트륨램프"
+  },
+  {
+    "define_code_name": "3405",
+    "define_code_kor_name": "발광다이오드램프"
+  },
+  {
+    "define_code_name": "3406",
+    "define_code_kor_name": "형광램프"
+  },
+  {
+    "define_code_name": "3407",
+    "define_code_kor_name": "LED"
+  },
+  {
+    "define_code_name": "3499",
+    "define_code_kor_name": "기타"
+  }
+]

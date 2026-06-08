@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "1001",
+    "define_code_kor_name": "마제형"
+  },
+  {
+    "define_code_name": "1002",
+    "define_code_kor_name": "원형"
+  },
+  {
+    "define_code_name": "1003",
+    "define_code_kor_name": "난형"
+  },
+  {
+    "define_code_name": "1099",
+    "define_code_kor_name": "기타"
+  }
+]

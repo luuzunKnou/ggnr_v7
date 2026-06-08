@@ -1,0 +1,30 @@
+[
+  {
+    "define_code_name": "6501",
+    "define_code_kor_name": "배수시설"
+  },
+  {
+    "define_code_name": "6502",
+    "define_code_kor_name": "보조도로"
+  },
+  {
+    "define_code_name": "6503",
+    "define_code_kor_name": "견인앵커"
+  },
+  {
+    "define_code_name": "6504",
+    "define_code_kor_name": "표지"
+  },
+  {
+    "define_code_name": "6505",
+    "define_code_kor_name": "조명시설"
+  },
+  {
+    "define_code_name": "6506",
+    "define_code_kor_name": "표지병"
+  },
+  {
+    "define_code_name": "6599",
+    "define_code_kor_name": "기타"
+  }
+]

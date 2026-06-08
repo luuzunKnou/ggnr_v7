@@ -1,0 +1,224 @@
+[
+  {
+    "define_code_key": "71493",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71494",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV001",
+    "define_code_kor_name": "소형고압블록"
+  },
+  {
+    "define_code_key": "71495",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV002",
+    "define_code_kor_name": "일반사각블록"
+  },
+  {
+    "define_code_key": "71496",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV003",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "71497",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV004",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "71498",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV005",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_key": "71499",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV006",
+    "define_code_kor_name": "투수성아스콘"
+  },
+  {
+    "define_code_key": "71500",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV007",
+    "define_code_kor_name": "투수성콘크리트"
+  },
+  {
+    "define_code_key": "71501",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV008",
+    "define_code_kor_name": "오너멘트블록"
+  },
+  {
+    "define_code_key": "71502",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV009",
+    "define_code_kor_name": "타일"
+  },
+  {
+    "define_code_key": "71503",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV010",
+    "define_code_kor_name": "세라믹블록"
+  },
+  {
+    "define_code_key": "71504",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV011",
+    "define_code_kor_name": "화학재료"
+  },
+  {
+    "define_code_key": "71505",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV090",
+    "define_code_kor_name": "우레탄"
+  },
+  {
+    "define_code_key": "71506",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71507",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV900",
+    "define_code_kor_name": "고압블럭"
+  },
+  {
+    "define_code_key": "71508",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV901",
+    "define_code_kor_name": "벽돌"
+  },
+  {
+    "define_code_key": "71509",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV902",
+    "define_code_kor_name": "부럭"
+  },
+  {
+    "define_code_key": "71510",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV903",
+    "define_code_kor_name": "비포장"
+  },
+  {
+    "define_code_key": "71511",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV904",
+    "define_code_kor_name": "사각"
+  },
+  {
+    "define_code_key": "71512",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV905",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_key": "71513",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV906",
+    "define_code_kor_name": "석재타일"
+  },
+  {
+    "define_code_key": "71514",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV907",
+    "define_code_kor_name": "스톤블럭"
+  },
+  {
+    "define_code_key": "71515",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV908",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "71516",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV909",
+    "define_code_kor_name": "에폭시"
+  },
+  {
+    "define_code_key": "71517",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV910",
+    "define_code_kor_name": "인트로킹"
+  },
+  {
+    "define_code_key": "71518",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV911",
+    "define_code_kor_name": "점토블록"
+  },
+  {
+    "define_code_key": "71519",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV912",
+    "define_code_kor_name": "칼라아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "71520",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV913",
+    "define_code_kor_name": "칼라콘크리트"
+  },
+  {
+    "define_code_key": "71521",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV914",
+    "define_code_kor_name": "텍코팅"
+  },
+  {
+    "define_code_key": "71522",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV915",
+    "define_code_kor_name": "투수성고무탄성포장재"
+  },
+  {
+    "define_code_key": "71523",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV916",
+    "define_code_kor_name": "특수콘크리트"
+  },
+  {
+    "define_code_key": "71524",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV917",
+    "define_code_kor_name": "폐타이어"
+  },
+  {
+    "define_code_key": "71525",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV918",
+    "define_code_kor_name": "플라워"
+  },
+  {
+    "define_code_key": "71526",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV919",
+    "define_code_kor_name": "G"
+  },
+  {
+    "define_code_key": "71527",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV920",
+    "define_code_kor_name": "GB"
+  },
+  {
+    "define_code_key": "71528",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV921",
+    "define_code_kor_name": "RUB"
+  },
+  {
+    "define_code_key": "71529",
+    "define_code_field_key": "7737",
+    "define_code_name": "BPV922",
+    "define_code_kor_name": "SB"
+  }
+]

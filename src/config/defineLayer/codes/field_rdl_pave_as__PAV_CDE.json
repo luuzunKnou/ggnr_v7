@@ -1,0 +1,224 @@
+[
+  {
+    "define_code_key": "71400",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71401",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV001",
+    "define_code_kor_name": "소형고압블록"
+  },
+  {
+    "define_code_key": "71402",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV002",
+    "define_code_kor_name": "일반사각블록"
+  },
+  {
+    "define_code_key": "71403",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV003",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "71404",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV004",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "71405",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV005",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_key": "71406",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV006",
+    "define_code_kor_name": "투수성아스콘"
+  },
+  {
+    "define_code_key": "71407",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV007",
+    "define_code_kor_name": "투수성콘크리트"
+  },
+  {
+    "define_code_key": "71408",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV008",
+    "define_code_kor_name": "오너멘트블록"
+  },
+  {
+    "define_code_key": "71409",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV009",
+    "define_code_kor_name": "타일"
+  },
+  {
+    "define_code_key": "71410",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV010",
+    "define_code_kor_name": "세라믹블록"
+  },
+  {
+    "define_code_key": "71411",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV011",
+    "define_code_kor_name": "화학재료"
+  },
+  {
+    "define_code_key": "71412",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV090",
+    "define_code_kor_name": "우레탄"
+  },
+  {
+    "define_code_key": "71413",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71414",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV900",
+    "define_code_kor_name": "고압블럭"
+  },
+  {
+    "define_code_key": "71415",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV901",
+    "define_code_kor_name": "벽돌"
+  },
+  {
+    "define_code_key": "71416",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV902",
+    "define_code_kor_name": "부럭"
+  },
+  {
+    "define_code_key": "71417",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV903",
+    "define_code_kor_name": "비포장"
+  },
+  {
+    "define_code_key": "71418",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV904",
+    "define_code_kor_name": "사각"
+  },
+  {
+    "define_code_key": "71419",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV905",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_key": "71420",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV906",
+    "define_code_kor_name": "석재타일"
+  },
+  {
+    "define_code_key": "71421",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV907",
+    "define_code_kor_name": "스톤블럭"
+  },
+  {
+    "define_code_key": "71422",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV908",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "71423",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV909",
+    "define_code_kor_name": "에폭시"
+  },
+  {
+    "define_code_key": "71424",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV910",
+    "define_code_kor_name": "인트로킹"
+  },
+  {
+    "define_code_key": "71425",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV911",
+    "define_code_kor_name": "점토블록"
+  },
+  {
+    "define_code_key": "71426",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV912",
+    "define_code_kor_name": "칼라아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "71427",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV913",
+    "define_code_kor_name": "칼라콘크리트"
+  },
+  {
+    "define_code_key": "71428",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV914",
+    "define_code_kor_name": "텍코팅"
+  },
+  {
+    "define_code_key": "71429",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV915",
+    "define_code_kor_name": "투수성고무탄성포장재"
+  },
+  {
+    "define_code_key": "71430",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV916",
+    "define_code_kor_name": "특수콘크리트"
+  },
+  {
+    "define_code_key": "71431",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV917",
+    "define_code_kor_name": "폐타이어"
+  },
+  {
+    "define_code_key": "71432",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV918",
+    "define_code_kor_name": "플라워"
+  },
+  {
+    "define_code_key": "71433",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV919",
+    "define_code_kor_name": "G"
+  },
+  {
+    "define_code_key": "71434",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV920",
+    "define_code_kor_name": "GB"
+  },
+  {
+    "define_code_key": "71435",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV921",
+    "define_code_kor_name": "RUB"
+  },
+  {
+    "define_code_key": "71436",
+    "define_code_field_key": "7735",
+    "define_code_name": "PAV922",
+    "define_code_kor_name": "SB"
+  }
+]

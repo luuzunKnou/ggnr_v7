@@ -1,0 +1,122 @@
+[
+  {
+    "define_code_key": "70952",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70953",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY001",
+    "define_code_kor_name": "목조식"
+  },
+  {
+    "define_code_key": "70954",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY002",
+    "define_code_kor_name": "중력식"
+  },
+  {
+    "define_code_key": "70955",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY003",
+    "define_code_kor_name": "벽식"
+  },
+  {
+    "define_code_key": "70956",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY004",
+    "define_code_kor_name": "구주식"
+  },
+  {
+    "define_code_key": "70957",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY005",
+    "define_code_kor_name": "T형 교각식"
+  },
+  {
+    "define_code_key": "70958",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY006",
+    "define_code_kor_name": "라멘식"
+  },
+  {
+    "define_code_key": "70959",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY007",
+    "define_code_kor_name": "아치식"
+  },
+  {
+    "define_code_key": "70960",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY008",
+    "define_code_kor_name": "V형 교각식"
+  },
+  {
+    "define_code_key": "70961",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY009",
+    "define_code_kor_name": "반중력식"
+  },
+  {
+    "define_code_key": "70962",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY901",
+    "define_code_kor_name": "역T형교대"
+  },
+  {
+    "define_code_key": "70963",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70964",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY900",
+    "define_code_kor_name": "규모이하"
+  },
+  {
+    "define_code_key": "70965",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY902",
+    "define_code_kor_name": "기둥식"
+  },
+  {
+    "define_code_key": "70966",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY903",
+    "define_code_kor_name": "박스식"
+  },
+  {
+    "define_code_key": "70967",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY904",
+    "define_code_kor_name": "부벽식"
+  },
+  {
+    "define_code_key": "70968",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY905",
+    "define_code_kor_name": "ETC식"
+  },
+  {
+    "define_code_key": "70969",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY906",
+    "define_code_kor_name": "GP"
+  },
+  {
+    "define_code_key": "70970",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY907",
+    "define_code_kor_name": "I빔"
+  },
+  {
+    "define_code_key": "70971",
+    "define_code_field_key": "7576",
+    "define_code_name": "DTY908",
+    "define_code_kor_name": "RAP"
+  }
+]

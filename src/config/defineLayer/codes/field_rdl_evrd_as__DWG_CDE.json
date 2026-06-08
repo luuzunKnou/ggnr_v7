@@ -1,0 +1,110 @@
+[
+  {
+    "define_code_key": "70883",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70884",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG011",
+    "define_code_kor_name": "T6 또는 D6"
+  },
+  {
+    "define_code_key": "70885",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG012",
+    "define_code_kor_name": "T8 또는 D8"
+  },
+  {
+    "define_code_key": "70886",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG013",
+    "define_code_kor_name": "T9 또는 D9"
+  },
+  {
+    "define_code_key": "70887",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG014",
+    "define_code_kor_name": "T12 또는 D12"
+  },
+  {
+    "define_code_key": "70888",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG015",
+    "define_code_kor_name": "T13 또는 D13"
+  },
+  {
+    "define_code_key": "70889",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG022",
+    "define_code_kor_name": "DB13,5"
+  },
+  {
+    "define_code_key": "70890",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG023",
+    "define_code_kor_name": "DB18"
+  },
+  {
+    "define_code_key": "70891",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG024",
+    "define_code_kor_name": "DB24"
+  },
+  {
+    "define_code_key": "70892",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70893",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG900",
+    "define_code_kor_name": "규모이하"
+  },
+  {
+    "define_code_key": "70894",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG901",
+    "define_code_kor_name": "DB22"
+  },
+  {
+    "define_code_key": "70895",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG902",
+    "define_code_kor_name": "DB23"
+  },
+  {
+    "define_code_key": "70896",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG903",
+    "define_code_kor_name": "DB23TO"
+  },
+  {
+    "define_code_key": "70897",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG904",
+    "define_code_kor_name": "DB24TO"
+  },
+  {
+    "define_code_key": "70898",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG905",
+    "define_code_kor_name": "DB25"
+  },
+  {
+    "define_code_key": "70899",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG906",
+    "define_code_kor_name": "DB25TO"
+  },
+  {
+    "define_code_key": "70900",
+    "define_code_field_key": "7566",
+    "define_code_name": "DWG907",
+    "define_code_kor_name": "DB33.2"
+  }
+]

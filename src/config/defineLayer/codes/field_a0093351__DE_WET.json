@@ -1,0 +1,46 @@
+[
+  {
+    "define_code_name": "0601",
+    "define_code_kor_name": "DB-24/DL-24"
+  },
+  {
+    "define_code_name": "0602",
+    "define_code_kor_name": "DB-18/DL-18"
+  },
+  {
+    "define_code_name": "0603",
+    "define_code_kor_name": "DB-13.5"
+  },
+  {
+    "define_code_name": "0604",
+    "define_code_kor_name": "T13/D13"
+  },
+  {
+    "define_code_name": "0605",
+    "define_code_kor_name": "T12/D12"
+  },
+  {
+    "define_code_name": "0606",
+    "define_code_kor_name": "T9/D9"
+  },
+  {
+    "define_code_name": "0607",
+    "define_code_kor_name": "T8/D8"
+  },
+  {
+    "define_code_name": "0608",
+    "define_code_kor_name": "T6/D6"
+  },
+  {
+    "define_code_name": "0609",
+    "define_code_kor_name": "KL510"
+  },
+  {
+    "define_code_name": "0699",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "KL-510"
+  }
+]
