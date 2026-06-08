@@ -20,6 +20,9 @@
 # production
 /build
 
+# CAD 미리보기 작업 파일 (roadDocCadPreviewPng)
+/.cad-preview-work/
+
 # misc
 .DS_Store
 *.pem
@@ -40,13 +43,28 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# geoserver_modules (바이너리 파일 포함)
+# geoserver_modules (바이너리·런타임 번들)
 /geoserver_modules/java/
 /geoserver_modules/geoserver/
+/geoserver_modules.zip
 
-# data_dir는 Git 관리 대상. 아래 런타임 생성 폴더만 제외
+# data_dir 설정은 Git 관리. 런타임 생성 폴더만 제외
 /geoserver_modules/data_dir/logs/
 /geoserver_modules/data_dir/gwc/
+
+# QCAD / Blender 런타임 모듈
+/QCAD_modules/
+/modules_blender/
+
+# Node 런타임 번들 (소스 저장소에 포함하지 않음)
+/runtime/node/
+
+# 3D 샘플·타일 데이터 (대용량)
+/3d_data_dir/
+
+# 도로 문서 원본 (업로드/API로 관리, Git 제외)
+/src/app/(pages)/map/_mapContents/road/roadDoc/cad/
+/src/app/(pages)/map/_mapContents/road/roadDoc/file/
 
 # pg_map_modules (바이너리 파일 포함)
 /pg_map_modules/services/pg_tileserv/
@@ -58,3 +76,6 @@ next-env.d.ts
 /src/config/defineLayer/
 /src/config/defineLayer.config
 /src/config/defineLayer.config.backup
+
+# LAS 파이프라인 Conda 환경 (python/env)
+/python/env/

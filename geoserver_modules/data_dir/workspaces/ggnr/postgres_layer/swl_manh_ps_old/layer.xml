@@ -1,22 +1,16 @@
 <layer>
   <name>swl_manh_ps_old</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cc2</id>
+  <id>LayerInfoImpl--3f73bcf1:19cc7f5bac5:328c</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7af1</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cc3</id>
+    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f5bac5:328b</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">for_cde IN (&apos;FOR001&apos;, &apos;FOR004&apos;) AND sbc_cde IN (&apos;SBC003&apos;, &apos;SBC006&apos;)</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:01:08.883 UTC</dateCreated>
-  <dateModified>2026-02-11 16:01:08.907 UTC</dateModified>
+  <dateCreated>2026-03-07 11:05:05.661 UTC</dateCreated>
 </layer>

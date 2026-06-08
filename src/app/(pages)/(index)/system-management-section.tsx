@@ -1,9 +1,12 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import { Card } from "@/app/shadcnComponents/ui/card"
-import { ChevronRight, Droplets, CloudRain, Waves, Plane, Settings2 } from "lucide-react"
+import { ChevronRight, Droplets, CloudRain, Waves, Plane } from "lucide-react"
+import { canAccessPrivateSystem } from "@/lib/accessClient"
+import { useMyAccessSnapshot } from "@/hooks/useMyAccessSnapshot"
+import { ResourceAccessDeniedDialog } from "@/app/(pages)/_components/AccessRequest"
 
 export type SystemItem = {
   sys_key: string
@@ -16,6 +19,7 @@ export type SystemItem = {
   sys_link: string
   serviceList: string[]
   layerList: string[]
+  sys_is_private?: boolean | null
 }
 
 interface SystemManagementSectionProps {
@@ -38,6 +42,10 @@ const DEFAULT_ICONS: Record<string, React.ReactNode> = {
 }
 
 export function SystemManagementSection({ systems }: SystemManagementSectionProps) {
+  const { snapshot, loading: accessLoading } = useMyAccessSnapshot()
+  const [deniedOpen, setDeniedOpen] = useState(false)
+  const [deniedSysKey, setDeniedSysKey] = useState("")
+
   if (systems.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -49,24 +57,31 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
   const sorted = [...systems].sort((a, b) => a.sys_idx - b.sys_idx)
 
   return (
-    <section className="w-full">
-      <div className="mb-6 flex items-center gap-2">
+    <section className="w-full relative">
+      {/* <div className="mb-6 flex items-center gap-2">
         <Settings2 className="w-5 h-5 text-muted-foreground" />
         <h2 className="text-xl font-bold text-foreground">시스템 목록</h2>
-      </div>
+      </div> */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {sorted.map((sys) => {
           const color = sys.sys_col || DEFAULT_COLORS[sys.sys_key] || "#64748b"
           const href = sys.sys_link || `/map?system=${sys.sys_key}`
-          return (
-            <Link key={sys.sys_key} href={href} className="block group">
-              <Card
-                className="p-5 h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 border border-border flex flex-row items-center gap-4"
-                style={{
-                  borderLeftWidth: "4px",
-                  borderLeftColor: color,
-                }}
-              >
+          const isPrivate = sys.sys_is_private === true
+          const allowed = !isPrivate || canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)
+          const gated = isPrivate && accessLoading
+          const cardClass =
+            "px-5 py-3.5 h-full transition-all duration-300 rounded-[5px] border border-border flex flex-row items-center gap-4"
+          const cardHover = allowed && !gated ? "hover:shadow-lg hover:-translate-y-0.5" : ""
+          const cardMuted = gated ? "opacity-60" : ""
+
+          const inner = (
+            <Card
+              className={`${cardClass} ${cardHover} ${cardMuted}`}
+              style={{
+                borderLeftWidth: "4px",
+                borderLeftColor: color,
+              }}
+            >
                 <div className="flex flex-col gap-2 flex-1 min-w-0">
                   <span
                     className="text-[10px] font-medium text-muted-foreground/55 uppercase tracking-wide"
@@ -87,27 +102,89 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
                 </div>
                 {/* 오른쪽 로고: 아래쪽 시스템 목록(부서 카드)과 동일한 원형 + 아이콘 스타일 */}
                 <div
-                  className="w-14 h-14 shrink-0 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                  className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
                   style={{
                     backgroundColor: `${color}15`,
                     border: `2px solid ${color}30`,
                     color,
                   }}
                 >
-                  {sys.sys_img?.trim() ? (
-                    <div
-                      className="w-7 h-7 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-                      dangerouslySetInnerHTML={{ __html: sys.sys_img }}
-                    />
-                  ) : (
-                    DEFAULT_ICONS[sys.sys_key] ?? <ChevronRight className="w-6 h-6" />
-                  )}
+                  {(() => {
+                    const imgRaw = sys.sys_img?.trim() ?? "";
+                    const isInlineSvg = imgRaw.startsWith("<");
+                    const iconSrc = !isInlineSvg && (imgRaw || `/image/systemlistIcon/${sys.sys_key}.svg`);
+                    if (isInlineSvg) {
+                      return (
+                        <div
+                          className="w-7 h-7 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:fill-none [&>svg]:stroke-current"
+                          style={{ color }}
+                          dangerouslySetInnerHTML={{ __html: imgRaw }}
+                        />
+                      );
+                    }
+                    if (iconSrc) {
+                      return (
+                        <div
+                          className="w-7 h-7 shrink-0"
+                          style={{
+                            backgroundColor: color,
+                            WebkitMaskImage: `url(${iconSrc})`,
+                            maskImage: `url(${iconSrc})`,
+                            WebkitMaskSize: "contain",
+                            maskSize: "contain",
+                            WebkitMaskRepeat: "no-repeat",
+                            maskRepeat: "no-repeat",
+                            WebkitMaskPosition: "center",
+                            maskPosition: "center",
+                          }}
+                          role="img"
+                          aria-label=""
+                        />
+                      );
+                    }
+                    return DEFAULT_ICONS[sys.sys_key] ?? <ChevronRight className="w-6 h-6" />;
+                  })()}
                 </div>
               </Card>
-            </Link>
+          )
+
+          if (gated) {
+            return (
+              <div key={sys.sys_key} className="block w-full">
+                {inner}
+              </div>
+            )
+          }
+
+          if (allowed) {
+            return (
+              <Link key={sys.sys_key} href={href} className="block group">
+                {inner}
+              </Link>
+            )
+          }
+
+          return (
+            <button
+              key={sys.sys_key}
+              type="button"
+              className="block w-full text-left group"
+              onClick={() => {
+                setDeniedSysKey(sys.sys_key)
+                setDeniedOpen(true)
+              }}
+            >
+              {inner}
+            </button>
           )
         })}
       </div>
+      <ResourceAccessDeniedDialog
+        open={deniedOpen}
+        onOpenChange={setDeniedOpen}
+        resource="system"
+        sysKey={deniedSysKey}
+      />
     </section>
   )
 }

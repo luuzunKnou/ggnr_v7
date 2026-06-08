@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
 import * as allServices from '@/service';
+
+/** 장시간 실행(예: 파이프라인 환경 설정) 허용. 단위: 초. */
+export const maxDuration = 600;
+
+/** config·runtime 등 실시간 반영을 위해 캐시 없이 매 요청 실행 */
+export const dynamic = 'force-dynamic';
 
 /**
  * 중앙 API 게이트웨이
@@ -20,11 +27,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 인증 토큰 확인 (구조만, 나중에 구현)
-    const authToken = req.headers.get('authorization')?.replace('Bearer ', '');
-    // TODO: 인증 로직 추가
+    let params: Record<string, unknown> = {};
+    if (paramsStr) {
+      try {
+        params = JSON.parse(paramsStr);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Invalid params format' },
+          { status: 400 }
+        );
+      }
+    }
+    if (service === 'permissionService') {
+      const session = await auth();
+      if (!session?.user?.id) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      params = { ...params, _sessionUsrId: session.user.id };
+    }
 
-    // Service에서 함수 찾기
     const serviceModule = (allServices as any)[service];
     if (!serviceModule) {
       return NextResponse.json(
@@ -41,25 +62,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 파라미터 파싱
-    let params = {};
-    if (paramsStr) {
-      try {
-        params = JSON.parse(paramsStr);
-      } catch (e) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid params format' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // 함수 실행
     const result = await targetFn(params);
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json(
+      { success: true, data: result },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (err: any) {
-    // 403 에러 처리
+    if (err.status === 401) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     if (err.status === 403) {
       return NextResponse.json(
         { success: false, error: 'Forbidden', status: 403 },
@@ -89,11 +101,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 인증 토큰 확인 (구조만, 나중에 구현)
-    const authToken = req.headers.get('authorization')?.replace('Bearer ', '');
-    // TODO: 인증 로직 추가
+    let merged = { ...(params as Record<string, unknown>) };
+    if (service === 'permissionService') {
+      const session = await auth();
+      if (!session?.user?.id) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      merged = { ...merged, _sessionUsrId: session.user.id };
+    }
 
-    // Service에서 함수 찾기
     const serviceModule = (allServices as any)[service];
     if (!serviceModule) {
       return NextResponse.json(
@@ -110,12 +126,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 함수 실행
-    const result = await targetFn(params);
+    const result = await targetFn(merged);
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json(
+      { success: true, data: result },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (err: any) {
-    // 403 에러 처리
+    if (err.status === 401) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     if (err.status === 403) {
       return NextResponse.json(
         { success: false, error: 'Forbidden', status: 403 },

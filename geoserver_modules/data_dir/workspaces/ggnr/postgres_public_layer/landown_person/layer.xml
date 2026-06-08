@@ -1,22 +1,16 @@
 <layer>
   <name>landown_person</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e3c</id>
+  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55d9</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7bae</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e3d</id>
+    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55da</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">a7 = &apos;01&apos;</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:00:36.776 UTC</dateCreated>
-  <dateModified>2026-02-11 16:00:36.851 UTC</dateModified>
+  <dateCreated>2026-03-07 11:07:20.645 UTC</dateCreated>
 </layer>

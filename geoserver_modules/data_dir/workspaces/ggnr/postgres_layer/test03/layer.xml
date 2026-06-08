@@ -1,0 +1,19 @@
+<layer>
+  <name>test03</name>
+  <id>LayerInfoImpl--60cb52a7:19cdc4f170d:-7db5</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--60cb52a7:19cdc4f170d:-7db4</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:-7db6</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-14 17:16:23.621 UTC</dateCreated>
+  <dateModified>2026-03-14 17:16:23.674 UTC</dateModified>
+</layer>

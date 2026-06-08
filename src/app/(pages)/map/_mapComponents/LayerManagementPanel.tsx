@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, ChevronDown, ChevronRight, X, Search, SlidersHorizontal, Palette, Trash2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WORKSPACE } from './serviceLayerFactory';
+import { WORKSPACE } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './map-layergroup-bar';
 
 type DefineLayerRow = {
@@ -22,7 +22,7 @@ interface LayerManagementPanelProps {
   onVisibleChange: (next: Set<string>) => void;
   onUpdateWms: (visible: Set<string>) => void;
   onClose: () => void;
-  layerFilterRows?: Map<string, LayerFilterRow[]>;
+  layerFilterRows?: globalThis.Map<string, LayerFilterRow[]>;
   onLayerFilterRowsChange?: (layerName: string, rows: LayerFilterRow[]) => void;
   favoriteGroupKeys?: string[];
   onFavoriteToggle?: (category: string) => void;
@@ -169,10 +169,11 @@ export function LayerManagementPanel({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-slate-200/80 text-slate-600 shrink-0"
+              className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title="닫기"
               aria-label="닫기"
             >
-              <X className="w-4 h-4" strokeWidth={1.5} />
+              <X className="h-4 w-4" strokeWidth={1.5} />
             </button>
           </div>
           <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-2.5 py-1.5">

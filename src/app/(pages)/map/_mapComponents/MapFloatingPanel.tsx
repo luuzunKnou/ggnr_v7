@@ -55,6 +55,19 @@ export function MapFloatingPanel({
     [position]
   );
 
+  const anchorTop = defaultPosition.top;
+  const anchorH = useLeft
+    ? (defaultPosition as { left: number }).left
+    : (defaultPosition as { right: number }).right;
+
+  useEffect(() => {
+    if (useLeft) {
+      setPosition({ top: anchorTop, left: anchorH });
+    } else {
+      setPosition({ top: anchorTop, right: anchorH });
+    }
+  }, [anchorTop, anchorH, useLeft]);
+
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       if (!dragRef.current.isDragging) return;

@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:180b</id>
+  <name>re_03</name>
+  <nativeName>re_03</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>re_03</title>
+  <keywords>
+    <string>features</string>
+    <string>re_03</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>330553.6875</minx>
+    <maxx>377888.8125</maxx>
+    <miny>321708.28125</miny>
+    <maxy>368486.53125</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.45501484283562</minx>
+    <maxx>128.99312232928915</maxx>
+    <miny>36.37704702851296</miny>
+    <maxy>36.80603795340908</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

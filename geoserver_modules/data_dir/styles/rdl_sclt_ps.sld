@@ -11,13 +11,34 @@
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
                   <sld:CssParameter name="fill">#4CAF50</sld:CssParameter>
+                  <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>
                   <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
+                  <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
                   <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size>10</sld:Size>
+              <sld:Size>
+                <ogc:Function name="min">
+                  <ogc:Literal>18</ogc:Literal>
+                  <ogc:Add>
+                    <ogc:Literal>5</ogc:Literal>
+                    <ogc:Mul>
+                      <ogc:Function name="sqrt">
+                        <ogc:Div>
+                          <ogc:Literal>100000</ogc:Literal>
+                          <ogc:Function name="env">
+                            <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                            <ogc:Literal>10000</ogc:Literal>
+                          </ogc:Function>
+                        </ogc:Div>
+                      </ogc:Function>
+                      <ogc:Literal>1.5</ogc:Literal>
+                    </ogc:Mul>
+                  </ogc:Add>
+                </ogc:Function>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

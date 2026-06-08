@@ -1,0 +1,7 @@
+/* 구조물도 분할(bsm) */
+* {
+  mark: url("river_plan_gd_ps_bsm.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
+  mark-anchor: 0.5 0.5;
+}

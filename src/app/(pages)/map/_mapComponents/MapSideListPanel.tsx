@@ -10,27 +10,40 @@ export type MapSideListPanelProps = {
   width: number;
   minWidth: number;
   maxWidth: number;
+  /** 이 패널의 왼쪽 끝 X(px). 드래그 시 새 너비 = clientX - leftOffsetPx. 미지정 시 SIDEBAR_WIDTH 사용(첫 번째 패널) */
+  leftOffsetPx?: number;
   onWidthChange: (width: number) => void;
   children: React.ReactNode;
   className?: string;
+  /** 본문 래퍼(flex-1)에 추가 클래스. 예: `overflow-y-auto`로 패널 전체 스크롤 */
+  contentClassName?: string;
 };
 
 export function MapSideListPanel({
   width,
   minWidth,
   maxWidth,
+  leftOffsetPx = SIDEBAR_WIDTH,
   onWidthChange,
   children,
   className,
+  contentClassName,
 }: MapSideListPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const onWidthChangeRef = useRef(onWidthChange);
+  onWidthChangeRef.current = onWidthChange;
 
   const handleResize = useCallback(
     (e: MouseEvent) => {
-      const next = Math.min(maxWidth, Math.max(minWidth, e.clientX - SIDEBAR_WIDTH));
-      onWidthChange(next);
+      const next = Math.min(maxWidth, Math.max(minWidth, e.clientX - leftOffsetPx));
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        onWidthChangeRef.current(next);
+      });
     },
-    [minWidth, maxWidth, onWidthChange]
+    [minWidth, maxWidth, leftOffsetPx]
   );
 
   const handleResizeEnd = useCallback(() => {
@@ -53,6 +66,7 @@ export function MapSideListPanel({
 
   useEffect(() => {
     return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       window.removeEventListener('mousemove', handleResize);
       window.removeEventListener('mouseup', handleResizeEnd);
     };
@@ -78,7 +92,12 @@ export function MapSideListPanel({
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div
+        className={cn(
+          'flex-1 min-h-0 flex flex-col',
+          contentClassName ?? 'overflow-hidden',
+        )}
+      >
         {children}
       </div>
     </div>

@@ -30,6 +30,8 @@ export type SystemItem = {
   sys_idx: number
   sys_col: string
   sys_link: string
+  /** DB 커스텀 시스템만 */
+  sys_is_private?: boolean
   serviceList: string[]
   layerList: string[]
 }
@@ -51,6 +53,7 @@ const emptySystem = (): SystemItem => ({
   sys_idx: 0,
   sys_col: "",
   sys_link: "",
+  sys_is_private: false,
   serviceList: [],
   layerList: [],
 })
@@ -89,7 +92,7 @@ function ColorPreview({ value }: { value: string }) {
   )
 }
 
-function SvgPreview({ value }: { value: string }) {
+function SvgPreview({ value, color }: { value: string; color?: string }) {
   const raw = (value ?? "").trim()
   if (!raw) {
     return (
@@ -102,8 +105,28 @@ function SvgPreview({ value }: { value: string }) {
   if (isInlineSvg) {
     return (
       <div
-        className="w-7 h-6 flex items-center justify-center rounded border border-border bg-muted/20 overflow-hidden [&_svg]:w-5 [&_svg]:h-5 [&_svg]:max-w-full [&_svg]:max-h-full"
+        className="w-7 h-6 flex items-center justify-center rounded border border-border bg-muted/20 overflow-hidden [&_svg]:w-5 [&_svg]:h-5 [&_svg]:max-w-full [&_svg]:max-h-full [&_svg]:fill-none [&_svg]:stroke-current"
+        style={color ? { color } : undefined}
         dangerouslySetInnerHTML={{ __html: raw }}
+        title="SVG 미리보기"
+      />
+    )
+  }
+  if (color) {
+    return (
+      <div
+        className="w-7 h-6 shrink-0 rounded border border-border overflow-hidden"
+        style={{
+          backgroundColor: color,
+          WebkitMaskImage: `url(${raw})`,
+          maskImage: `url(${raw})`,
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+        }}
         title="SVG 미리보기"
       />
     )
@@ -138,7 +161,7 @@ export function SystemListManager() {
     setError(null)
     try {
       const [configRes, customRes] = await Promise.all([
-        call("", "POST", { service: "configService", action: "getSystemList", params: {} }),
+        call("", "POST", { service: "configService", action: "getSystemListAll", params: {} }),
         call("", "POST", { service: "sysService", action: "getCustomSystems", params: {} }),
       ])
       const common: SystemItemWithSource[] = (Array.isArray(configRes.data?.systems) ? configRes.data.systems : []).map(
@@ -161,6 +184,14 @@ export function SystemListManager() {
 
   useEffect(() => {
     loadSystems()
+  }, [])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadSystems()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
   const openAddCommonConfirm = () => {
@@ -326,6 +357,7 @@ export function SystemListManager() {
               sys_idx: next.sys_idx,
               sys_col: next.sys_col,
               sys_link: next.sys_link,
+              sys_is_private: next.sys_is_private === true,
             },
           })
           if (!res?.success) throw new Error((res as any)?.error ?? "수정 실패")
@@ -344,6 +376,7 @@ export function SystemListManager() {
               sys_idx: next.sys_idx,
               sys_col: next.sys_col,
               sys_link: next.sys_link,
+              sys_is_private: next.sys_is_private === true,
             },
           })
           if (!res?.success) throw new Error((res as any)?.error ?? "추가 실패")
@@ -455,7 +488,7 @@ export function SystemListManager() {
                   <TableCell className="text-sm text-muted-foreground">{s.sys_eng ?? "-"}</TableCell>
                   <TableCell className="align-middle">
                     <div className="flex justify-center items-center">
-                      <SvgPreview value={s.sys_img ?? ""} />
+                      <SvgPreview value={(s.sys_img ?? "").trim() || `/image/systemlistIcon/${s.sys_key}.svg`} color={s.sys_col || undefined} />
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs">{s.sys_idx}</TableCell>
@@ -629,6 +662,19 @@ export function SystemListManager() {
                 placeholder="#태그1 #태그2"
               />
             </div>
+            {currentSource() === "custom" && (
+              <div className="grid grid-cols-3 gap-2 items-center">
+                <label className="text-sm font-medium">비공개 시스템</label>
+                <label className="col-span-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.sys_is_private === true}
+                    onChange={(e) => setForm((f) => ({ ...f, sys_is_private: e.target.checked }))}
+                  />
+                  로그인만으로는 접근 불가 (권한·신청 필요)
+                </label>
+              </div>
+            )}
             {currentSource() === "common" && (
               <>
                 <div className="grid grid-cols-3 gap-2 items-start">

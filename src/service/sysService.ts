@@ -15,6 +15,7 @@ function rowToSystemItem(row: {
   sysCol: string | null;
   sysLink: string | null;
   sysDetail: string | null;
+  sysIsPrivate?: boolean | null;
 }) {
   return {
     sys_key: String(row.sysKey),
@@ -25,6 +26,7 @@ function rowToSystemItem(row: {
     sys_idx: row.sysIdx ?? 0,
     sys_col: row.sysCol ?? '',
     sys_link: row.sysLink ?? '',
+    sys_is_private: row.sysIsPrivate === true,
     serviceList: [] as string[],
     layerList: [] as string[],
   };
@@ -74,6 +76,7 @@ export async function createSystem(params: {
   sys_col?: string;
   sys_link?: string;
   sys_detail?: string;
+  sys_is_private?: boolean;
 }) {
   try {
     const [inserted] = await db
@@ -86,6 +89,7 @@ export async function createSystem(params: {
         sysCol: strOrNull(params.sys_col),
         sysLink: strOrNull(params.sys_link),
         sysDetail: strOrNull(params.sys_detail),
+        sysIsPrivate: params.sys_is_private === true,
       })
       .returning();
     if (!inserted) throw new Error('Insert failed');
@@ -107,6 +111,7 @@ export async function updateSystem(params: {
   sys_col?: string;
   sys_link?: string;
   sys_detail?: string;
+  sys_is_private?: boolean;
 }) {
   const id = Number(params.sys_key);
   if (Number.isNaN(id)) return { success: false, error: 'Invalid sys_key' };
@@ -121,6 +126,7 @@ export async function updateSystem(params: {
         ...(params.sys_col !== undefined && { sysCol: strOrNull(params.sys_col) }),
         ...(params.sys_link !== undefined && { sysLink: strOrNull(params.sys_link) }),
         ...(params.sys_detail !== undefined && { sysDetail: strOrNull(params.sys_detail) }),
+        ...(params.sys_is_private !== undefined && { sysIsPrivate: params.sys_is_private }),
       })
       .where(eq(sys.sysKey, id))
       .returning();

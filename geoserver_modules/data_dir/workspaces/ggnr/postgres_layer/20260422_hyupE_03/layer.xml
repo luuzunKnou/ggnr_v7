@@ -1,0 +1,19 @@
+<layer>
+  <name>20260422_hyupE_03</name>
+  <id>LayerInfoImpl--4fde225b:19da052eb3b:-5c02</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4fde225b:19da052eb3b:-5c01</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-5c03</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-22 10:30:56.959 UTC</dateCreated>
+  <dateModified>2026-04-22 10:30:57.24 UTC</dateModified>
+</layer>

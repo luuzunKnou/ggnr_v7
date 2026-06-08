@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, X, ChevronDown, LayoutGrid, Check } from 'lucide-react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -13,6 +13,12 @@ import {
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MapLayergroupBar } from './map-layergroup-bar';
+import { getAddressFromCoord, searchAddress, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
+import { useMapContext } from './MapContext';
+import { transform } from 'ol/proj';
+import { canAccessPrivateSystem } from '@/lib/accessClient';
+import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
+import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 
 type SystemOption = {
   sys_key: string;
@@ -21,6 +27,8 @@ type SystemOption = {
   sys_detail?: string;
   sys_idx?: number;
   sys_col?: string;
+  serviceList?: string[];
+  sys_is_private?: boolean | null;
 };
 
 const SIDEBAR_WIDTH = 65;
@@ -31,6 +39,31 @@ const SEARCH_BAR_MARGIN = 20;
  * - listPanelWidth: 열린 MapSideListPanel 너비 합 → 겹치지 않게 left 계산 (Layout에서 계산해 전달)
  * - URL query param `q`에 검색어를 동기화(간단 동작)
  */
+const ADDRESS_DEBOUNCE_MS = 300;
+const ADDRESS_RESULT_MAX = 5;
+const RECENT_QUERIES_KEY = 'map-address-recent';
+const RECENT_QUERIES_MAX = 10;
+
+function loadRecentQueries(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(RECENT_QUERIES_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.slice(0, RECENT_QUERIES_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentQueries(queries: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(RECENT_QUERIES_KEY, JSON.stringify(queries.slice(0, RECENT_QUERIES_MAX)));
+  } catch {
+    // ignore
+  }
+}
+
 export function MapSearchBar({
   listPanelWidth = 0,
 }: {
@@ -38,28 +71,181 @@ export function MapSearchBar({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const mapContext = useMapContext();
 
   const initialQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams]);
   const [query, setQuery] = useState(initialQuery);
+  const selectedSystemKey = searchParams.get('system') ?? '';
+
   const [systemList, setSystemList] = useState<SystemOption[]>([]);
-  const [selectedSystemKey, setSelectedSystemKey] = useState<string>('');
   const [systemModalOpen, setSystemModalOpen] = useState(false);
+  const [deniedOpen, setDeniedOpen] = useState(false);
+  const [deniedSysKey, setDeniedSysKey] = useState('');
+  const { snapshot } = useMyAccessSnapshot();
+
+  const [addressResults, setAddressResults] = useState<VWorldAddressItem[]>([]);
+  const [addressSearchLoading, setAddressSearchLoading] = useState(false);
+  const [addressPanelOpen, setAddressPanelOpen] = useState(false);
+  const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
+  const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번 검색');
+  const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
+  const centerPlaceholderReqIdRef = useRef(0);
+  const vworldApiKey = mapContext?.vworldApiKey ?? '';
+
+  const addRecentQuery = useCallback((trimmed: string) => {
+    if (!trimmed) return;
+    setRecentQueries((prev) => {
+      const next = [trimmed, ...prev.filter((q) => q !== trimmed)].slice(0, RECENT_QUERIES_MAX);
+      saveRecentQueries(next);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAddress = useCallback(
+    (item: VWorldAddressItem) => {
+      const map = mapContext?.mapInstanceRef?.current;
+      if (map) {
+        const view = map.getView();
+        const center3857 = transform(
+          [item.point.x, item.point.y],
+          'EPSG:4326',
+          'EPSG:3857'
+        );
+        view.setCenter(center3857);
+        view.setZoom(17);
+      }
+      if (query.trim()) addRecentQuery(query.trim());
+    },
+    [mapContext, query, addRecentQuery]
+  );
 
   useEffect(() => {
+    if (!query.trim()) {
+      setAddressResults([]);
+      return;
+    }
+    if (!vworldApiKey) return;
+    const t = setTimeout(() => {
+      setAddressSearchLoading(true);
+      const trimmed = query.trim();
+      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+        .then((items) => {
+          setAddressResults(items);
+          setAddressPanelOpen(true);
+        })
+        .finally(() => setAddressSearchLoading(false));
+    }, ADDRESS_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query, vworldApiKey]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        addressPanelOpen &&
+        addressSearchWrapperRef.current &&
+        !addressSearchWrapperRef.current.contains(e.target as Node)
+      ) {
+        setAddressPanelOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [addressPanelOpen]);
+
+  const updateCenterPlaceholderFromMap = useCallback(async () => {
+    const map = mapContext?.mapInstanceRef?.current;
+    const apiKey = vworldApiKey.trim();
+    if (!map || !apiKey) return;
+    const center = map.getView().getCenter();
+    if (!center) return;
+    const [lon, lat] = transform(center, 'EPSG:3857', 'EPSG:4326');
+    if (![lon, lat].every((v) => Number.isFinite(v))) return;
+    const reqId = ++centerPlaceholderReqIdRef.current;
+    try {
+      const addr = await getAddressFromCoord(lon, lat, { apiKey });
+      if (reqId !== centerPlaceholderReqIdRef.current) return;
+      const jibun = String(addr?.jibun ?? '').trim();
+      const road = String(addr?.road ?? '').trim();
+      setCenterPlaceholder(jibun || road || '주소/지번 검색');
+    } catch {
+      if (reqId !== centerPlaceholderReqIdRef.current) return;
+      setCenterPlaceholder('주소/지번 검색');
+    }
+  }, [mapContext, vworldApiKey]);
+
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map || !vworldApiKey.trim()) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onMoveEnd = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void updateCenterPlaceholderFromMap();
+      }, 150);
+    };
+    void updateCenterPlaceholderFromMap();
+    map.on('moveend', onMoveEnd);
+    return () => {
+      if (timer) clearTimeout(timer);
+      map.un('moveend', onMoveEnd);
+    };
+  }, [mapContext, vworldApiKey, updateCenterPlaceholderFromMap]);
+
+  const fetchSystemList = useCallback(() => {
     call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} })
       .then((res) => {
         const data = res?.data ?? res;
         const systems = Array.isArray(data?.systems) ? data.systems : [];
         const sorted = [...systems].sort(
-          (a, b) => (Number(a.sys_idx) || 999) - (Number(b.sys_idx) || 999)
+          (a: SystemOption, b: SystemOption) => (Number(a.sys_idx) || 999) - (Number(b.sys_idx) || 999)
         );
         setSystemList(sorted);
-        if (sorted.length > 0) {
-          setSelectedSystemKey((prev) => prev || String(sorted[0].sys_key ?? ''));
-        }
       })
       .catch(() => setSystemList([]));
   }, []);
+
+  useEffect(() => {
+    fetchSystemList();
+  }, [fetchSystemList]);
+
+  /** 지도 주소 검색·역지오코딩용 VWorld API 키는 서버(runtime.env)에서만 읽히므로 API로 조회 후 context에 저장 */
+  const fetchMapConfig = useCallback(() => {
+    call('', 'POST', { service: 'configService', action: 'getMapConfig', params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        const key = (data?.VWORLD_API_KEY ?? '').trim();
+        mapContext?.setVworldApiKey?.(key);
+      })
+      .catch(() => mapContext?.setVworldApiKey?.(''));
+  }, [mapContext]);
+  useEffect(() => {
+    fetchMapConfig();
+  }, [fetchMapConfig]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchSystemList();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchSystemList]);
+
+  const selectSystem = (sysKey: string) => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    if (sysKey) current.set('system', sysKey);
+    else current.delete('system');
+    router.push(`/map?${current.toString()}`);
+    setSystemModalOpen(false);
+  };
+
+  const trySelectSystem = (sys: SystemOption) => {
+    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
+      setDeniedSysKey(sys.sys_key);
+      setDeniedOpen(true);
+      return;
+    }
+    selectSystem(sys.sys_key);
+  };
 
   const submit = (nextQuery: string) => {
     const trimmed = nextQuery.trim();
@@ -69,6 +255,17 @@ export function MapSearchBar({
     router.push(`/map?${params.toString()}`);
   };
 
+  /** 검색 버튼 클릭 시 VWorld 주소 검색 실행 */
+  const runAddressSearch = useCallback(() => {
+    const trimmed = query.trim();
+    if (!trimmed || !vworldApiKey) return;
+    setAddressSearchLoading(true);
+    setAddressPanelOpen(true);
+    searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+      .then((items) => setAddressResults(items))
+      .finally(() => setAddressSearchLoading(false));
+  }, [query, vworldApiKey]);
+
   const leftOffset = SIDEBAR_WIDTH + listPanelWidth + SEARCH_BAR_MARGIN;
 
   return (
@@ -77,135 +274,240 @@ export function MapSearchBar({
       style={{ left: `${leftOffset}px` }}
     >
       <div className="pointer-events-auto flex items-start gap-6 w-full min-w-0">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit(query);
-          }}
-          className="flex items-center gap-2 w-[350px] shrink-0 rounded-[10px] bg-white backdrop-blur-md border border-slate-200 shadow-lg px-3 py-1 opacity-90"
-        >
-          {/* 좌측 돋보기: 검색 버튼(Submit) */}
-          <button
-            type="submit"
-            className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-md hover:bg-slate-100 text-slate-600 -mr-1"
-            aria-label="검색"
-            title="검색"
+        <div className="flex items-start gap-2 shrink-0">
+        <div ref={addressSearchWrapperRef} className="relative shrink-0">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit(query);
+              runAddressSearch();
+            }}
+            className="flex items-center gap-2 w-[350px] rounded-[5px] bg-white backdrop-blur-md border border-slate-200 shadow-lg px-1 py-1 opacity-90"
           >
-            <Search className="w-4 h-4 shrink-0" />
-          </button>
-
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="주소/지번 검색"
-            className="h-[30px] border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-0"
-          />
-
-          {query.trim().length > 0 && (
             <button
-              type="button"
-              onClick={() => {
-                setQuery('');
-                submit('');
-              }}
-              className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-md hover:bg-slate-100 text-slate-500"
-              aria-label="검색어 지우기"
-              title="지우기"
+              type="submit"
+              className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-[5px] hover:bg-slate-100 text-slate-600 -mr-1 min-h-[20px]"
+              aria-label="검색"
+              title="검색"
             >
-              <X className="w-4 h-4" />
+              <Search className="w-4 h-4 shrink-0" />
             </button>
-          )}
-        </form>
 
-        {/* 레이어 그룹: 남는 공간만 사용, 좁아지면 버튼만 잘림 */}
-        <div className="min-w-0 flex-1 flex overflow-hidden">
-          <MapLayergroupBar />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setAddressPanelOpen(true)}
+              placeholder={centerPlaceholder}
+              className="h-[20px] min-h-[20px] text-[12px] border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-0"
+            />
+
+            {query.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  submit('');
+                  setAddressResults([]);
+                  setAddressPanelOpen(false);
+                }}
+                className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-md hover:bg-slate-100 text-slate-500"
+                aria-label="검색어 지우기"
+                title="지우기"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </form>
+
+          {/* 주소 검색 결과 목록 + 최근 검색어 */}
+          {addressPanelOpen && (
+            <div className="absolute top-full left-0 mt-1 w-[350px] rounded-[5px] opacity-90 bg-white border border-slate-200 shadow-lg overflow-hidden z-50">
+              {addressSearchLoading ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-slate-500 text-[12px]">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  검색 중...
+                </div>
+              ) : addressResults.length > 0 ? (
+                <ul className="py-0.5 max-h-[260px] overflow-y-auto">
+                  {addressResults.map((item, idx) => (
+                    <li key={`${item.address}-${idx}`}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAddress(item)}
+                        className="w-full text-left px-4 py-1.5 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 transition-colors min-h-[44px] flex flex-col justify-center gap-0.5"
+                      >
+                        {item.roadAddress && (
+                          <div className="flex items-center gap-2 min-h-[1.25rem]">
+                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700">
+                              도로명
+                            </span>
+                            <span className="text-[12px] text-slate-800 truncate flex-1 min-w-0">
+                              {item.roadAddress}
+                              {item.buildingName ? ` (${item.buildingName})` : ''}
+                            </span>
+                          </div>
+                        )}
+                        {item.jibunAddress && (
+                          <div className="flex items-center gap-2 min-h-[1.25rem]">
+                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800">
+                              지번
+                            </span>
+                            <span className="text-[12px] text-slate-800 truncate flex-1 min-w-0">
+                              {item.jibunAddress}
+                            </span>
+                          </div>
+                        )}
+                        {!item.roadAddress && !item.jibunAddress && (
+                          <span className="text-[12px] text-slate-800 line-clamp-2">
+                            {item.address}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : query.trim() ? (
+                <div className="py-4 text-center text-[12px] text-slate-500">
+                  검색 결과가 없습니다
+                </div>
+              ) : null}
+
+              {recentQueries.length > 0 && (
+                <>
+                  <div className="border-t border-slate-100" />
+                  <div className="px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 mb-1.5">
+                      <History className="w-3.5 h-3.5" />
+                      최근 검색어
+                    </p>
+                    <ul className="flex flex-wrap gap-1.5">
+                      {recentQueries.map((q) => (
+                        <li key={q}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQuery(q);
+                              if (!vworldApiKey) return;
+                              setAddressSearchLoading(true);
+                              searchAddress(q, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+                                .then((items) => setAddressResults(items))
+                                .finally(() => setAddressSearchLoading(false));
+                            }}
+                            className="text-[12px] px-2.5 py-1.5 rounded-[5px] bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                          >
+                            {q}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* 시스템 선택: 우측 끝 고정 (배경지도 버튼 열과 right-4 맞춤) */}
-        {systemList.length > 0 && (() => {
-              const selectedSystem = systemList.find((s) => s.sys_key === selectedSystemKey);
-              const systemColor = selectedSystem?.sys_col || 'var(--primary)';
-              return (
-          <>
-            <button
-              type="button"
-              onClick={() => setSystemModalOpen(true)}
-              className="shrink-0 flex items-center gap-2.5 h-10 rounded-[10px] bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-md pl-3 pr-3 text-left hover:shadow-lg hover:border-slate-300 hover:bg-white transition-all duration-200 w-[230px]"
-              aria-label="시스템 선택"
-            >
-              <div
-                className="flex items-center justify-center w-7 h-7 rounded-md"
-                style={{ backgroundColor: `${systemColor}18`, color: systemColor }}
-              >
-                <LayoutGrid className="w-4 h-4 shrink-0" aria-hidden />
-              </div>
-              <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-slate-700">
-                {selectedSystem?.sys_kor ?? selectedSystemKey ?? '시스템 선택'}
-              </span>
-              <ChevronDown className="w-4 h-4 shrink-0 text-slate-400" aria-hidden />
-            </button>
+        <button
+          type="button"
+          onClick={() => mapContext?.allLayersOffRef?.current?.()}
+          className="shrink-0 flex items-center justify-center w-[30px] h-[30px] opacity-90 rounded-[5px] bg-white backdrop-blur-md border border-slate-200 shadow-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          aria-label="전체 레이어 끄기"
+          title="전체 레이어 끄기 (지적도·건물도로·기초구간 포함)"
+        >
+          <EyeOff className="w-5 h-5 text-slate-600" strokeWidth={2} />
+        </button>
+        </div>
 
-            <Dialog open={systemModalOpen} onOpenChange={setSystemModalOpen}>
-              <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl" showCloseButton={false}>
-                <DialogHeader className="px-3 py-2 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
-                  <DialogTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-[5px] bg-primary/10 text-primary">
-                      <LayoutGrid className="w-3.5 h-3.5" />
-                    </div>
-                    시스템 선택
-                  </DialogTitle>
-                </DialogHeader>
-                <ul className="grid gap-2 p-4">
-                  {systemList.map((sys) => {
-                    const isSelected = sys.sys_key === selectedSystemKey;
-                    const accentColor = sys.sys_col || 'var(--primary)';
-                    return (
-                      <li key={sys.sys_key}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedSystemKey(sys.sys_key);
-                            setSystemModalOpen(false);
-                          }}
-                          className={cn(
-                            'w-full flex items-center gap-4 rounded-xl px-4 py-3 text-left transition-all duration-200 border',
-                            isSelected
-                              ? 'border-transparent shadow-md ring-1 ring-primary/20'
-                              : 'border-slate-100 bg-slate-50/50 hover:bg-slate-100/80 hover:border-slate-200'
-                          )}
-                          style={isSelected ? { backgroundColor: `${accentColor}12`, borderColor: `${accentColor}30` } : undefined}
-                        >
-                          <span
-                            className="w-1.5 h-8 shrink-0 rounded-full"
-                            style={{ backgroundColor: accentColor }}
-                            aria-hidden
-                          />
-                          <div className="flex-1 min-w-0 text-left">
-                            <span className={cn('block truncate text-sm', isSelected ? 'font-semibold text-slate-800' : 'font-medium text-slate-700')}>
-                              {sys.sys_kor}
-                            </span>
-                            {sys.sys_detail && (
-                              <span className="block text-xs text-slate-500 mt-1 leading-relaxed">{sys.sys_detail}</span>
+        {/* 레이어 그룹: 남는 공간만 사용 */}
+        <div className="min-w-0 flex-1 flex overflow-hidden" aria-hidden />
+
+        {/* 시스템 선택: 오른쪽 끝 고정, 셀렉트박스 스타일, 클릭 시 모달 */}
+        {systemList.length > 0 && (() => {
+          const selectedSystem = systemList.find((s) => s.sys_key === selectedSystemKey);
+          const systemColor = selectedSystem?.sys_col || 'var(--primary)';
+          return (
+            <>
+              <button
+                type="button"
+                onClick={() => setSystemModalOpen(true)}
+                className="shrink-0 flex items-center gap-2.5 h-[30px] opacity-90 rounded-[5px] bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-md pl-3 pr-3 text-left hover:shadow-lg hover:border-slate-300 hover:bg-white transition-all duration-200 w-[230px]"
+                aria-label="시스템 선택"
+              >
+                <div
+                  className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
+                  style={{ backgroundColor: `${systemColor}18`, color: systemColor }}
+                >
+                  <LayoutGrid className="w-4 h-4 shrink-0" aria-hidden />
+                </div>
+                <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-slate-700">
+                  {selectedSystem?.sys_kor ?? (selectedSystemKey || '시스템 선택')}
+                </span>
+                <ChevronDown className="w-4 h-4 shrink-0 text-slate-400" aria-hidden />
+              </button>
+
+              <Dialog open={systemModalOpen} onOpenChange={setSystemModalOpen}>
+                <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl" showCloseButton={false}>
+                  <DialogHeader className="px-3 py-2 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
+                    <DialogTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                      <div className="flex items-center justify-center w-6 h-6 rounded-[5px] bg-primary/10 text-primary">
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                      </div>
+                      시스템 선택
+                    </DialogTitle>
+                  </DialogHeader>
+                  <ul className="grid gap-2 p-4">
+                    {systemList.map((sys) => {
+                      const isSelected = sys.sys_key === selectedSystemKey;
+                      const accentColor = sys.sys_col || 'var(--primary)';
+                      return (
+                        <li key={sys.sys_key}>
+                          <button
+                            type="button"
+                            onClick={() => trySelectSystem(sys)}
+                            className={cn(
+                              'w-full flex items-center gap-4 rounded-xl px-4 py-3 text-left transition-all duration-200 border',
+                              isSelected
+                                ? 'border-transparent shadow-md ring-1 ring-primary/20'
+                                : 'border-slate-100 bg-slate-50/50 hover:bg-slate-100/80 hover:border-slate-200'
                             )}
-                          </div>
-                          {isSelected && (
-                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/15 text-primary shrink-0">
-                              <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <footer className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500">
-                </footer>
-              </DialogContent>
-            </Dialog>
-          </>
-              );
-            })()}
+                            style={isSelected ? { backgroundColor: `${accentColor}12`, borderColor: `${accentColor}30` } : undefined}
+                          >
+                            <span
+                              className="w-1.5 h-8 shrink-0 rounded-full"
+                              style={{ backgroundColor: accentColor }}
+                              aria-hidden
+                            />
+                            <div className="flex-1 min-w-0 text-left">
+                              <span className={cn('block truncate text-sm', isSelected ? 'font-semibold text-slate-800' : 'font-medium text-slate-700')}>
+                                {sys.sys_kor}
+                              </span>
+                              {sys.sys_detail && (
+                                <span className="block text-xs text-slate-500 mt-1 leading-relaxed">{sys.sys_detail}</span>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/15 text-primary shrink-0">
+                                <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <footer className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500">
+                  </footer>
+                </DialogContent>
+              </Dialog>
+              <ResourceAccessDeniedDialog
+                open={deniedOpen}
+                onOpenChange={setDeniedOpen}
+                resource="system"
+                sysKey={deniedSysKey}
+              />
+            </>
+          );
+        })()}
       </div>
     </div>
   );

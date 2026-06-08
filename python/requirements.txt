@@ -1,0 +1,6 @@
+# pip install after: conda install -c conda-forge pdal gdal
+# py3dtiles[las] = LAS/LAZ 지원 (기본 설치 시 support not found 오류)
+# pyproj = LAS가 UTM 등 투영좌표계일 때 tileset.json region(WGS84) 변환용
+py3dtiles[las]>=12.0.0
+numpy>=1.24
+pyproj>=3.0

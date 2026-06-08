@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/app/(pages)/(index)/theme-provider";
+import { AuthSessionProvider } from "@/app/providers";
+import { LoginModalProvider } from "@/app/login-modal-context";
 
 export default function RootLayout({
   children,
@@ -10,9 +12,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <AuthSessionProvider>
+          <ThemeProvider>
+            <LoginModalProvider>{children}</LoginModalProvider>
+          </ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

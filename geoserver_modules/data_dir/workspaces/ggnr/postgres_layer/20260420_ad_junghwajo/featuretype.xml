@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-6e50</id>
+  <name>20260420_ad_junghwajo</name>
+  <nativeName>20260420_ad_junghwajo</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>20260420_ad_junghwajo</title>
+  <keywords>
+    <string>features</string>
+    <string>20260420_ad_junghwajo</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>282561.46875</minx>
+    <maxx>404487.34375</maxx>
+    <miny>264377.28125</miny>
+    <maxy>414704.875</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>127.9142123784175</minx>
+    <maxx>129.30346439774092</maxx>
+    <miny>35.85549293536675</miny>
+    <maxy>37.227846889734785</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

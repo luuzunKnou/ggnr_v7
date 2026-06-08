@@ -43,6 +43,7 @@ interface ComplaintDetailPanelProps {
   onDeleteHistory?: (compdKey: number) => Promise<void>;
   onSave?: (values: ComplaintFormValues) => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
+  onClose?: () => void;
   saving?: boolean;
   deleting?: boolean;
 }
@@ -57,6 +58,7 @@ export function ComplaintDetailPanel({
   onDeleteHistory,
   onSave,
   onDelete,
+  onClose,
   saving,
   deleting,
 }: ComplaintDetailPanelProps) {
@@ -70,6 +72,7 @@ export function ComplaintDetailPanel({
           complaint={complaint}
           onSave={onSave}
           onDelete={isAdd ? undefined : onDelete}
+          onClose={onClose}
           saving={saving}
           deleting={deleting}
         />

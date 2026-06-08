@@ -1,0 +1,19 @@
+<layer>
+  <name>20260422_huga_02</name>
+  <id>LayerInfoImpl--4fde225b:19da052eb3b:-5c0b</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4fde225b:19da052eb3b:-5c0a</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-5c0c</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-22 03:10:01.266 UTC</dateCreated>
+  <dateModified>2026-04-22 03:10:01.691 UTC</dateModified>
+</layer>

@@ -1,0 +1,32 @@
+/* 횡단면 라인(항상) + draw_name 라벨(줌 16+). 생략 최소화: 충돌 해제·낮은 적합도·변위 허용 */
+* {
+  stroke-geometry: [geom];
+  stroke: #ffffff, #e91e63;
+  stroke-width: 3, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
+}
+
+[@z >= 16] * {
+  label: [draw_name];
+  label-follow-line: false;
+  /* 점 배치(centroid): MultiLineString도 피처당 라벨 1개. 회전은 첫 세그먼트 각도 */
+  label-geometry: [centroid(geom)];
+  label-anchor: 0.5 0.5;
+  label-offset: 0 0;
+  label-rotation: [startAngle(geom) + 180];
+  font-family: "Yu Gothic Bold";
+  font-size: 11;
+  font-weight: bold;
+  font-fill: #000;
+  halo-color: #ffffff;
+  halo-radius: 2;
+  halo-opacity: 0.85;
+
+  label-conflict-resolution: false;
+  label-group: false;
+  label-max-displacement: 120;
+  label-fit-goodness: 0;
+  label-priority: 1000000;
+  -gt-label-polygon-align: false;
+}

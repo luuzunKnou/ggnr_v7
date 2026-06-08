@@ -1,34 +1,115 @@
 /**
  * StandardList용 서비스 (레이어 목록/테이블 데이터)
- * - 레이어 데이터는 항상 layer 스키마에서 조회
+ * schema 파라미터로 layer / public_layer 구분 (기본값 layer)
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import * as fs from 'fs';
+import * as path from 'path';
+import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
 
-const LAYER_SCHEMA = 'layer';
+const DEFAULT_SCHEMA = 'layer';
+const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
 
+function resolveSchema(raw?: string): string {
+  const s = String(raw ?? '').trim() || DEFAULT_SCHEMA;
+  return ALLOWED_SCHEMAS.has(s) ? s : DEFAULT_SCHEMA;
+}
+
 /**
- * 테이블 이름만으로 layer 스키마의 테이블에서 행 조회.
- * information_schema.columns로 컬럼 목록을 가져온 뒤 SELECT 쿼리 구성.
+ * 스키마 내 실제 릴레이션 이름(relname, 대소문자 보존)을 대소문자 무관하게 찾는다.
+ * information_schema / geometry_columns / "schema"."Table" 인용 조회에 사용.
  */
-export async function getTableData(params: { table: string; limit?: number; offset?: number } = { table: '' }) {
-  const table = String(params?.table ?? '').trim();
+async function resolveLayerPhysicalRelName(schema: string, tableGuess: string): Promise<string | null> {
+  const sch = String(schema ?? '').trim();
+  const guess = String(tableGuess ?? '').trim();
+  if (!sch || !guess) return null;
+  const esc = (s: string) => s.replace(/'/g, "''");
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT c.relname::text AS name
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = '${esc(sch)}'
+           AND c.relkind IN ('r', 'p', 'v', 'm')
+           AND lower(c.relname) = lower('${esc(guess)}')
+         ORDER BY c.relname
+         LIMIT 1`
+      )
+    );
+    const row = res.rows?.[0] as { name?: string } | undefined;
+    const name = row?.name != null ? String(row.name).trim() : '';
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * tables.json define_table_div_query를 SQL WHERE에 AND로 붙일 때 사용.
+ * 관리자 설정값이지만 기본적인 인젝션 패턴만 차단.
+ */
+export function sanitizeDefineLayerRowFilter(raw: string): string | null {
+  const s = String(raw ?? '').trim();
+  if (!s || s.length > 800) return null;
+  const probe = s.toLowerCase();
+  if (
+    /--|\/\*|\*\/|\bunion\b|\bselect\b|\binsert\b|\bupdate\b|\bdelete\b|\bdrop\b|\btruncate\b|\bexec\b|\binto\b\s+outfile\b/i.test(
+      probe
+    )
+  ) {
+    return null;
+  }
+  if (s.includes(';')) return null;
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(s)) return null;
+  return s;
+}
+
+/**
+ * 테이블 이름과 스키마로 행 조회.
+ * spatialWkt/spatialSrid가 있으면 도형 내 데이터만 조회 (ST_Intersects).
+ */
+export async function getTableData(params: {
+  table: string;
+  schema?: string;
+  limit?: number;
+  offset?: number;
+  spatialWkt?: string;
+  spatialSrid?: number;
+  /** define 분할 레이어 등: AND (조건) */
+  rowFilter?: string;
+} = { table: '' }) {
+  const tableGuess = String(params?.table ?? '').trim().toLowerCase();
+  if (!tableGuess) return { rows: [], total: 0 };
+
+  const schema = resolveSchema(params?.schema).toLowerCase();
+  const table = await resolveLayerPhysicalRelName(schema, tableGuess);
   if (!table) return { rows: [], total: 0 };
 
   let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
   if (limit > MAX_LIMIT) limit = MAX_LIMIT;
   const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;
+  const spatialWkt = typeof params?.spatialWkt === 'string' ? params.spatialWkt.trim() : '';
+  const spatialSrid = typeof params?.spatialSrid === 'number' ? params.spatialSrid : 5181;
+  const rawRowFilter = String(params?.rowFilter ?? '').trim();
+  let rowFilterSql: string | null = null;
+  if (rawRowFilter) {
+    rowFilterSql = sanitizeDefineLayerRowFilter(rawRowFilter);
+    if (!rowFilterSql) return { rows: [], total: 0, error: '유효하지 않은 행 필터입니다.' };
+  }
 
-  const safeSchema = LAYER_SCHEMA.replace(/"/g, '""');
+  const safeSchema = schema.replace(/"/g, '""');
   const safeTable = table.replace(/"/g, '""');
+  const esc = (s: string) => s.replace(/'/g, "''");
 
   try {
     const colRes = await db.execute(
       sql.raw(
         `SELECT column_name AS name FROM information_schema.columns
-         WHERE table_schema = '${LAYER_SCHEMA.replace(/'/g, "''")}' AND table_name = '${table.replace(/'/g, "''")}'
+         WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(table)}'
          ORDER BY ordinal_position`
       )
     );
@@ -36,11 +117,137 @@ export async function getTableData(params: { table: string; limit?: number; offs
     if (columns.length === 0) return { rows: [], total: 0 };
 
     let geomCol: string | null = null;
+    let tableSrid = 4326;
+    try {
+      const gcRes = await db.execute(
+        sql.raw(
+          `SELECT f_geometry_column AS name, srid FROM geometry_columns
+           WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(table)}'
+           LIMIT 1`
+        )
+      );
+      const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+      if (gcRow?.name) {
+        geomCol = String(gcRow.name).trim();
+        tableSrid = gcRow.srid ?? 4326;
+      }
+    } catch {
+      // no geometry column
+    }
+
+    const safeGeomCol = geomCol ? geomCol.replace(/"/g, '""') : '';
+    const selectList = columns
+      .map((c) => {
+        if (geomCol && c === geomCol) {
+          return `ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}"`;
+        }
+        return `"${c.replace(/"/g, '""')}"`;
+      })
+      .join(', ');
+
+    const spatialPart =
+      spatialWkt && geomCol
+        ? (() => {
+            const geomFromText = `ST_GeomFromText('${spatialWkt.replace(/'/g, "''")}', ${spatialSrid})`;
+            const searchGeom =
+              tableSrid !== spatialSrid ? `ST_Transform(${geomFromText}, ${tableSrid})` : geomFromText;
+            return `ST_Intersects("${safeGeomCol}", ${searchGeom})`;
+          })()
+        : '';
+    const filterPart = rowFilterSql ? `(${rowFilterSql})` : '';
+    let whereClause = '';
+    if (spatialPart && filterPart) whereClause = ` WHERE ${spatialPart} AND ${filterPart}`;
+    else if (spatialPart) whereClause = ` WHERE ${spatialPart}`;
+    else if (filterPart) whereClause = ` WHERE ${filterPart}`;
+
+    const [countRes, dataRes] = await Promise.all([
+      db.execute(
+        sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereClause}`)
+      ),
+      db.execute(
+        sql.raw(
+          `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereClause} LIMIT ${limit} OFFSET ${offset}`
+        )
+      ),
+    ]);
+
+    const totalRow = countRes.rows?.[0] as { total?: string | number } | undefined;
+    const total =
+      totalRow?.total != null ? Math.max(0, parseInt(String(totalRow.total), 10) || 0) : 0;
+    const rows = (dataRes.rows ?? []) as Record<string, unknown>[];
+    return { rows, total };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { rows: [], total: 0, error: msg };
+  }
+}
+
+const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+
+/** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
+export function getDefineTableKeyFieldName(tableName: string): string | null {
+  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const keyField = Array.isArray(fields) ? fields.find((f) => String(f?.define_field_is_key ?? '').toLowerCase() === 'true') : null;
+    return keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 키 값으로 테이블에서 단일 행 조회 (URL dataKey 복원용).
+ * 데이터 설정(define_field_is_key)에 지정된 키 필드로만 조회.
+ */
+export async function getTableRowByKey(params: {
+  table: string;
+  schema?: string;
+  keyValue: string | number;
+  rowFilter?: string;
+}) {
+  const tableGuess = String(params?.table ?? '').trim().toLowerCase();
+  if (!tableGuess) return { row: null };
+  const schema = resolveSchema(params?.schema).toLowerCase();
+  const table = await resolveLayerPhysicalRelName(schema, tableGuess);
+  if (!table) return { row: null };
+  const keyValue = params?.keyValue;
+  if (keyValue == null || keyValue === '') return { row: null };
+  const rawRowFilter = String(params?.rowFilter ?? '').trim();
+  let rowFilterSql: string | null = null;
+  if (rawRowFilter) {
+    rowFilterSql = sanitizeDefineLayerRowFilter(rawRowFilter);
+    if (!rowFilterSql) return { row: null };
+  }
+
+  const keyFieldName = getDefineTableKeyFieldName(params?.table?.trim() || tableGuess);
+  if (!keyFieldName) return { row: null };
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const safeTable = table.replace(/"/g, '""');
+  const escapedKey = String(keyValue).replace(/'/g, "''");
+  const safeKeyCol = keyFieldName.replace(/"/g, '""');
+  const esc = (s: string) => s.replace(/'/g, "''");
+
+  try {
+    const colRes = await db.execute(
+      sql.raw(
+        `SELECT column_name AS name FROM information_schema.columns
+         WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(table)}'
+         ORDER BY ordinal_position`
+      )
+    );
+    const columns = (colRes.rows as { name: string }[]).map((r) => String(r?.name ?? '').trim()).filter(Boolean);
+    if (columns.length === 0 || !columns.includes(keyFieldName)) return { row: null };
+
+    let geomCol: string | null = null;
     try {
       const gcRes = await db.execute(
         sql.raw(
           `SELECT f_geometry_column AS name FROM geometry_columns
-           WHERE f_table_schema = '${LAYER_SCHEMA.replace(/'/g, "''")}' AND f_table_name = '${table.replace(/'/g, "''")}'
+           WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(table)}'
            LIMIT 1`
         )
       );
@@ -60,41 +267,969 @@ export async function getTableData(params: { table: string; limit?: number; offs
       })
       .join(', ');
 
-    const [countRes, dataRes] = await Promise.all([
-      db.execute(
-        sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"`)
-      ),
-      db.execute(
-        sql.raw(
-          `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}" LIMIT ${limit} OFFSET ${offset}`
-        )
-      ),
-    ]);
-
-    const totalRow = countRes.rows?.[0] as { total?: string | number } | undefined;
-    const total =
-      totalRow?.total != null ? Math.max(0, parseInt(String(totalRow.total), 10) || 0) : 0;
-    const rows = (dataRes.rows ?? []) as Record<string, unknown>[];
-    return { rows, total };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { rows: [], total: 0, error: msg };
+    const keyCond = `"${safeKeyCol}" = '${escapedKey}'`;
+    const whereSql = rowFilterSql ? ` WHERE ${keyCond} AND (${rowFilterSql})` : ` WHERE ${keyCond}`;
+    const dataRes = await db.execute(
+      sql.raw(`SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereSql} LIMIT 1`)
+    );
+    const row = (dataRes.rows?.[0] ?? null) as Record<string, unknown> | null;
+    return { row };
+  } catch {
+    return { row: null };
   }
+}
+const TABLES_JSON_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
+
+let _tablesJsonCache: Record<string, unknown>[] | null = null;
+function getTablesJson(): Record<string, unknown>[] {
+  if (_tablesJsonCache) return _tablesJsonCache;
+  try {
+    _tablesJsonCache = JSON.parse(fs.readFileSync(TABLES_JSON_PATH, 'utf-8'));
+  } catch { _tablesJsonCache = []; }
+  return _tablesJsonCache!;
+}
+
+function getTitleFieldName(tableName: string): string | null {
+  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const titleField = fields.find((f) => f.define_field_show_title === 'true');
+    return titleField ? String(titleField.define_field_name ?? '') : null;
+  } catch { return null; }
+}
+
+/** define 필드 설정에서 컬럼명 → 한글 라벨 */
+function getDefineFieldKorName(physicalTable: string, columnName: string): string | null {
+  const safe = physicalTable.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  const col = String(columnName ?? '').trim().toLowerCase();
+  if (!col) return null;
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const row = fields.find((f) => String(f.define_field_name ?? '').trim().toLowerCase() === col);
+    if (!row) return null;
+    const kor = String(row.define_field_kor_name ?? '').trim();
+    return kor || null;
+  } catch {
+    return null;
+  }
+}
+
+function findFirstKeywordColumnMatch(
+  row: Record<string, unknown>,
+  textCols: string[],
+  keywordLc: string
+): { fieldName: string; valuePreview: string } | null {
+  if (!keywordLc) return null;
+  const maxLen = 56;
+  for (const col of textCols) {
+    const key = Object.keys(row).find((k) => k.toLowerCase() === col.toLowerCase());
+    if (!key) continue;
+    const v = row[key];
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s === '') continue;
+    if (s.toLowerCase().includes(keywordLc)) {
+      const preview = s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
+      return { fieldName: col, valuePreview: preview };
+    }
+  }
+  return null;
+}
+
+type IdentifyFeatureOut = {
+  titleValue: string;
+  data: Record<string, unknown>;
+  keywordMatch?: { fieldName: string; fieldKorName?: string; valuePreview: string };
+};
+
+function attachKeywordMatchToFeatures(
+  features: { titleValue: string; data: Record<string, unknown> }[],
+  textCols: string[],
+  keywordRaw: string,
+  physicalTable: string
+): IdentifyFeatureOut[] {
+  const kw = keywordRaw.trim().toLowerCase();
+  if (!kw) return features as IdentifyFeatureOut[];
+  return features.map((feat) => {
+    const hit = findFirstKeywordColumnMatch(feat.data, textCols, kw);
+    if (!hit) return feat;
+    const kor = getDefineFieldKorName(physicalTable, hit.fieldName);
+    const out: IdentifyFeatureOut = { ...feat };
+    out.keywordMatch = {
+      fieldName: hit.fieldName,
+      valuePreview: hit.valuePreview,
+      ...(kor && kor !== hit.fieldName ? { fieldKorName: kor } : {}),
+    };
+    return out;
+  });
+}
+
+function getTableKorName(tableName: string): string {
+  const tables = getTablesJson();
+  const k = String(tableName ?? '').trim().toLowerCase();
+  const row = tables.find((r) => String(r.define_table_name ?? '').trim().toLowerCase() === k);
+  return row ? String(row.define_table_kor_name ?? tableName) : tableName;
+}
+
+/** 지도 식별: 켜 둔 레이어 이름 → DB 물리 테이블 + 선택적 행 필터 (분할 레이어) */
+function resolveIdentifyLayerTargets(
+  names: string[],
+  schema: string
+): Array<{ displayName: string; physicalTable: string; rowFilter: string | null }> {
+  const tables = getTablesJson();
+  const schemaLc = schema.toLowerCase();
+  const visibleLc = names.map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean);
+
+  /** 이번에 켜 둔 분할이 하나라도 있으면 부모 레이어 이름은 중복 식별에서 제외 */
+  const parentsWithVisibleSplitChild = new Set<string>();
+  for (const displayName of visibleLc) {
+    const row = tables.find(
+      (r) => String(r.define_table_name ?? '').trim().toLowerCase() === displayName
+    );
+    if (!row) continue;
+    const rowSchema = String(row.define_table_schema ?? 'layer').trim().toLowerCase() || 'layer';
+    if (rowSchema !== schemaLc) continue;
+    const parent = String(row.define_table_parents_layer ?? '').trim().toLowerCase();
+    const divQ = String(row.define_table_div_query ?? '').trim();
+    if (parent && divQ) parentsWithVisibleSplitChild.add(parent);
+  }
+
+  const out: Array<{ displayName: string; physicalTable: string; rowFilter: string | null }> = [];
+  for (const raw of names) {
+    const displayName = String(raw ?? '').trim().toLowerCase();
+    if (!displayName) continue;
+    if (parentsWithVisibleSplitChild.has(displayName)) continue;
+
+    const row = tables.find(
+      (r) => String(r.define_table_name ?? '').trim().toLowerCase() === displayName
+    );
+    if (!row) {
+      out.push({ displayName, physicalTable: displayName, rowFilter: null });
+      continue;
+    }
+    const rowSchema = String(row.define_table_schema ?? 'layer').trim().toLowerCase() || 'layer';
+    if (rowSchema !== schemaLc) continue;
+    const parent = String(row.define_table_parents_layer ?? '').trim();
+    const divQ = String(row.define_table_div_query ?? '').trim();
+    if (parent && divQ) {
+      const rf = sanitizeDefineLayerRowFilter(divQ);
+      if (!rf) continue;
+      out.push({ displayName, physicalTable: parent.toLowerCase(), rowFilter: rf });
+    } else {
+      out.push({ displayName, physicalTable: displayName, rowFilter: null });
+    }
+  }
+  return out;
+}
+
+/**
+ * define_table_name → DB에 실제로 있는 물리 테이블명(소문자 기준).
+ * 분할 레이어(define_table_parents_layer + div_query)는 부모 define 이름을 반환해 identify/getTableData와 동일.
+ */
+export function resolveDefineTablePhysicalBaseName(
+  defineTableName: string,
+  schema: string = DEFAULT_SCHEMA
+): string {
+  const displayName = String(defineTableName ?? '').trim().toLowerCase();
+  if (!displayName) return '';
+  const tables = getTablesJson();
+  const schemaLc = resolveSchema(schema).toLowerCase();
+  const row = tables.find(
+    (r) => String(r.define_table_name ?? '').trim().toLowerCase() === displayName
+  );
+  if (!row) return displayName;
+  const rowSchema = String(row.define_table_schema ?? 'layer').trim().toLowerCase() || 'layer';
+  if (rowSchema !== schemaLc) return displayName;
+  const parent = String(row.define_table_parents_layer ?? '').trim();
+  const divQ = String(row.define_table_div_query ?? '').trim();
+  if (parent && divQ && sanitizeDefineLayerRowFilter(divQ)) {
+    return parent.toLowerCase();
+  }
+  return displayName;
+}
+
+/** identifyFeatures용 테이블 메타 캐시 (schema.table → geomCol, tableSrid, columns, geometry_columns.type). */
+const identifyTableMetaCache = new Map<
+  string,
+  { geomCol: string; tableSrid: number; columns: string[]; geomTypeRaw: string | number | null }
+>();
+
+/**
+ * 클릭 좌표 기준으로 여러 테이블에서 교차 도형을 검색.
+ * params.x, params.y: 클릭 좌표 (EPSG:3857)
+ * params.buffer: 버퍼 크기 (미터 단위, 기본 10)
+ * params.tables: 켜 둔 레이어 이름 배열 (분할 레이어 이름 포함, tables.json 기준으로 물리 테이블·필터 해석)
+ * params.srid: 좌표 SRID (기본 3857)
+ */
+export async function identifyFeatures(params: {
+  x: number;
+  y: number;
+  buffer?: number;
+  tables: string[];
+  srid?: number;
+  schema?: string;
+}) {
+  const { x, y, tables, srid = 3857 } = params;
+  const buffer = typeof params.buffer === 'number' && params.buffer >= 0 ? params.buffer : 10;
+  const schema = resolveSchema(params.schema).toLowerCase();
+
+  if (!Array.isArray(tables) || tables.length === 0) return { results: [] };
+  if (typeof x !== 'number' || typeof y !== 'number') return { results: [] };
+
+  const targets = resolveIdentifyLayerTargets(tables, schema);
+  if (targets.length === 0) return { results: [] };
+
+  // 지도 클릭 데이터 목록 로그 (서버)
+  console.log(
+    `[FeatureIdentify] buffer=${buffer > 0 ? `${buffer.toFixed(1)}m` : '없음'} — 클릭 좌표 (${x.toFixed(1)}, ${y.toFixed(1)}) — ${targets.length}개 타깃 검색 중...`
+  );
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const results: {
+    tableName: string;
+    korName: string;
+    titleField: string | null;
+    /** define 분할 레이어(부모+CQL) 조회 결과 — UI에서 부모보다 우선 표시 */
+    isSplitLayer: boolean;
+    features: { titleValue: string; data: Record<string, unknown> }[];
+    /** 정렬용 — 응답에서는 제거 (점→선→면 우선) */
+    identifyGeomRank: number;
+  }[] = [];
+  const queries: string[] = [];
+
+  await Promise.all(
+    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+      const tableLower = physicalTable;
+      const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
+      if (!resolvedRel) return;
+      const safeTable = resolvedRel.replace(/"/g, '""');
+      if (!safeTable) return;
+
+      const cacheKey = `${schema}.${resolvedRel}`;
+      let geomCol: string;
+      let tableSrid: number;
+      let columns: string[];
+      let geomTypeRaw: string | number | null = null;
+
+      try {
+        const cached = identifyTableMetaCache.get(cacheKey);
+        if (cached) {
+          geomCol = cached.geomCol;
+          tableSrid = cached.tableSrid;
+          columns = cached.columns;
+          geomTypeRaw = cached.geomTypeRaw ?? null;
+        } else {
+          const gcRes = await db.execute(
+            sql.raw(
+              `SELECT f_geometry_column AS name, srid, type FROM geometry_columns
+               WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(resolvedRel)}'
+               LIMIT 1`
+            )
+          );
+          const gcRow = gcRes.rows?.[0] as
+            | { name?: string; srid?: number; type?: string | number }
+            | undefined;
+          if (!gcRow?.name) return;
+          geomCol = String(gcRow.name).trim();
+          tableSrid = gcRow.srid ?? 4326;
+          geomTypeRaw = gcRow.type ?? null;
+
+          const colRes = await db.execute(
+            sql.raw(
+              `SELECT column_name AS name FROM information_schema.columns
+               WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(resolvedRel)}'
+               ORDER BY ordinal_position`
+            )
+          );
+          columns = (colRes.rows as { name: string }[]).map((r) => String(r?.name ?? '').trim()).filter(Boolean);
+          if (columns.length === 0) return;
+          identifyTableMetaCache.set(cacheKey, { geomCol, tableSrid, columns, geomTypeRaw });
+        }
+
+        const safeGeomCol = geomCol.replace(/"/g, '""');
+        const point = `ST_SetSRID(ST_MakePoint(${x}, ${y}), ${srid})`;
+        const transformed = tableSrid !== srid
+          ? `ST_Transform(${point}, ${tableSrid})`
+          : point;
+        const searchGeom = buffer > 0 ? `ST_Buffer(${transformed}, ${buffer})` : transformed;
+
+        const selectList = columns
+          .map((c) => {
+            if (c === geomCol) return `ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}"`;
+            return `"${c.replace(/"/g, '""')}"`;
+          })
+          .join(', ');
+
+        const spatialWhere = `ST_Intersects("${safeGeomCol}", ${searchGeom})`;
+        const whereSql = rowFilter
+          ? ` WHERE ${spatialWhere} AND (${rowFilter})`
+          : ` WHERE ${spatialWhere}`;
+        /** 동일 테이블 내 다중 히트: 점 → 선 → 면 (ST_GeometryType 기준) */
+        const orderByGeomHitPriority = ` ORDER BY (
+          CASE ST_GeometryType("${safeGeomCol}")
+            WHEN 'ST_Point' THEN 0
+            WHEN 'ST_MultiPoint' THEN 0
+            WHEN 'ST_LineString' THEN 1
+            WHEN 'ST_MultiLineString' THEN 1
+            WHEN 'ST_Polygon' THEN 2
+            WHEN 'ST_MultiPolygon' THEN 2
+            ELSE 3
+          END
+        ) ASC`;
+        const queryStr = `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereSql}${orderByGeomHitPriority} LIMIT 50`;
+        queries.push(`[${displayName}→${physicalTable} SRID:${tableSrid}] ${queryStr}`);
+
+        const dataRes = await db.execute(sql.raw(queryStr));
+        const rawFeatures = (dataRes.rows ?? []) as Record<string, unknown>[];
+        if (rawFeatures.length > 0) {
+          const korName = getTableKorName(displayName);
+          const titleField = getTitleFieldName(physicalTable);
+          const nonGeomCols = columns.filter((c) => c !== geomCol);
+          const features = rawFeatures.map((row) => {
+            let titleValue = '';
+            if (titleField) {
+              const key = Object.keys(row).find((k) => k.toLowerCase() === titleField.toLowerCase());
+              titleValue = key ? String(row[key] ?? '') : '';
+            }
+            if (!titleValue && nonGeomCols.length > 0) {
+              const fallback = Object.keys(row).find((k) => k.toLowerCase() === nonGeomCols[0].toLowerCase());
+              titleValue = fallback ? String(row[fallback] ?? '') : '';
+            }
+            return { titleValue, data: row };
+          });
+          results.push({
+            tableName: displayName,
+            korName,
+            titleField,
+            isSplitLayer: rowFilter != null,
+            features,
+            identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+          });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        queries.push(`[${displayName}] ERROR: ${msg}`);
+      }
+    })
+  );
+
+  /** 레이어 간 순서: 점 레이어 → 선 → 면, 그다음 분할 레이어 우선, 한글명 */
+  results.sort((a, b) => {
+    if (a.identifyGeomRank !== b.identifyGeomRank) return a.identifyGeomRank - b.identifyGeomRank;
+    const da = a.isSplitLayer ? 0 : 1;
+    const db = b.isSplitLayer ? 0 : 1;
+    if (da !== db) return da - db;
+    return a.korName.localeCompare(b.korName, 'ko');
+  });
+
+  const resultsOut = results.map(({ identifyGeomRank: _rank, ...rest }) => rest);
+
+  // 결과 요약 로그 (서버, 쿼리/결과는 위 루프에서 logQueryAndResult로 출력됨)
+  if (resultsOut.length > 0) {
+    const total = resultsOut.reduce((s, r) => s + r.features.length, 0);
+    console.log(`[FeatureIdentify] ${total}건 발견 (${resultsOut.length}개 레이어)`);
+    for (const r of resultsOut) {
+      console.log(`[FeatureIdentify]   └ ${r.tableName}: ${r.features.length}건`);
+    }
+  } else {
+    console.log('[FeatureIdentify] 해당 위치에 도형 없음');
+  }
+
+  return { results: resultsOut, queries };
+}
+
+/**
+ * define 레이어 물리 테이블에서 PK(기본 ogc_fid)로 1건 조회.
+ * identifyFeatures와 동일한 컬럼 목록·geom은 WGS84 GeoJSON(`ST_AsGeoJSON(ST_Transform(geom_col,4326))::json`).
+ * 도로대장 목록 선택 등 지도 식별과 속성 스키마를 맞출 때 사용.
+ */
+export async function getLayerTableRowByOgcFid(params: {
+  schema?: string;
+  /** 물리 테이블명 */
+  table: string;
+  ogcFid: number | string;
+  /** PK 컬럼 (기본 ogc_fid) */
+  pkColumn?: string;
+}): Promise<{ row: Record<string, unknown> | null }> {
+  const schema = resolveSchema(params.schema).toLowerCase();
+  const tableLower = String(params.table ?? '').trim().toLowerCase();
+  const pkCol = String(params.pkColumn ?? 'ogc_fid').trim() || 'ogc_fid';
+  const ogcFid = Math.floor(Number(params.ogcFid));
+  if (!tableLower || !Number.isFinite(ogcFid) || ogcFid <= 0) {
+    return { row: null };
+  }
+
+  const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
+  if (!resolvedRel) return { row: null };
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const safeTable = resolvedRel.replace(/"/g, '""');
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const cacheKey = `${schema}.${resolvedRel}`;
+
+  let geomCol: string;
+  let columns: string[];
+
+  try {
+    const cached = identifyTableMetaCache.get(cacheKey);
+    if (cached) {
+      geomCol = cached.geomCol;
+      columns = cached.columns;
+    } else {
+      const gcRes = await db.execute(
+        sql.raw(
+          `SELECT f_geometry_column AS name, srid, type FROM geometry_columns
+           WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(resolvedRel)}'
+           LIMIT 1`
+        )
+      );
+      const gcRow = gcRes.rows?.[0] as
+        | { name?: string; srid?: number; type?: string | number }
+        | undefined;
+      if (!gcRow?.name) return { row: null };
+      geomCol = String(gcRow.name).trim();
+      const tableSrid = gcRow.srid ?? 4326;
+      const geomTypeRaw = gcRow.type ?? null;
+
+      const colRes = await db.execute(
+        sql.raw(
+          `SELECT column_name AS name FROM information_schema.columns
+           WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(resolvedRel)}'
+           ORDER BY ordinal_position`
+        )
+      );
+      columns = (colRes.rows as { name: string }[])
+        .map((r) => String(r?.name ?? '').trim())
+        .filter(Boolean);
+      if (columns.length === 0) return { row: null };
+      identifyTableMetaCache.set(cacheKey, { geomCol, tableSrid, columns, geomTypeRaw });
+    }
+
+    const safeGeomCol = geomCol.replace(/"/g, '""');
+    const safePk = pkCol.replace(/"/g, '""');
+
+    const selectList = columns
+      .map((c) => {
+        if (c === geomCol) {
+          return `ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}"`;
+        }
+        return `"${c.replace(/"/g, '""')}"`;
+      })
+      .join(', ');
+
+    const queryStr = `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}" WHERE "${safePk}" = ${ogcFid} LIMIT 1`;
+    const dataRes = await db.execute(sql.raw(queryStr));
+    const raw = dataRes.rows?.[0] as Record<string, unknown> | undefined;
+    if (!raw) return { row: null };
+    return { row: raw };
+  } catch {
+    return { row: null };
+  }
+}
+
+/**
+ * 주소정보 패널용: public_layer.jijuk에서 클릭 좌표(3857) 포함 필지 1건 조회.
+ * 테이블/스키마/컬럼(geom)/좌표계(5181) 고정, 쿼리 1회만 실행.
+ */
+export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
+  const { x, y } = params;
+  if (typeof x !== 'number' || typeof y !== 'number') return { results: [] };
+
+  const schema = 'public_layer';
+  const tableName = 'jijuk';
+  const geomCol = 'geom';
+  const tableSrid = 5181;
+  const srid = 3857;
+
+  const point = `ST_SetSRID(ST_MakePoint(${x}, ${y}), ${srid})`;
+  const pointInTable = `ST_Transform(${point}, ${tableSrid})`;
+  const queryStr = `SELECT "gid", "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${geomCol}", 4326))::json AS "${geomCol}" FROM "${schema}"."${tableName}" WHERE ST_Intersects("${geomCol}", ${pointInTable}) LIMIT 50`;
+
+  try {
+    const dataRes = await db.execute(sql.raw(queryStr));
+    const rawFeatures = (dataRes.rows ?? []) as Record<string, unknown>[];
+    const korName = getTableKorName(tableName);
+    const titleField = getTitleFieldName(tableName);
+    const features = rawFeatures.map((row) => {
+      let titleValue = '';
+      if (titleField) {
+        const key = Object.keys(row).find((k) => k.toLowerCase() === titleField.toLowerCase());
+        titleValue = key ? String(row[key] ?? '') : '';
+      }
+      if (!titleValue) {
+        const fallback = Object.keys(row).find((k) => k.toLowerCase() === 'jibun');
+        titleValue = fallback ? String(row[fallback] ?? '') : '';
+      }
+      return { titleValue, data: row };
+    });
+    return {
+      results: rawFeatures.length > 0 ? [{ tableName, korName, titleField, features }] : [],
+    };
+  } catch {
+    return { results: [] };
+  }
+}
+
+/**
+ * 도형(WKT) 내에 포함된 레이어별 건수 조회.
+ * 레이어 목록 도형(사각형/다각형/원형) 그리기 후, 해당 도형과 교차하는 레이어만 반환.
+ * params.wkt: WKT 문자열 (SRID는 params.srid)
+ * params.srid: WKT 좌표계 (기본 5181). 지도에서 3857로 그렸다면 클라이언트에서 5181로 변환 후 전달 권장.
+ * params.layerTargets: 표시용 이름(name) + DB 테이블(table) + 선택 rowFilter
+ * params.schema: 스키마 (기본 layer)
+ */
+export async function getLayersInGeometry(params: {
+  wkt: string;
+  srid?: number;
+  layerTargets: Array<{ name: string; table: string; rowFilter?: string | null }>;
+  schema?: string;
+}) {
+  const wkt = typeof params.wkt === 'string' ? params.wkt.trim() : '';
+  const srid = typeof params.srid === 'number' ? params.srid : 5181;
+  const targets = Array.isArray(params.layerTargets) ? params.layerTargets : [];
+  const schema = resolveSchema(params.schema).toLowerCase();
+  const esc = (s: string) => s.replace(/'/g, "''");
+
+  if (!wkt || targets.length === 0) return { layers: [] as { tableName: string; count: number }[] };
+
+  const results: { tableName: string; count: number }[] = [];
+
+  await Promise.all(
+    targets.map(async (t) => {
+      const displayName = String(t.name ?? '').trim();
+      const tableLower = String(t.table ?? '').trim().toLowerCase();
+      const rawRf = String(t.rowFilter ?? '').trim();
+      let rowFilterSql: string | null = null;
+      if (rawRf) {
+        rowFilterSql = sanitizeDefineLayerRowFilter(rawRf);
+        if (!rowFilterSql) return;
+      }
+      const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
+      if (!resolvedRel) return;
+      const safeTable = resolvedRel.replace(/"/g, '""');
+      const safeSchema = schema.replace(/"/g, '""');
+      if (!safeTable || !displayName) return;
+
+      try {
+        const gcRes = await db.execute(
+          sql.raw(
+            `SELECT f_geometry_column AS name, srid FROM geometry_columns
+             WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(resolvedRel)}'
+             LIMIT 1`
+          )
+        );
+        const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+        if (!gcRow?.name) return;
+        const geomCol = String(gcRow.name).trim();
+        const tableSrid = gcRow.srid ?? 4326;
+        const safeGeomCol = geomCol.replace(/"/g, '""');
+
+        const geomFromText = `ST_GeomFromText('${wkt.replace(/'/g, "''")}', ${srid})`;
+        const searchGeom =
+          tableSrid !== srid ? `ST_Transform(${geomFromText}, ${tableSrid})` : geomFromText;
+
+        const spatialPart = `ST_Intersects("${safeGeomCol}", ${searchGeom})`;
+        const whereSql = rowFilterSql
+          ? ` WHERE ${spatialPart} AND (${rowFilterSql})`
+          : ` WHERE ${spatialPart}`;
+        const queryStr = `SELECT COUNT(*) AS cnt FROM "${safeSchema}"."${safeTable}"${whereSql}`;
+        const countRes = await db.execute(sql.raw(queryStr));
+        const row = countRes.rows?.[0] as { cnt?: string | number } | undefined;
+        const count = row?.cnt != null ? Math.max(0, parseInt(String(row.cnt), 10) || 0) : 0;
+        if (count > 0) results.push({ tableName: displayName, count });
+      } catch {
+        // skip table on error
+      }
+    })
+  );
+
+  return { layers: results };
+}
+
+function mapRowsToIdentifyFeatures(
+  rawFeatures: Record<string, unknown>[],
+  physicalTable: string,
+  columns: string[],
+  geomCol: string
+): { titleValue: string; data: Record<string, unknown> }[] {
+  const titleField = getTitleFieldName(physicalTable);
+  const nonGeomCols = columns.filter((c) => c !== geomCol);
+  return rawFeatures.map((row) => {
+    let titleValue = '';
+    if (titleField) {
+      const key = Object.keys(row).find((k) => k.toLowerCase() === titleField.toLowerCase());
+      titleValue = key ? String(row[key] ?? '') : '';
+    }
+    if (!titleValue && nonGeomCols.length > 0) {
+      const fallback = Object.keys(row).find((k) => k.toLowerCase() === nonGeomCols[0].toLowerCase());
+      titleValue = fallback ? String(row[fallback] ?? '') : '';
+    }
+    return { titleValue, data: row };
+  });
+}
+
+/**
+ * 시설관리 도형검색: WKT와 교차하는 피처를 지도 식별(identify)과 동일한 results 형태로 반환.
+ */
+export async function searchDefineLayersByGeometry(params: {
+  wkt: string;
+  srid?: number;
+  tables: string[];
+  schema?: string;
+  limitPerLayer?: number;
+}) {
+  const wkt = typeof params.wkt === 'string' ? params.wkt.trim() : '';
+  const srid = typeof params.srid === 'number' ? params.srid : 5181;
+  const schema = resolveSchema(params.schema).toLowerCase();
+  const tables = Array.isArray(params.tables)
+    ? params.tables.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+    : [];
+  let limitPerLayer =
+    typeof params.limitPerLayer === 'number' && params.limitPerLayer > 0
+      ? Math.floor(params.limitPerLayer)
+      : 50;
+  limitPerLayer = Math.min(100, limitPerLayer);
+
+  if (!wkt || tables.length === 0) return { results: [] };
+
+  const targets = resolveIdentifyLayerTargets(tables, schema);
+  if (targets.length === 0) return { results: [] };
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const esc = (s: string) => s.replace(/'/g, "''");
+
+  type LayerOut = {
+    tableName: string;
+    korName: string;
+    titleField: string | null;
+    isSplitLayer: boolean;
+    features: { titleValue: string; data: Record<string, unknown> }[];
+    identifyGeomRank: number;
+  };
+  const results: LayerOut[] = [];
+
+  await Promise.all(
+    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+      const tableLower = physicalTable;
+      const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
+      if (!resolvedRel) return;
+      const safeTable = resolvedRel.replace(/"/g, '""');
+      if (!safeTable) return;
+
+      const cacheKey = `${schema}.${resolvedRel}`;
+      let geomCol: string;
+      let tableSrid: number;
+      let columns: string[];
+      let geomTypeRaw: string | number | null = null;
+
+      try {
+        const cached = identifyTableMetaCache.get(cacheKey);
+        if (cached) {
+          geomCol = cached.geomCol;
+          tableSrid = cached.tableSrid;
+          columns = cached.columns;
+          geomTypeRaw = cached.geomTypeRaw ?? null;
+        } else {
+          const gcRes = await db.execute(
+            sql.raw(
+              `SELECT f_geometry_column AS name, srid, type FROM geometry_columns
+               WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(resolvedRel)}'
+               LIMIT 1`
+            )
+          );
+          const gcRow = gcRes.rows?.[0] as
+            | { name?: string; srid?: number; type?: string | number }
+            | undefined;
+          if (!gcRow?.name) return;
+          geomCol = String(gcRow.name).trim();
+          tableSrid = gcRow.srid ?? 4326;
+          geomTypeRaw = gcRow.type ?? null;
+
+          const colRes = await db.execute(
+            sql.raw(
+              `SELECT column_name AS name FROM information_schema.columns
+               WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(resolvedRel)}'
+               ORDER BY ordinal_position`
+            )
+          );
+          columns = (colRes.rows as { name: string }[])
+            .map((r) => String(r?.name ?? '').trim())
+            .filter(Boolean);
+          if (columns.length === 0) return;
+          identifyTableMetaCache.set(cacheKey, { geomCol, tableSrid, columns, geomTypeRaw });
+        }
+
+        const safeGeomCol = geomCol.replace(/"/g, '""');
+        const geomFromText = `ST_GeomFromText('${wkt.replace(/'/g, "''")}', ${srid})`;
+        const searchGeom =
+          tableSrid !== srid ? `ST_Transform(${geomFromText}, ${tableSrid})` : geomFromText;
+
+        const spatialWhere = `ST_Intersects("${safeGeomCol}", ${searchGeom})`;
+        const whereSql = rowFilter
+          ? ` WHERE ${spatialWhere} AND (${rowFilter})`
+          : ` WHERE ${spatialWhere}`;
+
+        const orderByGeomHitPriority = ` ORDER BY (
+          CASE ST_GeometryType("${safeGeomCol}")
+            WHEN 'ST_Point' THEN 0
+            WHEN 'ST_MultiPoint' THEN 0
+            WHEN 'ST_LineString' THEN 1
+            WHEN 'ST_MultiLineString' THEN 1
+            WHEN 'ST_Polygon' THEN 2
+            WHEN 'ST_MultiPolygon' THEN 2
+            ELSE 3
+          END
+        ) ASC`;
+
+        const selectList = columns
+          .map((c) => {
+            if (c === geomCol) {
+              return `ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}"`;
+            }
+            return `"${c.replace(/"/g, '""')}"`;
+          })
+          .join(', ');
+
+        const queryStr = `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereSql}${orderByGeomHitPriority} LIMIT ${limitPerLayer}`;
+        const dataRes = await db.execute(sql.raw(queryStr));
+        const rawFeatures = (dataRes.rows ?? []) as Record<string, unknown>[];
+        if (rawFeatures.length === 0) return;
+
+        const korName = getTableKorName(displayName);
+        const titleField = getTitleFieldName(physicalTable);
+        const features = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
+        results.push({
+          tableName: displayName,
+          korName,
+          titleField,
+          isSplitLayer: rowFilter != null,
+          features,
+          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+        });
+      } catch {
+        /* skip */
+      }
+    })
+  );
+
+  results.sort((a, b) => {
+    if (a.identifyGeomRank !== b.identifyGeomRank) return a.identifyGeomRank - b.identifyGeomRank;
+    const da = a.isSplitLayer ? 0 : 1;
+    const db = b.isSplitLayer ? 0 : 1;
+    if (da !== db) return da - db;
+    return a.korName.localeCompare(b.korName, 'ko');
+  });
+
+  return {
+    results: results.map(({ identifyGeomRank: _r, ...rest }) => rest),
+  };
+}
+
+const KEYWORD_SEARCH_MAX_COLS = 14;
+const KEYWORD_MAX_LEN = 120;
+
+/**
+ * 시설관리 통합검색: 키워드가 속성 텍스트에 포함되는 행을 레이어별로 조회(identify results 형태).
+ */
+export async function searchDefineLayersByKeyword(params: {
+  keyword: string;
+  tables: string[];
+  schema?: string;
+  limitPerLayer?: number;
+}) {
+  const keywordRaw = String(params.keyword ?? '').trim();
+  const schema = resolveSchema(params.schema).toLowerCase();
+  const tables = Array.isArray(params.tables)
+    ? params.tables.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+    : [];
+  let limitPerLayer =
+    typeof params.limitPerLayer === 'number' && params.limitPerLayer > 0
+      ? Math.floor(params.limitPerLayer)
+      : 25;
+  limitPerLayer = Math.min(80, limitPerLayer);
+
+  if (!keywordRaw || keywordRaw.length > KEYWORD_MAX_LEN || tables.length === 0) {
+    return { results: [] };
+  }
+
+  const kwEsc = keywordRaw.replace(/'/g, "''");
+  const targets = resolveIdentifyLayerTargets(tables, schema);
+  if (targets.length === 0) return { results: [] };
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const esc = (s: string) => s.replace(/'/g, "''");
+
+  type LayerOutKw = {
+    tableName: string;
+    korName: string;
+    titleField: string | null;
+    isSplitLayer: boolean;
+    features: IdentifyFeatureOut[];
+    identifyGeomRank: number;
+  };
+  const results: LayerOutKw[] = [];
+
+  await Promise.all(
+    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+      const tableLower = physicalTable;
+      const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
+      if (!resolvedRel) return;
+      const safeTable = resolvedRel.replace(/"/g, '""');
+      if (!safeTable) return;
+
+      const cacheKey = `${schema}.${resolvedRel}`;
+      let geomCol: string;
+      let columns: string[];
+      let geomTypeRaw: string | number | null = null;
+
+      try {
+        const cached = identifyTableMetaCache.get(cacheKey);
+        if (cached) {
+          geomCol = cached.geomCol;
+          columns = cached.columns;
+          geomTypeRaw = cached.geomTypeRaw ?? null;
+        } else {
+          const gcRes = await db.execute(
+            sql.raw(
+              `SELECT f_geometry_column AS name, srid, type FROM geometry_columns
+               WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(resolvedRel)}'
+               LIMIT 1`
+            )
+          );
+          const gcRow = gcRes.rows?.[0] as
+            | { name?: string; srid?: number; type?: string | number }
+            | undefined;
+          if (!gcRow?.name) return;
+          geomCol = String(gcRow.name).trim();
+          const tableSridNew = gcRow.srid ?? 4326;
+          geomTypeRaw = gcRow.type ?? null;
+
+          const colRes = await db.execute(
+            sql.raw(
+              `SELECT column_name AS name FROM information_schema.columns
+               WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(resolvedRel)}'
+               ORDER BY ordinal_position`
+            )
+          );
+          columns = (colRes.rows as { name: string }[])
+            .map((r) => String(r?.name ?? '').trim())
+            .filter(Boolean);
+          if (columns.length === 0) return;
+          identifyTableMetaCache.set(cacheKey, {
+            geomCol,
+            tableSrid: tableSridNew,
+            columns,
+            geomTypeRaw,
+          });
+        }
+
+        const safeGeomCol = geomCol.replace(/"/g, '""');
+        const dataCols = columns.filter((c) => c !== geomCol);
+        const textCols = dataCols.slice(0, KEYWORD_SEARCH_MAX_COLS);
+        if (textCols.length === 0) return;
+
+        const orSql = textCols
+          .map((c) => {
+            const qc = c.replace(/"/g, '""');
+            return `strpos(lower("${qc}"::text), lower('${kwEsc}')) > 0`;
+          })
+          .join(' OR ');
+
+        const whereKeyword = `(${orSql})`;
+        const whereSql = rowFilter
+          ? ` WHERE ${whereKeyword} AND (${rowFilter})`
+          : ` WHERE ${whereKeyword}`;
+
+        const orderByGeomHitPriority = ` ORDER BY (
+          CASE ST_GeometryType("${safeGeomCol}")
+            WHEN 'ST_Point' THEN 0
+            WHEN 'ST_MultiPoint' THEN 0
+            WHEN 'ST_LineString' THEN 1
+            WHEN 'ST_MultiLineString' THEN 1
+            WHEN 'ST_Polygon' THEN 2
+            WHEN 'ST_MultiPolygon' THEN 2
+            ELSE 3
+          END
+        ) ASC`;
+
+        const selectList = columns
+          .map((c) => {
+            if (c === geomCol) {
+              return `ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}"`;
+            }
+            return `"${c.replace(/"/g, '""')}"`;
+          })
+          .join(', ');
+
+        const queryStr = `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereSql}${orderByGeomHitPriority} LIMIT ${limitPerLayer}`;
+        const dataRes = await db.execute(sql.raw(queryStr));
+        const rawFeatures = (dataRes.rows ?? []) as Record<string, unknown>[];
+        if (rawFeatures.length === 0) return;
+
+        const korName = getTableKorName(displayName);
+        const titleField = getTitleFieldName(physicalTable);
+        const baseFeatures = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
+        const features = attachKeywordMatchToFeatures(baseFeatures, textCols, keywordRaw, physicalTable);
+        results.push({
+          tableName: displayName,
+          korName,
+          titleField,
+          isSplitLayer: rowFilter != null,
+          features,
+          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+        });
+      } catch {
+        /* skip */
+      }
+    })
+  );
+
+  results.sort((a, b) => {
+    if (a.identifyGeomRank !== b.identifyGeomRank) return a.identifyGeomRank - b.identifyGeomRank;
+    const da = a.isSplitLayer ? 0 : 1;
+    const db = b.isSplitLayer ? 0 : 1;
+    if (da !== db) return da - db;
+    return a.korName.localeCompare(b.korName, 'ko');
+  });
+
+  return {
+    results: results.map(({ identifyGeomRank: _r, ...rest }) => rest),
+  };
 }
 
 /**
  * 테이블 전체 건수만 조회 (레이어 펼치기 전 배지 표시용)
  */
-export async function getTableCount(params: { table: string } = { table: '' }) {
-  const table = String(params?.table ?? '').trim();
+export async function getTableCount(params: {
+  table: string;
+  schema?: string;
+  rowFilter?: string;
+} = { table: '' }) {
+  const tableGuess = String(params?.table ?? '').trim().toLowerCase();
+  if (!tableGuess) return { total: 0 };
+
+  const schema = resolveSchema(params?.schema).toLowerCase();
+  const table = await resolveLayerPhysicalRelName(schema, tableGuess);
   if (!table) return { total: 0 };
 
-  const safeSchema = LAYER_SCHEMA.replace(/"/g, '""');
+  const safeSchema = schema.replace(/"/g, '""');
   const safeTable = table.replace(/"/g, '""');
+  const rawRowFilter = String(params?.rowFilter ?? '').trim();
+  let rowFilterSql: string | null = null;
+  if (rawRowFilter) {
+    rowFilterSql = sanitizeDefineLayerRowFilter(rawRowFilter);
+    if (!rowFilterSql) return { total: 0 };
+  }
+  const whereSql = rowFilterSql ? ` WHERE (${rowFilterSql})` : '';
 
   try {
     const countRes = await db.execute(
-      sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"`)
+      sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereSql}`)
     );
     const totalRow = countRes.rows?.[0] as { total?: string | number } | undefined;
     const total =
@@ -103,4 +1238,274 @@ export async function getTableCount(params: { table: string } = { table: '' }) {
   } catch (e: unknown) {
     return { total: 0 };
   }
+}
+
+/** 재난대응시설 패널: subtype별 layer 스키마 물리 테이블 */
+const SAFETY_FACILITY_DISPLAY: Record<
+  string,
+  {
+    nameKeys: string[];
+    addressKeys: string[];
+    phoneKeys?: string[];
+    lonKeys?: string[];
+    latKeys?: string[];
+  }
+> = {
+  sd_cold_wave_shelter: {
+    nameKeys: ['reare_nm'],
+    addressKeys: ['rona_daddr'],
+    lonKeys: ['lot'],
+    latKeys: ['lat'],
+  },
+  sd_heat_wave_shelter: {
+    nameKeys: ['rstr_nm'],
+    addressKeys: ['rn_dtl_adres'],
+    lonKeys: ['lo', 'xcord'],
+    latKeys: ['la', 'ycord'],
+  },
+  sd_heat_mitigation_facility: {
+    nameKeys: ['fbrc_nm', 'instl_bzenty'],
+    addressKeys: ['addr'],
+    lonKeys: ['lot'],
+    latKeys: ['lat'],
+  },
+  sd_earthquake_outdoor_evac_site: {
+    nameKeys: ['vt_acmdfclty_nm'],
+    addressKeys: ['eqk_acmdfclty_adres', 'dtl_adres', 'rn_dtl_adres'],
+    phoneKeys: ['telno'],
+    lonKeys: ['lo'],
+    latKeys: ['la'],
+  },
+  sd_tsunami_emergency_evac_site: {
+    nameKeys: ['shnt_place_nm'],
+    addressKeys: ['shnt_place_dtl_position', 'rn_dtl_adres'],
+    lonKeys: ['lo'],
+    latKeys: ['la'],
+  },
+  sd_mois_displaced_temp_housing: {
+    nameKeys: ['vt_acmdfclty_nm'],
+    addressKeys: ['dtl_adres', 'rn_dtl_adres', 'korean_ctprvn_nm', 'sgg_rn'],
+    phoneKeys: ['telno'],
+    lonKeys: ['lo', 'lot'],
+    latKeys: ['la', 'lat'],
+  },
+};
+
+function rowVal(row: Record<string, unknown>, k: string): unknown {
+  if (row[k] !== undefined && row[k] !== null) return row[k];
+  const lk = k.toLowerCase();
+  for (const rk of Object.keys(row)) {
+    if (rk.toLowerCase() === lk) return row[rk];
+  }
+  return undefined;
+}
+
+function rowPick(row: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    const v = rowVal(row, k);
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  return '';
+}
+
+const GEOM_COLUMN_NAMES = new Set([
+  'geom',
+  'geometry',
+  'the_geom',
+  'wkb_geometry',
+  'shape',
+  'geojson',
+]);
+
+function stripGeomRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (GEOM_COLUMN_NAMES.has(k.toLowerCase())) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function parseCoord(v: unknown): number | undefined {
+  if (v == null) return undefined;
+  const n = typeof v === 'number' ? v : Number(String(v).trim());
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function pickLonLat(
+  row: Record<string, unknown>,
+  spec: (typeof SAFETY_FACILITY_DISPLAY)[string] | undefined
+): { lon?: number; lat?: number } {
+  const lonKeys = spec?.lonKeys ?? ['lo', 'lot', 'lon', 'xcord', 'longitude'];
+  const latKeys = spec?.latKeys ?? ['la', 'lat', 'ycord', 'latitude'];
+  let lon: number | undefined;
+  let lat: number | undefined;
+  for (const k of lonKeys) {
+    const n = parseCoord(rowVal(row, k));
+    if (n != null) {
+      lon = n;
+      break;
+    }
+  }
+  for (const k of latKeys) {
+    const n = parseCoord(rowVal(row, k));
+    if (n != null) {
+      lat = n;
+      break;
+    }
+  }
+  return { lon, lat };
+}
+
+function formatSafetyFacilityRow(
+  subtype: string,
+  table: string,
+  row: Record<string, unknown>,
+  rowIndex: number,
+  spec: (typeof SAFETY_FACILITY_DISPLAY)[string] | undefined
+): {
+  subtype: string;
+  table: string;
+  id: string;
+  name: string;
+  address: string;
+  phone?: string;
+  lon?: number;
+  lat?: number;
+} {
+  const name =
+    rowPick(row, spec?.nameKeys ?? []) ||
+    rowPick(row, ['vt_acmdfclty_nm', 'nm', 'name', 'fclty_nm', 'title']);
+  const address =
+    rowPick(row, spec?.addressKeys ?? []) ||
+    rowPick(row, ['addr', 'adres', 'address', 'dtl_adres']);
+  const phone = rowPick(row, spec?.phoneKeys ?? ['telno', 'tel', 'phone', 'mng_inst_telno']);
+  const ogc = rowVal(row, 'ogc_fid');
+  const id =
+    ogc != null && String(ogc).trim() !== ''
+      ? String(ogc).trim()
+      : `${table}-${rowIndex}`;
+  const { lon, lat } = pickLonLat(row, spec);
+  return {
+    subtype,
+    table,
+    id,
+    name: name || '(이름 없음)',
+    address: address || '—',
+    ...(phone ? { phone } : {}),
+    ...(lon != null && lat != null ? { lon, lat } : {}),
+  };
+}
+
+async function fetchSafetyFacRows(opts: {
+  schema: string;
+  table: string;
+  searchRaw: string;
+  limit: number;
+}): Promise<Record<string, unknown>[]> {
+  const { schema, table, searchRaw, limit } = opts;
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const safeSchema = schema.replace(/"/g, '""');
+  const resolvedRel = await resolveLayerPhysicalRelName(schema, table);
+  if (!resolvedRel) return [];
+  const safeTable = resolvedRel.replace(/"/g, '""');
+
+  const colRes = await db.execute(
+    sql.raw(
+      `SELECT column_name AS name FROM information_schema.columns
+       WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(resolvedRel)}'
+       ORDER BY ordinal_position`
+    )
+  );
+  const columns = (colRes.rows as { name: string }[])
+    .map((r) => String(r?.name ?? '').trim())
+    .filter(Boolean);
+  if (columns.length === 0) return [];
+
+  let geomCol: string | null = null;
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(resolvedRel)}'
+         LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string } | undefined;
+    if (gcRow?.name) geomCol = String(gcRow.name).trim();
+  } catch {
+    /* no geom */
+  }
+
+  const dataCols = columns.filter((c) => !geomCol || c !== geomCol);
+  const textCols = [...dataCols];
+  const selectList = dataCols.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ');
+
+  let dataRes;
+  if (searchRaw && textCols.length > 0) {
+    const conds = textCols.map((c) =>
+      sql`strpos(lower(${sql.raw(`"${c.replace(/"/g, '""')}"`)}::text), lower(${searchRaw})) > 0`
+    );
+    const whereSql = sql.join(conds, sql` OR `);
+    dataRes = await db.execute(
+      sql`SELECT ${sql.raw(selectList)} FROM ${sql.raw(`"${safeSchema}"."${safeTable}"`)} WHERE ${whereSql} LIMIT ${limit}`
+    );
+  } else {
+    dataRes = await db.execute(
+      sql`SELECT ${sql.raw(selectList)} FROM ${sql.raw(`"${safeSchema}"."${safeTable}"`)} LIMIT ${limit}`
+    );
+  }
+
+  return (dataRes.rows ?? []) as Record<string, unknown>[];
+}
+
+export type SafetyFacilityListItem = {
+  subtype: string;
+  table: string;
+  id: string;
+  name: string;
+  address: string;
+  phone?: string;
+  lon?: number;
+  lat?: number;
+  /** geom 제외 원본 컬럼 — 상세 패널 표시용 */
+  detailAttrs: Record<string, unknown>;
+};
+
+/**
+ * 재난대응시설 패널: 선택한 subtype별 layer 테이블에서 행 조회 (geom 컬럼 제외, 부분 문자열 검색).
+ */
+export async function listSafetyFacilities(params: {
+  requests: { subtype: string; table: string }[];
+  search?: string;
+  limitPerTable?: number;
+  schema?: string;
+}): Promise<{ items: SafetyFacilityListItem[]; error?: string }> {
+  const schema = resolveSchema(params?.schema).toLowerCase();
+  let limitPerTable = Number(params?.limitPerTable);
+  if (!Number.isFinite(limitPerTable) || limitPerTable < 1) limitPerTable = 150;
+  limitPerTable = Math.min(300, Math.floor(limitPerTable));
+  const searchRaw = String(params?.search ?? '').trim();
+  const items: SafetyFacilityListItem[] = [];
+  const requests = Array.isArray(params?.requests) ? params.requests : [];
+
+  for (const req of requests) {
+    const subtype = String(req?.subtype ?? '').trim();
+    const table = String(req?.table ?? '').trim().toLowerCase();
+    if (!subtype || !table) continue;
+    try {
+      const rows = await fetchSafetyFacRows({ schema, table, searchRaw, limit: limitPerTable });
+      const spec = SAFETY_FACILITY_DISPLAY[table];
+      rows.forEach((row, idx) => {
+        items.push({
+          ...formatSafetyFacilityRow(subtype, table, row, idx, spec),
+          detailAttrs: stripGeomRow(row),
+        });
+      });
+    } catch {
+      /* 테이블 없음 등은 건너뜀 */
+    }
+  }
+
+  return { items };
 }

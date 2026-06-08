@@ -1,0 +1,19 @@
+<layer>
+  <name>public_land</name>
+  <id>LayerInfoImpl-76d5c5e9:19e00161290:-1b4f</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-76d5c5e9:19e00161290:-1c06</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-76d5c5e9:19e00161290:-1b50</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-05-07 07:37:34.300 UTC</dateCreated>
+  <dateModified>2026-05-07 07:37:34.416 UTC</dateModified>
+</layer>

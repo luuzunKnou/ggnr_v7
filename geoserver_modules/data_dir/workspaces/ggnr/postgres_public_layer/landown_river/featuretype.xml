@@ -1,7 +1,7 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cfd</id>
+  <id>FeatureTypeInfoImpl--3f73bcf1:19cc8020009:5753</id>
   <name>landown_river</name>
-  <nativeName>landown</nativeName>
+  <nativeName>jijuk</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>327950.2622200436</minx>
-    <maxx>379099.47020771215</maxx>
-    <miny>312531.33963256935</miny>
-    <maxy>370905.4133164596</maxy>
+    <minx>328647.32091433526</minx>
+    <maxx>378905.65898277157</maxx>
+    <miny>312761.5805258668</miny>
+    <maxy>369877.9427182361</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.4245011389381</minx>
-    <maxx>129.00724818012225</maxx>
-    <miny>36.29417164002223</miny>
-    <maxy>36.82818315636876</maxy>
+    <minx>128.43229741548626</minx>
+    <maxx>129.00483584144112</maxx>
+    <miny>36.296281237750236</miny>
+    <maxy>36.81883297159755</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
@@ -31,6 +31,7 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter><![CDATA[jibun LIKE '%천']]></cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

@@ -1,0 +1,19 @@
+<layer>
+  <name>20260422_junghwajo</name>
+  <id>LayerInfoImpl--4fde225b:19da052eb3b:-5c08</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4fde225b:19da052eb3b:-5c07</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-5c09</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-22 09:16:35.383 UTC</dateCreated>
+  <dateModified>2026-04-22 09:16:35.473 UTC</dateModified>
+</layer>

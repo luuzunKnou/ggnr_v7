@@ -8,11 +8,10 @@
           <sld:PolygonSymbolizer>
             <sld:Fill>
               <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
-              <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
+              <sld:CssParameter name="fill-opacity">0.3</sld:CssParameter>
             </sld:Fill>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-              <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
             </sld:Stroke>
           </sld:PolygonSymbolizer>
         </sld:Rule>

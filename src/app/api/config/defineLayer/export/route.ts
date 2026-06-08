@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import * as fs from "fs"
 import * as path from "path"
 import * as XLSX from "xlsx"
+import { normalizeDefineTableSource } from "@/lib/defineLayerTablesNormalize"
+import { reorderDefineLayerTablesArray } from "@/lib/defineLayerTableRowOrder"
 
 const TABLES_PATH = path.join(process.cwd(), "src", "config", "defineLayer", "tables.json")
 
@@ -30,6 +32,7 @@ const EXPORT_COLUMNS: { key: string; header: string }[] = [
   { key: "define_table_group", header: "그룹" },
   { key: "define_table_name", header: "테이블명" },
   { key: "define_table_kor_name", header: "한글명" },
+  { key: "define_table_source", header: "출처" },
   { key: "define_table_idx", header: "순서" },
   { key: "define_table_shp_type", header: "도형" },
   { key: "define_table_read_share", header: "읽기" },
@@ -49,7 +52,9 @@ export async function GET() {
     if (!Array.isArray(tables)) {
       return NextResponse.json({ success: false, error: "Invalid tables format" }, { status: 500 })
     }
-    const sorted = sortTables(tables)
+    normalizeDefineTableSource(tables)
+    const reordered = reorderDefineLayerTablesArray(tables)
+    const sorted = sortTables(reordered)
 
     const rows: Record<string, string>[] = sorted.map((row) => {
       const out: Record<string, string> = {}
@@ -59,6 +64,9 @@ export async function GET() {
         let str = String(val)
         if (key === "define_table_read_share" || key === "define_table_write_share") {
           str = SHARE_CODE_TO_LABEL[str] ?? str
+        }
+        if (key === "define_table_source") {
+          str = str.toLowerCase() === "excel" ? "Excel" : "SHP"
         }
         out[header] = str
       }

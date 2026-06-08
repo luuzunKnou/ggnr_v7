@@ -1,22 +1,16 @@
 <layer>
   <name>landown_railroad</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d04</id>
+  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55d5</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b12</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d05</id>
+    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55d6</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">jimok = &apos;15&apos;</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:01:02.373 UTC</dateCreated>
-  <dateModified>2026-02-11 16:01:02.609 UTC</dateModified>
+  <dateCreated>2026-03-07 11:07:23.998 UTC</dateCreated>
 </layer>

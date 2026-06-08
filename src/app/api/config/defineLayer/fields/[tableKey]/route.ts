@@ -17,7 +17,7 @@ function sortFields<T extends Record<string, unknown>>(arr: T[]): T[] {
 }
 
 function getFilePath(tableKey: string): string {
-  const safe = String(tableKey).replace(/[^a-zA-Z0-9_-]/g, "")
+  const safe = String(tableKey).replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase()
   return path.join(FIELDS_DIR, `table_${safe}.json`)
 }
 

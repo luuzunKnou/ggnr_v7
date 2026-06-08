@@ -392,22 +392,22 @@ export function ServiceListManager() {
       </div>
 
       <div className="border rounded overflow-x-auto">
-        <Table className="[&_th]:py-1.5 [&_td]:py-1.5">
+        <Table className="[&_th]:py-0.5 [&_td]:py-0.5 text-xs leading-tight">
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="w-20">구분</TableHead>
-              <TableHead className="w-28">서비스 영문명</TableHead>
-              <TableHead className="w-28">서비스 한글명</TableHead>
-              <TableHead className="w-20">서비스 유형</TableHead>
-              <TableHead className="w-24">메뉴</TableHead>
-              <TableHead className="w-24">카테고리</TableHead>
-              <TableHead className="w-16">순서</TableHead>
+              <TableHead className="w-20 font-medium">구분</TableHead>
+              <TableHead className="w-28 font-medium">서비스 영문명</TableHead>
+              <TableHead className="w-28 font-medium">서비스 한글명</TableHead>
+              <TableHead className="w-20 font-medium">서비스 유형</TableHead>
+              <TableHead className="w-24 font-medium">메뉴</TableHead>
+              <TableHead className="w-24 font-medium">카테고리</TableHead>
+              <TableHead className="w-16 font-medium">순서</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-5">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-2">
                   등록된 기능이 없습니다. 공통 추가 또는 커스텀 추가로 등록하세요.
                 </TableCell>
               </TableRow>
@@ -422,15 +422,15 @@ export function ServiceListManager() {
                     <span
                       className={
                         s.source === "common"
-                          ? "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
-                          : "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200"
+                          ? "inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium leading-tight bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
+                          : "inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium leading-tight bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200"
                       }
                     >
                       {s.source === "common" ? "공통" : "커스텀"}
                     </span>
                   </TableCell>
-                  <TableCell className="text-sm">{s.ser_eng ?? "-"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{s.ser_kor ?? "-"}</TableCell>
+                  <TableCell>{s.ser_eng ?? "-"}</TableCell>
+                  <TableCell className="text-muted-foreground">{s.ser_kor ?? "-"}</TableCell>
                   <TableCell className="text-xs">{s.ser_type ?? "-"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{s.ser_menu ?? "-"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{s.ser_cat ?? "-"}</TableCell>

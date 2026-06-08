@@ -10,6 +10,7 @@ import { Style, Stroke, Fill, Circle as CircleStyle } from 'ol/style';
 import { get as getProjection, transform } from 'ol/proj';
 import { getCenter } from 'ol/extent';
 import Overlay from 'ol/Overlay';
+import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 
 export type MeasureType = 'distance' | 'area';
 
@@ -72,6 +73,7 @@ export function useMeasure(
 
       const measureLayer = new VectorLayer({
         source: measureSourceRef.current,
+        renderOrder: compareFeaturesByGeometryStackOrder,
         style: (feature) => {
           const type = feature.get('measureType') as MeasureType;
           return type ? createStyle(type) : undefined;

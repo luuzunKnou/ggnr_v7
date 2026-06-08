@@ -224,14 +224,6 @@ export function HistoryAddDialog({ open, onOpenChange, compKey, onConfirm, onDel
           </div>
 
           <div className="mt-3 flex items-center justify-end gap-2">
-            <Button
-              type="submit"
-              disabled={!state || submitting}
-              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary"
-            >
-              <Check className="h-3 w-3" />
-              {submitting ? '저장 중…' : '저장'}
-            </Button>
             {isEdit && onDelete && editCompdKey != null && (
               <Button
                 type="button"
@@ -253,6 +245,23 @@ export function HistoryAddDialog({ open, onOpenChange, compKey, onConfirm, onDel
                 {deleting ? '삭제 중…' : '삭제'}
               </Button>
             )}
+            <Button
+              type="submit"
+              disabled={!state || submitting}
+              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary"
+            >
+              <Check className="h-3 w-3" />
+              {submitting ? '저장 중…' : '저장'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-3 w-3" />
+              닫기
+            </Button>
           </div>
         </form>
       </DialogContent>

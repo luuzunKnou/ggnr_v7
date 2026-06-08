@@ -1,0 +1,57 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
+import { assertSafeFileDataSegment } from '@/lib/serviceFileData';
+import { parseSerEngForServiceFileData } from '@/lib/serviceFileDataPolicy';
+import { softDeleteServiceFileDataItem } from '@/service/fileManagerService';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(req: NextRequest) {
+  const usrId = await getSessionUsrId();
+  if (!usrId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'JSON body required' }, { status: 400 });
+  }
+  const o = body as Record<string, unknown>;
+  const serEng = parseSerEngForServiceFileData(typeof o.serEng === 'string' ? o.serEng : null);
+  if (serEng == null) {
+    return NextResponse.json({ error: '유효하지 않은 serEng 입니다.' }, { status: 400 });
+  }
+  if (!(await userHasSerAccess(usrId, serEng, 'write'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const layer = typeof o.layer === 'string' ? o.layer : null;
+  const key = typeof o.key === 'string' ? o.key : o.key != null ? String(o.key) : null;
+  const fileName = typeof o.fileName === 'string' ? o.fileName : null;
+  if (layer == null || key == null || fileName == null) {
+    return NextResponse.json({ error: 'layer, key, fileName 이 필요합니다.' }, { status: 400 });
+  }
+  if (assertSafeFileDataSegment(layer) == null || assertSafeFileDataSegment(key) == null) {
+    return NextResponse.json({ error: '유효하지 않은 layer 또는 key 입니다.' }, { status: 400 });
+  }
+
+  const result = await softDeleteServiceFileDataItem({
+    layerName: layer,
+    keyValue: key,
+    fileName,
+  });
+  if (!result.ok) {
+    const status =
+      result.error === 'Forbidden'
+        ? 403
+        : result.error === '파일을 찾을 수 없습니다.'
+          ? 404
+          : result.error === '이미 삭제된 파일이 있습니다.'
+            ? 409
+            : 400;
+    return NextResponse.json({ error: result.error }, { status });
+  }
+  return NextResponse.json({ ok: true });
+}

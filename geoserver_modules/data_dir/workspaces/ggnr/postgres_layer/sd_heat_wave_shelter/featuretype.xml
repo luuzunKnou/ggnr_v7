@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30df</id>
+  <name>sd_heat_wave_shelter</name>
+  <nativeName>sd_heat_wave_shelter</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>sd_heat_wave_shelter</title>
+  <keywords>
+    <string>features</string>
+    <string>sd_heat_wave_shelter</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>-199.10211181640625</minx>
+    <maxx>434482.71875</maxx>
+    <miny>-38637.73828125</miny>
+    <maxy>553842.25</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>124.70632674629637</minx>
+    <maxx>129.68608871160123</maxx>
+    <miny>33.1199435345796</miny>
+    <maxy>38.484895905765136</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

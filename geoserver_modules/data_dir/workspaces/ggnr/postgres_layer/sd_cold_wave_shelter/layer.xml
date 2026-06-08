@@ -1,0 +1,19 @@
+<layer>
+  <name>sd_cold_wave_shelter</name>
+  <id>LayerInfoImpl--2053d3:19d606c4ff1:30d9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--2053d3:19d606c4ff1:30da</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30d8</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-08 11:06:02.797 UTC</dateCreated>
+  <dateModified>2026-04-08 11:06:10.323 UTC</dateModified>
+</layer>

@@ -1,0 +1,19 @@
+<layer>
+  <name>road_permit</name>
+  <id>LayerInfoImpl--60cb52a7:19cdc4f170d:1878</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--60cb52a7:19cdc4f170d:1879</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:1877</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-18 10:37:13.602 UTC</dateCreated>
+  <dateModified>2026-03-18 10:37:13.718 UTC</dateModified>
+</layer>

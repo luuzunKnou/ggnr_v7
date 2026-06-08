@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7ddd</id>
+  <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55fe</id>
   <name>relief_victims</name>
   <nativeName>relief</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>57078.06662994</minx>
-    <maxx>545848.37038022</maxx>
-    <miny>-4392.23934384</miny>
-    <maxy>518611.76569474</maxy>
+    <minx>147778.29026068</minx>
+    <maxx>404921.96188585</maxx>
+    <miny>149087.42713626</miny>
+    <maxy>463044.47238751</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>125.36937348262781</minx>
-    <maxx>130.94228292067226</maxx>
-    <miny>33.39833125636901</miny>
-    <maxy>38.16745473324755</maxy>
+    <minx>126.40812005576718</minx>
+    <maxx>129.3217640394752</maxx>
+    <miny>34.81706275673425</miny>
+    <maxy>37.666999593142904</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
@@ -31,6 +31,7 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter>shelter_sub_key is not null</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

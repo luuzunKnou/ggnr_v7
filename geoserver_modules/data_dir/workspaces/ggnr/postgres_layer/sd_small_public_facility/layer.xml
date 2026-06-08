@@ -1,0 +1,19 @@
+<layer>
+  <name>sd_small_public_facility</name>
+  <id>LayerInfoImpl--2053d3:19d606c4ff1:30ec</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--2053d3:19d606c4ff1:30fb</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30eb</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-08 11:06:39.385 UTC</dateCreated>
+  <dateModified>2026-04-08 11:07:00.65 UTC</dateModified>
+</layer>

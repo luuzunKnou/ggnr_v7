@@ -5,6 +5,7 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Search, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { call } from "@/lib/api"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -19,6 +20,10 @@ export function LayerCodeManager() {
   const [selectedTableKey, setSelectedTableKey] = useState<string>("")
   const [layerListSearch, setLayerListSearch] = useState("")
   const [debouncedLayerListSearch, setDebouncedLayerListSearch] = useState("")
+  const [showPublicLayer, setShowPublicLayer] = useState(false)
+  const [showAllLayers, setShowAllLayers] = useState(false)
+  const [tableExistenceSet, setTableExistenceSet] = useState<Set<string>>(new Set())
+  const [tableExistenceLoading, setTableExistenceLoading] = useState(false)
   const [fields, setFields] = useState<DefineField[]>([])
   const [codeFields, setCodeFields] = useState<DefineField[]>([])
   const [fieldListSearch, setFieldListSearch] = useState("")
@@ -64,6 +69,28 @@ export function LayerCodeManager() {
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
       .finally(() => !cancelled && setLoadingTables(false))
+    return () => { cancelled = true }
+  }, [])
+
+  // DB에 테이블 존재 여부 로드 (layer, public_layer 스키마)
+  useEffect(() => {
+    let cancelled = false
+    setTableExistenceLoading(true)
+    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        if (data?.success && Array.isArray(data.tables)) {
+          const set = new Set<string>(
+            data.tables.map(
+              (t: { schema?: string; table?: string }) => `${t.schema ?? "layer"}.${t.table ?? ""}`
+            )
+          )
+          setTableExistenceSet(set)
+        }
+      })
+      .catch(() => !cancelled && setTableExistenceSet(new Set()))
+      .finally(() => !cancelled && setTableExistenceLoading(false))
     return () => { cancelled = true }
   }, [])
 
@@ -131,9 +158,23 @@ export function LayerCodeManager() {
     return () => clearTimeout(t)
   }, [fieldListSearch])
 
-  /** CODE 필드가 있는 테이블만, 검색 필터 */
+  /** CODE 필드가 있는 테이블만, 스키마/전체 레이어(DB 테이블 존재) 필터 + 검색 */
   const filteredTables = useMemo(() => {
     let list = tables.filter((t) => codeTableKeys.has(String((t as Record<string, unknown>).define_table_name ?? "")))
+    if (!showPublicLayer) {
+      list = list.filter(
+        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
+      )
+    }
+    if (!showAllLayers) {
+      list = list.filter((t) => {
+        const schema = String((t as Record<string, unknown>).define_table_schema ?? "layer")
+        const tableName = String((t as Record<string, unknown>).define_table_name ?? "")
+        if (!tableName) return true
+        const key = `${schema}.${tableName}`
+        return tableExistenceLoading || tableExistenceSet.has(key)
+      })
+    }
     if (debouncedLayerListSearch.trim()) {
       const q = debouncedLayerListSearch.trim().toLowerCase()
       list = list.filter((t) => {
@@ -145,7 +186,7 @@ export function LayerCodeManager() {
       })
     }
     return list
-  }, [tables, codeTableKeys, debouncedLayerListSearch])
+  }, [tables, codeTableKeys, debouncedLayerListSearch, showPublicLayer, showAllLayers, tableExistenceSet, tableExistenceLoading])
 
   /** 필드 목록 검색 필터 */
   const filteredCodeFields = useMemo(() => {
@@ -228,14 +269,34 @@ export function LayerCodeManager() {
         className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
         style={{ width: LAYER_LIST_WIDTH, height: "calc(100vh - 14rem)" }}
       >
-        <div className="shrink-0 p-2 border-b bg-muted/50">
+        <div className="shrink-0 p-2 border-b bg-muted/50 space-y-2">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPublicLayer}
+                onChange={(e) => setShowPublicLayer(e.target.checked)}
+                className="rounded border-input"
+              />
+              public_layer 포함
+            </label>
+            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllLayers}
+                onChange={(e) => setShowAllLayers(e.target.checked)}
+                className="rounded border-input"
+              />
+              전체 레이어 보기
+            </label>
+          </div>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="레이어 검색 (그룹/테이블명/한글명)"
               value={layerListSearch}
               onChange={(e) => setLayerListSearch(e.target.value)}
-              className="h-9 pl-8 rounded-none text-sm bg-background"
+              className="h-9 pl-8 rounded-md text-sm bg-background"
             />
           </div>
         </div>
@@ -288,7 +349,7 @@ export function LayerCodeManager() {
               placeholder="필드 검색 (영문명/한글명)"
               value={fieldListSearch}
               onChange={(e) => setFieldListSearch(e.target.value)}
-              className="h-9 pl-8 rounded-none text-sm bg-background"
+              className="h-9 pl-8 rounded-md text-sm bg-background"
               disabled={!selectedTableKey}
             />
           </div>
@@ -341,19 +402,20 @@ export function LayerCodeManager() {
         ) : (
           <>
             <div className="flex items-center gap-3 flex-wrap shrink-0">
-              <Button size="sm" className="rounded-none" onClick={saveConfig} disabled={saving}>
-                <Save className="w-4 h-4 mr-1.5" />
+              <Button variant="outline" size="sm" className="rounded-md" onClick={saveConfig} disabled={saving}>
+                <Save className="w-4 h-4 mr-1.5 opacity-70" />
                 {saving ? "저장 중..." : "저장"}
               </Button>
               <Button
+                variant="outline"
                 size="sm"
-                className="rounded-none"
+                className="rounded-md"
                 onClick={() => {
                   setFieldListSearch("")
                   setDebouncedFieldListSearch("")
                 }}
               >
-                <RotateCcw className="w-4 h-4 mr-1.5" />
+                <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
                 초기화
               </Button>
               {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
@@ -379,12 +441,13 @@ export function LayerCodeManager() {
                     className="h-8 rounded-none text-sm"
                   />
                   <Button
+                    variant="outline"
                     size="sm"
-                    className="rounded-none shrink-0 w-fit"
+                    className="rounded-md shrink-0 w-fit"
                     onClick={addCode}
                     disabled={!selectedFieldKey}
                   >
-                    <Plus className="w-4 h-4 mr-1" />
+                    <Plus className="w-4 h-4 mr-1 opacity-70" />
                     추가
                   </Button>
                 </div>

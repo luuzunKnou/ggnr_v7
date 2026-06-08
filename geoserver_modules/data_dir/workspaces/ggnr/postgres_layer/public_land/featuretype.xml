@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-76d5c5e9:19e00161290:-1b50</id>
+  <name>public_land</name>
+  <nativeName>public_land</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>public_land</title>
+  <keywords>
+    <string>features</string>
+    <string>public_land</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>377864.625</minx>
+    <maxx>403522.53125</maxx>
+    <miny>335001.6875</miny>
+    <maxy>371350.46875</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.9850939088051</minx>
+    <maxx>129.28090225800193</maxx>
+    <miny>36.49166874057342</miny>
+    <maxy>36.82412867726726</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

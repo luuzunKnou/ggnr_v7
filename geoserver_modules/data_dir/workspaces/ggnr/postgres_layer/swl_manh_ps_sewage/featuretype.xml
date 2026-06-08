@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cbf</id>
+  <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-5600</id>
   <name>swl_manh_ps_sewage</name>
   <nativeName>swl_manh_ps</nativeName>
   <namespace>
@@ -31,6 +31,7 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <cqlFilter>smu_cde = &apos;SMU002&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

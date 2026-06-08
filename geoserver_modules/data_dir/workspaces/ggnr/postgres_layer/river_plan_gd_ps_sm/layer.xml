@@ -1,0 +1,19 @@
+<layer>
+  <name>river_plan_gd_ps_sm</name>
+  <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7df2</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4e575fd4:19d2eef647c:-7ddf</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4e575fd4:19d2eef647c:-7df3</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-28 05:56:37.263 UTC</dateCreated>
+  <dateModified>2026-03-28 06:00:32.309 UTC</dateModified>
+</layer>

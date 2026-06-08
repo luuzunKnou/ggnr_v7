@@ -1,6 +1,7 @@
 import { get as getProjection, transform } from 'ol/proj';
 import { View } from 'ol';
 import { Map } from 'ol';
+import { RESOLUTIONS_3857 } from '../config/mapDefaults';
 
 /**
  * 좌표계 변환 서비스
@@ -155,21 +156,38 @@ export function updateViewProjection(
       currentCenter as [number, number] | null,
       currentProjection || 'EPSG:3857'
     );
-  } else {
-    // 일반 좌표계로 변경
+  } else if (newProjection === 'EPSG:3857') {
+    // 일반 (3857) 좌표계로 변경
     newCenter = transformToStandardProjection(
       currentCenter as [number, number] | null,
       currentProjection || 'EPSG:3857'
     );
+  } else {
+    // 그 외 한국 평면/위경도 좌표계 (자체영상 view 좌표계 등). proj4 일반 변환 후 실패시 서울 중심 폴백
+    const cur = currentProjection || 'EPSG:3857';
+    newCenter = transformCoordinate(
+      currentCenter as [number, number] | null,
+      cur,
+      newProjection
+    );
+    if (!newCenter) {
+      newCenter = getSeoulCenter(newProjection);
+    }
   }
 
   if (newCenter) {
-    const newView = new View({
+    const viewOptions: { projection: typeof targetProj; center: [number, number]; zoom: number; resolutions?: number[]; minZoom?: number; maxZoom?: number; constrainResolution?: boolean } = {
       projection: targetProj,
       center: newCenter,
       zoom: currentZoom,
-    });
-    map.setView(newView);
+    };
+    if (newProjection === 'EPSG:3857') {
+      viewOptions.resolutions = RESOLUTIONS_3857;
+      viewOptions.minZoom = 0;
+      viewOptions.maxZoom = RESOLUTIONS_3857.length - 1;
+      viewOptions.constrainResolution = true;
+    }
+    map.setView(new View(viewOptions));
   } else {
     console.error('좌표 변환 실패: 유효한 중심 좌표를 얻을 수 없습니다.');
   }

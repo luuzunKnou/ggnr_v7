@@ -1,0 +1,19 @@
+<layer>
+  <name>a0063321</name>
+  <id>LayerInfoImpl--60cb52a7:19cdc4f170d:-7f65</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--60cb52a7:19cdc4f170d:-7f7c</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:-7f66</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-12 04:56:58.447 UTC</dateCreated>
+  <dateModified>2026-03-12 04:56:58.523 UTC</dateModified>
+</layer>

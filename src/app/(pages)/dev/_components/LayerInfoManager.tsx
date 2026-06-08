@@ -49,6 +49,8 @@ type TableColumnDef =
       alignCenter?: boolean
       shapeType?: boolean
       share?: "read" | "write"
+      schemaSelect?: boolean
+      tableSourceSelect?: boolean
     }
   | { id: string; label: string; width: string; kind: "table_status" }
   | { id: string; label: string; width: string; kind: "layer_status" }
@@ -75,9 +77,21 @@ function getLegendGraphicUrl(layerName: string, styleName?: string): string {
   return `${base}/wms?${params.toString()}`
 }
 
+const SCHEMA_OPTIONS = [
+  { value: "layer", label: "layer" },
+  { value: "public_layer", label: "public_layer" },
+]
+
+const TABLE_SOURCE_OPTIONS = [
+  { value: "shp", label: "SHP" },
+  { value: "excel", label: "Excel" },
+] as const
+
 const TABLE_COLUMNS: TableColumnDef[] = [
-  { id: "define_table_group", label: "그룹", width: "200px", kind: "field" },
-  { id: "define_table_name", label: "테이블명", width: "200px", kind: "field", readonly: true },
+  { id: "define_table_schema", label: "스키마", width: "120px", kind: "field", schemaSelect: true },
+  { id: "define_table_source", label: "출처", width: "88px", kind: "field", tableSourceSelect: true },
+  { id: "define_table_group", label: "그룹", width: "130px", kind: "field" },
+  { id: "define_table_name", label: "테이블명", width: "flex", kind: "field", readonly: true },
   { id: "define_table_kor_name", label: "한글명", width: "200px", kind: "field" },
   { id: "__style_legend", label: "범례", width: "80px", kind: "style_legend" },
   { id: "define_table_idx", label: "순서", width: "50px", kind: "field", alignCenter: true },
@@ -92,12 +106,13 @@ const TABLE_COLUMNS: TableColumnDef[] = [
   //{ id: "define_table_etc", label: "비고", width: "flex", kind: "field" },
 ]
 
-/** px 컬럼은 고정 너비, "flex"는 남은 공간 채움 (스크롤 없이) */
-function getColumnStyle(width: string): React.CSSProperties {
-  if (width === "flex") {
-    return { flex: 1, minWidth: 0, flexShrink: 1 }
+/** px 컬럼은 고정 너비, "flex"는 남은 공간 채움. 테이블명만 살짝 최소 너비(과도한 압축 방지) */
+function getColumnStyle(col: Pick<TableColumnDef, "id" | "width">): React.CSSProperties {
+  if (col.width === "flex") {
+    const minW = col.id === "define_table_name" ? 200 : 0
+    return { flex: 1, minWidth: minW, flexShrink: 1 }
   }
-  return { width, flexShrink: 0 }
+  return { width: col.width, flexShrink: 0 }
 }
 
 const TABLE_KEYS = TABLE_COLUMNS.filter((c): c is TableColumnDef & { kind: "field" } => c.kind === "field").map(
@@ -117,10 +132,8 @@ const SCROLL_LOAD_THRESHOLD = 200
 export function LayerInfoManager() {
   const [config, setConfig] = useState<DefineLayerConfig | null>(null)
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -128,11 +141,9 @@ export function LayerInfoManager() {
   const [debouncedSearchName, setDebouncedSearchName] = useState("")
   const [searchGroup, setSearchGroup] = useState("")
   const [debouncedSearchGroup, setDebouncedSearchGroup] = useState("")
+  const [showPublicLayer, setShowPublicLayer] = useState(false)
+  const [showAllLayers, setShowAllLayers] = useState(false)
   const parentRef = useRef<HTMLDivElement>(null)
-  const loadingMoreRef = useRef(false)
-  const hasMoreRef = useRef(true)
-  loadingMoreRef.current = loadingMore
-  hasMoreRef.current = hasMore
 
   // 스타일: GeoServer 레이어별 스타일 보유 여부 (테이블명 기준)
   const [styleInfoMap, setStyleInfoMap] = useState<
@@ -156,13 +167,11 @@ export function LayerInfoManager() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [autoApplyLoading, setAutoApplyLoading] = useState(false)
 
-  const loadFirstPage = useCallback(async () => {
+  const loadFullList = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(
-        `/api/config/defineLayer?page=1&limit=${PAGE_SIZE}`
-      )
+      const res = await fetch("/api/config/defineLayer")
       const contentType = res.headers.get("content-type") ?? ""
       if (!contentType.includes("application/json")) {
         const text = await res.text()
@@ -172,11 +181,8 @@ export function LayerInfoManager() {
       const body = await res.json()
       if (body.success && body.data) {
         setConfig({ tables: body.data })
-        setTotal(body.total ?? body.data.length)
-        setPage(1)
-        const more = (body.data?.length ?? 0) < (body.total ?? 0)
-        setHasMore(more)
-        hasMoreRef.current = more
+        setTotal(Array.isArray(body.data) ? body.data.length : 0)
+        setDisplayCount(PAGE_SIZE)
       } else {
         setError(body.error ?? "설정을 불러올 수 없습니다.")
       }
@@ -187,41 +193,9 @@ export function LayerInfoManager() {
     }
   }, [])
 
-  const loadMore = useCallback(async () => {
-    if (loadingMoreRef.current || !hasMoreRef.current) return
-    if (!config?.tables?.length) return
-    setLoadingMore(true)
-    loadingMoreRef.current = true
-    setError(null)
-    try {
-      const nextPage = page + 1
-      const res = await fetch(
-        `/api/config/defineLayer?page=${nextPage}&limit=${PAGE_SIZE}`
-      )
-      const body = await res.json()
-      if (body.success && Array.isArray(body.data)) {
-        if (body.data.length > 0) {
-          setConfig((prev) =>
-            prev ? { tables: [...prev.tables, ...body.data] } : prev
-          )
-          setPage(nextPage)
-        }
-        const newLen = config.tables.length + (body.data?.length ?? 0)
-        const stillHasMore = newLen < (body.total ?? 0)
-        setHasMore(stillHasMore)
-        hasMoreRef.current = stillHasMore
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "추가 로드 실패")
-    } finally {
-      setLoadingMore(false)
-      loadingMoreRef.current = false
-    }
-  }, [config, page])
-
   useEffect(() => {
-    loadFirstPage()
-  }, [loadFirstPage])
+    loadFullList()
+  }, [loadFullList])
 
   const loadStyleInfo = useCallback(async () => {
     setStyleLoading(true)
@@ -259,16 +233,6 @@ export function LayerInfoManager() {
     }
   }, [config?.tables?.length, loadStyleInfo])
 
-  // 스크롤 끝 근처에서 다음 페이지 로드 (loadMore 내부에서 ref로 중복 호출 방지)
-  const handleScroll = useCallback(() => {
-    const el = parentRef.current
-    if (!el) return
-    const { scrollTop, scrollHeight, clientHeight } = el
-    if (scrollTop + clientHeight >= scrollHeight - SCROLL_LOAD_THRESHOLD) {
-      loadMore()
-    }
-  }, [loadMore])
-
   // 디바운싱: 검색어 입력 후 300ms 대기
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearchName(searchName), 300)
@@ -282,6 +246,19 @@ export function LayerInfoManager() {
   const filteredTables = useMemo(() => {
     if (!config?.tables) return []
     let list = [...config.tables]
+    if (!showPublicLayer) {
+      list = list.filter(
+        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
+      )
+    }
+    if (!showAllLayers) {
+      list = list.filter((t) => {
+        const tableName = String((t as Record<string, unknown>).define_table_name ?? "")
+        if (!tableName) return true
+        const info = styleInfoMap[tableName]
+        return styleLoading || info === undefined || info.tableExists === true
+      })
+    }
     if (debouncedSearchGroup.trim()) {
       const g = debouncedSearchGroup.trim().toLowerCase()
       list = list.filter((t) =>
@@ -297,7 +274,26 @@ export function LayerInfoManager() {
       )
     }
     return list
-  }, [config?.tables, debouncedSearchName, debouncedSearchGroup])
+  }, [config?.tables, debouncedSearchName, debouncedSearchGroup, showPublicLayer, showAllLayers, styleInfoMap, styleLoading])
+
+  const displayedTables = useMemo(
+    () => filteredTables.slice(0, displayCount),
+    [filteredTables, displayCount]
+  )
+  const hasMoreDisplay = displayCount < filteredTables.length
+
+  useEffect(() => {
+    setDisplayCount(PAGE_SIZE)
+  }, [showPublicLayer, showAllLayers, debouncedSearchName, debouncedSearchGroup])
+
+  const handleScroll = useCallback(() => {
+    const el = parentRef.current
+    if (!el) return
+    const { scrollTop, scrollHeight, clientHeight } = el
+    if (scrollTop + clientHeight >= scrollHeight - SCROLL_LOAD_THRESHOLD) {
+      setDisplayCount((prev) => Math.min(prev + PAGE_SIZE, filteredTables.length))
+    }
+  }, [filteredTables.length])
 
   const updateCell = useCallback(
     (tableIndex: number, key: string, value: string) => {
@@ -717,13 +713,14 @@ export function LayerInfoManager() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 flex-wrap shrink-0">
-        <Button size="sm" className="rounded-none" onClick={saveConfig} disabled={saving}>
-          <Save className="w-4 h-4 mr-1.5" />
+        <Button variant="outline" size="sm" className="rounded-md" onClick={saveConfig} disabled={saving}>
+          <Save className="w-4 h-4 mr-1.5 opacity-70" />
           {saving ? "저장 중..." : "저장"}
         </Button>
         <Button
+          variant="outline"
           size="sm"
-          className="rounded-none"
+          className="rounded-md"
           onClick={() => {
             setSearchGroup("")
             setSearchName("")
@@ -731,13 +728,14 @@ export function LayerInfoManager() {
             setDebouncedSearchName("")
           }}
         >
-          <RotateCcw className="w-4 h-4 mr-1.5" />
+          <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
           초기화
         </Button>
         <Button
           type="button"
+          variant="outline"
           size="sm"
-          className="rounded-none"
+          className="rounded-md"
           onClick={handleAutoApply}
           disabled={autoApplyLoading || styleLoading}
         >
@@ -745,32 +743,55 @@ export function LayerInfoManager() {
         </Button>
         <Button
           type="button"
-          size="sm"
-          className="rounded-none"
           variant="outline"
+          size="sm"
+          className="rounded-md"
           onClick={() => {
             window.open("/api/config/defineLayer/export", "_blank")
           }}
         >
-          <Download className="w-4 h-4 mr-1.5" />
+          <Download className="w-4 h-4 mr-1.5 opacity-70" />
           엑셀 다운로드
         </Button>
-        {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
+        {successMsg && <span className="text-sm text-green-600 dark:text-green-400">{successMsg}</span>}
         {error && <span className="text-sm text-destructive">{error}</span>}
         <span className="text-sm text-muted-foreground">
-          {config.tables.length} / {total}
+          {filteredTables.length} / {total}
         </span>
+        {displayCount < filteredTables.length && (
+          <span className="text-xs text-muted-foreground">
+            (표시: {displayedTables.length})
+          </span>
+        )}
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showPublicLayer}
+            onChange={(e) => setShowPublicLayer(e.target.checked)}
+            className="rounded border-input"
+          />
+          public_layer 포함
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showAllLayers}
+            onChange={(e) => setShowAllLayers(e.target.checked)}
+            className="rounded border-input"
+          />
+          전체 레이어 보기
+        </label>
         <Input
           placeholder="그룹명 검색"
           value={searchGroup}
           onChange={(e) => setSearchGroup(e.target.value)}
-          className="h-8 w-40 rounded-none text-sm"
+          className="h-8 w-40 rounded-md text-sm"
         />
         <Input
           placeholder="테이블명/한글명 검색"
           value={searchName}
           onChange={(e) => setSearchName(e.target.value)}
-          className="h-8 w-48 rounded-none text-sm"
+          className="h-8 w-48 rounded-md text-sm"
         />
       </div>
       <div
@@ -785,7 +806,7 @@ export function LayerInfoManager() {
               <div
                 key={col.id}
                 className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${col.kind === "field" && col.alignCenter ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
-                style={getColumnStyle(col.width)}
+                style={getColumnStyle(col)}
               >
                 {col.label}
               </div>
@@ -795,7 +816,7 @@ export function LayerInfoManager() {
 
         {/* 테이블 행 목록 */}
         <div className="w-full">
-          {filteredTables.map((t, listIndex) => {
+          {displayedTables.map((t, listIndex) => {
             const tableIdx = config.tables.indexOf(t)
             if (tableIdx < 0) return null
             const row = t as Record<string, unknown>
@@ -811,12 +832,12 @@ export function LayerInfoManager() {
             return (
               <div
                 key={String(row.define_table_name ?? listIndex)}
-                className={`flex border-b hover:bg-muted/50 ${hasCssStyle ? "bg-green-50/30 dark:bg-green-950/10" : ""}`}
+                className="flex border-b hover:bg-green-50/30 dark:hover:bg-green-950/10"
               >
                 {TABLE_COLUMNS.map((col, colIndex) => {
                   const isLast = colIndex === TABLE_COLUMNS.length - 1
                   const cellClass = `py-0 px-1 overflow-hidden border-r flex items-center min-h-[28px] min-w-0 ${isLast ? "border-r-0" : ""}`
-                  const cellStyle = getColumnStyle(col.width)
+                  const cellStyle = getColumnStyle(col)
 
                   if (col.kind === "table_status") {
                     return (
@@ -899,9 +920,9 @@ export function LayerInfoManager() {
                       <div key={col.id} className={`${cellClass} gap-1 flex-wrap`} style={cellStyle}>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs px-2"
+                          className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
                           disabled={actionLoading === tableName}
                           onClick={() => handleAttrAutoApplyOne(tableName)}
                         >
@@ -909,9 +930,9 @@ export function LayerInfoManager() {
                         </Button>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs px-2 text-red-600 hover:text-red-700 dark:text-red-400"
+                          className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
                           disabled={actionLoading === tableName}
                           onClick={() => openAttrDelete(tableName)}
                         >
@@ -925,9 +946,9 @@ export function LayerInfoManager() {
                       <div key={col.id} className={`${cellClass} gap-1 flex-wrap`} style={cellStyle}>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs px-2"
+                          className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
                           onClick={() =>
                             hasCssStyle && styleName
                               ? openEdit(tableName, styleName)
@@ -939,9 +960,9 @@ export function LayerInfoManager() {
                         {!hasCssStyle && (
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="h-7 text-xs px-2"
+                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
                             disabled={actionLoading === tableName}
                             onClick={() => handleAutoApplyOne(tableName)}
                           >
@@ -950,9 +971,9 @@ export function LayerInfoManager() {
                         )}
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs px-2 text-red-600 hover:text-red-700 dark:text-red-400"
+                          className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
                           disabled={actionLoading === tableName || !hasCssStyle}
                           onClick={() => openDelete(tableName)}
                           title={!hasCssStyle ? "스타일이 없습니다" : undefined}
@@ -972,7 +993,37 @@ export function LayerInfoManager() {
                       style={cellStyle}
                     >
                       {col.readonly ? (
-                        <span className="block truncate text-sm font-mono py-1">{val}</span>
+                        <span className="block min-w-0 w-full truncate text-sm font-mono py-1" title={val}>
+                          {val}
+                        </span>
+                      ) : col.schemaSelect ? (
+                        <select
+                          value={val || "layer"}
+                          onChange={(e) => updateCell(tableIdx, key, e.target.value)}
+                          className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
+                        >
+                          {SCHEMA_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : col.tableSourceSelect ? (
+                        <select
+                          value={
+                            String(row.define_table_source ?? "").toLowerCase() === "excel"
+                              ? "excel"
+                              : "shp"
+                          }
+                          onChange={(e) => updateCell(tableIdx, key, e.target.value)}
+                          className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
+                        >
+                          {TABLE_SOURCE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
                       ) : col.shapeType ? (
                         <select
                           value={val}
@@ -1017,14 +1068,9 @@ export function LayerInfoManager() {
             )
           })}
         </div>
-        {loadingMore && (
-          <div className="py-2 text-center text-sm text-muted-foreground border-t">
-            더 불러오는 중...
-          </div>
-        )}
-        {!loadingMore && hasMore && total > config.tables.length && (
-          <div className="py-1 text-center text-xs text-muted-foreground">
-            아래로 스크롤하면 더 불러옵니다
+        {hasMoreDisplay && (
+          <div className="py-1 text-center text-xs text-muted-foreground border-t">
+            아래로 스크롤하면 더 불러옵니다 ({displayedTables.length} / {filteredTables.length})
           </div>
         )}
       </div>
@@ -1064,10 +1110,10 @@ export function LayerInfoManager() {
             <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
+            <Button variant="outline" className="text-muted-foreground" onClick={() => setAddOpen(false)}>
               취소
             </Button>
-            <Button onClick={handleAddSubmit} disabled={formSaving}>
+            <Button variant="secondary" onClick={handleAddSubmit} disabled={formSaving}>
               {formSaving ? "저장 중..." : "추가"}
             </Button>
           </DialogFooter>
@@ -1107,13 +1153,10 @@ export function LayerInfoManager() {
             <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
+            <Button variant="outline" className="text-muted-foreground" onClick={() => setEditOpen(false)}>
               취소
             </Button>
-            <Button
-              onClick={handleEditSubmit}
-              disabled={formSaving || !editEditable}
-            >
+            <Button variant="secondary" onClick={handleEditSubmit} disabled={formSaving || !editEditable}>
               {formSaving ? "저장 중..." : "저장"}
             </Button>
           </DialogFooter>
@@ -1130,14 +1173,10 @@ export function LayerInfoManager() {
             레이어 &quot;{deleteTarget}&quot;에 적용된 스타일을 삭제하고 기본 스타일로 바꿉니다. 계속하시겠습니까?
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+            <Button variant="outline" className="text-muted-foreground" onClick={() => setDeleteOpen(false)}>
               취소
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteConfirm}
-              disabled={!!actionLoading}
-            >
+            <Button variant="outline" className="text-destructive/90 hover:bg-destructive/10" onClick={handleDeleteConfirm} disabled={!!actionLoading}>
               {actionLoading ? "삭제 중..." : "삭제"}
             </Button>
           </DialogFooter>
@@ -1154,14 +1193,10 @@ export function LayerInfoManager() {
             테이블 &quot;{attrDeleteTarget}&quot;의 속성 정의(필드 목록)를 삭제합니다. 계속하시겠습니까?
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAttrDeleteOpen(false)}>
+            <Button variant="outline" className="text-muted-foreground" onClick={() => setAttrDeleteOpen(false)}>
               취소
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleAttrDeleteConfirm}
-              disabled={!!actionLoading}
-            >
+            <Button variant="outline" className="text-destructive/90 hover:bg-destructive/10" onClick={handleAttrDeleteConfirm} disabled={!!actionLoading}>
               {actionLoading ? "삭제 중..." : "삭제"}
             </Button>
           </DialogFooter>

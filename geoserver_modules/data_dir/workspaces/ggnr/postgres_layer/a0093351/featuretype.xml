@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:-7f60</id>
+  <name>a0093351</name>
+  <nativeName>a0093351</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>a0093351</title>
+  <keywords>
+    <string>features</string>
+    <string>a0093351</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>0.0</minx>
+    <maxx>-1.0</maxx>
+    <miny>0.0</miny>
+    <maxy>-1.0</maxy>
+    <crs class="projected">EPSG:5187</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>124.84847767680762</minx>
+    <maxx>124.84848865053446</maxx>
+    <miny>33.47495973610326</miny>
+    <maxy>33.474968932506</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

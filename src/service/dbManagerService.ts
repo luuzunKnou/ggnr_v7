@@ -2080,10 +2080,11 @@ export async function getDbTableColumnList(params?: DbConnectionParams): Promise
       // 테이블별 실제 PK 존재 여부를 한 번의 쿼리로 검증
       tablePkStatus = await queryActualPrimaryKeys(client, 'public');
 
+      // PostGIS 확장 테이블 제외 (DB Manager 비교 대상에서 제외 → 불일치로 안 뜸)
       const tableRes = await client.query<{ table_name: string }>(
         `SELECT table_name FROM information_schema.tables
          WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-           AND table_name <> 'spatial_ref_sys'
+           AND table_name NOT IN ('spatial_ref_sys', 'geometry_columns', 'geography_columns', 'raster_columns', 'raster_overviews')
          ORDER BY table_name`
       );
       for (const { table_name: table } of tableRes.rows) {
@@ -2118,6 +2119,53 @@ export async function getDbTableColumnList(params?: DbConnectionParams): Promise
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { rows: [], error: msg };
+  }
+}
+
+/**
+ * 스키마에 정의된 테이블/컬럼 코멘트를 현재 DB에 일괄 적용 (push 후 호출용)
+ */
+export async function applyAllSchemaComments(params?: DbConnectionParams): Promise<{ applied: number; error?: string }> {
+  const defaultCfg = getDefaultDbConfig(undefined) as unknown as DbConnectionParams;
+  const conn = params?.host ? params : defaultCfg;
+  if (!conn?.host || !conn?.database) {
+    return { applied: 0, error: '연결 정보 없음' };
+  }
+  const connParams: DbConnectionParams = {
+    host: conn.host,
+    port: conn.port ?? 5432,
+    database: conn.database,
+    username: conn.username ?? '',
+    password: conn.password,
+  };
+  let applied = 0;
+  try {
+    await withClient(connParams, async (client) => {
+      const tables = getSchemaDefinedTables();
+      for (const { schema, table } of tables) {
+        const tableComment = getSchemaTableComment(schema, table);
+        if (tableComment && tableComment.trim()) {
+          const escaped = tableComment.replace(/'/g, "''");
+          await client.query(`COMMENT ON TABLE ${fq(schema, table)} IS '${escaped}'`);
+          applied++;
+        }
+        const cols = getSchemaDefinedColumns(schema, table);
+        if (cols) {
+          for (const col of cols) {
+            const comment = getSchemaColumnComment(schema, table, col.name) ?? col.comment;
+            if (comment && String(comment).trim()) {
+              const escaped = String(comment).replace(/'/g, "''");
+              await client.query(`COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(col.name)} IS '${escaped}'`);
+              applied++;
+            }
+          }
+        }
+      }
+    });
+    return { applied };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { applied: 0, error: msg };
   }
 }
 

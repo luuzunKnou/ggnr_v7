@@ -1,0 +1,19 @@
+<layer>
+  <name>c9413426</name>
+  <id>LayerInfoImpl--60cb52a7:19cdc4f170d:-7f33</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--60cb52a7:19cdc4f170d:-7fc7</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--60cb52a7:19cdc4f170d:-7f34</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-12 04:58:07.610 UTC</dateCreated>
+  <dateModified>2026-03-12 04:58:07.745 UTC</dateModified>
+</layer>

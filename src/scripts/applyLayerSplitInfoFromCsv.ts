@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { reorderDefineLayerTablesArray } from "../lib/defineLayerTableRowOrder";
 
 type CsvRow = string[];
 type TableRow = Record<string, unknown>;
@@ -98,7 +99,8 @@ function main() {
     matched++;
   }
 
-  fs.writeFileSync(tablesPath, `${JSON.stringify(tableRows, null, 2)}\n`, "utf8");
+  const reordered = reorderDefineLayerTablesArray(tableRows);
+  fs.writeFileSync(tablesPath, `${JSON.stringify(reordered, null, 2)}\n`, "utf8");
 
   console.log("[applyLayerSplitInfoFromCsv] done");
   console.log(`- csv rows: ${rows.length - 1}`);

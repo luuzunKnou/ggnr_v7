@@ -1,22 +1,16 @@
 <layer>
   <name>landown_gasstation</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7d16</id>
+  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55ed</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7b1b</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7d17</id>
+    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55ee</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">jimok = &apos;12&apos;</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:00:59.234 UTC</dateCreated>
-  <dateModified>2026-02-11 16:00:59.245 UTC</dateModified>
+  <dateCreated>2026-03-07 11:06:46.487 UTC</dateCreated>
 </layer>

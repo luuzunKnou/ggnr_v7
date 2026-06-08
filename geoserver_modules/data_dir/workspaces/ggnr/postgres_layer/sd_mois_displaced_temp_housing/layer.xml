@@ -1,0 +1,19 @@
+<layer>
+  <name>sd_mois_displaced_temp_housing</name>
+  <id>LayerInfoImpl--2053d3:19d606c4ff1:30e4</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--2053d3:19d606c4ff1:30f7</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30e3</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-08 11:06:32.482 UTC</dateCreated>
+  <dateModified>2026-04-08 11:06:53.94 UTC</dateModified>
+</layer>

@@ -1,0 +1,19 @@
+<layer>
+  <name>20260419_ad_sgm_2025</name>
+  <id>LayerInfoImpl--4fde225b:19da052eb3b:-7f44</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4fde225b:19da052eb3b:-7f43</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4fde225b:19da052eb3b:-7f45</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-04-19 11:08:11.318 UTC</dateCreated>
+  <dateModified>2026-04-19 11:08:11.431 UTC</dateModified>
+</layer>

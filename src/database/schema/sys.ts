@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, boolean } from 'drizzle-orm/pg-core';
 
 export const sys = pgTable('sys', {
   sysKey: serial('sys_key').primaryKey().notNull(),
@@ -9,6 +9,7 @@ export const sys = pgTable('sys', {
   sysCol: varchar('sys_col'),
   sysLink: varchar('sys_link'),
   sysDetail: varchar('sys_detail'),
+  sysIsPrivate: boolean('sys_is_private').default(false),
 });
 
 /** 테이블 코멘트 (동기화·DB COMMENT ON TABLE 에 사용) */
@@ -24,6 +25,7 @@ export const sysColumnComments: Record<string, string> = {
   sys_col: '시스템 색상',
   sys_link: '바로가기 주소',
   sys_detail: '시스템 상세',
+  sys_is_private: '비공개 시스템',
 };
 
 export type Sys = typeof sys.$inferSelect;

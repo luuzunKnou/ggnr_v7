@@ -1,22 +1,16 @@
 <layer>
   <name>landown_sidoyuji</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7e3a</id>
+  <id>LayerInfoImpl--3f73bcf1:19cc802047a:3068</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7bad</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7e3b</id>
+    <id>FeatureTypeInfoImpl--3f73bcf1:19cc802047a:3067</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">a7 = &apos;04&apos;</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:00:37.109 UTC</dateCreated>
-  <dateModified>2026-02-11 16:00:37.207 UTC</dateModified>
+  <dateCreated>2026-03-07 11:15:09.394 UTC</dateCreated>
 </layer>

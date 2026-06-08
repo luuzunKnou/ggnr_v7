@@ -1,0 +1,3 @@
+@echo off 
+set PORT=!APP_PORT! 
+call npm run start -- !SB_PROJECT! !SB_TYPE!

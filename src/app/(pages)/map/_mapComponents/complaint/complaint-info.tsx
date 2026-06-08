@@ -31,6 +31,7 @@ interface ComplaintInfoProps {
   complaint: CompUI;
   onSave?: (values: ComplaintFormValues) => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
+  onClose?: () => void;
   saving?: boolean;
   deleting?: boolean;
 }
@@ -80,7 +81,7 @@ function InfoItemWithInput({
   );
 }
 
-export function ComplaintInfo({ complaint, onSave, onDelete, saving = false, deleting = false }: ComplaintInfoProps) {
+export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = false, deleting = false }: ComplaintInfoProps) {
   const [form, setForm] = useState<ComplaintFormValues>(() => toFormValues(complaint));
 
   useEffect(() => {
@@ -164,6 +165,18 @@ export function ComplaintInfo({ complaint, onSave, onDelete, saving = false, del
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-2">
+        {onDelete && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDelete}
+            disabled={deleting}
+            className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-destructive hover:bg-destructive/15 hover:text-destructive"
+          >
+            <X className="h-3 w-3" />
+            {deleting ? '삭제 중…' : '삭제'}
+          </Button>
+        )}
         {onSave && (
           <Button
             size="sm"
@@ -175,16 +188,15 @@ export function ComplaintInfo({ complaint, onSave, onDelete, saving = false, del
             {saving ? '저장 중…' : '저장'}
           </Button>
         )}
-        {onDelete && (
+        {onClose && (
           <Button
             size="sm"
             variant="outline"
-            onClick={onDelete}
-            disabled={deleting}
-            className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-destructive hover:bg-destructive/15 hover:text-destructive"
+            onClick={onClose}
+            className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
             <X className="h-3 w-3" />
-            {deleting ? '삭제 중…' : '삭제'}
+            닫기
           </Button>
         )}
       </div>

@@ -1,0 +1,19 @@
+<layer>
+  <name>river_plan_gd_ps_cib</name>
+  <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7e02</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4e575fd4:19d2eef647c:-7de7</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4e575fd4:19d2eef647c:-7e03</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-03-28 05:56:25.176 UTC</dateCreated>
+  <dateModified>2026-03-28 06:00:16.134 UTC</dateModified>
+</layer>
