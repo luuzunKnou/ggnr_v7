@@ -1,9 +1,9 @@
 1. 공간누리 v7 기술스택
-  Client : Cecium 3D, React 19, OpenLayers
-  BackEnd :  Next.js, Geoserver
-  Database : PostGis
-  Sub Module : Drizzle ORM, Phyton, GDAL, QCAD, blender
-  IDE : Cursor IDE
+  * Client : Cecium 3D, React 19, OpenLayers
+  * BackEnd :  Next.js, Geoserver
+  * Database : PostGis
+  * Sub Module : Drizzle ORM, Phyton, GDAL, QCAD, blender
+  * IDE : Cursor IDE
 
 2. 디자인 및 UI/UX 개선 : Standard 중심의 기능구현에서 기능별 Custom 중심의 기능구현으로 구현방식 전환
   * Standard 중심의 기능구현 : 투입인력대비 개발속도가 빠르고 세팅만으로 기능구현이 가능하지만 정해진 UI에 데이터를 표현하므로 사용성이 떨어짐
