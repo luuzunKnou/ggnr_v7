@@ -66,8 +66,11 @@ function saveRecentQueries(queries: string[]) {
 
 export function MapSearchBar({
   listPanelWidth = 0,
+  onInputBottomChange,
 }: {
   listPanelWidth?: number;
+  /** viewport 기준 주소검색 입력란 하단(px) — 플로팅 UI 정렬용 */
+  onInputBottomChange?: (bottomPx: number) => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -91,6 +94,22 @@ export function MapSearchBar({
   const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
   const centerPlaceholderReqIdRef = useRef(0);
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
+
+  useEffect(() => {
+    const el = addressSearchWrapperRef.current;
+    if (!el || !onInputBottomChange) return;
+    const report = () => {
+      onInputBottomChange(el.getBoundingClientRect().bottom);
+    };
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    window.addEventListener('resize', report);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', report);
+    };
+  }, [onInputBottomChange, listPanelWidth]);
 
   const addRecentQuery = useCallback((trimmed: string) => {
     if (!trimmed) return;

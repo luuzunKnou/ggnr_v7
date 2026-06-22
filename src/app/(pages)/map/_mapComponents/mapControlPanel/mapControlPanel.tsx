@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Printer,
   RotateCcw,
+  Banknote,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -149,6 +150,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
     id: "views",
     items: [
       { id: "street-view", icon: PersonStanding, label: "거리뷰", allowMultiple: true },
+      { id: "official-land-price", icon: Banknote, label: "공시지가", allowMultiple: true },
     ],
   },
   {

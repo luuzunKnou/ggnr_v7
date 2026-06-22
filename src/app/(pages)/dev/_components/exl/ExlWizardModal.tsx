@@ -243,6 +243,12 @@ function normalizeExcelAddressForGeocode(s: string): string {
   // "716-29외2번지" → "716-29번지" (부번 뒤의 외N만; "29"만 잡아 29번지로 바뀌는 오류 방지)
   t = t.replace(/([0-9]+(?:-[0-9]+)?)\s*외\s*\d+\s*(?:번지|필지)/gi, '$1번지');
   t = t.replace(/\s*외\s*\d+\s*(?:번지|필지)\s*/gi, ' ');
+  // "번지선", "하천", "하천부지" 같은 지번 뒤 설명어 제거
+  t = t.replace(/번지선/gi, '번지');
+  t = t.replace(/\s*하천부지\s*/gi, ' ');
+  t = t.replace(/\s*하천\s*/gi, ' ');
+  // 5자리 이상 숫자는 본번·부번이 아니므로 제거 (주민번호·관리번호 등 오염 방지)
+  t = t.replace(/\b\d{5,}\b/g, '');
   return t.replace(/\s{2,}/g, ' ').trim();
 }
 
@@ -275,6 +281,12 @@ function isLikelyMultiParcelAddress(raw: string): boolean {
   if (countRegexMatches(t, /번지/gi) >= 2) return true;
   // 공백으로 이어진 지번 나열(예: 781-4 702-2)
   if (/\d+\s*-\s*\d+\s+\d+\s*-\s*\d+/.test(t)) return true;
+  // 숫자-(한글/영문 단어 1개 이상)-숫자 → 지번이 여러 개로 추정 (공백 포함 멀티워드도 감지)
+  if (/\d+(?:\s+[가-힣A-Za-z]+)+\s+\d+/.test(t)) return true;
+  // "번지" 뒤에 읍/면/동/리가 또 나오면 새 필지 주소가 시작됨 (예: "236번지 입암면 금학리 1203")
+  if (/번지\s+[가-힣]+(?:읍|면|동|리)/.test(t)) return true;
+  // 시·도 행정구역 단위(도/광역시/특별시 등)가 2번 이상 → 전체 주소가 반복됨 (예: "...도곡리 630 경상북도 영양군...")
+  if (countRegexMatches(t, /[가-힣]+(?:도|광역시|특별시|특별자치시|특별자치도)/g) >= 2) return true;
   return false;
 }
 
@@ -1376,7 +1388,10 @@ export function ExlWizardModal({ open, onOpenChange, relativePath, onSuccess }: 
                         4. "경북 영양군 수비면 수하리 781-4, 702-2"처럼 읍면동·리는 공통이고 지번만 콤마로 붙은 경우, 공통 접두를 각 필지에 복제해
                            ["경북 영양군 수비면 수하리 781-4", "경북 영양군 수비면 수하리 702-2"] 형태로 반환한다.
                         5. 응답은 JSON 배열만 출력한다. 설명/코드펜스 금지.
-                        6. 주소가 있으면 빈 배열을 반환하지 않는다. 단일 필지면 길이 1 배열로 반환한다.`;
+                        6. 주소가 있으면 빈 배열을 반환하지 않는다. 단일 필지면 길이 1 배열로 반환한다.
+                        7. "652번지 5호"처럼 "번지" 뒤에 오는 "N호"는 호수/건물번호이므로 부번(-N)으로 보지 말고 제외한다. "652번지"로만 반환하고 절대 "652-5"로 만들지 않는다.
+                        8. "번지" 뒤에 읍/면/동/리가 다시 나오면 새 필지의 시작으로 보고 분리한다. (예: "입암면 금학리 236번지 입암면 금학리 1203" → ["...입암면 금학리 236번지", "...입암면 금학리 1203번지"])
+                        9. "하천", "하천부지", "번지선" 등 지번이 아닌 설명어는 제거한다.`;
 
     const splitCfg =
       parcelSelectMode === 'splitColumns'
@@ -1628,10 +1643,31 @@ export function ExlWizardModal({ open, onOpenChange, relativePath, onSuccess }: 
       const addresses = (addressesByRow.get(i) ?? []).map((a) => normalizeExcelAddressForGeocode(a)).filter(Boolean);
       rawText = unifiedAddressByRow.get(i) ?? '';
       const objectRawText = objectUnifiedAddressByRow.get(i) ?? '';
-      const mulgunjis = (mulgunjiByRow.get(i) ?? [])
+      const mulgunjiAddrs = (mulgunjiByRow.get(i) ?? [])
         .map((a) => normalizeExcelAddressForGeocode(a))
-        .filter(Boolean)
-        .map((address) => ({ address }));
+        .filter(Boolean);
+      const mulgunjis: { address: string; x?: number; y?: number }[] = [];
+      for (const addr of mulgunjiAddrs) {
+        if (!addr.trim()) continue;
+        try {
+          let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
+          if (!coord.ok) {
+            coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
+          }
+          if (coord.ok) {
+            mulgunjis.push({ address: addr, x: coord.lon, y: coord.lat });
+          } else {
+            geocodeFailCount++;
+            mulgunjis.push({ address: addr });
+            geocodeFailReasons.push({ address: addr, reason: coord.message || '물건지 GetCoord 실패' });
+          }
+        } catch (e: unknown) {
+          geocodeFailCount++;
+          mulgunjis.push({ address: addr });
+          const msg = e instanceof Error ? e.message : String(e);
+          geocodeFailReasons.push({ address: addr, reason: msg || '물건지 API 오류' });
+        }
+      }
 
       const parcels: { address: string; x?: number; y?: number }[] = [];
       for (const addr of addresses) {

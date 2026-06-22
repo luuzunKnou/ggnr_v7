@@ -5,6 +5,7 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
+import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
@@ -53,15 +54,6 @@ function pickFirstExisting(columns: Set<string>, candidates: readonly string[]):
     if (columns.has(c)) return c;
   }
   return null;
-}
-
-/** 통합 주소에서 앞의 두 토큰(시도·시군구 추정) 제거 */
-function sqlStripSidoSgg(addrExpr: string): string {
-  return `trim(both from regexp_replace(COALESCE(${addrExpr}, '')::text, '^[^\\s]+\\s+[^\\s]+\\s*', '', 'g'))`;
-}
-
-function stripSidoSggText(raw: string): string {
-  return String(raw ?? '').trim().replace(/^[^\s]+\s+[^\s]+\s*/, '').trim();
 }
 
 type ColumnIndex = {
@@ -173,7 +165,7 @@ export async function getPublicLandList(params?: { keyword?: string }) {
     selectCols.push(map.ownershipType ? `${quoteIdent(map.ownershipType)}::text AS "ownershipType"` : `''::text AS "ownershipType"`);
     selectCols.push(
       map.address
-        ? `${sqlStripSidoSgg(`${quoteIdent(map.address)}::text`)} AS "address"`
+        ? `${quoteIdent(map.address)}::text AS "address"`
         : `''::text AS "address"`
     );
     selectCols.push(map.useStart ? `${quoteIdent(map.useStart)}::text AS "useStart"` : `''::text AS "useStart"`);
@@ -202,7 +194,7 @@ export async function getPublicLandList(params?: { keyword?: string }) {
       rows: rows.map((r) => ({
         rowKey: String(r.rowKey ?? '').trim(),
         ownershipType: String(r.ownershipType ?? '').trim(),
-        address: String(r.address ?? '').trim(),
+        address: formatAddressStripSidoSigungu(r.address),
         useStart: formatToYmdOrText(r.useStart),
         useEnd: formatToYmdOrText(r.useEnd),
       })),
@@ -317,7 +309,7 @@ async function getPublicLandParcelsByParentId(parentId: string): Promise<{
 
   const sqlText = `
     SELECT
-      ${sqlStripSidoSgg(`jj.${oq('parcel_address')}::text`)} AS addr
+      jj.${oq('parcel_address')}::text AS addr
       ${extentSelect}
     FROM "${safeSchema}"."${safeTable}" jj
     WHERE jj.${oq('parent_id')}::text = '${esc(parentId)}'
@@ -329,7 +321,7 @@ async function getPublicLandParcelsByParentId(parentId: string): Promise<{
     const parcelItems = (res.rows ?? [])
       .map((r) => {
         const row = r as { addr?: unknown; xmin?: unknown; ymin?: unknown; xmax?: unknown; ymax?: unknown };
-        const address = String(row.addr ?? '').trim();
+        const address = formatAddressStripSidoSigungu(String(row.addr ?? '').trim());
         if (!address) return null;
         const xmin = Number(row.xmin);
         const ymin = Number(row.ymin);
@@ -416,7 +408,7 @@ export async function getPublicLandDetailById(params?: { id?: string }): Promise
     const parcels = parcelRaw
       ? parcelRaw
           .split(/[\n,]/g)
-          .map((x) => stripSidoSggText(x))
+          .map((x) => formatAddressStripSidoSigungu(x))
           .filter(Boolean)
       : [];
     const uniqueParcels = [...new Set(parcels)];

@@ -7,6 +7,11 @@ import { cn } from "@/lib/utils";
 import { tryFormatToYmd } from "@/lib/formatDateYmd";
 import { useMapContext } from "../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../_mapComponents/config/mapAutoNavigation";
+import {
+  LAYER_ROW_NEW_ID,
+  LayerRowAddButton,
+} from "../../_mapComponents/layerRowEdit";
 import { BUILD_PUBLIC_LAND_WMS_LAYER_ID } from "./buildPublicLandLayerId";
 
 type ListRow = {
@@ -21,9 +26,17 @@ type Props = {
   onClose: () => void;
   selectedId: string | null;
   onSelectId: (id: string) => void;
+  refreshKey?: number;
+  onAdd?: () => void;
 };
 
-export function BuildPublicLandListPanel({ onClose, selectedId, onSelectId }: Props) {
+export function BuildPublicLandListPanel({
+  onClose,
+  selectedId,
+  onSelectId,
+  refreshKey = 0,
+  onAdd,
+}: Props) {
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -88,27 +101,10 @@ export function BuildPublicLandListPanel({ onClose, selectedId, onSelectId }: Pr
           if (prev.has(lid)) return prev;
           return new Set(prev).add(lid);
         });
-        const view = map.getView();
-        const [xmin, ymin, xmax, ymax] = ext.map((v) => Number(v));
-        if (![xmin, ymin, xmax, ymax].every((v) => Number.isFinite(v))) {
-          window.alert("위치 정보가 올바르지 않습니다.");
-          return;
-        }
-        const w = Math.abs(xmax - xmin);
-        const h = Math.abs(ymax - ymin);
-        if (w < 2 && h < 2) {
-          view.animate({
-            center: [(xmin + xmax) / 2, (ymin + ymax) / 2],
-            zoom: 15,
-            duration: 450,
-          });
-        } else {
-          view.fit([xmin, ymin, xmax, ymax], {
-            padding: [80, 80, 80, 80],
-            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-            duration: 500,
-          });
-        }
+        scheduleFitMapToExtent3857(map, ext as number[], {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
       } catch {
         window.alert("지도 이동에 실패했습니다.");
       } finally {
@@ -152,7 +148,7 @@ export function BuildPublicLandListPanel({ onClose, selectedId, onSelectId }: Pr
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [keyword]);
+  }, [keyword, refreshKey]);
 
   const getUseEndStatus = useCallback((raw: string): "expired" | "soon" | "normal" => {
     const ymd = tryFormatToYmd(raw);
@@ -176,15 +172,23 @@ export function BuildPublicLandListPanel({ onClose, selectedId, onSelectId }: Pr
     <div className="flex min-h-0 h-full flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">국공유지</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-          title="닫기"
-          aria-label="닫기"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {onAdd && (
+            <LayerRowAddButton
+              onClick={() => onAdd()}
+              disabled={selectedId === LAYER_ROW_NEW_ID}
+            />
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            title="닫기"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="shrink-0 border-b border-slate-100 px-3 py-2">

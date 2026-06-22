@@ -29,6 +29,9 @@ export function useMapInstance(
   const mapInstanceRef = useRef<Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // 초기 생성 시 한 번만 사용하는 값이므로 ref에 캡처 — prop 참조가 매 서버 렌더마다 바뀌어도 맵을 재생성하지 않음
+  const initialDefaultCenterRef = useRef(defaultCenterWgs84);
+
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
@@ -36,9 +39,10 @@ export function useMapInstance(
     const persisted = loadPersistedMapState(projectName);
 
     const to3857 = getTransform('EPSG:4326', 'EPSG:3857');
+    const initialDefaultCenter = initialDefaultCenterRef.current;
     const defaultCenter = to3857([
-      defaultCenterWgs84?.lon ?? DEFAULT_CENTER_LON,
-      defaultCenterWgs84?.lat ?? DEFAULT_CENTER_LAT,
+      initialDefaultCenter?.lon ?? DEFAULT_CENTER_LON,
+      initialDefaultCenter?.lat ?? DEFAULT_CENTER_LAT,
     ]);
 
     const initialCenter = persisted ? [persisted.centerX, persisted.centerY] : defaultCenter;
@@ -88,7 +92,9 @@ export function useMapInstance(
       if (externalMapRef) externalMapRef.current = null;
       setMapReady(false);
     };
-  }, [mapRef, externalMapRef, defaultCenterWgs84, projectName]);
+  // defaultCenterWgs84는 초기값 전용(ref에 캡처) — page.tsx 서버 재렌더 시 새 객체가 와도 맵 재생성 안 함
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapRef, externalMapRef, projectName]);
 
   return { mapInstanceRef, mapReady };
 }

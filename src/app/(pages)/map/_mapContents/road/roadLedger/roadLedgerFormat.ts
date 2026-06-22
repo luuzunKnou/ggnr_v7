@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { formatFiniteNumberKoTrimZeros } from "@/lib/formatDetailScalar";
+import { formatAddressStripSidoSigungu } from "@/lib/formatAddressStripAdmin";
 import { darkerHex } from "@/lib/geoserverStyleUtils";
 
 export type RoadLedgerNameSectLabelOptions = {
@@ -93,23 +94,11 @@ function isLikelyPlainNumericString(s: string): boolean {
   return true;
 }
 
-const RE_ADDR_SIDO = /^([가-힣]+)(특별자치도|특별자치시|특별시|광역시|도)(\s+|$)/u;
-const RE_ADDR_SIGUNGU = /^([가-힣]+)(시|군|구)(\s+|$)/u;
-
 /**
  * 시설 ADDRESS 등: 문자열 앞의 시·도·시·군·구 행정구역명을 제거한 나머지(읍면동·도로명 등).
- * 인식 실패 시 원문을 그대로 둔다.
  */
 export function formatRoadLedgerAddressStripAdminPrefix(raw: unknown): string {
-  const original = String(raw ?? "").trim();
-  if (!original) return "";
-  let s = original.replace(RE_ADDR_SIDO, "").trim();
-  for (let i = 0; i < 6; i++) {
-    const next = s.replace(RE_ADDR_SIGUNGU, "").trim();
-    if (next === s) break;
-    s = next;
-  }
-  return s.length > 0 ? s : original;
+  return formatAddressStripSidoSigungu(raw);
 }
 
 /** 도로종류(ROAD_RANK) — 한글 표기 + 목록 벳지 기준색(#RRGGBB) */

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, FolderUp, Loader2, RefreshCw, Upload, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Check, Loader2, RefreshCw, X } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/shadcnComponents/ui/card';
 import {
@@ -12,25 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog';
-import { Input } from '@/app/shadcnComponents/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/shadcnComponents/ui/table';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { LasFileUploaderContent } from './LasFileUploaderContent';
 import { OrthophotoManagerContent } from './OrthophotoManagerContent';
-import { useChunkedUpload } from './useChunkedUpload';
+import { ExcelToDbWizardModal } from './exl/ExcelToDbWizardModal';
+import { ShpToDbWizardModal } from './shp/ShpToDbWizardModal';
 
-type ConverterTabId = 'lasToPnts' | 'objToB3dm' | 'tifToJpg';
-
-type UploadBatchState = {
-  running: boolean;
-  total: number;
-  current: number;
-  success: number;
-  fail: number;
-  currentFile: string;
-  message: string | null;
-};
+type ConverterTabId = 'shpToDb' | 'excelToDb' | 'pdfToJpg' | 'tifToJpg' | 'objToB3dm' | 'lasToPnts';
 
 type ObjDatasetRow = {
   datasetName: string;
@@ -57,9 +47,19 @@ const OBJ_SOURCE_CRS_OPTIONS = [
 
 const TAB_ITEMS: { id: ConverterTabId; label: string; description: string }[] = [
   {
-    id: 'lasToPnts',
-    label: 'LAS to PNTS',
-    description: '기존 LAS 업로드/변환 이력을 그대로 사용합니다.',
+    id: 'shpToDb',
+    label: 'SHP to DB',
+    description: 'shp_data 폴더의 SHP를 DB 테이블로 적재합니다.',
+  },
+  {
+    id: 'excelToDb',
+    label: 'Excel to DB',
+    description: 'excel_data 폴더의 Excel을 DB 테이블로 적재합니다.',
+  },
+  {
+    id: 'tifToJpg',
+    label: 'TIF to JPG',
+    description: 'GeoTIFF 그룹 업로드 후 기존 정사영상 타일 변환을 이어서 사용합니다.',
   },
   {
     id: 'objToB3dm',
@@ -67,21 +67,16 @@ const TAB_ITEMS: { id: ConverterTabId; label: string; description: string }[] = 
     description: '3dtiles_obj 하위 폴더를 골라 3dtiles_b3dm 으로 변환합니다.',
   },
   {
-    id: 'tifToJpg',
-    label: 'TIF to JPG',
-    description: 'GeoTIFF 그룹 업로드 후 기존 정사영상 타일 변환을 이어서 사용합니다.',
+    id: 'lasToPnts',
+    label: 'LAS to PNTS',
+    description: '기존 LAS 업로드/변환 이력을 그대로 사용합니다.',
+  },
+  {
+    id: 'pdfToJpg',
+    label: 'PDF to JPG',
+    description: 'PDFToJPG/{작업명}/PDF → JPG/{파일명}/page-001.jpg 로 변환합니다.',
   },
 ];
-
-const EMPTY_UPLOAD_BATCH: UploadBatchState = {
-  running: false,
-  total: 0,
-  current: 0,
-  success: 0,
-  fail: 0,
-  currentFile: '',
-  message: null,
-};
 
 function formatModified(iso?: string): string {
   if (!iso) return '—';
@@ -90,14 +85,6 @@ function formatModified(iso?: string): string {
   } catch {
     return iso;
   }
-}
-
-function getWebkitRelativePath(file: File): string {
-  return ((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name).replace(/\\/g, '/');
-}
-
-function isTifFile(file: File): boolean {
-  return /\.(tif|tiff)$/i.test(file.name);
 }
 
 function FileConverterTabButton({
@@ -129,174 +116,8 @@ function FileConverterTabButton({
 }
 
 function TifToJpgUploadPanel() {
-  const [groupName, setGroupName] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [batch, setBatch] = useState<UploadBatchState>(EMPTY_UPLOAD_BATCH);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
-  const { state: uploadState, upload, cancel, reset } = useChunkedUpload();
-
-  useEffect(() => {
-    folderInputRef.current?.setAttribute('webkitdirectory', '');
-  }, []);
-
-  const runUpload = useCallback(
-    async (fileList: FileList | null, mode: 'files' | 'folder') => {
-      const trimmedGroup = groupName.trim();
-      if (!trimmedGroup) {
-        setMessage('업로드할 그룹명을 먼저 입력하세요.');
-        return;
-      }
-      const files = Array.from(fileList ?? []).filter(isTifFile);
-      if (!files.length) {
-        setMessage('업로드할 tif/tiff 파일이 없습니다.');
-        return;
-      }
-      setMessage(null);
-      setBatch({
-        running: true,
-        total: files.length,
-        current: 0,
-        success: 0,
-        fail: 0,
-        currentFile: '',
-        message: null,
-      });
-      let success = 0;
-      let fail = 0;
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index]!;
-        const relative = mode === 'folder' ? getWebkitRelativePath(file) : file.name;
-        setBatch((prev) => ({
-          ...prev,
-          current: index + 1,
-          currentFile: relative,
-        }));
-        const result = await upload(file, 'satelliteTif', {
-          satelliteTifSavePath: `${trimmedGroup}/${relative}`,
-        });
-        if (result?.error === '취소됨') {
-          fail += 1;
-          break;
-        }
-        if (result?.error) fail += 1;
-        else success += 1;
-      }
-      setBatch({
-        running: false,
-        total: files.length,
-        current: files.length,
-        success,
-        fail,
-        currentFile: '',
-        message: `업로드 완료: 성공 ${success}, 실패 ${fail}`,
-      });
-      setMessage(`tiles_tif/${trimmedGroup} 업로드가 완료되었습니다.`);
-      reset();
-    },
-    [groupName, reset, upload]
-  );
-
   return (
     <div className="flex flex-col gap-3">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">GeoTIFF 업로드</CardTitle>
-          <CardDescription>
-            그룹 폴더명은 보통 `satellite_YYYY_CRS_레이어명` 형식을 권장합니다.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">그룹명</label>
-              <Input
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                placeholder="satellite_2025_5181_building"
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={batch.running}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              파일 업로드
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => folderInputRef.current?.click()}
-              disabled={batch.running}
-            >
-              <FolderUp className="mr-2 h-4 w-4" />
-              폴더 업로드
-            </Button>
-          </div>
-
-          <div className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
-            <div>입력 경로: `tiles_tif/{groupName || '{groupName}'}/.../*.tif`</div>
-            <div>출력 경로: `tiles_jpg/{groupName || '{groupName}'}/z/x/y.jpg`</div>
-          </div>
-
-          {batch.running && (
-            <div className="rounded border border-border bg-muted/30 px-3 py-2 text-xs">
-              업로드 진행 {batch.current}/{batch.total}
-              {batch.currentFile ? ` · ${batch.currentFile}` : ''}
-              {uploadState.status === 'uploading' ? ` · ${uploadState.progress}%` : ''}
-            </div>
-          )}
-          {batch.message && (
-            <div className="rounded border border-green-600/40 bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300">
-              {batch.message}
-            </div>
-          )}
-          {message && (
-            <div className="rounded border border-border px-3 py-2 text-xs text-muted-foreground">
-              {message}
-            </div>
-          )}
-          {uploadState.error && (
-            <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {uploadState.error}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            {batch.running && (
-              <Button type="button" variant="outline" size="sm" onClick={cancel}>
-                업로드 취소
-              </Button>
-            )}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".tif,.tiff"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              void runUpload(e.target.files, 'files');
-              e.target.value = '';
-            }}
-          />
-          <input
-            ref={folderInputRef}
-            type="file"
-            accept=".tif,.tiff"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              void runUpload(e.target.files, 'folder');
-              e.target.value = '';
-            }}
-          />
-        </CardContent>
-      </Card>
-
       <div className="min-h-0 overflow-hidden rounded-lg border border-border">
         <OrthophotoManagerContent />
       </div>
@@ -323,10 +144,8 @@ function ObjToB3dmTab() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [convertingDataset, setConvertingDataset] = useState<string | null>(null);
-  const [convertingChunkDataset, setConvertingChunkDataset] = useState<string | null>(null);
   const [crsModalOpen, setCrsModalOpen] = useState(false);
   const [pendingDatasetName, setPendingDatasetName] = useState<string | null>(null);
-  const [pendingChunkConversion, setPendingChunkConversion] = useState(false);
   const [selectedSourceCrs, setSelectedSourceCrs] = useState<string>(OBJ_SOURCE_CRS_OPTIONS[0].value);
 
   const refresh = useCallback(async () => {
@@ -363,13 +182,8 @@ function ObjToB3dmTab() {
 
   const selectedRow = rows.find((row) => row.datasetName === selectedDatasetName) ?? null;
 
-  const runConversion = useCallback(async (datasetName: string, sourceCrs: string, chunkSize?: 128) => {
-    const useChunk = chunkSize === 128;
-    if (useChunk) {
-      setConvertingChunkDataset(datasetName);
-    } else {
-      setConvertingDataset(datasetName);
-    }
+  const runConversion = useCallback(async (datasetName: string, sourceCrs: string) => {
+    setConvertingDataset(datasetName);
     setError(null);
     setMessage(null);
     try {
@@ -379,43 +193,37 @@ function ObjToB3dmTab() {
         params: {
           datasetName,
           sourceCrs,
-          ...(useChunk ? { chunkSize: 128 } : {}),
         },
       });
       const data = res?.data ?? res;
       setMessage(
         typeof data?.message === 'string'
           ? data.message
-          : `${datasetName}${useChunk ? '_128' : ''} 변환이 완료되었습니다.`
+          : `${datasetName} 변환이 완료되었습니다.`
       );
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (useChunk) {
-        setConvertingChunkDataset(null);
-      } else {
-        setConvertingDataset(null);
-      }
+      setConvertingDataset(null);
     }
   }, [refresh]);
 
-  const handleConvert = useCallback(async (chunkSize?: 128) => {
+  const handleConvert = useCallback(async () => {
     if (!selectedDatasetName || !selectedRow) {
       setError('변환할 폴더를 선택하세요.');
       return;
     }
     if (selectedRow.detectedSourceCrs) {
-      await runConversion(selectedDatasetName, selectedRow.detectedSourceCrs, chunkSize);
+      await runConversion(selectedDatasetName, selectedRow.detectedSourceCrs);
       return;
     }
     setPendingDatasetName(selectedDatasetName);
-    setPendingChunkConversion(chunkSize === 128);
     setSelectedSourceCrs(OBJ_SOURCE_CRS_OPTIONS[0].value);
     setCrsModalOpen(true);
   }, [runConversion, selectedDatasetName, selectedRow]);
 
-  const isBusy = loading || convertingDataset != null || convertingChunkDataset != null;
+  const isBusy = loading || convertingDataset != null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -425,7 +233,7 @@ function ObjToB3dmTab() {
             <div>
               <CardTitle className="text-base">3dtiles_obj 하위 폴더</CardTitle>
               <CardDescription>
-                바로 아래 하위 폴더만 선택할 수 있습니다. 변환 시작(128)은 OBJ 128개씩 묶어 3dtiles_b3dm/{'{dataset}_128'} 으로 출력합니다.
+                바로 아래 하위 폴더만 선택할 수 있습니다.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -436,16 +244,6 @@ function ObjToB3dmTab() {
               <Button type="button" size="sm" onClick={() => void handleConvert()} disabled={!selectedDatasetName || isBusy}>
                 {convertingDataset ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 변환 시작
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleConvert(128)}
-                disabled={!selectedDatasetName || isBusy}
-              >
-                {convertingChunkDataset ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                변환 시작(128)
               </Button>
             </div>
           </div>
@@ -545,7 +343,6 @@ function ObjToB3dmTab() {
           setCrsModalOpen(open);
           if (!open) {
             setPendingDatasetName(null);
-            setPendingChunkConversion(false);
           }
         }}
       >
@@ -581,14 +378,12 @@ function ObjToB3dmTab() {
               onClick={() => {
                 const target = pendingDatasetName;
                 if (!target) return;
-                const useChunk = pendingChunkConversion;
                 setCrsModalOpen(false);
                 setPendingDatasetName(null);
-                setPendingChunkConversion(false);
-                void runConversion(target, selectedSourceCrs, useChunk ? 128 : undefined);
+                void runConversion(target, selectedSourceCrs);
               }}
             >
-              {pendingChunkConversion ? '변환 시작(128)' : '변환 시작'}
+              변환 시작
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -597,12 +392,581 @@ function ObjToB3dmTab() {
   );
 }
 
+type ExcelFolderRow = {
+  name: string;
+};
+
+type ShpFolderRow = {
+  name: string;
+  totalLayerCount: number;
+  existingLayerCount: number;
+  newLayerCount: number;
+};
+
+type PdfToJpgJobRow = {
+  jobName: string;
+  pdfCount: number;
+  convertedPdfCount: number;
+  pendingPdfCount: number;
+  totalJpgCount: number;
+};
+
+const SHP_DATA_DIR = 'shp_data';
+const EXCEL_DATA_DIR = 'excel_data';
+
+function folderSortTimestamp(name: string, modified?: string): number {
+  if (modified) {
+    const t = Date.parse(modified);
+    if (!Number.isNaN(t)) return t;
+  }
+  const m = name.match(/^(\d{8})/);
+  if (m) return parseInt(m[1], 10) * 86_400_000;
+  return 0;
+}
+
+function sortFolderEntriesByDateDesc<T extends { name: string; modified?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const diff = folderSortTimestamp(b.name, b.modified) - folderSortTimestamp(a.name, a.modified);
+    if (diff !== 0) return diff;
+    return b.name.localeCompare(a.name);
+  });
+}
+
+function ShpToDbTab() {
+  const [selectedName, setSelectedName] = useState('');
+  const [rows, setRows] = useState<ShpFolderRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInfo, setWizardInfo] = useState<{ folderName: string; relativePath: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'fileManagerService',
+        action: 'listDirectory',
+        params: { relativePath: SHP_DATA_DIR },
+      });
+      const data = res?.data ?? res;
+      const directoryEntries = Array.isArray(data?.directoryEntries)
+        ? (data.directoryEntries as { name: string; modified?: string }[])
+        : Array.isArray(data?.directories)
+          ? (data.directories as string[]).map((name) => ({ name }))
+          : [];
+      const sortedEntries = sortFolderEntriesByDateDesc(directoryEntries);
+      const folderRows = await Promise.all(
+        sortedEntries.map(async ({ name }) => {
+          try {
+            const statusRes = await call('', 'POST', {
+              service: 'shpUploadService',
+              action: 'getShpStatusList',
+              params: { relativePath: `${SHP_DATA_DIR}/${name}` },
+            });
+            const sd = statusRes?.data ?? statusRes;
+            const shpRows = Array.isArray(sd?.rows) ? sd.rows : [];
+            const totalLayerCount = shpRows.length;
+            const existingLayerCount = shpRows.filter((r: { table?: boolean }) => r.table).length;
+            return {
+              name,
+              totalLayerCount,
+              existingLayerCount,
+              newLayerCount: totalLayerCount - existingLayerCount,
+            };
+          } catch {
+            return { name, totalLayerCount: 0, existingLayerCount: 0, newLayerCount: 0 };
+          }
+        })
+      );
+      setRows(folderRows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!rows.length) {
+      setSelectedName('');
+      return;
+    }
+    if (rows.some((row) => row.name === selectedName)) return;
+    setSelectedName(rows[0]?.name ?? '');
+  }, [rows, selectedName]);
+
+  const handleConvert = useCallback(() => {
+    if (!selectedName) {
+      setError('변환할 폴더를 선택하세요.');
+      return;
+    }
+    const selected = rows.find((r) => r.name === selectedName);
+    if (!selected || selected.totalLayerCount === 0) {
+      setError('선택한 폴더에 SHP 파일이 없습니다.');
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    setWizardInfo({
+      folderName: selectedName,
+      relativePath: `${SHP_DATA_DIR}/${selectedName}`,
+    });
+    setWizardOpen(true);
+  }, [selectedName, rows]);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Card className="flex min-h-0 flex-1 flex-col">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">shp_data 폴더</CardTitle>
+              <CardDescription>shp_data 하위 폴더를 선택해 DB로 적재합니다.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+                <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+                새로고침
+              </Button>
+              <Button type="button" size="sm" onClick={handleConvert} disabled={!selectedName || loading}>
+                변환 시작
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+          {message && (
+            <div className="rounded border border-green-600/40 bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300">
+              {message}
+            </div>
+          )}
+          {error && (
+            <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive whitespace-pre-wrap">
+              {error}
+            </div>
+          )}
+          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>선택</TableHead>
+                  <TableHead>폴더명</TableHead>
+                  <TableHead className="text-right">전체 레이어</TableHead>
+                  <TableHead className="text-right">기존 레이어</TableHead>
+                  <TableHead className="text-right">신규 레이어</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!rows.length ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      {loading ? '목록 불러오는 중...' : 'shp_data 폴더에 하위 폴더가 없습니다.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row) => {
+                    const selected = selectedName === row.name;
+                    return (
+                      <TableRow
+                        key={row.name}
+                        className={cn('cursor-pointer', selected && 'bg-muted/40')}
+                        onClick={() => setSelectedName(row.name)}
+                      >
+                        <TableCell>
+                          <input
+                            type="radio"
+                            checked={selected}
+                            onChange={() => setSelectedName(row.name)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{row.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.totalLayerCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.existingLayerCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.newLayerCount}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+      {wizardInfo && (
+        <ShpToDbWizardModal
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          folderName={wizardInfo.folderName}
+          relativePath={wizardInfo.relativePath}
+          onSuccess={() => {
+            setMessage('DB 적재가 완료되었습니다.');
+            void refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PdfToJpgTab() {
+  const [selectedName, setSelectedName] = useState('');
+  const [rows, setRows] = useState<PdfToJpgJobRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [convertingJob, setConvertingJob] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'pdfToJpgService',
+        action: 'listPdfToJpgJobs',
+        params: { limit: 200 },
+      });
+      const data = res?.data ?? res;
+      setRows(Array.isArray(data?.rows) ? (data.rows as PdfToJpgJobRow[]) : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!rows.length) {
+      setSelectedName('');
+      return;
+    }
+    if (rows.some((row) => row.jobName === selectedName)) return;
+    setSelectedName(rows[0]?.jobName ?? '');
+  }, [rows, selectedName]);
+
+  const selectedRow = rows.find((row) => row.jobName === selectedName) ?? null;
+
+  const handleConvert = useCallback(async () => {
+    if (!selectedName || !selectedRow) {
+      setError('변환할 작업을 선택하세요.');
+      return;
+    }
+    if (selectedRow.pdfCount === 0) {
+      setError('선택한 작업의 PDF 폴더에 PDF 파일이 없습니다.');
+      return;
+    }
+    setConvertingJob(selectedName);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'pdfToJpgService',
+        action: 'runPdfToJpgConversion',
+        params: { jobName: selectedName },
+      });
+      const data = res?.data ?? res;
+      setMessage(
+        typeof data?.message === 'string'
+          ? data.message
+          : `${selectedName} 변환이 완료되었습니다.`
+      );
+      await refresh();
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'error' in err && typeof (err as { error?: unknown }).error === 'string'
+          ? (err as { error: string }).error
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      setError(msg);
+    } finally {
+      setConvertingJob(null);
+    }
+  }, [refresh, selectedName, selectedRow]);
+
+  const isBusy = loading || convertingJob != null;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Card className="flex min-h-0 flex-1 flex-col">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">PDFToJPG 폴더</CardTitle>
+              <CardDescription>
+                PDFToJPG/작업명/PDF 에 PDF를 넣으면 JPG/파일명/ 에 페이지별 JPG가 생성됩니다.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={isBusy}>
+                <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+                새로고침
+              </Button>
+              <Button type="button" size="sm" onClick={() => void handleConvert()} disabled={!selectedName || isBusy}>
+                {convertingJob ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    변환 중...
+                  </>
+                ) : (
+                  '변환 시작'
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+          {message && (
+            <div className="rounded border border-green-600/40 bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300">
+              {message}
+            </div>
+          )}
+          {error && (
+            <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive whitespace-pre-wrap">
+              {error}
+            </div>
+          )}
+          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>선택</TableHead>
+                  <TableHead>작업명</TableHead>
+                  <TableHead className="text-right">PDF</TableHead>
+                  <TableHead className="text-right">변환 완료</TableHead>
+                  <TableHead className="text-right">미변환</TableHead>
+                  <TableHead className="text-right">JPG</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!rows.length ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      {loading ? '목록 불러오는 중...' : 'PDFToJPG 폴더에 작업 폴더가 없습니다.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row) => {
+                    const selected = selectedName === row.jobName;
+                    return (
+                      <TableRow
+                        key={row.jobName}
+                        className={cn('cursor-pointer', selected && 'bg-muted/40')}
+                        onClick={() => setSelectedName(row.jobName)}
+                      >
+                        <TableCell>
+                          <input
+                            type="radio"
+                            checked={selected}
+                            onChange={() => setSelectedName(row.jobName)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{row.jobName}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.pdfCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.convertedPdfCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.pendingPdfCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.totalJpgCount}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ExcelToDbTab() {
+  const [selectedName, setSelectedName] = useState('');
+  const [rows, setRows] = useState<ExcelFolderRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInfo, setWizardInfo] = useState<{ folderName: string; fileName: string; fileRelPath: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'fileManagerService',
+        action: 'listDirectory',
+        params: { relativePath: EXCEL_DATA_DIR },
+      });
+      const data = res?.data ?? res;
+      const directoryEntries = Array.isArray(data?.directoryEntries)
+        ? (data.directoryEntries as { name: string; modified?: string }[])
+        : Array.isArray(data?.directories)
+          ? (data.directories as string[]).map((name) => ({ name }))
+          : [];
+      setRows(sortFolderEntriesByDateDesc(directoryEntries).map(({ name }) => ({ name })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!rows.length) {
+      setSelectedName('');
+      return;
+    }
+    if (rows.some((row) => row.name === selectedName)) return;
+    setSelectedName(rows[0]?.name ?? '');
+  }, [rows, selectedName]);
+
+  const handleConvert = useCallback(async () => {
+    if (!selectedName) {
+      setError('변환할 폴더를 선택하세요.');
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'fileManagerService',
+        action: 'listDirectory',
+        params: { relativePath: `${EXCEL_DATA_DIR}/${selectedName}` },
+      });
+      const data = res?.data ?? res;
+      const files = Array.isArray(data?.files) ? (data.files as { name: string }[]) : [];
+      const excel = files.find((f) => /\.(xlsx|xls)$/i.test(f.name));
+      if (!excel) {
+        setError('선택한 폴더에 Excel 파일이 없습니다.');
+        return;
+      }
+      setWizardInfo({
+        folderName: selectedName,
+        fileName: excel.name,
+        fileRelPath: `${EXCEL_DATA_DIR}/${selectedName}/${excel.name}`,
+      });
+      setWizardOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [selectedName]);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Card className="flex min-h-0 flex-1 flex-col">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">excel_data 폴더</CardTitle>
+              <CardDescription>
+                excel_data 하위 폴더를 선택해 DB로 적재합니다.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+                <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+                새로고침
+              </Button>
+              <Button type="button" size="sm" onClick={() => void handleConvert()} disabled={!selectedName || loading}>
+                변환 시작
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+          {message && (
+            <div className="rounded border border-green-600/40 bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300">
+              {message}
+            </div>
+          )}
+          {error && (
+            <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive whitespace-pre-wrap">
+              {error}
+            </div>
+          )}
+          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>선택</TableHead>
+                  <TableHead>폴더명</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!rows.length ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center text-muted-foreground">
+                      {loading ? '목록 불러오는 중...' : 'excel_data 폴더에 하위 폴더가 없습니다.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row) => {
+                    const selected = selectedName === row.name;
+                    return (
+                      <TableRow
+                        key={row.name}
+                        className={cn('cursor-pointer', selected && 'bg-muted/40')}
+                        onClick={() => setSelectedName(row.name)}
+                      >
+                        <TableCell>
+                          <input
+                            type="radio"
+                            checked={selected}
+                            onChange={() => setSelectedName(row.name)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{row.name}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+      {wizardInfo && (
+        <ExcelToDbWizardModal
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          folderName={wizardInfo.folderName}
+          fileName={wizardInfo.fileName}
+          fileRelPath={wizardInfo.fileRelPath}
+          onSuccess={() => {
+            setMessage('DB 적재가 완료되었습니다.');
+            void refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function FileConverterContent() {
-  const [activeTab, setActiveTab] = useState<ConverterTabId>('lasToPnts');
+  const [activeTab, setActiveTab] = useState<ConverterTabId>('shpToDb');
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3">
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-6">
         {TAB_ITEMS.map((item) => (
           <FileConverterTabButton
             key={item.id}
@@ -615,12 +979,18 @@ export function FileConverterContent() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {activeTab === 'lasToPnts' ? (
-          <LasFileUploaderContent />
+        {activeTab === 'shpToDb' ? (
+          <ShpToDbTab />
+        ) : activeTab === 'excelToDb' ? (
+          <ExcelToDbTab />
+        ) : activeTab === 'tifToJpg' ? (
+          <TifToJpgUploadPanel />
         ) : activeTab === 'objToB3dm' ? (
           <ObjToB3dmTab />
+        ) : activeTab === 'lasToPnts' ? (
+          <LasFileUploaderContent />
         ) : (
-          <TifToJpgUploadPanel />
+          <PdfToJpgTab />
         )}
       </div>
     </div>

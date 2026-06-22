@@ -1,8 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useRef, useState, type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
+import React, { createContext, useContext, useRef, useState, useCallback, type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import type Map from 'ol/Map';
 import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
+import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 
 export type RoadCctvOverlayState = {
@@ -118,6 +119,8 @@ export type MapContextValue = {
   /** 뷰 왼쪽 패딩(px). 레이아웃에서 설정. 크로스헤어 위치 재계산용 */
   mapPaddingLeft: number;
   setMapPaddingLeft: Dispatch<SetStateAction<number>>;
+  /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
+  applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
   /** VWorld API 키 (주소 검색·역지오코딩). 서버 getMapConfig로 조회 후 설정 */
   vworldApiKey: string;
   setVworldApiKey: Dispatch<SetStateAction<string>>;
@@ -205,6 +208,74 @@ export type MapContextValue = {
   /** 변동이력 분석이 배경지도를 강제할 때(타임라인·복원). OpenLayersMap에서 소비 */
   dataFlowForcedBackgroundMapId: string | null;
   setDataFlowForcedBackgroundMapId: Dispatch<SetStateAction<string | null>>;
+  /** 레이어 행 등록/수정 — 지도 도형 그리기·수정 모드 */
+  layerRowGeomEdit: LayerRowGeomEditState;
+  setLayerRowGeomEdit: Dispatch<SetStateAction<LayerRowGeomEditState>>;
+  /** 편집 중 도형 WKT(EPSG:5181). 저장 시 layerRowService로 전달 */
+  layerRowGeomEditWktRef: MutableRefObject<string | null>;
+  /** 도형 영역 필지 자동/수동 반영 → 상세 패널 필지목록 */
+  layerRowParcelApplyRef: MutableRefObject<
+    | ((
+        items: {
+          address: string;
+          extent3857: [number, number, number, number] | null;
+          geometry3857?: Record<string, unknown> | null;
+          pnu?: string;
+          point4326?: { x: number; y: number };
+        }[],
+        options?: { replaceAuto?: boolean }
+      ) => void)
+    | null
+  >;
+  /** 필지목록 삭제 → 부모 도형에서 해당 필지 영역 제외 */
+  layerRowParcelRemoveRef: MutableRefObject<
+    | ((
+        parcel: {
+          address: string;
+          pnu?: string;
+          geometry3857?: Record<string, unknown> | null;
+        }
+      ) => void | Promise<void>)
+    | null
+  >;
+  /** 편집 중 필지목록 — 지도 미리보기용 */
+  layerRowDraftParcels: Array<{
+    address: string;
+    extent3857: [number, number, number, number] | null;
+    geometry3857?: Record<string, unknown> | null;
+    point4326?: { x: number; y: number };
+  }>;
+  setLayerRowDraftParcels: Dispatch<
+    SetStateAction<
+      Array<{
+        address: string;
+        extent3857: [number, number, number, number] | null;
+        geometry3857?: Record<string, unknown> | null;
+        point4326?: { x: number; y: number };
+      }>
+    >
+  >;
+  /** OpenLayersMap 등록 — 측정·검색 도형 그리기 등 Draw 인터랙션 일괄 해제 */
+  clearMapDrawInteractionsRef: MutableRefObject<((except?: MapDrawInteractionKind) => void) | null>;
+  /**
+   * 데이터조회(standardList) 패널에서 지도 클릭 → 항목 선택(listView) 허용 여부.
+   * 통합검색(키워드) 탭일 때만 true. 도형·행정경계·데이터선택 등 다른 기능 사용 중에는 false.
+   */
+  dataQueryMapPickEnabled: boolean;
+  setDataQueryMapPickEnabled: Dispatch<SetStateAction<boolean>>;
+  /** 좌측 서비스 메뉴 전환 시 증가 — 패널이 레이어를 다시 켜도록 트리거 */
+  serviceMenuEpoch: number;
+  bumpServiceMenuEpoch: () => void;
+} | null;
+
+export type LayerRowGeomEditState = {
+  /** GeoServer 레이어명 (define_table_name) */
+  layerName: string;
+  /** DB 스키마 (기본 layer) */
+  schema?: string;
+  keyField: string;
+  keyValue: string;
+  mode: 'draw' | 'modify';
 } | null;
 
 const MapContext = createContext<MapContextValue>(null);
@@ -228,6 +299,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   } | null>(null);
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
+  const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
   const [vworldApiKey, setVworldApiKey] = useState('');
   const [riverBasicPlanPanelOpen, setRiverBasicPlanPanelOpen] = useState(false);
   const [riverBasicPlanSelectedRiver, setRiverBasicPlanSelectedRiver] = useState('');
@@ -262,6 +334,45 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [dataFlowReport, setDataFlowReport] = useState<DataFlowReportSnapshot | null>(null);
   const [dataFlowCompareWithCurrentLayers, setDataFlowCompareWithCurrentLayers] = useState(false);
   const [dataFlowForcedBackgroundMapId, setDataFlowForcedBackgroundMapId] = useState<string | null>(null);
+  const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
+  const layerRowGeomEditWktRef = useRef<string | null>(null);
+  const layerRowParcelApplyRef = useRef<
+    | ((
+        items: {
+          address: string;
+          extent3857: [number, number, number, number] | null;
+          geometry3857?: Record<string, unknown> | null;
+          pnu?: string;
+          point4326?: { x: number; y: number };
+        }[],
+        options?: { replaceAuto?: boolean }
+      ) => void)
+    | null
+  >(null);
+  const layerRowParcelRemoveRef = useRef<
+    | ((
+        parcel: {
+          address: string;
+          pnu?: string;
+          geometry3857?: Record<string, unknown> | null;
+        }
+      ) => void | Promise<void>)
+    | null
+  >(null);
+  const [layerRowDraftParcels, setLayerRowDraftParcels] = useState<
+    Array<{
+      address: string;
+      extent3857: [number, number, number, number] | null;
+      geometry3857?: Record<string, unknown> | null;
+      point4326?: { x: number; y: number };
+    }>
+  >([]);
+  const clearMapDrawInteractionsRef = useRef<((except?: MapDrawInteractionKind) => void) | null>(null);
+  const [dataQueryMapPickEnabled, setDataQueryMapPickEnabled] = useState(true);
+  const [serviceMenuEpoch, setServiceMenuEpoch] = useState(0);
+  const bumpServiceMenuEpoch = useCallback(() => {
+    setServiceMenuEpoch((n) => n + 1);
+  }, []);
 
   return (
     <MapContext.Provider
@@ -293,6 +404,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setMeasurementActive,
         mapPaddingLeft,
         setMapPaddingLeft,
+        applyMapViewPaddingRef,
         vworldApiKey,
         setVworldApiKey,
         riverBasicPlanPanelOpen,
@@ -329,6 +441,18 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setDataFlowCompareWithCurrentLayers,
         dataFlowForcedBackgroundMapId,
         setDataFlowForcedBackgroundMapId,
+        layerRowGeomEdit,
+        setLayerRowGeomEdit,
+        layerRowGeomEditWktRef,
+        layerRowParcelApplyRef,
+        layerRowParcelRemoveRef,
+        layerRowDraftParcels,
+        setLayerRowDraftParcels,
+        clearMapDrawInteractionsRef,
+        dataQueryMapPickEnabled,
+        setDataQueryMapPickEnabled,
+        serviceMenuEpoch,
+        bumpServiceMenuEpoch,
       }}
     >
       {children}

@@ -224,7 +224,6 @@ export default function MapViewModeWrapper({
           .filter((x): x is { id: string; label: string } => !!x.label)
           .sort((a, b) => b.id.localeCompare(a.id))
           .map((x) => ({ id: x.id, label: x.label }));
-        if (opts.length === 0) return;
         setBackgroundMapGroups3d((prev) =>
           prev.map((g) => (g.id === 'custom-aerial' ? { ...g, options: opts } : g))
         );

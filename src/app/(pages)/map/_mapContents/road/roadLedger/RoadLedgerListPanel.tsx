@@ -11,7 +11,7 @@ import {
   DEFAULT_CENTER_LON,
   DEFAULT_ZOOM_2D,
 } from "../../../_mapComponents/config/mapDefaults";
-import { getFitPaddingWithView } from "../../../_mapComponents/config/mapFitPadding";
+import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import {
   formatRoadLedgerDecimalKo,
   formatRoadLedgerNameSectLabel,
@@ -20,8 +20,6 @@ import {
   getRoadLedgerRankBadgeStyle,
   pickRoadLedgerOgcFid,
 } from "./roadLedgerFormat";
-import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./roadLedgerDocLayerMap";
-
 /** extent 없음·오류 시 맞춤 줌과 함께 이동할 기본 중심(지도 초기와 동일, EPSG:3857) */
 function getDefaultMapCenter3857(): [number, number] {
   return fromLonLat([DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT]) as [number, number];
@@ -74,11 +72,13 @@ function formatRoadLedgerDsgdateForList(raw: string): string {
   return `${y}-${mo}-${d}`;
 }
 
+/** 도로대장 목록 최초 1회만 전체 extent 맞춤 — 서브메뉴 재진입 시 지도 깜빡임 방지 */
+let roadLedgerListExtentFitted = false;
+
 export function RoadLedgerListPanel({ onClose }: Props) {
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
-  const layerAddedByPanelRef = useRef(false);
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,18 +112,10 @@ export function RoadLedgerListPanel({ onClose }: Props) {
     [mapContext]
   );
 
-  /** 패널 마운트 시 레이어 켜기·extent 맞춤 줌, 언마운트 시 패널이 켠 레이어만 끄기 (mapContext 참조 변경으로 반복 실행되지 않도록 deps 비움) */
+  /** 패널 최초 표시 시에만 노선 전체 extent 맞춤 (레이어 on/off는 map-layout에서 관리) */
   useEffect(() => {
-    const ctx = mapContextRef.current;
-    if (!ctx?.setVisibleLayerNames) return;
-
-    const alreadyOn = (ctx.visibleLayerNames ?? new Set<string>()).has(ROAD_LEDGER_SUMMARY_LAYER_ID);
-    if (!alreadyOn) {
-      ctx.setVisibleLayerNames((prev) => new Set(prev).add(ROAD_LEDGER_SUMMARY_LAYER_ID));
-      layerAddedByPanelRef.current = true;
-    } else {
-      layerAddedByPanelRef.current = false;
-    }
+    if (roadLedgerListExtentFitted) return;
+    roadLedgerListExtentFitted = true;
 
     let cancelled = false;
 
@@ -154,18 +146,16 @@ export function RoadLedgerListPanel({ onClose }: Props) {
           const width = Math.abs(xmax - xmin);
           const height = Math.abs(ymax - ymin);
           if (width < 2 && height < 2) {
-            view.animate({
-              center: [(xmin + xmax) / 2, (ymin + ymax) / 2],
-              zoom: 12,
-              duration: 450,
+            scheduleFitMapToExtent3857(map, [xmin, ymin, xmax, ymax], {
+              maxZoom: 12,
+              pointZoom: 12,
+              applyMapViewPadding: () => c?.applyMapViewPaddingRef?.current?.(),
             });
             return;
           }
-          /** 하천 기본계획 목록(RiverBasicPlanListPanel)과 동일: view.padding이 패널을 반영하므로 fit은 균일 패딩 */
-          view.fit([xmin, ymin, xmax, ymax], {
-            padding: getFitPaddingWithView(view, [80, 80, 80, 80]),
+          scheduleFitMapToExtent3857(map, [xmin, ymin, xmax, ymax], {
             maxZoom: 13,
-            duration: 500,
+            applyMapViewPadding: () => c?.applyMapViewPaddingRef?.current?.(),
           });
           return;
         }
@@ -186,15 +176,6 @@ export function RoadLedgerListPanel({ onClose }: Props) {
 
     return () => {
       cancelled = true;
-      const c = mapContextRef.current;
-      if (layerAddedByPanelRef.current && c?.setVisibleLayerNames) {
-        c.setVisibleLayerNames((prev) => {
-          const next = new Set(prev);
-          next.delete(ROAD_LEDGER_SUMMARY_LAYER_ID);
-          return next;
-        });
-        layerAddedByPanelRef.current = false;
-      }
     };
   }, []);
 
