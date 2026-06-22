@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { getRowKey } from "../../../_mapComponents/standard/defineLayerRowUtils";
 import {
   isImageServiceFileName,
@@ -518,27 +519,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     (ext: [number, number, number, number] | null | undefined) => {
       const map = mapInstanceRef?.current;
       if (!map || !ext || ext.length !== 4) return;
-      const [xmin, ymin, xmax, ymax] = ext.map((v) => Number(v));
-      if (![xmin, ymin, xmax, ymax].every((v) => Number.isFinite(v))) return;
-      const view = map.getView();
-      const width = Math.abs(xmax - xmin);
-      const height = Math.abs(ymax - ymin);
-      if (width < 1 && height < 1) {
-        view.animate({
-          center: [(xmin + xmax) / 2, (ymin + ymax) / 2],
-          zoom: MAP_AUTO_NAV_MAX_ZOOM,
-          duration: 500,
-        });
-      } else {
-        /** View.fit는 getViewportSizeMinusPadding_로 이미 view.padding을 반영 — 여기는 추가 여백만 */
-        view.fit([xmin, ymin, xmax, ymax], {
-          padding: [12, 12, 12, 12],
-          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-          duration: 500,
-        });
-      }
+      scheduleFitMapToExtent3857(map, ext, {
+        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+        fitPadding: [12, 12, 12, 12],
+        pointThreshold: 1,
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
     },
-    [mapInstanceRef]
+    [mapContext?.applyMapViewPaddingRef, mapInstanceRef]
   );
 
   /**

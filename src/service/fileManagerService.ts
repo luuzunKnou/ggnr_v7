@@ -1,7 +1,7 @@
 /**
  * File Manager Service
  * 디렉터리 목록 조회. 베이스 = GGNR_DATA_DIR (사업명 폴더 없음).
- * 폴더 구조 없으면 생성: 3dtiles_*, tiles_*, file_data, shp_data, excel_data, .meta
+ * 폴더 구조 없으면 생성: 3dtiles_*, tiles_*, file_data, shp_data, excel_data, PDFToJPG, .meta
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -109,6 +109,8 @@ function resolveSafe(relativePath: string | undefined): string | null {
 
 export type ListDirectoryResult = {
   directories: string[];
+  /** directories 와 동일 항목, 수정일 포함 */
+  directoryEntries: { name: string; modified?: string }[];
   files: { name: string; size: number; modified?: string }[];
 };
 
@@ -151,11 +153,20 @@ export async function listDirectory(params: {
     throw new Error('Not a directory');
   }
   const entries = await fs.readdir(dir, { withFileTypes: true });
-  const directories: string[] = [];
+  const directoryEntries: { name: string; modified?: string }[] = [];
   const files: { name: string; size: number; modified?: string }[] = [];
   for (const e of entries) {
     if (e.isDirectory()) {
-      directories.push(e.name);
+      try {
+        const p = path.join(dir, e.name);
+        const s = await fs.stat(p);
+        directoryEntries.push({
+          name: e.name,
+          modified: s.mtime?.toISOString?.() ?? undefined,
+        });
+      } catch {
+        directoryEntries.push({ name: e.name });
+      }
     } else if (e.isFile()) {
       try {
         const p = path.join(dir, e.name);
@@ -170,9 +181,10 @@ export async function listDirectory(params: {
       }
     }
   }
-  directories.sort((a, b) => a.localeCompare(b));
+  directoryEntries.sort((a, b) => a.name.localeCompare(b.name));
+  const directories = directoryEntries.map((d) => d.name);
   files.sort((a, b) => a.name.localeCompare(b.name));
-  return { directories, files };
+  return { directories, directoryEntries, files };
 }
 
 export type FileManagerDirectoryItem = {
@@ -558,7 +570,9 @@ export type UploadConvertHistoryEntry = {
     | 'merge_b3dm'
     | 'convert_cog'
     | 'convert_ecef'
-    | 'convert_orthophoto_xyz';
+    | 'convert_orthophoto_xyz'
+    | 'convert_pdf_to_jpg'
+    | 'ocr_migration';
   sourceFile: string;
   pathOrResult: string;
   status: '완료' | '변환 중' | '실패';

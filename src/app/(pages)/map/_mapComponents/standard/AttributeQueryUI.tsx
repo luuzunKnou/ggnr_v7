@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
+import { scheduleAnimateMapToCenter3857 } from '../config/mapAutoNavigation';
+import { canStartMapDrawInteraction } from '../mapDrawInteraction';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import { transformCoordinate } from '../services/coordinateService';
 import type { IdentifyLayerResult } from '../hooks/useFeatureIdentify';
@@ -203,6 +205,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   /** Provider value 객체는 매 렌더 새 참조 → useCallback deps에 mapContext 전체 넣으면 무한 effect 유발 */
   const setIdentifyResultList = mapContext?.setIdentifyResultList;
+  const setDataQueryMapPickEnabled = mapContext?.setDataQueryMapPickEnabled;
   /** 부모가 매 렌더 새 함수를 넘기는 경우(map-layout handleOpenDataPanel 등) → 검색 콜백 체인이 흔들려 읍면동 effect 무한루프 */
   const onOpenDataPanelRef = useRef(onOpenDataPanel);
   useLayoutEffect(() => {
@@ -210,6 +213,25 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   }, [onOpenDataPanel]);
   /** 도형 검색 중(그리기 대기/진행)이거나 검색결과가 표시된 상태일 때만 도형 버튼 on */
   const isSpatialSearchActive = !!(spatialFilterWkt || spatialDrawRequest);
+
+  /** 통합검색(키워드) 탭에서만 지도 클릭 → 데이터 선택 패널 허용 */
+  useEffect(() => {
+    const enabled =
+      searchTab === 'keyword' &&
+      !spatialFilterWkt &&
+      !spatialDrawRequest &&
+      activeTool !== 'dataSelect' &&
+      !geometrySearchLoading;
+    setDataQueryMapPickEnabled?.(enabled);
+    return () => setDataQueryMapPickEnabled?.(true);
+  }, [
+    searchTab,
+    spatialFilterWkt,
+    spatialDrawRequest,
+    activeTool,
+    geometrySearchLoading,
+    setDataQueryMapPickEnabled,
+  ]);
 
   // 마운트 시 로컬스토리지에서 읍면동/리, 테이블/필드/값 검색 조건 복원
   useEffect(() => {
@@ -570,9 +592,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
       const center3857 = transformCoordinate([center.x, center.y], 'EPSG:5181', 'EPSG:3857');
-      if (center3857) map.getView().setCenter(center3857);
+      if (!center3857) return;
+      scheduleAnimateMapToCenter3857(map, center3857 as [number, number], map.getView().getZoom() ?? 14, {
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
     },
-    [mapContext?.mapInstanceRef]
+    [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]
   );
 
   const addBoundaryBadgeFromDraft = useCallback(() => {
@@ -701,13 +726,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   const startSpatialDraw = useCallback(
     (type: 'rectangle' | 'polygon' | 'circle') => {
       if (!setSpatialDrawRequest || !setSpatialFilterWkt || !setSpatialFilteredLayerNames) return;
-      // 거리/면적 측정이 켜져 있는 중에는 레이어 목록 검색용 도형 그리기 불가
-      if (mapContext?.measurementActive) {
-        if (typeof window !== 'undefined') {
-          window.alert('거리·면적 측정이 진행 중입니다. 측정을 완료하거나 끈 후 레이어 검색 도형 그리기를 사용해 주세요.');
-        }
-        return;
-      }
+      if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return;
       const targets = visibleLayerTargetsRef.current;
       if (targets.length === 0) return;
       setSearchTab('shape');
@@ -719,7 +738,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         },
       });
     },
-    [setSpatialDrawRequest, mapContext?.measurementActive, applySpatialSearchFromWkt5181]
+    [setSpatialDrawRequest, mapContext, applySpatialSearchFromWkt5181]
   );
 
   const clearSpatialFilter = useCallback(() => {
@@ -913,7 +932,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
       const center3857 = transformCoordinate([center.x, center.y], 'EPSG:5181', 'EPSG:3857');
-      if (center3857) map.getView().setCenter(center3857);
+      if (!center3857) return;
+      scheduleAnimateMapToCenter3857(map, center3857 as [number, number], map.getView().getZoom() ?? 14, {
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
     };
 
     if (dataSelectTable && dataSelectField && dataSelectValue) {

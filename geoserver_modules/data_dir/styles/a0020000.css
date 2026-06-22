@@ -1,106 +1,126 @@
-/* 도로대장(a0020000): 라인을 넓은 이중선(바깥·안)으로 그려 면(buffer 띠)처럼 보이게, 끝·꺾임은 round */
+/* 도로대장(a0020000): 라인 이중선 + 시점(화살표)·종점(원) */
 * {
+  stroke-geometry: [geom];
   stroke: #ffffff, #3d7fa0;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+
+  mark-geometry: [startPoint(geom)], [endPoint(geom)];
+  mark: symbol(triangle), symbol(circle);
+  mark-rotation: [startAngle(geom) - 90], 0;
+  mark-size: 14, 9;
+
+  :nth-mark(1) {
+    fill: #3d7fa0;
+  };
+
+  :nth-mark(2) {
+    fill: #3d7fa0;
+  };
 }
 
 [road_rank = 1501] {
   stroke: #ffffff, #f44336;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #f44336; };
+  :nth-mark(2) { fill: #f44336; };
 }
 
 [road_rank = 1502] {
   stroke: #ffffff, #e91e63;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #e91e63; };
+  :nth-mark(2) { fill: #e91e63; };
 }
 
 [road_rank = 1503] {
   stroke: #ffffff, #9c27b0;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #9c27b0; };
+  :nth-mark(2) { fill: #9c27b0; };
 }
 
 [road_rank = 1504] {
   stroke: #ffffff, #673ab7;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #673ab7; };
+  :nth-mark(2) { fill: #673ab7; };
 }
 
 [road_rank = 1506] {
   stroke: #ffffff, #3f51b5;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #3f51b5; };
+  :nth-mark(2) { fill: #3f51b5; };
 }
 
 [road_rank = 1508] {
   stroke: #ffffff, #2196f3;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #2196f3; };
+  :nth-mark(2) { fill: #2196f3; };
 }
 
 [road_rank = 1509] {
   stroke: #ffffff, #03a9f4;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #03a9f4; };
+  :nth-mark(2) { fill: #03a9f4; };
 }
 
 [road_rank = 1510] {
   stroke: #ffffff, #00BCD4;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #00BCD4; };
+  :nth-mark(2) { fill: #00BCD4; };
 }
 
 [road_rank = 1599] {
   stroke: #ffffff, #009688;
-  stroke-width:7, 4;
-  stroke-opacity: 0.4, 0.6;
-  stroke-linecap: round, round;
+  stroke-width:2, 2;
+  stroke-opacity: 0, 1;
+  stroke-linecap: butt, butt;
   stroke-linejoin: round, round;
+  :nth-mark(1) { fill: #009688; };
+  :nth-mark(2) { fill: #009688; };
 }
 
 [@z >= 11] * {
-  /* 도로명 + 공백 + (sect 숫자만 앞자리 0 제거) + '구간' — 앱 목록 formatRoadLedgerNameSectLabel 과 동일 */
-  /* [expr] 와 "한글" 사이 공백 필수 — 붙이면 토큰이 깨져 구간만 글꼴 깨짐 발생할 수 있음 */
-  label: [road_name];
-  label-follow-line: false;
-  label-geometry: [centroid(geom)];
-  label-anchor: 0.5 0.5;
-  label-offset: 0 0;
-  label-rotation: 0;
+  /* 도로명 + (노선번호-구간) */
+  label: [Concatenate(road_name, parseInt(road_no), '-', parseInt(sect))];
 
   font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
-  font-size: 18;
+  font-size: 16;
   font-weight: bold;
-  font-fill: #3d7fa0;
+  font-fill: #ffffff;
 
-  halo-color: #ffffff;
-  halo-radius: 2;
-  halo-opacity: 0.9;
-
-  label-conflict-resolution: true;
-  label-group: true;
-  label-max-displacement: 0;
-  label-priority: [area(geom)];
-  label-fit-goodness: 0.1;
+  halo-color: #114E7E;
+  halo-radius: 1;
+  halo-opacity: 1;
 }

@@ -78,3 +78,6 @@ next-env.d.ts
 
 # LAS 파이프라인 Conda 환경 (python/env)
 /python/env/
+
+# PaddleOCR inference models (docs/ocr-paddle-setup.md)
+/python/models/paddleocr/

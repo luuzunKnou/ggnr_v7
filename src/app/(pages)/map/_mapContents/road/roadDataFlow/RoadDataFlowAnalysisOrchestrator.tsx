@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMapContext, type DataFlowReportSnapshot } from '@/app/(pages)/map/_mapComponents/MapContext';
+import { canStartMapDrawInteraction } from '@/app/(pages)/map/_mapComponents/mapDrawInteraction';
 import {
   getAllRoadLedgerDocLayerIds,
   ROAD_LEDGER_SUMMARY_LAYER_ID,
@@ -164,6 +165,7 @@ export function RoadDataFlowAnalysisOrchestrator() {
   useEffect(() => {
     if (!roadDataFlowOpen || !setSpatialDrawRequest || !setDataFlowReport) return;
     if (dataFlowReport) return;
+    if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return;
 
     setSpatialDrawRequest({
       type: 'rectangle',
@@ -181,7 +183,7 @@ export function RoadDataFlowAnalysisOrchestrator() {
     return () => {
       setSpatialDrawRequest(null);
     };
-  }, [roadDataFlowOpen, dataFlowReport, setSpatialDrawRequest, setDataFlowReport, setSpatialFilterWkt, mapBgRef]);
+  }, [roadDataFlowOpen, dataFlowReport, setSpatialDrawRequest, setDataFlowReport, setSpatialFilterWkt, mapBgRef, mapContext]);
 
   const [timeline, setTimeline] = useState<RoadDataFlowTimelineItem[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);

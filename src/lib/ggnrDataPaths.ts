@@ -23,6 +23,10 @@ export const GGNR_DATA_PATHS = {
   dtilesObj: '3dtiles_obj',
   /** 3D 지도용 GeoTIFF (2D 패널 GeoTIFF 레이어) */
   dtilesTiff: '3dtiles_tiff',
+  /** PDF → JPG 변환 (작업명/PDF 입력, 작업명/파일명/JPG 출력) */
+  pdfToJpg: 'PDFToJPG',
+  /** OCR Data Migration (작업명 폴더에 이미지 입력) */
+  ocr: 'OCR',
 } as const;
 
 /** ensureBaseStructure 가 생성하는 루트 폴더 */
@@ -37,5 +41,7 @@ export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.dtilesB3dm,
   GGNR_DATA_PATHS.dtilesObj,
   GGNR_DATA_PATHS.dtilesTiff,
+  GGNR_DATA_PATHS.pdfToJpg,
+  GGNR_DATA_PATHS.ocr,
   GGNR_DATA_PATHS.meta,
 ] as const;

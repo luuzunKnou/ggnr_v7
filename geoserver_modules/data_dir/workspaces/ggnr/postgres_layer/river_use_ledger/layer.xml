@@ -1,0 +1,19 @@
+<layer>
+  <name>river_use_ledger</name>
+  <id>LayerInfoImpl--507751e8:19ecfddc8a6:-5855</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--507751e8:19ecfddc8a6:-5869</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--507751e8:19ecfddc8a6:-5856</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-06-16 14:42:05.98 UTC</dateCreated>
+  <dateModified>2026-06-16 14:42:05.170 UTC</dateModified>
+</layer>

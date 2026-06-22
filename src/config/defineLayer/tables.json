@@ -7015,6 +7015,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "jijuk_land_attr",
+    "define_table_kor_name": "지적토지속성",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "행정경계",
+    "define_table_idx": "0",
+    "define_table_etc": "VWorld 필지정보 캐시",
+    "define_table_schema": "public_layer",
+    "define_table_source": "excel"
+  },
+  {
     "define_table_name": "tl_sgco_rnadr_mst",
     "define_table_kor_name": "건물 , 건물군",
     "define_table_shp_type": "POLYGON",
@@ -7281,5 +7293,41 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "river_use_ledger",
+    "define_table_kor_name": "20260616_하천점용 허가",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
+  },
+  {
+    "define_table_name": "river_use_ledger_jijuk",
+    "define_table_kor_name": "20260616_하천점용 허가_필지목록",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
+  },
+  {
+    "define_table_name": "river_use_ledger_mulgunji",
+    "define_table_kor_name": "20260616_하천점용 허가_물건지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
   }
 ]

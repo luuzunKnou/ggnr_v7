@@ -22,15 +22,8 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
   {
     id: 'custom-aerial',
     title: '자체항공영상',
-    options: [
-      { id: 'aerial-2017', label: '항공영상(2017)' },
-      { id: 'aerial-2021', label: '항공영상(2021)' },
-      { id: 'aerial-2022', label: '항공영상(2022)' },
-      { id: 'high-res-2024', label: '고정밀영상(2024)' },
-      { id: 'fire-nir',   label: '산불영상(근적외)' },
-      { id: 'fire-ortho', label: '산불영상(정사)' },
-      { id: 'fire-drone', label: '산불영상(드론)' },
-    ],
+    // 디스크의 tiles_jpg 폴더 내용으로 동적 채움(없으면 빈 목록)
+    options: [],
   },
   {
     id: 'aerial',

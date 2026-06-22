@@ -153,7 +153,7 @@ export async function fetchParcelIdentityAtPoint(
   }
 }
 
-export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
+export async function fetchParcelTabDataFromVworld(args: { pnu: string; vworldKey: string }) {
   const query = {
     key: args.vworldKey,
     pnu: args.pnu,
@@ -193,7 +193,181 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
     'ownshipChgDe',
   ]);
 
-  return { characteristics, landUses, prices, possessions };
+  return { characteristics, landUses, prices, possessions, source: 'vworld' as const };
+}
+
+async function fetchParcelTabDataFromCache(pnu: string): Promise<ParcelTabData | null> {
+  try {
+    const res = await call('', 'POST', {
+      service: 'jijukLandAttrService',
+      action: 'getParcelTabDataFromCache',
+      params: { pnu },
+    });
+    const payload = (res?.data ?? res) as {
+      hit?: boolean;
+      characteristics?: JsonObject[];
+      landUses?: JsonObject[];
+      prices?: JsonObject[];
+      possessions?: JsonObject[];
+    };
+    if (!payload?.hit) return null;
+    return {
+      characteristics: Array.isArray(payload.characteristics) ? payload.characteristics : [],
+      landUses: Array.isArray(payload.landUses) ? payload.landUses : [],
+      prices: Array.isArray(payload.prices) ? payload.prices : [],
+      possessions: Array.isArray(payload.possessions) ? payload.possessions : [],
+      source: 'cache' as const,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 캐시 우선 조회 — 없으면 VWorld 호출 후 DB 캐시 저장 */
+export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
+  const pnu = toStr(args.pnu);
+  if (!pnu) {
+    return {
+      characteristics: [],
+      landUses: [],
+      prices: [],
+      possessions: [],
+      source: 'vworld' as const,
+    };
+  }
+
+  const cached = await fetchParcelTabDataFromCache(pnu);
+  if (cached) return cached;
+
+  if (!toStr(args.vworldKey)) {
+    return {
+      characteristics: [],
+      landUses: [],
+      prices: [],
+      possessions: [],
+      source: 'vworld' as const,
+    };
+  }
+
+  const fresh = await fetchParcelTabDataFromVworld(args);
+  void cacheJijukLandAttrFromParcelData({
+    pnu,
+    characteristics: fresh.characteristics,
+    landUses: fresh.landUses,
+    prices: fresh.prices,
+    possessions: fresh.possessions,
+  });
+  return fresh;
+}
+
+export type ParcelTabData = {
+  characteristics: JsonObject[];
+  landUses: JsonObject[];
+  prices: JsonObject[];
+  possessions: JsonObject[];
+  source?: 'cache' | 'vworld';
+};
+
+/** 필지정보(토지기본정보) 조회 결과를 public_layer.jijuk_land_attr에 캐시 */
+export async function cacheJijukLandAttrFromParcelData(args: {
+  pnu: string;
+  characteristics: JsonObject[];
+  landUses: JsonObject[];
+  prices: JsonObject[];
+  possessions: JsonObject[];
+}): Promise<void> {
+  const pnu = toStr(args.pnu);
+  if (!pnu) return;
+  try {
+    await call('', 'POST', {
+      service: 'jijukLandAttrService',
+      action: 'upsertJijukLandAttrFromParcelData',
+      params: {
+        pnu,
+        characteristics: args.characteristics,
+        landUses: args.landUses,
+        prices: args.prices,
+        possessions: args.possessions,
+      },
+    });
+  } catch {
+    /* 캐시 실패는 UI 조회를 막지 않음 */
+  }
+}
+
+/** 필지 PNU 기준 최신 공시지가 1건 — 캐시 우선, 없으면 VWorld */
+export async function fetchLatestOfficialLandPriceForPnu(args: {
+  pnu: string;
+  vworldKey: string;
+}): Promise<{ priceNum: number | null; priceLabel: string; jibun: string; source?: 'cache' | 'vworld' }> {
+  const pnu = toStr(args.pnu);
+  const vworldKey = toStr(args.vworldKey);
+  if (!pnu) {
+    return { priceNum: null, priceLabel: '-', jibun: '' };
+  }
+
+  try {
+    const cacheRes = await call('', 'POST', {
+      service: 'jijukLandAttrService',
+      action: 'getJijukLandAttrByPnu',
+      params: { pnu },
+    });
+    const cached = (cacheRes?.data ?? cacheRes) as { row?: { pblntf_pclnd?: unknown } | null };
+    const cachedPrice = Number(cached?.row?.pblntf_pclnd);
+    if (Number.isFinite(cachedPrice)) {
+      return {
+        priceNum: cachedPrice,
+        priceLabel: `${cachedPrice.toLocaleString('ko-KR')}원/㎡`,
+        jibun: '',
+        source: 'cache',
+      };
+    }
+  } catch {
+    /* cache miss → VWorld */
+  }
+
+  if (!vworldKey) {
+    return { priceNum: null, priceLabel: '-', jibun: '' };
+  }
+
+  const priceRaw = await fetchJsonp('https://api.vworld.kr/ned/data/getIndvdLandPriceAttr', {
+    key: vworldKey,
+    pnu,
+    format: 'json',
+    numOfRows: '1000',
+  });
+  const prices = dedupeRows(parseRowsFromVworld(priceRaw, 'indvdLandPrices'), [
+    'pblntfDe',
+    'pblntfPclnd',
+    'registDt',
+  ]);
+  if (!prices.length) {
+    return { priceNum: null, priceLabel: '-', jibun: '', source: 'vworld' };
+  }
+  const sorted = [...prices].sort((a, b) =>
+    toStr(b.pblntfDe).localeCompare(toStr(a.pblntfDe))
+  );
+  const latest = sorted[0]!;
+  const priceNum = Number(latest.pblntfPclnd);
+  const priceLabel = Number.isFinite(priceNum)
+    ? `${priceNum.toLocaleString('ko-KR')}원/㎡`
+    : '-';
+  const jibun = toStr(latest.ldCodeNm) || toStr(latest.jibun);
+
+  if (Number.isFinite(priceNum)) {
+    void call('', 'POST', {
+      service: 'jijukLandAttrService',
+      action: 'mergeJijukLandAttrSummary',
+      params: { pnu, pblntfPclnd: priceNum },
+    }).catch(() => undefined);
+  }
+
+  return {
+    priceNum: Number.isFinite(priceNum) ? priceNum : null,
+    priceLabel,
+    jibun,
+    source: 'vworld',
+  };
 }
 
 function buildPnuQueryParams(pnu: string): URLSearchParams {
