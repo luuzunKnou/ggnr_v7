@@ -11,6 +11,7 @@ import { sidebarServicePolicy } from '@/lib/accessClient';
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
+import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -171,6 +172,10 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     router.push(`/map?${current.toString()}`);
   };
 
+  const handleShapeEditorClick = useCallback(() => {
+    openShapeEditorMapWindow(systemKeyFromUrl || null);
+  }, [systemKeyFromUrl]);
+
   const renderServiceIcon = (item: ServiceItem) => {
     const svgRaw = item.ser_svg?.trim() ?? '';
     const serEng = item.ser_eng ?? '';
@@ -231,11 +236,13 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                   setDeniedSerEng(serEng);
                   setDeniedSerOpen(true);
                 }
-              : serEng === 'parcelAnalysis'
-                ? () => {
-                    /* 필지분석: UI만 유지, 패널/URL 토글 없음 */
-                  }
-                : () => toggleWindow(openedKey);
+              : serEng === 'shapeEditor'
+                ? handleShapeEditorClick
+                : serEng === 'parcelAnalysis'
+                  ? () => {
+                      /* 필지분석: UI만 유지, 패널/URL 토글 없음 */
+                    }
+                  : () => toggleWindow(openedKey);
           const svcDisabled =
             policy !== 'block' && roadDataFlowSidebarLock && openedKey !== 'roadDataFlow';
           return (
@@ -247,6 +254,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
               isActive={
                 policy !== 'block' &&
                 serEng !== 'parcelAnalysis' &&
+                serEng !== 'shapeEditor' &&
                 openedWindows.includes(openedKey)
               }
               disabled={policy === 'block' ? false : svcDisabled}

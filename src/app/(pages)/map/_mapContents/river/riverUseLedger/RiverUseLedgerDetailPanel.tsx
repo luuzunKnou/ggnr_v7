@@ -1,0 +1,370 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { call } from "@/lib/api";
+import {
+  LAYER_ROW_EDIT_PRESETS,
+  LAYER_ROW_NEW_ID,
+  LayerParcelAddModal,
+  LayerParcelTextSection,
+  LayerRowAttributeSection,
+  LayerRowEditHeader,
+  LayerRowPanelButton,
+  useLayerRowEdit,
+  useLayerParcelNavigation,
+  useLayerRowFormFields,
+  type LayerRowDetailAttr,
+  type LayerRowParcelItem,
+} from "../../../_mapComponents/layerRowEdit";
+import { RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID, RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID } from "./riverUseLedgerLayerId";
+import { useMapContext } from "../../../_mapComponents/MapContext";
+
+type Props = {
+  detailId: string;
+  onClose: () => void;
+  onSaved?: () => void;
+  onCreated?: (newId: string) => void;
+  onDeleted?: () => void;
+};
+
+export function RiverUseLedgerDetailPanel({
+  detailId,
+  onClose,
+  onSaved,
+  onCreated,
+  onDeleted,
+}: Props) {
+  const mapContext = useMapContext();
+  const preset = LAYER_ROW_EDIT_PRESETS.riverUseLedger;
+  const isCreateMode = detailId === LAYER_ROW_NEW_ID;
+
+  const [loading, setLoading] = useState(!isCreateMode);
+  const [error, setError] = useState<string | null>(null);
+  const [attributes, setAttributes] = useState<LayerRowDetailAttr[]>([]);
+  const [parcels, setParcels] = useState<LayerRowParcelItem[]>([]);
+  const [mulgunjiItems, setMulgunjiItems] = useState<LayerRowParcelItem[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // 물건지 draft 상태 (수정모드에서 사용)
+  const [draftMulgunji, setDraftMulgunji] = useState<LayerRowParcelItem[]>([]);
+  const draftMulgunjiRef = useRef<LayerRowParcelItem[]>([]);
+  const mulgunjiDirtyRef = useRef(false);
+  const [mulgunjiAddModalOpen, setMulgunjiAddModalOpen] = useState(false);
+
+  const { navigateToParcel: navigateToJijukParcel, movingParcelIdx: movingJijukIdx } =
+    useLayerParcelNavigation(RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID);
+  const { navigateToParcel: navigateToMulgunjiParcel, movingParcelIdx: movingMulgunjiIdx } =
+    useLayerParcelNavigation(RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID);
+
+  const { formAttributes, formFieldsLoading } = useLayerRowFormFields(preset, isCreateMode);
+
+  const loadDetail = useCallback(async () => {
+    const id = String(detailId ?? "").trim();
+    if (!id || id === LAYER_ROW_NEW_ID) {
+      setAttributes([]);
+      setParcels([]);
+      setMulgunjiItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await call("", "POST", {
+        service: "riverUseLedgerService",
+        action: "getRiverUseLedgerDetailById",
+        params: { id },
+      });
+      const data = res?.data ?? res;
+      if (data?.error) {
+        setAttributes([]);
+        setParcels([]);
+        setMulgunjiItems([]);
+        setError(String(data.error));
+        return;
+      }
+      setAttributes(Array.isArray(data?.attributes) ? data.attributes : []);
+
+      const toParcelItems = (arr: unknown): LayerRowParcelItem[] => {
+        if (!Array.isArray(arr)) return [];
+        return arr
+          .map((x: Record<string, unknown>) => {
+            const address = String(x?.address ?? "").trim();
+            if (!address) return null;
+            const extRaw = x?.extent3857 as unknown;
+            const extent3857: [number, number, number, number] | null =
+              Array.isArray(extRaw) && extRaw.length === 4 && extRaw.every((v) => Number.isFinite(Number(v)))
+                ? (extRaw.map((v) => Number(v)) as [number, number, number, number])
+                : null;
+            return { address, extent3857 };
+          })
+          .filter((x): x is LayerRowParcelItem => x != null);
+      };
+
+      setParcels(toParcelItems(data?.parcelItems));
+      setMulgunjiItems(toParcelItems(data?.mulgunjiItems));
+    } catch {
+      setAttributes([]);
+      setParcels([]);
+      setMulgunjiItems([]);
+      setError("상세 정보를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, [detailId]);
+
+  useEffect(() => {
+    void loadDetail();
+  }, [loadDetail, reloadToken]);
+
+  // 물건지 sync 후 reload
+  const handleReload = useCallback(async () => {
+    const id = String(detailId ?? "").trim();
+    if (!isCreateMode && id && id !== LAYER_ROW_NEW_ID && mulgunjiDirtyRef.current) {
+      try {
+        await call("", "POST", {
+          service: "riverUseLedgerService",
+          action: "syncRiverUseLedgerMulgunjiByParentId",
+          params: {
+            parentId: id,
+            items: draftMulgunjiRef.current.map((p) => ({
+              address: p.address,
+              x4326: p.point4326?.x,
+              y4326: p.point4326?.y,
+            })),
+          },
+        });
+      } catch {
+        // 물건지 저장 실패는 로그만
+      }
+      mulgunjiDirtyRef.current = false;
+    }
+    setReloadToken((t) => t + 1);
+    onSaved?.();
+  }, [detailId, isCreateMode, onSaved]);
+
+  const formAttributesForEdit = useMemo(
+    () => (isCreateMode ? formAttributes : attributes),
+    [attributes, formAttributes, isCreateMode]
+  );
+
+  const {
+    isEditing,
+    saving,
+    deleting,
+    editError,
+    draft,
+    readOnlyFields,
+    dateFields,
+    handleEdit,
+    handleCancel,
+    handleSave,
+    handleDelete,
+    handleDraftChange,
+    draftParcels,
+    addDraftParcel,
+    removeDraftParcel,
+  } = useLayerRowEdit({
+    preset,
+    rowKey: isCreateMode ? "" : detailId,
+    attributes: formAttributesForEdit,
+    initialParcels: parcels,
+    isCreateMode,
+    onReload: handleReload,
+    onCreated: (newKey) => onCreated?.(newKey),
+    onDeleted: () => onDeleted?.(),
+    onCancelCreate: onClose,
+    wmsLayerId: RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID,
+  });
+
+  // 수정 모드 진입 시 물건지 draft 초기화
+  useEffect(() => {
+    if (isEditing) {
+      const base = [...mulgunjiItems];
+      setDraftMulgunji(base);
+      draftMulgunjiRef.current = base;
+      mulgunjiDirtyRef.current = false;
+    } else {
+      setDraftMulgunji([]);
+      draftMulgunjiRef.current = [];
+    }
+  }, [isEditing, mulgunjiItems]);
+
+  // draftMulgunji ref 동기화
+  useEffect(() => {
+    draftMulgunjiRef.current = draftMulgunji;
+  }, [draftMulgunji]);
+
+  const handleAddMulgunji = useCallback((item: LayerRowParcelItem) => {
+    const key = item.address.toLowerCase();
+    setDraftMulgunji((prev) => {
+      if (prev.some((p) => p.address.toLowerCase() === key)) return prev;
+      const next = [...prev, item];
+      mulgunjiDirtyRef.current = true;
+      return next;
+    });
+  }, []);
+
+  const handleRemoveMulgunji = useCallback((index: number) => {
+    setDraftMulgunji((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      mulgunjiDirtyRef.current = true;
+      return next;
+    });
+  }, []);
+
+  const vworldApiKey = mapContext?.vworldApiKey ?? "";
+  const showLoading = (loading && !isCreateMode) || (isCreateMode && formFieldsLoading);
+  const showBody = !showLoading && !error && formAttributesForEdit.length > 0;
+  const mulgunjiList = isEditing ? draftMulgunji : mulgunjiItems;
+
+  return (
+    <div className="flex min-h-0 h-full flex-col bg-white">
+      <LayerRowEditHeader
+        title="하천점용 상세"
+        isEditing={isEditing}
+        isCreateMode={isCreateMode}
+        saving={saving}
+        deleting={deleting}
+        onEdit={() => void handleEdit()}
+        onSave={() => void handleSave()}
+        onCancel={handleCancel}
+        onDelete={isCreateMode ? undefined : () => void handleDelete()}
+        onClose={onClose}
+      />
+
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+        {showLoading && (
+          <div className="flex items-center gap-2 py-6 text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+            불러오는 중…
+          </div>
+        )}
+        {!showLoading && error && (
+          <div className="rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">{error}</div>
+        )}
+        {!showLoading && editError && (
+          <div className="mb-2 rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">{editError}</div>
+        )}
+        {showBody && (
+          <>
+            {/* 속성 */}
+            <LayerRowAttributeSection
+              attributes={formAttributesForEdit}
+              isEditing={isEditing}
+              draft={draft}
+              readOnlyFields={readOnlyFields}
+              dateFields={dateFields}
+              onDraftChange={handleDraftChange}
+            />
+
+            {/* 필지목록 — 도형수정 포함 */}
+            {(isEditing || !isCreateMode) && (
+              <LayerParcelTextSection
+                isEditing={isEditing}
+                draftParcels={draftParcels}
+                onAddParcel={addDraftParcel}
+                onRemoveParcel={removeDraftParcel}
+                parcels={parcels}
+                movingParcelIdx={movingJijukIdx}
+                onParcelClick={(item, idx) => void navigateToJijukParcel(item, idx)}
+              />
+            )}
+
+            {/* 물건지목록 — 주소검색+자동도형만, 도형수정 없음 */}
+            {!isCreateMode && (
+              <div className="mt-4">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    물건지목록
+                  </div>
+                  {isEditing && (
+                    <LayerRowPanelButton
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => setMulgunjiAddModalOpen(true)}
+                    >
+                      <Plus className="h-3 w-3 shrink-0" aria-hidden />
+                      추가
+                    </LayerRowPanelButton>
+                  )}
+                </div>
+
+                {mulgunjiList.length === 0 ? (
+                  <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+                    {isEditing
+                      ? "「추가」로 주소를 검색해 물건지를 등록합니다."
+                      : "등록된 물건지가 없습니다."}
+                  </div>
+                ) : (
+                  <ul className="list-none space-y-0 rounded border border-slate-200 bg-white">
+                    {mulgunjiList.map((item, i) => (
+                      <li
+                        key={`m-${i}-${item.address.slice(0, 24)}`}
+                        className="flex items-start gap-1 border-b border-slate-100 px-2 py-2 text-slate-800 last:border-b-0"
+                      >
+                        {isEditing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-start gap-1 text-left text-xs text-slate-800 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                              disabled={!item.extent3857}
+                              onClick={() => void navigateToMulgunjiParcel(item, i)}
+                              title={item.extent3857 ? "클릭 시 위치 이동" : "위치 정보 없음"}
+                            >
+                              <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
+                              <span className="min-w-0 flex-1 break-words">{item.address}</span>
+                              {movingMulgunjiIdx === i && (
+                                <span className="ml-1 shrink-0 text-[11px] text-slate-500">이동 중…</span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              onClick={() => handleRemoveMulgunji(i)}
+                              aria-label="물건지 삭제"
+                              title="삭제"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-full text-left text-slate-800 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                            disabled={!item.extent3857}
+                            onClick={() => void navigateToMulgunjiParcel(item, i)}
+                            title={item.extent3857 ? "클릭 시 위치 이동" : "위치 정보 없음"}
+                          >
+                            <span className="mr-2 tabular-nums text-slate-400">{i + 1}.</span>
+                            {item.address}
+                            {movingMulgunjiIdx === i && (
+                              <span className="ml-2 text-[11px] text-slate-500">이동 중…</span>
+                            )}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        {!showLoading && !error && isCreateMode && !formFieldsLoading && formAttributesForEdit.length === 0 && (
+          <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+            등록할 필드 정의를 불러오지 못했습니다.
+          </div>
+        )}
+      </div>
+
+      {/* 물건지 주소 검색 모달 */}
+      <LayerParcelAddModal
+        open={mulgunjiAddModalOpen}
+        onOpenChange={setMulgunjiAddModalOpen}
+        vworldApiKey={vworldApiKey}
+        onAdd={handleAddMulgunji}
+      />
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 // src/app/(pages)/map/map-layout-client.tsx
 "use client"
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, Suspense } from "react"
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
@@ -29,9 +29,16 @@ import { RoadInfraPanel } from "./_mapContents/road/roadInfra/RoadInfraPanel"
 import { RoadDataFlowAnalysisOrchestrator } from "./_mapContents/road/roadDataFlow/RoadDataFlowAnalysisOrchestrator"
 import { RoadUseLedgerListPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerListPanel"
 import { RoadUseLedgerDetailPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerDetailPanel"
+import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerListPanel"
+import { RiverUseLedgerDetailPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerDetailPanel"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
+import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
+import {
+  clearServiceMenuLayerState,
+  ensureRoadLedgerSummaryLayer,
+} from "@/lib/mapServiceMenuLayers"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
@@ -144,6 +151,14 @@ const ROAD_CCTV_OPENED_KEY = "roadCCTV"
 const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
 const BUILD_PUBLIC_LAND_OPENED_KEY = "buildPublicLand"
+const RIVER_USE_LEDGER_OPENED_KEY = "riverUseLedger"
+
+const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
+const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
+const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
+const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
+const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
+const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
 
 function MapLayoutContent({
   children,
@@ -158,6 +173,7 @@ function MapLayoutContent({
   /** Provider `value`는 매 렌더 새 객체 — effect deps에 `mapContext` 넣으면 visibleLayerNames만 바뀌어도 재실행됨 */
   const mapInstanceRef = mapContext?.mapInstanceRef
   const setMapPaddingLeft = mapContext?.setMapPaddingLeft
+  const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef
   const setRiverBasicPlanPanelOpen = mapContext?.setRiverBasicPlanPanelOpen
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
@@ -170,6 +186,9 @@ function MapLayoutContent({
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames
   const setIdentifyResultList = mapContext?.setIdentifyResultList
   const setIdentifySelectedRow = mapContext?.setIdentifySelectedRow
+  const setSafetyMapLayerVisibility = mapContext?.setSafetyMapLayerVisibility
+  const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt
+  const setSpatialFilteredLayerNames = mapContext?.setSpatialFilteredLayerNames
   /** 색인도 식별 시 하천·탭을 동기 갱신 (상세 패널 effect보다 먼저 반영되도록 ref에 등록) */
   if (mapContext?.applyRiverBasicPlanMapPickRef) {
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
@@ -179,6 +198,10 @@ function MapLayoutContent({
   }
   const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
   const openedWindows = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+  const serviceMenuKey = useMemo(
+    () => openedWindows.find((w) => w !== LIST_VIEW_OPENED_KEY && w !== "layerSetting") ?? "",
+    [rawOpened.join(",")]
+  )
 
   const dataTableFromUrl = searchParams.get("dataTable") ?? ""
   const dataKeyFromUrl = searchParams.get("dataKey") ?? ""
@@ -204,11 +227,57 @@ function MapLayoutContent({
   const roadInfraOpen = openedWindows.includes(ROAD_INFRA_OPENED_KEY)
   const buildPublicLandOpen = openedWindows.includes(BUILD_PUBLIC_LAND_OPENED_KEY)
   const roadUseLedgerOpen = openedWindows.includes(ROAD_USE_LEDGER_OPENED_KEY)
+  const riverUseLedgerOpen = openedWindows.includes(RIVER_USE_LEDGER_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
+  const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
   const [roadUseLedgerDetailId, setRoadUseLedgerDetailId] = useState<string | null>(null)
+  const [roadUseLedgerListRefreshKey, setRoadUseLedgerListRefreshKey] = useState(0)
   const roadUseLedgerDetailOpen = roadUseLedgerOpen && Boolean(roadUseLedgerDetailId)
+  const [riverUseLedgerDetailId, setRiverUseLedgerDetailId] = useState<string | null>(null)
+  const [riverUseLedgerListRefreshKey, setRiverUseLedgerListRefreshKey] = useState(0)
+  const riverUseLedgerDetailOpen = riverUseLedgerOpen && Boolean(riverUseLedgerDetailId)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
+
+  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
+  const prevServiceMenuRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const skipRoadLedgerSummary =
+      serviceMenuKey === ROAD_INFRA_OPENED_KEY &&
+      roadCctvOpen &&
+      roadCctvUnderlayMode === "traffic"
+    const layerCtx = {
+      setVisibleLayerNames,
+      setSafetyMapLayerVisibility,
+      setSpatialFilterWkt,
+      setSpatialFilteredLayerNames,
+      setIdentifyResultList,
+      setIdentifySelectedRow,
+    }
+
+    if (prevServiceMenuRef.current !== null && prevServiceMenuRef.current !== serviceMenuKey) {
+      clearServiceMenuLayerState(layerCtx, {
+        nextServiceMenuKey: serviceMenuKey,
+        skipRoadLedgerSummary,
+      })
+    } else if (!skipRoadLedgerSummary) {
+      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY || serviceMenuKey === ROAD_INFRA_OPENED_KEY) {
+        ensureRoadLedgerSummaryLayer(layerCtx)
+      }
+    }
+    prevServiceMenuRef.current = serviceMenuKey
+  }, [
+    serviceMenuKey,
+    roadCctvOpen,
+    roadCctvUnderlayMode,
+    setVisibleLayerNames,
+    setSafetyMapLayerVisibility,
+    setSpatialFilterWkt,
+    setSpatialFilteredLayerNames,
+    setIdentifyResultList,
+    setIdentifySelectedRow,
+  ])
+
   const [riverPlanTab, setRiverPlanTab] = useState<"river" | "smallRiver">("river")
   const [selectedRiverName, setSelectedRiverName] = useState("")
   const [standardListPanelWidth, setStandardListPanelWidth] = useState(STANDARD_LIST_DEFAULT_WIDTH)
@@ -233,7 +302,10 @@ function MapLayoutContent({
   const [buildPublicLandDetailWidth, setBuildPublicLandDetailWidth] = useState(BUILD_PUBLIC_LAND_DETAIL_DEFAULT_WIDTH)
   const [roadUseLedgerPanelWidth, setRoadUseLedgerPanelWidth] = useState(ROAD_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [roadUseLedgerDetailWidth, setRoadUseLedgerDetailWidth] = useState(ROAD_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
+  const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
+  const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
   /** 열린 MapSideListPanel 너비 합 → 검색창/레이어바 left 기준 (패널 추가 시 여기만 합산) */
   const totalListPanelWidth =
@@ -248,6 +320,8 @@ function MapLayoutContent({
     (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0) +
     (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0) +
     (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0) +
+    (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0) +
+    (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
     (safetyMapOpen ? safetyMapPanelWidth : 0) +
@@ -258,7 +332,11 @@ function MapLayoutContent({
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0)
-  const searchBarOffset = { leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN, topPx: 16 }
+  const searchBarOffset = {
+    leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
+    topPx: 16,
+    inputBottomPx: searchBarInputBottomPx,
+  }
 
   /** 패널별 왼쪽 경계(px). 드래그 시 해당 패널 너비 = clientX - leftOffset */
   const roadInfraPanelLeftPx = SIDEBAR_WIDTH
@@ -281,8 +359,12 @@ function MapLayoutContent({
     buildPublicLandDetailLeftPx + (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0)
   const roadUseLedgerDetailLeftPx =
     roadUseLedgerPanelLeftPx + (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0)
-  const complaintPanelLeftPx =
+  const riverUseLedgerPanelLeftPx =
     roadUseLedgerDetailLeftPx + (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0)
+  const riverUseLedgerDetailLeftPx =
+    riverUseLedgerPanelLeftPx + (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0)
+  const complaintPanelLeftPx =
+    riverUseLedgerDetailLeftPx + (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0)
   const map3dPanelLeftPx = complaintPanelLeftPx + (complaintManagementOpen ? complaintPanelWidth : 0)
   const safetyMapPanelLeftPx = map3dPanelLeftPx + (map3dDataOpen ? map3dDataPanelWidth : 0)
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
@@ -298,11 +380,20 @@ function MapLayoutContent({
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함 */
   useLayoutEffect(() => {
-    const map = mapInstanceRef?.current
-    if (!map) return
-    map.getView().padding = [0, 0, 0, mapPaddingLeft]
-    setMapPaddingLeft?.(mapPaddingLeft)
-  }, [mapPaddingLeft, mapInstanceRef, setMapPaddingLeft])
+    const apply = () => {
+      const map = mapInstanceRef?.current
+      if (!map) return
+      map.getView().padding = [0, 0, 0, mapPaddingLeft]
+      setMapPaddingLeft?.(mapPaddingLeft)
+    }
+    if (applyMapViewPaddingRef) {
+      applyMapViewPaddingRef.current = apply
+    }
+    apply()
+    return () => {
+      if (applyMapViewPaddingRef) applyMapViewPaddingRef.current = null
+    }
+  }, [applyMapViewPaddingRef, mapPaddingLeft, mapInstanceRef, setMapPaddingLeft])
 
   useEffect(() => {
     setRiverBasicPlanPanelOpen?.(riverBasicPlanOpen)
@@ -366,11 +457,7 @@ function MapLayoutContent({
   useEffect(() => {
     if (!roadInfraOpen || !setVisibleLayerNames) return
     if (roadCctvOpen && roadCctvUnderlayMode === "traffic") return
-    const id = ROAD_LEDGER_SUMMARY_LAYER_ID.toLowerCase()
-    setVisibleLayerNames((prev) => {
-      if (prev.has(id)) return prev
-      return new Set(prev).add(id)
-    })
+    ensureRoadLedgerSummaryLayer({ setVisibleLayerNames })
   }, [roadInfraOpen, roadCctvOpen, roadCctvUnderlayMode, setVisibleLayerNames])
 
   /**
@@ -454,6 +541,12 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseRiverUseLedger = () => {
+    setRiverUseLedgerDetailId(null)
+    const next = openedWindows.filter((w) => w !== RIVER_USE_LEDGER_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseBuildPublicLand = () => {
     setBuildPublicLandSelectedId(null)
     const next = openedWindows.filter((w) => w !== BUILD_PUBLIC_LAND_OPENED_KEY)
@@ -463,6 +556,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
+
+  useEffect(() => {
+    if (!riverUseLedgerOpen) setRiverUseLedgerDetailId(null)
+  }, [riverUseLedgerOpen])
 
   useEffect(() => {
     if (!buildPublicLandOpen) setBuildPublicLandSelectedId(null)
@@ -554,6 +651,12 @@ function MapLayoutContent({
   return (
     <SearchBarOffsetContext.Provider value={searchBarOffset}>
       <div className="relative w-full h-screen overflow-hidden bg-slate-100">
+        {mapContext?.layerRowGeomEdit && (
+          <div
+            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-red-500"
+            aria-hidden
+          />
+        )}
         <div className="absolute inset-0 z-0">{children}</div>
 
         <MapSidebar indexLogoSrc={indexLogoSrc} />
@@ -728,6 +831,8 @@ function MapLayoutContent({
                   onClose={handleCloseBuildPublicLand}
                   selectedId={buildPublicLandSelectedId}
                   onSelectId={setBuildPublicLandSelectedId}
+                  refreshKey={buildPublicLandListRefreshKey}
+                  onAdd={() => setBuildPublicLandSelectedId(LAYER_ROW_NEW_ID)}
                 />
               </MapSideListPanel>
             </div>
@@ -745,6 +850,15 @@ function MapLayoutContent({
                 <BuildPublicLandDetailPanel
                   detailId={buildPublicLandSelectedId}
                   onClose={() => setBuildPublicLandSelectedId(null)}
+                  onSaved={() => setBuildPublicLandListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => {
+                    setBuildPublicLandListRefreshKey((k) => k + 1)
+                    setBuildPublicLandSelectedId(newId)
+                  }}
+                  onDeleted={() => {
+                    setBuildPublicLandSelectedId(null)
+                    setBuildPublicLandListRefreshKey((k) => k + 1)
+                  }}
                 />
               </MapSideListPanel>
             </div>
@@ -762,6 +876,8 @@ function MapLayoutContent({
                   onClose={handleCloseRoadUseLedger}
                   selectedDetailId={roadUseLedgerDetailId}
                   onSelectDetailId={setRoadUseLedgerDetailId}
+                  refreshKey={roadUseLedgerListRefreshKey}
+                  onAdd={() => setRoadUseLedgerDetailId(LAYER_ROW_NEW_ID)}
                 />
               </MapSideListPanel>
             </div>
@@ -779,6 +895,60 @@ function MapLayoutContent({
                 <RoadUseLedgerDetailPanel
                   detailId={roadUseLedgerDetailId}
                   onClose={() => setRoadUseLedgerDetailId(null)}
+                  onSaved={() => setRoadUseLedgerListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => {
+                    setRoadUseLedgerListRefreshKey((k) => k + 1)
+                    setRoadUseLedgerDetailId(newId)
+                  }}
+                  onDeleted={() => {
+                    setRoadUseLedgerDetailId(null)
+                    setRoadUseLedgerListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverUseLedgerOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverUseLedgerPanelWidth}
+                minWidth={RIVER_USE_LEDGER_PANEL_MIN_WIDTH}
+                maxWidth={RIVER_USE_LEDGER_PANEL_MAX_WIDTH}
+                leftOffsetPx={riverUseLedgerPanelLeftPx}
+                onWidthChange={setRiverUseLedgerPanelWidth}
+              >
+                <RiverUseLedgerListPanel
+                  onClose={handleCloseRiverUseLedger}
+                  selectedDetailId={riverUseLedgerDetailId}
+                  onSelectDetailId={setRiverUseLedgerDetailId}
+                  refreshKey={riverUseLedgerListRefreshKey}
+                  onAdd={() => setRiverUseLedgerDetailId(LAYER_ROW_NEW_ID)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverUseLedgerOpen && riverUseLedgerDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverUseLedgerDetailWidth}
+                minWidth={RIVER_USE_LEDGER_DETAIL_MIN_WIDTH}
+                maxWidth={RIVER_USE_LEDGER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={riverUseLedgerDetailLeftPx}
+                onWidthChange={setRiverUseLedgerDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <RiverUseLedgerDetailPanel
+                  detailId={riverUseLedgerDetailId}
+                  onClose={() => setRiverUseLedgerDetailId(null)}
+                  onSaved={() => setRiverUseLedgerListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => {
+                    setRiverUseLedgerListRefreshKey((k) => k + 1)
+                    setRiverUseLedgerDetailId(newId)
+                  }}
+                  onDeleted={() => {
+                    setRiverUseLedgerDetailId(null)
+                    setRiverUseLedgerListRefreshKey((k) => k + 1)
+                  }}
                 />
               </MapSideListPanel>
             </div>
@@ -917,7 +1087,10 @@ function MapLayoutContent({
           )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
-              <MapSearchBar listPanelWidth={totalListPanelWidth} />
+              <MapSearchBar
+                listPanelWidth={totalListPanelWidth}
+                onInputBottomChange={setSearchBarInputBottomPx}
+              />
             </div>
             <div className="absolute inset-0 pointer-events-none p-4">
               {riverBasicPlanOpen && <RiverBasicPlanMapDrawingFromMapHandler />}

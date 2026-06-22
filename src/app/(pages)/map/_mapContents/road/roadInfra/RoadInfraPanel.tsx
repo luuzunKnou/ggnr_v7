@@ -26,6 +26,8 @@ import {
   X,
 } from "lucide-react";
 import { useMapContext } from "../../../_mapComponents/MapContext";
+import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import type { IdentifyLayerResult } from "../../../_mapComponents/hooks/useFeatureIdentify";
 import { getLegendGraphicUrl } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
@@ -414,8 +416,11 @@ export function RoadInfraPanel({
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
     const center3857 = transformCoordinate([center.x, center.y], "EPSG:5181", "EPSG:3857");
-    if (center3857) map.getView().setCenter(center3857);
-  }, [mapContext?.mapInstanceRef]);
+    if (!center3857) return;
+    scheduleAnimateMapToCenter3857(map, center3857 as [number, number], map.getView().getZoom() ?? 14, {
+      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    });
+  }, [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]);
 
   const runGeometrySearch = useCallback(
     (wkt5181: string, opts?: { syncSearchTab?: "shape" | "boundary"; listHeader?: string }) => {
@@ -540,12 +545,7 @@ export function RoadInfraPanel({
   const startRoadInfraShapeDraw = useCallback(
     (type: "rectangle" | "polygon" | "circle") => {
       if (!setSpatialDrawRequest) return;
-      if (mapContext?.measurementActive) {
-        window.alert(
-          "거리·면적 측정이 진행 중입니다. 측정을 완료하거나 끈 후 도형검색을 사용해 주세요."
-        );
-        return;
-      }
+      if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) return;
       if (visibleDefineTableNames.length === 0) return;
       setSearchTab("shape");
       setActiveSpatialTool(type);
@@ -557,7 +557,7 @@ export function RoadInfraPanel({
         },
       });
     },
-    [setSpatialDrawRequest, mapContext?.measurementActive, visibleDefineTableNames, runGeometrySearch, setSpatialFilterWkt]
+    [setSpatialDrawRequest, mapContext, visibleDefineTableNames, runGeometrySearch, setSpatialFilterWkt]
   );
 
   const runKeywordSearch = useCallback(() => {

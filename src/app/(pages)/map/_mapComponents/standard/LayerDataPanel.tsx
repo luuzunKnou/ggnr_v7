@@ -45,6 +45,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
+import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
 import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import {
   formatRoadLedgerFacilityCellValue,
@@ -437,11 +438,12 @@ export function LayerDataPanel({
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
       const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v)))
-        mapInstance.getView().fit(ext, {
-          padding: [80, 80, 80, 80],
+      if (ext.every((v) => isFinite(v))) {
+        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
           maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
         });
+      }
       setRadarActive(true);
     },
     [mapContext, rows]

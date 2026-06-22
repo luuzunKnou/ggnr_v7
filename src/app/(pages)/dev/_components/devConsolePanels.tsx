@@ -12,6 +12,7 @@ import { ExlFileUploaderContent } from "./ExlFileUploaderContent"
 import { DataFileUploaderContent } from "./DataFileUploaderContent"
 import { FileManagerContent } from "./FileManagerContent"
 import { FileConverterContent } from "./FileConverterContent"
+import { DataMigrationContent } from "./DataMigrationContent"
 import { LasFixerContent } from "./LasFixerContent"
 import { OrthophotoManagerContent } from "./OrthophotoManagerContent"
 import { PermissionFeatureManager } from "./PermissionFeatureManager"
@@ -47,6 +48,7 @@ export const DEV_SUBMENUS = [
   { id: "lasFileUploader", label: "LAS File Uploader" },
   { id: "fileManager", label: "File Manager" },
   { id: "fileConverter", label: "File Converter" },
+  { id: "dataMigration", label: "Data Migration" },
   { id: "lasFixer", label: "LAS Fixer" },
   { id: "orthophotoManager", label: "정사영상관리" },
 ] as const
@@ -73,10 +75,9 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     menuIds: [
       "systemIntegration",
       "geocodingTest",
-      "shpFileUploader",
-      "exlFileUploader",
-      "dataFileUploader",
-      "orthophotoManager",
+      "fileManager",
+      "fileConverter",
+      "dataMigration",
     ],
   },
   {
@@ -86,9 +87,17 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "dbManager",
       "geoserverManagerLayer",
       "geoserverManagerPublic",
+    ],
+  },
+  {
+    id: "etcFeatures",
+    label: "기타기능",
+    menuIds: [
+      "shpFileUploader",
+      "exlFileUploader",
+      "dataFileUploader",
+      "orthophotoManager",
       "lasFileUploader",
-      "fileManager",
-      "fileConverter",
       "lasFixer",
     ],
   },
@@ -141,6 +150,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "GGNR_DATA_DIR 현재 프로젝트 폴더 전체 탐색 및 업로드·다운로드·이동·이름변경·삭제"
     case "fileConverter":
       return "LAS -> PNTS, OBJ -> B3DM, TIF -> JPG 변환 화면"
+    case "dataMigration":
+      return "OCR 등 데이터 마이그레이션 (GPT Vision → DB·file_data)"
     case "shpFileUploader":
       return "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
     case "dataFileUploader":
@@ -228,6 +239,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <FileConverterContent />
+        </div>
+      )
+    case "dataMigration":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <DataMigrationContent />
         </div>
       )
     case "shpFileUploader":

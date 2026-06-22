@@ -776,6 +776,43 @@ export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
 }
 
 /**
+ * 현재 지도 bbox(기본 EPSG:3857)와 교차하는 public_layer.jijuk 필지 목록.
+ */
+export async function getJijukParcelsInBbox(params: {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  srid?: number;
+  limit?: number;
+}) {
+  const { minX, minY, maxX, maxY } = params;
+  if (![minX, minY, maxX, maxY].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+    return { parcels: [] as Array<Record<string, unknown>> };
+  }
+  const srid = typeof params.srid === 'number' && Number.isFinite(params.srid) ? params.srid : 3857;
+  const limit = Math.min(Math.max(Math.floor(params.limit ?? 120), 1), 300);
+
+  const schema = 'public_layer';
+  const tableName = 'jijuk';
+  const geomCol = 'geom';
+  const tableSrid = 5181;
+
+  const envelope = `ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, ${srid})`;
+  const envelopeInTable = `ST_Transform(${envelope}, ${tableSrid})`;
+  const safeGeomCol = geomCol.replace(/"/g, '""');
+  const queryStr = `SELECT "gid", "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "gid" LIMIT ${limit}`;
+
+  try {
+    const dataRes = await db.execute(sql.raw(queryStr));
+    const rows = (dataRes.rows ?? []) as Record<string, unknown>[];
+    return { parcels: rows };
+  } catch {
+    return { parcels: [] as Array<Record<string, unknown>> };
+  }
+}
+
+/**
  * 도형(WKT) 내에 포함된 레이어별 건수 조회.
  * 레이어 목록 도형(사각형/다각형/원형) 그리기 후, 해당 도형과 교차하는 레이어만 반환.
  * params.wkt: WKT 문자열 (SRID는 params.srid)

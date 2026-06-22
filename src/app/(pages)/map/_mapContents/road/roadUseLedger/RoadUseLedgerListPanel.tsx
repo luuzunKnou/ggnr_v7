@@ -7,8 +7,10 @@ import { formatFiniteNumberKoTrimZeros } from "@/lib/formatDetailScalar";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { ROAD_USE_LEDGER_WMS_LAYER_ID } from "./roadUseLedgerLayerId";
 import { RoadUseLedgerAnalysisModal } from "./RoadUseLedgerAnalysisModal";
+import { LAYER_ROW_NEW_ID, LayerRowAddButton, LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit";
 
 const SPOT_MODE_STORAGE_KEY = "ggnr.roadUseLedger.spotDisplayMode";
 
@@ -28,6 +30,8 @@ type Props = {
   onClose: () => void;
   selectedDetailId: string | null;
   onSelectDetailId: (id: string) => void;
+  refreshKey?: number;
+  onAdd?: () => void;
 };
 
 function formatAreaWithM2(raw: string): string {
@@ -51,7 +55,13 @@ function readStoredSpotMode(): SpotMode {
   return window.localStorage.getItem(SPOT_MODE_STORAGE_KEY) === "property" ? "property" : "occupancy";
 }
 
-export function RoadUseLedgerListPanel({ onClose, selectedDetailId, onSelectDetailId }: Props) {
+export function RoadUseLedgerListPanel({
+  onClose,
+  selectedDetailId,
+  onSelectDetailId,
+  refreshKey = 0,
+  onAdd,
+}: Props) {
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -136,27 +146,10 @@ export function RoadUseLedgerListPanel({ onClose, selectedDetailId, onSelectDeta
           if (prev.has(lid)) return prev;
           return new Set(prev).add(lid);
         });
-        const view = map.getView();
-        const [xmin, ymin, xmax, ymax] = ext.map((v) => Number(v));
-        if (![xmin, ymin, xmax, ymax].every((v) => Number.isFinite(v))) {
-          window.alert("위치 정보가 올바르지 않습니다.");
-          return;
-        }
-        const w = Math.abs(xmax - xmin);
-        const h = Math.abs(ymax - ymin);
-        if (w < 2 && h < 2) {
-          view.animate({
-            center: [(xmin + xmax) / 2, (ymin + ymax) / 2],
-            zoom: 15,
-            duration: 450,
-          });
-        } else {
-          view.fit([xmin, ymin, xmax, ymax], {
-            padding: [80, 80, 80, 80],
-            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-            duration: 500,
-          });
-        }
+        scheduleFitMapToExtent3857(map, ext as number[], {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
       } catch {
         window.alert("지도 이동에 실패했습니다.");
       } finally {
@@ -205,7 +198,7 @@ export function RoadUseLedgerListPanel({ onClose, selectedDetailId, onSelectDeta
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [keyword]);
+  }, [keyword, refreshKey]);
 
   useEffect(() => {
     if (loading) return;
@@ -222,13 +215,15 @@ export function RoadUseLedgerListPanel({ onClose, selectedDetailId, onSelectDeta
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">도로점용</span>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setAnalysisModalOpen(true)}
-            className="rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100"
-          >
+          {onAdd && (
+            <LayerRowAddButton
+              onClick={() => onAdd()}
+              disabled={selectedDetailId === LAYER_ROW_NEW_ID}
+            />
+          )}
+          <LayerRowPanelButton onClick={() => setAnalysisModalOpen(true)}>
             도로점용 분석
-          </button>
+          </LayerRowPanelButton>
           <button
             type="button"
             onClick={onClose}

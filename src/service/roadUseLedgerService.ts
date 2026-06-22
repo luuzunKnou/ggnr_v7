@@ -1,10 +1,29 @@
 /**
- * 도로점용 — layer.road_use_ledger (컬럼명은 database/schema/road_use_ledger.ts 와 동일)
+ * 도로점용 — road_use_ledger (layer 스키마 없으면 public 스키마에서 자동 탐색)
  */
 import { db } from '@/database/db';
-import { roadUseLedgerColumnComments } from '@/database/schema/road_use_ledger';
 import { sql } from 'drizzle-orm';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
+import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+
+const ROAD_USE_LEDGER_COLUMN_COMMENTS: Record<string, string> = {
+  id: 'id',
+  geom: 'geom',
+  parcel_address: '필지이름',
+  use_no: '허가번호',
+  use_permit_date: '허가일자',
+  use_road_type: '도로종류',
+  use_road_name: '노선명',
+  use_addr: '점용장소',
+  use_mgj: '물건지',
+  use_why: '점용목적',
+  use_lic_addr: '피허가자 주소',
+  use_lic_tel: '피허가자 전화번호',
+  use_lic_name: '피허가자명',
+  use_area: '점용면적(m²)',
+  use_start: '점용시작',
+  use_end: '점용종료',
+};
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
@@ -66,8 +85,7 @@ const DETAIL_ATTR_ORDER: readonly string[] = [
 const DATE_DETAIL_FIELDS: Set<string> = new Set([COL.usePermitDate, COL.useStart, COL.useEnd]);
 
 function columnLabel(field: string): string {
-  const map = roadUseLedgerColumnComments as Record<string, string>;
-  return map[field] ?? field;
+  return ROAD_USE_LEDGER_COLUMN_COMMENTS[field] ?? field;
 }
 
 /**
@@ -79,12 +97,14 @@ async function getRoadUseLedgerParcelsByParentId(parentId: string): Promise<{
   parcelItems: { address: string; extent3857: [number, number, number, number] | null }[];
   error?: string;
 }> {
-  const jijukTable = await resolveLayerTableName('road_use_ledger_jijuk');
+  const jijukMeta = await resolveTableWithSchema('road_use_ledger_jijuk');
+  const jijukTable = jijukMeta?.tableName ?? null;
+  const jijukSchema = jijukMeta?.schema ?? 'layer';
   if (!jijukTable) {
-    return { parcels: [], parcelItems: [], error: 'layer 스키마에 road_use_ledger_jijuk 테이블이 없습니다.' };
+    return { parcels: [], parcelItems: [], error: 'road_use_ledger_jijuk 테이블이 없습니다.' };
   }
 
-  const jCols = await getTableColumns('layer', jijukTable);
+  const jCols = await getTableColumns(jijukSchema, jijukTable);
   const jLower = new Set(jCols.map((c) => c.toLowerCase()));
   const hasParentId = jLower.has('parent_id');
   const hasParcelAddress = jLower.has(COL.parcelAddress.toLowerCase());
@@ -99,6 +119,7 @@ async function getRoadUseLedgerParcelsByParentId(parentId: string): Promise<{
   const hasId = jLower.has('id');
   const hasGeom = jLower.has('geom');
   const safeJijuk = jijukTable.replace(/"/g, '""');
+  const safeJijukSchema = jijukSchema.replace(/"/g, '""');
   const oq = (name: string) => quoteIdent(name);
   const orderExpr = hasId ? oq('id') : oq(COL.parcelAddress);
   const extentSelect = hasGeom
@@ -116,7 +137,7 @@ async function getRoadUseLedgerParcelsByParentId(parentId: string): Promise<{
     SELECT
       COALESCE(jj.${oq(COL.parcelAddress)}::text, '') AS addr
       ${extentSelect}
-    FROM layer."${safeJijuk}" jj
+    FROM "${safeJijukSchema}"."${safeJijuk}" jj
     WHERE jj.${oq('parent_id')} = ${parentId}::bigint
       AND COALESCE(jj.${oq(COL.parcelAddress)}::text, '') <> ''
     ORDER BY jj.${orderExpr}`;
@@ -132,7 +153,7 @@ async function getRoadUseLedgerParcelsByParentId(parentId: string): Promise<{
           xmax?: unknown;
           ymax?: unknown;
         };
-        const address = String(row.addr ?? '').trim();
+        const address = formatAddressStripSidoSigungu(String(row.addr ?? '').trim());
         if (!address) return null;
         const xmin = Number(row.xmin);
         const ymin = Number(row.ymin);
@@ -175,12 +196,13 @@ export async function getRoadUseLedgerDetailById(params: {
     return { attributes: [], parcels: [], parcelItems: [], error: '유효하지 않은 id입니다.' };
   }
 
-  const tableName = await resolveLayerTableName('road_use_ledger');
-  if (!tableName) {
-    return { attributes: [], parcels: [], parcelItems: [], error: 'layer 스키마에 road_use_ledger 테이블이 없습니다.' };
+  const tblMeta = await resolveTableWithSchema('road_use_ledger');
+  if (!tblMeta) {
+    return { attributes: [], parcels: [], parcelItems: [], error: 'road_use_ledger 테이블이 없습니다.' };
   }
+  const { tableName, schema: tblSchema } = tblMeta;
 
-  const columns = await getTableColumns('layer', tableName);
+  const columns = await getTableColumns(tblSchema, tableName);
   const colErr = validateColumns(columns);
   if (colErr) {
     return { attributes: [], parcels: [], parcelItems: [], error: colErr };
@@ -195,6 +217,7 @@ export async function getRoadUseLedgerDetailById(params: {
     (c) => !GEOM_COLUMN_NAMES.has(c.toLowerCase())
   );
   const safeTbl = tableName.replace(/"/g, '""');
+  const safeTblSchema = tblSchema.replace(/"/g, '""');
   const t = 't';
   const q = (name: string) => `${t}.${quoteIdent(name)}`;
   const iq = quoteIdent(COL.id);
@@ -203,7 +226,7 @@ export async function getRoadUseLedgerDetailById(params: {
   const sqlText = `
     SELECT
       ${selectList}
-    FROM layer."${safeTbl}" ${t}
+    FROM "${safeTblSchema}"."${safeTbl}" ${t}
     WHERE ${iq} = ${idRaw}::bigint
     LIMIT 1`;
 
@@ -229,7 +252,7 @@ export async function getRoadUseLedgerDetailById(params: {
       if (!colLower.has(field.toLowerCase())) continue;
       const raw = getVal(field);
       const value = field === COL.useAddr
-        ? (firstParcel || String(raw ?? '').trim() || '—')
+        ? formatAddressStripSidoSigungu(firstParcel || String(raw ?? '').trim()) || '—'
         : DATE_DETAIL_FIELDS.has(field)
         ? formatToYmdOrText(raw) || '—'
         : String(raw ?? '').trim() || '—';
@@ -248,12 +271,14 @@ export async function getRoadUseLedgerDetailById(params: {
   }
 }
 
+/** layer 스키마를 먼저 확인하고 없으면 public 스키마에서 탐색 */
 async function resolveLayerTableName(wantedLower: string): Promise<string | null> {
   const res = await db.execute(
     sql.raw(
       `SELECT table_name
        FROM information_schema.tables
-       WHERE table_schema = 'layer' AND lower(table_name) = '${esc(wantedLower)}'
+       WHERE table_schema IN ('layer', 'public') AND lower(table_name) = '${esc(wantedLower)}'
+       ORDER BY CASE table_schema WHEN 'layer' THEN 0 ELSE 1 END
        LIMIT 1`
     )
   );
@@ -261,6 +286,22 @@ async function resolveLayerTableName(wantedLower: string): Promise<string | null
   return row?.table_name != null && String(row.table_name).trim() !== ''
     ? String(row.table_name).trim()
     : null;
+}
+
+/** layer 또는 public 스키마에서 테이블의 실제 스키마를 함께 반환 */
+async function resolveTableWithSchema(wantedLower: string): Promise<{ tableName: string; schema: string } | null> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_schema, table_name
+       FROM information_schema.tables
+       WHERE table_schema IN ('layer', 'public') AND lower(table_name) = '${esc(wantedLower)}'
+       ORDER BY CASE table_schema WHEN 'layer' THEN 0 ELSE 1 END
+       LIMIT 1`
+    )
+  );
+  const row = res.rows?.[0] as { table_schema?: string; table_name?: string } | undefined;
+  if (!row?.table_name) return null;
+  return { tableName: String(row.table_name).trim(), schema: String(row.table_schema ?? 'public').trim() };
 }
 
 async function getTableColumns(schema: string, table: string): Promise<string[]> {
@@ -277,11 +318,6 @@ async function getTableColumns(schema: string, table: string): Promise<string[]>
   return (res.rows as { name?: string }[])
     .map((r) => String(r?.name ?? '').trim())
     .filter(Boolean);
-}
-
-/** 통합 주소에서 앞의 두 토큰(시도·시군구 추정) 제거 */
-function sqlStripSidoSgg(addrExpr: string): string {
-  return `trim(both from regexp_replace(COALESCE(${addrExpr}, '')::text, '^[^\\s]+\\s+[^\\s]+\\s*', '', 'g'))`;
 }
 
 function validateColumns(columns: string[]): string | null {
@@ -320,26 +356,29 @@ export async function getRoadUseLedgerExtent3857ById(params: {
     return { extent3857: null, error: '유효하지 않은 id입니다.' };
   }
 
-  const tableName = await resolveLayerTableName('road_use_ledger');
-  if (!tableName) {
-    return { extent3857: null, error: 'layer 스키마에 road_use_ledger 테이블이 없습니다.' };
+  const tblMeta = await resolveTableWithSchema('road_use_ledger');
+  if (!tblMeta) {
+    return { extent3857: null, error: 'road_use_ledger 테이블이 없습니다.' };
   }
+  const { tableName, schema: tblSchema } = tblMeta;
 
-  const columns = await getTableColumns('layer', tableName);
+  const columns = await getTableColumns(tblSchema, tableName);
   const colLower = new Set(columns.map((c) => c.toLowerCase()));
   if (!colLower.has(COL.id.toLowerCase())) {
     return { extent3857: null, error: 'id 컬럼이 없습니다.' };
   }
 
   // 1순위: road_use_ledger_jijuk 첫 필지(가장 위 id) 위치
-  const jijukTableName = await resolveLayerTableName('road_use_ledger_jijuk');
-  if (jijukTableName) {
-    const jCols = await getTableColumns('layer', jijukTableName);
+  const jijukMeta2 = await resolveTableWithSchema('road_use_ledger_jijuk');
+  if (jijukMeta2) {
+    const { tableName: jijukTableName, schema: jijukSchema2 } = jijukMeta2;
+    const jCols = await getTableColumns(jijukSchema2, jijukTableName);
     const jLower = new Set(jCols.map((c) => c.toLowerCase()));
     const hasParentId = jLower.has('parent_id');
     const hasGeom = jLower.has('geom');
     if (hasParentId && hasGeom) {
       const safeJijuk = jijukTableName.replace(/"/g, '""');
+      const safeJijukSchema2 = jijukSchema2.replace(/"/g, '""');
       const jOrder = jLower.has('id') ? quoteIdent('id') : quoteIdent('parent_id');
       const jSql = `
         SELECT
@@ -349,7 +388,7 @@ export async function getRoadUseLedgerExtent3857ById(params: {
           ST_YMax(box)::float8 AS ymax
         FROM (
           SELECT ST_Envelope(ST_Transform(jj.${quoteIdent('geom')}, 3857))::box2d AS box
-          FROM layer."${safeJijuk}" jj
+          FROM "${safeJijukSchema2}"."${safeJijuk}" jj
           WHERE jj.${quoteIdent('parent_id')} = ${idRaw}::bigint AND jj.${quoteIdent('geom')} IS NOT NULL
           ORDER BY jj.${jOrder}
           LIMIT 1
@@ -373,13 +412,14 @@ export async function getRoadUseLedgerExtent3857ById(params: {
     }
   }
 
-  let geomCol = await resolveGeometryColumn('layer', tableName);
+  let geomCol = await resolveGeometryColumn(tblSchema, tableName);
   if (!geomCol && colLower.has('geom')) geomCol = 'geom';
   if (!geomCol) {
     return { extent3857: null, error: 'geometry 컬럼을 찾을 수 없습니다.' };
   }
 
   const safeTbl = tableName.replace(/"/g, '""');
+  const safeTblSchema = tblSchema.replace(/"/g, '""');
   const gq = quoteIdent(geomCol);
   const iq = quoteIdent(COL.id);
 
@@ -391,7 +431,7 @@ export async function getRoadUseLedgerExtent3857ById(params: {
       ST_YMax(box)::float8 AS ymax
     FROM (
       SELECT ST_Extent(ST_Transform(t.${gq}, 3857))::box2d AS box
-      FROM layer."${safeTbl}" t
+      FROM "${safeTblSchema}"."${safeTbl}" t
       WHERE t.${iq} = ${idRaw}::bigint AND t.${gq} IS NOT NULL
     ) sub
     WHERE box IS NOT NULL`;
@@ -437,16 +477,17 @@ export async function getRoadUseLedgerList(params?: {
   error?: string;
 }> {
   const keyword = String(params?.keyword ?? '').trim();
-  const tableName = await resolveLayerTableName('road_use_ledger');
-  if (!tableName) {
+  const listTblMeta = await resolveTableWithSchema('road_use_ledger');
+  if (!listTblMeta) {
     return {
       rows: [],
       hasUseMgjColumn: false,
-      error: 'layer 스키마에 road_use_ledger 테이블이 없습니다.',
+      error: 'road_use_ledger 테이블이 없습니다.',
     };
   }
+  const { tableName, schema: listTblSchema } = listTblMeta;
 
-  const columns = await getTableColumns('layer', tableName);
+  const columns = await getTableColumns(listTblSchema, tableName);
   const colErr = validateColumns(columns);
   if (colErr) {
     return { rows: [], hasUseMgjColumn: false, error: colErr };
@@ -459,19 +500,21 @@ export async function getRoadUseLedgerList(params?: {
   const t = 't';
   const q = (name: string) => `${t}.${quoteIdent(name)}`;
 
-  const jijukTableName = await resolveLayerTableName('road_use_ledger_jijuk');
+  const jijukListMeta = await resolveTableWithSchema('road_use_ledger_jijuk');
   let firstJijukParcelExpr = `''::text`;
-  if (jijukTableName) {
-    const jijukCols = await getTableColumns('layer', jijukTableName);
+  if (jijukListMeta) {
+    const { tableName: jijukTableName, schema: jijukListSchema } = jijukListMeta;
+    const jijukCols = await getTableColumns(jijukListSchema, jijukTableName);
     const jijukLower = new Set(jijukCols.map((c) => c.toLowerCase()));
     const hasParentId = jijukLower.has('parent_id');
     const hasParcelAddress = jijukLower.has(COL.parcelAddress.toLowerCase());
     if (hasParentId && hasParcelAddress) {
       const safeJijuk = jijukTableName.replace(/"/g, '""');
+      const safeJijukListSchema = jijukListSchema.replace(/"/g, '""');
       const orderField = jijukLower.has('id') ? quoteIdent('id') : quoteIdent(COL.parcelAddress);
       firstJijukParcelExpr = `COALESCE((
         SELECT jj.${quoteIdent(COL.parcelAddress)}::text
-        FROM layer."${safeJijuk}" jj
+        FROM "${safeJijukListSchema}"."${safeJijuk}" jj
         WHERE jj.${quoteIdent('parent_id')} = ${q(COL.id)}::bigint
           AND COALESCE(jj.${quoteIdent(COL.parcelAddress)}::text, '') <> ''
         ORDER BY jj.${orderField}
@@ -481,9 +524,9 @@ export async function getRoadUseLedgerList(params?: {
   }
 
   const spotSourceExpr = `COALESCE(NULLIF(${firstJijukParcelExpr}, ''), ${q(COL.useAddr)}::text, '')`;
-  const spotExpr = sqlStripSidoSgg(spotSourceExpr);
+  const spotExpr = spotSourceExpr;
   const propertySpotExpr = hasUseMgjColumn
-    ? sqlStripSidoSgg(`${q(COL.useMgj)}`)
+    ? `COALESCE(${q(COL.useMgj)}::text, '')`
     : `''::text`;
   const permitNoExpr = `COALESCE(${q(COL.useNo)}::text, '')`;
   const permitDateExpr = `COALESCE(${q(COL.usePermitDate)}::text, '')`;
@@ -512,6 +555,7 @@ export async function getRoadUseLedgerList(params?: {
     : '';
 
   const safeTbl = tableName.replace(/"/g, '""');
+  const safeListTblSchema = listTblSchema.replace(/"/g, '""');
 
   const sqlText = `
     SELECT
@@ -522,7 +566,7 @@ export async function getRoadUseLedgerList(params?: {
       ${areaExpr} AS "area",
       ${startExpr} AS "useStart",
       ${endExpr} AS "useEnd"
-    FROM layer."${safeTbl}" ${t}
+    FROM "${safeListTblSchema}"."${safeTbl}" ${t}
     WHERE 1=1 ${kwClause}
     ORDER BY ${q(COL.id)}
     LIMIT 5000`;
@@ -534,8 +578,8 @@ export async function getRoadUseLedgerList(params?: {
       return {
         rowKey: String(row.rowKey ?? '').trim(),
         permitNo: String(row.permitNo ?? '').trim(),
-        spotWithoutSidoSgg: String(row.spotWithoutSidoSgg ?? '').trim(),
-        propertySpot: String(row.propertySpot ?? '').trim(),
+        spotWithoutSidoSgg: formatAddressStripSidoSigungu(row.spotWithoutSidoSgg),
+        propertySpot: formatAddressStripSidoSigungu(row.propertySpot),
         area: String(row.area ?? '').trim(),
         useStart: formatToYmdOrText(row.useStart),
         useEnd: formatToYmdOrText(row.useEnd),

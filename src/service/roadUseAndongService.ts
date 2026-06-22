@@ -150,10 +150,30 @@ function s(v: unknown): string {
   return String(v ?? '').trim();
 }
 
+function normalizeParcelText(raw: string): string {
+  let t = s(raw);
+  if (!t) return t;
+  t = t.replace(/번지선/gi, '번지');
+  t = t.replace(/\s*하천부지\s*/gi, ' ');
+  t = t.replace(/\s*하천\s*/gi, ' ');
+  // 5자리 이상 숫자는 본번·부번이 아니므로 제거 (주민번호·관리번호 등 오염 방지)
+  t = t.replace(/\b\d{5,}\b/g, '');
+  return t.replace(/\s{2,}/g, ' ').trim();
+}
+
 function isLikelyComplexParcelText(raw: string): boolean {
-  const t = s(raw);
+  const t = normalizeParcelText(raw);
   if (!t) return false;
-  return /[\r\n,;]|외\s*\d+|및|\/|·/.test(t);
+  if (/[\r\n,;]|외\s*\d+|및|\/|·/.test(t)) return true;
+  // '번지'가 두 번 이상 → 한 칸에 지번이 여러 개
+  if ((t.match(/번지/g) ?? []).length >= 2) return true;
+  // 숫자-(한글/영문 단어 1개 이상)-숫자 → 지번이 여러 개로 추정 (공백 포함 멀티워드도 감지)
+  if (/\d+(?:\s+[가-힣A-Za-z]+)+\s+\d+/.test(t)) return true;
+  // "번지" 뒤에 읍/면/동/리가 또 나오면 새 필지 주소가 시작됨 (예: "236번지 입암면 금학리 1203")
+  if (/번지\s+[가-힣]+(?:읍|면|동|리)/.test(t)) return true;
+  // 시·도 행정구역 단위(도/광역시/특별시 등)가 2번 이상 → 전체 주소가 반복됨 (예: "...도곡리 630 경상북도 영양군...")
+  if ((t.match(/[가-힣]+(?:도|광역시|특별시|특별자치시|특별자치도)/g) ?? []).length >= 2) return true;
+  return false;
 }
 
 function enrichParcelPrefixContext(parcels: string[], rawText: string): string[] {
@@ -219,15 +239,19 @@ function splitParcelsByRule(raw: string): string[] {
 }
 
 async function gptNormalizeParcels(openaiApiKey: string, rawText: string): Promise<string[]> {
+  const normalizedInput = normalizeParcelText(rawText);
   const prompt = `다음 문자열은 도로점용 필지목록입니다.
 - 콤마/줄바꿈/세미콜론/외 N필지 등 혼합 표기를 "개별 지번 문자열 배열"로 정규화하세요.
+- "652번지 5호"처럼 "번지" 뒤에 오는 "N호"는 호수/건물번호이므로 부번(-N)으로 보지 말고 제외하고 "652번지"로만 반환하세요. ("652-5"로 만들지 마세요)
+- "번지" 뒤에 읍/면/동/리가 다시 나오면 새 필지의 시작으로 보고 분리하세요. (예: "236번지 입암면 금학리 1203" → ["...입암면 금학리 236번지", "...입암면 금학리 1203번지"])
+- "하천", "하천부지", "번지선" 등 지번이 아닌 설명어는 제거하세요.
 - 모르는 정보는 추정하지 마세요.
 - 빈값은 제외하세요.
 - 응답은 JSON 한 개만:
 { "parcels": ["...", "..."] }
 
 입력:
-${rawText}`;
+${normalizedInput}`;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -263,10 +287,11 @@ ${rawText}`;
 }
 
 async function normalizeParcels(rawText: string, openaiApiKey?: string): Promise<string[]> {
-  const rule = splitParcelsByRule(rawText);
-  if (!openaiApiKey || !isLikelyComplexParcelText(rawText)) return rule;
+  const normalized = normalizeParcelText(rawText);
+  const rule = splitParcelsByRule(normalized);
+  if (!openaiApiKey || !isLikelyComplexParcelText(normalized)) return rule;
   try {
-    return await gptNormalizeParcels(openaiApiKey, rawText);
+    return await gptNormalizeParcels(openaiApiKey, normalized);
   } catch {
     return rule;
   }
