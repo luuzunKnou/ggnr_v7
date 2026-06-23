@@ -32,7 +32,7 @@ export default function Map3DDataPanel({ onClose }: { onClose: () => void }) {
       const res = await call('', 'POST', {
         service: 'fileManagerService',
         action: 'listDirectory',
-        params: { relativePath: 'service_data/3dtiles_tiff' },
+        params: { relativePath: '3dtiles_tiff' },
       });
       const data = res?.data ?? res;
       const dirs = Array.isArray(data?.directories) ? data.directories : [];
@@ -42,7 +42,7 @@ export default function Map3DDataPanel({ onClose }: { onClose: () => void }) {
           const r = await call('', 'POST', {
             service: 'fileManagerService',
             action: 'listDirectory',
-            params: { relativePath: `service_data/3dtiles_tiff/${folder}` },
+            params: { relativePath: `3dtiles_tiff/${folder}` },
           }).catch(() => ({ data: { files: [] } }));
           const files = (r?.data ?? r)?.files ?? [];
           files.forEach((f: { name: string }) => {

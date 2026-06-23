@@ -18,7 +18,6 @@ type AggregatedRow = {
   pathOrResult: string;
   steps: {
     upload?: '완료' | '실패' | '변환 중' | undefined;
-    geotiff?: '완료' | '실패' | '변환 중' | undefined;
     ecef?: '완료' | '실패' | '변환 중' | undefined;
     pnts?: '완료' | '실패' | '변환 중' | undefined;
   };
@@ -72,7 +71,7 @@ function StepCell({ status }: { status?: '완료' | '실패' | '변환 중' }) {
 }
 
 export function LasFileUploaderContent() {
-  const [relativePath, setRelativePath] = useState('upload_data/las');
+  const [relativePath, setRelativePath] = useState('3dtiles_las');
   const [list, setList] = useState<DirListResult | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,8 +82,8 @@ export function LasFileUploaderContent() {
   const [envSetupLoading, setEnvSetupLoading] = useState(false);
   const [envSetupResult, setEnvSetupResult] = useState<{ success: boolean; message: string; log: string } | null>(null);
   const [retryingPath, setRetryingPath] = useState<string | null>(null);
-  const [retryingStep, setRetryingStep] = useState<{ path: string; step: 'geotiff' | 'ecef' | 'pnts' } | null>(null);
-  const [runningSteps, setRunningSteps] = useState<Record<string, { geotiff?: 'start' | 'ok' | 'fail'; ecef?: 'start' | 'ok' | 'fail'; pnts?: 'start' | 'ok' | 'fail' }>>({});
+  const [retryingStep, setRetryingStep] = useState<{ path: string; step: 'ecef' | 'pnts' } | null>(null);
+  const [runningSteps, setRunningSteps] = useState<Record<string, { ecef?: 'start' | 'ok' | 'fail'; pnts?: 'start' | 'ok' | 'fail' }>>({});
   /** 업로드 직후 파이프라인 진행 중인 행(이력에 아직 없을 때 표시) */
   const [pendingRows, setPendingRows] = useState<AggregatedRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,7 +95,7 @@ export function LasFileUploaderContent() {
       if (normPath(retryingPath ?? '') === np) return true;
       if (retryingStep && normPath(retryingStep.path) === np) return true;
       const run = runningSteps[np];
-      return Boolean(run && (run.geotiff === 'start' || run.ecef === 'start' || run.pnts === 'start'));
+      return Boolean(run && (run.ecef === 'start' || run.pnts === 'start'));
     },
     [retryingPath, retryingStep, runningSteps]
   );
@@ -164,7 +163,7 @@ export function LasFileUploaderContent() {
     const es = new EventSource('/api/pipeline-events');
     es.onmessage = (e) => {
       try {
-        const ev = JSON.parse(e.data) as { path: string; step: 'geotiff' | 'ecef' | 'pnts'; status: 'start' | 'ok' | 'fail' };
+        const ev = JSON.parse(e.data) as { path: string; step: 'ecef' | 'pnts'; status: 'start' | 'ok' | 'fail' };
         const pathKey = normPath(ev.path);
         setRunningSteps((prev) => ({
           ...prev,
@@ -192,7 +191,7 @@ export function LasFileUploaderContent() {
     if (!relativePath) return;
     const parts = relativePath.replace(/\/$/, '').split(/[/\\]/).filter(Boolean);
     parts.pop();
-    setRelativePath(parts.length ? parts.join('/') : 'upload_data');
+    setRelativePath(parts.length ? parts.join('/') : '');
   };
 
   const goInto = (dirName: string) => {
@@ -216,7 +215,7 @@ export function LasFileUploaderContent() {
           ...prev,
           { at: new Date().toISOString(), sourceFile, pathOrResult: savedPath, steps: { upload: '완료' } },
         ]);
-        setRunningSteps((prev) => ({ ...prev, [normPath(savedPath)]: { geotiff: 'start' } }));
+        setRunningSteps((prev) => ({ ...prev, [normPath(savedPath)]: { ecef: 'start' } }));
         fetchList();
         fetchHistory();
       }
@@ -237,7 +236,7 @@ export function LasFileUploaderContent() {
           ...prev,
           { at: new Date().toISOString(), sourceFile, pathOrResult: savedPath, steps: { upload: '완료' } },
         ]);
-        setRunningSteps((prev) => ({ ...prev, [normPath(savedPath)]: { geotiff: 'start' } }));
+        setRunningSteps((prev) => ({ ...prev, [normPath(savedPath)]: { ecef: 'start' } }));
         fetchList();
         fetchHistory();
       }
@@ -277,7 +276,7 @@ export function LasFileUploaderContent() {
   );
 
   const handleStepClick = useCallback(
-    (pathOrResult: string, step: 'geotiff' | 'ecef' | 'pnts', row: AggregatedRow) => {
+    (pathOrResult: string, step: 'ecef' | 'pnts', row: AggregatedRow) => {
       if (isPathRunning(pathOrResult)) {
         alert('해당 파일에 대한 작업이 이미 진행 중입니다. 완료 후 다시 시도해주세요.');
         return;
@@ -422,7 +421,7 @@ export function LasFileUploaderContent() {
         <section className="shrink-0 flex flex-col gap-2 rounded border border-border p-3 bg-muted/20">
           <input ref={fileInputRef} type="file" className="hidden" accept=".las,.laz" onChange={handleFileSelect} />
           <div className="text-xs text-muted-foreground">1) 업로드 → 2) 변환 자동 실행 → 3) 이력에서 확인</div>
-          <div className="text-sm font-medium">저장 위치: upload_data/las</div>
+          <div className="text-sm font-medium">저장 위치: 3dtiles_las/&lt;dataset&gt;/원본파일.las</div>
           <div
             role="button"
             tabIndex={0}
@@ -489,16 +488,10 @@ export function LasFileUploaderContent() {
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => goToResult('upload_data/las')}>
+            <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => goToResult('3dtiles_las')}>
               업로드 결과 보기
             </Button>
-            <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => goToResult('service_data/3dtiles_tiff')}>
-              GeoTIFF 결과 보기
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => goToResult('service_data/3dtiles_ecef')}>
-              ECEF 결과 보기
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => goToResult('service_data/3dtiles_pnts')}>
+            <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => goToResult('3dtiles_pnts')}>
               PNTS 결과 보기
             </Button>
           </div>
@@ -576,7 +569,6 @@ export function LasFileUploaderContent() {
                   <th className="text-left py-1.5 px-2 w-20">일시</th>
                   <th className="text-left py-1.5 px-2 min-w-[100px]">원본 파일</th>
                   <th className="text-center py-1.5 px-1 w-14">업로드</th>
-                  <th className="text-center py-1.5 px-1 w-14">GeoTIFF</th>
                   <th className="text-center py-1.5 px-1 w-14">ECEF</th>
                   <th className="text-center py-1.5 px-1 w-14">PNTS</th>
                   <th className="text-left py-1.5 px-2 w-20">재실행</th>
@@ -586,8 +578,6 @@ export function LasFileUploaderContent() {
                 {displayRows.map((row, i) => {
                   const pathRunning = isPathRunning(row.pathOrResult);
                   const run = runningSteps[normPath(row.pathOrResult)];
-                  const geotiffStatus: AggregatedRow['steps']['geotiff'] =
-                    run?.geotiff === 'start' ? '변환 중' : run?.geotiff === 'ok' ? '완료' : run?.geotiff === 'fail' ? '실패' : row.steps.geotiff;
                   const ecefStatus: AggregatedRow['steps']['ecef'] =
                     run?.ecef === 'start' ? '변환 중' : run?.ecef === 'ok' ? '완료' : run?.ecef === 'fail' ? '실패' : row.steps.ecef;
                   const pntsStatus: AggregatedRow['steps']['pnts'] =
@@ -602,21 +592,6 @@ export function LasFileUploaderContent() {
                     </td>
                     <td className="py-1 px-1 text-center">
                       <StepCell status={row.steps.upload} />
-                    </td>
-                    <td className="py-1 px-1 text-center">
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className={cn(
-                          'inline-block rounded',
-                          pathRunning ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-muted/50'
-                        )}
-                        onClick={() => handleStepClick(row.pathOrResult, 'geotiff', row)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleStepClick(row.pathOrResult, 'geotiff', row)}
-                        title={pathRunning ? '해당 파일 작업 진행 중' : '클릭 시 GeoTIFF만 재실행'}
-                      >
-                        <StepCell status={geotiffStatus} />
-                      </span>
                     </td>
                     <td className="py-1 px-1 text-center">
                       <span

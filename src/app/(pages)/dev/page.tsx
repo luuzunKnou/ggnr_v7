@@ -66,7 +66,7 @@ export default function DevPage() {
       await call("", "POST", {
         service: "pipelineService",
         action: "runLasPipeline",
-        params: { lasRelativePath: "upload_data/las/sampleData16.las" },
+        params: { lasRelativePath: "3dtiles_las/sampleData16/sampleData16.las" },
       })
       setSampleGenMessage("파이프라인을 시작했습니다. LAS File Uploader 이력에서 결과를 확인하세요.")
     } catch (err) {
@@ -152,7 +152,7 @@ export default function DevPage() {
       getDescription={getDevMenuDescription}
       renderContent={renderDevMenuContent}
       renderTitleExtra={(menuId) =>
-        menuId === "fileManager" ? (
+        menuId === "lasFileUploader" ? (
           <>
             <Button
               type="button"

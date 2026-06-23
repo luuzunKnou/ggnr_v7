@@ -136,7 +136,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
 
   const goUp = useCallback(() => {
     const parts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
-    if (parts.length <= 2) return;
+    if (parts.length <= 1) return;
     parts.pop();
     onPathChange(parts.join('/'));
   }, [relativePath, onPathChange]);
@@ -522,7 +522,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
             const parts = slashPath.split('/');
             let fullPath: string;
             if (parts.length > 1) {
-              fullPath = 'service_data/shp_data/' + slashPath;
+              fullPath = 'shp_data/' + slashPath;
             } else {
               const rp = relativePath.replace(/\\/g, '/').replace(/\/$/, '');
               fullPath = rp + '/' + slashPath;
@@ -548,7 +548,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
       try {
         const uniqueDirs = new Set<string>();
         for (const s of uploadedShpPaths) {
-          const dir = s.path.replace(/\\/g, '/').replace(/\/[^/]+$/, '') || 'service_data/shp_data';
+          const dir = s.path.replace(/\\/g, '/').replace(/\/[^/]+$/, '') || 'shp_data';
           uniqueDirs.add(dir);
         }
         for (const dir of uniqueDirs) {
@@ -606,7 +606,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
   );
 
   const pathParts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
-  const canGoUp = pathParts.length > 2;
+  const canGoUp = pathParts.length > 1;
   const isBusy = folderUploading || postProcessing;
   const syncNeedCount = fileLogs.filter((s) => s.table === 'sync').length;
   const successCount = fileLogs.filter((s) => s.table !== 'fail' && s.table !== 'pending' && s.table !== 'sync' && s.layer !== 'fail' && s.layer !== 'pending' && s.style !== 'fail' && s.style !== 'pending' && s.define !== 'fail' && s.define !== 'pending').length;

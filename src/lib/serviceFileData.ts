@@ -1,5 +1,5 @@
 /**
- * GGNR_DATA_DIR 기준 service_data/file_data/{layer}/{key}/ 첨부 저장소.
+ * GGNR_DATA_DIR 기준 file_data/{layer}/{key}/ 첨부 저장소.
  * (사업별로 GGNR_DATA_DIR가 이미 프로젝트 루트를 가리킴)
  */
 
@@ -17,15 +17,15 @@ export function fileDataRelativeDir(layerName: string, keyValue: string): string
   const L = assertSafeFileDataSegment(layerName);
   const K = assertSafeFileDataSegment(String(keyValue));
   if (!L || !K) return null;
-  return `service_data/file_data/${L}/${K}`;
+  return `file_data/${L}/${K}`;
 }
 
 /**
- * 다운로드 허용: service_data/file_data/{layer}/{key}/{file}
+ * 다운로드 허용: file_data/{layer}/{key}/{file}
  */
 export function isAllowedServiceFileDataDownloadPath(relativePath: string): boolean {
   const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
-  const prefix = 'service_data/file_data/';
+  const prefix = 'file_data/';
   if (!norm.startsWith(prefix)) return false;
   const rest = norm.slice(prefix.length);
   if (!rest || rest.includes('..')) return false;

@@ -25,6 +25,7 @@ import * as roadUseAndongService from './roadUseAndongService';
 import * as buildPublicLandService from './buildPublicLandService';
 import * as fileDataUploadService from './fileDataUploadService';
 import * as integrationService from './integrationService';
+import * as fileConverterService from './fileConverterService';
 
 export {
   configService,
@@ -51,4 +52,5 @@ export {
   buildPublicLandService,
   fileDataUploadService,
   integrationService,
+  fileConverterService,
 };

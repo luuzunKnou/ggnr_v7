@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const BASE_DIR = path.normalize(path.join(GGNR_DATA_DIR, 'service_data', '2dtiles'));
+const BASE_DIR = path.normalize(path.join(GGNR_DATA_DIR, 'tiles_jpg'));
 
 function isSafeOrthoSegment(s: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(s);

@@ -114,18 +114,18 @@ export type ExlStatusRow = {
 };
 
 /**
- * service_data/excel_data 내 .xlsx 파일 목록 및 테이블/레이어/define 상태.
+ * excel_data 내 .xlsx 파일 목록 및 테이블/레이어/define 상태.
  */
 export async function getExlStatusList(params?: { relativePath?: string }): Promise<{ success: boolean; rows?: ExlStatusRow[]; path?: string; error?: string }> {
-  const baseExcel = path.join(GGNR_DATA_DIR, 'service_data', 'excel_data');
-  const relativePath = (params?.relativePath ?? 'service_data/excel_data').trim().replace(/^[/\\]+/, '');
+  const baseExcel = path.join(GGNR_DATA_DIR, 'excel_data');
+  const relativePath = (params?.relativePath ?? 'excel_data').trim().replace(/^[/\\]+/, '');
   const dir = relativePath ? path.join(GGNR_DATA_DIR, relativePath) : baseExcel;
   if (!dir.startsWith(baseExcel)) {
     return { success: true, rows: [], path: baseExcel };
   }
 
   try {
-    await fs.mkdir(path.join(GGNR_DATA_DIR, 'service_data', 'excel_data'), { recursive: true });
+    await fs.mkdir(path.join(GGNR_DATA_DIR, 'excel_data'), { recursive: true });
   } catch {
     // ignore
   }
@@ -147,7 +147,7 @@ export async function getExlStatusList(params?: { relativePath?: string }): Prom
     return { success: true, rows: [], path: dir };
   }
 
-  const pathOrResultPrefix = relativePath ? `${relativePath.replace(/\\/g, '/')}/` : 'service_data/excel_data/';
+  const pathOrResultPrefix = relativePath ? `${relativePath.replace(/\\/g, '/')}/` : 'excel_data/';
   let layerNames: string[] = [];
   let styleNames: string[] = [];
   try {

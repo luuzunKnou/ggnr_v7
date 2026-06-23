@@ -26,6 +26,36 @@ export type { TileFeaturePickResult };
 
 type CesiumViewer = import('cesium').Viewer;
 type Cesium3DTileset = import('cesium').Cesium3DTileset;
+type CesiumModule = Awaited<ReturnType<typeof getCesium>>;
+
+function applyTilesetVerticalOffset(
+  Cesium: CesiumModule,
+  tileset: Cesium3DTileset,
+  offsetMeters: number
+): void {
+  if (!Number.isFinite(offsetMeters) || Math.abs(offsetMeters) < 1e-6) {
+    tileset.modelMatrix = Cesium.Matrix4.IDENTITY;
+    return;
+  }
+  const bs = tileset.boundingSphere;
+  if (!bs?.center) return;
+  const { x, y, z } = bs.center;
+  const lenSq = x * x + y * y + z * z;
+  if (!Number.isFinite(lenSq) || lenSq < 1e-12) return;
+  const up = Cesium.Cartesian3.normalize(bs.center, new Cesium.Cartesian3());
+  const translation = Cesium.Cartesian3.multiplyByScalar(
+    up,
+    offsetMeters,
+    new Cesium.Cartesian3()
+  );
+  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+}
+
+function getTilesetKindFromLayerKey(layerKey: string): Visible3DTilesetEntry['kind'] | null {
+  if (layerKey.startsWith('pnts:')) return 'pnts';
+  if (layerKey.startsWith('b3dm:')) return 'b3dm';
+  return null;
+}
 
 function formatPickPropertyValue(val: unknown): string {
   if (val === null || val === undefined) return String(val);
@@ -124,11 +154,15 @@ export function tilesetLayerKey(kind: 'pnts' | 'b3dm', name: string): string {
 }
 
 export type CesiumMapProps = {
-  /** 표시할 3D Tiles — 디스크: service_data/3dtiles/(이름)/pnts 또는 …/b3dm */
+  /** 초기 기본 중심 좌표(WGS84). 미지정 시 하드코드 fallback 사용 */
+  defaultCenter?: { lon: number; lat: number; height?: number } | null;
+  /** 표시할 3D Tiles — 디스크: 3dtiles_pnts/(이름) 또는 3dtiles_b3dm/(이름) */
   visibleTilesets: Visible3DTilesetEntry[];
   onTilesetLoadError?: (name: string, message: string) => void;
   /** 배경 지도(글로브/이미지) 표시 여부. 기본 true */
   globeVisible?: boolean;
+  /** 모든 메시(B3DM)에 일괄 적용할 Z 오프셋(m) */
+  meshTilesetZOffsetM?: number;
   /** GeoServer WMS 지적도 오버레이 (2D와 동일 레이어 소스) */
   cadastralWmsEnabled?: boolean;
   /** null 이면 지적도 전 테이블, 아니면 해당 tableName 만 */
@@ -150,9 +184,11 @@ export type CesiumMapRef = {
 
 const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
   {
+    defaultCenter = null,
     visibleTilesets,
     onTilesetLoadError,
     globeVisible = true,
+    meshTilesetZOffsetM = 0,
     cadastralWmsEnabled = false,
     cadastralVisibleTableNames = null,
     backgroundMapId = 'aerial-2022',
@@ -312,9 +348,9 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
 
       viewer.camera.setView({
         destination: Cesium.Cartesian3.fromDegrees(
-          DEFAULT_CENTER_LON,
-          DEFAULT_CENTER_LAT,
-          DEFAULT_CAMERA_HEIGHT_3D
+          defaultCenter?.lon ?? DEFAULT_CENTER_LON,
+          defaultCenter?.lat ?? DEFAULT_CENTER_LAT,
+          defaultCenter?.height ?? DEFAULT_CAMERA_HEIGHT_3D
         ),
       });
 
@@ -347,7 +383,7 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
 
       tilesetsRef.current.clear();
     };
-  }, []);
+  }, [defaultCenter]);
 
   // ========== 레이어 표시/숨김 및 추가 ==========
   useEffect(() => {
@@ -359,6 +395,16 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
     const nextVisibleKeys = new Set(
       visibleTilesets.map((e) => tilesetLayerKey(e.kind, e.name))
     );
+
+    viewer.scene.globe.depthTestAgainstTerrain = visibleTilesets.some((entry) => entry.kind === 'b3dm');
+
+    void getCesium().then((Cesium) => {
+      for (const [layerKey, tileset] of currentMap) {
+        if (getTilesetKindFromLayerKey(layerKey) === 'b3dm') {
+          applyTilesetVerticalOffset(Cesium, tileset, meshTilesetZOffsetM);
+        }
+      }
+    });
 
     // 1. 이미 로드된 타일셋은 show만 토글 (remove/destroy 없이 → 에러 방지, 끄면 화면에서 숨김)
     for (const [layerKey, tileset] of currentMap) {
@@ -410,20 +456,25 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
           로드된_타일_목록: Array.from(currentMap.keys()),
         });
 
-        // 고도 오프셋: 지형/수면 위로 올려서 표시
-        if (TILESET_HEIGHT_OFFSET_M !== 0) {
+        if (kind === 'b3dm') {
+          const rp = (tileset as { readyPromise?: Promise<Cesium3DTileset> }).readyPromise;
+          if (rp) {
+            rp.then(() => {
+              applyTilesetVerticalOffset(Cesium, tileset, meshTilesetZOffsetM);
+            }).catch(() => {});
+          } else {
+            applyTilesetVerticalOffset(Cesium, tileset, meshTilesetZOffsetM);
+          }
+        }
+
+        // 포인트 클라우드만 필요 시 지형 위로 조금 올려서 가시성을 확보한다.
+        if (kind === 'pnts' && TILESET_HEIGHT_OFFSET_M !== 0) {
           const rp = (tileset as { readyPromise?: Promise<Cesium3DTileset> }).readyPromise;
           if (rp) {
             rp.then(() => {
               const bs = tileset.boundingSphere;
               if (bs?.center) {
-                const up = Cesium.Cartesian3.normalize(bs.center, new Cesium.Cartesian3());
-                const translation = Cesium.Cartesian3.multiplyByScalar(
-                  up,
-                  TILESET_HEIGHT_OFFSET_M,
-                  new Cesium.Cartesian3()
-                );
-                tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+                applyTilesetVerticalOffset(Cesium, tileset, TILESET_HEIGHT_OFFSET_M);
                 try {
                   const carto = Cesium.Cartographic.fromCartesian(bs.center);
                   const lonDeg = (carto.longitude * 180) / Math.PI;
@@ -447,7 +498,7 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
         onTilesetLoadError?.(layerKey, msg);
       }
     });
-  }, [viewerReady, visibleTilesets]);
+  }, [viewerReady, visibleTilesets, meshTilesetZOffsetM, onTilesetLoadError]);
 
   return (
     <div className="relative w-full h-full">

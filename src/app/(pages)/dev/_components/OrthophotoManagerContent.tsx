@@ -342,11 +342,11 @@ export function OrthophotoManagerContent() {
         <p className="font-medium text-foreground">업로드 · 변환 경로</p>
         <ul className="list-disc pl-5 text-muted-foreground text-xs space-y-0.5">
           <li>
-            업로드: <code className="text-foreground">upload_data/satellite_tif/&#123;그룹폴더&#125;/…/*.tif</code>
+            업로드: <code className="text-foreground">tiles_tif/&#123;그룹폴더&#125;/…/*.tif</code>
             — 파일은 재투영 없이 원본 바이트 그대로 저장됩니다.
           </li>
           <li>
-            결과: <code className="text-foreground">service_data/2dtiles/&#123;그룹&#125;/z/x/y.jpg</code>
+            결과: <code className="text-foreground">tiles_jpg/&#123;그룹&#125;/z/x/y.jpg</code>
             · 변환은 항상 원본 좌표계 그대로(<code className="text-[10px]">gdal2tiles --profile=raster</code>) JPEG 타일을 굽습니다. 변환 후 브라우저에 그룹·출력폴더명이 저장됩니다.
           </li>
         </ul>
@@ -424,7 +424,7 @@ export function OrthophotoManagerContent() {
                   const requiresCrsSelect = needsCrsSelectForGroup(g);
                   return (
                     <tr key={g.groupName} className="border-t border-border">
-                      <td className="p-2 font-mono break-all">{`upload_data/satellite_tif/${g.groupName}`}</td>
+                      <td className="p-2 font-mono break-all">{`tiles_tif/${g.groupName}`}</td>
                       <td className="p-2 font-mono">{sourceCrs || '-'}</td>
                       <td className="p-2">{meta.expectedLayerName}</td>
                       <td className="p-2 text-right text-muted-foreground">{g.files.length}</td>

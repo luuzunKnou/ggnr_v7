@@ -134,7 +134,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [indexListError, setIndexListError] = useState<string | null>(null);
   const indexFitDoneRef = useRef<string | null>(null);
   const setRiverBasicPlanIndexFromMap = mapContext?.setRiverBasicPlanIndexFromMap;
-  /** define_field_is_key — 데이터 조회 첨부와 동일 (service_data/file_data/river_d_index/{키}/) */
+  /** define_field_is_key — 데이터 조회 첨부와 동일 (file_data/river_d_index/{키}/) */
   const [indexTableKeyFieldName, setIndexTableKeyFieldName] = useState<string | null>(null);
   /** define_table_parents_layer === river_plan_gd_ps 인 자식 define_table_name */
   const [structureChildLayerNames, setStructureChildLayerNames] = useState<string[]>([]);

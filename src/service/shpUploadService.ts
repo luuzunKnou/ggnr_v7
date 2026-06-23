@@ -1,6 +1,6 @@
 /**
  * SHP File Uploader service.
- * - 목록: GGNR_DATA_DIR/service_data/shp_data (또는 하위 폴더) 내 .shp 파일 및 Table/좌표계/layer/style/Define 상태
+ * - 목록: GGNR_DATA_DIR/shp_data (또는 하위 폴더) 내 .shp 파일 및 Table/좌표계/layer/style/Define 상태
  * - 후처리: GeoServer에 Shapefile 데이터스토어·레이어·스타일 생성
  * - 테이블 생성: GDAL ogr2ogr로 SHP → PostGIS layer 스키마
  */
@@ -241,14 +241,14 @@ function findLayerTableByName(
 
 /**
  * shp_data 폴더(또는 하위 폴더) 내 .shp 파일 목록과 좌표계/Table/layer/style/Define 상태 반환.
- * @param params.relativePath - 현재 폴더 상대경로 (예: service_data/shp_data, service_data/shp_data/폴더명). 해당 폴더 안의 .shp만 반환.
+ * @param params.relativePath - 현재 폴더 상대경로 (예: shp_data, shp_data/폴더명). 해당 폴더 안의 .shp만 반환.
  */
 export async function getShpStatusList(params?: { relativePath?: string }): Promise<{
   rows: ShpStatusRow[];
   path: string;
 }> {
-  const baseShp = path.join(GGNR_DATA_DIR, 'service_data', 'shp_data');
-  const relativePath = (params?.relativePath ?? 'service_data/shp_data').trim().replace(/^[/\\]+/, '');
+  const baseShp = path.join(GGNR_DATA_DIR, 'shp_data');
+  const relativePath = (params?.relativePath ?? 'shp_data').trim().replace(/^[/\\]+/, '');
   const dir = relativePath
     ? path.join(GGNR_DATA_DIR, relativePath)
     : baseShp;
@@ -258,7 +258,7 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
   const resultPath = dir;
 
   try {
-    await fs.mkdir(path.join(GGNR_DATA_DIR, 'service_data', 'shp_data'), { recursive: true });
+    await fs.mkdir(path.join(GGNR_DATA_DIR, 'shp_data'), { recursive: true });
   } catch {
     // ignore
   }
@@ -350,7 +350,7 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
     const basename = path.basename(name, '.shp');
     const pathOrResult = relativePath
       ? `${relativePath.replace(/\\/g, '/')}/${name}`
-      : `service_data/shp_data/${name}`;
+      : `shp_data/${name}`;
 
     let epsg: string | null = null;
     try {
@@ -1022,7 +1022,7 @@ export async function processShpBatch(params: {
     const uniqueDirs = new Set<string>();
     for (const p of params.shpPaths) {
       const dir = p.replace(/\\/g, '/').replace(/\/[^/]+$/, '');
-      uniqueDirs.add(dir || 'service_data/shp_data');
+      uniqueDirs.add(dir || 'shp_data');
     }
     const allRows: ShpStatusRow[] = [];
     for (const dir of uniqueDirs) {
@@ -1241,7 +1241,7 @@ export async function savePostProcessLog(params: {
   }>;
 }): Promise<{ success: boolean; logPath?: string; error?: string }> {
   try {
-    const rp = (params.relativePath ?? 'service_data/shp_data').trim().replace(/^[/\\]+/, '');
+    const rp = (params.relativePath ?? 'shp_data').trim().replace(/^[/\\]+/, '');
     const dir = path.join(GGNR_DATA_DIR, rp);
     await fs.mkdir(dir, { recursive: true });
 

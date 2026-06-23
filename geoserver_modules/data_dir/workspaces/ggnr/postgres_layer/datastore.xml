@@ -8,11 +8,11 @@
   </workspace>
   <connectionParameters>
     <entry key="schema">layer</entry>
-    <entry key="database">build_yy</entry>
+    <entry key="database">ggnr_yj</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:Cv+l5mjJl4yhCcuNjsyvVDmAHlgI6t/c</entry>
-    <entry key="host">localhost</entry>
-    <entry key="user">build_yy</entry>
+    <entry key="passwd">crypt1:jVYyOICcL217wnx8emaunQ==</entry>
+    <entry key="host">192.168.120.82</entry>
+    <entry key="user">ggnr_yj</entry>
   </connectionParameters>
   <__default>false</__default>
   <dateCreated>2026-02-11 16:00:05.307 UTC</dateCreated>

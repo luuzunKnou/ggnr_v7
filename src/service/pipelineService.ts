@@ -1,14 +1,15 @@
 /**
- * LAS/TIF 파이프라인: Python CLI 호출.
- * LAS 업로드 완료 시 캡쳐형 GeoTIFF + PNTS 자동 생성 (service_data/3dtiles_tiff, service_data/3dtiles_pnts).
+ * LAS 파이프라인: Python CLI 호출.
+ * LAS 업로드 완료 시 ECEF 보정 후 PNTS 생성 (3dtiles_las, 3dtiles_pnts).
  */
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { appendUploadConvertHistory } from './fileManagerService';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { broadcastPipelineStep } from '@/lib/pipelineEvents';
 
-const GGNR_DATA_DIR = 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 /** pdal/gdal이 설치된 Python. 미설정 시 'python'. 항상 프로젝트 루트(process.cwd()) 기준 상대경로로 해석 */
 function getPythonBin(): string {
@@ -43,7 +44,7 @@ function runCommand(
       child.kill('SIGTERM');
       resolve({ code: -1, stdout, stderr: stderr + '\n[타임아웃]' });
     }, timeoutMs);
-    child.on('close', (code, signal) => {
+    child.on('close', (code) => {
       clearTimeout(t);
       resolve({ code: code ?? -1, stdout, stderr });
     });
@@ -60,7 +61,7 @@ export type RunPipelineEnvSetupResult = { success: boolean; message: string; log
  * python/env Conda 환경 생성 및 pdal, gdal, libpq, py3dtiles[las] 설치.
  * libpq: GDAL PostgreSQL 드라이버(ogr2ogr SHP→PostGIS)용. File Manager에서 "환경 생성 및 설치" 실행 시 호출. conda가 PATH에 있어야 함.
  */
-export async function runPipelineEnvSetup(_params?: object): Promise<RunPipelineEnvSetupResult> {
+export async function runPipelineEnvSetup(): Promise<RunPipelineEnvSetupResult> {
   const projectRoot = path.resolve(process.cwd());
   const pythonDir = path.join(projectRoot, 'python');
   const envPath = path.join(pythonDir, 'env');
@@ -86,17 +87,21 @@ export async function runPipelineEnvSetup(_params?: object): Promise<RunPipeline
   }
 }
 
-/** LAS 기준 캡쳐 GeoTIFF 출력 폴더 (Python CLI: 3dtiles_tiff/{basename}/{basename}_capture.tif) */
-function geotiffOutputDir(baseDir: string, lasRelativePath: string): string {
+function lasEcefOutputPath(baseDir: string, lasRelativePath: string): string {
   const stem = path.basename(lasRelativePath, path.extname(lasRelativePath));
-  return path.join(baseDir, 'service_data', '3dtiles_tiff', stem);
+  return path.join(baseDir, path.dirname(lasRelativePath), `${stem}_ecef.las`);
+}
+
+function pntsOutputDir(baseDir: string, lasRelativePath: string): string {
+  const dataset = path.basename(path.dirname(lasRelativePath));
+  return path.join(baseDir, GGNR_DATA_PATHS.dtilesPnts, dataset);
 }
 
 /**
- * LAS 파일 1개에 대해 캡쳐형 GeoTIFF + PNTS 생성. 비동기로 실행하고 완료/실패 시 이력 추가.
- * spawn 실패(ENOENT 등) 시 실패로 기록. RESULT 없을 때는 3dtiles_tiff 하위 .tif 존재 여부로 보정.
+ * LAS 파일 1개에 대해 ECEF + PNTS 생성. 비동기로 실행하고 완료/실패 시 이력 추가.
+ * spawn 실패(ENOENT 등) 시 실패로 기록. RESULT 없을 때는 출력 파일 존재 여부로 보정.
  */
-export function runLasPipeline(params: { lasRelativePath: string; only?: 'geotiff' | 'ecef' | 'pnts' }): void {
+export function runLasPipeline(params: { lasRelativePath: string; only?: 'ecef' | 'pnts' }): void {
   const { lasRelativePath, only: onlyStep } = params;
   const baseDir = GGNR_DATA_DIR;
   const projectRoot = path.resolve(process.cwd());
@@ -106,15 +111,13 @@ export function runLasPipeline(params: { lasRelativePath: string; only?: 'geotif
 
   const appendSteps = async (
     at: string,
-    geotiffOk: boolean,
     ecefOk: boolean,
     pntsOk: boolean,
-    geotiffNote?: string,
     ecefNote?: string,
     pntsNote?: string
   ) => {
     const onAppendErr = (err: unknown) => console.error('[pipelineService] appendUploadConvertHistory failed:', err);
-    const append = (kind: 'convert_geotiff' | 'convert_ecef' | 'convert_b3dm', ok: boolean, pathOrResult: string, note?: string) =>
+    const append = (kind: 'convert_ecef' | 'convert_b3dm', ok: boolean, pathOrResult: string, note?: string) =>
       appendUploadConvertHistory({
         at,
         kind,
@@ -123,14 +126,11 @@ export function runLasPipeline(params: { lasRelativePath: string; only?: 'geotif
         status: ok ? '완료' : '실패',
         note: ok ? undefined : (note ?? '').slice(0, 200),
       }).catch(onAppendErr);
-    if (!onlyStep || onlyStep === 'geotiff') {
-      await append('convert_geotiff', geotiffOk, geotiffOk ? 'service_data/3dtiles_tiff' : lasRelativePath, geotiffNote);
-    }
     if (!onlyStep || onlyStep === 'ecef') {
-      await append('convert_ecef', ecefOk, lasRelativePath, ecefNote);
+      await append('convert_ecef', ecefOk, ecefOk ? lasEcefOutputPath(baseDir, lasRelativePath) : lasRelativePath, ecefNote);
     }
     if (!onlyStep || onlyStep === 'pnts') {
-      await append('convert_b3dm', pntsOk, pntsOk ? 'service_data/3dtiles_pnts' : lasRelativePath, pntsNote);
+      await append('convert_b3dm', pntsOk, pntsOk ? pntsOutputDir(baseDir, lasRelativePath) : lasRelativePath, pntsNote);
     }
   };
 
@@ -147,19 +147,18 @@ export function runLasPipeline(params: { lasRelativePath: string; only?: 'geotif
   let stdout = '';
   let stdoutLineBuf = '';
   let stderr = '';
-  const stepFromTag = (tag: string): 'geotiff' | 'ecef' | 'pnts' =>
-    tag === 'GEOTIFF' ? 'geotiff' : tag === 'ECEF' ? 'ecef' : 'pnts';
+  const stepFromTag = (tag: string): 'ecef' | 'pnts' => (tag === 'ECEF' ? 'ecef' : 'pnts');
   const pathKey = lasRelativePath.replace(/\\/g, '/');
-  const pushStep = (step: 'geotiff' | 'ecef' | 'pnts', status: 'start' | 'ok' | 'fail') => {
+  const pushStep = (step: 'ecef' | 'pnts', status: 'start' | 'ok' | 'fail') => {
     broadcastPipelineStep({ path: pathKey, step, status });
   };
   const processLine = (line: string) => {
-    const stepStart = line.match(/STEP_START:(GEOTIFF|ECEF|PNTS)/);
+    const stepStart = line.match(/STEP_START:(ECEF|PNTS)/);
     if (stepStart) {
       pushStep(stepFromTag(stepStart[1]), 'start');
       return;
     }
-    const resultMatch = line.match(/RESULT:(GEOTIFF|ECEF|PNTS):(OK|FAIL)/);
+    const resultMatch = line.match(/RESULT:(ECEF|PNTS):(OK|FAIL)/);
     if (resultMatch) {
       pushStep(stepFromTag(resultMatch[1]), resultMatch[2] === 'OK' ? 'ok' : 'fail');
     }
@@ -186,7 +185,7 @@ export function runLasPipeline(params: { lasRelativePath: string; only?: 'geotif
     console.error('[pipelineService] Python spawn error:', err);
     const at = new Date().toISOString();
     const errMsg = (err instanceof Error ? err.message : String(err)).slice(0, 200);
-    void appendSteps(at, false, false, false, errMsg, errMsg, errMsg);
+    void appendSteps(at, false, false, errMsg, errMsg);
   });
 
   child.on('close', (code) => {
@@ -202,29 +201,23 @@ export function runLasPipeline(params: { lasRelativePath: string; only?: 'geotif
         console.warn('[pipelineService] Python stderr:', stderr.trim());
       }
     }
-    const geotiffMatch = stdout.match(/\bRESULT:GEOTIFF:(OK|FAIL)(?::(.*))?/);
     const ecefMatch = stdout.match(/\bRESULT:ECEF:(OK|FAIL)(?::(.*))?/);
     const pntsMatch = stdout.match(/\bRESULT:PNTS:(OK|FAIL)(?::(.*))?/);
-    let geotiffOk = geotiffMatch?.[1] === 'OK' || false;
     let ecefOk = ecefMatch?.[1] === 'OK' || false;
     let pntsOk = pntsMatch?.[1] === 'OK';
-    let geotiffNote = geotiffMatch?.[2]?.trim() ?? (code !== 0 ? stderr.trim() : '');
     let ecefNote = ecefMatch?.[2]?.trim() ?? (code !== 0 ? stderr.trim() : '');
     let pntsNote = pntsMatch?.[2]?.trim() ?? (code !== 0 ? stderr.trim() : '');
-    if (geotiffMatch == null) {
-      const geotiffDir = geotiffOutputDir(baseDir, lasRelativePath);
-      try {
-        const names = fs.readdirSync(geotiffDir);
-        const hasTif = names.some((n) => n.toLowerCase().endsWith('.tif') || n.toLowerCase().endsWith('.tiff'));
-        if (hasTif) geotiffOk = true;
-        else geotiffNote = code !== 0 ? `exit ${code}` : 'Python 출력 없음';
-      } catch {
-        geotiffNote = code !== 0 ? `exit ${code}` : 'Python 출력 없음';
-      }
+    if (ecefMatch == null) {
+      const ecefPath = lasEcefOutputPath(baseDir, lasRelativePath);
+      if (fs.existsSync(ecefPath)) ecefOk = true;
+      else ecefNote = code !== 0 ? `exit ${code}` : 'Python 출력 없음';
     }
-    if (ecefMatch == null) ecefNote = code !== 0 ? `exit ${code}` : 'Python 출력 없음';
-    if (pntsMatch == null) pntsNote = code !== 0 ? `exit ${code}` : 'Python 출력 없음';
-    void appendSteps(at, geotiffOk, ecefOk, pntsOk, geotiffNote, ecefNote, pntsNote);
+    if (pntsMatch == null) {
+      const pntsTileset = path.join(pntsOutputDir(baseDir, lasRelativePath), 'tileset.json');
+      if (fs.existsSync(pntsTileset)) pntsOk = true;
+      else pntsNote = code !== 0 ? `exit ${code}` : 'Python 출력 없음';
+    }
+    void appendSteps(at, ecefOk, pntsOk, ecefNote, pntsNote);
   });
 }
 

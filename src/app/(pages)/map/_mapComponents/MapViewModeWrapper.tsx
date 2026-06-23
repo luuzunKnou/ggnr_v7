@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Map, Box, Crosshair, Globe } from 'lucide-react';
+import { toLonLat } from 'ol/proj';
 import OpenLayersMap from './OpenLayersMap';
 import { MapControlPanel, defaultMapControlGroups } from './mapControlPanel/mapControlPanel';
 import {
@@ -20,13 +21,42 @@ import {
   type BackgroundMapGroup,
 } from './mapControlPanel/backgroundMapSelector';
 import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
+import { DEFAULT_CAMERA_HEIGHT_3D, DEFAULT_ZOOM_2D } from './config/mapDefaults';
 
 /** 3D 오른쪽 패널에서 다중 토글 허용 id (OpenLayers MULTI_SELECT_IDS 와 동일 계열) */
 const MULTI_SELECT_CONTROLS_3D = ['cadastral', 'thematic-map'] as const;
 
 const CesiumMap = dynamic(() => import('../../3dMap/CesiumMap'), { ssr: false });
 
-/** 3D 타일: service_data/3dtiles/<데이터셋>/pnts|b3dm */
+/** 3D 타일: 3dtiles_pnts/<데이터셋> | 3dtiles_b3dm/<데이터셋> */
+
+type MapStartView = {
+  lon: number;
+  lat: number;
+  height?: number;
+};
+
+function build3dStartViewFrom2d(
+  map: import('ol/Map').default | null | undefined,
+  fallback: { lon: number; lat: number } | null
+): MapStartView | null {
+  const view = map?.getView();
+  const center = view?.getCenter();
+  const zoom = view?.getZoom();
+  if (!center || !Array.isArray(center) || center.length < 2) {
+    return fallback ? { ...fallback, height: DEFAULT_CAMERA_HEIGHT_3D } : null;
+  }
+  const [lon, lat] = toLonLat(center);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    return fallback ? { ...fallback, height: DEFAULT_CAMERA_HEIGHT_3D } : null;
+  }
+  const zoomNum = Number.isFinite(zoom) ? Number(zoom) : DEFAULT_ZOOM_2D;
+  const height = Math.min(
+    20_000_000,
+    Math.max(100, DEFAULT_CAMERA_HEIGHT_3D * Math.pow(2, DEFAULT_ZOOM_2D - zoomNum))
+  );
+  return { lon, lat, height };
+}
 
 function ViewModeButton({
   label,
@@ -56,7 +86,13 @@ function ViewModeButton({
   );
 }
 
-export default function MapViewModeWrapper() {
+export default function MapViewModeWrapper({
+  defaultCenter = null,
+  projectName,
+}: {
+  defaultCenter?: { lon: number; lat: number } | null;
+  projectName?: string;
+}) {
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
   const [pntsTilesetNames, setPntsTilesetNames] = useState<string[]>([]);
   const [meshTilesetNames, setMeshTilesetNames] = useState<string[]>([]);
@@ -67,6 +103,8 @@ export default function MapViewModeWrapper() {
   const [globeVisible, setGlobeVisible] = useState(true);
   const [pointCloudCategoryEnabled, setPointCloudCategoryEnabled] = useState(true);
   const [meshCategoryEnabled, setMeshCategoryEnabled] = useState(true);
+  const [meshTilesetZOffsetM, setMeshTilesetZOffsetM] = useState(0);
+  const [meshTilesetZOffsetInput, setMeshTilesetZOffsetInput] = useState('0');
   /** 3D 오른쪽 패널 활성 컨트롤 id (지적도 WMS 등) */
   const [activeControls3d, setActiveControls3d] = useState<string[]>([]);
   /** 3D 배경: 2D에서 마지막으로 쓴 mapBackgroundMapIdRef 와 동기화 */
@@ -74,9 +112,16 @@ export default function MapViewModeWrapper() {
   const [backgroundMapGroups3d, setBackgroundMapGroups3d] =
     useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [isBackgroundPanelExiting3d, setIsBackgroundPanelExiting3d] = useState(false);
+  const [default3dView, setDefault3dView] = useState<MapStartView | null>(
+    defaultCenter ? { ...defaultCenter, height: DEFAULT_CAMERA_HEIGHT_3D } : null
+  );
   const cesiumMapRef = useRef<CesiumMapRef>(null);
   const { leftPx, topPx } = useSearchBarOffset();
   const mapContext = useMapContext();
+
+  useEffect(() => {
+    setDefault3dView(defaultCenter ? { ...defaultCenter, height: DEFAULT_CAMERA_HEIGHT_3D } : null);
+  }, [defaultCenter]);
 
   const fetch3DTilesetDirs = useCallback(async () => {
     setTilesetNamesLoading(true);
@@ -199,9 +244,9 @@ export default function MapViewModeWrapper() {
       if (mapContext?.mapBackgroundMapIdRef) {
         mapContext.mapBackgroundMapIdRef.current = value;
       }
-      patchPersistedBackgroundMap(value);
+      patchPersistedBackgroundMap(value, projectName);
     },
-    [mapContext]
+    [mapContext, projectName]
   );
 
   const visibleTilesets = useMemo((): Visible3DTilesetEntry[] => {
@@ -226,16 +271,43 @@ export default function MapViewModeWrapper() {
     meshTilesetEnabled,
   ]);
 
+  const handleMeshFlyTo = useCallback((name: string) => {
+    setMeshCategoryEnabled(true);
+    setMeshTilesetEnabled((prev) => {
+      const alreadyEnabled = prev[name] ?? true;
+      if (alreadyEnabled) {
+        queueMicrotask(() => {
+          cesiumMapRef.current?.flyToTileset(tilesetLayerKey('b3dm', name));
+        });
+        return prev;
+      }
+      return {
+        ...prev,
+        [name]: true,
+      };
+    });
+    setTilesetError(null);
+  }, []);
+
   const handleTilesetLoadError = useCallback((_name: string, message: string) => {
     setTilesetError(message);
   }, []);
+
+  const adjustMeshTilesetZOffset = useCallback((delta: number) => {
+    const next = Number((meshTilesetZOffsetM + delta).toFixed(2));
+    setMeshTilesetZOffsetM(next);
+    setMeshTilesetZOffsetInput(String(next));
+  }, [meshTilesetZOffsetM]);
 
   const viewModeControls2d = (
     <ViewModeButton
       label="3D 지도"
       icon={Box}
       isActive={viewMode === '3d'}
-      onClick={() => setViewMode('3d')}
+      onClick={() => {
+        setDefault3dView(build3dStartViewFrom2d(mapContext?.mapInstanceRef?.current, defaultCenter));
+        setViewMode('3d');
+      }}
     />
   );
 
@@ -251,7 +323,11 @@ export default function MapViewModeWrapper() {
   return (
     <div className="relative w-full h-full">
       {viewMode === '2d' && (
-        <OpenLayersMap extraControls={viewModeControls2d} />
+        <OpenLayersMap
+          extraControls={viewModeControls2d}
+          defaultCenter={defaultCenter}
+          projectName={projectName}
+        />
       )}
 
       {viewMode === '3d' && (
@@ -261,9 +337,11 @@ export default function MapViewModeWrapper() {
             onReady={(api) => {
               cesiumMapRef.current = api;
             }}
+            defaultCenter={default3dView}
             visibleTilesets={visibleTilesets}
             onTilesetLoadError={handleTilesetLoadError}
             globeVisible={globeVisible}
+            meshTilesetZOffsetM={meshTilesetZOffsetM}
             cadastralWmsEnabled={activeControls3d.includes('cadastral')}
             cadastralVisibleTableNames={null}
             backgroundMapId={cesiumBackgroundMapId}
@@ -365,7 +443,7 @@ export default function MapViewModeWrapper() {
                   onClick={fetch3DTilesetDirs}
                   disabled={tilesetNamesLoading}
                   className="text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-50"
-                  title="목록 새로고침 (service_data/3dtiles/…/pnts·b3dm)"
+                  title="목록 새로고침 (3dtiles_pnts · 3dtiles_b3dm)"
                 >
                   새로고침
                 </button>
@@ -403,7 +481,7 @@ export default function MapViewModeWrapper() {
                   {tilesetNamesLoading ? (
                     <p className="text-xs text-muted-foreground">목록 불러오는 중…</p>
                   ) : pntsTilesetNames.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">PNTS 없음 (3dtiles/…/pnts)</p>
+                    <p className="text-xs text-muted-foreground">PNTS 없음 (3dtiles_pnts/…/pnts)</p>
                   ) : (
                     pntsTilesetNames.map((name) => (
                       <div key={`pnts-${name}`} className="flex items-center gap-2">
@@ -457,6 +535,59 @@ export default function MapViewModeWrapper() {
                     aria-label="메시 데이터 표시"
                   />
                 </div>
+                <div className="rounded-md border border-border/60 bg-muted/30 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">전체 Z 오프셋</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMeshTilesetZOffsetM(0);
+                        setMeshTilesetZOffsetInput('0');
+                      }}
+                      className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                    >
+                      초기화
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => adjustMeshTilesetZOffset(-1)}
+                      className="h-7 w-7 shrink-0 rounded border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-background"
+                      title="메시 전체 높이 1m 내리기"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={meshTilesetZOffsetInput}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setMeshTilesetZOffsetInput(raw);
+                        const next = Number(raw);
+                        if (Number.isFinite(next)) {
+                          setMeshTilesetZOffsetM(next);
+                        }
+                      }}
+                      onBlur={() => setMeshTilesetZOffsetInput(String(meshTilesetZOffsetM))}
+                      className="h-7 w-full rounded border border-input bg-background px-2 text-xs"
+                      aria-label="전체 메시 Z 오프셋 미터"
+                    />
+                    <span className="shrink-0 text-xs text-muted-foreground">m</span>
+                    <button
+                      type="button"
+                      onClick={() => adjustMeshTilesetZOffset(1)}
+                      className="h-7 w-7 shrink-0 rounded border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-background"
+                      title="메시 전체 높이 1m 올리기"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    모든 메시 데이터에 일괄 적용됩니다.
+                  </p>
+                </div>
                 <div
                   className={cn(
                     'space-y-2',
@@ -466,7 +597,7 @@ export default function MapViewModeWrapper() {
                   {tilesetNamesLoading ? (
                     <p className="text-xs text-muted-foreground">목록 불러오는 중…</p>
                   ) : meshTilesetNames.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">메시 없음 (3dtiles/…/b3dm)</p>
+                    <p className="text-xs text-muted-foreground">메시 없음 (3dtiles_b3dm)</p>
                   ) : (
                     meshTilesetNames.map((name) => (
                       <div key={`b3dm-${name}`} className="flex items-center gap-2">
@@ -489,18 +620,14 @@ export default function MapViewModeWrapper() {
                         >
                           {name}
                         </label>
-                        {(meshTilesetEnabled[name] ?? false) && meshCategoryEnabled && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              cesiumMapRef.current?.flyToTileset(tilesetLayerKey('b3dm', name))
-                            }
-                            className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
-                            title="해당 위치로 이동"
-                          >
-                            <Crosshair className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleMeshFlyTo(name)}
+                          className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                          title="해당 위치로 이동"
+                        >
+                          <Crosshair className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ))
                   )}

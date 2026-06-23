@@ -21,7 +21,7 @@ export function serviceFileDataDownloadUrl(
   keyValue: string | number,
   fileName: string
 ): string {
-  const rel = `service_data/file_data/${layerSegment}/${keyValue}/${fileName}`;
+  const rel = `file_data/${layerSegment}/${keyValue}/${fileName}`;
   const qs = new URLSearchParams({
     serEng: serEng.trim(),
     path: rel,
@@ -83,7 +83,7 @@ export async function requestServiceFileDataDelete(params: {
 }
 
 /**
- * service_data/file_data/{layer}/{key}/ 목록 조회.
+ * file_data/{layer}/{key}/ 목록 조회.
  * @param serEng - 호출 화면이 속한 서비스의 ser_eng (권한 검사에 사용)
  */
 export function useServiceFileData(params: {
@@ -167,7 +167,7 @@ const chunkUploadInitial: ServiceFileChunkUploadState = {
 };
 
 /**
- * service_data/file_data 청크 업로드 (init → /api/upload/chunk → complete).
+ * file_data 청크 업로드 (init → /api/upload/chunk → complete).
  */
 export function useServiceFileChunkedUpload(): {
   state: ServiceFileChunkUploadState;

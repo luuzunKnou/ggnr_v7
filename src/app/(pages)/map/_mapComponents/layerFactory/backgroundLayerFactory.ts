@@ -58,12 +58,12 @@ export const VWORLD_MAX_ZOOM_INDEX = 19;
 /** tileSetId → 그룹 폴더 매핑 (브라우저). 변환 완료 시 정사영상관리 패널에서 갱신 */
 export const ORTHO_TILESET_GROUP_LS_KEY = 'ggnr_ortho_tileset_group';
 
-/** tileSetId(UI) → 디스크 타일 루트 폴더명(outputSlug). 없으면 tileSetId로 레거시 호환 */
+/** tileSetId(UI) → 디스크 타일 루트 폴더명(outputSlug). 레거시 호환용으로만 유지 */
 export const ORTHO_TILESET_OUTPUT_SLUG_LS_KEY = 'ggnr_ortho_tileset_output_slug';
 
 /**
  * 2D XYZ / Cesium UrlTemplate 공통 — `/api/2dtiles/.../{z}/{x}/{y}.jpg`
- * - `groupName` 있음: `/api/2dtiles/{group}/{outputSlug|tileSetId}/{z}/{x}/{y}.jpg`
+ * - `groupName` 있음: `/api/2dtiles/{group}/{z}/{x}/{y}.jpg`
  * - `groupName` 빈 문자열: 레거시 `/api/2dtiles/{tileSetId}/{z}/{x}/{y}.jpg`
  */
 export function buildLocalOrthoXyzUrlTemplate(
@@ -74,12 +74,12 @@ export function buildLocalOrthoXyzUrlTemplate(
   const pathSeg = outputSlug != null && String(outputSlug).trim().length > 0 ? String(outputSlug).trim() : tileSetId;
   const encId = encodeURIComponent(pathSeg);
   return groupName != null && String(groupName).length > 0
-    ? `/api/2dtiles/${encodeURIComponent(String(groupName))}/${encId}/{z}/{x}/{y}.jpg`
+    ? `/api/2dtiles/${encodeURIComponent(String(groupName))}/{z}/{x}/{y}.jpg`
     : `/api/2dtiles/${encId}/{z}/{x}/{y}.jpg`;
 }
 
 /**
- * 로컬 service_data/2dtiles 배경(항상 JPEG raster 타일).
+ * 로컬 tiles_jpg 배경(항상 JPEG raster 타일).
  */
 export function createLocalOrthoTileLayer(
   tileSetId: string,

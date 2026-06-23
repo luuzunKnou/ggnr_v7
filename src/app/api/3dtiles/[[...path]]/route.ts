@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-/** service_data/3dtiles/<데이터셋>/pnts/... */
-const TILES_ROOT = path.join(GGNR_DATA_DIR, 'service_data', '3dtiles');
+/** 3dtiles_pnts/<데이터셋>/... */
+const TILES_ROOT = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.dtilesPnts);
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -110,7 +111,7 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const pntsDir = path.join(TILES_ROOT, dataset, 'pnts');
+  const pntsDir = path.join(TILES_ROOT, dataset);
   const resolved = path.normalize(path.join(pntsDir, ...pathSegments.slice(1)));
 
   if (!resolved.startsWith(pntsDir)) {

@@ -45,8 +45,17 @@ const DEFAULT_EXCLUDE_PREFIXES = [
   'node_modules/',
   '.cursor/',
   '.vscode/',
-  'upload_data/',
-  'service_data/',
+  '3dtiles_las/',
+  'tiles_tif/',
+  'tiles_jpg/',
+  '3dtiles_b3dm/',
+  '3dtiles_pnts/',
+  '3dtiles_obj/',
+  '3dtiles_tiff/',
+  'file_data/',
+  'shp_data/',
+  'excel_data/',
+  'source_upload/',
   'coverage/',
   'out/',
   'build/',
@@ -71,12 +80,104 @@ function shouldSkipRelPath(relPath: string, excludePrefixes: string[]): boolean 
   return excludePrefixes.some((prefix) => posixRel === prefix.slice(0, -1) || posixRel.startsWith(prefix));
 }
 
-function absoluteUrl(base: string, maybeRelative: string): string {
+export function absoluteUrl(base: string, maybeRelative: string): string {
   try {
     return new URL(maybeRelative).toString();
   } catch {
     return new URL(maybeRelative.replace(/^\//, ''), `${base.replace(/\/+$/, '')}/`).toString();
   }
+}
+
+export type GnmsClientConfig = {
+  gnmsBaseUrl: string;
+  latestUrl: string;
+  downloadUrlFallback: string;
+  bearer: string;
+};
+
+/** 브라우저가 GNMS에 직접 요청할 때 쓸 URL·토큰 (폐쇄망 중계, CORS 허용 전제) */
+export function getGnmsClientConfig(): GnmsClientConfig {
+  const gnmsBaseUrl =
+    process.env.NEXT_PUBLIC_GNMS_SOURCE_BASE_URL?.trim() ||
+    process.env.GNMS_SOURCE_BASE_URL?.trim() ||
+    'http://192.168.126.1:3000/api/source/version';
+  const latestPath = process.env.GNMS_SOURCE_LATEST_PATH?.trim() ?? '/latest';
+  const downloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
+  const bearer =
+    process.env.NEXT_PUBLIC_GNMS_SOURCE_BEARER?.trim() ||
+    process.env.GNMS_SOURCE_BEARER?.trim() ||
+    '';
+  return {
+    gnmsBaseUrl,
+    latestUrl: absoluteUrl(gnmsBaseUrl, latestPath),
+    downloadUrlFallback: absoluteUrl(gnmsBaseUrl, downloadPath),
+    bearer,
+  };
+}
+
+export type ApplySourceZipOptions = {
+  zipPath: string;
+  version: string;
+  fileName: string;
+  requestedBy: string;
+  restart: boolean;
+  restartMode: RestartMode;
+};
+
+export type ApplySourceZipResult = Omit<
+  ApplyLatestSourceResult,
+  'gnmsBaseUrl' | 'latestUrl' | 'downloadUrl'
+>;
+
+/** ZIP 파일 경로 기준 워크스페이스 적용 (GNMS fetch 없음) */
+export async function applySourceZipFile(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
+  const { zipPath, version, fileName, requestedBy, restart, restartMode } = options;
+  const workspaceRoot = process.cwd();
+  const stat = await fs.stat(zipPath);
+  const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
+  const extractDir = path.join(tmpBase, 'extracted');
+
+  await extractZip(zipPath, extractDir);
+  const extractedRoot = await pickExtractedRoot(extractDir);
+
+  const excludePrefixes = parseExcludePrefixes();
+  const copyResult = await copyRecursive({
+    srcRoot: extractedRoot,
+    dstRoot: workspaceRoot,
+    excludePrefixes,
+  });
+
+  const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
+  await writeRestartSignal(signalFile, {
+    at: new Date().toISOString(),
+    requestedBy,
+    version,
+    fileName,
+    restartRequested: restart,
+    restartMode,
+    source: 'versionManagerClientRelay',
+  });
+
+  const restartResult = scheduleRestart(restart ? restartMode : 'none');
+  await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+
+  return {
+    version,
+    fileName,
+    downloadedBytes: stat.size,
+    extractedRoot: normalizeSlashes(path.relative(workspaceRoot, extractedRoot) || '.'),
+    appliedFiles: copyResult.appliedFiles,
+    skippedFiles: copyResult.skippedFiles,
+    skippedSamples: copyResult.skippedSamples,
+    restart: {
+      requested: restart,
+      mode: restart ? restartMode : 'none',
+      commandConfigured: restartResult.commandConfigured,
+      scheduled: restartResult.scheduled,
+      signalFile: normalizeSlashes(path.relative(workspaceRoot, signalFile)),
+      message: restartResult.message,
+    },
+  };
 }
 
 function spawnAsync(command: string, args: string[]): Promise<void> {
@@ -208,15 +309,10 @@ function scheduleRestart(mode: RestartMode): {
 
 export async function applyLatestSourceFromGnms(options: ApplyLatestSourceOptions): Promise<ApplyLatestSourceResult> {
   const { requestedBy, restart, restartMode } = options;
-  const gnmsBaseUrl =
-    process.env.GNMS_SOURCE_BASE_URL?.trim() ?? 'http://192.168.126.1:3000/api/source/version';
-  const latestPath = process.env.GNMS_SOURCE_LATEST_PATH?.trim() ?? '/latest';
-  const fallbackDownloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
-  const bearer = process.env.GNMS_SOURCE_BEARER?.trim() ?? '';
-  const latestUrl = absoluteUrl(gnmsBaseUrl, latestPath);
-  const headers: Record<string, string> = bearer ? { Authorization: `Bearer ${bearer}` } : {};
+  const cfg = getGnmsClientConfig();
+  const headers: Record<string, string> = cfg.bearer ? { Authorization: `Bearer ${cfg.bearer}` } : {};
 
-  const latestRes = await fetch(latestUrl, {
+  const latestRes = await fetch(cfg.latestUrl, {
     method: 'GET',
     headers,
     cache: 'no-store',
@@ -228,8 +324,8 @@ export async function applyLatestSourceFromGnms(options: ApplyLatestSourceOption
 
   const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
   const fileName = String(latestJson.fileName ?? '').trim() || `source_latest_${Date.now()}.zip`;
-  const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || fallbackDownloadPath;
-  const downloadUrl = absoluteUrl(gnmsBaseUrl, downloadUrlRaw);
+  const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || cfg.downloadUrlFallback;
+  const downloadUrl = absoluteUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
 
   const downloadRes = await fetch(downloadUrl, {
     method: 'GET',
@@ -243,51 +339,23 @@ export async function applyLatestSourceFromGnms(options: ApplyLatestSourceOption
 
   const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
   const zipPath = path.join(tmpBase, fileName);
-  const extractDir = path.join(tmpBase, 'extracted');
-  const workspaceRoot = process.cwd();
   await fs.mkdir(tmpBase, { recursive: true });
   await fs.writeFile(zipPath, zipBuffer);
-  await extractZip(zipPath, extractDir);
-  const extractedRoot = await pickExtractedRoot(extractDir);
 
-  const excludePrefixes = parseExcludePrefixes();
-  const copyResult = await copyRecursive({
-    srcRoot: extractedRoot,
-    dstRoot: workspaceRoot,
-    excludePrefixes,
-  });
-
-  const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
-  await writeRestartSignal(signalFile, {
-    at: new Date().toISOString(),
-    requestedBy,
+  const applied = await applySourceZipFile({
+    zipPath,
     version,
-    restartRequested: restart,
+    fileName,
+    requestedBy,
+    restart,
     restartMode,
-    source: 'versionManager',
   });
-
-  const restartResult = scheduleRestart(restart ? restartMode : 'none');
   await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
 
   return {
-    gnmsBaseUrl,
-    latestUrl,
+    gnmsBaseUrl: cfg.gnmsBaseUrl,
+    latestUrl: cfg.latestUrl,
     downloadUrl,
-    version,
-    fileName,
-    downloadedBytes: zipBuffer.byteLength,
-    extractedRoot: normalizeSlashes(path.relative(workspaceRoot, extractedRoot) || '.'),
-    appliedFiles: copyResult.appliedFiles,
-    skippedFiles: copyResult.skippedFiles,
-    skippedSamples: copyResult.skippedSamples,
-    restart: {
-      requested: restart,
-      mode: restart ? restartMode : 'none',
-      commandConfigured: restartResult.commandConfigured,
-      scheduled: restartResult.scheduled,
-      signalFile: normalizeSlashes(path.relative(workspaceRoot, signalFile)),
-      message: restartResult.message,
-    },
+    ...applied,
   };
 }

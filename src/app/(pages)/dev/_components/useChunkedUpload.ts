@@ -17,12 +17,13 @@ export type UseChunkedUploadReturn = {
   state: ChunkedUploadState;
   upload: (
     file: File,
-    uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source',
+    uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source' | 'fileManager',
     options?: {
       shpSavePath?: string;
       fileDataSavePath?: string;
       satelliteTifSavePath?: string;
       sourceSavePath?: string;
+      fileManagerSavePath?: string;
     }
   ) => Promise<{ savedPath?: string; size?: number; error?: string } | void>;
   cancel: () => void;
@@ -56,12 +57,13 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
   const upload = useCallback(
     async (
       file: File,
-      uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source',
+      uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source' | 'fileManager',
       options?: {
         shpSavePath?: string;
         fileDataSavePath?: string;
         satelliteTifSavePath?: string;
         sourceSavePath?: string;
+        fileManagerSavePath?: string;
       }
     ): Promise<{ savedPath?: string; size?: number; error?: string } | void> => {
       cancel();
@@ -83,6 +85,8 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
               ? options.satelliteTifSavePath.replace(/\\/g, '/')
               : uploadType === 'source' && options?.sourceSavePath
                 ? options.sourceSavePath.replace(/\\/g, '/')
+              : uploadType === 'fileManager' && options?.fileManagerSavePath
+                ? options.fileManagerSavePath.replace(/\\/g, '/')
               : file.name;
       try {
         const initRes = await call('', 'POST', {

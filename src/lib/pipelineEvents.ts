@@ -4,7 +4,7 @@
  */
 export type PipelineStepEvent = {
   path: string;
-  step: 'geotiff' | 'ecef' | 'pnts';
+  step: 'ecef' | 'pnts';
   status: 'start' | 'ok' | 'fail';
 };
 

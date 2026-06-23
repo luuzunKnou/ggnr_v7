@@ -511,7 +511,7 @@ export async function getRiverBasicPlanIndexView(params?: {
     label: string;
     /** 목록 배지: 종단/횡단은 종류명, 구조물은 gd_type(없으면 '구조물') */
     badge: string;
-    /** service_data/file_data/{fileLayer}/{fileKey}/ 물리 테이블명 */
+    /** file_data/{fileLayer}/{fileKey}/ 물리 테이블명 */
     fileLayer: string;
     /** 첨부 폴더 키(define 키 필드 값, 없으면 ogc_fid) */
     fileKey: string;

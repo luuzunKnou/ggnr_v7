@@ -6,11 +6,13 @@ export type SourceUploadMode = 'install' | 'update';
  * - 용량이 크거나 재생성 가능한 산출물
  * - IDE/패키지 캐시/빌드 결과물
  * - 런타임 로그·캐시 디렉터리
+ *
+ * 주의: `node_modules/`는 설치(install) 모드에서 대상 서버 구동에 필요하므로
+ * 여기서 제외하지 않고, `MODE_EXCLUDE_PREFIXES.update`에서만 제외한다.
  */
 const ALWAYS_EXCLUDE_PREFIXES = [
   '.cursor/',
   '.vscode/',
-  'node_modules/',
   '.next/',
   '.git/',
   '.yarn/',
@@ -43,8 +45,17 @@ const RUNTIME_PREFIXES = [
  * (모드별 업로드 허용 정책에서 별도 판단)
  */
 const DATA_PREFIXES = [
-  'service_data/',
-  'upload_data/',
+  '3dtiles_las/',
+  'tiles_tif/',
+  'tiles_jpg/',
+  '3dtiles_b3dm/',
+  '3dtiles_pnts/',
+  '3dtiles_obj/',
+  '3dtiles_tiff/',
+  'file_data/',
+  'shp_data/',
+  'excel_data/',
+  'source_upload/',
   'geoserver_modules/data_dir/',
 ];
 
@@ -56,12 +67,13 @@ const UPDATE_DATA_ALLOW_PREFIXES = ['geoserver_modules/data_dir/'];
 
 /**
  * 모드별 추가 제외 prefix.
- * - install: 구동 필수 번들도 포함해야 하므로 추가 제외 없음
- * - update: 무거운 실행 바이너리/서비스 번들은 제외
+ * - install: 구동 필수 번들(node_modules 포함)도 포함해야 하므로 추가 제외 없음
+ * - update: 무거운 실행 바이너리/서비스 번들 및 의존성 디렉터리는 제외
  */
 const MODE_EXCLUDE_PREFIXES: Record<SourceUploadMode, string[]> = {
   install: [],
   update: [
+    'node_modules/',
     'geoserver_modules/java/',
     'geoserver_modules/geoserver/',
     'pg_map_modules/services/pg_tileserv/',

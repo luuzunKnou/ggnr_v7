@@ -79,7 +79,7 @@ export function ShpProcessTab({ relativePath, onComplete }: Props) {
 
   const goUp = useCallback(() => {
     const parts = currentPath.replace(/\\/g, '/').split('/').filter(Boolean);
-    if (parts.length <= 2) return;
+    if (parts.length <= 1) return;
     parts.pop();
     setCurrentPath(parts.join('/'));
   }, [currentPath]);
@@ -90,7 +90,7 @@ export function ShpProcessTab({ relativePath, onComplete }: Props) {
   );
 
   const pathParts = currentPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  const canGoUp = pathParts.length > 2;
+  const canGoUp = pathParts.length > 1;
 
   const needProcessing = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
 

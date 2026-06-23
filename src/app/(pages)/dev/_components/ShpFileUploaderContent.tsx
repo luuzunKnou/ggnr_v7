@@ -17,7 +17,7 @@ type TabId = (typeof TABS)[number]['id'];
 
 export function ShpFileUploaderContent() {
   const [activeTab, setActiveTab] = useState<TabId>('upload');
-  const [sharedRelativePath, setSharedRelativePath] = useState('service_data/shp_data');
+  const [sharedRelativePath, setSharedRelativePath] = useState('shp_data');
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">

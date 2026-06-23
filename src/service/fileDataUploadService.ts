@@ -1,5 +1,5 @@
 /**
- * 개발자 모드 Data File Upload — service_data/file_data/{테이블}/{키}/ 구조 검증·로그
+ * 개발자 모드 Data File Upload — file_data/{테이블}/{키}/ 구조 검증·로그
  */
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
@@ -11,7 +11,7 @@ import { getDefineLayerTables, getLayerTableList } from './devTestService';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
-const FILE_DATA_PREFIX = 'service_data/file_data';
+const FILE_DATA_PREFIX = 'file_data';
 const HISTORY_FILE = '.meta/file_data_upload_history.json';
 
 /** 업로드·후처리 로그 등 — 데이터 상태 검증 대상에서 제외 */

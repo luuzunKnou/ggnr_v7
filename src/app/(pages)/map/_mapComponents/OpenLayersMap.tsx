@@ -127,13 +127,24 @@ const MEASUREMENT_IDS = ['distance', 'area', 'altitude', 'slope'];
 export type OpenLayersMapProps = {
   /** 배경지도 버튼과 지적도 버튼 사이에 렌더할 컨트롤 (예: 2D/3D 전환 버튼) */
   extraControls?: React.ReactNode;
+  defaultCenter?: { lon: number; lat: number } | null;
+  projectName?: string;
 };
 
-export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}) {
+export default function OpenLayersMap({
+  extraControls,
+  defaultCenter = null,
+  projectName,
+}: OpenLayersMapProps = {}) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapContext = useMapContext();
   const sharedMapRef = mapContext?.mapInstanceRef ?? null;
-  const { mapInstanceRef, mapReady } = useMapInstance(mapRef, sharedMapRef);
+  const { mapInstanceRef, mapReady } = useMapInstance(
+    mapRef,
+    sharedMapRef,
+    defaultCenter,
+    projectName
+  );
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
@@ -184,7 +195,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   useEffect(() => {
-    const state = loadPersistedMapState();
+    const state = loadPersistedMapState(projectName);
     if (state) {
       if (state.activeControls?.length) setActiveControls(state.activeControls);
       if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
@@ -218,7 +229,7 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
     }
     setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
-  }, []);
+  }, [projectName]);
 
   const fetchGeoserverLog = useCallback(async () => {
     try {
@@ -350,7 +361,8 @@ export default function OpenLayersMap({ extraControls }: OpenLayersMapProps = {}
     selectedBackgroundMap,
     activeControls,
     visibleLayerNames,
-    layerPanelSelections
+    layerPanelSelections,
+    projectName
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
 

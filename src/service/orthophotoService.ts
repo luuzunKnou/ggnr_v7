@@ -1,11 +1,11 @@
 /**
  * 정사영상(GeoTIFF) → XYZ JPEG 타일.
- * 업로드: upload_data/satellite_tif/{groupName}/...tif
- * 산출: service_data/2dtiles/{groupName}/z/x/y.jpg
+ * 업로드: tiles_tif/{groupName}/...tif
+ * 산출: tiles_jpg/{groupName}/z/x/y.jpg
  *
  * 변환은 항상 원본 좌표계 그대로(`gdal2tiles --profile=raster`). gdalwarp/좌표계 reprojection 없음.
  *
- * 기존 평면 구조 service_data/2dtiles/{tileSetId}/… 도 타일 API·resolve에서 지원(레거시).
+ * 기존 평면 구조 tiles_jpg/{tileSetId}/… 도 타일 API·resolve에서 지원(레거시).
  */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
@@ -264,7 +264,7 @@ function isSafeOrthoSegment(s: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(s);
 }
 
-const SATELLITE_TIF_PREFIX = 'upload_data/satellite_tif/';
+const SATELLITE_TIF_PREFIX = 'tiles_tif/';
 const ORTHO_GROUP_CRS_META_FILE = '.meta/orthophoto_group_crs.json';
 const EMD_SCHEMA = 'public_layer';
 const EMD_TABLE = 'emd';
@@ -334,7 +334,7 @@ function sanitizeOrthoOutputFolderName(raw: string): string {
 }
 
 /**
- * 변환 산출: `service_data/2dtiles/{groupName}/z/x/y.*`
+ * 변환 산출: `tiles_jpg/{groupName}/z/x/y.*`
  * - 같은 그룹 내 여러 소스는 동일 그룹 타일 루트에 누적/갱신됨.
  * - outputSlug 는 로그/호환 메시지용으로만 유지.
  */
@@ -344,12 +344,12 @@ export function computeOrthoOutputSlugFromSourceRelativePath(sourceRelativePath:
 } {
   const norm = sourceRelativePath.replace(/\\/g, '/').trim();
   if (!norm.startsWith(SATELLITE_TIF_PREFIX)) {
-    throw new Error('sourceRelativePath는 upload_data/satellite_tif/ 로 시작해야 합니다.');
+    throw new Error('sourceRelativePath는 tiles_tif/ 로 시작해야 합니다.');
   }
   const tail = norm.slice(SATELLITE_TIF_PREFIX.length);
   const segments = tail.split('/').filter(Boolean);
   if (segments.length < 2) {
-    throw new Error('upload_data/satellite_tif/{그룹}/파일.tif 형태가 필요합니다.');
+    throw new Error('tiles_tif/{그룹}/파일.tif 형태가 필요합니다.');
   }
   const groupName = segments[0]!;
   if (!isSafeOrthoSegment(groupName)) {
@@ -368,7 +368,7 @@ export function computeOrthoOutputSlugFromSourceRelativePath(sourceRelativePath:
 }
 
 export function orthoOutputRel(groupName: string, _outputSlug?: string): string {
-  return `service_data/2dtiles/${groupName}`.replace(/\\/g, '/');
+  return `tiles_jpg/${groupName}`.replace(/\\/g, '/');
 }
 
 async function collectTifsUnderDir(
@@ -393,7 +393,7 @@ async function collectTifsUnderDir(
         const st = await fsPromises.stat(full);
         out.push({
           groupName: baseRel.split('/')[0] ?? '',
-          relativePath: `upload_data/satellite_tif/${relJoin}`.replace(/\\/g, '/'),
+          relativePath: `tiles_tif/${relJoin}`.replace(/\\/g, '/'),
           name: e.name,
           size: st.size,
           modified: st.mtime?.toISOString?.(),
@@ -407,12 +407,12 @@ async function collectTifsUnderDir(
 }
 
 /**
- * upload_data/satellite_tif/{그룹폴더}/… 하위 모든 tif 수집 (그룹명 = 직계 하위 폴더명).
+ * tiles_tif/{그룹폴더}/… 하위 모든 tif 수집 (그룹명 = 직계 하위 폴더명).
  */
 export async function listSatelliteTifGroupedUploads(): Promise<SatelliteTifGroupedUploadsResult> {
   await ensureBaseStructure();
   const base = getBaseDir();
-  const root = path.join(base, 'upload_data', 'satellite_tif');
+  const root = path.join(base, 'tiles_tif');
   const groups: SatelliteTifGroupedUploadsResult['groups'] = [];
   let top: fs.Dirent[];
   try {
@@ -784,7 +784,7 @@ async function dirLooksLikeTileRoot(dirAbs: string): Promise<boolean> {
 export async function listOrthophotoTileOutputs(): Promise<OrthophotoTileOutputsResult> {
   await ensureBaseStructure();
   const base = getBaseDir();
-  const tilesRoot = path.join(base, 'service_data', '2dtiles');
+  const tilesRoot = path.join(base, 'tiles_jpg');
   const groups: OrthophotoTileOutputsResult['groups'] = [];
   const legacyTileSetIds: string[] = [];
   let top: fs.Dirent[];
@@ -853,7 +853,7 @@ export async function resolveOrthoGroupForTileset(params: {
 /** 루트 목록 (빈 폴더 등) 호환용 — 필요 시 유지 */
 export async function listSatelliteTifUploads(): Promise<ListDirectoryResult> {
   await ensureBaseStructure();
-  return listDirectory({ relativePath: 'upload_data/satellite_tif' });
+  return listDirectory({ relativePath: 'tiles_tif' });
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -945,7 +945,7 @@ async function runOrthophotoJob(params: {
   const tmpRoot = path.join(base, '.tmp', `ortho_xyz_${gFromPath}_${outputSlug}_${Date.now()}`);
   const warp3857 = path.join(tmpRoot, 'warp_3857.tif');
   const tilesStaging = path.join(tmpRoot, 'tiles_staging');
-  const finalAbs = path.join(base, 'service_data', '2dtiles', gFromPath);
+  const finalAbs = path.join(base, 'tiles_jpg', gFromPath);
 
   const gdalwarp = gdalToolPath('gdalwarp');
   const gdal2tiles = gdalToolPath('gdal2tiles');
@@ -1197,7 +1197,7 @@ export async function runSatelliteTifGroupToXyz(params: {
         vrtPath
       );
 
-      const syntheticRel = `upload_data/satellite_tif/${groupName}/(mosaic_${sorted.length}files.vrt)`;
+      const syntheticRel = `tiles_tif/${groupName}/(mosaic_${sorted.length}files.vrt)`;
       try {
         await runOrthophotoJob({
           absSource: vrtPath,
@@ -1395,7 +1395,7 @@ export async function getOrthoTileSetExtentWgs84(params: { groupName: string }):
   }
   await ensureBaseStructure();
   const base = getBaseDir();
-  const groupDir = path.join(base, 'service_data', '2dtiles', groupName);
+  const groupDir = path.join(base, GGNR_DATA_PATHS.tilesJpg, groupName);
   try {
     const st = await fsPromises.stat(groupDir);
     if (!st.isDirectory()) return { ...empty, error: 'group folder not found' };

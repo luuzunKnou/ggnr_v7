@@ -17,10 +17,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-const LAS_FOLDER = 'upload_data/las';
+const LAS_FOLDER = '3dtiles_las';
 
 export function LasFixerContent() {
-  const [list, setList] = useState<DirListResult | null>(null);
+  const [lasEntries, setLasEntries] = useState<Array<{ label: string; relativePath: string; fileName: string; size: number }>>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState<'4326' | '5181' | 'ecef' | null>(null);
@@ -37,14 +37,33 @@ export function LasFixerContent() {
         params: { relativePath: LAS_FOLDER },
       });
       const data = res?.data ?? res;
-      setList({
+      const nextList = {
         directories: Array.isArray(data?.directories) ? data.directories : [],
         files: Array.isArray(data?.files) ? data.files : [],
-      });
+      };
+      const grouped = await Promise.all(
+        nextList.directories.map(async (dirName: string) => {
+          const child = await call('', 'POST', {
+            service: 'fileManagerService',
+            action: 'listDirectory',
+            params: { relativePath: `${LAS_FOLDER}/${dirName}` },
+          }).catch(() => ({ data: { files: [] } }));
+          const files = ((child?.data ?? child) as DirListResult)?.files ?? [];
+          return files
+            .filter((f) => /\.las$/i.test(f.name))
+            .map((f) => ({
+              label: `${dirName}/${f.name}`,
+              relativePath: `${LAS_FOLDER}/${dirName}/${f.name}`,
+              fileName: f.name,
+              size: f.size,
+            }));
+        })
+      );
+      setLasEntries(grouped.flat());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setListError(msg);
-      setList(null);
+      setLasEntries([]);
     } finally {
       setLoading(false);
     }
@@ -54,8 +73,7 @@ export function LasFixerContent() {
     fetchList();
   }, [fetchList]);
 
-  const handleFix = async (fileName: string, target: '4326' | '5181' | 'ecef') => {
-    const lasRelativePath = `${LAS_FOLDER}/${fileName}`;
+  const handleFix = async (lasRelativePath: string, target: '4326' | '5181' | 'ecef') => {
     setFixing(target);
     setResult(null);
     const action = target === '4326' ? 'fixLasTo4326' : target === '5181' ? 'fixLasTo5181' : 'fixLasToEcef';
@@ -86,8 +104,6 @@ export function LasFixerContent() {
       setFixing(null);
     }
   };
-
-  const lasFiles = list?.files?.filter((f) => /\.las$/i.test(f.name)) ?? [];
 
   return (
     <div className="space-y-4">
@@ -125,18 +141,18 @@ export function LasFixerContent() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">폴더 목록 로딩 중…</p>
-      ) : lasFiles.length === 0 ? (
+      ) : lasEntries.length === 0 ? (
         <p className="text-sm text-muted-foreground">{LAS_FOLDER}에 LAS 파일이 없습니다.</p>
       ) : (
         <div className="border rounded-md divide-y max-h-[60vh] overflow-auto">
-          {lasFiles.map((f) => (
+          {lasEntries.map((f) => (
             <div
-              key={f.name}
+              key={f.relativePath}
               className="flex items-center justify-between gap-4 px-3 py-2 hover:bg-muted/50"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <FileUp className="w-4 h-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium">{f.name}</span>
+                <span className="truncate font-medium">{f.label}</span>
                 <span className="text-xs text-muted-foreground shrink-0">{formatSize(f.size)}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -146,7 +162,7 @@ export function LasFixerContent() {
                   size="sm"
                   className="rounded-none"
                   disabled={fixing !== null}
-                  onClick={() => handleFix(f.name, '4326')}
+                  onClick={() => handleFix(f.relativePath, '4326')}
                 >
                   {fixing === '4326' ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                   4326으로 변환
@@ -157,7 +173,7 @@ export function LasFixerContent() {
                   size="sm"
                   className="rounded-none"
                   disabled={fixing !== null}
-                  onClick={() => handleFix(f.name, '5181')}
+                  onClick={() => handleFix(f.relativePath, '5181')}
                 >
                   {fixing === '5181' ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                   5181로 변환
@@ -168,7 +184,7 @@ export function LasFixerContent() {
                   size="sm"
                   className="rounded-none"
                   disabled={fixing !== null}
-                  onClick={() => handleFix(f.name, 'ecef')}
+                  onClick={() => handleFix(f.relativePath, 'ecef')}
                 >
                   {fixing === 'ecef' ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                   ECEF로 변환

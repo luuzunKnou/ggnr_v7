@@ -15,11 +15,11 @@ export const TILESET_POINT_CLOUD_POINT_SIZE = 6;
 /**
  * 3D Tiles LOD — 허용 화면 공간 오차(px). 0에 가까울수록 최고 LOD(성능 무시).
  */
-export const TILESET_MAX_SCREEN_SPACE_ERROR = 0;
+export const TILESET_MAX_SCREEN_SPACE_ERROR =0;
 /** 원거리·지평선에서 SSE를 완화하는 최적화(Cesium 기본 true). 최고 화질이면 false */
-export const TILESET_DYNAMIC_SCREEN_SPACE_ERROR = false;
+export const TILESET_DYNAMIC_SCREEN_SPACE_ERROR = true;
 /** 화면 가장자리 타일을 나중에·거칠게 로드하는 최적화(Cesium 기본 true). 최고 화질이면 false */
-export const TILESET_FOVEATED_SCREEN_SPACE_ERROR = false;
+export const TILESET_FOVEATED_SCREEN_SPACE_ERROR = true;
 /** GPU 타일 캐시 바이트(기본 512MB). 고해상 타일이 캐시에서 덜 밀리도록 여유 */
 export const TILESET_CACHE_BYTES = 2 * 1024 * 1024 * 1024;
 /** cacheBytes 초과 시 허용 추가 여유 바이트(기본 512MB) */

@@ -49,7 +49,7 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
   const handleExcelDownload = useCallback(async (pathRel: string | null, tableName: string) => {
     const path =
       pathRel?.trim() ||
-      `service_data/excel_data/${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}.xlsx`;
+      `excel_data/${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}.xlsx`;
     const key = `excel:${path}`;
     setDownloadingExcel(key);
     console.log('[ExlDataStatusTab] Excel download start', path);
@@ -213,7 +213,7 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
                       title={
                         r.lastSourcePath
                           ? '원본 Excel 다운로드'
-                          : `이력 경로 없음 — service_data/excel_data/${r.tableName}.xlsx 시도`
+                          : `이력 경로 없음 — excel_data/${r.tableName}.xlsx 시도`
                       }
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5" />

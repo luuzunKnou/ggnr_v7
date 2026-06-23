@@ -19,7 +19,7 @@ export const authConfig = {
   secret:
     process.env.AUTH_SECRET ||
     process.env.NEXTAUTH_SECRET ||
-    (process.env.NODE_ENV === 'development' ? 'ggnr-dev-auth-secret-change-me' : undefined),
+    'ggnr-dev-auth-secret-change-me',
   session: { strategy: 'jwt', maxAge: 60 * 60 * 8 },
   pages: { signIn: '/' },
   callbacks: {

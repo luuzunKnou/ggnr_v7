@@ -1,7 +1,6 @@
 r"""
 LAS 파이프라인 CLI: --base-dir, --input-file
-  GeoTIFF: LAS 포인트를 위에서 본 캡쳐형 래스터(RGB 또는 Intensity) → service_data/3dtiles_tiff
-  3D Tiles: 들어오는 LAS를 ECEF(EPSG:4978)로 고정 후 py3dtiles convert → tileset.json + .pnts
+  3D Tiles: 들어오는 LAS를 ECEF(EPSG:4978)로 고정 후 py3dtiles convert → 3dtiles_pnts/{dataset}/tileset.json + .pnts
 
 =============================================================================
 구동 방법 (Conda 환경 = 프로젝트 내 python/env)
@@ -20,7 +19,7 @@ LAS 파이프라인 CLI: --base-dir, --input-file
 2) 실행 (python 폴더에서, env 활성화 후)
    cd <프로젝트경로>/python
    conda activate ./env
-   python -m pipeline.cli --base-dir "d:\ggnr_data_dir" --input-file "upload_data/las/파일명.las"
+  python -m pipeline.cli --base-dir "d:\ggnr_data_dir" --input-file "3dtiles_las/레이어명/파일명.las"
 
 3) Node에서 호출 시 (npm run dev)
    .env.local 에 GGNR_PIPELINE_PYTHON 을 python/env 의 python.exe 로 설정.
@@ -101,13 +100,13 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-dir", required=True, help="데이터 베이스 디렉터리 (예: d:\\ggnr_data_dir)")
-    parser.add_argument("--input-file", help="LAS 상대 경로 (예: upload_data/las/sample.las)")
+    parser.add_argument("--input-file", help="LAS 상대 경로 (예: 3dtiles_las/sample/sample.las)")
     parser.add_argument("--repair-tileset", dest="repair_tileset", metavar="PATH", help="NaN 보정할 tileset.json 경로")
-    parser.add_argument("--las", dest="repair_las", metavar="PATH", help="repair-tileset 사용 시 LAS 파일 경로 (미지정 시 base-dir/upload_data/las/<폴더명>.las 사용)")
+    parser.add_argument("--las", dest="repair_las", metavar="PATH", help="repair-tileset 사용 시 LAS 파일 경로 (미지정 시 base-dir/3dtiles_las/<폴더명>/<폴더명>.las 사용)")
     parser.add_argument("--fix-las-to-4326", dest="fix_las_to_4326", action="store_true", help="LAS를 WKT/현재 좌표계에서 EPSG:4326으로 변환해 같은 폴더에 _4326.las로 저장")
     parser.add_argument("--fix-las-to-5181", dest="fix_las_to_5181", action="store_true", help="LAS를 WKT/현재 좌표계에서 EPSG:5181(Korea 2000 / Unified)으로 변환해 같은 폴더에 _5181.las로 저장")
     parser.add_argument("--fix-las-to-ecef", dest="fix_las_to_ecef", action="store_true", help="LAS를 현재 좌표계에서 EPSG:4978(ECEF)으로 변환해 _ecef.las로 저장 (3D Tiles/Cesium용)")
-    parser.add_argument("--only", choices=["geotiff", "ecef", "pnts"], help="해당 단계만 실행 (전체 파이프라인 대신)")
+    parser.add_argument("--only", choices=["ecef", "pnts"], help="해당 단계만 실행 (전체 파이프라인 대신)")
     parser.add_argument("--callback-url", dest="callback_url", metavar="URL", help="단계 시작/완료 시 POST 알림 URL (예: http://127.0.0.1:3000)")
     args = parser.parse_args()
     base_dir = os.path.abspath(args.base_dir)
@@ -200,7 +199,7 @@ def main():
             las_path = os.path.abspath(las_path)
         else:
             folder_name = os.path.basename(os.path.dirname(tileset_path))
-            las_path = os.path.join(base_dir, "upload_data", "las", folder_name + ".las")
+            las_path = os.path.join(base_dir, "3dtiles_las", folder_name, folder_name + ".las")
         if not os.path.isfile(las_path):
             print(f"LAS not found: {las_path}", file=sys.stderr)
             print("Use --las <path> to specify the LAS file.", file=sys.stderr)
@@ -217,32 +216,16 @@ def main():
         print(f"Input file not found: {input_path}", file=sys.stderr)
         sys.exit(1)
     basename = os.path.splitext(os.path.basename(input_path))[0]
+    dataset_name = os.path.basename(os.path.dirname(input_path)) or basename
     only_step = getattr(args, "only", None)
     callback_url = getattr(args, "callback_url", None) or None
     path_key = (args.input_file or "").replace("\\", "/")
 
-    dtiles_pnts_dir = os.path.join(base_dir, "service_data", "3dtiles_pnts", basename)
-    dtiles_tiff_dir = os.path.join(base_dir, "service_data", "3dtiles_tiff", basename)
-    dtiles_ecef_dir = os.path.join(base_dir, "service_data", "3dtiles_ecef", basename)
+    dtiles_pnts_dir = os.path.join(base_dir, "3dtiles_pnts", dataset_name)
+    dtiles_ecef_dir = os.path.dirname(input_path)
     os.makedirs(dtiles_pnts_dir, exist_ok=True)
-    os.makedirs(dtiles_tiff_dir, exist_ok=True)
     os.makedirs(dtiles_ecef_dir, exist_ok=True)
 
-    out_geotiff = os.path.join(dtiles_tiff_dir, f"{basename}_capture.tif")
-
-    if only_step == "geotiff":
-        print("STEP_START:GEOTIFF", flush=True)
-        _notify_step(callback_url, path_key, "geotiff", "start")
-        try:
-            run_capture_geotiff(input_path, out_geotiff, resolution=0.5)
-            print("RESULT:GEOTIFF:OK", flush=True)
-            _notify_step(callback_url, path_key, "geotiff", "ok")
-        except Exception as e:
-            msg = str(e).replace("\n", " ").strip()[:200]
-            print(f"RESULT:GEOTIFF:FAIL:{msg}", flush=True)
-            _notify_step(callback_url, path_key, "geotiff", "fail")
-            sys.exit(1)
-        sys.exit(0)
     if only_step == "ecef":
         print("STEP_START:ECEF", flush=True)
         _notify_step(callback_url, path_key, "ecef", "start")
@@ -275,19 +258,6 @@ def main():
             sys.exit(1)
         sys.exit(0)
 
-    geotiff_ok = False
-    print("STEP_START:GEOTIFF", flush=True)
-    _notify_step(callback_url, path_key, "geotiff", "start")
-    try:
-        run_capture_geotiff(input_path, out_geotiff, resolution=0.5)
-        geotiff_ok = True
-        print("RESULT:GEOTIFF:OK", flush=True)
-        _notify_step(callback_url, path_key, "geotiff", "ok")
-    except Exception as e:
-        msg = str(e).replace("\n", " ").strip()[:200]
-        print(f"RESULT:GEOTIFF:FAIL:{msg}", flush=True)
-        _notify_step(callback_url, path_key, "geotiff", "fail")
-
     pnts_ok = False
     try:
         run_b3dm(input_path, dtiles_pnts_dir, ecef_output_dir=dtiles_ecef_dir, callback_url=callback_url, path_key=path_key)
@@ -298,7 +268,7 @@ def main():
         msg = str(e).replace("\n", " ").strip()[:200]
         print(f"RESULT:PNTS:FAIL:{msg}", flush=True)
         _notify_step(callback_url, path_key, "pnts", "fail")
-    sys.exit(0 if (geotiff_ok and pnts_ok) else 1)
+    sys.exit(0 if pnts_ok else 1)
 
 
 def run_capture_geotiff(

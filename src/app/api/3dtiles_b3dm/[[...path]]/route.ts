@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-/** service_data/3dtiles/<데이터셋>/b3dm/... */
-const TILES_ROOT = path.join(GGNR_DATA_DIR, 'service_data', '3dtiles');
+const TILES_ROOT = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.dtilesB3dm);
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -23,6 +23,13 @@ function getContentType(filename: string): string {
 const WGS84_A = 6378137.0;
 const WGS84_F = 1 / 298.257223563;
 const WGS84_E2 = 2 * WGS84_F - WGS84_F * WGS84_F;
+
+type TilesetLike = {
+  root?: {
+    transform?: unknown;
+    boundingVolume?: Record<string, unknown>;
+  };
+};
 
 function lonLatHeightToEcef(lonDeg: number, latDeg: number, heightM: number): [number, number, number] {
   const lon = (lonDeg * Math.PI) / 180;
@@ -59,7 +66,7 @@ function getEnuToEcefRotation(lonDeg: number, latDeg: number): number[] {
   ];
 }
 
-function patchTilesetRootTransformToEcef(json: any): void {
+function patchTilesetRootTransformToEcef(json: TilesetLike): void {
   const root = json.root;
   if (!root || !Array.isArray(root.transform) || root.transform.length !== 16) return;
 
@@ -114,7 +121,20 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const b3dmDir = path.join(TILES_ROOT, dataset, 'b3dm');
+  let b3dmDir: string | null = null;
+  const candidate = path.join(TILES_ROOT, dataset);
+  try {
+    const stat = await fs.stat(candidate);
+    if (stat.isDirectory()) {
+      b3dmDir = candidate;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!b3dmDir) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const resolved = path.normalize(path.join(b3dmDir, ...pathSegments.slice(1)));
 
   if (!resolved.startsWith(b3dmDir)) {
@@ -146,8 +166,9 @@ export async function GET(
         'Cache-Control': 'no-store',
       },
     });
-  } catch (err: any) {
-    if (err.code === 'ENOENT') return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  } catch (err: unknown) {
+    const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
+    if (code === 'ENOENT') return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

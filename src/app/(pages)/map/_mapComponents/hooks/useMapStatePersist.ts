@@ -4,6 +4,11 @@ import { Map } from 'ol';
 const STORAGE_KEY = 'ggnr_map_state';
 const SAVE_DEBOUNCE_MS = 300;
 
+function getStorageKey(projectName?: string): string {
+  const name = String(projectName ?? '').trim();
+  return name ? `${STORAGE_KEY}:${name}` : STORAGE_KEY;
+}
+
 export interface PersistedMapState {
   zoom: number;
   centerX: number;
@@ -19,10 +24,10 @@ export interface PersistedMapState {
   visibleBuildingRoadLayerNames?: string[];
 }
 
-export function loadPersistedMapState(): PersistedMapState | null {
+export function loadPersistedMapState(projectName?: string): PersistedMapState | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey(projectName));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (
@@ -55,17 +60,17 @@ export function loadPersistedMapState(): PersistedMapState | null {
   return null;
 }
 
-function saveMapState(state: PersistedMapState) {
+function saveMapState(state: PersistedMapState, projectName?: string) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(getStorageKey(projectName), JSON.stringify(state));
   } catch { /* storage full or unavailable */ }
 }
 
 /** 3D 배경 선택 등 — 기존 ggnr_map_state 유지한 채 backgroundMap 만 갱신 */
-export function patchPersistedBackgroundMap(backgroundMap: string): void {
-  const prev = loadPersistedMapState();
+export function patchPersistedBackgroundMap(backgroundMap: string, projectName?: string): void {
+  const prev = loadPersistedMapState(projectName);
   if (!prev) return;
-  saveMapState({ ...prev, backgroundMap });
+  saveMapState({ ...prev, backgroundMap }, projectName);
 }
 
 /** 지목/소유구분/지적도/건물도로 체크박스 상태 (null이면 저장 시 빈 배열로 저장하지 않음) */
@@ -87,6 +92,7 @@ export function useMapStatePersist(
   activeControls: string[],
   visibleLayerNames: Set<string>,
   layerPanelSelections: PersistedLayerPanelSelections,
+  projectName?: string,
 ) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestRef = useRef({
@@ -128,7 +134,7 @@ export function useMapStatePersist(
         ...(sel.visibleBuildingRoadLayerNames && {
           visibleBuildingRoadLayerNames: sel.visibleBuildingRoadLayerNames,
         }),
-      });
+      }, projectName);
     };
 
     const debouncedPersist = () => {
@@ -143,7 +149,7 @@ export function useMapStatePersist(
       view.un('change', debouncedPersist);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [map, mapReady]);
+  }, [map, mapReady, projectName]);
 
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -169,7 +175,7 @@ export function useMapStatePersist(
       ...(sel.visibleBuildingRoadLayerNames && {
         visibleBuildingRoadLayerNames: sel.visibleBuildingRoadLayerNames,
       }),
-    });
+    }, projectName);
   }, [
     backgroundMap,
     activeControls,
@@ -177,5 +183,6 @@ export function useMapStatePersist(
     layerPanelSelections,
     map,
     mapReady,
+    projectName,
   ]);
 }

@@ -11,12 +11,24 @@ import {
   shouldUploadSourcePath,
   type SourceUploadMode,
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import {
+  RemoteUploadError,
+  SOURCE_UPLOAD_REMOTE_BASE,
+  uploadZipByChunks,
+  type RemoteStageReport,
+} from '@/service/sourceUploadRemote';
+import {
+  completeUploadProgress,
+  createProgressId,
+  failUploadProgress,
+  getUploadProgress,
+  initUploadProgress,
+  setScanProgress,
+  setUploadProgressPhase,
+  setZipProgress,
+} from '@/service/sourceUploadProgress';
 
 export const dynamic = 'force-dynamic';
-
-const SOURCE_UPLOAD_REMOTE_BASE =
-  process.env.SOURCE_UPLOAD_REMOTE_BASE ?? 'http://192.168.126.1:3000/api/source/upload';
-const SOURCE_UPLOAD_REMOTE_BEARER = process.env.SOURCE_UPLOAD_REMOTE_BEARER ?? '';
 
 type ItemStatus = 'ok' | 'skipped' | 'fail';
 type UploadItem = {
@@ -30,6 +42,13 @@ type IncludedFile = {
   absPath: string;
   relPath: string;
   category: 'core' | 'runtime' | 'data';
+};
+
+type LocalStageReport = {
+  id: 'scan' | 'zip' | 'finalize';
+  ok: boolean;
+  detail?: string;
+  error?: string;
 };
 
 function toPosixRelative(absPath: string, root: string): string {
@@ -52,16 +71,31 @@ async function buildZipBundle(params: {
   date: string;
   changeNote: string;
   workspaceRoot: string;
+  progressId?: string;
 }): Promise<void> {
-  const { files, zipPath, bundleRoot, mode, date, changeNote, workspaceRoot } = params;
+  const { files, zipPath, bundleRoot, mode, date, changeNote, workspaceRoot, progressId } = params;
   await fs.mkdir(path.dirname(zipPath), { recursive: true });
+  const total = files.length + 1;
 
   await new Promise<void>((resolve, reject) => {
     const output = fsSync.createWriteStream(zipPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
+    let processed = 0;
+
+    const reportZip = () => {
+      if (!progressId) return;
+      setZipProgress(progressId, { processed, total, zipName: path.basename(zipPath) });
+    };
+
     output.on('close', () => resolve());
     output.on('error', reject);
     archive.on('error', reject);
+    archive.on('entry', () => {
+      processed += 1;
+      if (processed === 1 || processed % 25 === 0 || processed >= total) {
+        reportZip();
+      }
+    });
     archive.pipe(output);
 
     for (const f of files) {
@@ -77,108 +111,35 @@ async function buildZipBundle(params: {
       '',
     ].join('\n');
     archive.append(metaText, { name: `${bundleRoot}/_upload_meta.txt` });
+    reportZip();
     archive.finalize().catch(reject);
   });
 }
 
-async function uploadZipByChunks(params: {
-  zipPath: string;
-  zipName: string;
-  totalSize: number;
-  mode: SourceUploadMode;
-  date: string;
-  changeNote: string;
-  bundleRoot: string;
-}): Promise<Record<string, unknown>> {
-  const { zipPath, zipName, totalSize, mode, date, changeNote, bundleRoot } = params;
-  const base = SOURCE_UPLOAD_REMOTE_BASE.replace(/\/+$/, '');
-  const initUrl = `${base}/init`;
-  const chunkUrl = `${base}/chunk`;
-  const completeUrl = `${base}/complete`;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (SOURCE_UPLOAD_REMOTE_BEARER) {
-    headers.Authorization = `Bearer ${SOURCE_UPLOAD_REMOTE_BEARER}`;
-  }
-
-  const initRes = await fetch(initUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      fileName: zipName,
-      totalSize,
-      mode,
-      date,
-      changeNote,
-      bundleRoot,
-      bundleType: 'sourceZip',
-    }),
-    cache: 'no-store',
-  });
-  const initJson = (await initRes.json().catch(() => ({}))) as {
-    uploadId?: string;
-    chunkSize?: number;
-    expectedChunks?: number;
-    error?: string;
-  };
-  if (!initRes.ok) {
-    throw new Error(initJson?.error ?? `remote init failed (${initRes.status})`);
-  }
-  const uploadId = String(initJson.uploadId ?? '').trim();
-  const chunkSize = Number(initJson.chunkSize ?? 512 * 1024);
-  const expectedChunks = Number(initJson.expectedChunks ?? Math.ceil(totalSize / chunkSize));
-  if (!uploadId || !Number.isFinite(chunkSize) || chunkSize <= 0 || !Number.isFinite(expectedChunks) || expectedChunks <= 0) {
-    throw new Error('remote init response invalid');
-  }
-
-  const fh = await fs.open(zipPath, 'r');
-  try {
-    let position = 0;
-    for (let chunkIndex = 0; chunkIndex < expectedChunks; chunkIndex++) {
-      const remain = totalSize - position;
-      const want = Math.min(chunkSize, Math.max(remain, 0));
-      if (want <= 0) break;
-      const buf = Buffer.allocUnsafe(want);
-      const read = await fh.read(buf, 0, want, position);
-      if (read.bytesRead <= 0) break;
-      position += read.bytesRead;
-      const url = `${chunkUrl}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-      const chunkRes = await fetch(url, {
-        method: 'POST',
-        body: buf.subarray(0, read.bytesRead),
-        headers: SOURCE_UPLOAD_REMOTE_BEARER ? { Authorization: `Bearer ${SOURCE_UPLOAD_REMOTE_BEARER}` } : undefined,
-        cache: 'no-store',
-      });
-      if (!chunkRes.ok) {
-        const chunkTxt = await chunkRes.text().catch(() => '');
-        throw new Error(chunkTxt || `remote chunk failed (${chunkRes.status})`);
-      }
-    }
-  } finally {
-    await fh.close();
-  }
-
-  const completeRes = await fetch(completeUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      uploadId,
-      // 원격 서버에서 합치기 완료 후 압축 해제까지 처리 가능하도록 힌트 전달
-      extract: true,
-      extractFolder: bundleRoot,
-      preserveBundleZip: true,
-    }),
-    cache: 'no-store',
-  });
-  const completeJson = (await completeRes.json().catch(() => ({}))) as Record<string, unknown> & {
-    error?: string;
-  };
-  if (!completeRes.ok) {
-    throw new Error(completeJson?.error ?? `remote complete failed (${completeRes.status})`);
-  }
-  return { uploadId, chunkSize, expectedChunks, complete: completeJson };
+function uploadErrorResponse(params: {
+  message: string;
+  failedStage?: string;
+  localStages?: LocalStageReport[];
+  remoteStages?: RemoteStageReport[];
+  partial?: Record<string, unknown>;
+}) {
+  return NextResponse.json(
+    {
+      error: params.message,
+      failedStage: params.failedStage,
+      localStages: params.localStages ?? [],
+      remoteStages: params.remoteStages ?? [],
+      ...params.partial,
+    },
+    { status: 500 }
+  );
 }
 
 export async function POST(req: NextRequest) {
+  const localStages: LocalStageReport[] = [];
+  let remoteStages: RemoteStageReport[] = [];
+  let progressId = '';
+
   try {
     if (!(await getSessionUsrId())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -189,14 +150,26 @@ export async function POST(req: NextRequest) {
     const dateRaw = typeof body.date === 'string' ? body.date.trim() : '';
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : todayYmd();
     const changeNote = typeof body.changeNote === 'string' ? body.changeNote.trim() : '';
+    const skipPreflight = body.skipPreflight === true;
+    progressId =
+      typeof body.progressId === 'string' && body.progressId.trim()
+        ? body.progressId.trim()
+        : createProgressId();
+    if (!getUploadProgress(progressId)) {
+      initUploadProgress(progressId);
+    }
+    setUploadProgressPhase(progressId, 'scan', '소스 스캔/필터링 시작...', { progressPct: 5 });
 
     const workspaceRoot = process.cwd();
     const items: UploadItem[] = [];
     const included: IncludedFile[] = [];
+    let dirsVisited = 0;
+    let scanTicks = 0;
 
     async function walk(absDir: string): Promise<void> {
       const relDir = toPosixRelative(absDir, workspaceRoot);
       if (relDir && shouldSkipSourceDir(relDir, mode)) return;
+      dirsVisited += 1;
       const entries = await fs.readdir(absDir, { withFileTypes: true });
       for (const entry of entries) {
         const childAbs = path.join(absDir, entry.name);
@@ -212,23 +185,60 @@ export async function POST(req: NextRequest) {
         const category = classifySourcePath(childRel);
         if (!shouldUploadSourcePath(childRel, mode)) {
           items.push({ file: childRel, category, status: 'skipped' });
-          continue;
+        } else {
+          included.push({ absPath: childAbs, relPath: childRel, category });
         }
-        included.push({ absPath: childAbs, relPath: childRel, category });
+
+        scanTicks += 1;
+        if (scanTicks % 80 === 0) {
+          setScanProgress(progressId, {
+            included: included.length,
+            skipped: items.length,
+            currentPath: childRel,
+            dirsVisited,
+          });
+          await new Promise<void>((r) => setImmediate(r));
+        }
       }
     }
 
     await walk(workspaceRoot);
+    setScanProgress(progressId, {
+      included: included.length,
+      skipped: items.filter((x) => x.status === 'skipped').length,
+      currentPath: '(스캔 완료)',
+      dirsVisited,
+    });
+    localStages.push({
+      id: 'scan',
+      ok: true,
+      detail: `포함 ${included.length}건, 제외 ${items.filter((x) => x.status === 'skipped').length}건`,
+    });
+    setUploadProgressPhase(progressId, 'zip', `ZIP 압축 중... (${included.length}개 파일)`);
+
+    if (included.length === 0) {
+      localStages.push({ id: 'zip', ok: false, error: '업로드 대상 파일이 없습니다.' });
+      failUploadProgress(progressId, 'scan', '업로드 대상 파일이 없습니다.');
+      return uploadErrorResponse({
+        message: '업로드 대상 파일이 없습니다.',
+        failedStage: 'scan',
+        localStages,
+        remoteStages,
+        partial: { progressId, items, total: items.length, ok: 0, skipped: items.length, fail: 0 },
+      });
+    }
 
     const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
     const bundleRoot = `${date}_${stamp}`;
     const zipName = `source_${mode}_${date}_${stamp}.zip`;
     const tmpDir = path.join(os.tmpdir(), 'ggnr_source_upload');
     const zipPath = path.join(tmpDir, zipName);
-    let zipSize = 0;
-    let remoteResult: Record<string, unknown> | null = null;
 
-    if (included.length > 0) {
+    setUploadProgressPhase(progressId, 'zip', `ZIP 압축 준비 (${included.length}개 파일)...`, {
+      progressPct: 14,
+    });
+
+    try {
       await buildZipBundle({
         files: included,
         zipPath,
@@ -237,8 +247,34 @@ export async function POST(req: NextRequest) {
         date,
         changeNote,
         workspaceRoot,
+        progressId,
       });
-      zipSize = (await fs.stat(zipPath)).size;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'ZIP 압축 실패';
+      localStages.push({ id: 'zip', ok: false, error: message });
+      failUploadProgress(progressId, 'zip', message);
+      return uploadErrorResponse({
+        message,
+        failedStage: 'zip',
+        localStages,
+        remoteStages,
+        partial: { progressId, items, total: items.length },
+      });
+    }
+
+    const zipSize = (await fs.stat(zipPath)).size;
+    localStages.push({
+      id: 'zip',
+      ok: true,
+      detail: `${zipName} (${Math.round(zipSize / 1024 / 1024)}MB)`,
+    });
+    setUploadProgressPhase(progressId, 'init', `ZIP 완료 (${Math.round(zipSize / 1024 / 1024)}MB) — 원격 전송 시작`, {
+      zipName,
+      zipSize,
+    });
+
+    let remoteResult;
+    try {
       remoteResult = await uploadZipByChunks({
         zipPath,
         zipName,
@@ -247,14 +283,27 @@ export async function POST(req: NextRequest) {
         date,
         changeNote,
         bundleRoot,
+        skipPreflight,
+        progressId,
       });
-      for (const f of included) {
-        items.push({ file: f.relPath, category: f.category, status: 'ok' });
-      }
+      remoteStages = remoteResult.stages;
+    } finally {
       await fs.rm(zipPath, { force: true }).catch(() => {});
     }
 
+    for (const f of included) {
+      items.push({ file: f.relPath, category: f.category, status: 'ok' });
+    }
+
+    localStages.push({
+      id: 'finalize',
+      ok: true,
+      detail: `성공 ${items.filter((x) => x.status === 'ok').length}, 제외 ${items.filter((x) => x.status === 'skipped').length}`,
+    });
+    completeUploadProgress(progressId, '업로드 완료');
+
     return NextResponse.json({
+      progressId,
       remoteBase: SOURCE_UPLOAD_REMOTE_BASE,
       workspaceRoot,
       zipName,
@@ -265,11 +314,42 @@ export async function POST(req: NextRequest) {
       skipped: items.filter((x) => x.status === 'skipped').length,
       fail: items.filter((x) => x.status === 'fail').length,
       remoteResult,
+      localStages,
+      remoteStages,
       items,
     });
   } catch (err: unknown) {
+    if (err instanceof RemoteUploadError) {
+      remoteStages = err.stages;
+      if (progressId) {
+        failUploadProgress(progressId, err.stage, err.message, {
+          sentChunks: err.sentChunks,
+          expectedChunks: err.expectedChunks,
+          chunkIndex: err.chunkIndex,
+        });
+      }
+      return uploadErrorResponse({
+        message: err.message,
+        failedStage: err.stage,
+        localStages,
+        remoteStages,
+        partial: {
+          progressId,
+          chunkIndex: err.chunkIndex,
+          sentChunks: err.sentChunks,
+          expectedChunks: err.expectedChunks,
+          status: err.status,
+        },
+      });
+    }
     const message = err instanceof Error ? err.message : 'Upload failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (progressId) failUploadProgress(progressId, 'unknown', message);
+    return uploadErrorResponse({
+      message,
+      failedStage: 'unknown',
+      localStages,
+      remoteStages,
+      partial: { progressId },
+    });
   }
 }
-

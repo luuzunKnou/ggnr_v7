@@ -133,6 +133,49 @@ const DEFAULT_FOOTER_ADDR =
   "안동시 토지정보과 | 054-840-6371 | 36691 경상북도 안동시 퇴계로 115 (명륜동)"
 const DEFAULT_FOOTER_RSS = "Copyright (c) 2024. ALL RIGHTS RESERVED"
 
+function extractAddressFromFooterAddr(footerAddr: string): string {
+  const parts = String(footerAddr ?? "")
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const raw = parts[parts.length - 1] ?? ""
+  return raw.replace(/^\d{5}\s+/, "").trim()
+}
+
+async function geocodeAddressVworld(
+  address: string,
+  apiKey: string,
+  type: "ROAD" | "PARCEL"
+): Promise<{ lon: number; lat: number } | null> {
+  if (!address || !apiKey) return null
+  const u = new URL("https://api.vworld.kr/req/address")
+  u.searchParams.set("service", "address")
+  u.searchParams.set("request", "getCoord")
+  u.searchParams.set("version", "2.0")
+  u.searchParams.set("crs", "epsg:4326")
+  u.searchParams.set("type", type)
+  u.searchParams.set("address", address)
+  u.searchParams.set("format", "json")
+  u.searchParams.set("key", apiKey)
+  try {
+    const res = await fetch(u.toString(), { method: "GET", cache: "no-store" })
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      response?: {
+        status?: string
+        result?: { point?: { x?: string | number; y?: string | number } }
+      }
+    }
+    const status = String(data?.response?.status ?? "").toUpperCase()
+    const lon = Number(data?.response?.result?.point?.x)
+    const lat = Number(data?.response?.result?.point?.y)
+    if (status !== "OK" || !Number.isFinite(lon) || !Number.isFinite(lat)) return null
+    return { lon, lat }
+  } catch {
+    return null
+  }
+}
+
 /** 인덱스 푸터: runtime.env 의 FOOTER_ADDR, FOOTER_RSS */
 export function getIndexFooterConfig(_params?: unknown): {
   footerAddr: string
@@ -143,6 +186,21 @@ export function getIndexFooterConfig(_params?: unknown): {
     footerAddr: vars.FOOTER_ADDR?.trim() || DEFAULT_FOOTER_ADDR,
     footerRss: vars.FOOTER_RSS?.trim() || DEFAULT_FOOTER_RSS,
   }
+}
+
+/**
+ * runtime.env 의 FOOTER_ADDR 마지막 주소 조각을 파싱해 기본 지도 중심 좌표를 구합니다.
+ * 예: "영주시 | 054-639-6000 | 36040 경상북도 영주시 시청로 1" → "경상북도 영주시 시청로 1"
+ */
+export async function getDefaultMapCenterFromFooter(): Promise<{ lon: number; lat: number } | null> {
+  const vars = getRuntimeEnvVars()
+  const footerAddr = vars.FOOTER_ADDR?.trim() || DEFAULT_FOOTER_ADDR
+  const address = extractAddressFromFooterAddr(footerAddr)
+  const apiKey = vars.VWORLD_API_KEY?.trim() ?? ""
+  if (!address || !apiKey) return null
+  const road = await geocodeAddressVworld(address, apiKey, "ROAD")
+  if (road) return road
+  return geocodeAddressVworld(address, apiKey, "PARCEL")
 }
 
 /**
@@ -348,14 +406,15 @@ export function getIndexSliderImages(projectName: string): string[] {
 
 /**
  * 인덱스·지도 헤더/사이드 로고 URL.
- * public/image/indexImage/{project}_index_logo.svg 가 있으면 사용, 없으면 default_index_logo.svg
+ * 1) {project}_index_logo.svg → 2) {project}_index_logo.png → 3) default_index_logo.svg (공간누리)
  */
 export function getIndexLogoSrc(projectName?: string): string {
   const name = (projectName ?? process.env.GGNR_PROJECT ?? "build_yy").trim()
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")
-  const custom = join(dir, `${name}_index_logo.svg`)
-  if (existsSync(custom)) return `/image/indexImage/${name}_index_logo.svg`
+  const base = `${name}_index_logo`
+  if (existsSync(join(dir, `${base}.svg`))) return `/image/indexImage/${base}.svg`
+  if (existsSync(join(dir, `${base}.png`))) return `/image/indexImage/${base}.png`
   return `/image/indexImage/default_index_logo.svg`
 }
 

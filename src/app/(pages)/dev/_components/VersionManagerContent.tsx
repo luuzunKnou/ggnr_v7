@@ -1,29 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
-
-type RestartMode = 'none' | 'exit' | 'command';
-
-type UpdateResult = {
-  version: string;
-  fileName: string;
-  downloadedBytes: number;
-  appliedFiles: number;
-  skippedFiles: number;
-  gnmsBaseUrl: string;
-  latestUrl: string;
-  downloadUrl: string;
-  restart: {
-    requested: boolean;
-    mode: RestartMode;
-    scheduled: boolean;
-    message: string;
-    signalFile: string;
-  };
-  skippedSamples?: string[];
-};
+import {
+  relayLatestSourceFromGnms,
+  type RestartMode,
+  type VersionRelayProgress,
+  type VersionRelayResult,
+} from '@/lib/sourceVersionClientRelay';
 
 export function VersionManagerContent() {
   const [restart, setRestart] = useState(true);
@@ -31,24 +16,36 @@ export function VersionManagerContent() {
   const [running, setRunning] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState('대기 중');
-  const [result, setResult] = useState<UpdateResult | null>(null);
+  const [progress, setProgress] = useState<VersionRelayProgress | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [result, setResult] = useState<VersionRelayResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const logRef = useRef<string[]>([]);
+
+  const pushLog = (line: string) => {
+    const next = [...logRef.current, `[${new Date().toLocaleTimeString()}] ${line}`].slice(-80);
+    logRef.current = next;
+    setLogs(next);
+  };
 
   const runUpdate = async () => {
     setRunning(true);
     setError(null);
     setResult(null);
+    setProgress(null);
+    logRef.current = [];
+    setLogs([]);
     setMessage('GNMS 최신 버전 조회 중...');
     try {
-      const res = await fetch('/api/source/version/update-latest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restart, restartMode }),
+      const json = await relayLatestSourceFromGnms({
+        restart,
+        restartMode,
+        onProgress: (p) => {
+          setProgress(p);
+          setMessage(p.message);
+        },
+        onLog: pushLog,
       });
-      const json = (await res.json().catch(() => ({}))) as {
-        error?: string;
-      } & UpdateResult;
-      if (!res.ok) throw new Error(json.error ?? '최신 소스 업데이트 실패');
       setResult(json);
       if (json.restart?.scheduled) {
         setMessage('최신 소스 적용 완료. 서버 재시작 예약됨');
@@ -56,8 +53,10 @@ export function VersionManagerContent() {
         setMessage('최신 소스 적용 완료');
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
       setMessage('실패');
+      pushLog(`ERROR: ${msg}`);
     } finally {
       setRunning(false);
     }
@@ -97,12 +96,18 @@ export function VersionManagerContent() {
     }
   };
 
+  const pct =
+    progress?.totalBytes && progress.bytesDone != null
+      ? Math.min(100, Math.round((progress.bytesDone / progress.totalBytes) * 100))
+      : null;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-2">
       <div className="rounded border p-3">
         <div className="text-sm font-medium">GNMS 최신 소스 코드 업데이트</div>
         <p className="mt-1 text-xs text-muted-foreground">
-          GNMS에서 최신 ZIP을 내려받아 현재 워크스페이스에 덮어쓴 뒤 재시작할 수 있습니다.
+          브라우저가 GNMS에서 ZIP을 스트리밍으로 받아 운영 서버로 청크 전송합니다. 운영 서버는 GNMS에
+          접속하지 않습니다 (CORS 허용 전제).
         </p>
 
         <div className="mt-3 space-y-2 text-sm">
@@ -115,7 +120,7 @@ export function VersionManagerContent() {
             />
             적용 후 서버 재시작
           </label>
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
             <label className="flex items-center gap-1">
               <input
                 type="radio"
@@ -167,8 +172,33 @@ export function VersionManagerContent() {
           <span className="text-xs text-muted-foreground">{message}</span>
         </div>
 
+        {running && progress && (
+          <div className="mt-3 space-y-1">
+            <div className="text-xs text-muted-foreground">
+              단계: {progress.phase}
+              {progress.chunkIndex != null && progress.totalChunks != null
+                ? ` · 청크 ${progress.chunkIndex}/${progress.totalChunks}`
+                : ''}
+              {pct != null ? ` · ${pct}%` : ''}
+            </div>
+            {pct != null && (
+              <div className="h-2 w-full overflow-hidden rounded bg-muted">
+                <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+              </div>
+            )}
+          </div>
+        )}
+
         {error && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</div>}
       </div>
+
+      {logs.length > 0 && (
+        <div className="max-h-40 overflow-auto rounded border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed">
+          {logs.map((line, i) => (
+            <div key={`${i}-${line}`}>{line}</div>
+          ))}
+        </div>
+      )}
 
       {result && (
         <div className="rounded border p-3 text-xs">

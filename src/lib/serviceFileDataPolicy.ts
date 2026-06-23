@@ -1,5 +1,5 @@
 /**
- * service_data/file_data API 호출 시 ser_eng 검증.
+ * file_data API 호출 시 ser_eng 검증.
  * serviceList에 등록된 ser_eng + 향후 확장용 예약 코드만 허용합니다.
  */
 import { getServiceList } from '@/service/configService';

@@ -1,12 +1,13 @@
 /**
  * Chunked upload service.
- * 베이스 = GGNR_DATA_DIR. upload_data/*, service_data/shp_data|excel_data|file_data/...
+ * 베이스 = GGNR_DATA_DIR. 3dtiles_*, tiles_*, shp_data, excel_data, file_data/... 루트에 저장.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
 import { assertSafeServiceFileBasename, fileDataRelativeDir } from '@/lib/serviceFileData';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { appendUploadConvertHistory, ensureBaseStructure } from './fileManagerService';
 import { runLasPipeline } from './pipelineService';
 
@@ -21,6 +22,10 @@ function getUploadTempDir(uploadId: string): string {
   return path.join(getBaseDir(), '.tmp', 'uploads', uploadId);
 }
 
+function joinRelativePath(baseDir: string, relativePath: string): string {
+  return [baseDir, relativePath].filter(Boolean).join('/').replace(/\\/g, '/');
+}
+
 type BaseMeta = {
   fileName: string;
   totalSize: number;
@@ -29,7 +34,7 @@ type BaseMeta = {
 };
 
 type UploadMetaStandard = BaseMeta & {
-  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source';
+  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source' | 'fileManager';
 };
 
 type UploadMetaServiceFileData = BaseMeta & {
@@ -55,7 +60,7 @@ export type InitChunkedUploadResult = {
  * serviceFileData 타입은 사용할 수 없습니다 — initServiceFileDataUpload 를 사용하세요.
  */
 export async function initChunkedUpload(params: {
-  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source';
+  uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source' | 'fileManager';
   fileName: string;
   totalSize: number;
 }): Promise<InitChunkedUploadResult> {
@@ -67,9 +72,10 @@ export async function initChunkedUpload(params: {
     uploadType !== 'excel' &&
     uploadType !== 'fileData' &&
     uploadType !== 'satelliteTif' &&
-    uploadType !== 'source'
+    uploadType !== 'source' &&
+    uploadType !== 'fileManager'
   ) {
-    throw new Error('uploadType must be tif, las, shp, excel, fileData, satelliteTif, or source');
+    throw new Error('uploadType must be tif, las, shp, excel, fileData, satelliteTif, source, or fileManager');
   }
   const expectedChunks = Math.ceil(totalSize / CHUNK_SIZE) || 1;
   const uploadId = nanoid();
@@ -91,7 +97,7 @@ export async function initChunkedUpload(params: {
 }
 
 /**
- * service_data/file_data/{layer}/{key}/ 에 청크 업로드할 세션 시작.
+ * file_data/{layer}/{key}/ 에 청크 업로드할 세션 시작.
  * 호출부에서 serEng·layer·key·ownerUsrId 검증 후 전달.
  */
 export async function initServiceFileDataUpload(params: {
@@ -215,25 +221,30 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     subDir = meta.relativeDir.replace(/\\/g, '/');
     saveFileName = meta.fileName;
   } else if (meta.uploadType === 'tif') {
-    subDir = 'upload_data/tif';
+    subDir = 'tiles_tif';
     saveFileName = meta.fileName;
   } else if (meta.uploadType === 'satelliteTif') {
-    subDir = 'upload_data/satellite_tif';
+    subDir = 'tiles_tif';
     saveFileName = meta.fileName;
   } else if (meta.uploadType === 'shp') {
-    subDir = 'service_data/shp_data';
+    subDir = 'shp_data';
     saveFileName = meta.fileName;
   } else if (meta.uploadType === 'excel') {
-    subDir = 'service_data/excel_data';
+    subDir = 'excel_data';
     saveFileName = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}_${meta.fileName}`;
   } else if (meta.uploadType === 'fileData') {
-    subDir = 'service_data/file_data';
+    subDir = 'file_data';
     saveFileName = meta.fileName;
   } else if (meta.uploadType === 'source') {
-    subDir = 'upload_data/source_upload';
+    subDir = 'source_upload';
+    saveFileName = meta.fileName;
+  } else if (meta.uploadType === 'fileManager') {
+    subDir = '';
     saveFileName = meta.fileName;
   } else {
-    subDir = 'upload_data/las';
+    const ext = path.extname(meta.fileName);
+    const dataset = path.basename(meta.fileName, ext).trim() || 'las_dataset';
+    subDir = `${GGNR_DATA_PATHS.dtilesLas}/${dataset.replace(/\\/g, '/').split('/').pop() ?? dataset}`;
     saveFileName = meta.fileName;
   }
 
@@ -246,12 +257,13 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   if (segments.some((p) => p === '..')) {
     throw new Error('Invalid fileName path');
   }
-  /** 폴더 선택 업로드(webkitRelativePath) 시 하위 경로 유지. 루트만 저장하면 후처리가 service_data/shp_data/폴더/파일.shp 를 찾다가 실패함. */
+  /** 폴더 선택 업로드(webkitRelativePath) 시 하위 경로 유지. 루트만 저장하면 후처리가 shp_data/폴더/파일.shp 를 찾다가 실패함. */
   const preserveRelativePath =
     meta.uploadType === 'fileData' ||
     meta.uploadType === 'shp' ||
     meta.uploadType === 'satelliteTif' ||
-    meta.uploadType === 'source';
+    meta.uploadType === 'source' ||
+    meta.uploadType === 'fileManager';
   const targetPath = preserveRelativePath
     ? path.join(targetDir, ...segments)
     : path.join(targetDir, segments[segments.length - 1] ?? normalized);
@@ -266,15 +278,16 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   const stat = await fs.stat(targetPath);
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   const savedPath = preserveRelativePath
-    ? `${subDir}/${segments.join('/')}`
-    : `${subDir}/${segments[segments.length - 1] ?? path.basename(normalized)}`;
+    ? joinRelativePath(subDir, segments.join('/'))
+    : joinRelativePath(subDir, segments[segments.length - 1] ?? path.basename(normalized));
 
   if (
     meta.uploadType !== 'shp' &&
     meta.uploadType !== 'excel' &&
     meta.uploadType !== 'serviceFileData' &&
     meta.uploadType !== 'fileData' &&
-    meta.uploadType !== 'source'
+    meta.uploadType !== 'source' &&
+    meta.uploadType !== 'fileManager'
   ) {
     await appendUploadConvertHistory({
       at: new Date().toISOString(),

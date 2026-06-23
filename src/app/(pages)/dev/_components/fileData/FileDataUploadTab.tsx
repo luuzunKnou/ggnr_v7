@@ -79,7 +79,7 @@ export function FileDataUploadTab({ relativePath, onPathChange, onGoHistory }: P
 
   const goUp = useCallback(() => {
     const parts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
-    if (parts.length <= 2) return;
+    if (parts.length <= 1) return;
     parts.pop();
     onPathChange(parts.join('/'));
   }, [relativePath, onPathChange]);
@@ -172,7 +172,7 @@ export function FileDataUploadTab({ relativePath, onPathChange, onGoHistory }: P
           const rec = await call('', 'POST', {
             service: 'fileDataUploadService',
             action: 'recordFileDataUploadSession',
-            params: { savedPaths, logRelativeDir: 'service_data/file_data' },
+            params: { savedPaths, logRelativeDir: 'file_data' },
           });
           const d = rec?.data ?? rec;
           const logPath = d?.logPath as string | undefined;
@@ -208,7 +208,7 @@ export function FileDataUploadTab({ relativePath, onPathChange, onGoHistory }: P
   );
 
   const pathParts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
-  const canGoUp = pathParts.length > 2;
+  const canGoUp = pathParts.length > 1;
   const busy = uploading;
   const showExplorer = !busy && rows.length === 0;
 
@@ -235,7 +235,7 @@ export function FileDataUploadTab({ relativePath, onPathChange, onGoHistory }: P
       </div>
 
       <p className="text-[11px] text-muted-foreground shrink-0">
-        저장 위치: GGNR_DATA_DIR 기준 <code className="text-foreground">service_data/file_data/테이블명/키값/</code> — 폴더 업로드 시 선택한
+        저장 위치: GGNR_DATA_DIR 기준 <code className="text-foreground">file_data/테이블명/키값/</code> — 폴더 업로드 시 선택한
         폴더 이름 한 단계는 제외하고, 그 아래(테이블/키/파일) 구조만 저장됩니다.
       </p>
 

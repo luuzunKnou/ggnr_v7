@@ -26,7 +26,7 @@ export function FileDataStatusTab() {
       const res = await call('', 'POST', {
         service: 'fileDataUploadService',
         action: 'validateFileDataTree',
-        params: { relativePath: 'service_data/file_data' },
+        params: { relativePath: 'file_data' },
       });
       const d = res?.data ?? res;
       setData(d as Validation);
@@ -53,7 +53,7 @@ export function FileDataStatusTab() {
     <div className="flex flex-col h-full min-h-0 p-2 gap-2">
       <div className="shrink-0 flex items-center gap-2">
         <span className="text-sm font-medium">file_data 검증</span>
-        <span className="text-xs text-muted-foreground flex-1 truncate">{data?.rootRelative ?? 'service_data/file_data'}</span>
+        <span className="text-xs text-muted-foreground flex-1 truncate">{data?.rootRelative ?? 'file_data'}</span>
         <Button variant="outline" size="sm" onClick={() => void fetchValidation()} disabled={loading} className="gap-1">
           <RefreshCw className={loading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> 새로고침
         </Button>

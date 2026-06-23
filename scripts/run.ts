@@ -35,7 +35,7 @@ function usage(): never {
 Usage: npm run dev -- <project> <type>   # 개발 서버 (DB 셋업 후 next dev)
        npm run start -- <project> <type>  # 운영 서버 (DB 셋업 후 next start)
 
-  project  e.g. river_yd, ggnr_ad, build_uj
+  project  e.g. river_yd, ggnr_ad, ggnr_yj, build_yy, build_uj
   type     dev | demo | prod (src/config/projects/<project>.env 의 [section] 이름)
 `);
   process.exit(1);
@@ -102,6 +102,9 @@ async function main(): Promise<void> {
 
   loadProjectEnv(PROJECT, TYPE);
   loadRuntimeEnv(PROJECT);
+  if (!process.env.AUTH_SECRET?.trim() && !process.env.NEXTAUTH_SECRET?.trim()) {
+    process.env.AUTH_SECRET = 'ggnr-dev-auth-secret-change-me';
+  }
   process.env.GGNR_PROJECT = PROJECT;
   process.env.GGNR_ENV = TYPE;
   console.log(`[run] Loaded env: project=${PROJECT}, type=${TYPE}`);

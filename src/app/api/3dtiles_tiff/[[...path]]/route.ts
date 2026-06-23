@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const BASE_DIR = path.join(GGNR_DATA_DIR, 'service_data', '3dtiles_tiff');
+const BASE_DIR = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.dtilesTiff);
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();

@@ -1,5 +1,5 @@
 /**
- * service_data/file_data/{layer}/{key}/ 폴더를 ZIP 스트림으로 묶기 (스트리밍).
+ * file_data/{layer}/{key}/ 폴더를 ZIP 스트림으로 묶기 (스트리밍).
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
