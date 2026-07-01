@@ -33,6 +33,8 @@ import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/Riv
 import { RiverUseLedgerDetailPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerDetailPanel"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
+import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
+import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
 import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
 import {
@@ -57,6 +59,13 @@ const STANDARD_LIST_MAX_WIDTH = 900
 const COMPLAINT_PANEL_DEFAULT_WIDTH = 460
 const COMPLAINT_PANEL_MIN_WIDTH = 320
 const COMPLAINT_PANEL_MAX_WIDTH = 900
+
+const MEMO_PANEL_DEFAULT_WIDTH = 420
+const MEMO_PANEL_MIN_WIDTH = 320
+const MEMO_PANEL_MAX_WIDTH = 720
+const MEMO_DETAIL_DEFAULT_WIDTH = 400
+const MEMO_DETAIL_MIN_WIDTH = 320
+const MEMO_DETAIL_MAX_WIDTH = 640
 
 const MAP_3D_DATA_PANEL_DEFAULT_WIDTH = 360
 const MAP_3D_DATA_PANEL_MIN_WIDTH = 280
@@ -136,6 +145,7 @@ const LAYER_DATA_PANEL_MAX_WIDTH = 900
 const STANDARD_LIST_OPENED_KEY = "standardList"
 const LIST_VIEW_OPENED_KEY = "listView"
 const COMPLAINT_OPENED_KEY = "complaintManagement"
+const MEMO_OPENED_KEY = "memoManagement"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
@@ -211,6 +221,7 @@ function MapLayoutContent({
   const layerDataPanelOpen = dataPanelOpened && dataTableFromUrl !== ""
 
   const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
+  const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
   const map3dDataOpen = openedWindows.includes(MAP_3D_DATA_OPENED_KEY)
   const riverBasicPlanOpen = openedWindows.includes(RIVER_BASIC_PLAN_OPENED_KEY)
   const roadLedgerOpen = openedWindows.includes(ROAD_LEDGER_OPENED_KEY)
@@ -237,6 +248,9 @@ function MapLayoutContent({
   const [riverUseLedgerDetailId, setRiverUseLedgerDetailId] = useState<string | null>(null)
   const [riverUseLedgerListRefreshKey, setRiverUseLedgerListRefreshKey] = useState(0)
   const riverUseLedgerDetailOpen = riverUseLedgerOpen && Boolean(riverUseLedgerDetailId)
+  const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
+  const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
+  const memoDetailOpen = memoManagementOpen && Boolean(memoDetailId)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
   /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
@@ -304,6 +318,8 @@ function MapLayoutContent({
   const [roadUseLedgerDetailWidth, setRoadUseLedgerDetailWidth] = useState(ROAD_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
+  const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
@@ -322,6 +338,8 @@ function MapLayoutContent({
     (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0) +
     (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0) +
     (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0) +
+    (memoManagementOpen ? memoPanelWidth : 0) +
+    (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
     (safetyMapOpen ? safetyMapPanelWidth : 0) +
@@ -363,8 +381,11 @@ function MapLayoutContent({
     roadUseLedgerDetailLeftPx + (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0)
   const riverUseLedgerDetailLeftPx =
     riverUseLedgerPanelLeftPx + (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0)
-  const complaintPanelLeftPx =
+  const memoPanelLeftPx =
     riverUseLedgerDetailLeftPx + (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0)
+  const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
+  const complaintPanelLeftPx =
+    memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
   const map3dPanelLeftPx = complaintPanelLeftPx + (complaintManagementOpen ? complaintPanelWidth : 0)
   const safetyMapPanelLeftPx = map3dPanelLeftPx + (map3dDataOpen ? map3dDataPanelWidth : 0)
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
@@ -547,6 +568,12 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseMemoManagement = () => {
+    setMemoDetailId(null)
+    const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseBuildPublicLand = () => {
     setBuildPublicLandSelectedId(null)
     const next = openedWindows.filter((w) => w !== BUILD_PUBLIC_LAND_OPENED_KEY)
@@ -560,6 +587,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!riverUseLedgerOpen) setRiverUseLedgerDetailId(null)
   }, [riverUseLedgerOpen])
+
+  useEffect(() => {
+    if (!memoManagementOpen) setMemoDetailId(null)
+  }, [memoManagementOpen])
 
   useEffect(() => {
     if (!buildPublicLandOpen) setBuildPublicLandSelectedId(null)
@@ -948,6 +979,50 @@ function MapLayoutContent({
                   onDeleted={() => {
                     setRiverUseLedgerDetailId(null)
                     setRiverUseLedgerListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {memoManagementOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={memoPanelWidth}
+                minWidth={MEMO_PANEL_MIN_WIDTH}
+                maxWidth={MEMO_PANEL_MAX_WIDTH}
+                leftOffsetPx={memoPanelLeftPx}
+                onWidthChange={setMemoPanelWidth}
+              >
+                <MemoListPanel
+                  onClose={handleCloseMemoManagement}
+                  selectedDetailId={memoDetailId}
+                  onSelectDetailId={setMemoDetailId}
+                  refreshKey={memoListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {memoManagementOpen && memoDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={memoDetailWidth}
+                minWidth={MEMO_DETAIL_MIN_WIDTH}
+                maxWidth={MEMO_DETAIL_MAX_WIDTH}
+                leftOffsetPx={memoDetailLeftPx}
+                onWidthChange={setMemoDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <MemoDetailPanel
+                  detailId={memoDetailId}
+                  onClose={() => setMemoDetailId(null)}
+                  onSaved={() => setMemoListRefreshKey((k) => k + 1)}
+                  onCreated={(newRowKey) => {
+                    setMemoListRefreshKey((k) => k + 1)
+                    setMemoDetailId(newRowKey)
+                  }}
+                  onDeleted={() => {
+                    setMemoDetailId(null)
+                    setMemoListRefreshKey((k) => k + 1)
                   }}
                 />
               </MapSideListPanel>

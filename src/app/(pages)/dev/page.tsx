@@ -172,6 +172,7 @@ export default function DevPage() {
         ) : null
       }
       onLogout={handleLogout}
+      consoleArea="dev"
     />
   )
 }

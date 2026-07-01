@@ -11,8 +11,10 @@ import {
 import {
   BackgroundMapSelector,
   defaultBackgroundMapGroups,
+  buildCustomAerialBackgroundOptions,
+  FALLBACK_BACKGROUND_MAP_ID,
+  pickLatestCustomAerialBackgroundId,
   type BackgroundMapGroup,
-  type BackgroundMapOption,
 } from './mapControlPanel/backgroundMapSelector';
 import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
 import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
@@ -158,7 +160,7 @@ export default function OpenLayersMap({
   }, [applyMapViewPaddingRef, mapReady]);
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
-  const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
+  const [selectedBackgroundMap, setSelectedBackgroundMap] = useState(FALLBACK_BACKGROUND_MAP_ID);
   const [backgroundMapGroups, setBackgroundMapGroups] = useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
@@ -292,20 +294,6 @@ export default function OpenLayersMap({
 
   useEffect(() => {
     let cancelled = false;
-    const buildLabelFromOrthoFolder = (id: string): string | null => {
-      // satellite_YYYY[_CRS[_이름] | _이름]
-      const m = /^satellite_(\d{4})(?:_([^_]+)(?:_(.+))?)?$/i.exec(id);
-      if (!m) return null;
-      const year = m[1];
-      const seg3 = (m[2] ?? '').trim();
-      const seg4 = (m[3] ?? '').trim();
-      // 3번째 세그먼트가 순수 숫자 → CRS 코드, 표시명은 4번째
-      if (/^\d+$/.test(seg3)) {
-        return seg4 || `항공영상(${year})`;
-      }
-      // 3번째가 이름
-      return seg3 || `항공영상(${year})`;
-    };
     const run = async () => {
       try {
         const res = await call('', 'POST', {
@@ -314,21 +302,16 @@ export default function OpenLayersMap({
           params: {},
         });
         if (cancelled) return;
-        const d = (res?.data ?? res) as {
-          groups?: { groupName: string; tileSetIds: string[] }[];
-          legacyTileSetIds?: string[];
-        };
-        const idSet = new Set<string>();
-        for (const id of d.legacyTileSetIds ?? []) idSet.add(id);
-        for (const g of d.groups ?? []) idSet.add(g.groupName);
-        const opts: BackgroundMapOption[] = Array.from(idSet)
-          .map((id) => ({ id, label: buildLabelFromOrthoFolder(id) }))
-          .filter((x): x is { id: string; label: string } => !!x.label)
-          .sort((a, b) => b.id.localeCompare(a.id))
-          .map((x) => ({ id: x.id, label: x.label }));
+        const d = (res?.data ?? res) as Parameters<typeof buildCustomAerialBackgroundOptions>[0];
+        const opts = buildCustomAerialBackgroundOptions(d);
         setBackgroundMapGroups((prev) =>
           prev.map((g) => (g.id === 'custom-aerial' ? { ...g, options: opts } : g))
         );
+        const state = loadPersistedMapState(projectName);
+        if (!state?.backgroundMap && opts.length > 0) {
+          const latest = pickLatestCustomAerialBackgroundId(d);
+          if (latest) setSelectedBackgroundMap(latest);
+        }
       } catch {
         /* ignore */
       }
@@ -337,7 +320,7 @@ export default function OpenLayersMap({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectName]);
 
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();

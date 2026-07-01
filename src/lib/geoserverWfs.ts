@@ -42,3 +42,36 @@ export async function fetchWfsGeoJsonByCql(params: {
   if (!Array.isArray(json?.features)) return null;
   return { type: String(json.type ?? 'FeatureCollection'), features: json.features };
 }
+
+/** GeoServer WFS GetFeature — 뷰포트 bbox (스냅 대상 로드) */
+export async function fetchWfsGeoJsonByBbox(params: {
+  layerName: string;
+  bbox: [number, number, number, number];
+  srsName?: string;
+  maxFeatures?: number;
+}): Promise<{ type: string; features: unknown[] } | null> {
+  const layerName = String(params.layerName ?? '').trim();
+  if (!layerName) return null;
+
+  const [minX, minY, maxX, maxY] = params.bbox;
+  if (![minX, minY, maxX, maxY].every((n) => Number.isFinite(n))) return null;
+
+  const srsName = params.srsName ?? 'EPSG:3857';
+  const typeName = `${WORKSPACE}:${layerName}`;
+  const qs = new URLSearchParams({
+    service: 'WFS',
+    version: '2.0.0',
+    request: 'GetFeature',
+    typeNames: typeName,
+    outputFormat: 'application/json',
+    srsName,
+    bbox: `${minX},${minY},${maxX},${maxY},${srsName}`,
+    count: String(params.maxFeatures ?? 3000),
+  });
+  const url = `${getGeoServerBase()}/${WORKSPACE}/wfs?${qs.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const json = (await res.json()) as { type?: string; features?: unknown[] };
+  if (!Array.isArray(json?.features)) return null;
+  return { type: String(json.type ?? 'FeatureCollection'), features: json.features };
+}

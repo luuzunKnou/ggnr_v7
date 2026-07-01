@@ -48,6 +48,57 @@ function filterRowsToCql(rows: LayerFilterRow[]): string {
   }).join(' AND ');
 }
 
+/** 편집 중 WMS 원본 숨김 — 레이어 PK 컬럼 기준 제외 CQL */
+export type HiddenWmsFeatureKey = { keyField: string; keyValue: string };
+
+function escapeCqlString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+export function buildExcludeFeatureKeysCql(items: HiddenWmsFeatureKey[]): string | null {
+  if (items.length === 0) return null;
+  const byField = new Map<string, string[]>();
+  for (const { keyField, keyValue } of items) {
+    const field = String(keyField).trim();
+    const val = String(keyValue).trim();
+    if (!field || !val) continue;
+    const list = byField.get(field) ?? [];
+    list.push(val);
+    byField.set(field, list);
+  }
+
+  const clauses: string[] = [];
+  for (const [field, values] of byField) {
+    const unique = [...new Set(values)];
+    if (unique.length === 0) continue;
+    const allNumeric = unique.every((v) => /^-?\d+(\.\d+)?$/.test(v));
+    if (allNumeric) {
+      if (unique.length === 1) clauses.push(`${field} <> ${unique[0]}`);
+      else clauses.push(`${field} NOT IN (${unique.join(',')})`);
+    } else if (unique.length === 1) {
+      clauses.push(`${field} <> '${escapeCqlString(unique[0]!)}'`);
+    } else {
+      const list = unique.map((v) => `'${escapeCqlString(v)}'`).join(',');
+      clauses.push(`${field} NOT IN (${list})`);
+    }
+  }
+  if (clauses.length === 0) return null;
+  return clauses.join(' AND ');
+}
+
+/** @deprecated ogc_fid 전용 — buildExcludeFeatureKeysCql 사용 */
+export function buildExcludeOgcFidsCql(fids: string[]): string | null {
+  return buildExcludeFeatureKeysCql(
+    fids.map((f) => ({ keyField: 'ogc_fid', keyValue: String(f).trim() })).filter((k) => k.keyValue)
+  );
+}
+
+function mergeCqlParts(...parts: Array<string | null | undefined>): string {
+  const clauses = parts.filter((p): p is string => !!p && p !== 'INCLUDE');
+  if (clauses.length === 0) return 'INCLUDE';
+  return clauses.join(' AND ');
+}
+
 /**
  * WMS GetMap 로드를 POST로 수행 (CQL_FILTER 등으로 URL이 길어져 414 방지)
  */
@@ -116,9 +167,13 @@ export function useServiceLayerSync(
   layerFilterRows?: Map<string, LayerFilterRow[]>,
   spatialFilterWkt?: string | null,
   layerGeometryTypes?: Record<string, LayerDbGeometryKind>,
+  /** 레이어별 WMS에서 숨길 feature key (도형편집기 등) */
+  hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
+  const hiddenRef = useRef(hiddenFeaturesByLayer);
+  hiddenRef.current = hiddenFeaturesByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -156,11 +211,12 @@ export function useServiceLayerSync(
     const stylesParam = names.join(',');
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
+    const hidden = hiddenRef.current;
     const cqlArr = names.map((n) => {
       const base = filterRowsToCql(filters?.get(n) ?? []);
-      if (!wkt) return base;
-      const spatialCql = `INTERSECTS(geom, ${wkt})`;
-      return base === 'INCLUDE' ? spatialCql : `${base} AND ${spatialCql}`;
+      const spatialCql = wkt ? `INTERSECTS(geom, ${wkt})` : null;
+      const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? []);
+      return mergeCqlParts(base, spatialCql, excludeCql);
     });
     const cqlParam = cqlArr.join(';');
     const syncKey = `${layersParam}|${stylesParam}|${cqlParam}`;
@@ -181,7 +237,7 @@ export function useServiceLayerSync(
     params.CQL_FILTER = cqlParam;
     serviceLayer.setVisible(true);
     source.changed();
-  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes]);
+  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);
 }
 
 export { WORKSPACE };

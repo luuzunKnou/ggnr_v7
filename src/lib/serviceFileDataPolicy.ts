@@ -5,7 +5,7 @@
 import { getServiceList } from '@/service/configService';
 
 /** 설정에 없어도 파일 API를 쓸 ser_eng (게시판 등 추후 모듈) */
-const SERVICE_FILE_DATA_EXTRA_SER_ENG = new Set<string>(['board']);
+const SERVICE_FILE_DATA_EXTRA_SER_ENG = new Set<string>(['board', 'notice']);
 
 const SER_ENG_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 

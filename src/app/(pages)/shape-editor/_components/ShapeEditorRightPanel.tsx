@@ -1,69 +1,24 @@
 'use client';
 
-import { History, Magnet, PanelRightClose } from 'lucide-react';
-import { useShapeEditorContext } from '../ShapeEditorContext';
+import { List } from 'lucide-react';
+import { ShapeEditorFeatureAttributes } from './ShapeEditorFeatureAttributes';
+import { ShapeEditorWorkHistory } from './ShapeEditorWorkHistory';
 
-const PANEL_WIDTH = 208; // w-52
-
-/** 우측 고정 열 — 지도와 나란히 배치 (오버레이 아님) */
+/** 우측 패널 — 상단 속성 / 하단 작업 내역 */
 export function ShapeEditorRightPanel() {
-  const { rightPanelOpen, setRightPanelOpen } = useShapeEditorContext();
-
-  if (!rightPanelOpen) {
-    return (
-      <div className="flex w-8 shrink-0 flex-col border-l border-slate-200 bg-white">
-        <button
-          type="button"
-          onClick={() => setRightPanelOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] text-slate-500 hover:bg-slate-50"
-          title="패널 펼치기"
-        >
-          <PanelRightClose className="h-4 w-4 rotate-180" />
-          <span className="[writing-mode:vertical-rl]">펼치기</span>
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <aside
-      className="flex w-52 shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-white"
-      style={{ width: PANEL_WIDTH }}
-    >
-      <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-slate-500" />
-          <span className="text-xs font-semibold text-slate-700">작업 내역</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setRightPanelOpen(false)}
-          className="text-[10px] text-slate-500 hover:text-slate-800"
-        >
-          접기
-        </button>
+    <aside className="flex w-[306px] shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-white">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-slate-200">
+        <ShapeEditorFeatureAttributes />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <p className="text-xs text-slate-400">Undo/Redo 연동 후 표시됩니다.</p>
-      </div>
-
-      <div className="shrink-0 border-t border-slate-100">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <Magnet className="h-4 w-4 text-slate-500" />
-          <span className="text-xs font-semibold text-slate-700">스냅</span>
+      <div className="flex h-[40%] min-h-[120px] shrink-0 flex-col overflow-hidden bg-slate-50/50">
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 px-3 py-1.5">
+          <List className="h-3.5 w-3.5 text-slate-500" />
+          <span className="text-[11px] font-semibold text-slate-600">작업 내역</span>
         </div>
-        <div className="space-y-1 px-3 pb-3">
-          {['필지', '상수관로', '하수관로', '도로'].map((label) => (
-            <label
-              key={label}
-              className="flex cursor-not-allowed items-center gap-2 text-xs text-slate-400"
-            >
-              <input type="checkbox" disabled className="rounded" />
-              {label}
-            </label>
-          ))}
-          <p className="pt-1 text-[10px] text-slate-400">WFS 스냅 연동 예정</p>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <ShapeEditorWorkHistory />
         </div>
       </div>
     </aside>
