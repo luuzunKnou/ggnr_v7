@@ -31,6 +31,9 @@ import * as pdfToJpgService from './pdfToJpgService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as jijukLandAttrService from './jijukLandAttrService';
 import * as layerRowService from './layerRowService';
+import * as memoService from './memoService';
+import * as noticeService from './noticeService';
+import * as boardService from './boardService';
 
 export {
   configService,
@@ -63,4 +66,7 @@ export {
   ocrMigrationService,
   jijukLandAttrService,
   layerRowService,
+  memoService,
+  noticeService,
+  boardService,
 };

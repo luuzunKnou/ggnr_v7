@@ -1,0 +1,91 @@
+---
+description: ggnr_v7 코딩·아키텍처 (단일 기준)
+alwaysApply: true
+---
+
+# ggnr_v7
+
+## 작업 원칙
+- 요청 범위만 수정. 무관한 리팩터·대량 포맷 변경 금지.
+- 한 작업 = 기능 1개. 시작 전 `src/service/`, `src/lib/`, 유사 컴포넌트 grep.
+- 새 util/hook/service는 기존 패턴 확장. 중복 구현 금지.
+- route·service·schema는 **한 세트**로. 타입만 맞추고 runtime null·Provider 누락 방치 금지.
+
+## 경로
+- import: `@/*` → `src/*`
+- UI primitive: `src/app/shadcnComponents/ui/` (`@/components/ui` 새로 만들지 말 것)
+- 페이지 전용: `page/` 밑 `_lib`, `_hooks`, `_components` (URL 세그먼트 아님)
+
+## App Router
+- `page.tsx` / `layout.tsx`: Server Component. `'use client'` 금지.
+- hooks·state: `*Client.tsx` / `*LayoutClient.tsx`로 분리.
+- Server Actions(`"use server"`) 사용 안 함 — `@/lib/api` `call()` + `/api`.
+- Server: `@/service/*` 직접. Client: DB import 금지.
+- OL/Cesium: `dynamic(..., { ssr: false })`, Cesium은 `cesiumLoader.ts` `getCesium()`.
+
+## API · Service · DB
+```
+route.ts (thin) → @/service/* → @/database/db + @/lib/*
+```
+- **DB 실데이터·스키마 적용은 Agent가 절대 자동 실행하지 않는다.** (`db:push`, `db:migrate`, `db:generate`, `drizzle-kit push`, SQL 직접 실행 등 금지. 사용자가 명시적으로 요청한 경우만)
+- **허용:** `src/database/schema/*.ts` 등 **스키마 소스 파일 수정** + 필요 시 `npm run schema:index` (barrel 갱신만)
+- `src/app/api/route.ts` **수정 금지**. 새 기능은 dedicated route 또는 service action.
+- Service: `src/service/*Service.ts`, auth는 `@/lib/auth/guard`.
+- Drizzle: `src/database/schema/<table>.ts`, barrel은 `npm run schema:index`.
+- 필드 메타: `src/config/defineLayer/` 가 기준.
+- 멀티 프로젝트: `GGNR_PROJECT`, `GGNR_ENV` → `src/config/projects/<project>.env`.
+
+## 기능 추가 · 폴더 배치
+
+### 지도 사이드바 기능 (패널·모드)
+- UI·기능 전용 코드는 `src/app/(pages)/map/_mapContents/<기능명>/` 에 둔다.
+- 도로·하천처럼 묶음이 크면 `_mapContents/<도메인>/<기능명>/` (예: `road/roadLedger`, `memo`는 1단).
+- 패널은 `{기능}ListPanel` + `{기능}DetailPanel` (또는 Scope/Banner 등 동일 기능 접두) 명명.
+- 레이어 ID·설정은 같은 기능 폴더의 `*LayerId.ts`, `*Config.ts` 등 작은 파일로.
+- `map-layout-client.tsx` 등 shell에서 import·연동만 한다. 기능 본문은 기능 폴더에만 둔다.
+
+### 지도 공통 (기능 폴더 금지)
+- MapContext, Draw, landInfo, standard, complaint(레거시) 등 **여러 기능이 공유**하는 코드는 `_mapComponents/` 에만 둔다.
+- 신규 기능은 `_mapComponents/complaint/` 패턴을 따르지 않고 `_mapContents/<기능명>/` 를 사용한다.
+
+### API · Service · DB
+- Service: `src/service/<기능>Service.ts` (폴더 없이 flat 파일). `src/service/index.ts` 에 등록.
+- Route: `src/app/api/...` thin handler → service 호출.
+- Schema: `src/database/schema/<table>.ts` (테이블 단위). DB push/migrate는 사용자 명시 요청 전까지 실행하지 않는다.
+
+### shape-editor · dev · 기타 페이지
+- shape-editor: `_components/`, `_lib/`, `_hooks/` 역할별 폴더 유지 (기능명 폴더로 통일하지 않음).
+- dev: `dev/_components/{기능}Content.tsx` 등 기존 dev 패턴 따름.
+
+## 공유 코드 수정 · 회귀 방지
+
+### 원칙
+- **기능 전용 코드 우선:** 새 동작은 `_mapContents/<기능명>/`·`<기능>Service.ts`에 추가. 공유 파일 수정은 최소화.
+- **공유 파일** (`MapContext`, `OpenLayersMap`, `map-layout-client`, `map-sidebar`, `mapDrawInteraction`, `src/service/index.ts`, `mapServiceOpened` 등) 수정 시 **반드시 영향 분석** 후 진행.
+- 공유 API(함수 시그니처, Context 필드, opened 키, 전역 state) **변경·삭제 금지** — 불가피하면 grep으로 **모든 호출처** 함께 수정.
+
+### 수정 전 (필수)
+- 변경 파일·심볼에 대해 **grep으로 사용처** 확인. 다른 `_mapContents/*`·service에서 쓰는지 목록화.
+- plan/report 또는 작업 메모에 **「영향 받는 기능」** 1줄 이상 적기 (예: 메모관리, 민원, 측정, 주소검색).
+
+### 수정 후 (필수)
+- `npm run lint` (또는 IDE 진단) — type/import error 0.
+- **영향 기능 스모크:** grep으로 찾은 기능마다 최소 1가지 — 열기·닫기·핵심 클릭 1회 (지도: 사이드바 메뉴 전환, 패널 동시 오픈, Draw/측정 배타).
+- 공유 Context/state 변경 시 **Provider default·null guard** 재확인.
+- 의도와 무관한 diff(포맷·import 정리·rename)는 되돌리거나 별도 작업으로 분리.
+
+### 금지
+- 여러 기능이 쓰는 함수/타입의 **breaking change**를 호출처 수정 없이 남기기.
+- `map-layout-client`에 거대 분기·전역 state 추가 (기능별 hook/폴더로 격리).
+- «동작 확인 안 함»으로 공유 파일만 커밋·report 완료 처리.
+
+## 환경
+- dev: `npm run dev -- <project> <type>` (예: `build_yy dev`)
+- Node 20 x64. Turbopack module-not-found → `.next` 삭제 후 `next dev --webpack`.
+- plan/report: `work-brief.mdc` → `work-plan.mdc` → `work-report.mdc` (`docs/brief/` → `docs/plan/` → `docs/reports/`)
+- 문서 최상단 H1: brief `작업요청서`, plan `작업계획서`, report `결과보고서` (필수)
+- plan `수정추가파일`은 경로·한 줄 요약; report `파일수정`은 `\`symbol\` — 설명`(핵심=상세, on/off·toast=짧게); report `테스트`는 번호 목록
+
+## 마무리 점검
+- `@/` import, server/client 경계, API ↔ service ↔ schema 일치
+- lint/type error, dead code, console.log 잔류 없음

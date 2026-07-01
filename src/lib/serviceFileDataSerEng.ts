@@ -12,7 +12,9 @@ export const SER_FILE_ENG = {
   waterworksLedger: 'waterworksLedger',
   complaint: 'complaint',
   memo: 'memo',
-  /** 설정 전용 — `serviceFileDataPolicy` allowlist에 포함됨 */
+  /** 공지사항 첨부 — file_data/notice/{key}/ */
+  notice: 'notice',
+  /** 자료실 첨부 — file_data/board/{key}/ */
   board: 'board',
 } as const;
 

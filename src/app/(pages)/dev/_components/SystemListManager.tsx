@@ -39,9 +39,6 @@ export type SystemItem = {
 /** 공통(config) / 커스텀(DB) 구분 */
 export type SystemSource = "common" | "custom"
 
-/** 공통 추가 시 확인용 비밀번호 */
-const COMMON_ADD_PASSWORD = "admin00!!"
-
 export type SystemItemWithSource = SystemItem & { source: SystemSource }
 
 const emptySystem = (): SystemItem => ({
@@ -148,13 +145,6 @@ export function SystemListManager() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [addSource, setAddSource] = useState<SystemSource | null>(null)
   const [form, setForm] = useState<SystemItem>(emptySystem())
-  const [commonConfirmOpen, setCommonConfirmOpen] = useState(false)
-  const [commonConfirmPassword, setCommonConfirmPassword] = useState("")
-  const [commonConfirmError, setCommonConfirmError] = useState<string | null>(null)
-  /** 공통 확인 다이얼로그 용도: 추가 / 수정(index) / 삭제(index) */
-  const [commonConfirmTarget, setCommonConfirmTarget] = useState<
-    { mode: "add" } | { mode: "edit"; index: number } | { mode: "delete"; index: number } | null
- >(null)
 
   const loadSystems = async () => {
     setLoading(true)
@@ -194,77 +184,35 @@ export function SystemListManager() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  const openAddCommonConfirm = () => {
-    setCommonConfirmTarget({ mode: "add" })
-    setCommonConfirmError(null)
-    setCommonConfirmPassword("")
-    setCommonConfirmOpen(true)
+  const openAddCommon = () => {
+    setSuccessMsg(null)
+    setEditingIndex(null)
+    setAddSource("common")
+    setForm(emptySystem())
+    setDialogOpen(true)
   }
 
-  const openCommonConfirmForEdit = (index: number) => {
-    setCommonConfirmTarget({ mode: "edit", index })
-    setCommonConfirmError(null)
-    setCommonConfirmPassword("")
-    setCommonConfirmOpen(true)
-  }
-
-  const openCommonConfirmForDelete = (index: number) => {
-    setCommonConfirmTarget({ mode: "delete", index })
-    setCommonConfirmError(null)
-    setCommonConfirmPassword("")
-    setCommonConfirmOpen(true)
-  }
-
-  const proceedCommonConfirm = () => {
-    if (commonConfirmPassword !== COMMON_ADD_PASSWORD) {
-      setCommonConfirmError("비밀번호가 올바르지 않습니다.")
-      return
-    }
-    const target = commonConfirmTarget
-    setCommonConfirmOpen(false)
-    setCommonConfirmPassword("")
-    setCommonConfirmError(null)
-    setCommonConfirmTarget(null)
-
-    if (!target) return
-    if (target.mode === "add") {
-      setSuccessMsg(null)
-      setEditingIndex(null)
-      setAddSource("common")
-      setForm(emptySystem())
-      setDialogOpen(true)
-      return
-    }
-    if (target.mode === "edit") {
-      setSuccessMsg(null)
-      setEditingIndex(target.index)
-      setAddSource(null)
-      setForm({ ...systems[target.index] })
-      setDialogOpen(true)
-      return
-    }
-    if (target.mode === "delete") {
-      closeDialog()
-      const newList = systems.filter((_, i) => i !== target.index)
-      setSystems(newList)
-      ;(async () => {
-        try {
-          setSaving(true)
-          const commonOnly = newList.filter((s) => s.source === "common").map(({ source: _, ...s }) => s)
-          const res = await call("", "POST", {
-            service: "configService",
-            action: "saveSystemList",
-            params: { systems: commonOnly },
-          })
-          if (!res.success) throw new Error(res.error)
-          setSuccessMsg("공통 목록이 파일에 저장되었습니다.")
-        } catch (e: any) {
-          setError(e?.message ?? "파일 저장 실패")
-        } finally {
-          setSaving(false)
-        }
-      })()
-    }
+  const deleteCommonAt = (index: number) => {
+    closeDialog()
+    const newList = systems.filter((_, i) => i !== index)
+    setSystems(newList)
+    ;(async () => {
+      try {
+        setSaving(true)
+        const commonOnly = newList.filter((s) => s.source === "common").map(({ source: _, ...s }) => s)
+        const res = await call("", "POST", {
+          service: "configService",
+          action: "saveSystemList",
+          params: { systems: commonOnly },
+        })
+        if (!res.success) throw new Error(res.error)
+        setSuccessMsg("공통 목록이 파일에 저장되었습니다.")
+      } catch (e: any) {
+        setError(e?.message ?? "파일 저장 실패")
+      } finally {
+        setSaving(false)
+      }
+    })()
   }
 
   const openAddCustom = () => {
@@ -276,11 +224,6 @@ export function SystemListManager() {
   }
 
   const openEdit = (index: number) => {
-    const row = systems[index]
-    if (row?.source === "common") {
-      openCommonConfirmForEdit(index)
-      return
-    }
     setSuccessMsg(null)
     setEditingIndex(index)
     setAddSource(null)
@@ -398,8 +341,7 @@ export function SystemListManager() {
     if (!confirm("이 시스템을 삭제할까요?")) return
 
     if (row.source === "common") {
-      closeDialog()
-      openCommonConfirmForDelete(index)
+      deleteCommonAt(index)
       return
     }
 
@@ -434,7 +376,7 @@ export function SystemListManager() {
       )}
 
       <div className="flex items-center gap-2 flex-wrap">
-        <Button size="sm" className="rounded-none gap-1" onClick={openAddCommonConfirm}>
+        <Button size="sm" className="rounded-none gap-1" onClick={openAddCommon}>
           <Plus className="w-4 h-4" />
           공통 추가
         </Button>
@@ -511,70 +453,6 @@ export function SystemListManager() {
           </TableBody>
         </Table>
       </div>
-
-      <Dialog
-        open={commonConfirmOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCommonConfirmOpen(false)
-            setCommonConfirmPassword("")
-            setCommonConfirmError(null)
-            setCommonConfirmTarget(null)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md rounded-none">
-          <DialogHeader>
-            <DialogTitle>
-              {commonConfirmTarget?.mode === "add"
-                ? "공통 기능 추가 확인"
-                : commonConfirmTarget?.mode === "edit"
-                  ? "공통 시스템 수정 확인"
-                  : commonConfirmTarget?.mode === "delete"
-                    ? "공통 시스템 삭제 확인"
-                    : "공통 기능 확인"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800">
-              공통기능 추가/수정/삭제 시 <strong>모든 시스템</strong>에 반영됩니다. 계속하려면 비밀번호를 입력하세요.
-            </p>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">비밀번호</label>
-              <Input
-                type="password"
-                className="rounded-none"
-                value={commonConfirmPassword}
-                onChange={(e) => {
-                  setCommonConfirmPassword(e.target.value)
-                  setCommonConfirmError(null)
-                }}
-                placeholder="비밀번호 입력"
-                onKeyDown={(e) => e.key === "Enter" && proceedCommonConfirm()}
-              />
-              {commonConfirmError && (
-                <p className="text-sm text-red-600">{commonConfirmError}</p>
-              )}
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-none"
-              onClick={() => {
-                setCommonConfirmOpen(false)
-                setCommonConfirmTarget(null)
-              }}
-            >
-              취소
-            </Button>
-            <Button size="sm" className="rounded-none" onClick={proceedCommonConfirm}>
-              확인
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-none">

@@ -11,13 +11,20 @@ import {
   DEFAULT_ZOOM_2D,
   RESOLUTIONS_3857,
 } from '../../map/_mapComponents/config/mapDefaults';
+import {
+  createCadastralLayers,
+  createBuildingRoadLayers,
+} from '../../map/_mapComponents/layerFactory/boundaryLayerFactory';
+import { createBasicSectionLayers } from '../../map/_mapComponents/layerFactory/basicSectionLayerFactory';
+import { createJimokLayers } from '../../map/_mapComponents/layerFactory/jimokLayerFactory';
+import { createLandownLayers } from '../../map/_mapComponents/layerFactory/landownLayerFactory';
 import { createServiceLayer } from '../../map/_mapComponents/layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from '../../map/_mapComponents/hooks/useMapStatePersist';
 
 const SHAPE_EDITOR_STATE_SUFFIX = ':shape-editor';
 
 /**
- * 도형편집기 전용 OpenLayers 맵 — 배경 + WMS serviceLayer 만 포함.
+ * 도형편집기 전용 OpenLayers 맵 — 배경 + 참조 WMS + serviceLayer.
  */
 export function useShapeEditorMapInstance(
   mapRef: RefObject<HTMLDivElement | null>,
@@ -50,6 +57,11 @@ export function useShapeEditorMapInstance(
           source: new OSM(),
           properties: { name: 'background' },
         }),
+        ...createCadastralLayers(),
+        ...createBuildingRoadLayers(),
+        ...createBasicSectionLayers(),
+        ...createJimokLayers(),
+        ...createLandownLayers(),
       ],
       view: new View({
         center: initialCenter,
