@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Readable } from 'node:stream';
-import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
+import { getSessionUsrId } from '@/lib/auth/guard';
+import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
 import { assertSafeFileDataSegment } from '@/lib/serviceFileData';
 import { parseSerEngForServiceFileData } from '@/lib/serviceFileDataPolicy';
 import { createServiceFileDataZipStream } from '@/service/serviceFileDataZipService';
@@ -15,15 +16,11 @@ function contentDispositionAttachment(filename: string): string {
 
 export async function GET(req: NextRequest) {
   const usrId = await getSessionUsrId();
-  if (!usrId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const serEng = parseSerEngForServiceFileData(req.nextUrl.searchParams.get('serEng'));
   if (serEng == null) {
     return NextResponse.json({ error: '유효하지 않은 serEng 입니다.' }, { status: 400 });
   }
-  if (!(await userHasSerAccess(usrId, serEng, 'read'))) {
+  if (!(await userCanAccessServiceFileData(usrId, serEng, 'read'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

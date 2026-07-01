@@ -17,6 +17,48 @@ export interface BackgroundMapGroup {
   options: BackgroundMapOption[];
 }
 
+/** 자체항공영상이 없을 때 사용하는 배경지도 id */
+export const FALLBACK_BACKGROUND_MAP_ID = 'aerial-vworld';
+
+export type OrthophotoTileOutputsPayload = {
+  groups?: { groupName: string; tileSetIds: string[] }[];
+  legacyTileSetIds?: string[];
+};
+
+/** tiles_jpg 폴더명 → UI 표시 라벨 (satellite_YYYY[_CRS[_이름]] 규칙) */
+export function buildLabelFromOrthoFolder(id: string): string | null {
+  const m = /^satellite_(\d{4})(?:_([^_]+)(?:_(.+))?)?$/i.exec(id);
+  if (!m) return null;
+  const year = m[1];
+  const seg3 = (m[2] ?? '').trim();
+  const seg4 = (m[3] ?? '').trim();
+  if (/^\d+$/.test(seg3)) return seg4 || `항공영상(${year})`;
+  return seg3 || `항공영상(${year})`;
+}
+
+/** orthophotoService.listOrthophotoTileOutputs → 자체항공영상 옵션 (최신순) */
+export function buildCustomAerialBackgroundOptions(
+  payload: OrthophotoTileOutputsPayload
+): BackgroundMapOption[] {
+  const idSet = new Set<string>();
+  for (const id of payload.legacyTileSetIds ?? []) idSet.add(id);
+  for (const g of payload.groups ?? []) idSet.add(g.groupName);
+  return Array.from(idSet)
+    .map((id) => {
+      const label = buildLabelFromOrthoFolder(id);
+      return label ? { id, label } : null;
+    })
+    .filter((x): x is BackgroundMapOption => x != null)
+    .sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/** 자체항공영상 중 id 기준 최신(목록 첫 항목) */
+export function pickLatestCustomAerialBackgroundId(
+  payload: OrthophotoTileOutputsPayload
+): string | null {
+  return buildCustomAerialBackgroundOptions(payload)[0]?.id ?? null;
+}
+
 // 기본 배경지도 그룹 데이터
 export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
   {
@@ -156,7 +198,7 @@ export function BackgroundMapSelector({
   onValueChange,
   className,
 }: BackgroundMapSelectorProps) {
-  const [internalValue, setInternalValue] = useState('aerial-2022');
+  const [internalValue, setInternalValue] = useState(FALLBACK_BACKGROUND_MAP_ID);
   const selectedValue = value ?? internalValue;
 
   const handleValueChange = (newValue: string) => {

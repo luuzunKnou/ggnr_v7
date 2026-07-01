@@ -38,6 +38,22 @@ function mergeGeometries3857(features: Feature[]) {
   return geoms[0]!;
 }
 
+/** EPSG:5181 WKT → 편집 VectorSource용 Feature (EPSG:3857) */
+export function wkt5181ToFeature(wkt5181: string): Feature | null {
+  const raw = String(wkt5181 ?? '').trim();
+  if (!raw) return null;
+  try {
+    const geom = new WKT().readGeometry(raw, {
+      dataProjection: 'EPSG:5181',
+      featureProjection: 'EPSG:3857',
+    });
+    if (!geom) return null;
+    return new Feature({ geometry: geom });
+  } catch {
+    return null;
+  }
+}
+
 /** 편집 VectorSource features → EPSG:5181 WKT */
 export function featuresToWkt5181(features: Feature[]): string | null {
   if (features.length === 0) return null;

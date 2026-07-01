@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { ChevronDown } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
@@ -8,6 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
 import { cn } from "@/lib/utils"
 import { signOut } from "next-auth/react"
+import type { ConsoleAreaId, ConsoleMenuPolicy } from "@/lib/consoleMenuAccess/types"
+import { canConsoleMenuRead, canConsoleMenuWrite } from "@/lib/consoleMenuAccess/client"
+import { useConsoleMenuAccess } from "@/hooks/useConsoleMenuAccess"
+import {
+  ConsoleMenuAccessContext,
+} from "@/app/(pages)/_components/ConsoleMenuAccessContext"
+import { ConsoleMenuAccessDeniedDialog } from "@/app/(pages)/_components/ConsoleMenuAccessDeniedDialog"
 
 export type AdminConsoleMenuItem = { id: string; label: string }
 export type AdminConsoleMenuGroup = { id: string; label: string; menuIds: readonly string[] }
@@ -23,6 +30,8 @@ type AdminConsoleLayoutProps = {
   /** 카드 제목 옆 보조 UI (예: 개발자 모드 LAS 샘플 버튼) */
   renderTitleExtra?: (menuId: string) => ReactNode
   onLogout?: () => void | Promise<void>
+  /** 설정 시 서브메뉴별 console:{area}:{menuId} 권한 적용 */
+  consoleArea?: ConsoleAreaId
 }
 
 export function AdminConsoleLayout({
@@ -35,8 +44,38 @@ export function AdminConsoleLayout({
   renderContent,
   renderTitleExtra,
   onLogout,
+  consoleArea,
 }: AdminConsoleLayoutProps) {
-  const validDefault = menus.some((m) => m.id === defaultMenuId) ? defaultMenuId : menus[0]?.id ?? ""
+  const { getPolicy, loading: accessLoading } = useConsoleMenuAccess()
+  const [deniedOpen, setDeniedOpen] = useState(false)
+  const [deniedMenuId, setDeniedMenuId] = useState<string>("")
+
+  const resolvePolicy = (menuId: string): ConsoleMenuPolicy => {
+    if (!consoleArea) return "write"
+    return getPolicy(consoleArea, menuId)
+  }
+
+  const visibleMenuIds = useMemo(() => {
+    if (!consoleArea) return menus.map((m) => m.id)
+    return menus.filter((m) => resolvePolicy(m.id) !== "hidden").map((m) => m.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getPolicy(levels) drives visibility
+  }, [consoleArea, menus, getPolicy])
+
+  const pickDefaultMenu = (preferred: string): string => {
+    if (visibleMenuIds.includes(preferred)) return preferred
+    const readable = visibleMenuIds.find((id) => {
+      const p = resolvePolicy(id)
+      return p === "read" || p === "write"
+    })
+    if (readable) return readable
+    const blockable = visibleMenuIds.find((id) => resolvePolicy(id) === "block")
+    if (blockable) return blockable
+    return visibleMenuIds[0] ?? preferred
+  }
+
+  const validDefault = pickDefaultMenu(
+    menus.some((m) => m.id === defaultMenuId) ? defaultMenuId : menus[0]?.id ?? ""
+  )
   const [selectedMenu, setSelectedMenu] = useState(validDefault)
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>(() => {
     const first = menuGroups?.[0]?.id ?? null
@@ -97,6 +136,39 @@ export function AdminConsoleLayout({
     window.localStorage.setItem(expandedGroupStorageKey, JSON.stringify(expandedGroupIds))
   }, [expandedGroupIds, menuGroups, expandedGroupStorageKey])
 
+  useEffect(() => {
+    if (accessLoading || !consoleArea) return
+    const policy = resolvePolicy(selectedMenu)
+    if (policy === "hidden") {
+      setSelectedMenu(pickDefaultMenu(selectedMenu))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessLoading, consoleArea, selectedMenu, visibleMenuIds.join("|")])
+
+  const currentPolicy = resolvePolicy(selectedMenu)
+  const contextValue = useMemo(
+    () => ({
+      area: consoleArea ?? null,
+      menuId: selectedMenu,
+      policy: currentPolicy,
+      canRead: canConsoleMenuRead(currentPolicy),
+      canWrite: canConsoleMenuWrite(currentPolicy),
+      loading: accessLoading,
+    }),
+    [consoleArea, selectedMenu, currentPolicy, accessLoading]
+  )
+
+  const handleMenuClick = (menuId: string) => {
+    const policy = resolvePolicy(menuId)
+    if (policy === "block") {
+      setDeniedMenuId(menuId)
+      setDeniedOpen(true)
+      return
+    }
+    if (policy === "hidden") return
+    setSelectedMenu(menuId)
+  }
+
   const handleLogout = async () => {
     if (onLogout) await onLogout()
     else await signOut({ redirect: false })
@@ -144,16 +216,21 @@ export function AdminConsoleLayout({
                       {group.menuIds.map((menuId) => {
                         const menu = menuById.get(menuId)
                         if (!menu) return null
+                        const policy = resolvePolicy(menu.id)
+                        if (consoleArea && policy === "hidden") return null
+                        const isBlock = policy === "block"
                         return (
                           <button
                             key={menu.id}
                             type="button"
-                            onClick={() => setSelectedMenu(menu.id)}
+                            onClick={() => handleMenuClick(menu.id)}
                             className={cn(
                               "w-full text-left px-6 py-2 text-sm font-medium transition-colors",
-                              selectedMenu === menu.id
+                              selectedMenu === menu.id && !isBlock
                                 ? "bg-primary text-primary-foreground"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                : isBlock
+                                  ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
                             )}
                           >
                             {menu.label}
@@ -166,21 +243,28 @@ export function AdminConsoleLayout({
               )
             })
           ) : (
-            menus.map((menu) => (
-              <button
-                key={menu.id}
-                type="button"
-                onClick={() => setSelectedMenu(menu.id)}
-                className={cn(
-                  "w-full text-left px-4 py-2.5 text-sm font-medium transition-colors",
-                  selectedMenu === menu.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                {menu.label}
-              </button>
-            ))
+            menus.map((menu) => {
+              const policy = resolvePolicy(menu.id)
+              if (consoleArea && policy === "hidden") return null
+              const isBlock = policy === "block"
+              return (
+                <button
+                  key={menu.id}
+                  type="button"
+                  onClick={() => handleMenuClick(menu.id)}
+                  className={cn(
+                    "w-full text-left px-4 py-2.5 text-sm font-medium transition-colors",
+                    selectedMenu === menu.id && !isBlock
+                      ? "bg-primary text-primary-foreground"
+                      : isBlock
+                        ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {menu.label}
+                </button>
+              )
+            })
           )}
         </aside>
 
@@ -193,10 +277,40 @@ export function AdminConsoleLayout({
               </div>
               <CardDescription>{getDescription(selectedMenu)}</CardDescription>
             </CardHeader>
-            <CardContent>{renderContent(selectedMenu)}</CardContent>
+            <CardContent>
+              {consoleArea && accessLoading ? (
+                <p className="text-sm text-muted-foreground py-4">권한 정보를 불러오는 중…</p>
+              ) : consoleArea && currentPolicy === "block" ? (
+                <p className="text-sm text-muted-foreground py-4">
+                  선택한 메뉴에 대한 접근 권한이 없습니다. 사이드바에서 메뉴를 선택하세요.
+                </p>
+              ) : (
+                <ConsoleMenuAccessContext.Provider value={contextValue}>
+                  <fieldset
+                    disabled={currentPolicy === "read"}
+                    className="min-w-0 border-0 p-0 m-0 disabled:opacity-100 [&_button:not([type='button'])]:disabled:opacity-60"
+                  >
+                    {currentPolicy === "read" ? (
+                      <p className="mb-3 text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800">
+                        읽기 권한만 있습니다. 저장·추가·삭제는 할 수 없습니다.
+                      </p>
+                    ) : null}
+                    {renderContent(selectedMenu)}
+                  </fieldset>
+                </ConsoleMenuAccessContext.Provider>
+              )}
+            </CardContent>
           </Card>
         </main>
       </div>
+      {consoleArea ? (
+        <ConsoleMenuAccessDeniedDialog
+          open={deniedOpen}
+          onOpenChange={setDeniedOpen}
+          area={consoleArea}
+          menuId={deniedMenuId}
+        />
+      ) : null}
     </div>
   )
 }

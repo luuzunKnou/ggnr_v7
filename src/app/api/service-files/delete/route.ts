@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
+import { getSessionUsrId } from '@/lib/auth/guard';
+import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
 import { assertSafeFileDataSegment } from '@/lib/serviceFileData';
 import { parseSerEngForServiceFileData } from '@/lib/serviceFileDataPolicy';
 import { softDeleteServiceFileDataItem } from '@/service/fileManagerService';
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (serEng == null) {
     return NextResponse.json({ error: '유효하지 않은 serEng 입니다.' }, { status: 400 });
   }
-  if (!(await userHasSerAccess(usrId, serEng, 'write'))) {
+  if (!(await userCanAccessServiceFileData(usrId, serEng, 'write'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

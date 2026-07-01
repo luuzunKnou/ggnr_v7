@@ -16,6 +16,7 @@ export async function GET() {
     permKeys: snap.permKeys,
     privateSerLevel: snap.privateSerLevel,
     privateSysKeys: snap.privateSysKeys,
+    consoleMenuLevel: snap.consoleMenuLevel,
     isSuperUser: isSuperUser(id),
   });
 }

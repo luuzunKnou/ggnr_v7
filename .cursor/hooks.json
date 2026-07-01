@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "npx tsx .cursor/hooks/cache-report-author.ts"
+      }
+    ]
+  }
+}
