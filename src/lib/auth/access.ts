@@ -8,6 +8,7 @@ import { upMap } from '@/database/schema/up_map';
 import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { getServiceList, getSystemListAll } from '@/service/configService';
+import { loadConsoleMenuLevels } from '@/lib/consoleMenuAccess/server';
 import {
   SERP_TYPE_LIST,
   SERP_TYPE_READ,
@@ -26,6 +27,8 @@ export type UserAccessSnapshot = {
   privateSerLevel: Record<string, number>;
   /** 접근 가능한 비공개 sys_key (DB serial 문자열 또는 config sys_key) */
   privateSysKeys: string[];
+  /** console:{area}:{menuId} → 접근 단계 (serp_map·usr_ser_grant) */
+  consoleMenuLevel: Record<string, number>;
 };
 
 export function serpTypeLabel(t: number): string {
@@ -61,11 +64,13 @@ export async function loadUserAccess(usrId: string): Promise<UserAccessSnapshot>
     const allSys = await db.select({ k: sys.sysKey }).from(sys);
     const cfgKeys = getSystemListAll().systems.map((s) => s.sys_key?.trim()).filter(Boolean) as string[];
     const privateSysKeys = [...new Set([...allSys.map((r) => String(r.k)), ...cfgKeys])];
+    const consoleMenuLevel = await loadConsoleMenuLevels(usrId);
     return {
       usrId,
       permKeys: [],
       privateSerLevel,
       privateSysKeys,
+      consoleMenuLevel,
     };
   }
 
@@ -144,6 +149,7 @@ export async function loadUserAccess(usrId: string): Promise<UserAccessSnapshot>
     permKeys,
     privateSerLevel,
     privateSysKeys: [...allowedSys],
+    consoleMenuLevel: await loadConsoleMenuLevels(usrId),
   };
 }
 

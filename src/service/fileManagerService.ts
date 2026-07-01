@@ -417,6 +417,54 @@ export async function listServiceFileDataFiles(params: {
   }
 }
 
+/** file_data/{layer}/{fromKey}/ 첨부를 {toKey}/ 로 이전 (글쓰기 임시 키 → 게시글 키) */
+export async function relocateServiceFileDataKey(params: {
+  layerName: string;
+  fromKey: string;
+  toKey: string;
+}): Promise<{ ok: true }> {
+  await ensureBaseStructure();
+  const fromRel = fileDataRelativeDir(params.layerName, params.fromKey);
+  const toRel = fileDataRelativeDir(params.layerName, params.toKey);
+  if (!fromRel || !toRel) throw new Error('유효하지 않은 경로입니다.');
+
+  const from = resolveWithinBase(fromRel);
+  if (!from) throw new Error('Invalid source path');
+
+  const fromStat = await fs.stat(from.abs).catch(() => null);
+  if (!fromStat) return { ok: true };
+
+  const to = resolveWithinBase(toRel);
+  if (!to) throw new Error('Invalid target path');
+
+  if (fromStat.isDirectory()) {
+    const toStat = await fs.stat(to.abs).catch(() => null);
+    if (!toStat) {
+      await fs.mkdir(path.dirname(to.abs), { recursive: true });
+      await fs.rename(from.abs, to.abs);
+      return { ok: true };
+    }
+    if (!toStat.isDirectory()) throw new Error('대상 경로가 폴더가 아닙니다.');
+    const files = await listServiceFileDataFiles({
+      layerName: params.layerName,
+      keyValue: params.fromKey,
+    });
+    if (files.length === 0) {
+      await fs.rm(from.abs, { recursive: true, force: true }).catch(() => {});
+      return { ok: true };
+    }
+    await moveFileManagerPaths({
+      sourcePaths: files.map((f) => `${fromRel}/${f.name}`),
+      targetDir: toRel,
+    });
+    await fs.rm(from.abs, { recursive: true, force: true }).catch(() => {});
+    return { ok: true };
+  }
+
+  await moveFileManagerPaths({ sourcePaths: [fromRel], targetDir: path.posix.dirname(toRel) });
+  return { ok: true };
+}
+
 /**
  * 첨부파일 소프트 삭제: 원본을 `{파일명}.tmp` 로 rename (목록에서 제외).
  */

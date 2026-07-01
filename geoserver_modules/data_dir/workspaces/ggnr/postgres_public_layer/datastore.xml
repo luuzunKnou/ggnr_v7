@@ -10,7 +10,7 @@
     <entry key="schema">public_layer</entry>
     <entry key="database">build_yy</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:frbRZmigFmlGZKu6ro0PmggQHr+j3JIM</entry>
+    <entry key="passwd">crypt1:Y3/oOFjvsGN7VrtEam51d/kQ6+7stVcD</entry>
     <entry key="host">localhost</entry>
     <entry key="user">build_yy</entry>
   </connectionParameters>

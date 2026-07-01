@@ -5,17 +5,9 @@ import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout
 import { PermissionFeatureManager } from "@/app/(pages)/dev/_components/PermissionFeatureManager"
 import { AccessRequestQueue } from "@/app/(pages)/dev/_components/AccessRequestQueue"
 import { UserManager } from "@/app/(pages)/dev/_components/UserManager"
+import { SYS_MANAGER_CONSOLE_MENUS } from "@/lib/consoleMenuAccess/menus/sysManager"
 
-const SYS_ADMIN_MENUS = [
-  { id: "userManager", label: "사용자관리" },
-  { id: "permissionFeature", label: "권한관리" },
-  { id: "accessRequestQueue", label: "권한신청 처리" },
-  { id: "uploadHistory", label: "데이터 업로드 이력" },
-  { id: "dataAccessLog", label: "데이터 접근기록" },
-  { id: "userMgmtHistory", label: "사용자 관리 이력" },
-  { id: "userAccessStats", label: "사용자 접속 통계" },
-  { id: "featureUsageStats", label: "기능별 사용현황 통계" },
-] as const
+const SYS_ADMIN_MENUS = SYS_MANAGER_CONSOLE_MENUS
 
 function PlaceholderPanel({ title }: { title: string }) {
   return (
@@ -84,6 +76,7 @@ export default function SysManagerPage() {
       defaultMenuId="userManager"
       getDescription={getSysAdminDescription}
       renderContent={renderSysAdminContent}
+      consoleArea="sysManager"
     />
   )
 }

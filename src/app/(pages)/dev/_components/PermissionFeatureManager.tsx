@@ -5,118 +5,26 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnComponents/ui/dialog';
 import { cn } from '@/lib/utils';
-import { call } from '@/lib/api';
-import { Check, FileText, IdCard, Layers, PanelRight, Plus, Search, Server, Shield, X } from 'lucide-react';
+import { Check, FileText, IdCard, Layers, LayoutGrid, PanelRight, Plus, Search, Server, Shield, X } from 'lucide-react';
+import { permCall } from './perm/permApi';
+import { PermRoleMappingPanel } from './perm/PermRoleMappingPanel';
 
 type Perm = { permKey: number; permName: string | null; permEtc: string | null };
 type PermDetailUserRow = { usrId: string; utName: string; usrName: string | null };
-type SerRow = { serEng: string; serKor: string | null };
-type SysRow = {
-  sysKey: string;
-  sysKor: string | null;
-  sysEng: string | null;
-  sysDetail: string | null;
-};
-
-const LEVELS = [
-  { v: 0, l: '없음' },
-  { v: 1, l: '버튼보기' },
-  { v: 2, l: '읽기' },
-  { v: 3, l: '쓰기' },
-] as const;
-
-function SerLevelSegments(props: {
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const { value, onChange } = props;
-  return (
-    <div
-      role="group"
-      aria-label="접근 단계"
-      className="inline-flex max-w-full flex-wrap gap-px rounded-md border border-border/70 bg-muted/40 p-px"
-    >
-      {LEVELS.map((l) => {
-        const selected = value === l.v;
-        return (
-          <button
-            key={l.v}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onChange(l.v)}
-            className={cn(
-              'rounded-[3px] px-1.5 py-0.5 text-[11px] font-normal transition-colors leading-tight',
-              selected
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-background/90 hover:text-foreground'
-            )}
-          >
-            {l.l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-const SYS_ACCESS_OPTIONS = [
-  { allowed: false as const, label: '없음' },
-  { allowed: true as const, label: '접속허용' },
-] as const;
-
-function SysAccessSegments(props: { allowed: boolean; onChange: (allowed: boolean) => void }) {
-  const { allowed, onChange } = props;
-  return (
-    <div
-      role="group"
-      aria-label="시스템 접속"
-      className="inline-flex max-w-full flex-wrap gap-px rounded-md border border-border/70 bg-muted/40 p-px"
-    >
-      {SYS_ACCESS_OPTIONS.map((o) => {
-        const selected = allowed === o.allowed;
-        return (
-          <button
-            key={o.label}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onChange(o.allowed)}
-            className={cn(
-              'rounded-[3px] px-1.5 py-0.5 text-[11px] font-normal transition-colors leading-tight',
-              selected
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-background/90 hover:text-foreground'
-            )}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 const PERM_TABS = [
   { id: 'ser' as const, label: '기능별 권한관리', icon: Layers },
   { id: 'sys' as const, label: '시스템별 접속권한 관리', icon: Server },
+  { id: 'console' as const, label: '콘솔 메뉴 권한', icon: LayoutGrid },
 ];
 
 /** 레이어 속성관리(`LayerAttrManager`) 왼쪽 목록과 동일 폭 */
 const PERM_LIST_WIDTH = 280;
 
-async function permCall(action: string, params: Record<string, unknown> = {}) {
-  const res = await call('', 'POST', { service: 'permissionService', action, params });
-  if (!res?.success) throw new Error(res?.error ?? 'failed');
-  return res.data;
-}
-
 export function PermissionFeatureManager() {
-  const [tab, setTab] = useState<'ser' | 'sys'>('ser');
+  const [tab, setTab] = useState<'ser' | 'sys' | 'console'>('ser');
   const [perms, setPerms] = useState<Perm[]>([]);
   const [selPerm, setSelPerm] = useState<number | null>(null);
-  const [privateSers, setPrivateSers] = useState<SerRow[]>([]);
-  const [privateSys, setPrivateSys] = useState<SysRow[]>([]);
-  const [serpMap, setSerpMap] = useState<Record<string, number>>({});
-  const [syspSet, setSyspSet] = useState<Set<string>>(new Set());
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   /** 상세 다이얼로그가 편집 중인 권한 키 (목록 선택과 별도로 유지) */
@@ -147,43 +55,6 @@ export function PermissionFeatureManager() {
     });
   }, [perms, permListSearch]);
 
-  /** sys_eng 가 같으면 한 행(접속 토글은 그룹 내 sys_key 전체에 적용) */
-  const privateSysGroups = useMemo(() => {
-    type G = {
-      rowKey: string;
-      displayEng: string;
-      sysKeys: string[];
-      korLines: string;
-      detailLines: string;
-    };
-    const byEng = new Map<string, SysRow[]>();
-    for (const s of privateSys) {
-      const eng = (s.sysEng ?? '').trim();
-      const bucket = eng || `\0${s.sysKey}`;
-      if (!byEng.has(bucket)) byEng.set(bucket, []);
-      byEng.get(bucket)!.push(s);
-    }
-    const out: G[] = [];
-    for (const [bucket, rows] of byEng) {
-      const sysKeys = rows.map((r) => r.sysKey);
-      const displayEng = bucket.startsWith('\0') ? rows[0].sysEng ?? rows[0].sysKey : bucket;
-      const kors = [...new Set(rows.map((r) => (r.sysKor ?? '').trim()).filter(Boolean))];
-      const details = [...new Set(rows.map((r) => (r.sysDetail ?? '').trim()).filter(Boolean))];
-      out.push({
-        rowKey: [...sysKeys].sort().join('|'),
-        displayEng,
-        sysKeys,
-        korLines: kors.join('\n'),
-        detailLines: details.join('\n'),
-      });
-    }
-    out.sort(
-      (a, b) =>
-        a.displayEng.localeCompare(b.displayEng, 'ko') || a.sysKeys[0].localeCompare(b.sysKeys[0])
-    );
-    return out;
-  }, [privateSys]);
-
   const loadPerms = useCallback(async () => {
     const rows = (await permCall('listPerms')) as Perm[];
     setPerms(rows);
@@ -193,43 +64,12 @@ export function PermissionFeatureManager() {
     });
   }, []);
 
-  const loadPrivateSers = useCallback(async () => {
-    const rows = (await permCall('listPrivateSers')) as SerRow[];
-    setPrivateSers(rows);
-  }, []);
-
-  const loadPrivateSys = useCallback(async () => {
-    const rows = (await permCall('listPrivateSys')) as SysRow[];
-    setPrivateSys(rows);
-  }, []);
-
-  const loadSerp = useCallback(async (permKey: number) => {
-    const rows = (await permCall('getSerpForPerm', { permKey })) as {
-      serEng: string;
-      serpType: number;
-    }[];
-    const m: Record<string, number> = {};
-    for (const r of rows) m[r.serEng] = r.serpType;
-    setSerpMap(m);
-  }, []);
-
-  const loadSysp = useCallback(async (permKey: number) => {
-    const rows = (await permCall('getSyspForPerm', { permKey })) as { sysKey: string | null }[];
-    setSyspSet(new Set(rows.map((r) => (r.sysKey != null ? String(r.sysKey) : '')).filter(Boolean)));
-  }, []);
-
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadPerms(), loadPrivateSers(), loadPrivateSys()])
+    loadPerms()
       .catch((e) => setMsg(String(e.message)))
       .finally(() => setLoading(false));
-  }, [loadPerms, loadPrivateSers, loadPrivateSys]);
-
-  useEffect(() => {
-    if (selPerm == null) return;
-    if (tab === 'ser') loadSerp(selPerm);
-    else loadSysp(selPerm);
-  }, [selPerm, tab, loadSerp, loadSysp]);
+  }, [loadPerms]);
 
   useEffect(() => {
     if (!detailModalOpen || detailModalPermKey == null) {
@@ -337,35 +177,6 @@ export function PermissionFeatureManager() {
       setModalError(e instanceof Error ? e.message : '오류');
     } finally {
       setPermDetailUserRemoving(null);
-    }
-  }
-
-  async function setSerLevel(serEng: string, serpType: number) {
-    if (selPerm == null) return;
-    try {
-      await permCall('setSerpForPerm', { permKey: selPerm, serEng, serpType });
-      setSerpMap((prev) => ({ ...prev, [serEng]: serpType }));
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : '오류');
-    }
-  }
-
-  async function toggleSysGroup(sysKeys: string[], on: boolean) {
-    if (selPerm == null || sysKeys.length === 0) return;
-    try {
-      for (const sysKey of sysKeys) {
-        await permCall('setSyspForPerm', { permKey: selPerm, sysKey, enabled: on });
-      }
-      setSyspSet((prev) => {
-        const n = new Set(prev);
-        for (const k of sysKeys) {
-          if (on) n.add(k);
-          else n.delete(k);
-        }
-        return n;
-      });
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : '오류');
     }
   }
 
@@ -505,128 +316,15 @@ export function PermissionFeatureManager() {
 
         {/* 오른쪽: 선택 권한 매핑 — LayerAttrManager 본문과 동일 톤 */}
         <div className="flex-1 min-w-0 flex flex-col gap-2 min-h-0 overflow-hidden">
-          {selPerm == null ? (
-            <p className="text-sm text-muted-foreground py-4">
-              왼쪽에서 권한을 선택하면 기능별·시스템별 매핑을 편집할 수 있습니다.
-            </p>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 flex-wrap shrink-0 text-sm text-muted-foreground">
-                <span>
-                  선택 권한:{' '}
-                  <span className="font-medium text-foreground">
-                    {detailPerm?.permName ?? selPerm}
-                  </span>
-                  <span className="ml-1.5 font-mono text-xs opacity-80">#{selPerm}</span>
-                </span>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto border rounded-none bg-muted/20 w-full min-w-0">
-                {tab === 'ser' ? (
-                  <table className="w-full text-sm border-collapse min-w-[560px] table-fixed">
-                    <colgroup>
-                      <col className="w-[28%]" />
-                      <col className="w-[32%]" />
-                      <col className="w-[40%]" />
-                    </colgroup>
-                    <thead className="sticky top-0 z-10 bg-muted border-b">
-                      <tr className="text-left">
-                        <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                          서비스
-                        </th>
-                        <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                          한글명
-                        </th>
-                        <th className="py-1.5 px-2 text-xs font-semibold leading-tight">접근단계</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {privateSers.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="p-4 text-muted-foreground">
-                            비공개(ser_is_private) 서비스가 없습니다. 기능 목록에서 비공개로 설정하세요.
-                          </td>
-                        </tr>
-                      ) : (
-                        privateSers.map((s) => {
-                          const v = serpMap[s.serEng] ?? 0;
-                          return (
-                            <tr key={s.serEng} className="border-b border-border/60 hover:bg-muted/50">
-                              <td className="py-1.5 px-2 min-w-0 font-mono text-[11px] align-top border-r border-border/40 leading-snug whitespace-normal break-words [overflow-wrap:anywhere]">
-                                {s.serEng}
-                              </td>
-                              <td className="py-1.5 px-2 min-w-0 align-top border-r border-border/40 text-xs leading-snug whitespace-pre-line break-words">
-                                {s.serKor ?? ''}
-                              </td>
-                              <td className="py-1.5 px-2 align-top">
-                                <SerLevelSegments value={v} onChange={(nv) => setSerLevel(s.serEng, nv)} />
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                ) : (
-                  <table className="w-full text-sm border-collapse min-w-[720px] table-fixed">
-                    <colgroup>
-                      <col className="w-[22%]" />
-                      <col className="w-[20%]" />
-                      <col className="w-[30%]" />
-                      <col className="w-[28%]" />
-                    </colgroup>
-                    <thead className="sticky top-0 z-10 bg-muted border-b">
-                      <tr className="text-left">
-                        <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                          한글명
-                        </th>
-                        <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                          시스템
-                        </th>
-                        <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                          상세
-                        </th>
-                        <th className="py-1.5 px-2 text-xs font-semibold leading-tight">접속</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {privateSys.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="p-4 text-muted-foreground">
-                            비공개 시스템이 없습니다. DB 시스템은 sys_is_private, config 전용은
-                            systemList.config 의 sys_is_private 을 켜세요.
-                          </td>
-                        </tr>
-                      ) : (
-                        privateSysGroups.map((g) => {
-                          const allOn =
-                            g.sysKeys.length > 0 && g.sysKeys.every((k) => syspSet.has(k));
-                          return (
-                            <tr key={g.rowKey} className="border-b border-border/60 hover:bg-muted/50">
-                              <td className="py-1.5 px-2 min-w-0 align-top border-r border-border/40 text-xs leading-snug whitespace-pre-line break-words">
-                                {g.korLines || ''}
-                              </td>
-                              <td className="py-1.5 px-2 min-w-0 font-mono text-[11px] align-top border-r border-border/40 leading-snug whitespace-normal break-words [overflow-wrap:anywhere]">
-                                {g.displayEng}
-                              </td>
-                              <td className="py-1.5 px-2 min-w-0 align-top border-r border-border/40 text-[11px] text-muted-foreground leading-snug whitespace-pre-line break-words">
-                                {g.detailLines || '—'}
-                              </td>
-                              <td className="py-1.5 px-2 align-top">
-                                <SysAccessSegments
-                                  allowed={allOn}
-                                  onChange={(on) => void toggleSysGroup(g.sysKeys, on)}
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </>
-          )}
+          <PermRoleMappingPanel
+            permKey={selPerm}
+            permName={detailPerm?.permName}
+            tab={tab}
+            onTabChange={setTab}
+            showTabBar={false}
+            className="flex-1 min-h-0"
+            onError={(message) => setMsg(message)}
+          />
         </div>
       </div>
 

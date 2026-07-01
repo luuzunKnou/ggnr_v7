@@ -1,202 +1,152 @@
 'use client';
 
-import { RotateCcw, Redo2, Save, X } from 'lucide-react';
+import {
+  Circle,
+  Hexagon,
+  MousePointer2,
+  Pencil,
+  Redo2,
+  RotateCcw,
+  Save,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { call } from '@/lib/api';
 import { useShapeEditorContext } from '../ShapeEditorContext';
-import { clearShapeEditorGeometry } from './ShapeEditorEngine';
-import type { ShapeEditorLayerGroup, ShapeEditorLayerItem } from '../types';
-import { ShapeEditorLayerSelect } from './ShapeEditorLayerSelect';
+import { shpTypeLabel } from '../_lib/geomUtils';
+import {
+  SHAPE_EDITOR_OVERLAY_CONTROLS,
+  type ShapeEditorOverlayControls,
+} from '../_hooks/useShapeEditorOverlayControls';
 
 type ShapeEditorTopBarProps = {
-  layerGroups: ShapeEditorLayerGroup[];
-  layerLoading: boolean;
-  layerError: string | null;
+  overlayControls: ShapeEditorOverlayControls;
 };
 
-export function ShapeEditorTopBar({
-  layerGroups,
-  layerLoading,
-  layerError,
-}: ShapeEditorTopBarProps) {
+export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
   const {
     activeEditLayer,
-    setActiveEditLayer,
     editMode,
-    setEditMode,
+    toolMode,
+    setToolMode,
     draft,
-    setDraft,
-    refreshWms,
+    dirtySaveItems,
+    bulkSavePending,
+    bulkSaving,
+    bulkSaveMessage,
+    hasUnsavedWork,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    deleteCurrentGeometry,
   } = useShapeEditorContext();
 
-  const handleSave = async () => {
-    if (!activeEditLayer) {
-      window.alert('편집할 레이어를 먼저 선택하세요.');
-      return;
-    }
-    if (editMode === 'edit') {
-      window.alert('기존 수정 저장은 준비 중입니다.');
-      return;
-    }
-    if (!draft.wkt5181) {
-      window.alert('저장할 도형이 없습니다.');
-      return;
-    }
-
-    setDraft({ saving: true, saveMessage: null });
-    try {
-      const res = await call('', 'POST', {
-        service: 'layerRowService',
-        action: 'insertTableRow',
-        params: {
-          table: activeEditLayer.tableName,
-          schema: activeEditLayer.schema,
-          values: {},
-          geomWkt5181: draft.wkt5181,
-        },
-      });
-      const data = res?.data ?? res;
-      if (data?.error || data?.success === false) {
-        setDraft({
-          saving: false,
-          saveMessage: String(data?.error ?? '저장에 실패했습니다.'),
-        });
-        return;
-      }
-      clearShapeEditorGeometry();
-      refreshWms();
-      setDraft({
-        saving: false,
-        saveMessage: `저장 완료 (키: ${data?.keyValue ?? '-'})`,
-        hasGeometry: false,
-        wkt5181: null,
-      });
-    } catch {
-      setDraft({ saving: false, saveMessage: '저장 요청에 실패했습니다.' });
-    }
-  };
+  const toolsDisabled = !activeEditLayer;
+  const drawDisabled = toolsDisabled || editMode === 'edit';
+  const shpLabel = activeEditLayer ? shpTypeLabel(activeEditLayer.shpType) : '면';
 
   const handleClose = () => {
-    if (draft.hasGeometry && !window.confirm('저장하지 않은 도형이 있습니다. 창을 닫을까요?')) {
+    if (hasUnsavedWork && !window.confirm('저장하지 않은 작업이 있습니다. 창을 닫을까요?')) {
       return;
     }
     window.close();
   };
 
-  const onSelectLayer = (layer: ShapeEditorLayerItem) => {
-    if (draft.hasGeometry && !window.confirm('저장하지 않은 도형이 있습니다. 레이어를 변경할까요?')) {
-      return;
-    }
-    setActiveEditLayer(layer);
-  };
+  const DrawIcon =
+    shpLabel === '점' ? Circle : shpLabel === '선' ? Pencil : Hexagon;
 
-  const toolsDisabled = !activeEditLayer;
+  const { toggleControl, isActive } = overlayControls;
+
+  const statusMessage = bulkSaveMessage ?? draft.saveMessage;
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3">
-      <ShapeEditorLayerSelect
-        layerGroups={layerGroups}
-        loading={layerLoading}
-        error={layerError}
-        activeLayer={activeEditLayer}
-        onSelectLayer={onSelectLayer}
-      />
+    <header className="flex h-11 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2">
+      <ToolbarButton
+        title="선택·수정"
+        active={toolMode === 'select'}
+        disabled={toolsDisabled}
+        onClick={() => setToolMode('select')}
+      >
+        <MousePointer2 className="h-3.5 w-3.5" />
+        선택
+      </ToolbarButton>
+      <ToolbarButton
+        title={`${shpLabel} 그리기`}
+        active={toolMode === 'draw'}
+        disabled={drawDisabled}
+        onClick={() => setToolMode('draw')}
+      >
+        <DrawIcon className="h-3.5 w-3.5" />
+        그리기
+      </ToolbarButton>
+      <ToolbarButton
+        title="도형 지우기"
+        disabled={toolsDisabled || !draft.hasGeometry}
+        onClick={() => deleteCurrentGeometry()}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        삭제
+      </ToolbarButton>
 
-      <div className="h-6 w-px shrink-0 bg-slate-200" />
+      <div className="mx-1 h-5 w-px bg-slate-200" />
 
-      <div className="flex shrink-0 items-center rounded-md border border-slate-200 p-0.5">
-        <ModeButton
-          active={editMode === 'new'}
-          disabled={toolsDisabled}
-          onClick={() => setEditMode('new')}
+      <ToolbarButton title="실행 취소" disabled={!canUndo || bulkSaving} onClick={() => undo()}>
+        <RotateCcw className="h-3.5 w-3.5" />
+        Undo
+      </ToolbarButton>
+      <ToolbarButton title="다시 실행" disabled={!canRedo || bulkSaving} onClick={() => redo()}>
+        <Redo2 className="h-3.5 w-3.5" />
+        Redo
+      </ToolbarButton>
+
+      <div className="mx-1 h-5 w-px bg-slate-200" />
+
+      <ToolbarButton
+        title="변경된 도형 일괄 저장"
+        disabled={dirtySaveItems.length === 0 || bulkSaving}
+        onClick={() => void bulkSavePending()}
+      >
+        <Save className="h-3.5 w-3.5" />
+        {bulkSaving
+          ? '저장 중…'
+          : `일괄저장${dirtySaveItems.length > 0 ? ` (${dirtySaveItems.length})` : ''}`}
+      </ToolbarButton>
+      <ToolbarButton title="닫기" onClick={handleClose}>
+        <X className="h-3.5 w-3.5" />
+        닫기
+      </ToolbarButton>
+
+      <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
+
+      {SHAPE_EDITOR_OVERLAY_CONTROLS.map(({ id, label }) => (
+        <ToolbarButton
+          key={id}
+          title={label}
+          active={isActive(id)}
+          onClick={() => toggleControl(id)}
         >
-          신규
-        </ModeButton>
-        <ModeButton
-          active={editMode === 'edit'}
-          disabled={toolsDisabled}
-          onClick={() => setEditMode('edit')}
-        >
-          기존수정
-        </ModeButton>
-      </div>
+          {label}
+        </ToolbarButton>
+      ))}
 
-      <div className="h-6 w-px shrink-0 bg-slate-200" />
-
-      <div className="flex shrink-0 items-center gap-1">
-        <TextIconButton title="실행 취소 (준비 중)" disabled>
-          <RotateCcw className="h-3.5 w-3.5" />
-          Undo
-        </TextIconButton>
-        <TextIconButton title="다시 실행 (준비 중)" disabled>
-          <Redo2 className="h-3.5 w-3.5" />
-          Redo
-        </TextIconButton>
-      </div>
-
-      {draft.saveMessage ? (
-        <span className="min-w-0 flex-1 truncate text-xs text-slate-600">{draft.saveMessage}</span>
-      ) : (
-        <div className="flex-1" />
-      )}
-
-      <div className="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          disabled={!activeEditLayer || !draft.wkt5181 || draft.saving || editMode === 'edit'}
-          onClick={() => void handleSave()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
-        >
-          <Save className="h-4 w-4" />
-          {draft.saving ? '저장 중…' : '저장'}
-        </button>
-        <button
-          type="button"
-          onClick={handleClose}
-          className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-200 px-3 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          <X className="h-4 w-4" />
-          닫기
-        </button>
-      </div>
+      {statusMessage ? (
+        <span className="ml-2 min-w-0 flex-1 truncate text-xs text-slate-500">{statusMessage}</span>
+      ) : null}
     </header>
   );
 }
 
-function ModeButton({
+function ToolbarButton({
   children,
+  title,
   active,
   disabled,
   onClick,
 }: {
   children: React.ReactNode;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        'rounded px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40',
-        active ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function TextIconButton({
-  children,
-  title,
-  disabled,
-  onClick,
-}: {
-  children: React.ReactNode;
   title: string;
+  active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
 }) {
@@ -206,7 +156,11 @@ function TextIconButton({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+      className={cn(
+        'inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-xs text-slate-700 transition-colors',
+        'hover:bg-slate-100 disabled:opacity-40',
+        active && 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
+      )}
     >
       {children}
     </button>
