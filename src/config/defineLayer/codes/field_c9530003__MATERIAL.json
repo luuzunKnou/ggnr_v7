@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "6801",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_name": "6802",
+    "define_code_kor_name": "시멘트"
+  },
+  {
+    "define_code_name": "6803",
+    "define_code_kor_name": "고무"
+  },
+  {
+    "define_code_name": "6899",
+    "define_code_kor_name": "기타"
+  }
+]

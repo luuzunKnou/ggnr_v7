@@ -1,0 +1,34 @@
+[
+  {
+    "define_code_name": "2101",
+    "define_code_kor_name": "비상조명등"
+  },
+  {
+    "define_code_name": "2102",
+    "define_code_kor_name": "유도등"
+  },
+  {
+    "define_code_name": "2103",
+    "define_code_kor_name": "피난연결통로"
+  },
+  {
+    "define_code_name": "2104",
+    "define_code_kor_name": "피난대피터널"
+  },
+  {
+    "define_code_name": "2105",
+    "define_code_kor_name": "격벽분리형 피난대피통로"
+  },
+  {
+    "define_code_name": "2106",
+    "define_code_kor_name": "비상주차대"
+  },
+  {
+    "define_code_name": "2107",
+    "define_code_kor_name": "배면대피통로"
+  },
+  {
+    "define_code_name": "2199",
+    "define_code_kor_name": "기타"
+  }
+]

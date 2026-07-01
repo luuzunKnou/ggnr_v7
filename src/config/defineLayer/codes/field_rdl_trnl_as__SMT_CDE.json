@@ -1,0 +1,170 @@
+[
+  {
+    "define_code_key": "72403",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72404",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT001",
+    "define_code_kor_name": "무근콘크리트"
+  },
+  {
+    "define_code_key": "72405",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT002",
+    "define_code_kor_name": "철근콘크리트"
+  },
+  {
+    "define_code_key": "72406",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT003",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_key": "72407",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT004",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "72408",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72409",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT900",
+    "define_code_kor_name": "견치돌"
+  },
+  {
+    "define_code_key": "72410",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT901",
+    "define_code_kor_name": "나무"
+  },
+  {
+    "define_code_key": "72411",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT902",
+    "define_code_kor_name": "돌"
+  },
+  {
+    "define_code_key": "72412",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT903",
+    "define_code_kor_name": "돌망태"
+  },
+  {
+    "define_code_key": "72413",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT904",
+    "define_code_kor_name": "벽돌"
+  },
+  {
+    "define_code_key": "72414",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT905",
+    "define_code_kor_name": "보강토"
+  },
+  {
+    "define_code_key": "72415",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT906",
+    "define_code_kor_name": "블록"
+  },
+  {
+    "define_code_key": "72416",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT907",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_key": "72417",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT908",
+    "define_code_kor_name": "석축+철근콘크리트"
+  },
+  {
+    "define_code_key": "72418",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT909",
+    "define_code_kor_name": "시멘트"
+  },
+  {
+    "define_code_key": "72419",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT910",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_key": "72420",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT911",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "72421",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT912",
+    "define_code_kor_name": "알루미늄"
+  },
+  {
+    "define_code_key": "72422",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT913",
+    "define_code_kor_name": "인조석"
+  },
+  {
+    "define_code_key": "72423",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT914",
+    "define_code_kor_name": "인조화강석"
+  },
+  {
+    "define_code_key": "72424",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT915",
+    "define_code_kor_name": "자연석"
+  },
+  {
+    "define_code_key": "72425",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT916",
+    "define_code_kor_name": "조경석"
+  },
+  {
+    "define_code_key": "72426",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT917",
+    "define_code_kor_name": "철재"
+  },
+  {
+    "define_code_key": "72427",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT918",
+    "define_code_kor_name": "타일"
+  },
+  {
+    "define_code_key": "72428",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT919",
+    "define_code_kor_name": "플라스틱"
+  },
+  {
+    "define_code_key": "72429",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT920",
+    "define_code_kor_name": "합성재"
+  },
+  {
+    "define_code_key": "72430",
+    "define_code_field_key": "7987",
+    "define_code_name": "SMT921",
+    "define_code_kor_name": "화학재질"
+  }
+]

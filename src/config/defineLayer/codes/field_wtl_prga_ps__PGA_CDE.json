@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "65506",
+    "define_code_field_key": "4320",
+    "define_code_name": "PGA000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65507",
+    "define_code_field_key": "4320",
+    "define_code_name": "PGA001",
+    "define_code_kor_name": "고정식"
+  },
+  {
+    "define_code_key": "65508",
+    "define_code_field_key": "4320",
+    "define_code_name": "PGA002",
+    "define_code_kor_name": "설치식"
+  },
+  {
+    "define_code_key": "65509",
+    "define_code_field_key": "4320",
+    "define_code_name": "PGA003",
+    "define_code_kor_name": "혼합식"
+  },
+  {
+    "define_code_key": "65510",
+    "define_code_field_key": "4320",
+    "define_code_name": "PGA999",
+    "define_code_kor_name": "기타"
+  }
+]

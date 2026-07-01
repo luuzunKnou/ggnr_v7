@@ -1,0 +1,86 @@
+[
+  {
+    "define_code_key": "63545",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "63546",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO001",
+    "define_code_kor_name": "계속운영중"
+  },
+  {
+    "define_code_key": "63547",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO002",
+    "define_code_kor_name": "가끔운영중"
+  },
+  {
+    "define_code_key": "63548",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO003",
+    "define_code_kor_name": "임시의"
+  },
+  {
+    "define_code_key": "63549",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO004",
+    "define_code_kor_name": "대리의"
+  },
+  {
+    "define_code_key": "63550",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO005",
+    "define_code_kor_name": "시험중"
+  },
+  {
+    "define_code_key": "63551",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO010",
+    "define_code_kor_name": "건설계획중"
+  },
+  {
+    "define_code_key": "63552",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO011",
+    "define_code_kor_name": "건설중"
+  },
+  {
+    "define_code_key": "63553",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO012",
+    "define_code_kor_name": "보존되는"
+  },
+  {
+    "define_code_key": "63554",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO013",
+    "define_code_kor_name": "닫혀진"
+  },
+  {
+    "define_code_key": "63555",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO014",
+    "define_code_kor_name": "폐지된"
+  },
+  {
+    "define_code_key": "63556",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO015",
+    "define_code_kor_name": "파괴된"
+  },
+  {
+    "define_code_key": "63557",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO900",
+    "define_code_kor_name": "건설후 미개통"
+  },
+  {
+    "define_code_key": "63558",
+    "define_code_field_key": "4593",
+    "define_code_name": "SOO999",
+    "define_code_kor_name": "기타"
+  }
+]

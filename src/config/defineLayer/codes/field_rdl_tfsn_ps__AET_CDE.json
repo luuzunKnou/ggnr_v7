@@ -1,0 +1,200 @@
+[
+  {
+    "define_code_key": "72098",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72099",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET008",
+    "define_code_kor_name": "교통안전(주의)"
+  },
+  {
+    "define_code_key": "72100",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET009",
+    "define_code_kor_name": "교통안전(규제)"
+  },
+  {
+    "define_code_key": "72101",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET010",
+    "define_code_kor_name": "교통안전(지시)"
+  },
+  {
+    "define_code_key": "72102",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET011",
+    "define_code_kor_name": "교통안전(보조)"
+  },
+  {
+    "define_code_key": "72103",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET012",
+    "define_code_kor_name": "교통안전(기타)"
+  },
+  {
+    "define_code_key": "72104",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET013",
+    "define_code_kor_name": "광고표지"
+  },
+  {
+    "define_code_key": "72105",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72106",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET900",
+    "define_code_kor_name": "갈매기"
+  },
+  {
+    "define_code_key": "72107",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET901",
+    "define_code_kor_name": "경광등"
+  },
+  {
+    "define_code_key": "72108",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET902",
+    "define_code_kor_name": "관광휴양"
+  },
+  {
+    "define_code_key": "72109",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET903",
+    "define_code_kor_name": "교통안전"
+  },
+  {
+    "define_code_key": "72110",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET904",
+    "define_code_kor_name": "교통안전(규제+보조)"
+  },
+  {
+    "define_code_key": "72111",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET905",
+    "define_code_kor_name": "교통안전(규제+주의)"
+  },
+  {
+    "define_code_key": "72112",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET906",
+    "define_code_kor_name": "교통안전(규제+주의+보조)"
+  },
+  {
+    "define_code_key": "72113",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET907",
+    "define_code_kor_name": "교통안전(규제+주의+지시)"
+  },
+  {
+    "define_code_key": "72114",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET908",
+    "define_code_kor_name": "교통안전(규제+주의+지시+보조)"
+  },
+  {
+    "define_code_key": "72115",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET909",
+    "define_code_kor_name": "교통안전(규제+지시)"
+  },
+  {
+    "define_code_key": "72116",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET910",
+    "define_code_kor_name": "교통안전(주의+지시)"
+  },
+  {
+    "define_code_key": "72117",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET911",
+    "define_code_kor_name": "교통안전(주의+지시+보조)"
+  },
+  {
+    "define_code_key": "72118",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET912",
+    "define_code_kor_name": "교통안전(지시+보조)"
+  },
+  {
+    "define_code_key": "72119",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET913",
+    "define_code_kor_name": "교통안전(혼합)"
+  },
+  {
+    "define_code_key": "72120",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET914",
+    "define_code_kor_name": "도로안내(규제+보조)"
+  },
+  {
+    "define_code_key": "72121",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET915",
+    "define_code_kor_name": "도로안내(규제+주의)"
+  },
+  {
+    "define_code_key": "72122",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET916",
+    "define_code_kor_name": "도로안내(규제+주의+보조)"
+  },
+  {
+    "define_code_key": "72123",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET917",
+    "define_code_kor_name": "도로안내(규제+주의+지시)"
+  },
+  {
+    "define_code_key": "72124",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET918",
+    "define_code_kor_name": "도로안내(규제+지시)"
+  },
+  {
+    "define_code_key": "72125",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET919",
+    "define_code_kor_name": "도로안내(규제+지시+보조)"
+  },
+  {
+    "define_code_key": "72126",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET920",
+    "define_code_kor_name": "도로안내(주의+보조)"
+  },
+  {
+    "define_code_key": "72127",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET921",
+    "define_code_kor_name": "도로안내(주의+지시)"
+  },
+  {
+    "define_code_key": "72128",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET922",
+    "define_code_kor_name": "도로안내(주의+지시+보조)"
+  },
+  {
+    "define_code_key": "72129",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET923",
+    "define_code_kor_name": "도로안내(지시+보조)"
+  },
+  {
+    "define_code_key": "72130",
+    "define_code_field_key": "7937",
+    "define_code_name": "AET924",
+    "define_code_kor_name": "보조표지판"
+  }
+]

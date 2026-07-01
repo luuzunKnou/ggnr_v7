@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_name": "0301",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_name": "0302",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_name": "0303",
+    "define_code_kor_name": "콘크리트블록"
+  },
+  {
+    "define_code_name": "0304",
+    "define_code_kor_name": "토사(자연법면)"
+  },
+  {
+    "define_code_name": "0305",
+    "define_code_kor_name": "보강토"
+  },
+  {
+    "define_code_name": "0399",
+    "define_code_kor_name": "기타"
+  }
+]

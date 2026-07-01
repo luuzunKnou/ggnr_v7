@@ -1,0 +1,56 @@
+[
+  {
+    "define_code_key": "71541",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71542",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW001",
+    "define_code_kor_name": "일자형"
+  },
+  {
+    "define_code_key": "71543",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW002",
+    "define_code_kor_name": "지그재그형"
+  },
+  {
+    "define_code_key": "71544",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71545",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW900",
+    "define_code_kor_name": "고원식"
+  },
+  {
+    "define_code_key": "71546",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW901",
+    "define_code_kor_name": "대각선형"
+  },
+  {
+    "define_code_key": "71547",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW902",
+    "define_code_kor_name": "사선형"
+  },
+  {
+    "define_code_key": "71548",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW903",
+    "define_code_kor_name": "일반형"
+  },
+  {
+    "define_code_key": "71549",
+    "define_code_field_key": "7784",
+    "define_code_name": "CRW904",
+    "define_code_kor_name": "험프형"
+  }
+]

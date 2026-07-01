@@ -1,0 +1,54 @@
+[
+  {
+    "define_code_name": "1401",
+    "define_code_kor_name": "단주식"
+  },
+  {
+    "define_code_name": "1402",
+    "define_code_kor_name": "복주식"
+  },
+  {
+    "define_code_name": "1403",
+    "define_code_kor_name": "측주식"
+  },
+  {
+    "define_code_name": "1404",
+    "define_code_kor_name": "편지식"
+  },
+  {
+    "define_code_name": "1405",
+    "define_code_kor_name": "복합식"
+  },
+  {
+    "define_code_name": "1406",
+    "define_code_kor_name": "문형식"
+  },
+  {
+    "define_code_name": "1407",
+    "define_code_kor_name": "내민식"
+  },
+  {
+    "define_code_name": "1408",
+    "define_code_kor_name": "부착식"
+  },
+  {
+    "define_code_name": "1409",
+    "define_code_kor_name": "현수식"
+  },
+  {
+    "define_code_name": "1499",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC07",
+    "define_code_kor_name": "양편지식"
+  },
+  {
+    "define_code_name": "EC08",
+    "define_code_kor_name": "양내민식"
+  },
+  {
+    "define_code_name": "EC10",
+    "define_code_kor_name": "복합설치(현수식또는문형식)"
+  }
+]

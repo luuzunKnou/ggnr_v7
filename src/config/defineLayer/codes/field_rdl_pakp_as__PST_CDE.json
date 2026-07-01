@@ -1,0 +1,56 @@
+[
+  {
+    "define_code_key": "71306",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71307",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST001",
+    "define_code_kor_name": "노상"
+  },
+  {
+    "define_code_key": "71308",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST002",
+    "define_code_kor_name": "노외"
+  },
+  {
+    "define_code_key": "71309",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST003",
+    "define_code_kor_name": "둔치"
+  },
+  {
+    "define_code_key": "71310",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71311",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST900",
+    "define_code_kor_name": "부설"
+  },
+  {
+    "define_code_key": "71312",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST901",
+    "define_code_kor_name": "옥외"
+  },
+  {
+    "define_code_key": "71313",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST902",
+    "define_code_kor_name": "이면도로"
+  },
+  {
+    "define_code_key": "71314",
+    "define_code_field_key": "7705",
+    "define_code_name": "PST903",
+    "define_code_kor_name": "이면도로주차구획선"
+  }
+]

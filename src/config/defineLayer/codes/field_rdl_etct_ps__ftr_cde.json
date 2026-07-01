@@ -1,0 +1,20 @@
+[
+  {
+    "define_code_key": "69375",
+    "define_code_field_key": "11295",
+    "define_code_name": "AE310",
+    "define_code_kor_name": "게시판(광고탑)"
+  },
+  {
+    "define_code_key": "69376",
+    "define_code_field_key": "11295",
+    "define_code_name": "AE325",
+    "define_code_kor_name": "시계탑"
+  },
+  {
+    "define_code_key": "69377",
+    "define_code_field_key": "11295",
+    "define_code_name": "AE330",
+    "define_code_kor_name": "분수"
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "define_code_key": "71836",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71837",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE001",
+    "define_code_kor_name": "시외버스"
+  },
+  {
+    "define_code_key": "71838",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE002",
+    "define_code_kor_name": "좌석버스"
+  },
+  {
+    "define_code_key": "71839",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE003",
+    "define_code_kor_name": "일반버스"
+  },
+  {
+    "define_code_key": "71840",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE004",
+    "define_code_kor_name": "마을버스"
+  },
+  {
+    "define_code_key": "71841",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE010",
+    "define_code_kor_name": "택시"
+  },
+  {
+    "define_code_key": "71842",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE090",
+    "define_code_kor_name": "버스공용"
+  },
+  {
+    "define_code_key": "71843",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71844",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE900",
+    "define_code_kor_name": "좌석,일반공용"
+  },
+  {
+    "define_code_key": "71845",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE901",
+    "define_code_kor_name": "공용승강장"
+  },
+  {
+    "define_code_key": "71846",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE902",
+    "define_code_kor_name": "공항버스"
+  },
+  {
+    "define_code_key": "71847",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE903",
+    "define_code_kor_name": "시내버스"
+  },
+  {
+    "define_code_key": "71848",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE904",
+    "define_code_kor_name": "장애인전용"
+  },
+  {
+    "define_code_key": "71849",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE905",
+    "define_code_kor_name": "저상버스"
+  },
+  {
+    "define_code_key": "71850",
+    "define_code_field_key": "7897",
+    "define_code_name": "AEE906",
+    "define_code_kor_name": "카풀정류장"
+  }
+]

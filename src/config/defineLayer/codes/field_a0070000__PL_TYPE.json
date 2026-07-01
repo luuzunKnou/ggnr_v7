@@ -1,0 +1,118 @@
+[
+  {
+    "define_code_name": "0401",
+    "define_code_kor_name": "중력식"
+  },
+  {
+    "define_code_name": "0402",
+    "define_code_kor_name": "반중력식"
+  },
+  {
+    "define_code_name": "0403",
+    "define_code_kor_name": "역T형"
+  },
+  {
+    "define_code_name": "0404",
+    "define_code_kor_name": "부벽식"
+  },
+  {
+    "define_code_name": "0405",
+    "define_code_kor_name": "구주식"
+  },
+  {
+    "define_code_name": "0406",
+    "define_code_kor_name": "라멘식"
+  },
+  {
+    "define_code_name": "0407",
+    "define_code_kor_name": "박스식"
+  },
+  {
+    "define_code_name": "0499",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "아치식"
+  },
+  {
+    "define_code_name": "EC02",
+    "define_code_kor_name": "뒷부벽식"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "문형식"
+  },
+  {
+    "define_code_name": "EC08",
+    "define_code_kor_name": "∏형라멘"
+  },
+  {
+    "define_code_name": "EC10",
+    "define_code_kor_name": "역T형다주식"
+  },
+  {
+    "define_code_name": "EC12",
+    "define_code_kor_name": "T형교각식"
+  },
+  {
+    "define_code_name": "EC13",
+    "define_code_kor_name": "T형다주식"
+  },
+  {
+    "define_code_name": "EC14",
+    "define_code_kor_name": "V형교각식"
+  },
+  {
+    "define_code_name": "EC15",
+    "define_code_kor_name": "목조식"
+  },
+  {
+    "define_code_name": "EC16",
+    "define_code_kor_name": "벽식"
+  },
+  {
+    "define_code_name": "EC18",
+    "define_code_kor_name": "RAP+WLP"
+  },
+  {
+    "define_code_name": "EC19",
+    "define_code_kor_name": "RAP+TP"
+  },
+  {
+    "define_code_name": "EC20",
+    "define_code_kor_name": "RAP+GP"
+  },
+  {
+    "define_code_name": "EC21",
+    "define_code_kor_name": "RAP+SCP"
+  },
+  {
+    "define_code_name": "EC22",
+    "define_code_kor_name": "RAP+RP"
+  },
+  {
+    "define_code_name": "EC23",
+    "define_code_kor_name": "RTA+SGA"
+  },
+  {
+    "define_code_name": "EC24",
+    "define_code_kor_name": "RTA+RA"
+  },
+  {
+    "define_code_name": "EC25",
+    "define_code_kor_name": "RTA+RAA"
+  },
+  {
+    "define_code_name": "EC26",
+    "define_code_kor_name": "RTA+BA"
+  },
+  {
+    "define_code_name": "EC27",
+    "define_code_kor_name": "RTA+GA"
+  },
+  {
+    "define_code_name": "EC28",
+    "define_code_kor_name": "문형 balanced 라멘교"
+  }
+]

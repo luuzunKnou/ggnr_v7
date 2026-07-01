@@ -1,0 +1,116 @@
+[
+  {
+    "define_code_key": "71994",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71995",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT001",
+    "define_code_kor_name": "기본형"
+  },
+  {
+    "define_code_key": "71996",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT002",
+    "define_code_kor_name": "2등형"
+  },
+  {
+    "define_code_key": "71997",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT003",
+    "define_code_kor_name": "3등형"
+  },
+  {
+    "define_code_key": "71998",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT004",
+    "define_code_kor_name": "4등형"
+  },
+  {
+    "define_code_key": "71999",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT005",
+    "define_code_kor_name": "5등형"
+  },
+  {
+    "define_code_key": "72000",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT006",
+    "define_code_kor_name": "보행등"
+  },
+  {
+    "define_code_key": "72001",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72002",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT900",
+    "define_code_kor_name": "1등용"
+  },
+  {
+    "define_code_key": "72003",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT901",
+    "define_code_kor_name": "사각"
+  },
+  {
+    "define_code_key": "72004",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT902",
+    "define_code_kor_name": "원형"
+  },
+  {
+    "define_code_key": "72005",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT903",
+    "define_code_kor_name": "육각형"
+  },
+  {
+    "define_code_key": "72006",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT904",
+    "define_code_kor_name": "지주식(4M)"
+  },
+  {
+    "define_code_key": "72007",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT905",
+    "define_code_kor_name": "지주식(5M)"
+  },
+  {
+    "define_code_key": "72008",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT906",
+    "define_code_kor_name": "지주식(6M)"
+  },
+  {
+    "define_code_key": "72009",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT907",
+    "define_code_kor_name": "체신주부착식"
+  },
+  {
+    "define_code_key": "72010",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT908",
+    "define_code_kor_name": "팔각형"
+  },
+  {
+    "define_code_key": "72011",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT909",
+    "define_code_kor_name": "한전주병설"
+  },
+  {
+    "define_code_key": "72012",
+    "define_code_field_key": "7916",
+    "define_code_name": "PLT910",
+    "define_code_kor_name": "한전주부착식"
+  }
+]

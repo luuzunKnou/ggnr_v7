@@ -1,0 +1,152 @@
+[
+  {
+    "define_code_key": "70544",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70545",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA001",
+    "define_code_kor_name": "아치형(Arch)"
+  },
+  {
+    "define_code_key": "70546",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA002",
+    "define_code_kor_name": "외팔보형(Cantilever)"
+  },
+  {
+    "define_code_key": "70547",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA003",
+    "define_code_kor_name": "상로교/노선교(Deck)"
+  },
+  {
+    "define_code_key": "70548",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA004",
+    "define_code_kor_name": "도개교(Draw/Bascule)"
+  },
+  {
+    "define_code_key": "70549",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA005",
+    "define_code_kor_name": "부교(Floating/Pontoon)"
+  },
+  {
+    "define_code_key": "70550",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA006",
+    "define_code_kor_name": "형교(Girder),"
+  },
+  {
+    "define_code_key": "70551",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA007",
+    "define_code_kor_name": "탑형 현수교(Tower suspension)"
+  },
+  {
+    "define_code_key": "70552",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA008",
+    "define_code_kor_name": "아치형 현수교(Arch suspension)"
+  },
+  {
+    "define_code_key": "70553",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA009",
+    "define_code_kor_name": "적교(Suspension)"
+  },
+  {
+    "define_code_key": "70554",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA010",
+    "define_code_kor_name": "선개교/선회교(Swing)"
+  },
+  {
+    "define_code_key": "70555",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA011",
+    "define_code_kor_name": "승개교(Lift)"
+  },
+  {
+    "define_code_key": "70556",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA012",
+    "define_code_kor_name": "운반교(Transporter)"
+  },
+  {
+    "define_code_key": "70557",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA013",
+    "define_code_kor_name": "목판교(Slab)"
+  },
+  {
+    "define_code_key": "70558",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA014",
+    "define_code_kor_name": "세로 빔/들보 다리(Stringer / Beam)"
+  },
+  {
+    "define_code_key": "70559",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA015",
+    "define_code_kor_name": "결구교(Trass)"
+  },
+  {
+    "define_code_key": "70560",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA016",
+    "define_code_kor_name": "미닫이형(Retractable)"
+  },
+  {
+    "define_code_key": "70561",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA017",
+    "define_code_kor_name": "고정형(Fixed)"
+  },
+  {
+    "define_code_key": "70562",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA018",
+    "define_code_kor_name": "인도교(Foot bridge)"
+  },
+  {
+    "define_code_key": "70563",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA019",
+    "define_code_kor_name": "스라브(RC콘크리트)"
+  },
+  {
+    "define_code_key": "70564",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70565",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA900",
+    "define_code_kor_name": "단순형교"
+  },
+  {
+    "define_code_key": "70566",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA901",
+    "define_code_kor_name": "라멘교"
+  },
+  {
+    "define_code_key": "70567",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA902",
+    "define_code_kor_name": "사장교"
+  },
+  {
+    "define_code_key": "70568",
+    "define_code_field_key": "7379",
+    "define_code_name": "AEA903",
+    "define_code_kor_name": "연속형교"
+  }
+]

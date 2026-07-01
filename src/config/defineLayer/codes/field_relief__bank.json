@@ -1,0 +1,464 @@
+[
+  {
+    "define_code_key": "65593",
+    "define_code_field_key": "10635",
+    "define_code_name": "001",
+    "define_code_kor_name": "한국은행"
+  },
+  {
+    "define_code_key": "65594",
+    "define_code_field_key": "10635",
+    "define_code_name": "002",
+    "define_code_kor_name": "산업은행"
+  },
+  {
+    "define_code_key": "65595",
+    "define_code_field_key": "10635",
+    "define_code_name": "003",
+    "define_code_kor_name": "기업은행"
+  },
+  {
+    "define_code_key": "65596",
+    "define_code_field_key": "10635",
+    "define_code_name": "004",
+    "define_code_kor_name": "국민은행"
+  },
+  {
+    "define_code_key": "65597",
+    "define_code_field_key": "10635",
+    "define_code_name": "007",
+    "define_code_kor_name": "수협은행"
+  },
+  {
+    "define_code_key": "65598",
+    "define_code_field_key": "10635",
+    "define_code_name": "008",
+    "define_code_kor_name": "수출입은행"
+  },
+  {
+    "define_code_key": "65599",
+    "define_code_field_key": "10635",
+    "define_code_name": "011",
+    "define_code_kor_name": "농협은행"
+  },
+  {
+    "define_code_key": "65600",
+    "define_code_field_key": "10635",
+    "define_code_name": "012",
+    "define_code_kor_name": "지역 농축협"
+  },
+  {
+    "define_code_key": "65601",
+    "define_code_field_key": "10635",
+    "define_code_name": "020",
+    "define_code_kor_name": "우리은행"
+  },
+  {
+    "define_code_key": "65602",
+    "define_code_field_key": "10635",
+    "define_code_name": "023",
+    "define_code_kor_name": "SC제일은행"
+  },
+  {
+    "define_code_key": "65603",
+    "define_code_field_key": "10635",
+    "define_code_name": "027",
+    "define_code_kor_name": "한국씨티은행"
+  },
+  {
+    "define_code_key": "65604",
+    "define_code_field_key": "10635",
+    "define_code_name": "031",
+    "define_code_kor_name": "iM뱅크(구)대구은행"
+  },
+  {
+    "define_code_key": "65605",
+    "define_code_field_key": "10635",
+    "define_code_name": "032",
+    "define_code_kor_name": "부산은행"
+  },
+  {
+    "define_code_key": "65606",
+    "define_code_field_key": "10635",
+    "define_code_name": "034",
+    "define_code_kor_name": "광주은행"
+  },
+  {
+    "define_code_key": "65607",
+    "define_code_field_key": "10635",
+    "define_code_name": "035",
+    "define_code_kor_name": "제주은행"
+  },
+  {
+    "define_code_key": "65608",
+    "define_code_field_key": "10635",
+    "define_code_name": "037",
+    "define_code_kor_name": "전북은행"
+  },
+  {
+    "define_code_key": "65609",
+    "define_code_field_key": "10635",
+    "define_code_name": "039",
+    "define_code_kor_name": "경남은행"
+  },
+  {
+    "define_code_key": "65610",
+    "define_code_field_key": "10635",
+    "define_code_name": "045",
+    "define_code_kor_name": "새마을금고중앙회"
+  },
+  {
+    "define_code_key": "65611",
+    "define_code_field_key": "10635",
+    "define_code_name": "048",
+    "define_code_kor_name": "신협"
+  },
+  {
+    "define_code_key": "65612",
+    "define_code_field_key": "10635",
+    "define_code_name": "050",
+    "define_code_kor_name": "상호저축은행"
+  },
+  {
+    "define_code_key": "65613",
+    "define_code_field_key": "10635",
+    "define_code_name": "051",
+    "define_code_kor_name": "기타 외국계은행(중국 교통은행 등)"
+  },
+  {
+    "define_code_key": "65614",
+    "define_code_field_key": "10635",
+    "define_code_name": "052",
+    "define_code_kor_name": "모간스탠리은행"
+  },
+  {
+    "define_code_key": "65615",
+    "define_code_field_key": "10635",
+    "define_code_name": "054",
+    "define_code_kor_name": "HSBC은행"
+  },
+  {
+    "define_code_key": "65616",
+    "define_code_field_key": "10635",
+    "define_code_name": "055",
+    "define_code_kor_name": "도이치은행"
+  },
+  {
+    "define_code_key": "65617",
+    "define_code_field_key": "10635",
+    "define_code_name": "057",
+    "define_code_kor_name": "제이피모간체이스은행"
+  },
+  {
+    "define_code_key": "65618",
+    "define_code_field_key": "10635",
+    "define_code_name": "058",
+    "define_code_kor_name": "미즈호은행"
+  },
+  {
+    "define_code_key": "65619",
+    "define_code_field_key": "10635",
+    "define_code_name": "059",
+    "define_code_kor_name": "미쓰비시도쿄UFJ은행"
+  },
+  {
+    "define_code_key": "65620",
+    "define_code_field_key": "10635",
+    "define_code_name": "060",
+    "define_code_kor_name": "BOA은행"
+  },
+  {
+    "define_code_key": "65621",
+    "define_code_field_key": "10635",
+    "define_code_name": "061",
+    "define_code_kor_name": "비엔피파리바은행"
+  },
+  {
+    "define_code_key": "65622",
+    "define_code_field_key": "10635",
+    "define_code_name": "062",
+    "define_code_kor_name": "중국공상은행"
+  },
+  {
+    "define_code_key": "65623",
+    "define_code_field_key": "10635",
+    "define_code_name": "063",
+    "define_code_kor_name": "중국은행"
+  },
+  {
+    "define_code_key": "65624",
+    "define_code_field_key": "10635",
+    "define_code_name": "064",
+    "define_code_kor_name": "산림조합중앙회"
+  },
+  {
+    "define_code_key": "65625",
+    "define_code_field_key": "10635",
+    "define_code_name": "065",
+    "define_code_kor_name": "대화은행"
+  },
+  {
+    "define_code_key": "65626",
+    "define_code_field_key": "10635",
+    "define_code_name": "067",
+    "define_code_kor_name": "중국건설은행"
+  },
+  {
+    "define_code_key": "65627",
+    "define_code_field_key": "10635",
+    "define_code_name": "071",
+    "define_code_kor_name": "우체국"
+  },
+  {
+    "define_code_key": "65628",
+    "define_code_field_key": "10635",
+    "define_code_name": "076",
+    "define_code_kor_name": "신용보증기금"
+  },
+  {
+    "define_code_key": "65629",
+    "define_code_field_key": "10635",
+    "define_code_name": "077",
+    "define_code_kor_name": "기술보증기금"
+  },
+  {
+    "define_code_key": "65630",
+    "define_code_field_key": "10635",
+    "define_code_name": "081",
+    "define_code_kor_name": "KEB하나은행"
+  },
+  {
+    "define_code_key": "65631",
+    "define_code_field_key": "10635",
+    "define_code_name": "088",
+    "define_code_kor_name": "신한은행"
+  },
+  {
+    "define_code_key": "65632",
+    "define_code_field_key": "10635",
+    "define_code_name": "089",
+    "define_code_kor_name": "케이뱅크"
+  },
+  {
+    "define_code_key": "65633",
+    "define_code_field_key": "10635",
+    "define_code_name": "090",
+    "define_code_kor_name": "카카오뱅크"
+  },
+  {
+    "define_code_key": "65634",
+    "define_code_field_key": "10635",
+    "define_code_name": "092",
+    "define_code_kor_name": "토스뱅크"
+  },
+  {
+    "define_code_key": "65635",
+    "define_code_field_key": "10635",
+    "define_code_name": "093",
+    "define_code_kor_name": "한국주택금융공사"
+  },
+  {
+    "define_code_key": "65636",
+    "define_code_field_key": "10635",
+    "define_code_name": "094",
+    "define_code_kor_name": "서울보증보험"
+  },
+  {
+    "define_code_key": "65637",
+    "define_code_field_key": "10635",
+    "define_code_name": "209",
+    "define_code_kor_name": "유안타증권"
+  },
+  {
+    "define_code_key": "65638",
+    "define_code_field_key": "10635",
+    "define_code_name": "218",
+    "define_code_kor_name": "KB증권"
+  },
+  {
+    "define_code_key": "65639",
+    "define_code_field_key": "10635",
+    "define_code_name": "221",
+    "define_code_kor_name": "상상인증권"
+  },
+  {
+    "define_code_key": "65640",
+    "define_code_field_key": "10635",
+    "define_code_name": "223",
+    "define_code_kor_name": "리딩투자증권"
+  },
+  {
+    "define_code_key": "65641",
+    "define_code_field_key": "10635",
+    "define_code_name": "224",
+    "define_code_kor_name": "BNK투자증권"
+  },
+  {
+    "define_code_key": "65642",
+    "define_code_field_key": "10635",
+    "define_code_name": "225",
+    "define_code_kor_name": "IBK투자증권"
+  },
+  {
+    "define_code_key": "65643",
+    "define_code_field_key": "10635",
+    "define_code_name": "226",
+    "define_code_kor_name": "KB증권"
+  },
+  {
+    "define_code_key": "65644",
+    "define_code_field_key": "10635",
+    "define_code_name": "227",
+    "define_code_kor_name": "KTB투자증권"
+  },
+  {
+    "define_code_key": "65645",
+    "define_code_field_key": "10635",
+    "define_code_name": "238",
+    "define_code_kor_name": "미래에셋증권"
+  },
+  {
+    "define_code_key": "65646",
+    "define_code_field_key": "10635",
+    "define_code_name": "240",
+    "define_code_kor_name": "삼성증권"
+  },
+  {
+    "define_code_key": "65647",
+    "define_code_field_key": "10635",
+    "define_code_name": "243",
+    "define_code_kor_name": "한국투자증권"
+  },
+  {
+    "define_code_key": "65648",
+    "define_code_field_key": "10635",
+    "define_code_name": "247",
+    "define_code_kor_name": "NH투자증권"
+  },
+  {
+    "define_code_key": "65649",
+    "define_code_field_key": "10635",
+    "define_code_name": "261",
+    "define_code_kor_name": "교보증권"
+  },
+  {
+    "define_code_key": "65650",
+    "define_code_field_key": "10635",
+    "define_code_name": "262",
+    "define_code_kor_name": "하이투자증권"
+  },
+  {
+    "define_code_key": "65651",
+    "define_code_field_key": "10635",
+    "define_code_name": "263",
+    "define_code_kor_name": "현대차투자증권"
+  },
+  {
+    "define_code_key": "65652",
+    "define_code_field_key": "10635",
+    "define_code_name": "264",
+    "define_code_kor_name": "키움증권"
+  },
+  {
+    "define_code_key": "65653",
+    "define_code_field_key": "10635",
+    "define_code_name": "265",
+    "define_code_kor_name": "이베스트투자증권"
+  },
+  {
+    "define_code_key": "65654",
+    "define_code_field_key": "10635",
+    "define_code_name": "266",
+    "define_code_kor_name": "SK증권"
+  },
+  {
+    "define_code_key": "65655",
+    "define_code_field_key": "10635",
+    "define_code_name": "267",
+    "define_code_kor_name": "대신증권"
+  },
+  {
+    "define_code_key": "65656",
+    "define_code_field_key": "10635",
+    "define_code_name": "268",
+    "define_code_kor_name": "메리츠종합금융증권"
+  },
+  {
+    "define_code_key": "65657",
+    "define_code_field_key": "10635",
+    "define_code_name": "269",
+    "define_code_kor_name": "한화투자증권"
+  },
+  {
+    "define_code_key": "65658",
+    "define_code_field_key": "10635",
+    "define_code_name": "270",
+    "define_code_kor_name": "하나금융투자"
+  },
+  {
+    "define_code_key": "65659",
+    "define_code_field_key": "10635",
+    "define_code_name": "271",
+    "define_code_kor_name": "토스증권"
+  },
+  {
+    "define_code_key": "65660",
+    "define_code_field_key": "10635",
+    "define_code_name": "278",
+    "define_code_kor_name": "신한금융투자"
+  },
+  {
+    "define_code_key": "65661",
+    "define_code_field_key": "10635",
+    "define_code_name": "279",
+    "define_code_kor_name": "DB금융투자"
+  },
+  {
+    "define_code_key": "65662",
+    "define_code_field_key": "10635",
+    "define_code_name": "280",
+    "define_code_kor_name": "유진투자증권"
+  },
+  {
+    "define_code_key": "65663",
+    "define_code_field_key": "10635",
+    "define_code_name": "287",
+    "define_code_kor_name": "메리츠종합금융증권"
+  },
+  {
+    "define_code_key": "65664",
+    "define_code_field_key": "10635",
+    "define_code_name": "288",
+    "define_code_kor_name": "카카오페이증권"
+  },
+  {
+    "define_code_key": "65665",
+    "define_code_field_key": "10635",
+    "define_code_name": "289",
+    "define_code_kor_name": "NH투자증권"
+  },
+  {
+    "define_code_key": "65666",
+    "define_code_field_key": "10635",
+    "define_code_name": "290",
+    "define_code_kor_name": "부국증권"
+  },
+  {
+    "define_code_key": "65667",
+    "define_code_field_key": "10635",
+    "define_code_name": "291",
+    "define_code_kor_name": "신영증권"
+  },
+  {
+    "define_code_key": "65668",
+    "define_code_field_key": "10635",
+    "define_code_name": "292",
+    "define_code_kor_name": "케이프투자증권"
+  },
+  {
+    "define_code_key": "65669",
+    "define_code_field_key": "10635",
+    "define_code_name": "294",
+    "define_code_kor_name": "한국포스증권"
+  }
+]

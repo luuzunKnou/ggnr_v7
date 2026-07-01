@@ -1,0 +1,242 @@
+[
+  {
+    "define_code_key": "71265",
+    "define_code_field_key": "7684",
+    "define_code_name": "HOS000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71266",
+    "define_code_field_key": "7684",
+    "define_code_name": "HOS001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71267",
+    "define_code_field_key": "7684",
+    "define_code_name": "HOS002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71268",
+    "define_code_field_key": "7684",
+    "define_code_name": "HOS003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71269",
+    "define_code_field_key": "7684",
+    "define_code_name": "HOS999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71270",
+    "define_code_field_key": "7684",
+    "define_code_name": "BDN000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71271",
+    "define_code_field_key": "7684",
+    "define_code_name": "BDN001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71272",
+    "define_code_field_key": "7684",
+    "define_code_name": "BDN002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71273",
+    "define_code_field_key": "7684",
+    "define_code_name": "BDN003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71274",
+    "define_code_field_key": "7684",
+    "define_code_name": "BDN999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71275",
+    "define_code_field_key": "7684",
+    "define_code_name": "HND000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71276",
+    "define_code_field_key": "7684",
+    "define_code_name": "HND001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71277",
+    "define_code_field_key": "7684",
+    "define_code_name": "HND002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71278",
+    "define_code_field_key": "7684",
+    "define_code_name": "HND003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71279",
+    "define_code_field_key": "7684",
+    "define_code_name": "HND999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71280",
+    "define_code_field_key": "7684",
+    "define_code_name": "PTC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71281",
+    "define_code_field_key": "7684",
+    "define_code_name": "PTC001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71282",
+    "define_code_field_key": "7684",
+    "define_code_name": "PTC002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71283",
+    "define_code_field_key": "7684",
+    "define_code_name": "PTC003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71284",
+    "define_code_field_key": "7684",
+    "define_code_name": "PTC999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71285",
+    "define_code_field_key": "7684",
+    "define_code_name": "LFT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71286",
+    "define_code_field_key": "7684",
+    "define_code_name": "LFT001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71287",
+    "define_code_field_key": "7684",
+    "define_code_name": "LFT002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71288",
+    "define_code_field_key": "7684",
+    "define_code_name": "LFT003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71289",
+    "define_code_field_key": "7684",
+    "define_code_name": "LFT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71290",
+    "define_code_field_key": "7684",
+    "define_code_name": "SLT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71291",
+    "define_code_field_key": "7684",
+    "define_code_name": "SLT001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71292",
+    "define_code_field_key": "7684",
+    "define_code_name": "SLT002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71293",
+    "define_code_field_key": "7684",
+    "define_code_name": "SLT003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71294",
+    "define_code_field_key": "7684",
+    "define_code_name": "SLT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71295",
+    "define_code_field_key": "7684",
+    "define_code_name": "TRF000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71296",
+    "define_code_field_key": "7684",
+    "define_code_name": "TRF001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71297",
+    "define_code_field_key": "7684",
+    "define_code_name": "TRF002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71298",
+    "define_code_field_key": "7684",
+    "define_code_name": "TRF003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71299",
+    "define_code_field_key": "7684",
+    "define_code_name": "TRF999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71300",
+    "define_code_field_key": "7684",
+    "define_code_name": "ESC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71301",
+    "define_code_field_key": "7684",
+    "define_code_name": "ESC001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71302",
+    "define_code_field_key": "7684",
+    "define_code_name": "ESC002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71303",
+    "define_code_field_key": "7684",
+    "define_code_name": "ESC003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71304",
+    "define_code_field_key": "7684",
+    "define_code_name": "ESC999",
+    "define_code_kor_name": "기타"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "1501",
+    "define_code_kor_name": "고속국도"
+  },
+  {
+    "define_code_name": "1502",
+    "define_code_kor_name": "일반국도"
+  },
+  {
+    "define_code_name": "1503",
+    "define_code_kor_name": "특별시도"
+  },
+  {
+    "define_code_name": "1504",
+    "define_code_kor_name": "광역시도"
+  },
+  {
+    "define_code_name": "1505",
+    "define_code_kor_name": "지방도"
+  },
+  {
+    "define_code_name": "1506",
+    "define_code_kor_name": "시도"
+  },
+  {
+    "define_code_name": "1507",
+    "define_code_kor_name": "군도"
+  },
+  {
+    "define_code_name": "1508",
+    "define_code_kor_name": "구도"
+  },
+  {
+    "define_code_name": "1599",
+    "define_code_kor_name": "기타"
+  }
+]

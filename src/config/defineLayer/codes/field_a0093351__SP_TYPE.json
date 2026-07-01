@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "3001",
+    "define_code_kor_name": "흡음형"
+  },
+  {
+    "define_code_name": "3002",
+    "define_code_kor_name": "반사형"
+  },
+  {
+    "define_code_name": "3003",
+    "define_code_kor_name": "혼합형"
+  },
+  {
+    "define_code_name": "3099",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "터널형"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "분산형"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "아크릴형"
+  },
+  {
+    "define_code_name": "EC06",
+    "define_code_kor_name": "흡음+투명형"
+  },
+  {
+    "define_code_name": "EC07",
+    "define_code_kor_name": "목재형"
+  }
+]

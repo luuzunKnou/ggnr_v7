@@ -1,0 +1,1458 @@
+[
+  {
+    "define_code_name": "11000",
+    "define_code_kor_name": "서울특별시"
+  },
+  {
+    "define_code_name": "11110",
+    "define_code_kor_name": "서울특별시 종로구"
+  },
+  {
+    "define_code_name": "11140",
+    "define_code_kor_name": "서울특별시 중구"
+  },
+  {
+    "define_code_name": "11170",
+    "define_code_kor_name": "서울특별시 용산구"
+  },
+  {
+    "define_code_name": "11200",
+    "define_code_kor_name": "서울특별시 성동구"
+  },
+  {
+    "define_code_name": "11215",
+    "define_code_kor_name": "서울특별시 광진구"
+  },
+  {
+    "define_code_name": "11230",
+    "define_code_kor_name": "서울특별시 동대문구"
+  },
+  {
+    "define_code_name": "11260",
+    "define_code_kor_name": "서울특별시 중랑구"
+  },
+  {
+    "define_code_name": "11290",
+    "define_code_kor_name": "서울특별시 성북구"
+  },
+  {
+    "define_code_name": "11305",
+    "define_code_kor_name": "서울특별시 강북구"
+  },
+  {
+    "define_code_name": "11320",
+    "define_code_kor_name": "서울특별시 도봉구"
+  },
+  {
+    "define_code_name": "11350",
+    "define_code_kor_name": "서울특별시 노원구"
+  },
+  {
+    "define_code_name": "11380",
+    "define_code_kor_name": "서울특별시 은평구"
+  },
+  {
+    "define_code_name": "11410",
+    "define_code_kor_name": "서울특별시 서대문구"
+  },
+  {
+    "define_code_name": "11440",
+    "define_code_kor_name": "서울특별시 마포구"
+  },
+  {
+    "define_code_name": "11470",
+    "define_code_kor_name": "서울특별시 양천구"
+  },
+  {
+    "define_code_name": "11500",
+    "define_code_kor_name": "서울특별시 강서구"
+  },
+  {
+    "define_code_name": "11530",
+    "define_code_kor_name": "서울특별시 구로구"
+  },
+  {
+    "define_code_name": "11545",
+    "define_code_kor_name": "서울특별시 금천구"
+  },
+  {
+    "define_code_name": "11560",
+    "define_code_kor_name": "서울특별시 영등포구"
+  },
+  {
+    "define_code_name": "11590",
+    "define_code_kor_name": "서울특별시 동작구"
+  },
+  {
+    "define_code_name": "11620",
+    "define_code_kor_name": "서울특별시 관악구"
+  },
+  {
+    "define_code_name": "11650",
+    "define_code_kor_name": "서울특별시 서초구"
+  },
+  {
+    "define_code_name": "11680",
+    "define_code_kor_name": "서울특별시 강남구"
+  },
+  {
+    "define_code_name": "11710",
+    "define_code_kor_name": "서울특별시 송파구"
+  },
+  {
+    "define_code_name": "11740",
+    "define_code_kor_name": "서울특별시 강동구"
+  },
+  {
+    "define_code_name": "16000",
+    "define_code_kor_name": "국토교통부"
+  },
+  {
+    "define_code_name": "16100",
+    "define_code_kor_name": "서울지방국토관리청"
+  },
+  {
+    "define_code_name": "16110",
+    "define_code_kor_name": "수원국토관리사무소"
+  },
+  {
+    "define_code_name": "16120",
+    "define_code_kor_name": "의정부국토관리사무소"
+  },
+  {
+    "define_code_name": "16150",
+    "define_code_kor_name": "경기도 건설본부"
+  },
+  {
+    "define_code_name": "16160",
+    "define_code_kor_name": "경기도 도로사업소"
+  },
+  {
+    "define_code_name": "16200",
+    "define_code_kor_name": "원주지방국토관리청"
+  },
+  {
+    "define_code_name": "16210",
+    "define_code_kor_name": "홍천국토관리사무소"
+  },
+  {
+    "define_code_name": "16220",
+    "define_code_kor_name": "강릉국토관리사무소"
+  },
+  {
+    "define_code_name": "16230",
+    "define_code_kor_name": "정선국토관리사무소"
+  },
+  {
+    "define_code_name": "16240",
+    "define_code_kor_name": "강원도(도로관리사업소)"
+  },
+  {
+    "define_code_name": "16300",
+    "define_code_kor_name": "대전지방국토관리청"
+  },
+  {
+    "define_code_name": "16310",
+    "define_code_kor_name": "충주국토관리사무소"
+  },
+  {
+    "define_code_name": "16320",
+    "define_code_kor_name": "보은국토관리사무소"
+  },
+  {
+    "define_code_name": "16330",
+    "define_code_kor_name": "충청북도(도로관리사업소)"
+  },
+  {
+    "define_code_name": "16410",
+    "define_code_kor_name": "논산국토관리사무소"
+  },
+  {
+    "define_code_name": "16420",
+    "define_code_kor_name": "예산국토관리사무소"
+  },
+  {
+    "define_code_name": "16440",
+    "define_code_kor_name": "충청남도(종합건설사업소)"
+  },
+  {
+    "define_code_name": "16500",
+    "define_code_kor_name": "익산지방국토관리청"
+  },
+  {
+    "define_code_name": "16510",
+    "define_code_kor_name": "전주국토관리사무소"
+  },
+  {
+    "define_code_name": "16520",
+    "define_code_kor_name": "남원국토관리사무소"
+  },
+  {
+    "define_code_name": "16530",
+    "define_code_kor_name": "전라북도(도로관리사업소)"
+  },
+  {
+    "define_code_name": "16610",
+    "define_code_kor_name": "광주국토관리사무소"
+  },
+  {
+    "define_code_name": "16620",
+    "define_code_kor_name": "순천국토관리사무소"
+  },
+  {
+    "define_code_name": "16640",
+    "define_code_kor_name": "전라남도(도로관리사업소)"
+  },
+  {
+    "define_code_name": "16700",
+    "define_code_kor_name": "부산지방국토관리청"
+  },
+  {
+    "define_code_name": "16710",
+    "define_code_kor_name": "대구국토관리사무소"
+  },
+  {
+    "define_code_name": "16720",
+    "define_code_kor_name": "포항국토관리사무소"
+  },
+  {
+    "define_code_name": "16730",
+    "define_code_kor_name": "영주국토관리사무소"
+  },
+  {
+    "define_code_name": "16760",
+    "define_code_kor_name": "경상북도(종합건설사무소)"
+  },
+  {
+    "define_code_name": "16810",
+    "define_code_kor_name": "진주국토관리사무소"
+  },
+  {
+    "define_code_name": "16820",
+    "define_code_kor_name": "김해국토관리사무소"
+  },
+  {
+    "define_code_name": "16840",
+    "define_code_kor_name": "경상남도(도로관리사업소)"
+  },
+  {
+    "define_code_name": "26000",
+    "define_code_kor_name": "부산광역시"
+  },
+  {
+    "define_code_name": "26110",
+    "define_code_kor_name": "부산광역시 중구"
+  },
+  {
+    "define_code_name": "26140",
+    "define_code_kor_name": "부산광역시 서구"
+  },
+  {
+    "define_code_name": "26170",
+    "define_code_kor_name": "부산광역시 동구"
+  },
+  {
+    "define_code_name": "26200",
+    "define_code_kor_name": "부산광역시 영도구"
+  },
+  {
+    "define_code_name": "26230",
+    "define_code_kor_name": "부산광역시 부산진구"
+  },
+  {
+    "define_code_name": "26260",
+    "define_code_kor_name": "부산광역시 동래구"
+  },
+  {
+    "define_code_name": "26290",
+    "define_code_kor_name": "부산광역시 남구"
+  },
+  {
+    "define_code_name": "26320",
+    "define_code_kor_name": "부산광역시 북구"
+  },
+  {
+    "define_code_name": "26350",
+    "define_code_kor_name": "부산광역시 해운대구"
+  },
+  {
+    "define_code_name": "26380",
+    "define_code_kor_name": "부산광역시 사하구"
+  },
+  {
+    "define_code_name": "26410",
+    "define_code_kor_name": "부산광역시 금정구"
+  },
+  {
+    "define_code_name": "26440",
+    "define_code_kor_name": "부산광역시 강서구"
+  },
+  {
+    "define_code_name": "26470",
+    "define_code_kor_name": "부산광역시 연제구"
+  },
+  {
+    "define_code_name": "26500",
+    "define_code_kor_name": "부산광역시 수영구"
+  },
+  {
+    "define_code_name": "26530",
+    "define_code_kor_name": "부산광역시 사상구"
+  },
+  {
+    "define_code_name": "26710",
+    "define_code_kor_name": "부산광역시 기장군"
+  },
+  {
+    "define_code_name": "27000",
+    "define_code_kor_name": "대구광역시"
+  },
+  {
+    "define_code_name": "27110",
+    "define_code_kor_name": "대구광역시 중구"
+  },
+  {
+    "define_code_name": "27140",
+    "define_code_kor_name": "대구광역시 동구"
+  },
+  {
+    "define_code_name": "27170",
+    "define_code_kor_name": "대구광역시 서구"
+  },
+  {
+    "define_code_name": "27200",
+    "define_code_kor_name": "대구광역시 남구"
+  },
+  {
+    "define_code_name": "27230",
+    "define_code_kor_name": "대구광역시 북구"
+  },
+  {
+    "define_code_name": "27260",
+    "define_code_kor_name": "대구광역시 수성구"
+  },
+  {
+    "define_code_name": "27290",
+    "define_code_kor_name": "대구광역시 달서구"
+  },
+  {
+    "define_code_name": "27710",
+    "define_code_kor_name": "대구광역시 달성군"
+  },
+  {
+    "define_code_name": "27720",
+    "define_code_kor_name": "대구광역시 군위군"
+  },
+  {
+    "define_code_name": "28000",
+    "define_code_kor_name": "인천광역시"
+  },
+  {
+    "define_code_name": "28110",
+    "define_code_kor_name": "인천광역시 중구"
+  },
+  {
+    "define_code_name": "28140",
+    "define_code_kor_name": "인천광역시 동구"
+  },
+  {
+    "define_code_name": "28177",
+    "define_code_kor_name": "인천광역시 미추홀구"
+  },
+  {
+    "define_code_name": "28185",
+    "define_code_kor_name": "인천광역시 연수구"
+  },
+  {
+    "define_code_name": "28200",
+    "define_code_kor_name": "인천광역시 남동구"
+  },
+  {
+    "define_code_name": "28237",
+    "define_code_kor_name": "인천광역시 부평구"
+  },
+  {
+    "define_code_name": "28245",
+    "define_code_kor_name": "인천광역시 계양구"
+  },
+  {
+    "define_code_name": "28260",
+    "define_code_kor_name": "인천광역시 서구"
+  },
+  {
+    "define_code_name": "28710",
+    "define_code_kor_name": "인천광역시 강화군"
+  },
+  {
+    "define_code_name": "28720",
+    "define_code_kor_name": "인천광역시 옹진군"
+  },
+  {
+    "define_code_name": "29000",
+    "define_code_kor_name": "광주광역시"
+  },
+  {
+    "define_code_name": "29110",
+    "define_code_kor_name": "광주광역시 동구"
+  },
+  {
+    "define_code_name": "29140",
+    "define_code_kor_name": "광주광역시 서구"
+  },
+  {
+    "define_code_name": "29155",
+    "define_code_kor_name": "광주광역시 남구"
+  },
+  {
+    "define_code_name": "29170",
+    "define_code_kor_name": "광주광역시 북구"
+  },
+  {
+    "define_code_name": "29200",
+    "define_code_kor_name": "광주광역시 광산구"
+  },
+  {
+    "define_code_name": "30000",
+    "define_code_kor_name": "대전광역시"
+  },
+  {
+    "define_code_name": "30110",
+    "define_code_kor_name": "대전광역시 동구"
+  },
+  {
+    "define_code_name": "30140",
+    "define_code_kor_name": "대전광역시 중구"
+  },
+  {
+    "define_code_name": "30170",
+    "define_code_kor_name": "대전광역시 서구"
+  },
+  {
+    "define_code_name": "30200",
+    "define_code_kor_name": "대전광역시 유성구"
+  },
+  {
+    "define_code_name": "30230",
+    "define_code_kor_name": "대전광역시 대덕구"
+  },
+  {
+    "define_code_name": "31000",
+    "define_code_kor_name": "울산광역시"
+  },
+  {
+    "define_code_name": "31110",
+    "define_code_kor_name": "울산광역시 중구"
+  },
+  {
+    "define_code_name": "31140",
+    "define_code_kor_name": "울산광역시 남구"
+  },
+  {
+    "define_code_name": "31170",
+    "define_code_kor_name": "울산광역시 동구"
+  },
+  {
+    "define_code_name": "31200",
+    "define_code_kor_name": "울산광역시 북구"
+  },
+  {
+    "define_code_name": "31710",
+    "define_code_kor_name": "울산광역시 울주군"
+  },
+  {
+    "define_code_name": "36110",
+    "define_code_kor_name": "세종특별자치시"
+  },
+  {
+    "define_code_name": "41000",
+    "define_code_kor_name": "경기도"
+  },
+  {
+    "define_code_name": "41110",
+    "define_code_kor_name": "경기도 수원시"
+  },
+  {
+    "define_code_name": "41130",
+    "define_code_kor_name": "경기도 성남시"
+  },
+  {
+    "define_code_name": "41150",
+    "define_code_kor_name": "경기도 의정부시"
+  },
+  {
+    "define_code_name": "41170",
+    "define_code_kor_name": "경기도 안양시"
+  },
+  {
+    "define_code_name": "41190",
+    "define_code_kor_name": "경기도 부천시"
+  },
+  {
+    "define_code_name": "41210",
+    "define_code_kor_name": "경기도 광명시"
+  },
+  {
+    "define_code_name": "41220",
+    "define_code_kor_name": "경기도 평택시"
+  },
+  {
+    "define_code_name": "41250",
+    "define_code_kor_name": "경기도 동두천시"
+  },
+  {
+    "define_code_name": "41270",
+    "define_code_kor_name": "경기도 안산시"
+  },
+  {
+    "define_code_name": "41280",
+    "define_code_kor_name": "경기도 고양시"
+  },
+  {
+    "define_code_name": "41290",
+    "define_code_kor_name": "경기도 과천시"
+  },
+  {
+    "define_code_name": "41310",
+    "define_code_kor_name": "경기도 구리시"
+  },
+  {
+    "define_code_name": "41360",
+    "define_code_kor_name": "경기도 남양주시"
+  },
+  {
+    "define_code_name": "41370",
+    "define_code_kor_name": "경기도 오산시"
+  },
+  {
+    "define_code_name": "41390",
+    "define_code_kor_name": "경기도 시흥시"
+  },
+  {
+    "define_code_name": "41410",
+    "define_code_kor_name": "경기도 군포시"
+  },
+  {
+    "define_code_name": "41430",
+    "define_code_kor_name": "경기도 의왕시"
+  },
+  {
+    "define_code_name": "41450",
+    "define_code_kor_name": "경기도 하남시"
+  },
+  {
+    "define_code_name": "41460",
+    "define_code_kor_name": "경기도 용인시"
+  },
+  {
+    "define_code_name": "41480",
+    "define_code_kor_name": "경기도 파주시"
+  },
+  {
+    "define_code_name": "41500",
+    "define_code_kor_name": "경기도 이천시"
+  },
+  {
+    "define_code_name": "41550",
+    "define_code_kor_name": "경기도 안성시"
+  },
+  {
+    "define_code_name": "41570",
+    "define_code_kor_name": "경기도 김포시"
+  },
+  {
+    "define_code_name": "41590",
+    "define_code_kor_name": "경기도 화성시"
+  },
+  {
+    "define_code_name": "41610",
+    "define_code_kor_name": "경기도 광주시"
+  },
+  {
+    "define_code_name": "41630",
+    "define_code_kor_name": "경기도 양주시"
+  },
+  {
+    "define_code_name": "41650",
+    "define_code_kor_name": "경기도 포천시"
+  },
+  {
+    "define_code_name": "41670",
+    "define_code_kor_name": "경기도 여주시"
+  },
+  {
+    "define_code_name": "41800",
+    "define_code_kor_name": "경기도 연천군"
+  },
+  {
+    "define_code_name": "41820",
+    "define_code_kor_name": "경기도 가평군"
+  },
+  {
+    "define_code_name": "41830",
+    "define_code_kor_name": "경기도 양평군"
+  },
+  {
+    "define_code_name": "43000",
+    "define_code_kor_name": "충청북도"
+  },
+  {
+    "define_code_name": "43110",
+    "define_code_kor_name": "충청북도 청주시"
+  },
+  {
+    "define_code_name": "43130",
+    "define_code_kor_name": "충청북도 충주시"
+  },
+  {
+    "define_code_name": "43150",
+    "define_code_kor_name": "충청북도 제천시"
+  },
+  {
+    "define_code_name": "43720",
+    "define_code_kor_name": "충청북도 보은군"
+  },
+  {
+    "define_code_name": "43730",
+    "define_code_kor_name": "충청북도 옥천군"
+  },
+  {
+    "define_code_name": "43740",
+    "define_code_kor_name": "충청북도 영동군"
+  },
+  {
+    "define_code_name": "43745",
+    "define_code_kor_name": "충청북도 증평군"
+  },
+  {
+    "define_code_name": "43750",
+    "define_code_kor_name": "충청북도 진천군"
+  },
+  {
+    "define_code_name": "43760",
+    "define_code_kor_name": "충청북도 괴산군"
+  },
+  {
+    "define_code_name": "43770",
+    "define_code_kor_name": "충청북도 음성군"
+  },
+  {
+    "define_code_name": "43800",
+    "define_code_kor_name": "충청북도 단양군"
+  },
+  {
+    "define_code_name": "44000",
+    "define_code_kor_name": "충청남도"
+  },
+  {
+    "define_code_name": "44130",
+    "define_code_kor_name": "충청남도 천안시"
+  },
+  {
+    "define_code_name": "44150",
+    "define_code_kor_name": "충청남도 공주시"
+  },
+  {
+    "define_code_name": "44180",
+    "define_code_kor_name": "충청남도 보령시"
+  },
+  {
+    "define_code_name": "44200",
+    "define_code_kor_name": "충청남도 아산시"
+  },
+  {
+    "define_code_name": "44210",
+    "define_code_kor_name": "충청남도 서산시"
+  },
+  {
+    "define_code_name": "44230",
+    "define_code_kor_name": "충청남도 논산시"
+  },
+  {
+    "define_code_name": "44250",
+    "define_code_kor_name": "충청남도 계룡시"
+  },
+  {
+    "define_code_name": "44270",
+    "define_code_kor_name": "충청남도 당진시"
+  },
+  {
+    "define_code_name": "44710",
+    "define_code_kor_name": "충청남도 금산군"
+  },
+  {
+    "define_code_name": "44760",
+    "define_code_kor_name": "충청남도 부여군"
+  },
+  {
+    "define_code_name": "44770",
+    "define_code_kor_name": "충청남도 서천군"
+  },
+  {
+    "define_code_name": "44790",
+    "define_code_kor_name": "충청남도 청양군"
+  },
+  {
+    "define_code_name": "44800",
+    "define_code_kor_name": "충청남도 홍성군"
+  },
+  {
+    "define_code_name": "44810",
+    "define_code_kor_name": "충청남도 예산군"
+  },
+  {
+    "define_code_name": "44825",
+    "define_code_kor_name": "충청남도 태안군"
+  },
+  {
+    "define_code_name": "46000",
+    "define_code_kor_name": "전라남도"
+  },
+  {
+    "define_code_name": "46110",
+    "define_code_kor_name": "전라남도 목포시"
+  },
+  {
+    "define_code_name": "46130",
+    "define_code_kor_name": "전라남도 여수시"
+  },
+  {
+    "define_code_name": "46150",
+    "define_code_kor_name": "전라남도 순천시"
+  },
+  {
+    "define_code_name": "46170",
+    "define_code_kor_name": "전라남도 나주시"
+  },
+  {
+    "define_code_name": "46230",
+    "define_code_kor_name": "전라남도 광양시"
+  },
+  {
+    "define_code_name": "46710",
+    "define_code_kor_name": "전라남도 담양군"
+  },
+  {
+    "define_code_name": "46720",
+    "define_code_kor_name": "전라남도 곡성군"
+  },
+  {
+    "define_code_name": "46730",
+    "define_code_kor_name": "전라남도 구례군"
+  },
+  {
+    "define_code_name": "46770",
+    "define_code_kor_name": "전라남도 고흥군"
+  },
+  {
+    "define_code_name": "46780",
+    "define_code_kor_name": "전라남도 보성군"
+  },
+  {
+    "define_code_name": "46790",
+    "define_code_kor_name": "전라남도 화순군"
+  },
+  {
+    "define_code_name": "46800",
+    "define_code_kor_name": "전라남도 장흥군"
+  },
+  {
+    "define_code_name": "46810",
+    "define_code_kor_name": "전라남도 강진군"
+  },
+  {
+    "define_code_name": "46820",
+    "define_code_kor_name": "전라남도 해남군"
+  },
+  {
+    "define_code_name": "46830",
+    "define_code_kor_name": "전라남도 영암군"
+  },
+  {
+    "define_code_name": "46840",
+    "define_code_kor_name": "전라남도 무안군"
+  },
+  {
+    "define_code_name": "46860",
+    "define_code_kor_name": "전라남도 함평군"
+  },
+  {
+    "define_code_name": "46870",
+    "define_code_kor_name": "전라남도 영광군"
+  },
+  {
+    "define_code_name": "46880",
+    "define_code_kor_name": "전라남도 장성군"
+  },
+  {
+    "define_code_name": "46890",
+    "define_code_kor_name": "전라남도 완도군"
+  },
+  {
+    "define_code_name": "46900",
+    "define_code_kor_name": "전라남도 진도군"
+  },
+  {
+    "define_code_name": "46910",
+    "define_code_kor_name": "전라남도 신안군"
+  },
+  {
+    "define_code_name": "47000",
+    "define_code_kor_name": "경상북도"
+  },
+  {
+    "define_code_name": "47110",
+    "define_code_kor_name": "경상북도 포항시"
+  },
+  {
+    "define_code_name": "47130",
+    "define_code_kor_name": "경상북도 경주시"
+  },
+  {
+    "define_code_name": "47150",
+    "define_code_kor_name": "경상북도 김천시"
+  },
+  {
+    "define_code_name": "47170",
+    "define_code_kor_name": "경상북도 안동시"
+  },
+  {
+    "define_code_name": "47190",
+    "define_code_kor_name": "경상북도 구미시"
+  },
+  {
+    "define_code_name": "47210",
+    "define_code_kor_name": "경상북도 영주시"
+  },
+  {
+    "define_code_name": "47230",
+    "define_code_kor_name": "경상북도 영천시"
+  },
+  {
+    "define_code_name": "47250",
+    "define_code_kor_name": "경상북도 상주시"
+  },
+  {
+    "define_code_name": "47280",
+    "define_code_kor_name": "경상북도 문경시"
+  },
+  {
+    "define_code_name": "47290",
+    "define_code_kor_name": "경상북도 경산시"
+  },
+  {
+    "define_code_name": "47730",
+    "define_code_kor_name": "경상북도 의성군"
+  },
+  {
+    "define_code_name": "47750",
+    "define_code_kor_name": "경상북도 청송군"
+  },
+  {
+    "define_code_name": "47760",
+    "define_code_kor_name": "경상북도 영양군"
+  },
+  {
+    "define_code_name": "47770",
+    "define_code_kor_name": "경상북도 영덕군"
+  },
+  {
+    "define_code_name": "47820",
+    "define_code_kor_name": "경상북도 청도군"
+  },
+  {
+    "define_code_name": "47830",
+    "define_code_kor_name": "경상북도 고령군"
+  },
+  {
+    "define_code_name": "47840",
+    "define_code_kor_name": "경상북도 성주군"
+  },
+  {
+    "define_code_name": "47850",
+    "define_code_kor_name": "경상북도 칠곡군"
+  },
+  {
+    "define_code_name": "47900",
+    "define_code_kor_name": "경상북도 예천군"
+  },
+  {
+    "define_code_name": "47920",
+    "define_code_kor_name": "경상북도 봉화군"
+  },
+  {
+    "define_code_name": "47930",
+    "define_code_kor_name": "경상북도 울진군"
+  },
+  {
+    "define_code_name": "47940",
+    "define_code_kor_name": "경상북도 울릉군"
+  },
+  {
+    "define_code_name": "48000",
+    "define_code_kor_name": "경상남도"
+  },
+  {
+    "define_code_name": "48120",
+    "define_code_kor_name": "경상남도 창원시"
+  },
+  {
+    "define_code_name": "48170",
+    "define_code_kor_name": "경상남도 진주시"
+  },
+  {
+    "define_code_name": "48220",
+    "define_code_kor_name": "경상남도 통영시"
+  },
+  {
+    "define_code_name": "48240",
+    "define_code_kor_name": "경상남도 사천시"
+  },
+  {
+    "define_code_name": "48250",
+    "define_code_kor_name": "경상남도 김해시"
+  },
+  {
+    "define_code_name": "48270",
+    "define_code_kor_name": "경상남도 밀양시"
+  },
+  {
+    "define_code_name": "48310",
+    "define_code_kor_name": "경상남도 거제시"
+  },
+  {
+    "define_code_name": "48330",
+    "define_code_kor_name": "경상남도 양산시"
+  },
+  {
+    "define_code_name": "48720",
+    "define_code_kor_name": "경상남도 의령군"
+  },
+  {
+    "define_code_name": "48730",
+    "define_code_kor_name": "경상남도 함안군"
+  },
+  {
+    "define_code_name": "48740",
+    "define_code_kor_name": "경상남도 창녕군"
+  },
+  {
+    "define_code_name": "48820",
+    "define_code_kor_name": "경상남도 고성군"
+  },
+  {
+    "define_code_name": "48840",
+    "define_code_kor_name": "경상남도 남해군"
+  },
+  {
+    "define_code_name": "48850",
+    "define_code_kor_name": "경상남도 하동군"
+  },
+  {
+    "define_code_name": "48860",
+    "define_code_kor_name": "경상남도 산청군"
+  },
+  {
+    "define_code_name": "48870",
+    "define_code_kor_name": "경상남도 함양군"
+  },
+  {
+    "define_code_name": "48880",
+    "define_code_kor_name": "경상남도 거창군"
+  },
+  {
+    "define_code_name": "48890",
+    "define_code_kor_name": "경상남도 합천군"
+  },
+  {
+    "define_code_name": "50000",
+    "define_code_kor_name": "제주특별자치도"
+  },
+  {
+    "define_code_name": "50110",
+    "define_code_kor_name": "제주특별자치도 제주시"
+  },
+  {
+    "define_code_name": "50130",
+    "define_code_kor_name": "제주특별자치도 서귀포시"
+  },
+  {
+    "define_code_name": "51000",
+    "define_code_kor_name": "강원특별자치도"
+  },
+  {
+    "define_code_name": "51110",
+    "define_code_kor_name": "강원특별자치도 춘천시"
+  },
+  {
+    "define_code_name": "51130",
+    "define_code_kor_name": "강원특별자치도 원주시"
+  },
+  {
+    "define_code_name": "51150",
+    "define_code_kor_name": "강원특별자치도 강릉시"
+  },
+  {
+    "define_code_name": "51170",
+    "define_code_kor_name": "강원특별자치도 동해시"
+  },
+  {
+    "define_code_name": "51190",
+    "define_code_kor_name": "강원특별자치도 태백시"
+  },
+  {
+    "define_code_name": "51210",
+    "define_code_kor_name": "강원특별자치도 속초시"
+  },
+  {
+    "define_code_name": "51230",
+    "define_code_kor_name": "강원특별자치도 삼척시"
+  },
+  {
+    "define_code_name": "51720",
+    "define_code_kor_name": "강원특별자치도 홍천군"
+  },
+  {
+    "define_code_name": "51730",
+    "define_code_kor_name": "강원특별자치도 횡성군"
+  },
+  {
+    "define_code_name": "51750",
+    "define_code_kor_name": "강원특별자치도 영월군"
+  },
+  {
+    "define_code_name": "51760",
+    "define_code_kor_name": "강원특별자치도 평창군"
+  },
+  {
+    "define_code_name": "51770",
+    "define_code_kor_name": "강원특별자치도 정선군"
+  },
+  {
+    "define_code_name": "51780",
+    "define_code_kor_name": "강원특별자치도 철원군"
+  },
+  {
+    "define_code_name": "51790",
+    "define_code_kor_name": "강원특별자치도 화천군"
+  },
+  {
+    "define_code_name": "51800",
+    "define_code_kor_name": "강원특별자치도 양구군"
+  },
+  {
+    "define_code_name": "51810",
+    "define_code_kor_name": "강원특별자치도 인제군"
+  },
+  {
+    "define_code_name": "51820",
+    "define_code_kor_name": "강원특별자치도 고성군"
+  },
+  {
+    "define_code_name": "51830",
+    "define_code_kor_name": "강원특별자치도 양양군"
+  },
+  {
+    "define_code_name": "52000",
+    "define_code_kor_name": "전북특별자치도"
+  },
+  {
+    "define_code_name": "52110",
+    "define_code_kor_name": "전북특별자치도 전주시"
+  },
+  {
+    "define_code_name": "52130",
+    "define_code_kor_name": "전북특별자치도 군산시"
+  },
+  {
+    "define_code_name": "52140",
+    "define_code_kor_name": "전북특별자치도 익산시"
+  },
+  {
+    "define_code_name": "52180",
+    "define_code_kor_name": "전북특별자치도 정읍시"
+  },
+  {
+    "define_code_name": "52190",
+    "define_code_kor_name": "전북특별자치도 남원시"
+  },
+  {
+    "define_code_name": "52210",
+    "define_code_kor_name": "전북특별자치도 김제시"
+  },
+  {
+    "define_code_name": "52710",
+    "define_code_kor_name": "전북특별자치도 완주군"
+  },
+  {
+    "define_code_name": "52720",
+    "define_code_kor_name": "전북특별자치도 진안군"
+  },
+  {
+    "define_code_name": "52730",
+    "define_code_kor_name": "전북특별자치도 무주군"
+  },
+  {
+    "define_code_name": "52740",
+    "define_code_kor_name": "전북특별자치도 장수군"
+  },
+  {
+    "define_code_name": "52750",
+    "define_code_kor_name": "전북특별자치도 임실군"
+  },
+  {
+    "define_code_name": "52770",
+    "define_code_kor_name": "전북특별자치도 순창군"
+  },
+  {
+    "define_code_name": "52790",
+    "define_code_kor_name": "전북특별자치도 고창군"
+  },
+  {
+    "define_code_name": "52800",
+    "define_code_kor_name": "전북특별자치도 부안군"
+  },
+  {
+    "define_code_name": "90218",
+    "define_code_kor_name": "서울경기본부 인천지사"
+  },
+  {
+    "define_code_name": "90221",
+    "define_code_kor_name": "서울경기본부 시흥지사"
+  },
+  {
+    "define_code_name": "90225",
+    "define_code_kor_name": "서울경기본부 군포지사"
+  },
+  {
+    "define_code_name": "90234",
+    "define_code_kor_name": "서울경기본부 화성지사"
+  },
+  {
+    "define_code_name": "90242",
+    "define_code_kor_name": "서울경기본부 수원지사"
+  },
+  {
+    "define_code_name": "90255",
+    "define_code_kor_name": "서울경기본부 동서울지사"
+  },
+  {
+    "define_code_name": "90260",
+    "define_code_kor_name": "강원본부 이천지사"
+  },
+  {
+    "define_code_name": "90278",
+    "define_code_kor_name": "강원본부 원주지사"
+  },
+  {
+    "define_code_name": "90283",
+    "define_code_kor_name": "강원본부 대관령지사"
+  },
+  {
+    "define_code_name": "90293",
+    "define_code_kor_name": "강원본부 홍천지사"
+  },
+  {
+    "define_code_name": "90305",
+    "define_code_kor_name": "충북본부 충주지사"
+  },
+  {
+    "define_code_name": "90321",
+    "define_code_kor_name": "대전충남본부 천안지사"
+  },
+  {
+    "define_code_name": "90338",
+    "define_code_kor_name": "충북본부 진천지사"
+  },
+  {
+    "define_code_name": "90356",
+    "define_code_kor_name": "대전충남본부 당진지사"
+  },
+  {
+    "define_code_name": "90399",
+    "define_code_kor_name": "광주전남본부 순천지사"
+  },
+  {
+    "define_code_name": "90441",
+    "define_code_kor_name": "대구경북본부 구미지사"
+  },
+  {
+    "define_code_name": "90447",
+    "define_code_kor_name": "대구경북본부 대구지사"
+  },
+  {
+    "define_code_name": "90461",
+    "define_code_kor_name": "대구경북본부 군위지사"
+  },
+  {
+    "define_code_name": "90475",
+    "define_code_kor_name": "충북본부 상주지사"
+  },
+  {
+    "define_code_name": "90490",
+    "define_code_kor_name": "부산경남본부 울산지사"
+  },
+  {
+    "define_code_name": "90495",
+    "define_code_kor_name": "부산경남본부 양산지사"
+  },
+  {
+    "define_code_name": "90512",
+    "define_code_kor_name": "부산경남본부 창원지사"
+  },
+  {
+    "define_code_name": "90521",
+    "define_code_kor_name": "부산경남본부 진주지사"
+  },
+  {
+    "define_code_name": "90534",
+    "define_code_kor_name": "부산경남본부 산청지사"
+  },
+  {
+    "define_code_name": "90595",
+    "define_code_kor_name": "대구경북본부 영천지사"
+  },
+  {
+    "define_code_name": "91044",
+    "define_code_kor_name": "광주전남본부 담양지사"
+  },
+  {
+    "define_code_name": "91046",
+    "define_code_kor_name": "충북본부 보은지사"
+  },
+  {
+    "define_code_name": "91390",
+    "define_code_kor_name": "대전충남본부 공주지사"
+  },
+  {
+    "define_code_name": "91410",
+    "define_code_kor_name": "강원본부 춘천지사"
+  },
+  {
+    "define_code_name": "91640",
+    "define_code_kor_name": "광주전남본부 구례지사"
+  },
+  {
+    "define_code_name": "91776",
+    "define_code_kor_name": "광주전남본부 보성지사"
+  },
+  {
+    "define_code_name": "91795",
+    "define_code_kor_name": "서울경기본부"
+  },
+  {
+    "define_code_name": "91796",
+    "define_code_kor_name": "강원본부"
+  },
+  {
+    "define_code_name": "91797",
+    "define_code_kor_name": "대전충남본부"
+  },
+  {
+    "define_code_name": "91798",
+    "define_code_kor_name": "전북본부"
+  },
+  {
+    "define_code_name": "91799",
+    "define_code_kor_name": "광주전남본부"
+  },
+  {
+    "define_code_name": "91800",
+    "define_code_kor_name": "대구경북본부"
+  },
+  {
+    "define_code_name": "91801",
+    "define_code_kor_name": "부산경남본부"
+  },
+  {
+    "define_code_name": "91821",
+    "define_code_kor_name": "강원본부 강릉지사"
+  },
+  {
+    "define_code_name": "91832",
+    "define_code_kor_name": "전북본부 진안지사"
+  },
+  {
+    "define_code_name": "91912",
+    "define_code_kor_name": "대구경북본부 고령지사"
+  },
+  {
+    "define_code_name": "91986",
+    "define_code_kor_name": "전북본부 전주지사"
+  },
+  {
+    "define_code_name": "91987",
+    "define_code_kor_name": "전북본부 부안지사"
+  },
+  {
+    "define_code_name": "91988",
+    "define_code_kor_name": "전북본부 무주지사"
+  },
+  {
+    "define_code_name": "91989",
+    "define_code_kor_name": "전북본부 논산지사"
+  },
+  {
+    "define_code_name": "91990",
+    "define_code_kor_name": "대전충남본부 부여지사"
+  },
+  {
+    "define_code_name": "92022",
+    "define_code_kor_name": "대전충남본부 대전지사"
+  },
+  {
+    "define_code_name": "92025",
+    "define_code_kor_name": "대전충남본부 영동지사"
+  },
+  {
+    "define_code_name": "92031",
+    "define_code_kor_name": "광주전남본부 광주지사"
+  },
+  {
+    "define_code_name": "92033",
+    "define_code_kor_name": "광주전남본부 함평지사"
+  },
+  {
+    "define_code_name": "92224",
+    "define_code_kor_name": "충북본부 엄정지사"
+  },
+  {
+    "define_code_name": "92241",
+    "define_code_kor_name": "서울경기본부 경기광주지사"
+  },
+  {
+    "define_code_name": "92398",
+    "define_code_kor_name": "부산경남본부 경주지사"
+  },
+  {
+    "define_code_name": "92408",
+    "define_code_kor_name": "강원본부 양양지사"
+  },
+  {
+    "define_code_name": "92409",
+    "define_code_kor_name": "대구경북본부 청송지사"
+  },
+  {
+    "define_code_name": "92428",
+    "define_code_kor_name": "충북본부 제천지사"
+  },
+  {
+    "define_code_name": "92429",
+    "define_code_kor_name": "전북본부 보령지사"
+  },
+  {
+    "define_code_name": "92430",
+    "define_code_kor_name": "광주전남본부 남원지사"
+  },
+  {
+    "define_code_name": "92431",
+    "define_code_kor_name": "대구경북본부 영주지사"
+  },
+  {
+    "define_code_name": "92432",
+    "define_code_kor_name": "대구경북본부 성주지사"
+  },
+  {
+    "define_code_name": "92442",
+    "define_code_kor_name": "부산경남본부 창녕지사"
+  },
+  {
+    "define_code_name": "92443",
+    "define_code_kor_name": "부산경남본부 고성지사"
+  },
+  {
+    "define_code_name": "92723",
+    "define_code_kor_name": "충북본부"
+  },
+  {
+    "define_code_name": "92749",
+    "define_code_kor_name": "부산경남본부 서울산지사"
+  },
+  {
+    "define_code_name": "95010",
+    "define_code_kor_name": "옥산오창고속도로(주)"
+  },
+  {
+    "define_code_name": "95020",
+    "define_code_kor_name": "인천대교(주)"
+  },
+  {
+    "define_code_name": "95030",
+    "define_code_kor_name": "부산신항제이배후(주)"
+  },
+  {
+    "define_code_name": "95040",
+    "define_code_kor_name": "경기동서순환도로(주)"
+  },
+  {
+    "define_code_name": "95050",
+    "define_code_kor_name": "제이경인연결고속도로(주)"
+  },
+  {
+    "define_code_name": "95060",
+    "define_code_kor_name": "경수고속도로(주)"
+  },
+  {
+    "define_code_name": "95070",
+    "define_code_kor_name": "수도권서부고속도로(주)"
+  },
+  {
+    "define_code_name": "95080",
+    "define_code_kor_name": "포천화도고속도로(주)"
+  },
+  {
+    "define_code_name": "95090",
+    "define_code_kor_name": "인천김포고속도로(주)"
+  },
+  {
+    "define_code_name": "95100",
+    "define_code_kor_name": "화성광주고속도로(주)"
+  },
+  {
+    "define_code_name": "95110",
+    "define_code_kor_name": "서울문산고속도로(주)"
+  },
+  {
+    "define_code_name": "95120",
+    "define_code_kor_name": "서울고속도로(주)"
+  },
+  {
+    "define_code_name": "95130",
+    "define_code_kor_name": "신공항하이웨이(주)"
+  },
+  {
+    "define_code_name": "95140",
+    "define_code_kor_name": "경기고속도로(주)"
+  },
+  {
+    "define_code_name": "95150",
+    "define_code_kor_name": "제2서해안고속도로(주)"
+  },
+  {
+    "define_code_name": "95160",
+    "define_code_kor_name": "부산울산고속도로(주)"
+  },
+  {
+    "define_code_name": "95170",
+    "define_code_kor_name": "서울북부고속도로(주)"
+  },
+  {
+    "define_code_name": "95180",
+    "define_code_kor_name": "제이영동고속도로(주)"
+  },
+  {
+    "define_code_name": "95190",
+    "define_code_kor_name": "서울춘천고속도로(주)"
+  },
+  {
+    "define_code_name": "95200",
+    "define_code_kor_name": "천안논산고속도로㈜"
+  },
+  {
+    "define_code_name": "95210",
+    "define_code_kor_name": "신대구부산고속도로(주)"
+  },
+  {
+    "define_code_name": "95220",
+    "define_code_kor_name": "상주영천고속도로(주)"
+  }
+]

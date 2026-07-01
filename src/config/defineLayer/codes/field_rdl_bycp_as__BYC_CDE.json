@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "70722",
+    "define_code_field_key": "7450",
+    "define_code_name": "CGB000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70723",
+    "define_code_field_key": "7450",
+    "define_code_name": "CGB001",
+    "define_code_kor_name": "자전거전용도로"
+  },
+  {
+    "define_code_key": "70724",
+    "define_code_field_key": "7450",
+    "define_code_name": "CGB002",
+    "define_code_kor_name": "자전거보행자겸용도로"
+  },
+  {
+    "define_code_key": "70725",
+    "define_code_field_key": "7450",
+    "define_code_name": "CGB003",
+    "define_code_kor_name": "자전거자동차겸용도로"
+  },
+  {
+    "define_code_key": "70726",
+    "define_code_field_key": "7450",
+    "define_code_name": "CGB999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70727",
+    "define_code_field_key": "7450",
+    "define_code_name": "CGB900",
+    "define_code_kor_name": "사리토"
+  }
+]

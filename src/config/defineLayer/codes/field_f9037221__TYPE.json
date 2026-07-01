@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "4201",
+    "define_code_kor_name": "암사면"
+  },
+  {
+    "define_code_name": "4202",
+    "define_code_kor_name": "흙사면"
+  },
+  {
+    "define_code_name": "4203",
+    "define_code_kor_name": "혼합사면"
+  },
+  {
+    "define_code_name": "4299",
+    "define_code_kor_name": "기타"
+  }
+]

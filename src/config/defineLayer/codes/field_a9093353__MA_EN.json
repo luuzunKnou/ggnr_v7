@@ -1,0 +1,42 @@
+[
+  {
+    "define_code_name": "2101",
+    "define_code_kor_name": "벽돌"
+  },
+  {
+    "define_code_name": "2102",
+    "define_code_kor_name": "블록"
+  },
+  {
+    "define_code_name": "2103",
+    "define_code_kor_name": "시멘트"
+  },
+  {
+    "define_code_name": "2104",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_name": "2105",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_name": "2106",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_name": "2107",
+    "define_code_kor_name": "합성재"
+  },
+  {
+    "define_code_name": "2108",
+    "define_code_kor_name": "화학재질"
+  },
+  {
+    "define_code_name": "2109",
+    "define_code_kor_name": "플라스틱"
+  },
+  {
+    "define_code_name": "2199",
+    "define_code_kor_name": "기타"
+  }
+]

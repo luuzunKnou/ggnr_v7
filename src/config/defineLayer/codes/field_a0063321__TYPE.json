@@ -1,0 +1,78 @@
+[
+  {
+    "define_code_name": "2302",
+    "define_code_kor_name": "아치형"
+  },
+  {
+    "define_code_name": "2303",
+    "define_code_kor_name": "외팔보형"
+  },
+  {
+    "define_code_name": "2304",
+    "define_code_kor_name": "상로교/노선교"
+  },
+  {
+    "define_code_name": "2305",
+    "define_code_kor_name": "도개교"
+  },
+  {
+    "define_code_name": "2306",
+    "define_code_kor_name": "부교"
+  },
+  {
+    "define_code_name": "2307",
+    "define_code_kor_name": "형교"
+  },
+  {
+    "define_code_name": "2308",
+    "define_code_kor_name": "탑형 현수교"
+  },
+  {
+    "define_code_name": "2309",
+    "define_code_kor_name": "아치형 현수교"
+  },
+  {
+    "define_code_name": "2310",
+    "define_code_kor_name": "적교"
+  },
+  {
+    "define_code_name": "2311",
+    "define_code_kor_name": "선개교/선회교"
+  },
+  {
+    "define_code_name": "2312",
+    "define_code_kor_name": "승개교"
+  },
+  {
+    "define_code_name": "2313",
+    "define_code_kor_name": "운반교"
+  },
+  {
+    "define_code_name": "2314",
+    "define_code_kor_name": "목판교"
+  },
+  {
+    "define_code_name": "2315",
+    "define_code_kor_name": "세로 빔/들보다리"
+  },
+  {
+    "define_code_name": "2316",
+    "define_code_kor_name": "결구교"
+  },
+  {
+    "define_code_name": "2317",
+    "define_code_kor_name": "미닫이형"
+  },
+  {
+    "define_code_name": "2318",
+    "define_code_kor_name": "고정형"
+  },
+  {
+    "define_code_name": "2319",
+    "define_code_kor_name": "인도교"
+  },
+  {
+    "define_code_name": "2399",
+    "define_code_kor_name": "기타"
+  }
+]

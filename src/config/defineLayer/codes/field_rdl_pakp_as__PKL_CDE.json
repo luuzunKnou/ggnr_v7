@@ -1,0 +1,44 @@
+[
+  {
+    "define_code_key": "71323",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71324",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN001",
+    "define_code_kor_name": "일렬주차"
+  },
+  {
+    "define_code_key": "71325",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN002",
+    "define_code_kor_name": "사선주차"
+  },
+  {
+    "define_code_key": "71326",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71327",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN900",
+    "define_code_kor_name": "병렬주차"
+  },
+  {
+    "define_code_key": "71328",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN901",
+    "define_code_kor_name": "직각주차"
+  },
+  {
+    "define_code_key": "71329",
+    "define_code_field_key": "7713",
+    "define_code_name": "PKN902",
+    "define_code_kor_name": "평행주차"
+  }
+]

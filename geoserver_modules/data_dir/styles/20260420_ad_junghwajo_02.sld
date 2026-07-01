@@ -10,7 +10,11 @@
               <sld:Mark>
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
+<<<<<<<< HEAD:geoserver_modules/data_dir/styles/c9413426.sld
+                  <sld:CssParameter name="fill">#009688</sld:CssParameter>
+========
                   <sld:CssParameter name="fill">#E91E63</sld:CssParameter>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/styles/20260420_ad_junghwajo_02.sld
                   <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>

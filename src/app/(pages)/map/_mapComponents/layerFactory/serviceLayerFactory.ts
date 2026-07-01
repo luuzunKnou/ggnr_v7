@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react';
-import TileLayer from 'ol/layer/Tile';
-import TileWMS from 'ol/source/TileWMS';
+import ImageLayer from 'ol/layer/Image';
+import ImageWMS from 'ol/source/ImageWMS';
+import ImageWrapper from 'ol/Image';
 import type { Map as OLMap } from 'ol';
-import { getTileGrid3857 } from '../config/mapDefaults';
 import {
   sortLayerNamesForWmsStack,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
 
 const WORKSPACE = 'ggnr';
+
+/** 뷰포트 bbox 대비 GetMap 요청 여유 (1 = 화면과 동일, 1.5 = 가장자리 라벨·선 잘림 완화) */
+const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
 
 function getGeoServerBase(): string {
   if (typeof window !== 'undefined') {
@@ -45,14 +48,62 @@ function filterRowsToCql(rows: LayerFilterRow[]): string {
   }).join(' AND ');
 }
 
+/** 편집 중 WMS 원본 숨김 — 레이어 PK 컬럼 기준 제외 CQL */
+export type HiddenWmsFeatureKey = { keyField: string; keyValue: string };
+
+function escapeCqlString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+export function buildExcludeFeatureKeysCql(items: HiddenWmsFeatureKey[]): string | null {
+  if (items.length === 0) return null;
+  const byField = new Map<string, string[]>();
+  for (const { keyField, keyValue } of items) {
+    const field = String(keyField).trim();
+    const val = String(keyValue).trim();
+    if (!field || !val) continue;
+    const list = byField.get(field) ?? [];
+    list.push(val);
+    byField.set(field, list);
+  }
+
+  const clauses: string[] = [];
+  for (const [field, values] of byField) {
+    const unique = [...new Set(values)];
+    if (unique.length === 0) continue;
+    const allNumeric = unique.every((v) => /^-?\d+(\.\d+)?$/.test(v));
+    if (allNumeric) {
+      if (unique.length === 1) clauses.push(`${field} <> ${unique[0]}`);
+      else clauses.push(`${field} NOT IN (${unique.join(',')})`);
+    } else if (unique.length === 1) {
+      clauses.push(`${field} <> '${escapeCqlString(unique[0]!)}'`);
+    } else {
+      const list = unique.map((v) => `'${escapeCqlString(v)}'`).join(',');
+      clauses.push(`${field} NOT IN (${list})`);
+    }
+  }
+  if (clauses.length === 0) return null;
+  return clauses.join(' AND ');
+}
+
+/** @deprecated ogc_fid 전용 — buildExcludeFeatureKeysCql 사용 */
+export function buildExcludeOgcFidsCql(fids: string[]): string | null {
+  return buildExcludeFeatureKeysCql(
+    fids.map((f) => ({ keyField: 'ogc_fid', keyValue: String(f).trim() })).filter((k) => k.keyValue)
+  );
+}
+
+function mergeCqlParts(...parts: Array<string | null | undefined>): string {
+  const clauses = parts.filter((p): p is string => !!p && p !== 'INCLUDE');
+  if (clauses.length === 0) return 'INCLUDE';
+  return clauses.join(' AND ');
+}
+
 /**
- * WMS 타일 로드를 POST로 수행 (CQL_FILTER 등으로 URL이 길어져 414 방지)
+ * WMS GetMap 로드를 POST로 수행 (CQL_FILTER 등으로 URL이 길어져 414 방지)
  */
-function tileLoadFunctionPost(
-  tile: import('ol/Tile').default,
-  src: string
-): void {
-  const img = (tile as unknown as { getImage(): HTMLImageElement }).getImage();
+function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
+  const img = image.getImage() as HTMLImageElement;
   try {
     const url = new URL(src);
     const baseUrl = url.origin + url.pathname;
@@ -78,27 +129,25 @@ function tileLoadFunctionPost(
 }
 
 /**
- * 단일 GeoServer WMS TileLayer 생성.
- * CQL 등으로 URL이 길어질 수 있어 타일 로드는 POST로 전송.
+ * 단일 GeoServer WMS ImageLayer — 화면(뷰포트) 전체를 GetMap 1회로 요청.
+ * CQL 등으로 URL이 길어질 수 있어 이미지 로드는 POST로 전송.
  */
-export function createServiceLayer(): TileLayer<TileWMS> {
+export function createServiceLayer(): ImageLayer<ImageWMS> {
   const geoServerBase = getGeoServerBase();
   const wmsUrl = `${geoServerBase}/${WORKSPACE}/wms`;
 
-  const layer = new TileLayer({
+  const layer = new ImageLayer({
     visible: false,
-    source: new TileWMS({
+    source: new ImageWMS({
       url: wmsUrl,
       params: {
         LAYERS: '',
         STYLES: '',
-        TILED: true,
         EXCEPTIONS: 'application/vnd.ogc.se_inimage',
       },
       serverType: 'geoserver',
-      transition: 0,
-      tileGrid: getTileGrid3857(),
-      tileLoadFunction: tileLoadFunctionPost,
+      ratio: WMS_VIEWPORT_IMAGE_RATIO,
+      imageLoadFunction: imageLoadFunctionPost,
     }),
   });
 
@@ -118,15 +167,24 @@ export function useServiceLayerSync(
   layerFilterRows?: Map<string, LayerFilterRow[]>,
   spatialFilterWkt?: string | null,
   layerGeometryTypes?: Record<string, LayerDbGeometryKind>,
+  /** 레이어별 WMS에서 숨길 feature key (도형편집기 등) */
+  hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
+  const hiddenRef = useRef(hiddenFeaturesByLayer);
+  hiddenRef.current = hiddenFeaturesByLayer;
+  const lastSyncKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!mapReady || !map) return;
 
     const serviceLayer = map.getLayers().getArray().find((l) => l.get('serviceLayer')) as
-      | { getSource(): { getParams(): Record<string, string | undefined>; changed(): void } | null; setVisible(v: boolean): void }
+      | {
+          getVisible(): boolean;
+          getSource(): { getParams(): Record<string, string | undefined>; changed(): void } | null;
+          setVisible(v: boolean): void;
+        }
       | undefined;
     if (!serviceLayer) return;
     const source = serviceLayer.getSource();
@@ -134,31 +192,52 @@ export function useServiceLayerSync(
     const params = source.getParams();
 
     if (visibleLayerNames.size === 0) {
+      const syncKey = 'empty';
+      if (lastSyncKeyRef.current === syncKey && !serviceLayer.getVisible()) return;
+      lastSyncKeyRef.current = syncKey;
       params.LAYERS = '';
       params.STYLES = '';
       delete params.CQL_FILTER;
       serviceLayer.setVisible(false);
-    } else {
-      const rawNames = Array.from(visibleLayerNames);
-      const names =
-        layerGeometryTypes && Object.keys(layerGeometryTypes).length > 0
-          ? sortLayerNamesForWmsStack(rawNames, layerGeometryTypes)
-          : rawNames;
-      params.LAYERS = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-      params.STYLES = names.join(',');
-      const filters = filterRef.current;
-      const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
-      const cqlArr = names.map((n) => {
-        const base = filterRowsToCql(filters?.get(n) ?? []);
-        if (!wkt) return base;
-        const spatialCql = `INTERSECTS(geom, ${wkt})`;
-        return base === 'INCLUDE' ? spatialCql : `${base} AND ${spatialCql}`;
-      });
-      params.CQL_FILTER = cqlArr.join(';');
-      serviceLayer.setVisible(true);
-      source.changed();
+      return;
     }
-  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes]);
+
+    const rawNames = Array.from(visibleLayerNames);
+    const names =
+      layerGeometryTypes && Object.keys(layerGeometryTypes).length > 0
+        ? sortLayerNamesForWmsStack(rawNames, layerGeometryTypes)
+        : rawNames;
+    const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
+    const stylesParam = names.join(',');
+    const filters = filterRef.current;
+    const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
+    const hidden = hiddenRef.current;
+    const cqlArr = names.map((n) => {
+      const base = filterRowsToCql(filters?.get(n) ?? []);
+      const spatialCql = wkt ? `INTERSECTS(geom, ${wkt})` : null;
+      const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? []);
+      return mergeCqlParts(base, spatialCql, excludeCql);
+    });
+    const cqlParam = cqlArr.join(';');
+    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}`;
+
+    if (
+      lastSyncKeyRef.current === syncKey &&
+      params.LAYERS === layersParam &&
+      params.STYLES === stylesParam &&
+      (params.CQL_FILTER ?? '') === cqlParam &&
+      serviceLayer.getVisible()
+    ) {
+      return;
+    }
+    lastSyncKeyRef.current = syncKey;
+
+    params.LAYERS = layersParam;
+    params.STYLES = stylesParam;
+    params.CQL_FILTER = cqlParam;
+    serviceLayer.setVisible(true);
+    source.changed();
+  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);
 }
 
 export { WORKSPACE };

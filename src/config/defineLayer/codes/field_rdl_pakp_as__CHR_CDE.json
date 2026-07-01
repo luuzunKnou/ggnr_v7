@@ -1,0 +1,50 @@
+[
+  {
+    "define_code_key": "71315",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71316",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR001",
+    "define_code_kor_name": "무료"
+  },
+  {
+    "define_code_key": "71317",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR002",
+    "define_code_kor_name": "유료"
+  },
+  {
+    "define_code_key": "71318",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71319",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR900",
+    "define_code_kor_name": "1급지"
+  },
+  {
+    "define_code_key": "71320",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR901",
+    "define_code_kor_name": "2급지"
+  },
+  {
+    "define_code_key": "71321",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR902",
+    "define_code_kor_name": "3급지"
+  },
+  {
+    "define_code_key": "71322",
+    "define_code_field_key": "7706",
+    "define_code_name": "CHR903",
+    "define_code_kor_name": "4급지"
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "define_code_name": "3301",
+    "define_code_kor_name": "주물형"
+  },
+  {
+    "define_code_name": "3302",
+    "define_code_kor_name": "강판"
+  },
+  {
+    "define_code_name": "3303",
+    "define_code_kor_name": "스테인레스"
+  },
+  {
+    "define_code_name": "3304",
+    "define_code_kor_name": "강관"
+  },
+  {
+    "define_code_name": "3305",
+    "define_code_kor_name": "한전주병설주"
+  },
+  {
+    "define_code_name": "3306",
+    "define_code_kor_name": "조명탑"
+  },
+  {
+    "define_code_name": "3399",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC710",
+    "define_code_kor_name": "고압나트륨등구"
+  },
+  {
+    "define_code_name": "EC720",
+    "define_code_kor_name": "가로등철주"
+  },
+  {
+    "define_code_name": "EC722",
+    "define_code_kor_name": "LED(등기구)"
+  }
+]

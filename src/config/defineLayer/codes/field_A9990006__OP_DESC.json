@@ -1,0 +1,98 @@
+[
+  {
+    "define_code_name": "9001",
+    "define_code_kor_name": "전봇대"
+  },
+  {
+    "define_code_name": "9002",
+    "define_code_kor_name": "가로등"
+  },
+  {
+    "define_code_name": "9003",
+    "define_code_kor_name": "변압탑"
+  },
+  {
+    "define_code_name": "9004",
+    "define_code_kor_name": "전기자동차 충전시설"
+  },
+  {
+    "define_code_name": "9005",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_name": "9006",
+    "define_code_kor_name": "모래함"
+  },
+  {
+    "define_code_name": "9007",
+    "define_code_kor_name": "제설용구함"
+  },
+  {
+    "define_code_name": "9008",
+    "define_code_kor_name": "공중전화"
+  },
+  {
+    "define_code_name": "9009",
+    "define_code_kor_name": "수도관"
+  },
+  {
+    "define_code_name": "9010",
+    "define_code_kor_name": "하수도관"
+  },
+  {
+    "define_code_name": "9011",
+    "define_code_kor_name": "가스관"
+  },
+  {
+    "define_code_name": "9012",
+    "define_code_kor_name": "송유관"
+  },
+  {
+    "define_code_name": "9013",
+    "define_code_kor_name": "주유소"
+  },
+  {
+    "define_code_name": "9014",
+    "define_code_kor_name": "작업구(맨홀)"
+  },
+  {
+    "define_code_name": "9015",
+    "define_code_kor_name": "전력구"
+  },
+  {
+    "define_code_name": "9016",
+    "define_code_kor_name": "통신구"
+  },
+  {
+    "define_code_name": "9017",
+    "define_code_kor_name": "공동구"
+  },
+  {
+    "define_code_name": "9018",
+    "define_code_kor_name": "배수시설"
+  },
+  {
+    "define_code_name": "9019",
+    "define_code_kor_name": "주차장"
+  },
+  {
+    "define_code_name": "9020",
+    "define_code_kor_name": "휴게소"
+  },
+  {
+    "define_code_name": "9021",
+    "define_code_kor_name": "간판"
+  },
+  {
+    "define_code_name": "9022",
+    "define_code_kor_name": "표지"
+  },
+  {
+    "define_code_name": "9023",
+    "define_code_kor_name": "현수막"
+  },
+  {
+    "define_code_name": "9099",
+    "define_code_kor_name": "기타"
+  }
+]

@@ -1,0 +1,146 @@
+[
+  {
+    "define_code_key": "62904",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717010400",
+    "define_code_kor_name": "명륜동"
+  },
+  {
+    "define_code_key": "62905",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717011000",
+    "define_code_kor_name": "용상동"
+  },
+  {
+    "define_code_key": "62906",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717012200",
+    "define_code_kor_name": "태화동"
+  },
+  {
+    "define_code_key": "62907",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717012700",
+    "define_code_kor_name": "평화동"
+  },
+  {
+    "define_code_key": "62908",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717012800",
+    "define_code_kor_name": "안기동"
+  },
+  {
+    "define_code_key": "62909",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717013300",
+    "define_code_kor_name": "옥동"
+  },
+  {
+    "define_code_key": "62910",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717014300",
+    "define_code_kor_name": "서구동"
+  },
+  {
+    "define_code_key": "62911",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717014400",
+    "define_code_kor_name": "중구동"
+  },
+  {
+    "define_code_key": "62912",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717014500",
+    "define_code_kor_name": "강남동"
+  },
+  {
+    "define_code_key": "62913",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717014600",
+    "define_code_kor_name": "송하동"
+  },
+  {
+    "define_code_key": "62914",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717025000",
+    "define_code_kor_name": "풍산읍"
+  },
+  {
+    "define_code_key": "62915",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717031000",
+    "define_code_kor_name": "와룡면"
+  },
+  {
+    "define_code_key": "62916",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717032000",
+    "define_code_kor_name": "북후면"
+  },
+  {
+    "define_code_key": "62917",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717033000",
+    "define_code_kor_name": "서후면"
+  },
+  {
+    "define_code_key": "62918",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717034000",
+    "define_code_kor_name": "풍천면"
+  },
+  {
+    "define_code_key": "62919",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717035000",
+    "define_code_kor_name": "일직면"
+  },
+  {
+    "define_code_key": "62920",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717036000",
+    "define_code_kor_name": "남후면"
+  },
+  {
+    "define_code_key": "62921",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717037000",
+    "define_code_kor_name": "남선면"
+  },
+  {
+    "define_code_key": "62922",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717038000",
+    "define_code_kor_name": "임하면"
+  },
+  {
+    "define_code_key": "62923",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717039000",
+    "define_code_kor_name": "길안면"
+  },
+  {
+    "define_code_key": "62924",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717040000",
+    "define_code_kor_name": "임동면"
+  },
+  {
+    "define_code_key": "62925",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717041000",
+    "define_code_kor_name": "예안면"
+  },
+  {
+    "define_code_key": "62926",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717042000",
+    "define_code_kor_name": "도산면"
+  },
+  {
+    "define_code_key": "62927",
+    "define_code_field_key": "6923",
+    "define_code_name": "4717043000",
+    "define_code_kor_name": "녹전면"
+  }
+]

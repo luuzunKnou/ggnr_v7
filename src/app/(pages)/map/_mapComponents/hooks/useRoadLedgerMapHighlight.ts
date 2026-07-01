@@ -7,6 +7,7 @@ import VectorLayer from 'ol/layer/Vector';
 import GeoJSONFormat from 'ol/format/GeoJSON';
 import { buffer as bufferExtent } from 'ol/extent';
 import { useMapContext } from '../MapContext';
+import { fitMapToExtent3857, prepareMapForPanelAwareNavigation } from '../config/mapAutoNavigation';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
   createDataQuerySelectionRowHighlightStyle,
@@ -186,24 +187,26 @@ export function useRoadLedgerMapHighlight(mapReady: boolean) {
 
     const runFit = () => {
       if (!map.getTargetElement()) return;
-      map.updateSize();
+      prepareMapForPanelAwareNavigation(map, () => mapContext?.applyMapViewPaddingRef?.current?.());
       if (isFacilityFromList) {
-        map.getView().fit(fitExt, {
-          padding: [...FACILITY_LIST_FIT_PADDING],
+        fitMapToExtent3857(map, fitExt as [number, number, number, number], {
+          fitPadding: [...FACILITY_LIST_FIT_PADDING],
           maxZoom: FACILITY_LIST_MAX_ZOOM,
           duration: 450,
         });
       } else {
-        map.getView().fit(fitExt, {
-          padding: [...DATA_QUERY_HIGHLIGHT_FIT_PADDING],
+        fitMapToExtent3857(map, fitExt as [number, number, number, number], {
+          fitPadding: [...DATA_QUERY_HIGHLIGHT_FIT_PADDING],
           maxZoom: DATA_QUERY_HIGHLIGHT_MAX_ZOOM,
         });
       }
     };
 
-    /** layout 반영·맵 크기 갱신 후 fit (map-layout 패딩은 useLayoutEffect 로 먼저 적용됨) */
+    /** layout 반영·패널 padding 적용 후 fit */
     queueMicrotask(() => {
-      requestAnimationFrame(runFit);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(runFit);
+      });
     });
-  }, [row, mapReady, mapContext?.mapInstanceRef, mapContext?.roadLedgerFacilityModal, mapContext?.roadLedgerIdentifyRow]);
+  }, [row, mapReady, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef, mapContext?.roadLedgerFacilityModal, mapContext?.roadLedgerIdentifyRow]);
 }

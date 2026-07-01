@@ -1,0 +1,152 @@
+[
+  {
+    "define_code_key": "63615",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "63616",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ001",
+    "define_code_kor_name": "부실공사"
+  },
+  {
+    "define_code_key": "63617",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ002",
+    "define_code_kor_name": "타공사"
+  },
+  {
+    "define_code_key": "63618",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ003",
+    "define_code_kor_name": "유속,내압"
+  },
+  {
+    "define_code_key": "63619",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ004",
+    "define_code_kor_name": "외압"
+  },
+  {
+    "define_code_key": "63620",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ006",
+    "define_code_kor_name": "교체(민원)"
+  },
+  {
+    "define_code_key": "63621",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ007",
+    "define_code_kor_name": "이설(민원)"
+  },
+  {
+    "define_code_key": "63622",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ008",
+    "define_code_kor_name": "통합(민원)"
+  },
+  {
+    "define_code_key": "63623",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ010",
+    "define_code_kor_name": "교체(누수)"
+  },
+  {
+    "define_code_key": "63624",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ011",
+    "define_code_kor_name": "이설(누수)"
+  },
+  {
+    "define_code_key": "63625",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ012",
+    "define_code_kor_name": "통합(누수)"
+  },
+  {
+    "define_code_key": "63626",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ013",
+    "define_code_kor_name": "노후관 교체"
+  },
+  {
+    "define_code_key": "63627",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ015",
+    "define_code_kor_name": "교체(도로확장)"
+  },
+  {
+    "define_code_key": "63628",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ016",
+    "define_code_kor_name": "이설(도로확장)"
+  },
+  {
+    "define_code_key": "63629",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ017",
+    "define_code_kor_name": "통합(도로확장)"
+  },
+  {
+    "define_code_key": "63630",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ019",
+    "define_code_kor_name": "교체(급수구역확대)"
+  },
+  {
+    "define_code_key": "63631",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ020",
+    "define_code_kor_name": "이설(급수구역확대)"
+  },
+  {
+    "define_code_key": "63632",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ021",
+    "define_code_kor_name": "통합(급수구역확대)"
+  },
+  {
+    "define_code_key": "63633",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ023",
+    "define_code_kor_name": "교체(계획)"
+  },
+  {
+    "define_code_key": "63634",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ024",
+    "define_code_kor_name": "이설(계획)"
+  },
+  {
+    "define_code_key": "63635",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ025",
+    "define_code_kor_name": "통합(계획)"
+  },
+  {
+    "define_code_key": "63636",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ026",
+    "define_code_kor_name": "동파"
+  },
+  {
+    "define_code_key": "63637",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ027",
+    "define_code_kor_name": "내부부식"
+  },
+  {
+    "define_code_key": "63638",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ028",
+    "define_code_kor_name": "외부부식"
+  },
+  {
+    "define_code_key": "63639",
+    "define_code_field_key": "7100",
+    "define_code_name": "SBJ999",
+    "define_code_kor_name": "기타"
+  }
+]

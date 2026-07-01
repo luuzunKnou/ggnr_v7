@@ -1,0 +1,130 @@
+[
+  {
+    "define_code_name": "1001",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_name": "1002",
+    "define_code_kor_name": "아스팔트 콘크리트"
+  },
+  {
+    "define_code_name": "1003",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_name": "1004",
+    "define_code_kor_name": "비포장"
+  },
+  {
+    "define_code_name": "1005",
+    "define_code_kor_name": "일반사각블럭"
+  },
+  {
+    "define_code_name": "1006",
+    "define_code_kor_name": "소형고압블럭"
+  },
+  {
+    "define_code_name": "1007",
+    "define_code_kor_name": "투수성아스팔트"
+  },
+  {
+    "define_code_name": "1008",
+    "define_code_kor_name": "투수성콘크리트"
+  },
+  {
+    "define_code_name": "1009",
+    "define_code_kor_name": "오너멘트블럭"
+  },
+  {
+    "define_code_name": "1010",
+    "define_code_kor_name": "세라믹블럭"
+  },
+  {
+    "define_code_name": "1011",
+    "define_code_kor_name": "화강석타일"
+  },
+  {
+    "define_code_name": "1012",
+    "define_code_kor_name": "화강석판재"
+  },
+  {
+    "define_code_name": "1099",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_name": "EC02",
+    "define_code_kor_name": "콘크리트계"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "아스콘+콘크리트계"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "LMC"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "RPC"
+  },
+  {
+    "define_code_name": "EC06",
+    "define_code_kor_name": "아스팔트+RPC"
+  },
+  {
+    "define_code_name": "EC07",
+    "define_code_kor_name": "메타콘"
+  },
+  {
+    "define_code_name": "EC08",
+    "define_code_kor_name": "HSMC"
+  },
+  {
+    "define_code_name": "EC09",
+    "define_code_kor_name": "SSPCMC"
+  },
+  {
+    "define_code_name": "EC10",
+    "define_code_kor_name": "노출포장"
+  },
+  {
+    "define_code_name": "EC11",
+    "define_code_kor_name": "콘크리트 절삭후 콘크리트 재포장(초속경)"
+  },
+  {
+    "define_code_name": "EC12",
+    "define_code_kor_name": "아스팔트 절삭후 아스팔트 재포장(방수 포함)"
+  },
+  {
+    "define_code_name": "EC13",
+    "define_code_kor_name": "아스팔트 절삭덧씌우기(방수 제외)"
+  },
+  {
+    "define_code_name": "EC14",
+    "define_code_kor_name": "아스팔트 절삭후 콘크리트 재포장(조강)"
+  },
+  {
+    "define_code_name": "EC15",
+    "define_code_kor_name": "아스팔트 절삭후 콘크리트 재포장(초속경)"
+  },
+  {
+    "define_code_name": "EC16",
+    "define_code_kor_name": "콘크리트 절삭후 콘크리트 재포장(조강)"
+  },
+  {
+    "define_code_name": "EC19",
+    "define_code_kor_name": "교면개량"
+  },
+  {
+    "define_code_name": "EC20",
+    "define_code_kor_name": "교면재포장"
+  },
+  {
+    "define_code_name": "EC21",
+    "define_code_kor_name": "절삭덧씌우기"
+  }
+]

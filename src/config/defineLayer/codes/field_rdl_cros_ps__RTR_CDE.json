@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_key": "70790",
+    "define_code_field_key": "7525",
+    "define_code_name": "RTR000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70791",
+    "define_code_field_key": "7525",
+    "define_code_name": "RTR001",
+    "define_code_kor_name": "평면교차"
+  },
+  {
+    "define_code_key": "70792",
+    "define_code_field_key": "7525",
+    "define_code_name": "RTR002",
+    "define_code_kor_name": "입체교차"
+  },
+  {
+    "define_code_key": "70793",
+    "define_code_field_key": "7525",
+    "define_code_name": "RTR999",
+    "define_code_kor_name": "기타"
+  }
+]

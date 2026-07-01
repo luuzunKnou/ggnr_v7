@@ -1,0 +1,1106 @@
+[
+  {
+    "define_code_key": "68933",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "68934",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP001",
+    "define_code_kor_name": "닥타일주철관(DCIP)"
+  },
+  {
+    "define_code_key": "68935",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP002",
+    "define_code_kor_name": "강관(SP)"
+  },
+  {
+    "define_code_key": "68936",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP003",
+    "define_code_kor_name": "아연도강관(GS)"
+  },
+  {
+    "define_code_key": "68937",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP004",
+    "define_code_kor_name": "염화비닐관(PVC)"
+  },
+  {
+    "define_code_key": "68938",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP005",
+    "define_code_kor_name": "폴리에틸렌관(PE)"
+  },
+  {
+    "define_code_key": "68939",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP006",
+    "define_code_kor_name": "스테인레스관(SSP)"
+  },
+  {
+    "define_code_key": "68940",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP007",
+    "define_code_kor_name": "동관(COP)"
+  },
+  {
+    "define_code_key": "68941",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP008",
+    "define_code_kor_name": "P.S.콘크리트관(PC)"
+  },
+  {
+    "define_code_key": "68942",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP009",
+    "define_code_kor_name": "석면시멘트관(AS)"
+  },
+  {
+    "define_code_key": "68943",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP010",
+    "define_code_kor_name": "회주철관(CIP)"
+  },
+  {
+    "define_code_key": "68944",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP011",
+    "define_code_kor_name": "연관(LP)"
+  },
+  {
+    "define_code_key": "68945",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP012",
+    "define_code_kor_name": "흉관(HP)"
+  },
+  {
+    "define_code_key": "68946",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP013",
+    "define_code_kor_name": "철근콘크리트관(RC)"
+  },
+  {
+    "define_code_key": "68947",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP014",
+    "define_code_kor_name": "강관(ST)"
+  },
+  {
+    "define_code_key": "68948",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP015",
+    "define_code_kor_name": "주철관(CI)"
+  },
+  {
+    "define_code_key": "68949",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP016",
+    "define_code_kor_name": "화학제품류관(PV)"
+  },
+  {
+    "define_code_key": "68950",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP017",
+    "define_code_kor_name": "도관(VC)"
+  },
+  {
+    "define_code_key": "68951",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP018",
+    "define_code_kor_name": "석축(SE)"
+  },
+  {
+    "define_code_key": "68952",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP019",
+    "define_code_kor_name": "도복장 강관(SP)"
+  },
+  {
+    "define_code_key": "68953",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP020",
+    "define_code_kor_name": "흉관(EP)"
+  },
+  {
+    "define_code_key": "68954",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP021",
+    "define_code_kor_name": "아연도강관(GP)"
+  },
+  {
+    "define_code_key": "68955",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP022",
+    "define_code_kor_name": "청동관(BR)"
+  },
+  {
+    "define_code_key": "68956",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP023",
+    "define_code_kor_name": "고무몰딩(RM)"
+  },
+  {
+    "define_code_key": "68957",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP024",
+    "define_code_kor_name": "주강(CS)"
+  },
+  {
+    "define_code_key": "68958",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP025",
+    "define_code_kor_name": "VR관"
+  },
+  {
+    "define_code_key": "68959",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP026",
+    "define_code_kor_name": "HDPE관"
+  },
+  {
+    "define_code_key": "68960",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP027",
+    "define_code_kor_name": "시멘트라이닝주철관(C)"
+  },
+  {
+    "define_code_key": "68961",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP028",
+    "define_code_kor_name": "수도용 PE관(PE)"
+  },
+  {
+    "define_code_key": "68962",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP029",
+    "define_code_kor_name": "석면시멘트관(AC)"
+  },
+  {
+    "define_code_key": "68963",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP030",
+    "define_code_kor_name": "폴리에틸렌분체라이닝강관(PEP)"
+  },
+  {
+    "define_code_key": "68964",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP031",
+    "define_code_kor_name": "에폭시코팅강관(EPS)"
+  },
+  {
+    "define_code_key": "68965",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP032",
+    "define_code_kor_name": "HI-3P"
+  },
+  {
+    "define_code_key": "68966",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP033",
+    "define_code_kor_name": "철근콘크리트박스(RCB)"
+  },
+  {
+    "define_code_key": "68967",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP034",
+    "define_code_kor_name": "콘크리트중선함(CD)"
+  },
+  {
+    "define_code_key": "68968",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP035",
+    "define_code_kor_name": "후랙시불전선함(FP)"
+  },
+  {
+    "define_code_key": "68969",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP036",
+    "define_code_kor_name": "전선함(FD)"
+  },
+  {
+    "define_code_key": "68970",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP038",
+    "define_code_kor_name": "이중보온관"
+  },
+  {
+    "define_code_key": "68971",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP039",
+    "define_code_kor_name": "폴리에틸렌피복강관(PLP)"
+  },
+  {
+    "define_code_key": "68972",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP041",
+    "define_code_kor_name": "FRP"
+  },
+  {
+    "define_code_key": "68973",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP042",
+    "define_code_kor_name": "강재"
+  },
+  {
+    "define_code_key": "68974",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68975",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP800",
+    "define_code_kor_name": "2중벽PE관"
+  },
+  {
+    "define_code_key": "68976",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP801",
+    "define_code_kor_name": "3중벽PE관"
+  },
+  {
+    "define_code_key": "68977",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP802",
+    "define_code_kor_name": "가스배관용 강관"
+  },
+  {
+    "define_code_key": "68978",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP803",
+    "define_code_kor_name": "강관(피복 Double, 용접접합)"
+  },
+  {
+    "define_code_key": "68979",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP804",
+    "define_code_kor_name": "강관(피복 Single, 용접접합)"
+  },
+  {
+    "define_code_key": "68980",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP805",
+    "define_code_kor_name": "강관(CP)"
+  },
+  {
+    "define_code_key": "68981",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP806",
+    "define_code_kor_name": "강철"
+  },
+  {
+    "define_code_key": "68982",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP807",
+    "define_code_kor_name": "강화플라스틱복합관"
+  },
+  {
+    "define_code_key": "68983",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP808",
+    "define_code_kor_name": "경질염화비닐관(HI-VP)"
+  },
+  {
+    "define_code_key": "68984",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP809",
+    "define_code_kor_name": "고강성PVC이중벽관"
+  },
+  {
+    "define_code_key": "68985",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP810",
+    "define_code_kor_name": "고광도PVC이중벽관"
+  },
+  {
+    "define_code_key": "68986",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP811",
+    "define_code_kor_name": "고밀도폴리에틸렌관(THP)"
+  },
+  {
+    "define_code_key": "68987",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP812",
+    "define_code_kor_name": "고밀도폴리에틸렌파상형이중벽관"
+  },
+  {
+    "define_code_key": "68988",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP813",
+    "define_code_kor_name": "공장제 박스관거"
+  },
+  {
+    "define_code_key": "68989",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP814",
+    "define_code_kor_name": "관로없음(알케이블)"
+  },
+  {
+    "define_code_key": "68990",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP815",
+    "define_code_kor_name": "나선형강관"
+  },
+  {
+    "define_code_key": "68991",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP816",
+    "define_code_kor_name": "내충격수도관"
+  },
+  {
+    "define_code_key": "68992",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP817",
+    "define_code_kor_name": "내충격용하수도용경질염화비닐관"
+  },
+  {
+    "define_code_key": "68993",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP818",
+    "define_code_kor_name": "내충격HI-VG2관"
+  },
+  {
+    "define_code_key": "68994",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP819",
+    "define_code_kor_name": "내충격PVC하수관"
+  },
+  {
+    "define_code_key": "68995",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP820",
+    "define_code_kor_name": "녹석(돌산호과 일종)"
+  },
+  {
+    "define_code_key": "68996",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP821",
+    "define_code_kor_name": "동관(구리관, 용접)"
+  },
+  {
+    "define_code_key": "68997",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP822",
+    "define_code_kor_name": "둥근잔돌"
+  },
+  {
+    "define_code_key": "68998",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP823",
+    "define_code_kor_name": "무근콘크리트"
+  },
+  {
+    "define_code_key": "68999",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP824",
+    "define_code_kor_name": "백관"
+  },
+  {
+    "define_code_key": "69000",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP825",
+    "define_code_kor_name": "복합철판파형관"
+  },
+  {
+    "define_code_key": "69001",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP826",
+    "define_code_kor_name": "분체라이닝관"
+  },
+  {
+    "define_code_key": "69002",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP827",
+    "define_code_kor_name": "석축박스"
+  },
+  {
+    "define_code_key": "69003",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP828",
+    "define_code_kor_name": "석축철콘"
+  },
+  {
+    "define_code_key": "69004",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP829",
+    "define_code_kor_name": "수도용경질염화비관"
+  },
+  {
+    "define_code_key": "69005",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP830",
+    "define_code_kor_name": "수도용경질염화비닐이음관"
+  },
+  {
+    "define_code_key": "69006",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP831",
+    "define_code_kor_name": "수도용엑포시수지분체내외면코팅강관"
+  },
+  {
+    "define_code_key": "69007",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP832",
+    "define_code_kor_name": "수지파형강관(PCS)"
+  },
+  {
+    "define_code_key": "69008",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP833",
+    "define_code_kor_name": "수지CSP"
+  },
+  {
+    "define_code_key": "69009",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP834",
+    "define_code_kor_name": "스테인레스 주름관"
+  },
+  {
+    "define_code_key": "69010",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP835",
+    "define_code_kor_name": "스테인레스관(STS)"
+  },
+  {
+    "define_code_key": "69011",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP836",
+    "define_code_kor_name": "스테인레스스틸파이프관"
+  },
+  {
+    "define_code_key": "69012",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP837",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_key": "69013",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP838",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "69014",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP839",
+    "define_code_kor_name": "아스팔트도복장강관(ASP)"
+  },
+  {
+    "define_code_key": "69015",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP840",
+    "define_code_kor_name": "아연"
+  },
+  {
+    "define_code_key": "69016",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP841",
+    "define_code_kor_name": "아연도금(백관)"
+  },
+  {
+    "define_code_key": "69017",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP842",
+    "define_code_kor_name": "알루미늄"
+  },
+  {
+    "define_code_key": "69018",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP843",
+    "define_code_kor_name": "알루미늄합금"
+  },
+  {
+    "define_code_key": "69019",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP844",
+    "define_code_kor_name": "압력배관용 탄소강관"
+  },
+  {
+    "define_code_key": "69020",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP845",
+    "define_code_kor_name": "양철관"
+  },
+  {
+    "define_code_key": "69021",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP846",
+    "define_code_kor_name": "양철주름관(CSP)"
+  },
+  {
+    "define_code_key": "69022",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP847",
+    "define_code_kor_name": "연합인슈강판"
+  },
+  {
+    "define_code_key": "69023",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP848",
+    "define_code_kor_name": "와사관(GSP)"
+  },
+  {
+    "define_code_key": "69024",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP849",
+    "define_code_kor_name": "원심력철근콘크리트"
+  },
+  {
+    "define_code_key": "69025",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP850",
+    "define_code_kor_name": "유리섬유관(GRP)"
+  },
+  {
+    "define_code_key": "69026",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP851",
+    "define_code_kor_name": "유리섬유복합관(GRP)"
+  },
+  {
+    "define_code_key": "69027",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP852",
+    "define_code_kor_name": "이음매없는동및동합금관"
+  },
+  {
+    "define_code_key": "69028",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP853",
+    "define_code_kor_name": "일반배관용스테인리스강관"
+  },
+  {
+    "define_code_key": "69029",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP854",
+    "define_code_kor_name": "전압 콘크리트관"
+  },
+  {
+    "define_code_key": "69030",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP855",
+    "define_code_kor_name": "주름관"
+  },
+  {
+    "define_code_key": "69031",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP856",
+    "define_code_kor_name": "주름주철파형강관"
+  },
+  {
+    "define_code_key": "69032",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP857",
+    "define_code_kor_name": "지중 저압케이블 입상관"
+  },
+  {
+    "define_code_key": "69033",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP858",
+    "define_code_kor_name": "진동및전압철근콘크리트관"
+  },
+  {
+    "define_code_key": "69034",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP859",
+    "define_code_kor_name": "철근콘크리트"
+  },
+  {
+    "define_code_key": "69035",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP860",
+    "define_code_kor_name": "철근콘크리트 블록"
+  },
+  {
+    "define_code_key": "69036",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP861",
+    "define_code_kor_name": "철근콘크리트조립흙막이"
+  },
+  {
+    "define_code_key": "69037",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP862",
+    "define_code_kor_name": "철판매입관"
+  },
+  {
+    "define_code_key": "69038",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP863",
+    "define_code_kor_name": "청동"
+  },
+  {
+    "define_code_key": "69039",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP864",
+    "define_code_kor_name": "코아식프리스트레스트콘크리트관"
+  },
+  {
+    "define_code_key": "69040",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP865",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "69041",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP866",
+    "define_code_kor_name": "콘크리트 폴륨관"
+  },
+  {
+    "define_code_key": "69042",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP867",
+    "define_code_kor_name": "콘크리트블록"
+  },
+  {
+    "define_code_key": "69043",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP868",
+    "define_code_kor_name": "탄소강"
+  },
+  {
+    "define_code_key": "69044",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP869",
+    "define_code_kor_name": "탄소강(카본스틸)"
+  },
+  {
+    "define_code_key": "69045",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP870",
+    "define_code_kor_name": "탄소주강"
+  },
+  {
+    "define_code_key": "69046",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP871",
+    "define_code_kor_name": "트러후"
+  },
+  {
+    "define_code_key": "69047",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP872",
+    "define_code_kor_name": "파선형강관(RCF)"
+  },
+  {
+    "define_code_key": "69048",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP873",
+    "define_code_kor_name": "파형강관(CSP)"
+  },
+  {
+    "define_code_key": "69049",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP874",
+    "define_code_kor_name": "파형관"
+  },
+  {
+    "define_code_key": "69050",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP875",
+    "define_code_kor_name": "파형플라스틱관"
+  },
+  {
+    "define_code_key": "69051",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP876",
+    "define_code_kor_name": "폴리머관"
+  },
+  {
+    "define_code_key": "69052",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP877",
+    "define_code_kor_name": "폴리에스테르수지콘크리트관"
+  },
+  {
+    "define_code_key": "69053",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP878",
+    "define_code_kor_name": "폴리에틸렌 전선관"
+  },
+  {
+    "define_code_key": "69054",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP879",
+    "define_code_kor_name": "폴리에틸렌 피복강관"
+  },
+  {
+    "define_code_key": "69055",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP880",
+    "define_code_kor_name": "폴리에틸렌관 1호관"
+  },
+  {
+    "define_code_key": "69056",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP881",
+    "define_code_kor_name": "폴리에틸렌관 2호관"
+  },
+  {
+    "define_code_key": "69057",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP882",
+    "define_code_kor_name": "폴리에틸렌관(2중벽)"
+  },
+  {
+    "define_code_key": "69058",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP883",
+    "define_code_kor_name": "폴리에틸렌관(3중벽)"
+  },
+  {
+    "define_code_key": "69059",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP884",
+    "define_code_kor_name": "폴리에틸렌분체라이닝"
+  },
+  {
+    "define_code_key": "69060",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP885",
+    "define_code_kor_name": "폴리에틸렌이중벽하수관"
+  },
+  {
+    "define_code_key": "69061",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP886",
+    "define_code_kor_name": "폴리탄산에스테르"
+  },
+  {
+    "define_code_key": "69062",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP887",
+    "define_code_kor_name": "프리스트레스트콘크리트실린더관"
+  },
+  {
+    "define_code_key": "69063",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP888",
+    "define_code_kor_name": "플라스틱"
+  },
+  {
+    "define_code_key": "69064",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP889",
+    "define_code_kor_name": "플라스틱주름관"
+  },
+  {
+    "define_code_key": "69065",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP890",
+    "define_code_kor_name": "하수도용고강성경질염화비닐이중벽주름관"
+  },
+  {
+    "define_code_key": "69066",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP891",
+    "define_code_kor_name": "현장타설관"
+  },
+  {
+    "define_code_key": "69067",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP892",
+    "define_code_kor_name": "현장타설철근콘크리트관"
+  },
+  {
+    "define_code_key": "69068",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP893",
+    "define_code_kor_name": "흑관"
+  },
+  {
+    "define_code_key": "69069",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP894",
+    "define_code_kor_name": "흙"
+  },
+  {
+    "define_code_key": "69070",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP895",
+    "define_code_kor_name": "AP"
+  },
+  {
+    "define_code_key": "69071",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP896",
+    "define_code_kor_name": "API관"
+  },
+  {
+    "define_code_key": "69072",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP897",
+    "define_code_kor_name": "ASP"
+  },
+  {
+    "define_code_key": "69073",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP898",
+    "define_code_kor_name": "CMCIP"
+  },
+  {
+    "define_code_key": "69074",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP899",
+    "define_code_kor_name": "CSP"
+  },
+  {
+    "define_code_key": "69075",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP900",
+    "define_code_kor_name": "DRP"
+  },
+  {
+    "define_code_key": "69076",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP901",
+    "define_code_kor_name": "DSP"
+  },
+  {
+    "define_code_key": "69077",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP902",
+    "define_code_kor_name": "DTC관"
+  },
+  {
+    "define_code_key": "69078",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP903",
+    "define_code_kor_name": "ELP"
+  },
+  {
+    "define_code_key": "69079",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP904",
+    "define_code_kor_name": "EPP"
+  },
+  {
+    "define_code_key": "69080",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP905",
+    "define_code_kor_name": "FC관"
+  },
+  {
+    "define_code_key": "69081",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP906",
+    "define_code_kor_name": "H"
+  },
+  {
+    "define_code_key": "69082",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP907",
+    "define_code_kor_name": "H6"
+  },
+  {
+    "define_code_key": "69083",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP908",
+    "define_code_kor_name": "HCP"
+  },
+  {
+    "define_code_key": "69084",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP909",
+    "define_code_kor_name": "HI_2P관"
+  },
+  {
+    "define_code_key": "69085",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP910",
+    "define_code_kor_name": "HI-KP"
+  },
+  {
+    "define_code_key": "69086",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP911",
+    "define_code_kor_name": "HL"
+  },
+  {
+    "define_code_key": "69087",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP912",
+    "define_code_kor_name": "IP"
+  },
+  {
+    "define_code_key": "69088",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP913",
+    "define_code_kor_name": "KCGP"
+  },
+  {
+    "define_code_key": "69089",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP914",
+    "define_code_kor_name": "KP관"
+  },
+  {
+    "define_code_key": "69090",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP915",
+    "define_code_kor_name": "P2S관"
+  },
+  {
+    "define_code_key": "69091",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP916",
+    "define_code_kor_name": "PC박스(PCB)"
+  },
+  {
+    "define_code_key": "69092",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP917",
+    "define_code_kor_name": "PCS"
+  },
+  {
+    "define_code_key": "69093",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP918",
+    "define_code_kor_name": "PDP"
+  },
+  {
+    "define_code_key": "69094",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP919",
+    "define_code_kor_name": "PE이중벽관"
+  },
+  {
+    "define_code_key": "69095",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP920",
+    "define_code_kor_name": "PE적측벽1종관"
+  },
+  {
+    "define_code_key": "69096",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP921",
+    "define_code_kor_name": "PFP관"
+  },
+  {
+    "define_code_key": "69097",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP922",
+    "define_code_kor_name": "PG관"
+  },
+  {
+    "define_code_key": "69098",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP923",
+    "define_code_kor_name": "PIP관(이중보온관)"
+  },
+  {
+    "define_code_key": "69099",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP924",
+    "define_code_kor_name": "PLCSP"
+  },
+  {
+    "define_code_key": "69100",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP925",
+    "define_code_kor_name": "PS"
+  },
+  {
+    "define_code_key": "69101",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP926",
+    "define_code_kor_name": "PUB"
+  },
+  {
+    "define_code_key": "69102",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP927",
+    "define_code_kor_name": "PVB"
+  },
+  {
+    "define_code_key": "69103",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP928",
+    "define_code_kor_name": "PVC이중벽관(PVC2)"
+  },
+  {
+    "define_code_key": "69104",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP929",
+    "define_code_kor_name": "PVC-DC"
+  },
+  {
+    "define_code_key": "69105",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP930",
+    "define_code_kor_name": "PVC-DV"
+  },
+  {
+    "define_code_key": "69106",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP931",
+    "define_code_kor_name": "SBK"
+  },
+  {
+    "define_code_key": "69107",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP932",
+    "define_code_kor_name": "SCP"
+  },
+  {
+    "define_code_key": "69108",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP933",
+    "define_code_kor_name": "SEB"
+  },
+  {
+    "define_code_key": "69109",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP934",
+    "define_code_kor_name": "SIS관(이중보온관)"
+  },
+  {
+    "define_code_key": "69110",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP935",
+    "define_code_kor_name": "SMC"
+  },
+  {
+    "define_code_key": "69111",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP936",
+    "define_code_kor_name": "STW"
+  },
+  {
+    "define_code_key": "69112",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP937",
+    "define_code_kor_name": "SUS"
+  },
+  {
+    "define_code_key": "69113",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP938",
+    "define_code_kor_name": "THP나선관"
+  },
+  {
+    "define_code_key": "69114",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP939",
+    "define_code_kor_name": "U관"
+  },
+  {
+    "define_code_key": "69115",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP940",
+    "define_code_kor_name": "VG2"
+  },
+  {
+    "define_code_key": "69116",
+    "define_code_field_key": "4818",
+    "define_code_name": "HMP941",
+    "define_code_kor_name": "WSP(와사피)"
+  }
+]

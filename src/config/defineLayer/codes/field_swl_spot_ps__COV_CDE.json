@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "68654",
+    "define_code_field_key": "4798",
+    "define_code_name": "COV000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "68655",
+    "define_code_field_key": "4798",
+    "define_code_name": "COV001",
+    "define_code_kor_name": "원형"
+  },
+  {
+    "define_code_key": "68656",
+    "define_code_field_key": "4798",
+    "define_code_name": "COV002",
+    "define_code_kor_name": "각형"
+  },
+  {
+    "define_code_key": "68657",
+    "define_code_field_key": "4798",
+    "define_code_name": "COV999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68658",
+    "define_code_field_key": "4798",
+    "define_code_name": "COV900",
+    "define_code_kor_name": "구형(BOX)뚜껑"
+  },
+  {
+    "define_code_key": "68659",
+    "define_code_field_key": "4798",
+    "define_code_name": "COV901",
+    "define_code_kor_name": "뚜껑없음"
+  }
+]

@@ -1,0 +1,310 @@
+[
+  {
+    "define_code_name": "0501",
+    "define_code_kor_name": "트러스트"
+  },
+  {
+    "define_code_name": "0502",
+    "define_code_kor_name": "T 빔교"
+  },
+  {
+    "define_code_name": "0503",
+    "define_code_kor_name": "PC 빔교"
+  },
+  {
+    "define_code_name": "0504",
+    "define_code_kor_name": "I 형교"
+  },
+  {
+    "define_code_name": "0505",
+    "define_code_kor_name": "라멘교"
+  },
+  {
+    "define_code_name": "0506",
+    "define_code_kor_name": "강판형교"
+  },
+  {
+    "define_code_name": "0507",
+    "define_code_kor_name": "현수교"
+  },
+  {
+    "define_code_name": "0508",
+    "define_code_kor_name": "스라브교"
+  },
+  {
+    "define_code_name": "0509",
+    "define_code_kor_name": "목조교"
+  },
+  {
+    "define_code_name": "0510",
+    "define_code_kor_name": "아치교"
+  },
+  {
+    "define_code_name": "0511",
+    "define_code_kor_name": "게르바교"
+  },
+  {
+    "define_code_name": "0512",
+    "define_code_kor_name": "사장교"
+  },
+  {
+    "define_code_name": "0513",
+    "define_code_kor_name": "(콘크리트)박스가더교"
+  },
+  {
+    "define_code_name": "0514",
+    "define_code_kor_name": "프리플렉스빔교"
+  },
+  {
+    "define_code_name": "0515",
+    "define_code_kor_name": "스틸박스가더교"
+  },
+  {
+    "define_code_name": "0599",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC05",
+    "define_code_kor_name": "프리플렉스형교(PF)"
+  },
+  {
+    "define_code_name": "EC11",
+    "define_code_kor_name": "PSC박스형교(PSCB)"
+  },
+  {
+    "define_code_name": "EC12",
+    "define_code_kor_name": "PSC중공슬래브교(PSCH)"
+  },
+  {
+    "define_code_name": "EC13",
+    "define_code_kor_name": "PSCI형교(PSCI)"
+  },
+  {
+    "define_code_name": "EC14",
+    "define_code_kor_name": "PSC슬래브교(PSCS)"
+  },
+  {
+    "define_code_name": "EC17",
+    "define_code_kor_name": "RC박스형교(RCB)"
+  },
+  {
+    "define_code_name": "EC18",
+    "define_code_kor_name": "RC중공슬래브교(RCH)"
+  },
+  {
+    "define_code_name": "EC19",
+    "define_code_kor_name": "RC슬래브교(RCS)"
+  },
+  {
+    "define_code_name": "EC20",
+    "define_code_kor_name": "RCT형교(RCT)"
+  },
+  {
+    "define_code_name": "EC23",
+    "define_code_kor_name": "강박스형교(STB)"
+  },
+  {
+    "define_code_name": "EC25",
+    "define_code_kor_name": "현수교(SU)"
+  },
+  {
+    "define_code_name": "EC27",
+    "define_code_kor_name": "거더가있는라멘교(RA(G))"
+  },
+  {
+    "define_code_name": "EC28",
+    "define_code_kor_name": "IPC"
+  },
+  {
+    "define_code_name": "EC29",
+    "define_code_kor_name": "RCB(PAR)"
+  },
+  {
+    "define_code_name": "EC30",
+    "define_code_kor_name": "RPF"
+  },
+  {
+    "define_code_name": "EC31",
+    "define_code_kor_name": "EXT"
+  },
+  {
+    "define_code_name": "EC32",
+    "define_code_kor_name": "CS+PSCB"
+  },
+  {
+    "define_code_name": "EC33",
+    "define_code_kor_name": "PF+PSCI"
+  },
+  {
+    "define_code_name": "EC34",
+    "define_code_kor_name": "PF+RCH"
+  },
+  {
+    "define_code_name": "EC35",
+    "define_code_kor_name": "PSCB+STB"
+  },
+  {
+    "define_code_name": "EC36",
+    "define_code_kor_name": "PSCI+STB"
+  },
+  {
+    "define_code_name": "EC37",
+    "define_code_kor_name": "PSCI+PF"
+  },
+  {
+    "define_code_name": "EC38",
+    "define_code_kor_name": "PSCI+RA"
+  },
+  {
+    "define_code_name": "EC39",
+    "define_code_kor_name": "PSCI+SPG"
+  },
+  {
+    "define_code_name": "EC40",
+    "define_code_kor_name": "PSCI+ST"
+  },
+  {
+    "define_code_name": "EC41",
+    "define_code_kor_name": "RA+BOX"
+  },
+  {
+    "define_code_name": "EC42",
+    "define_code_kor_name": "RA+STB"
+  },
+  {
+    "define_code_name": "EC43",
+    "define_code_kor_name": "RCS+PF"
+  },
+  {
+    "define_code_name": "EC44",
+    "define_code_kor_name": "RCS+PSCI"
+  },
+  {
+    "define_code_name": "EC45",
+    "define_code_kor_name": "RCS+RA"
+  },
+  {
+    "define_code_name": "EC46",
+    "define_code_kor_name": "STB+TR"
+  },
+  {
+    "define_code_name": "EC47",
+    "define_code_kor_name": "STI+SPG"
+  },
+  {
+    "define_code_name": "EC48",
+    "define_code_kor_name": "SPG+PSCI"
+  },
+  {
+    "define_code_name": "EC49",
+    "define_code_kor_name": "SPG+STB"
+  },
+  {
+    "define_code_name": "EC50",
+    "define_code_kor_name": "RCS+RA+STB"
+  },
+  {
+    "define_code_name": "EC51",
+    "define_code_kor_name": "PSCI+PSCS+RCS"
+  },
+  {
+    "define_code_name": "EC52",
+    "define_code_kor_name": "PSCI+STB+SPG"
+  },
+  {
+    "define_code_name": "EC53",
+    "define_code_kor_name": "Double-T"
+  },
+  {
+    "define_code_name": "EC54",
+    "define_code_kor_name": "PNP"
+  },
+  {
+    "define_code_name": "EC55",
+    "define_code_kor_name": "WPC"
+  },
+  {
+    "define_code_name": "EC56",
+    "define_code_kor_name": "파형강판교"
+  },
+  {
+    "define_code_name": "EC57",
+    "define_code_kor_name": "PCT"
+  },
+  {
+    "define_code_name": "EC58",
+    "define_code_kor_name": "RPF빔교"
+  },
+  {
+    "define_code_name": "EC59",
+    "define_code_kor_name": "MSP거더교"
+  },
+  {
+    "define_code_name": "EC60",
+    "define_code_kor_name": "Precom거더교"
+  },
+  {
+    "define_code_name": "EC61",
+    "define_code_kor_name": "DR거더교"
+  },
+  {
+    "define_code_name": "EC62",
+    "define_code_kor_name": "SegBeam교"
+  },
+  {
+    "define_code_name": "EC63",
+    "define_code_kor_name": "Bicon거더교"
+  },
+  {
+    "define_code_name": "EC64",
+    "define_code_kor_name": "PSC-E빔교"
+  },
+  {
+    "define_code_name": "EC65",
+    "define_code_kor_name": "IT거더교"
+  },
+  {
+    "define_code_name": "EC66",
+    "define_code_kor_name": "EPC빔교"
+  },
+  {
+    "define_code_name": "EC67",
+    "define_code_kor_name": "Spliced-PSC거더교"
+  },
+  {
+    "define_code_name": "EC68",
+    "define_code_kor_name": "BIB거더교"
+  },
+  {
+    "define_code_name": "EC69",
+    "define_code_kor_name": "CPI거더교"
+  },
+  {
+    "define_code_name": "EC70",
+    "define_code_kor_name": "PAB"
+  },
+  {
+    "define_code_name": "EC71",
+    "define_code_kor_name": "PRA"
+  },
+  {
+    "define_code_name": "EC72",
+    "define_code_kor_name": "IH거더교"
+  },
+  {
+    "define_code_name": "EC73",
+    "define_code_kor_name": "파형강판I빔교"
+  },
+  {
+    "define_code_name": "EC74",
+    "define_code_kor_name": "Edge거더PSC라멘"
+  },
+  {
+    "define_code_name": "EC75",
+    "define_code_kor_name": "SCP"
+  },
+  {
+    "define_code_name": "EC76",
+    "define_code_kor_name": "엑스트라도즈교(ED)"
+  }
+]

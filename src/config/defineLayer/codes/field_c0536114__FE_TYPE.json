@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_name": "6101",
+    "define_code_kor_name": "제연설비"
+  },
+  {
+    "define_code_name": "6102",
+    "define_code_kor_name": "무선통신 보조설비"
+  },
+  {
+    "define_code_name": "6103",
+    "define_code_kor_name": "연결송수관설비"
+  },
+  {
+    "define_code_name": "6104",
+    "define_code_kor_name": "비상콘센트 설비"
+  },
+  {
+    "define_code_name": "6105",
+    "define_code_kor_name": "제연보조설비"
+  },
+  {
+    "define_code_name": "6199",
+    "define_code_kor_name": "기타"
+  }
+]

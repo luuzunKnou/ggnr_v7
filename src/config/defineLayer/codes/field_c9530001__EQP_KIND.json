@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "6001",
+    "define_code_kor_name": "주행복귀형"
+  },
+  {
+    "define_code_name": "6002",
+    "define_code_kor_name": "주행비복귀형"
+  },
+  {
+    "define_code_name": "6003",
+    "define_code_kor_name": "비규격"
+  },
+  {
+    "define_code_name": "6099",
+    "define_code_kor_name": "기타"
+  }
+]

@@ -1,0 +1,34 @@
+[
+  {
+    "define_code_name": "1001",
+    "define_code_kor_name": "강화유리"
+  },
+  {
+    "define_code_name": "1002",
+    "define_code_kor_name": "PC"
+  },
+  {
+    "define_code_name": "1003",
+    "define_code_kor_name": "PMMA"
+  },
+  {
+    "define_code_name": "1004",
+    "define_code_kor_name": "금속"
+  },
+  {
+    "define_code_name": "1005",
+    "define_code_kor_name": "폴리에스터"
+  },
+  {
+    "define_code_name": "1006",
+    "define_code_kor_name": "PVC"
+  },
+  {
+    "define_code_name": "1007",
+    "define_code_kor_name": "ABS수지"
+  },
+  {
+    "define_code_name": "1099",
+    "define_code_kor_name": "기타"
+  }
+]

@@ -1,0 +1,356 @@
+[
+  {
+    "define_code_key": "70222",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70223",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP001",
+    "define_code_kor_name": "스테인레스"
+  },
+  {
+    "define_code_key": "70224",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP002",
+    "define_code_kor_name": "주철"
+  },
+  {
+    "define_code_key": "70225",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP003",
+    "define_code_kor_name": "알루미늄"
+  },
+  {
+    "define_code_key": "70226",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP004",
+    "define_code_kor_name": "탄소주강"
+  },
+  {
+    "define_code_key": "70227",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP005",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "70228",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP006",
+    "define_code_kor_name": "플라스틱"
+  },
+  {
+    "define_code_key": "70229",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP007",
+    "define_code_kor_name": "철재"
+  },
+  {
+    "define_code_key": "70230",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70231",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP900",
+    "define_code_kor_name": "강관"
+  },
+  {
+    "define_code_key": "70232",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP901",
+    "define_code_kor_name": "강선"
+  },
+  {
+    "define_code_key": "70233",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP902",
+    "define_code_kor_name": "강재"
+  },
+  {
+    "define_code_key": "70234",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP903",
+    "define_code_kor_name": "강판"
+  },
+  {
+    "define_code_key": "70235",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP904",
+    "define_code_kor_name": "강화유리"
+  },
+  {
+    "define_code_key": "70236",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP905",
+    "define_code_kor_name": "강화플라스틱"
+  },
+  {
+    "define_code_key": "70237",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP906",
+    "define_code_kor_name": "견치돌"
+  },
+  {
+    "define_code_key": "70238",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP907",
+    "define_code_kor_name": "고무"
+  },
+  {
+    "define_code_key": "70239",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP908",
+    "define_code_kor_name": "녹석(돌산호과일종)"
+  },
+  {
+    "define_code_key": "70240",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP909",
+    "define_code_kor_name": "동파이프"
+  },
+  {
+    "define_code_key": "70241",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP910",
+    "define_code_kor_name": "로프"
+  },
+  {
+    "define_code_key": "70242",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP911",
+    "define_code_kor_name": "막돌"
+  },
+  {
+    "define_code_key": "70243",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP912",
+    "define_code_kor_name": "매쉬"
+  },
+  {
+    "define_code_key": "70244",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP913",
+    "define_code_kor_name": "목재"
+  },
+  {
+    "define_code_key": "70245",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP914",
+    "define_code_kor_name": "물"
+  },
+  {
+    "define_code_key": "70246",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP915",
+    "define_code_kor_name": "바위"
+  },
+  {
+    "define_code_key": "70247",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP916",
+    "define_code_kor_name": "방사성물질"
+  },
+  {
+    "define_code_key": "70248",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP917",
+    "define_code_kor_name": "산호"
+  },
+  {
+    "define_code_key": "70249",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP918",
+    "define_code_kor_name": "소금"
+  },
+  {
+    "define_code_key": "70250",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP919",
+    "define_code_kor_name": "속돌"
+  },
+  {
+    "define_code_key": "70251",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP920",
+    "define_code_kor_name": "쇄석"
+  },
+  {
+    "define_code_key": "70252",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP921",
+    "define_code_kor_name": "스틸"
+  },
+  {
+    "define_code_key": "70253",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP922",
+    "define_code_kor_name": "스폰지"
+  },
+  {
+    "define_code_key": "70254",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP923",
+    "define_code_kor_name": "시멘트"
+  },
+  {
+    "define_code_key": "70255",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP924",
+    "define_code_kor_name": "식생"
+  },
+  {
+    "define_code_key": "70256",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP925",
+    "define_code_kor_name": "실트"
+  },
+  {
+    "define_code_key": "70257",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP926",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_key": "70258",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP927",
+    "define_code_kor_name": "아크릴"
+  },
+  {
+    "define_code_key": "70259",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP928",
+    "define_code_kor_name": "와이어"
+  },
+  {
+    "define_code_key": "70260",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP929",
+    "define_code_kor_name": "유리"
+  },
+  {
+    "define_code_key": "70261",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP930",
+    "define_code_kor_name": "자갈"
+  },
+  {
+    "define_code_key": "70262",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP931",
+    "define_code_kor_name": "점토"
+  },
+  {
+    "define_code_key": "70263",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP932",
+    "define_code_kor_name": "조개껍질"
+  },
+  {
+    "define_code_key": "70264",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP933",
+    "define_code_kor_name": "조약돌"
+  },
+  {
+    "define_code_key": "70265",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP934",
+    "define_code_kor_name": "진흙"
+  },
+  {
+    "define_code_key": "70266",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP935",
+    "define_code_kor_name": "철"
+  },
+  {
+    "define_code_key": "70267",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP936",
+    "define_code_kor_name": "철강"
+  },
+  {
+    "define_code_key": "70268",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP937",
+    "define_code_kor_name": "철근콘크리트블록"
+  },
+  {
+    "define_code_key": "70269",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP938",
+    "define_code_kor_name": "철망"
+  },
+  {
+    "define_code_key": "70270",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP939",
+    "define_code_kor_name": "철조망"
+  },
+  {
+    "define_code_key": "70271",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP940",
+    "define_code_kor_name": "철책"
+  },
+  {
+    "define_code_key": "70272",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP941",
+    "define_code_kor_name": "투명유리"
+  },
+  {
+    "define_code_key": "70273",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP942",
+    "define_code_kor_name": "파형동판"
+  },
+  {
+    "define_code_key": "70274",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP943",
+    "define_code_kor_name": "합성재"
+  },
+  {
+    "define_code_key": "70275",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP944",
+    "define_code_kor_name": "호박돌"
+  },
+  {
+    "define_code_key": "70276",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP945",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "70277",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP946",
+    "define_code_kor_name": "화산재"
+  },
+  {
+    "define_code_key": "70278",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP947",
+    "define_code_kor_name": "화학재질"
+  },
+  {
+    "define_code_key": "70279",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP948",
+    "define_code_kor_name": "황토"
+  },
+  {
+    "define_code_key": "70280",
+    "define_code_field_key": "11334",
+    "define_code_name": "STP949",
+    "define_code_kor_name": "IRN"
+  }
+]

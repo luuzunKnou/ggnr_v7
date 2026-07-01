@@ -1,0 +1,78 @@
+[
+  {
+    "define_code_name": "1801",
+    "define_code_kor_name": "경계표지"
+  },
+  {
+    "define_code_name": "1802",
+    "define_code_kor_name": "이정표지"
+  },
+  {
+    "define_code_name": "1803",
+    "define_code_kor_name": "방향표지"
+  },
+  {
+    "define_code_name": "1804",
+    "define_code_kor_name": "노선표지"
+  },
+  {
+    "define_code_name": "1805",
+    "define_code_kor_name": "주의표지"
+  },
+  {
+    "define_code_name": "1806",
+    "define_code_kor_name": "규제표지"
+  },
+  {
+    "define_code_name": "1807",
+    "define_code_kor_name": "지시표지"
+  },
+  {
+    "define_code_name": "1808",
+    "define_code_kor_name": "보조표지"
+  },
+  {
+    "define_code_name": "1809",
+    "define_code_kor_name": "거리표지"
+  },
+  {
+    "define_code_name": "1810",
+    "define_code_kor_name": "휴게소표지"
+  },
+  {
+    "define_code_name": "1811",
+    "define_code_kor_name": "관광지표지"
+  },
+  {
+    "define_code_name": "1812",
+    "define_code_kor_name": "양보차로표지"
+  },
+  {
+    "define_code_name": "1813",
+    "define_code_kor_name": "오르막차로표지"
+  },
+  {
+    "define_code_name": "1814",
+    "define_code_kor_name": "유도표지"
+  },
+  {
+    "define_code_name": "1815",
+    "define_code_kor_name": "예고표지"
+  },
+  {
+    "define_code_name": "1816",
+    "define_code_kor_name": "도로명 방향표지"
+  },
+  {
+    "define_code_name": "1897",
+    "define_code_kor_name": "기타표지"
+  },
+  {
+    "define_code_name": "1898",
+    "define_code_kor_name": "안내기타표지"
+  },
+  {
+    "define_code_name": "1899",
+    "define_code_kor_name": "교통기타표지"
+  }
+]

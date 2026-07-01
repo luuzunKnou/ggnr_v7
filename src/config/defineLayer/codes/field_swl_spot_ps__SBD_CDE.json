@@ -1,0 +1,56 @@
+[
+  {
+    "define_code_key": "68580",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "68581",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD001",
+    "define_code_kor_name": "우수"
+  },
+  {
+    "define_code_key": "68582",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD002",
+    "define_code_kor_name": "오수"
+  },
+  {
+    "define_code_key": "68583",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD003",
+    "define_code_kor_name": "집수"
+  },
+  {
+    "define_code_key": "68584",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68585",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD900",
+    "define_code_kor_name": "도로우수받이"
+  },
+  {
+    "define_code_key": "68586",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD901",
+    "define_code_kor_name": "빗물"
+  },
+  {
+    "define_code_key": "68587",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD902",
+    "define_code_kor_name": "연결"
+  },
+  {
+    "define_code_key": "68588",
+    "define_code_field_key": "4792",
+    "define_code_name": "SBD903",
+    "define_code_kor_name": "합류"
+  }
+]

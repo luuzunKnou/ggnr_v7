@@ -11,8 +11,10 @@ import {
 import {
   BackgroundMapSelector,
   defaultBackgroundMapGroups,
+  buildCustomAerialBackgroundOptions,
+  FALLBACK_BACKGROUND_MAP_ID,
+  pickLatestCustomAerialBackgroundId,
   type BackgroundMapGroup,
-  type BackgroundMapOption,
 } from './mapControlPanel/backgroundMapSelector';
 import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
 import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
@@ -52,11 +54,15 @@ import {
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
 import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
+import { useMapVisualCenterPixel } from './hooks/useMapVisualCenterPixel';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
+import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
 import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
 import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
+import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler';
+import { canStartMapDrawInteraction, type MapDrawInteractionKind } from './mapDrawInteraction';
 import {
   getAllRoadLedgerDocLayerIds,
   ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
@@ -106,6 +112,7 @@ const MULTI_SELECT_IDS = [
   'land-category',
   'ownership',
   'street-view',
+  'official-land-price',
 ];
 
 // 전체 레이어 끄기 버튼에서 제거할 컨트롤 ID (지적도, 건물도로, 기초구간)
@@ -145,9 +152,15 @@ export default function OpenLayersMap({
     defaultCenter,
     projectName
   );
+  const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef;
+
+  useEffect(() => {
+    if (!mapReady) return;
+    applyMapViewPaddingRef?.current?.();
+  }, [applyMapViewPaddingRef, mapReady]);
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
-  const [selectedBackgroundMap, setSelectedBackgroundMap] = useState('aerial-2022');
+  const [selectedBackgroundMap, setSelectedBackgroundMap] = useState(FALLBACK_BACKGROUND_MAP_ID);
   const [backgroundMapGroups, setBackgroundMapGroups] = useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
@@ -281,20 +294,6 @@ export default function OpenLayersMap({
 
   useEffect(() => {
     let cancelled = false;
-    const buildLabelFromOrthoFolder = (id: string): string | null => {
-      // satellite_YYYY[_CRS[_이름] | _이름]
-      const m = /^satellite_(\d{4})(?:_([^_]+)(?:_(.+))?)?$/i.exec(id);
-      if (!m) return null;
-      const year = m[1];
-      const seg3 = (m[2] ?? '').trim();
-      const seg4 = (m[3] ?? '').trim();
-      // 3번째 세그먼트가 순수 숫자 → CRS 코드, 표시명은 4번째
-      if (/^\d+$/.test(seg3)) {
-        return seg4 || `항공영상(${year})`;
-      }
-      // 3번째가 이름
-      return seg3 || `항공영상(${year})`;
-    };
     const run = async () => {
       try {
         const res = await call('', 'POST', {
@@ -303,22 +302,16 @@ export default function OpenLayersMap({
           params: {},
         });
         if (cancelled) return;
-        const d = (res?.data ?? res) as {
-          groups?: { groupName: string; tileSetIds: string[] }[];
-          legacyTileSetIds?: string[];
-        };
-        const idSet = new Set<string>();
-        for (const id of d.legacyTileSetIds ?? []) idSet.add(id);
-        for (const g of d.groups ?? []) idSet.add(g.groupName);
-        const opts: BackgroundMapOption[] = Array.from(idSet)
-          .map((id) => ({ id, label: buildLabelFromOrthoFolder(id) }))
-          .filter((x): x is { id: string; label: string } => !!x.label)
-          .sort((a, b) => b.id.localeCompare(a.id))
-          .map((x) => ({ id: x.id, label: x.label }));
-        if (opts.length === 0) return;
+        const d = (res?.data ?? res) as Parameters<typeof buildCustomAerialBackgroundOptions>[0];
+        const opts = buildCustomAerialBackgroundOptions(d);
         setBackgroundMapGroups((prev) =>
           prev.map((g) => (g.id === 'custom-aerial' ? { ...g, options: opts } : g))
         );
+        const state = loadPersistedMapState(projectName);
+        if (!state?.backgroundMap && opts.length > 0) {
+          const latest = pickLatestCustomAerialBackgroundId(d);
+          if (latest) setSelectedBackgroundMap(latest);
+        }
       } catch {
         /* ignore */
       }
@@ -327,7 +320,7 @@ export default function OpenLayersMap({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectName]);
 
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
@@ -477,8 +470,10 @@ export default function OpenLayersMap({
   // 레이어 목록 도형(사각형/다각형/원형) 그리기: spatialDrawRequest 시 Draw 추가, 완료 시 WKT(5181)로 onComplete 호출
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
+  const layerRowGeomEdit = mapContext?.layerRowGeomEdit ?? null;
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !spatialDrawRequest || !setSpatialDrawRequest) return;
+    if (layerRowGeomEdit) return;
     const map = mapInstanceRef.current;
     const source = new VectorSource();
     const layer = new VectorLayer({
@@ -517,7 +512,7 @@ export default function OpenLayersMap({
       map.removeInteraction(draw);
       map.removeLayer(layer);
     };
-  }, [mapReady, spatialDrawRequest, setSpatialDrawRequest]);
+  }, [mapReady, spatialDrawRequest, setSpatialDrawRequest, layerRowGeomEdit]);
 
   // 지적도 레이어 동기화 (activeControls + visibleCadastralLayerNames)
   useCadastralLayerSync(
@@ -596,7 +591,7 @@ export default function OpenLayersMap({
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
-    roadCctvPanelOpen
+    roadCctvPanelOpen || !!layerRowGeomEdit
   );
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
@@ -923,6 +918,12 @@ export default function OpenLayersMap({
         return;
       }
 
+      const isDataQueryMenu = openedTokens.includes('standardList');
+      if (!isDataQueryMenu || mapContext.dataQueryMapPickEnabled === false) {
+        closePopup();
+        return;
+      }
+
       const layer = withFeat.find((r) => r.isSplitLayer) ?? withFeat[0];
       if (!layer) return;
       const feature = totalIdentifyCount === 1 ? layer.features[0].data : null;
@@ -946,30 +947,9 @@ export default function OpenLayersMap({
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
   const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);
 
-  // view.padding 반영 "시각적 중심" 픽셀에 크로스헤어를 고정
-  const [centerPixel, setCenterPixel] = useState<{ x: number; y: number } | null>(null);
+  // view.padding 반영 "시각적 중심" 픽셀 (크로스헤어 등)
   const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
-  useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-    const view = map.getView();
-    const update = () => {
-      const size = map.getSize();
-      if (!size) return;
-      const padding = (view as unknown as { padding?: number[] }).padding ?? [0, 0, 0, 0];
-      const [top, right, bottom, left] = padding;
-      const x = (size[0] - right + left) / 2;
-      const y = (size[1] - bottom + top) / 2;
-      setCenterPixel({ x, y });
-    };
-    update();
-    map.on('change:size', update);
-    map.on('postrender', update);
-    return () => {
-      map.un('change:size', update);
-      map.un('postrender', update);
-    };
-  }, [mapReady, mapPaddingLeft]);
+  const centerPixel = useMapVisualCenterPixel(mapInstanceRef.current, mapReady, mapPaddingLeft);
 
   // console 로그 auto-scroll
   useEffect(() => {
@@ -994,6 +974,34 @@ export default function OpenLayersMap({
     (result) => {
       console.log('측정 완료:', result);
     }
+  );
+
+  const clearMapDrawInteractions = useCallback(
+    (except?: MapDrawInteractionKind) => {
+      if (except !== 'measure') {
+        setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
+        clearMeasurements();
+      }
+      if (except !== 'spatialSearch') {
+        setSpatialDrawRequest?.(null);
+      }
+    },
+    [clearMeasurements, setSpatialDrawRequest]
+  );
+
+  useEffect(() => {
+    const ref = mapContext?.clearMapDrawInteractionsRef;
+    if (!ref) return;
+    ref.current = clearMapDrawInteractions;
+    return () => {
+      ref.current = null;
+    };
+  }, [clearMapDrawInteractions, mapContext?.clearMapDrawInteractionsRef]);
+
+  useOfficialLandPriceMapLayer(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls.includes('official-land-price')
   );
 
   const handleItemRightClick = (id: string) => {
@@ -1057,11 +1065,7 @@ export default function OpenLayersMap({
   };
 
   const handleControlClick = (id: string, isActive: boolean) => {
-    // 레이어 목록 검색용 도형 그리기가 켜져 있는 중에는 거리/면적 등 다른 도형 그리기(측정) 시작 불가
-    if (MEASUREMENT_IDS.includes(id) && !isActive && mapContext?.spatialDrawRequest) {
-      if (typeof window !== 'undefined') {
-        window.alert('레이어 목록 검색용 도형 그리기가 진행 중입니다. 도형 그리기를 완료하거나 취소한 후 측정을 사용해 주세요.');
-      }
+    if (MEASUREMENT_IDS.includes(id) && !isActive && !canStartMapDrawInteraction(mapContext, 'measure')) {
       return;
     }
 
@@ -1133,6 +1137,8 @@ export default function OpenLayersMap({
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
+
+      <LayerRowGeomEditHandler centerPixel={centerPixel} />
 
       {/* 지도 중심점 마크 (view 중심 = padding 반영된 보이는 영역 중심에 배치) */}
       <div

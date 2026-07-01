@@ -1,0 +1,34 @@
+[
+  {
+    "define_code_name": "2201",
+    "define_code_kor_name": "현장타설 콘크리트 바닥판"
+  },
+  {
+    "define_code_name": "2202",
+    "define_code_kor_name": "현장타설 프리스트레스 콘크리트 바닥판"
+  },
+  {
+    "define_code_name": "2203",
+    "define_code_kor_name": "프리캐스트 바닥판"
+  },
+  {
+    "define_code_name": "2204",
+    "define_code_kor_name": "I형 격자 바닥판"
+  },
+  {
+    "define_code_name": "2205",
+    "define_code_kor_name": "강상판"
+  },
+  {
+    "define_code_name": "2299",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC01",
+    "define_code_kor_name": "철근 콘크리트 바닥판"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "프리스트레스 바닥판"
+  }
+]

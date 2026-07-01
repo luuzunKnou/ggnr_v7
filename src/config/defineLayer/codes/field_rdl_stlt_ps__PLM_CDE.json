@@ -1,0 +1,206 @@
+[
+  {
+    "define_code_key": "72013",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72014",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM001",
+    "define_code_kor_name": "주철"
+  },
+  {
+    "define_code_key": "72015",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM002",
+    "define_code_kor_name": "강판"
+  },
+  {
+    "define_code_key": "72016",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM003",
+    "define_code_kor_name": "스텐레스"
+  },
+  {
+    "define_code_key": "72017",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM004",
+    "define_code_kor_name": "강관"
+  },
+  {
+    "define_code_key": "72018",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM005",
+    "define_code_kor_name": "한전주병설"
+  },
+  {
+    "define_code_key": "72019",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM006",
+    "define_code_kor_name": "조명탑"
+  },
+  {
+    "define_code_key": "72020",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM007",
+    "define_code_kor_name": "FRP"
+  },
+  {
+    "define_code_key": "72021",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72022",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM900",
+    "define_code_kor_name": "가로등부착형"
+  },
+  {
+    "define_code_key": "72023",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM901",
+    "define_code_kor_name": "동주"
+  },
+  {
+    "define_code_key": "72024",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM902",
+    "define_code_kor_name": "벽면부착형"
+  },
+  {
+    "define_code_key": "72025",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM903",
+    "define_code_kor_name": "스텐마디주"
+  },
+  {
+    "define_code_key": "72026",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM904",
+    "define_code_kor_name": "스틸"
+  },
+  {
+    "define_code_key": "72027",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM905",
+    "define_code_kor_name": "알루미늄 다이캐스팅"
+  },
+  {
+    "define_code_key": "72028",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM906",
+    "define_code_kor_name": "알루미늄주"
+  },
+  {
+    "define_code_key": "72029",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM907",
+    "define_code_kor_name": "원형마디철주"
+  },
+  {
+    "define_code_key": "72030",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM908",
+    "define_code_kor_name": "원형철주"
+  },
+  {
+    "define_code_key": "72031",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM909",
+    "define_code_kor_name": "전주부착형"
+  },
+  {
+    "define_code_key": "72032",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM910",
+    "define_code_kor_name": "주물형"
+  },
+  {
+    "define_code_key": "72033",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM911",
+    "define_code_kor_name": "철주"
+  },
+  {
+    "define_code_key": "72034",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM912",
+    "define_code_kor_name": "철팔각"
+  },
+  {
+    "define_code_key": "72035",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM913",
+    "define_code_kor_name": "청동"
+  },
+  {
+    "define_code_key": "72036",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM914",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "72037",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM915",
+    "define_code_kor_name": "테파폴"
+  },
+  {
+    "define_code_key": "72038",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM916",
+    "define_code_kor_name": "팔각테파폴(강판)"
+  },
+  {
+    "define_code_key": "72039",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM917",
+    "define_code_kor_name": "팔각테퍼"
+  },
+  {
+    "define_code_key": "72040",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM918",
+    "define_code_kor_name": "합성수지"
+  },
+  {
+    "define_code_key": "72041",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM919",
+    "define_code_kor_name": "혼합주(강관+스텐레스)"
+  },
+  {
+    "define_code_key": "72042",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM920",
+    "define_code_kor_name": "혼합주(주철+스텐레스)"
+  },
+  {
+    "define_code_key": "72043",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM921",
+    "define_code_kor_name": "황동"
+  },
+  {
+    "define_code_key": "72044",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM922",
+    "define_code_kor_name": "AL"
+  },
+  {
+    "define_code_key": "72045",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM923",
+    "define_code_kor_name": "STEEL"
+  },
+  {
+    "define_code_key": "72046",
+    "define_code_field_key": "7917",
+    "define_code_name": "PLM924",
+    "define_code_kor_name": "SUS"
+  }
+]

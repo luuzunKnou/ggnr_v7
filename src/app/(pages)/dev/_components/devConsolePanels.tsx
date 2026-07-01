@@ -12,6 +12,7 @@ import { ExlFileUploaderContent } from "./ExlFileUploaderContent"
 import { DataFileUploaderContent } from "./DataFileUploaderContent"
 import { FileManagerContent } from "./FileManagerContent"
 import { FileConverterContent } from "./FileConverterContent"
+import { DataMigrationContent } from "./DataMigrationContent"
 import { LasFixerContent } from "./LasFixerContent"
 import { OrthophotoManagerContent } from "./OrthophotoManagerContent"
 import { PermissionFeatureManager } from "./PermissionFeatureManager"
@@ -23,33 +24,9 @@ import { GeocodingTestPanel } from "./GeocodingTestPanel"
 import { SourceCodeUploaderContent } from "./SourceCodeUploaderContent"
 import { VersionManagerContent } from "./VersionManagerContent"
 import type { AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
+import { DEV_CONSOLE_MENUS, type DevConsoleMenuId } from "@/lib/consoleMenuAccess/menus/dev"
 
-export const DEV_SUBMENUS = [
-  { id: "systemList", label: "시스템 목록관리" },
-  { id: "serviceList", label: "기능 목록관리" },
-  { id: "systemIntegration", label: "시스템 연계" },
-  { id: "geocodingTest", label: "지오코딩 테스트" },
-  { id: "userManager", label: "사용자관리" },
-  { id: "permissionFeature", label: "권한관리" },
-  { id: "accessRequestQueue", label: "권한 신청 처리" },
-  { id: "shpFileUploader", label: "SHP File Uploader" },
-  { id: "exlFileUploader", label: "Excel File Uploader" },
-  { id: "dataFileUploader", label: "Data File Upload" },
-  { id: "sourceCodeUploader", label: "소스코드 업로더" },
-  { id: "versionManager", label: "버전관리" },
-  { id: "layerInfo", label: "레이어 정보관리" },
-  { id: "layerAttr", label: "레이어 속성관리" },
-  { id: "layerCode", label: "레이어 코드관리" },
-  { id: "systemVar", label: "시스템 변수" },
-  { id: "dbManager", label: "DB Manager" },
-  { id: "geoserverManagerLayer", label: "Geoserver Manager [layer]" },
-  { id: "geoserverManagerPublic", label: "Geoserver Manager [public]" },
-  { id: "lasFileUploader", label: "LAS File Uploader" },
-  { id: "fileManager", label: "File Manager" },
-  { id: "fileConverter", label: "File Converter" },
-  { id: "lasFixer", label: "LAS Fixer" },
-  { id: "orthophotoManager", label: "정사영상관리" },
-] as const
+export const DEV_SUBMENUS = DEV_CONSOLE_MENUS
 
 export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   {
@@ -73,10 +50,9 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     menuIds: [
       "systemIntegration",
       "geocodingTest",
-      "shpFileUploader",
-      "exlFileUploader",
-      "dataFileUploader",
-      "orthophotoManager",
+      "fileManager",
+      "fileConverter",
+      "dataMigration",
     ],
   },
   {
@@ -86,9 +62,17 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "dbManager",
       "geoserverManagerLayer",
       "geoserverManagerPublic",
+    ],
+  },
+  {
+    id: "etcFeatures",
+    label: "기타기능",
+    menuIds: [
+      "shpFileUploader",
+      "exlFileUploader",
+      "dataFileUploader",
+      "orthophotoManager",
       "lasFileUploader",
-      "fileManager",
-      "fileConverter",
       "lasFixer",
     ],
   },
@@ -99,7 +83,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
 ]
 
-export type DevSubmenuId = (typeof DEV_SUBMENUS)[number]["id"]
+export type DevSubmenuId = DevConsoleMenuId
 
 function devMenuLabel(menuId: string): string {
   return DEV_SUBMENUS.find((m) => m.id === menuId)?.label ?? menuId
@@ -141,6 +125,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "GGNR_DATA_DIR 현재 프로젝트 폴더 전체 탐색 및 업로드·다운로드·이동·이름변경·삭제"
     case "fileConverter":
       return "LAS -> PNTS, OBJ -> B3DM, TIF -> JPG 변환 화면"
+    case "dataMigration":
+      return "OCR 등 데이터 마이그레이션 (GPT Vision → DB·file_data)"
     case "shpFileUploader":
       return "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
     case "dataFileUploader":
@@ -163,7 +149,11 @@ export function renderDevMenuContent(menuId: string): ReactNode {
     case "systemList":
       return <SystemListManager />
     case "serviceList":
-      return <ServiceListManager />
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <ServiceListManager />
+        </div>
+      )
     case "systemIntegration":
       return <SystemIntegrationManager />
     case "geocodingTest":
@@ -228,6 +218,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <FileConverterContent />
+        </div>
+      )
+    case "dataMigration":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <DataMigrationContent />
         </div>
       )
     case "shpFileUploader":

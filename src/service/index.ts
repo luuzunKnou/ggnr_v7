@@ -21,11 +21,19 @@ import * as usrService from './usrService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadUseLedgerService from './roadUseLedgerService';
+import * as riverUseLedgerService from './riverUseLedgerService';
 import * as roadUseAndongService from './roadUseAndongService';
 import * as buildPublicLandService from './buildPublicLandService';
 import * as fileDataUploadService from './fileDataUploadService';
 import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
+import * as pdfToJpgService from './pdfToJpgService';
+import * as ocrMigrationService from './ocrMigrationService';
+import * as jijukLandAttrService from './jijukLandAttrService';
+import * as layerRowService from './layerRowService';
+import * as memoService from './memoService';
+import * as noticeService from './noticeService';
+import * as boardService from './boardService';
 
 export {
   configService,
@@ -48,9 +56,17 @@ export {
   riverBasicPlanService,
   roadLedgerService,
   roadUseLedgerService,
+  riverUseLedgerService,
   roadUseAndongService,
   buildPublicLandService,
   fileDataUploadService,
   integrationService,
   fileConverterService,
+  pdfToJpgService,
+  ocrMigrationService,
+  jijukLandAttrService,
+  layerRowService,
+  memoService,
+  noticeService,
+  boardService,
 };

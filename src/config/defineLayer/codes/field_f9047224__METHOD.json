@@ -1,0 +1,86 @@
+[
+  {
+    "define_code_name": "4301",
+    "define_code_kor_name": "중력식"
+  },
+  {
+    "define_code_name": "4302",
+    "define_code_kor_name": "반중력식"
+  },
+  {
+    "define_code_name": "4303",
+    "define_code_kor_name": "비자립형"
+  },
+  {
+    "define_code_name": "4304",
+    "define_code_kor_name": "캔딜레버식(4313, 4314 참고)"
+  },
+  {
+    "define_code_name": "4305",
+    "define_code_kor_name": "뒷부벽식"
+  },
+  {
+    "define_code_name": "4306",
+    "define_code_kor_name": "앞부벽식"
+  },
+  {
+    "define_code_name": "4307",
+    "define_code_kor_name": "U형"
+  },
+  {
+    "define_code_name": "4308",
+    "define_code_kor_name": "블록쌓기(돌쌓기)"
+  },
+  {
+    "define_code_name": "4309",
+    "define_code_kor_name": "보강토(4311, 4312 참고)"
+  },
+  {
+    "define_code_name": "4310",
+    "define_code_kor_name": "EPS"
+  },
+  {
+    "define_code_name": "4311",
+    "define_code_kor_name": "패널식 보강토"
+  },
+  {
+    "define_code_name": "4312",
+    "define_code_kor_name": "블록식 보강토"
+  },
+  {
+    "define_code_name": "4313",
+    "define_code_kor_name": "역T형"
+  },
+  {
+    "define_code_name": "4314",
+    "define_code_kor_name": "L형"
+  },
+  {
+    "define_code_name": "4315",
+    "define_code_kor_name": "선반식"
+  },
+  {
+    "define_code_name": "4316",
+    "define_code_kor_name": "상자형"
+  },
+  {
+    "define_code_name": "4317",
+    "define_code_kor_name": "혼합형"
+  },
+  {
+    "define_code_name": "4318",
+    "define_code_kor_name": "게비온"
+  },
+  {
+    "define_code_name": "4319",
+    "define_code_kor_name": "계단식"
+  },
+  {
+    "define_code_name": "4399",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC06",
+    "define_code_kor_name": "부축식"
+  }
+]

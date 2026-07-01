@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "68509",
+    "define_code_field_key": "4763",
+    "define_code_name": "VMT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "68510",
+    "define_code_field_key": "4763",
+    "define_code_name": "VMT001",
+    "define_code_kor_name": "우수"
+  },
+  {
+    "define_code_key": "68511",
+    "define_code_field_key": "4763",
+    "define_code_name": "VMT002",
+    "define_code_kor_name": "오수"
+  },
+  {
+    "define_code_key": "68512",
+    "define_code_field_key": "4763",
+    "define_code_name": "VMT003",
+    "define_code_kor_name": "합류"
+  },
+  {
+    "define_code_key": "68513",
+    "define_code_field_key": "4763",
+    "define_code_name": "VMT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68514",
+    "define_code_field_key": "4763",
+    "define_code_name": "VMT900",
+    "define_code_kor_name": "방류토구"
+  }
+]

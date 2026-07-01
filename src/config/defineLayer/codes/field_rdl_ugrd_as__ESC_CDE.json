@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "72450",
+    "define_code_field_key": "8017",
+    "define_code_name": "ESC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72451",
+    "define_code_field_key": "8017",
+    "define_code_name": "ESC001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "72452",
+    "define_code_field_key": "8017",
+    "define_code_name": "ESC002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "72453",
+    "define_code_field_key": "8017",
+    "define_code_name": "ESC003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "72454",
+    "define_code_field_key": "8017",
+    "define_code_name": "ESC999",
+    "define_code_kor_name": "기타"
+  }
+]

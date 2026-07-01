@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
@@ -399,9 +400,9 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
     { id: 'remove', label: `삭제 (${counts.remove})` },
   ];
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
       onClick={onClose}
       role="presentation"
     >
@@ -677,7 +678,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
         const isBusyDetail = busyKey === detailLog.sl_key;
         return (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50"
             onClick={(e) => { e.stopPropagation(); closeDetail(); }}
             role="presentation"
           >
@@ -832,6 +833,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
           </div>
         );
       })()}
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,0 +1,50 @@
+[
+  {
+    "define_code_key": "67533",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "67534",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH001",
+    "define_code_kor_name": "유"
+  },
+  {
+    "define_code_key": "67535",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH002",
+    "define_code_kor_name": "무"
+  },
+  {
+    "define_code_key": "67536",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "67812",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "67813",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH001",
+    "define_code_kor_name": "유"
+  },
+  {
+    "define_code_key": "67814",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH002",
+    "define_code_kor_name": "무"
+  },
+  {
+    "define_code_key": "67815",
+    "define_code_field_key": "4503",
+    "define_code_name": "MAH999",
+    "define_code_kor_name": "기타"
+  }
+]

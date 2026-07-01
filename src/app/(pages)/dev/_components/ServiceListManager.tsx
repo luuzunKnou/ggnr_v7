@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import {
   Dialog,
@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
-import { Trash2, Plus } from "lucide-react"
+import { Trash2, Plus, Search } from "lucide-react"
 
 export type ServiceItem = {
   ser_menu: string | null
@@ -39,8 +39,6 @@ export type ServiceItem = {
 }
 
 export type ServiceSource = "common" | "custom"
-
-const COMMON_ADD_PASSWORD = "admin00!!"
 
 export type ServiceItemWithSource = ServiceItem & { source: ServiceSource }
 
@@ -63,6 +61,12 @@ function emptyService(): ServiceItem {
   }
 }
 
+function formatBoolFlag(v: boolean | null | undefined, whenTrue: string, whenFalse = "-"): string {
+  if (v === true) return whenTrue
+  if (v === false) return whenFalse
+  return "-"
+}
+
 export function ServiceListManager() {
   const [items, setItems] = useState<ServiceItemWithSource[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,13 +78,33 @@ export function ServiceListManager() {
   const [editingSerEng, setEditingSerEng] = useState<string | null>(null)
   const [addSource, setAddSource] = useState<ServiceSource | null>(null)
   const [form, setForm] = useState<ServiceItem>(emptyService())
-  const [commonConfirmOpen, setCommonConfirmOpen] = useState(false)
-  const [commonConfirmPassword, setCommonConfirmPassword] = useState("")
-  const [commonConfirmError, setCommonConfirmError] = useState<string | null>(null)
-  const [commonConfirmTarget, setCommonConfirmTarget] = useState<
-    { mode: "add" } | { mode: "edit"; index: number } | { mode: "delete"; index: number } | null
-  >(null)
-  const [commonWarningClicks, setCommonWarningClicks] = useState(0)
+  const [listSearch, setListSearch] = useState("")
+
+  const filteredRows = useMemo(() => {
+    const q = listSearch.trim().toLowerCase()
+    return items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => {
+        if (!q) return true
+        const sourceLabel = item.source === "common" ? "공통" : "커스텀"
+        const searchable = [
+          sourceLabel,
+          item.ser_eng,
+          item.ser_kor,
+          item.ser_type,
+          item.ser_menu,
+          item.ser_cat,
+          item.ser_work_type,
+          item.ser_data_table,
+          item.ser_data_query,
+          item.ser_idx != null ? String(item.ser_idx) : "",
+          item.ser_is_private === true ? "비공개" : item.ser_is_private === false ? "공개" : "",
+          item.ser_is_del === true ? "삭제" : "",
+          item.ser_has_file === true ? "첨부 y" : item.ser_has_file === false ? "첨부 n" : "",
+        ]
+        return searchable.some((v) => (v ?? "").toLowerCase().includes(q))
+      })
+  }, [items, listSearch])
 
   const loadItems = async () => {
     setLoading(true)
@@ -113,82 +137,35 @@ export function ServiceListManager() {
     loadItems()
   }, [])
 
-  const openAddCommonConfirm = () => {
-    setCommonConfirmTarget({ mode: "add" })
-    setCommonConfirmError(null)
-    setCommonConfirmPassword("")
-    setCommonWarningClicks(0)
-    setCommonConfirmOpen(true)
+  const openAddCommon = () => {
+    setSuccessMsg(null)
+    setEditingIndex(null)
+    setAddSource("common")
+    setForm(emptyService())
+    setDialogOpen(true)
   }
 
-  const openCommonConfirmForEdit = (index: number) => {
-    setCommonConfirmTarget({ mode: "edit", index })
-    setCommonConfirmError(null)
-    setCommonConfirmPassword("")
-    setCommonWarningClicks(0)
-    setCommonConfirmOpen(true)
-  }
-
-  const openCommonConfirmForDelete = (index: number) => {
-    setCommonConfirmTarget({ mode: "delete", index })
-    setCommonConfirmError(null)
-    setCommonConfirmPassword("")
-    setCommonWarningClicks(0)
-    setCommonConfirmOpen(true)
-  }
-
-  const proceedCommonConfirm = (forceBypass?: boolean) => {
-    const bypassPassword = forceBypass === true || commonWarningClicks >= 3
-    if (!bypassPassword && commonConfirmPassword !== COMMON_ADD_PASSWORD) {
-      setCommonConfirmError("비밀번호가 올바르지 않습니다.")
-      return
-    }
-    const target = commonConfirmTarget
-    setCommonConfirmOpen(false)
-    setCommonConfirmPassword("")
-    setCommonConfirmError(null)
-    setCommonConfirmTarget(null)
-    setCommonWarningClicks(0)
-
-    if (!target) return
-    if (target.mode === "add") {
-      setSuccessMsg(null)
-      setEditingIndex(null)
-      setAddSource("common")
-      setForm(emptyService())
-      setDialogOpen(true)
-      return
-    }
-    if (target.mode === "edit") {
-      setSuccessMsg(null)
-      setEditingIndex(target.index)
-      setAddSource(null)
-      setForm({ ...items[target.index] })
-      setDialogOpen(true)
-      return
-    }
-    if (target.mode === "delete") {
-      setDialogOpen(false)
-      const newList = items.filter((_, i) => i !== target.index)
-      setItems(newList)
-      ;(async () => {
-        try {
-          setSaving(true)
-          const commonOnly = newList.filter((s) => s.source === "common").map(({ source: _, ...s }) => s)
-          const res = await call("", "POST", {
-            service: "configService",
-            action: "saveServiceList",
-            params: { ser: commonOnly },
-          })
-          if (!res.success) throw new Error(res.error)
-          setSuccessMsg("공통 목록이 파일에 저장되었습니다.")
-        } catch (e: unknown) {
-          setError(e instanceof Error ? e.message : "파일 저장 실패")
-        } finally {
-          setSaving(false)
-        }
-      })()
-    }
+  const deleteCommonAt = (index: number) => {
+    setDialogOpen(false)
+    const newList = items.filter((_, i) => i !== index)
+    setItems(newList)
+    ;(async () => {
+      try {
+        setSaving(true)
+        const commonOnly = newList.filter((s) => s.source === "common").map(({ source: _, ...s }) => s)
+        const res = await call("", "POST", {
+          service: "configService",
+          action: "saveServiceList",
+          params: { ser: commonOnly },
+        })
+        if (!res.success) throw new Error(res.error)
+        setSuccessMsg("공통 목록이 파일에 저장되었습니다.")
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "파일 저장 실패")
+      } finally {
+        setSaving(false)
+      }
+    })()
   }
 
   const openAddCustom = () => {
@@ -201,10 +178,6 @@ export function ServiceListManager() {
 
   const openEdit = (index: number) => {
     const row = items[index]
-    if (row?.source === "common") {
-      openCommonConfirmForEdit(index)
-      return
-    }
     setSuccessMsg(null)
     setEditingIndex(index)
     setEditingSerEng(row?.ser_eng ?? null)
@@ -340,7 +313,7 @@ export function ServiceListManager() {
 
     if (row.source === "common") {
       closeDialog()
-      openCommonConfirmForDelete(index)
+      deleteCommonAt(index)
       return
     }
 
@@ -371,16 +344,18 @@ export function ServiceListManager() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 min-h-0 flex-1 h-full overflow-hidden">
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/50 px-3 py-1.5 rounded">{error}</div>
+        <div className="shrink-0 text-sm text-red-600 bg-red-50 dark:bg-red-950/50 px-3 py-1.5 rounded">{error}</div>
       )}
       {successMsg && (
-        <div className="text-sm text-green-700 bg-green-50 dark:bg-green-950/50 px-3 py-1.5 rounded">{successMsg}</div>
+        <div className="shrink-0 text-sm text-green-700 bg-green-50 dark:bg-green-950/50 px-3 py-1.5 rounded">
+          {successMsg}
+        </div>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <Button size="sm" className="rounded-none gap-1" onClick={openAddCommonConfirm}>
+      <div className="flex shrink-0 items-center gap-2 flex-wrap">
+        <Button size="sm" className="rounded-none gap-1" onClick={openAddCommon}>
           <Plus className="w-4 h-4" />
           공통 추가
         </Button>
@@ -388,42 +363,68 @@ export function ServiceListManager() {
           <Plus className="w-4 h-4" />
           커스텀 추가
         </Button>
+        <div className="relative min-w-[200px] flex-1 max-w-md">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            placeholder="기능 검색 (구분·영문명·한글명·유형·메뉴·카테고리)"
+            className="h-8 pl-8 rounded-none text-xs"
+          />
+        </div>
         {saving && <span className="text-xs text-muted-foreground self-center">저장 중...</span>}
       </div>
 
-      <div className="border rounded overflow-x-auto">
-        <Table className="[&_th]:py-0.5 [&_td]:py-0.5 text-xs leading-tight">
+      <div className="min-h-0 flex-1 overflow-auto rounded border">
+        <Table className="[&_th]:py-[4.5px] [&_td]:py-[4.5px] text-xs leading-tight">
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="w-20 font-medium">구분</TableHead>
-              <TableHead className="w-28 font-medium">서비스 영문명</TableHead>
-              <TableHead className="w-28 font-medium">서비스 한글명</TableHead>
-              <TableHead className="w-20 font-medium">서비스 유형</TableHead>
-              <TableHead className="w-24 font-medium">메뉴</TableHead>
-              <TableHead className="w-24 font-medium">카테고리</TableHead>
-              <TableHead className="w-16 font-medium">순서</TableHead>
+              <TableHead className="w-11 min-w-[2.75rem] max-w-[2.75rem] px-1 font-medium sticky top-0 z-10 bg-muted/95">
+                구분
+              </TableHead>
+              <TableHead className="w-28 font-medium sticky top-0 z-10 bg-muted/95">서비스 영문명</TableHead>
+              <TableHead className="w-28 font-medium sticky top-0 z-10 bg-muted/95">서비스 한글명</TableHead>
+              <TableHead className="w-20 font-medium sticky top-0 z-10 bg-muted/95">서비스 유형</TableHead>
+              <TableHead className="w-24 font-medium sticky top-0 z-10 bg-muted/95">메뉴</TableHead>
+              <TableHead className="w-24 font-medium sticky top-0 z-10 bg-muted/95">카테고리</TableHead>
+              <TableHead className="w-16 font-medium sticky top-0 z-10 bg-muted/95">순서</TableHead>
+              <TableHead className="w-14 min-w-[3.25rem] px-1 text-center font-medium sticky top-0 z-10 bg-muted/95">
+                비공개
+              </TableHead>
+              <TableHead className="w-14 min-w-[3.25rem] px-1 text-center font-medium sticky top-0 z-10 bg-muted/95">
+                삭제
+              </TableHead>
+              <TableHead className="w-14 min-w-[3.25rem] px-1 text-center font-medium sticky top-0 z-10 bg-muted/95">
+                첨부
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-2">
+                <TableCell colSpan={10} className="text-center text-muted-foreground py-2">
                   등록된 기능이 없습니다. 공통 추가 또는 커스텀 추가로 등록하세요.
                 </TableCell>
               </TableRow>
+            ) : filteredRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center text-muted-foreground py-2">
+                  검색 결과가 없습니다.
+                </TableCell>
+              </TableRow>
             ) : (
-              items.map((s, i) => (
+              filteredRows.map(({ item: s, index: i }) => (
                 <TableRow
                   key={s.source === "common" ? `common-${i}-${s.ser_eng ?? ""}` : `custom-${s.ser_eng ?? ""}`}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => openEdit(i)}
                 >
-                  <TableCell className="text-xs">
+                  <TableCell className="text-xs px-1">
                     <span
                       className={
                         s.source === "common"
-                          ? "inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium leading-tight bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
-                          : "inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium leading-tight bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200"
+                          ? "inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
+                          : "inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200"
                       }
                     >
                       {s.source === "common" ? "공통" : "커스텀"}
@@ -435,85 +436,21 @@ export function ServiceListManager() {
                   <TableCell className="text-xs text-muted-foreground">{s.ser_menu ?? "-"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{s.ser_cat ?? "-"}</TableCell>
                   <TableCell className="font-mono text-xs">{s.ser_idx ?? "-"}</TableCell>
+                  <TableCell className="text-center text-xs px-1">
+                    {formatBoolFlag(s.ser_is_private, "Y", "N")}
+                  </TableCell>
+                  <TableCell className="text-center text-xs px-1">
+                    {formatBoolFlag(s.ser_is_del, "Y", "N")}
+                  </TableCell>
+                  <TableCell className="text-center text-xs px-1">
+                    {formatBoolFlag(s.ser_has_file, "Y", "N")}
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </div>
-
-      <Dialog
-        open={commonConfirmOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCommonConfirmOpen(false)
-            setCommonConfirmPassword("")
-            setCommonConfirmError(null)
-            setCommonConfirmTarget(null)
-            setCommonWarningClicks(0)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md rounded-none">
-          <DialogHeader>
-            <DialogTitle>
-              {commonConfirmTarget?.mode === "add"
-                ? "공통 기능 추가 확인"
-                : commonConfirmTarget?.mode === "edit"
-                  ? "공통 기능 수정 확인"
-                  : commonConfirmTarget?.mode === "delete"
-                    ? "공통 기능 삭제 확인"
-                    : "공통 기능 확인"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p
-              role="alert"
-              className="text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800 cursor-default select-none"
-              onClick={() => {
-                setCommonWarningClicks((c) => {
-                  const next = c + 1
-                  if (next === 3) setTimeout(() => proceedCommonConfirm(true), 0)
-                  return next
-                })
-              }}
-            >
-              공통 기능 추가/수정/삭제 시 <strong>모든 시스템</strong>에 반영됩니다. 계속하려면 비밀번호를 입력하세요.
-            </p>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">비밀번호</label>
-              <Input
-                type="password"
-                className="rounded-none"
-                value={commonConfirmPassword}
-                onChange={(e) => {
-                  setCommonConfirmPassword(e.target.value)
-                  setCommonConfirmError(null)
-                }}
-                placeholder="비밀번호 입력"
-                onKeyDown={(e) => e.key === "Enter" && proceedCommonConfirm()}
-              />
-              {commonConfirmError && <p className="text-sm text-red-600">{commonConfirmError}</p>}
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-none"
-              onClick={() => {
-                setCommonConfirmOpen(false)
-                setCommonConfirmTarget(null)
-              }}
-            >
-              취소
-            </Button>
-            <Button size="sm" className="rounded-none" onClick={() => proceedCommonConfirm()}>
-              확인
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-none">

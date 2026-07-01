@@ -101,6 +101,7 @@ export function LandInfoPanelContent({
   const [dataPortalKey, setDataPortalKey] = useState('');
 
   const [parcelError, setParcelError] = useState<string | null>(null);
+  const [parcelFetching, setParcelFetching] = useState(false);
   const [parcelData, setParcelData] = useState<{
     characteristics: Record<string, unknown>[];
     landUses: Record<string, unknown>[];
@@ -154,8 +155,10 @@ export function LandInfoPanelContent({
 
   useEffect(() => {
     if (activeTab !== 'parcel') return;
-    if (!effectivePnu || !vworldKey) return;
+    if (!effectivePnu) return;
     let alive = true;
+    setParcelFetching(true);
+    setParcelError(null);
     fetchParcelTabData({ pnu: effectivePnu, vworldKey })
       .then((data) => {
         if (!alive) return;
@@ -166,7 +169,9 @@ export function LandInfoPanelContent({
         if (!alive) return;
         setParcelError('필지정보를 불러오지 못했습니다.');
       })
-      .finally(() => undefined);
+      .finally(() => {
+        if (alive) setParcelFetching(false);
+      });
     return () => {
       alive = false;
     };
@@ -255,7 +260,7 @@ export function LandInfoPanelContent({
   const tabBody = useMemo(() => {
     if (!effectivePnu) return <p className="text-xs text-rose-600">필지 PNU를 찾지 못했습니다.</p>;
     if (activeTab === 'parcel') {
-      const parcelLoading = loading || (parcelData.characteristics.length === 0 && parcelData.landUses.length === 0 && !parcelError);
+      const parcelLoading = loading || parcelFetching;
       if (parcelLoading) {
         return (
           <div className="h-full flex items-center justify-center text-slate-500 text-xs gap-2">

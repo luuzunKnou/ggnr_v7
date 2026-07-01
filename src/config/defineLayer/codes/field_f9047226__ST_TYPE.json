@@ -1,0 +1,22 @@
+[
+  {
+    "define_code_name": "1215",
+    "define_code_kor_name": "화강암"
+  },
+  {
+    "define_code_name": "1222",
+    "define_code_kor_name": "사암"
+  },
+  {
+    "define_code_name": "1223",
+    "define_code_kor_name": "대리석"
+  },
+  {
+    "define_code_name": "1224",
+    "define_code_kor_name": "자연석"
+  },
+  {
+    "define_code_name": "1299",
+    "define_code_kor_name": "기타"
+  }
+]

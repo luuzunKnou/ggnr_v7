@@ -1,0 +1,22 @@
+[
+  {
+    "define_code_name": "3901",
+    "define_code_kor_name": "문자식"
+  },
+  {
+    "define_code_name": "3902",
+    "define_code_kor_name": "도형식"
+  },
+  {
+    "define_code_name": "3903",
+    "define_code_kor_name": "차로제어식"
+  },
+  {
+    "define_code_name": "3904",
+    "define_code_kor_name": "동영상식"
+  },
+  {
+    "define_code_name": "3999",
+    "define_code_kor_name": "기타"
+  }
+]

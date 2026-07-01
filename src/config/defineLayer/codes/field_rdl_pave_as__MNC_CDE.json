@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "71332",
+    "define_code_field_key": "7727",
+    "define_code_name": "MNC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71333",
+    "define_code_field_key": "7727",
+    "define_code_name": "MNC001",
+    "define_code_kor_name": "신설"
+  },
+  {
+    "define_code_key": "71334",
+    "define_code_field_key": "7727",
+    "define_code_name": "MNC002",
+    "define_code_kor_name": "전면개수"
+  },
+  {
+    "define_code_key": "71335",
+    "define_code_field_key": "7727",
+    "define_code_name": "MNC003",
+    "define_code_kor_name": "부분보수"
+  },
+  {
+    "define_code_key": "71336",
+    "define_code_field_key": "7727",
+    "define_code_name": "MNC999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71337",
+    "define_code_field_key": "7727",
+    "define_code_name": "MNC900",
+    "define_code_kor_name": "전면보수"
+  }
+]

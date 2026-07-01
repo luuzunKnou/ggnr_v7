@@ -1,0 +1,704 @@
+[
+  {
+    "define_code_key": "71646",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71647",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH002",
+    "define_code_kor_name": "세종형대형"
+  },
+  {
+    "define_code_key": "71648",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH005",
+    "define_code_kor_name": "원형글로브"
+  },
+  {
+    "define_code_key": "71649",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH006",
+    "define_code_kor_name": "올챙이형"
+  },
+  {
+    "define_code_key": "71650",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH007",
+    "define_code_kor_name": "가오스형(신),"
+  },
+  {
+    "define_code_key": "71651",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH010",
+    "define_code_kor_name": "수박등"
+  },
+  {
+    "define_code_key": "71652",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH901",
+    "define_code_kor_name": "확산형"
+  },
+  {
+    "define_code_key": "71653",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71654",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH800",
+    "define_code_kor_name": "21세기형"
+  },
+  {
+    "define_code_key": "71655",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH801",
+    "define_code_kor_name": "4각형"
+  },
+  {
+    "define_code_key": "71656",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH802",
+    "define_code_kor_name": "6각형"
+  },
+  {
+    "define_code_key": "71657",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH803",
+    "define_code_kor_name": "8각형"
+  },
+  {
+    "define_code_key": "71658",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH804",
+    "define_code_kor_name": "가로등"
+  },
+  {
+    "define_code_key": "71659",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH805",
+    "define_code_kor_name": "가오스,수박"
+  },
+  {
+    "define_code_key": "71660",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH806",
+    "define_code_kor_name": "간접조명주"
+  },
+  {
+    "define_code_key": "71661",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH807",
+    "define_code_kor_name": "갈매기형"
+  },
+  {
+    "define_code_key": "71662",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH808",
+    "define_code_kor_name": "갓등"
+  },
+  {
+    "define_code_key": "71663",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH809",
+    "define_code_kor_name": "갓부형"
+  },
+  {
+    "define_code_key": "71664",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH810",
+    "define_code_kor_name": "갓형"
+  },
+  {
+    "define_code_key": "71665",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH811",
+    "define_code_kor_name": "경관등"
+  },
+  {
+    "define_code_key": "71666",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH812",
+    "define_code_kor_name": "공원등"
+  },
+  {
+    "define_code_key": "71667",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH813",
+    "define_code_kor_name": "구멍가오스형"
+  },
+  {
+    "define_code_key": "71668",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH814",
+    "define_code_kor_name": "구형기"
+  },
+  {
+    "define_code_key": "71669",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH815",
+    "define_code_kor_name": "글로브형"
+  },
+  {
+    "define_code_key": "71670",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH816",
+    "define_code_kor_name": "기러기형"
+  },
+  {
+    "define_code_key": "71671",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH817",
+    "define_code_kor_name": "김포시형"
+  },
+  {
+    "define_code_key": "71672",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH818",
+    "define_code_kor_name": "까치형"
+  },
+  {
+    "define_code_key": "71673",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH819",
+    "define_code_kor_name": "나팔등"
+  },
+  {
+    "define_code_key": "71674",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH820",
+    "define_code_kor_name": "넌 컷 오프형"
+  },
+  {
+    "define_code_key": "71675",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH821",
+    "define_code_kor_name": "농촌등"
+  },
+  {
+    "define_code_key": "71676",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH822",
+    "define_code_kor_name": "다원형"
+  },
+  {
+    "define_code_key": "71677",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH823",
+    "define_code_kor_name": "다이아몬드형"
+  },
+  {
+    "define_code_key": "71678",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH824",
+    "define_code_kor_name": "대교형"
+  },
+  {
+    "define_code_key": "71679",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH825",
+    "define_code_kor_name": "돌고래형"
+  },
+  {
+    "define_code_key": "71680",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH826",
+    "define_code_kor_name": "맞춤형"
+  },
+  {
+    "define_code_key": "71681",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH827",
+    "define_code_kor_name": "목련형"
+  },
+  {
+    "define_code_key": "71682",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH828",
+    "define_code_kor_name": "무역로대형"
+  },
+  {
+    "define_code_key": "71683",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH829",
+    "define_code_kor_name": "무역의거리형"
+  },
+  {
+    "define_code_key": "71684",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH830",
+    "define_code_kor_name": "무전극램프"
+  },
+  {
+    "define_code_key": "71685",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH831",
+    "define_code_kor_name": "무지개"
+  },
+  {
+    "define_code_key": "71686",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH832",
+    "define_code_kor_name": "박등"
+  },
+  {
+    "define_code_key": "71687",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH833",
+    "define_code_kor_name": "보라매형"
+  },
+  {
+    "define_code_key": "71688",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH834",
+    "define_code_kor_name": "보석형"
+  },
+  {
+    "define_code_key": "71689",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH835",
+    "define_code_kor_name": "보안등"
+  },
+  {
+    "define_code_key": "71690",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH836",
+    "define_code_kor_name": "보안등소형"
+  },
+  {
+    "define_code_key": "71691",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH837",
+    "define_code_kor_name": "보안등일반"
+  },
+  {
+    "define_code_key": "71692",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH838",
+    "define_code_kor_name": "보안등중형"
+  },
+  {
+    "define_code_key": "71693",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH839",
+    "define_code_kor_name": "보행자보호등"
+  },
+  {
+    "define_code_key": "71694",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH840",
+    "define_code_kor_name": "비둘기형"
+  },
+  {
+    "define_code_key": "71695",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH842",
+    "define_code_kor_name": "사각형"
+  },
+  {
+    "define_code_key": "71696",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH843",
+    "define_code_kor_name": "새.개화형"
+  },
+  {
+    "define_code_key": "71697",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH844",
+    "define_code_kor_name": "새모형"
+  },
+  {
+    "define_code_key": "71698",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH845",
+    "define_code_kor_name": "세미컷 오프형"
+  },
+  {
+    "define_code_key": "71699",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH846",
+    "define_code_kor_name": "세종형 중형"
+  },
+  {
+    "define_code_key": "71700",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH847",
+    "define_code_kor_name": "슈나이더"
+  },
+  {
+    "define_code_key": "71701",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH848",
+    "define_code_kor_name": "신형"
+  },
+  {
+    "define_code_key": "71702",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH849",
+    "define_code_kor_name": "신형1"
+  },
+  {
+    "define_code_key": "71703",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH850",
+    "define_code_kor_name": "신형10"
+  },
+  {
+    "define_code_key": "71704",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH851",
+    "define_code_kor_name": "신형11"
+  },
+  {
+    "define_code_key": "71705",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH852",
+    "define_code_kor_name": "신형12"
+  },
+  {
+    "define_code_key": "71706",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH853",
+    "define_code_kor_name": "신형13"
+  },
+  {
+    "define_code_key": "71707",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH854",
+    "define_code_kor_name": "신형14"
+  },
+  {
+    "define_code_key": "71708",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH855",
+    "define_code_kor_name": "신형15"
+  },
+  {
+    "define_code_key": "71709",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH856",
+    "define_code_kor_name": "신형16"
+  },
+  {
+    "define_code_key": "71710",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH857",
+    "define_code_kor_name": "신형17"
+  },
+  {
+    "define_code_key": "71711",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH858",
+    "define_code_kor_name": "신형18"
+  },
+  {
+    "define_code_key": "71712",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH859",
+    "define_code_kor_name": "신형2"
+  },
+  {
+    "define_code_key": "71713",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH860",
+    "define_code_kor_name": "신형3"
+  },
+  {
+    "define_code_key": "71714",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH861",
+    "define_code_kor_name": "신형4"
+  },
+  {
+    "define_code_key": "71715",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH862",
+    "define_code_kor_name": "신형5"
+  },
+  {
+    "define_code_key": "71716",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH863",
+    "define_code_kor_name": "신형6"
+  },
+  {
+    "define_code_key": "71717",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH864",
+    "define_code_kor_name": "신형7"
+  },
+  {
+    "define_code_key": "71718",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH865",
+    "define_code_kor_name": "신형8"
+  },
+  {
+    "define_code_key": "71719",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH866",
+    "define_code_kor_name": "신형9"
+  },
+  {
+    "define_code_key": "71720",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH867",
+    "define_code_kor_name": "신호등"
+  },
+  {
+    "define_code_key": "71721",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH868",
+    "define_code_kor_name": "쌍구형"
+  },
+  {
+    "define_code_key": "71722",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH869",
+    "define_code_kor_name": "아톰형"
+  },
+  {
+    "define_code_key": "71723",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH870",
+    "define_code_kor_name": "아트형"
+  },
+  {
+    "define_code_key": "71724",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH871",
+    "define_code_kor_name": "오페라형"
+  },
+  {
+    "define_code_key": "71725",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH872",
+    "define_code_kor_name": "온누리형"
+  },
+  {
+    "define_code_key": "71726",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH873",
+    "define_code_kor_name": "우주형"
+  },
+  {
+    "define_code_key": "71727",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH874",
+    "define_code_kor_name": "원형"
+  },
+  {
+    "define_code_key": "71728",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH875",
+    "define_code_kor_name": "원형보안등"
+  },
+  {
+    "define_code_key": "71729",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH876",
+    "define_code_kor_name": "육각"
+  },
+  {
+    "define_code_key": "71730",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH877",
+    "define_code_kor_name": "이미지등"
+  },
+  {
+    "define_code_key": "71731",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH878",
+    "define_code_kor_name": "일자형"
+  },
+  {
+    "define_code_key": "71732",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH879",
+    "define_code_kor_name": "접시형"
+  },
+  {
+    "define_code_key": "71733",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH880",
+    "define_code_kor_name": "제2교형"
+  },
+  {
+    "define_code_key": "71734",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH881",
+    "define_code_kor_name": "조명탑형"
+  },
+  {
+    "define_code_key": "71735",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH882",
+    "define_code_kor_name": "지중등"
+  },
+  {
+    "define_code_key": "71736",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH883",
+    "define_code_kor_name": "천지형"
+  },
+  {
+    "define_code_key": "71737",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH884",
+    "define_code_kor_name": "청사초롱"
+  },
+  {
+    "define_code_key": "71738",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH885",
+    "define_code_kor_name": "초롱형"
+  },
+  {
+    "define_code_key": "71739",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH886",
+    "define_code_kor_name": "컷 오프 형"
+  },
+  {
+    "define_code_key": "71740",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH887",
+    "define_code_kor_name": "코스모스형"
+  },
+  {
+    "define_code_key": "71741",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH888",
+    "define_code_kor_name": "터널형"
+  },
+  {
+    "define_code_key": "71742",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH889",
+    "define_code_kor_name": "통일21형"
+  },
+  {
+    "define_code_key": "71743",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH890",
+    "define_code_kor_name": "투광"
+  },
+  {
+    "define_code_key": "71744",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH891",
+    "define_code_kor_name": "투광기보안등"
+  },
+  {
+    "define_code_key": "71745",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH892",
+    "define_code_kor_name": "팽이형"
+  },
+  {
+    "define_code_key": "71746",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH893",
+    "define_code_kor_name": "폴형"
+  },
+  {
+    "define_code_key": "71747",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH894",
+    "define_code_kor_name": "표준형"
+  },
+  {
+    "define_code_key": "71748",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH895",
+    "define_code_kor_name": "해밀등"
+  },
+  {
+    "define_code_key": "71749",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH896",
+    "define_code_kor_name": "호롱불형"
+  },
+  {
+    "define_code_key": "71750",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH897",
+    "define_code_kor_name": "호박형"
+  },
+  {
+    "define_code_key": "71751",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH898",
+    "define_code_kor_name": "홈플러스1형"
+  },
+  {
+    "define_code_key": "71752",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH899",
+    "define_code_kor_name": "홈플러스2형"
+  },
+  {
+    "define_code_key": "71753",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH900",
+    "define_code_kor_name": "ALURA"
+  },
+  {
+    "define_code_key": "71754",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH902",
+    "define_code_kor_name": "BOX형"
+  },
+  {
+    "define_code_key": "71755",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH903",
+    "define_code_kor_name": "GC-삼등용"
+  },
+  {
+    "define_code_key": "71756",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH904",
+    "define_code_kor_name": "GC-이등용"
+  },
+  {
+    "define_code_key": "71757",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH905",
+    "define_code_kor_name": "GC-일등용"
+  },
+  {
+    "define_code_key": "71758",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH906",
+    "define_code_kor_name": "LED"
+  },
+  {
+    "define_code_key": "71759",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH907",
+    "define_code_kor_name": "LG(사각)"
+  },
+  {
+    "define_code_key": "71760",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH908",
+    "define_code_kor_name": "MODENA"
+  },
+  {
+    "define_code_key": "71761",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH909",
+    "define_code_kor_name": "Sepac"
+  },
+  {
+    "define_code_key": "71762",
+    "define_code_field_key": "7826",
+    "define_code_name": "LSH910",
+    "define_code_kor_name": "STS엠보싱돌기성형"
+  }
+]

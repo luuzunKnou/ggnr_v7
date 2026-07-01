@@ -1,0 +1,54 @@
+[
+  {
+    "define_code_name": "4810",
+    "define_code_kor_name": "측구"
+  },
+  {
+    "define_code_name": "4811",
+    "define_code_kor_name": "L형 측구"
+  },
+  {
+    "define_code_name": "4812",
+    "define_code_kor_name": "U형 측구"
+  },
+  {
+    "define_code_name": "4813",
+    "define_code_kor_name": "V형 측구"
+  },
+  {
+    "define_code_name": "4814",
+    "define_code_kor_name": "J형 측구"
+  },
+  {
+    "define_code_name": "4820",
+    "define_code_kor_name": "다이크"
+  },
+  {
+    "define_code_name": "4830",
+    "define_code_kor_name": "집수정"
+  },
+  {
+    "define_code_name": "4840",
+    "define_code_kor_name": "도수로"
+  },
+  {
+    "define_code_name": "4850",
+    "define_code_kor_name": "배수관"
+  },
+  {
+    "define_code_name": "4860",
+    "define_code_kor_name": "암거"
+  },
+  {
+    "define_code_name": "4861",
+    "define_code_kor_name": "맹암거"
+  },
+  {
+    "define_code_name": "4870",
+    "define_code_kor_name": "배수펌프"
+  },
+  {
+    "define_code_name": "4899",
+    "define_code_kor_name": "기타"
+  }
+]

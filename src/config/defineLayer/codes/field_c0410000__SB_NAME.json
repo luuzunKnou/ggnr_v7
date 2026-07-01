@@ -1,0 +1,1086 @@
+[
+  {
+    "define_code_name": "101-1",
+    "define_code_kor_name": "주의표지_T자형교차로"
+  },
+  {
+    "define_code_name": "101-2",
+    "define_code_kor_name": "주의표지_Y자형교차로"
+  },
+  {
+    "define_code_name": "101-3",
+    "define_code_kor_name": "주의표지_ㅏ자형교차로"
+  },
+  {
+    "define_code_name": "101-4",
+    "define_code_kor_name": "주의표지_ㅓ자형교차로"
+  },
+  {
+    "define_code_name": "10100",
+    "define_code_kor_name": "주의표지_+자형교차로"
+  },
+  {
+    "define_code_name": "10200",
+    "define_code_kor_name": "주의표지_우선도로"
+  },
+  {
+    "define_code_name": "103-1",
+    "define_code_kor_name": "주의표지_좌합류도로"
+  },
+  {
+    "define_code_name": "10300",
+    "define_code_kor_name": "주의표지_우합류도로"
+  },
+  {
+    "define_code_name": "10400",
+    "define_code_kor_name": "주의표지_회전형교차로"
+  },
+  {
+    "define_code_name": "10500",
+    "define_code_kor_name": "주의표지_철길건널목"
+  },
+  {
+    "define_code_name": "106-1",
+    "define_code_kor_name": "주의표지_좌로굽은도로"
+  },
+  {
+    "define_code_name": "10600",
+    "define_code_kor_name": "주의표지_우로굽은도로"
+  },
+  {
+    "define_code_name": "107-1",
+    "define_code_kor_name": "주의표지_좌우로이중굽은도로"
+  },
+  {
+    "define_code_name": "10700",
+    "define_code_kor_name": "주의표지_우좌로이중굽은도로"
+  },
+  {
+    "define_code_name": "10800",
+    "define_code_kor_name": "주의표지_2방향통행"
+  },
+  {
+    "define_code_name": "109-1",
+    "define_code_kor_name": "주의표지_내리막경사"
+  },
+  {
+    "define_code_name": "10900",
+    "define_code_kor_name": "주의표지_오르막경사"
+  },
+  {
+    "define_code_name": "110-1",
+    "define_code_kor_name": "주의표지_우측차로없어짐"
+  },
+  {
+    "define_code_name": "110-2",
+    "define_code_kor_name": "주의표지_좌측차로없어짐"
+  },
+  {
+    "define_code_name": "11000",
+    "define_code_kor_name": "주의표지_도로폭이좁아짐"
+  },
+  {
+    "define_code_name": "11300",
+    "define_code_kor_name": "주의표지_중앙분리대시작"
+  },
+  {
+    "define_code_name": "11400",
+    "define_code_kor_name": "주의표지_신호기"
+  },
+  {
+    "define_code_name": "11500",
+    "define_code_kor_name": "주의표지_미끄러운도로"
+  },
+  {
+    "define_code_name": "11600",
+    "define_code_kor_name": "주의표지_강변도로"
+  },
+  {
+    "define_code_name": "117-1",
+    "define_code_kor_name": "주의표지_과속방지턱"
+  },
+  {
+    "define_code_name": "11700",
+    "define_code_kor_name": "주의표지_노면고르지못함"
+  },
+  {
+    "define_code_name": "11800",
+    "define_code_kor_name": "주의표지_낙석도로"
+  },
+  {
+    "define_code_name": "11900",
+    "define_code_kor_name": "주의표지_고임물튐"
+  },
+  {
+    "define_code_name": "120-1",
+    "define_code_kor_name": "주의표지_양측방통행"
+  },
+  {
+    "define_code_name": "12000",
+    "define_code_kor_name": "주의표지_우측방통행"
+  },
+  {
+    "define_code_name": "12000",
+    "define_code_kor_name": "주의표지_횡단보도"
+  },
+  {
+    "define_code_name": "12100",
+    "define_code_kor_name": "주의표지_어린이보호"
+  },
+  {
+    "define_code_name": "12200",
+    "define_code_kor_name": "주의표지_자전거"
+  },
+  {
+    "define_code_name": "12300",
+    "define_code_kor_name": "주의표지_도로공사중"
+  },
+  {
+    "define_code_name": "12400",
+    "define_code_kor_name": "주의표지_비행기"
+  },
+  {
+    "define_code_name": "12500",
+    "define_code_kor_name": "주의표지_횡풍"
+  },
+  {
+    "define_code_name": "12600",
+    "define_code_kor_name": "주의표지_터널"
+  },
+  {
+    "define_code_name": "12700",
+    "define_code_kor_name": "주의표지_야생동물보호"
+  },
+  {
+    "define_code_name": "12800",
+    "define_code_kor_name": "주의표지_위험"
+  },
+  {
+    "define_code_name": "12900",
+    "define_code_kor_name": "주의표지_교량"
+  },
+  {
+    "define_code_name": "13000",
+    "define_code_kor_name": "주의표지_상습정체구간"
+  },
+  {
+    "define_code_name": "20100",
+    "define_code_kor_name": "규제표지_통행금지"
+  },
+  {
+    "define_code_name": "20200",
+    "define_code_kor_name": "규제표지_승용차통행금지"
+  },
+  {
+    "define_code_name": "20300",
+    "define_code_kor_name": "규제표지_화물차통행금지"
+  },
+  {
+    "define_code_name": "20400",
+    "define_code_kor_name": "규제표지_승합차통행금지"
+  },
+  {
+    "define_code_name": "20500",
+    "define_code_kor_name": "규제표지_2륜차통행금지"
+  },
+  {
+    "define_code_name": "206-1",
+    "define_code_kor_name": "규제표지_트랙터통행금지"
+  },
+  {
+    "define_code_name": "20600",
+    "define_code_kor_name": "규제표지_승용2륜통행금지"
+  },
+  {
+    "define_code_name": "20700",
+    "define_code_kor_name": "규제표지_우마차통행금지"
+  },
+  {
+    "define_code_name": "20800",
+    "define_code_kor_name": "규제표지_손수레통행금지"
+  },
+  {
+    "define_code_name": "20900",
+    "define_code_kor_name": "규제표지_자전거통행금지"
+  },
+  {
+    "define_code_name": "210-1",
+    "define_code_kor_name": "규제표지_직진금지"
+  },
+  {
+    "define_code_name": "21000",
+    "define_code_kor_name": "규제표지_진입금지"
+  },
+  {
+    "define_code_name": "211-1",
+    "define_code_kor_name": "규제표지_좌회전금지"
+  },
+  {
+    "define_code_name": "21100",
+    "define_code_kor_name": "규제표지_우회전금지"
+  },
+  {
+    "define_code_name": "212-1",
+    "define_code_kor_name": "규제표지_유턴금지"
+  },
+  {
+    "define_code_name": "21200",
+    "define_code_kor_name": "규제표지_횡단금지"
+  },
+  {
+    "define_code_name": "21300",
+    "define_code_kor_name": "규제표지_앞지르기금지"
+  },
+  {
+    "define_code_name": "21400",
+    "define_code_kor_name": "규제표지_주정차금지"
+  },
+  {
+    "define_code_name": "21500",
+    "define_code_kor_name": "규제표지_주차금지"
+  },
+  {
+    "define_code_name": "21600",
+    "define_code_kor_name": "규제표지_차중량제한"
+  },
+  {
+    "define_code_name": "21700",
+    "define_code_kor_name": "규제표지_차높이제한"
+  },
+  {
+    "define_code_name": "21800",
+    "define_code_kor_name": "규제표지_차폭제한"
+  },
+  {
+    "define_code_name": "21900",
+    "define_code_kor_name": "규제표지_차간거리확보"
+  },
+  {
+    "define_code_name": "22000",
+    "define_code_kor_name": "규제표지_최고속도제한"
+  },
+  {
+    "define_code_name": "22100",
+    "define_code_kor_name": "규제표지_최저속도제한"
+  },
+  {
+    "define_code_name": "22101",
+    "define_code_kor_name": "규제표지_(가변속도제한표지)"
+  },
+  {
+    "define_code_name": "22200",
+    "define_code_kor_name": "규제표지_경음기사용금지"
+  },
+  {
+    "define_code_name": "22300",
+    "define_code_kor_name": "규제표지_서행"
+  },
+  {
+    "define_code_name": "22400",
+    "define_code_kor_name": "규제표지_일시정지"
+  },
+  {
+    "define_code_name": "22500",
+    "define_code_kor_name": "규제표지_양보"
+  },
+  {
+    "define_code_name": "226-1",
+    "define_code_kor_name": "규제표지_보행자보행금지"
+  },
+  {
+    "define_code_name": "22600",
+    "define_code_kor_name": "규제표지_보행자횡단금지"
+  },
+  {
+    "define_code_name": "22700",
+    "define_code_kor_name": "규제표지_위험물차량통행금지"
+  },
+  {
+    "define_code_name": "30100",
+    "define_code_kor_name": "지시표지_자동차전용도로"
+  },
+  {
+    "define_code_name": "302-1",
+    "define_code_kor_name": "지시표지_자전거보행자겸용"
+  },
+  {
+    "define_code_name": "30200",
+    "define_code_kor_name": "지시표지_자전거전용도로"
+  },
+  {
+    "define_code_name": "30300",
+    "define_code_kor_name": "지시표지_회전교차로"
+  },
+  {
+    "define_code_name": "30400",
+    "define_code_kor_name": "지시표지_직진"
+  },
+  {
+    "define_code_name": "305-1",
+    "define_code_kor_name": "지시표지_좌회전"
+  },
+  {
+    "define_code_name": "30500",
+    "define_code_kor_name": "지시표지_우회전"
+  },
+  {
+    "define_code_name": "306-1",
+    "define_code_kor_name": "지시표지_직진및좌회전"
+  },
+  {
+    "define_code_name": "30600",
+    "define_code_kor_name": "지시표지_직진및우회전"
+  },
+  {
+    "define_code_name": "30700",
+    "define_code_kor_name": "지시표지_좌우회전"
+  },
+  {
+    "define_code_name": "30800",
+    "define_code_kor_name": "지시표지_유턴"
+  },
+  {
+    "define_code_name": "30900",
+    "define_code_kor_name": "지시표지_양측방통행"
+  },
+  {
+    "define_code_name": "310-1",
+    "define_code_kor_name": "지시표지_좌측면통행"
+  },
+  {
+    "define_code_name": "310-2",
+    "define_code_kor_name": "지시표지_진행별통행"
+  },
+  {
+    "define_code_name": "310-3",
+    "define_code_kor_name": "지시표지_우회로"
+  },
+  {
+    "define_code_name": "31000",
+    "define_code_kor_name": "지시표지_우측면통행"
+  },
+  {
+    "define_code_name": "31100",
+    "define_code_kor_name": "지시표지_경음기사용"
+  },
+  {
+    "define_code_name": "31200",
+    "define_code_kor_name": "지시표지_스노타이어체인사용"
+  },
+  {
+    "define_code_name": "31300",
+    "define_code_kor_name": "지시표지_안전지대"
+  },
+  {
+    "define_code_name": "314-1",
+    "define_code_kor_name": "지시표지_자전거주차장"
+  },
+  {
+    "define_code_name": "31400",
+    "define_code_kor_name": "지시표지_주차장"
+  },
+  {
+    "define_code_name": "31500",
+    "define_code_kor_name": "지시표지_보행자전용도로"
+  },
+  {
+    "define_code_name": "316-1",
+    "define_code_kor_name": "지시표지_노인보호"
+  },
+  {
+    "define_code_name": "31600",
+    "define_code_kor_name": "지시표지_횡단보도"
+  },
+  {
+    "define_code_name": "317-1",
+    "define_code_kor_name": "지시표지_장애인보호"
+  },
+  {
+    "define_code_name": "31700",
+    "define_code_kor_name": "지시표지_어린이보호"
+  },
+  {
+    "define_code_name": "31800",
+    "define_code_kor_name": "지시표지_자전거횡단도"
+  },
+  {
+    "define_code_name": "319-1",
+    "define_code_kor_name": "지시표지_일방통행(좌측)"
+  },
+  {
+    "define_code_name": "319-2",
+    "define_code_kor_name": "지시표지_일방통행(직진)"
+  },
+  {
+    "define_code_name": "31900",
+    "define_code_kor_name": "지시표지_일방통행(우측)"
+  },
+  {
+    "define_code_name": "32000",
+    "define_code_kor_name": "지시표지_비보호좌회전"
+  },
+  {
+    "define_code_name": "32100",
+    "define_code_kor_name": "지시표지_버스전용차로"
+  },
+  {
+    "define_code_name": "32200",
+    "define_code_kor_name": "지시표지_다인승전용차로"
+  },
+  {
+    "define_code_name": "323-1",
+    "define_code_kor_name": "지시표지_자전거나란히통행허용"
+  },
+  {
+    "define_code_name": "323-2",
+    "define_code_kor_name": "지시표지_자전거 및 보행자 통행구분"
+  },
+  {
+    "define_code_name": "323-3",
+    "define_code_kor_name": "지시표지_자전거전용차로"
+  },
+  {
+    "define_code_name": "32300",
+    "define_code_kor_name": "지시표지_통행우선"
+  },
+  {
+    "define_code_name": "401-1",
+    "define_code_kor_name": "경계표지(지방)_면계표지"
+  },
+  {
+    "define_code_name": "401-2",
+    "define_code_kor_name": "경계표지(지방)_군계표지"
+  },
+  {
+    "define_code_name": "401-3",
+    "define_code_kor_name": "경계표지(지방)_도계표지"
+  },
+  {
+    "define_code_name": "402-1",
+    "define_code_kor_name": "이정표지(지방)_1지명이정표지"
+  },
+  {
+    "define_code_name": "402-2",
+    "define_code_kor_name": "이정표지(지방)_2지명이정표지"
+  },
+  {
+    "define_code_name": "402-3",
+    "define_code_kor_name": "이정표지(지방)_3지명이정표지"
+  },
+  {
+    "define_code_name": "402-4",
+    "define_code_kor_name": "이정표지(지방)_좌우이정표지"
+  },
+  {
+    "define_code_name": "403-1",
+    "define_code_kor_name": "방향표지(지방)_3방향예고표지"
+  },
+  {
+    "define_code_name": "403-10",
+    "define_code_kor_name": "방향표지(지방)_3방향표지"
+  },
+  {
+    "define_code_name": "403-11",
+    "define_code_kor_name": "방향표지(지방)_2방향표지"
+  },
+  {
+    "define_code_name": "403-12",
+    "define_code_kor_name": "방향표지(지방)_약식3방향표지"
+  },
+  {
+    "define_code_name": "403-13",
+    "define_code_kor_name": "방향표지(지방)_약식2방향예고표지"
+  },
+  {
+    "define_code_name": "403-14",
+    "define_code_kor_name": "방향표지(지방)_2지명차로지정표지"
+  },
+  {
+    "define_code_name": "403-15",
+    "define_code_kor_name": "방향표지(지방)_1지명차로지정표지"
+  },
+  {
+    "define_code_name": "403-16",
+    "define_code_kor_name": "방향표지(지방)_광폭차로지정표지"
+  },
+  {
+    "define_code_name": "403-1A",
+    "define_code_kor_name": "방향표지(지방)_3방향예고표지A"
+  },
+  {
+    "define_code_name": "403-1B",
+    "define_code_kor_name": "방향표지(지방)_3방향예고표지B"
+  },
+  {
+    "define_code_name": "403-1C",
+    "define_code_kor_name": "방향표지(지방)_3방향예고표지C"
+  },
+  {
+    "define_code_name": "403-2",
+    "define_code_kor_name": "방향표지(지방)_3방향표지"
+  },
+  {
+    "define_code_name": "403-3",
+    "define_code_kor_name": "방향표지(지방)_2방향예고표지"
+  },
+  {
+    "define_code_name": "403-3A",
+    "define_code_kor_name": "방향표지(지방)_2방향예고표지A"
+  },
+  {
+    "define_code_name": "403-3B",
+    "define_code_kor_name": "방향표지(지방)_2방향예고표지B"
+  },
+  {
+    "define_code_name": "403-3C",
+    "define_code_kor_name": "방향표지(지방)_2방향예고표지C"
+  },
+  {
+    "define_code_name": "403-4",
+    "define_code_kor_name": "방향표지(지방)_2방향표지"
+  },
+  {
+    "define_code_name": "403-5",
+    "define_code_kor_name": "방향표지(지방)_2방향예고표지"
+  },
+  {
+    "define_code_name": "403-6",
+    "define_code_kor_name": "방향표지(지방)_2방향표지"
+  },
+  {
+    "define_code_name": "403-7",
+    "define_code_kor_name": "방향표지(지방)_1지명방향표지"
+  },
+  {
+    "define_code_name": "403-7A",
+    "define_code_kor_name": "방향표지(지방)_1지명방향표지A"
+  },
+  {
+    "define_code_name": "403-7B",
+    "define_code_kor_name": "방향표지(지방)_1지명방향표지B"
+  },
+  {
+    "define_code_name": "403-8",
+    "define_code_kor_name": "방향표지(지방)_2지명방향표지"
+  },
+  {
+    "define_code_name": "403-8A",
+    "define_code_kor_name": "방향표지(지방)_2지명방향표지A"
+  },
+  {
+    "define_code_name": "403-8B",
+    "define_code_kor_name": "방향표지(지방)_2지명방향표지B"
+  },
+  {
+    "define_code_name": "403-9",
+    "define_code_kor_name": "방향표지(지방)_2지명방향표지"
+  },
+  {
+    "define_code_name": "404-1A",
+    "define_code_kor_name": "노선표지(지방)_단일노선표지"
+  },
+  {
+    "define_code_name": "404-1B",
+    "define_code_kor_name": "노선표지(지방)_단일노선표지"
+  },
+  {
+    "define_code_name": "404-2A",
+    "define_code_kor_name": "노선표지(지방)_중복노선표지"
+  },
+  {
+    "define_code_name": "404-2B",
+    "define_code_kor_name": "노선표지(지방)_중복노선표지"
+  },
+  {
+    "define_code_name": "404-3",
+    "define_code_kor_name": "노선표지(지방)_분기점표지"
+  },
+  {
+    "define_code_name": "404-3A",
+    "define_code_kor_name": "방향표지(지방)_분기점표지A"
+  },
+  {
+    "define_code_name": "404-3B",
+    "define_code_kor_name": "방향표지(지방)_분기점표지B"
+  },
+  {
+    "define_code_name": "404-3C",
+    "define_code_kor_name": "방향표지(지방)_분기점표지C"
+  },
+  {
+    "define_code_name": "405-1",
+    "define_code_kor_name": "휴게소표지(지방)_소형휴게소표지"
+  },
+  {
+    "define_code_name": "405-2",
+    "define_code_kor_name": "휴게소표지(지방)_중형휴게소표지"
+  },
+  {
+    "define_code_name": "405-3",
+    "define_code_kor_name": "휴게소표지(지방)_대형휴게소표지"
+  },
+  {
+    "define_code_name": "406",
+    "define_code_kor_name": "관광지표지(지방)_관광지표지"
+  },
+  {
+    "define_code_name": "407-1",
+    "define_code_kor_name": "양보차로표지(지방)_양보차로예고표지"
+  },
+  {
+    "define_code_name": "407-2",
+    "define_code_kor_name": "양보차로표지(지방)_양보차로표지"
+  },
+  {
+    "define_code_name": "407-3",
+    "define_code_kor_name": "양보차로표지(지방)_양보차로끝표지"
+  },
+  {
+    "define_code_name": "407-4",
+    "define_code_kor_name": "오르막차로표지(지방)_오르막차로예고표지"
+  },
+  {
+    "define_code_name": "407-5",
+    "define_code_kor_name": "오르막차로표지(지방)_오르막차로표지"
+  },
+  {
+    "define_code_name": "407-6",
+    "define_code_kor_name": "오르막차로표지(지방)_오르막차로끝표지"
+  },
+  {
+    "define_code_name": "408",
+    "define_code_kor_name": "유도표지(지방)_유도표지"
+  },
+  {
+    "define_code_name": "409",
+    "define_code_kor_name": "예고표지(지방)_자동차전용도로 예고표지"
+  },
+  {
+    "define_code_name": "410-1A",
+    "define_code_kor_name": "방향표지(도시)_3방향예고표지"
+  },
+  {
+    "define_code_name": "410-1B",
+    "define_code_kor_name": "방향표지(도시)_3방향예고표지"
+  },
+  {
+    "define_code_name": "410-1C",
+    "define_code_kor_name": "방향표지(도시)_3방향예고표지"
+  },
+  {
+    "define_code_name": "410-1D",
+    "define_code_kor_name": "방향표지(도시)_3방향예고표지"
+  },
+  {
+    "define_code_name": "410-1E",
+    "define_code_kor_name": "방향표지(도시)_3방향예고표지"
+  },
+  {
+    "define_code_name": "410-2A",
+    "define_code_kor_name": "방향표지(도시)_3방향표지"
+  },
+  {
+    "define_code_name": "410-2B",
+    "define_code_kor_name": "방향표지(도시)_3방향표지"
+  },
+  {
+    "define_code_name": "410-2C",
+    "define_code_kor_name": "방향표지(도시)_3방향표지"
+  },
+  {
+    "define_code_name": "410-3",
+    "define_code_kor_name": "방향표지(도시)_2방향예고표지"
+  },
+  {
+    "define_code_name": "410-4",
+    "define_code_kor_name": "방향표지(도시)_2방향표지"
+  },
+  {
+    "define_code_name": "410-5A",
+    "define_code_kor_name": "방향표지(도시)_2방향표지"
+  },
+  {
+    "define_code_name": "410-5B",
+    "define_code_kor_name": "방향표지(도시)_2방향표지"
+  },
+  {
+    "define_code_name": "410-5C",
+    "define_code_kor_name": "방향표지(도시)_2방향표지"
+  },
+  {
+    "define_code_name": "410-5D",
+    "define_code_kor_name": "방향표지(도시)_2방향표지"
+  },
+  {
+    "define_code_name": "410-6",
+    "define_code_kor_name": "방향표지(도시)_방향표지"
+  },
+  {
+    "define_code_name": "411",
+    "define_code_kor_name": "보행인표지(도시)_보행인표지"
+  },
+  {
+    "define_code_name": "412-1",
+    "define_code_kor_name": "주차장표지(도시)_주차장예고표지"
+  },
+  {
+    "define_code_name": "412-2",
+    "define_code_kor_name": "주차장표지(도시)_주차장표지"
+  },
+  {
+    "define_code_name": "413-1",
+    "define_code_kor_name": "이정표시(도시)_1지명이정표지"
+  },
+  {
+    "define_code_name": "413-2",
+    "define_code_kor_name": "이정표시(도시)_2지명이정표지"
+  },
+  {
+    "define_code_name": "413-3",
+    "define_code_kor_name": "이정표시(도시)_3지명이정표지"
+  },
+  {
+    "define_code_name": "414-1",
+    "define_code_kor_name": "분기점표지(도시)_분기점표지"
+  },
+  {
+    "define_code_name": "414-2",
+    "define_code_kor_name": "분기점표지(도시)_분기점표지"
+  },
+  {
+    "define_code_name": "415",
+    "define_code_kor_name": "지점표지(도시)_지점표지"
+  },
+  {
+    "define_code_name": "440-1",
+    "define_code_kor_name": "도로명방향표지_3방향 도로명예고표지"
+  },
+  {
+    "define_code_name": "440-2",
+    "define_code_kor_name": "도로명방향표지_3방향 도로명표지"
+  },
+  {
+    "define_code_name": "440-3",
+    "define_code_kor_name": "도로명방향표지_2방향 도로명예고표지"
+  },
+  {
+    "define_code_name": "440-4",
+    "define_code_kor_name": "도로명방향표지_2방향 도로명표지"
+  },
+  {
+    "define_code_name": "440-5",
+    "define_code_kor_name": "도로명방향표지_회전교차로 도로명예고표지"
+  },
+  {
+    "define_code_name": "440-6",
+    "define_code_kor_name": "도로명방향표지_회전교차로 도로명표지"
+  },
+  {
+    "define_code_name": "440-7",
+    "define_code_kor_name": "도로명방향표지_다지형교차로 도로명예고표지"
+  },
+  {
+    "define_code_name": "440-8",
+    "define_code_kor_name": "도로명방향표지_다지형교차로 도로명표지"
+  },
+  {
+    "define_code_name": "501-1",
+    "define_code_kor_name": "보조표지_거리(여기부터)"
+  },
+  {
+    "define_code_name": "50100",
+    "define_code_kor_name": "보조표지_거리(앞부터)"
+  },
+  {
+    "define_code_name": "50200",
+    "define_code_kor_name": "보조표지_구역(시내전역)"
+  },
+  {
+    "define_code_name": "50300",
+    "define_code_kor_name": "보조표지_일자"
+  },
+  {
+    "define_code_name": "50400",
+    "define_code_kor_name": "보조표지_시간"
+  },
+  {
+    "define_code_name": "50500",
+    "define_code_kor_name": "보조표지_시간"
+  },
+  {
+    "define_code_name": "50600",
+    "define_code_kor_name": "보조표지_전방우선도로"
+  },
+  {
+    "define_code_name": "50700",
+    "define_code_kor_name": "보조표지_안전속도"
+  },
+  {
+    "define_code_name": "50800",
+    "define_code_kor_name": "보조표지_기상상태"
+  },
+  {
+    "define_code_name": "50900",
+    "define_code_kor_name": "보조표지_노면상태"
+  },
+  {
+    "define_code_name": "51000",
+    "define_code_kor_name": "보조표지_교통규제"
+  },
+  {
+    "define_code_name": "51100",
+    "define_code_kor_name": "보조표지_통행규제"
+  },
+  {
+    "define_code_name": "51200",
+    "define_code_kor_name": "보조표지_통행주의"
+  },
+  {
+    "define_code_name": "51300",
+    "define_code_kor_name": "보조표지_표지설명"
+  },
+  {
+    "define_code_name": "514-1",
+    "define_code_kor_name": "보조표지_구간내"
+  },
+  {
+    "define_code_name": "514-2",
+    "define_code_kor_name": "보조표지_구간끝"
+  },
+  {
+    "define_code_name": "51400",
+    "define_code_kor_name": "보조표지_구간시작"
+  },
+  {
+    "define_code_name": "515-1",
+    "define_code_kor_name": "보조표지_좌방향"
+  },
+  {
+    "define_code_name": "515-2",
+    "define_code_kor_name": "보조표지_전방"
+  },
+  {
+    "define_code_name": "51500",
+    "define_code_kor_name": "보조표지_우방향"
+  },
+  {
+    "define_code_name": "51600",
+    "define_code_kor_name": "보조표지_중량"
+  },
+  {
+    "define_code_name": "51700",
+    "define_code_kor_name": "보조표지_노폭"
+  },
+  {
+    "define_code_name": "51800",
+    "define_code_kor_name": "보조표지_거리"
+  },
+  {
+    "define_code_name": "51900",
+    "define_code_kor_name": "보조표지_해제"
+  },
+  {
+    "define_code_name": "52000",
+    "define_code_kor_name": "보조표지_견인지역"
+  },
+  {
+    "define_code_name": "521-1",
+    "define_code_kor_name": "기타_신호등화상태_적신호시"
+  },
+  {
+    "define_code_name": "521-2",
+    "define_code_kor_name": "기타_차량한정_승용차에한함"
+  },
+  {
+    "define_code_name": "52100",
+    "define_code_kor_name": "보조표지_어린이보호구역"
+  },
+  {
+    "define_code_name": "90000",
+    "define_code_kor_name": "기타_거리표지"
+  },
+  {
+    "define_code_name": "90100",
+    "define_code_kor_name": "기타_터널길이"
+  },
+  {
+    "define_code_name": "90200",
+    "define_code_kor_name": "기타_구역"
+  },
+  {
+    "define_code_name": "90300",
+    "define_code_kor_name": "기타_속도를줄이시오"
+  },
+  {
+    "define_code_name": "90400",
+    "define_code_kor_name": "기타_회차로"
+  },
+  {
+    "define_code_name": "90500",
+    "define_code_kor_name": "기타_화물적재차량1"
+  },
+  {
+    "define_code_name": "90600",
+    "define_code_kor_name": "기타_화물적재차량2"
+  },
+  {
+    "define_code_name": "90700",
+    "define_code_kor_name": "기타_거리"
+  },
+  {
+    "define_code_name": "90800",
+    "define_code_kor_name": "기타_라이트를켜시오"
+  },
+  {
+    "define_code_name": "90900",
+    "define_code_kor_name": "기타_버리지마시오"
+  },
+  {
+    "define_code_name": "91000",
+    "define_code_kor_name": "기타_담뱃불조심"
+  },
+  {
+    "define_code_name": "91100",
+    "define_code_kor_name": "기타_급경사감속"
+  },
+  {
+    "define_code_name": "91200",
+    "define_code_kor_name": "기타_이상기후감속"
+  },
+  {
+    "define_code_name": "913-1",
+    "define_code_kor_name": "기타_방향유도(＜＞)"
+  },
+  {
+    "define_code_name": "91300",
+    "define_code_kor_name": "기타_곡선유도(<)"
+  },
+  {
+    "define_code_name": "914-1",
+    "define_code_kor_name": "기타_방향유도(곡선부양방향)(><)"
+  },
+  {
+    "define_code_name": "91400",
+    "define_code_kor_name": "기타_곡선유도(>)"
+  },
+  {
+    "define_code_name": "915-10",
+    "define_code_kor_name": "기타_(위험) 천천히"
+  },
+  {
+    "define_code_name": "915-11",
+    "define_code_kor_name": "기타_(위험) 급커브"
+  },
+  {
+    "define_code_name": "915-12",
+    "define_code_kor_name": "기타_절대감속"
+  },
+  {
+    "define_code_name": "915-13",
+    "define_code_kor_name": "기타_추락주의"
+  },
+  {
+    "define_code_name": "915-14",
+    "define_code_kor_name": "기타_추월금지"
+  },
+  {
+    "define_code_name": "915-15",
+    "define_code_kor_name": "기타_천천히"
+  },
+  {
+    "define_code_name": "915-16",
+    "define_code_kor_name": "기타_갓길없음"
+  },
+  {
+    "define_code_name": "915-17",
+    "define_code_kor_name": "기타_카메라 단속구간"
+  },
+  {
+    "define_code_name": "915-18",
+    "define_code_kor_name": "기타_운전중 휴대폰금지"
+  },
+  {
+    "define_code_name": "915-2",
+    "define_code_kor_name": "기타_교통기타"
+  },
+  {
+    "define_code_name": "915-3",
+    "define_code_kor_name": "기타_마을끝까지 속도를 줄이시오"
+  },
+  {
+    "define_code_name": "915-4",
+    "define_code_kor_name": "기타_횡단금지"
+  },
+  {
+    "define_code_name": "915-5",
+    "define_code_kor_name": "기타_사고많은곳"
+  },
+  {
+    "define_code_name": "915-6",
+    "define_code_kor_name": "기타_미끄럼주의"
+  },
+  {
+    "define_code_name": "915-7",
+    "define_code_kor_name": "기타_추락위험주의"
+  },
+  {
+    "define_code_name": "915-8",
+    "define_code_kor_name": "기타_추돌주의"
+  },
+  {
+    "define_code_name": "915-9",
+    "define_code_kor_name": "기타_통학로서행"
+  },
+  {
+    "define_code_name": "91500",
+    "define_code_kor_name": "기타_(사고많은곳 속도를줄이시오)"
+  },
+  {
+    "define_code_name": "916-1",
+    "define_code_kor_name": "기타_저속전기차통행"
+  },
+  {
+    "define_code_name": "91600",
+    "define_code_kor_name": "기타_저속전기차통행금지"
+  },
+  {
+    "define_code_name": "99900",
+    "define_code_kor_name": "기타_교통안내표지 기타"
+  },
+  {
+    "define_code_name": "99900-2",
+    "define_code_kor_name": "기타_반사경"
+  },
+  {
+    "define_code_name": "99900-3",
+    "define_code_kor_name": "기타_무인카메라단속중"
+  },
+  {
+    "define_code_name": "99900-4",
+    "define_code_kor_name": "기타_속도를줄이시오 교통사고 많은곳"
+  },
+  {
+    "define_code_name": "99900-5",
+    "define_code_kor_name": "기타_속도를줄이시오 마을끝까지"
+  },
+  {
+    "define_code_name": "99900-6",
+    "define_code_kor_name": "기타_속도를줄이시오 사망사고발생지점"
+  },
+  {
+    "define_code_name": "99900-7",
+    "define_code_kor_name": "기타_장애물표적표지"
+  },
+  {
+    "define_code_name": "99900-8",
+    "define_code_kor_name": "기타_CCTV"
+  },
+  {
+    "define_code_name": "99900-9",
+    "define_code_kor_name": "기타_감응신호"
+  },
+  {
+    "define_code_name": "99999",
+    "define_code_kor_name": "기타_기타"
+  }
+]

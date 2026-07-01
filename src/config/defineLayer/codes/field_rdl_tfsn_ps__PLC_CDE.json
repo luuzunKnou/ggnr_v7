@@ -1,0 +1,56 @@
+[
+  {
+    "define_code_key": "72089",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72090",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT001",
+    "define_code_kor_name": "좌"
+  },
+  {
+    "define_code_key": "72091",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT002",
+    "define_code_kor_name": "우"
+  },
+  {
+    "define_code_key": "72092",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT003",
+    "define_code_kor_name": "중앙"
+  },
+  {
+    "define_code_key": "72093",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72094",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT900",
+    "define_code_kor_name": "(보도)전용"
+  },
+  {
+    "define_code_key": "72095",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT901",
+    "define_code_kor_name": "보도진입부"
+  },
+  {
+    "define_code_key": "72096",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT902",
+    "define_code_kor_name": "좌우혼용"
+  },
+  {
+    "define_code_key": "72097",
+    "define_code_field_key": "7936",
+    "define_code_name": "DRT903",
+    "define_code_kor_name": "횡단보도"
+  }
+]

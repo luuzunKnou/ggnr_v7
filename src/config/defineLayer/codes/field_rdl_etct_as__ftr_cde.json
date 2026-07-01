@@ -1,0 +1,20 @@
+[
+  {
+    "define_code_key": "69117",
+    "define_code_field_key": "11283",
+    "define_code_name": "AE140",
+    "define_code_kor_name": "계단"
+  },
+  {
+    "define_code_key": "69118",
+    "define_code_field_key": "11283",
+    "define_code_name": "AE121",
+    "define_code_kor_name": "교통섬(안전지대)"
+  },
+  {
+    "define_code_key": "69119",
+    "define_code_field_key": "11283",
+    "define_code_name": "AE261",
+    "define_code_kor_name": "승강장"
+  }
+]

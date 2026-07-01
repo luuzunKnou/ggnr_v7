@@ -1,0 +1,224 @@
+[
+  {
+    "define_code_key": "70728",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70729",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW001",
+    "define_code_kor_name": "벽돌"
+  },
+  {
+    "define_code_key": "70730",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW002",
+    "define_code_kor_name": "블록"
+  },
+  {
+    "define_code_key": "70731",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW003",
+    "define_code_kor_name": "시멘트"
+  },
+  {
+    "define_code_key": "70732",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW004",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "70733",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW005",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_key": "70734",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW006",
+    "define_code_kor_name": "아스콘"
+  },
+  {
+    "define_code_key": "70735",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW007",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "70736",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW008",
+    "define_code_kor_name": "합성재"
+  },
+  {
+    "define_code_key": "70737",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW009",
+    "define_code_kor_name": "화학재질"
+  },
+  {
+    "define_code_key": "70738",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW010",
+    "define_code_kor_name": "플라스틱"
+  },
+  {
+    "define_code_key": "70739",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW090",
+    "define_code_kor_name": "우레탄"
+  },
+  {
+    "define_code_key": "70740",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70741",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW900",
+    "define_code_kor_name": "고무매트"
+  },
+  {
+    "define_code_key": "70742",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW901",
+    "define_code_kor_name": "고압블럭"
+  },
+  {
+    "define_code_key": "70743",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW902",
+    "define_code_kor_name": "백색"
+  },
+  {
+    "define_code_key": "70744",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW903",
+    "define_code_kor_name": "비포장"
+  },
+  {
+    "define_code_key": "70745",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW904",
+    "define_code_kor_name": "세라믹"
+  },
+  {
+    "define_code_key": "70746",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW905",
+    "define_code_kor_name": "소고"
+  },
+  {
+    "define_code_key": "70747",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW906",
+    "define_code_kor_name": "소형고압블럭"
+  },
+  {
+    "define_code_key": "70748",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW907",
+    "define_code_kor_name": "스톤블럭"
+  },
+  {
+    "define_code_key": "70749",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW908",
+    "define_code_kor_name": "아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "70750",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW909",
+    "define_code_kor_name": "연성블럭(화학재료)"
+  },
+  {
+    "define_code_key": "70751",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW910",
+    "define_code_kor_name": "연성포장(화학재료)"
+  },
+  {
+    "define_code_key": "70752",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW911",
+    "define_code_kor_name": "일반사각블럭"
+  },
+  {
+    "define_code_key": "70753",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW912",
+    "define_code_kor_name": "점토블럭"
+  },
+  {
+    "define_code_key": "70754",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW913",
+    "define_code_kor_name": "칼라아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "70755",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW914",
+    "define_code_kor_name": "칼라콘크리트"
+  },
+  {
+    "define_code_key": "70756",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW915",
+    "define_code_kor_name": "타일"
+  },
+  {
+    "define_code_key": "70757",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW916",
+    "define_code_kor_name": "탄성고무"
+  },
+  {
+    "define_code_key": "70758",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW917",
+    "define_code_kor_name": "탄성포장재질(우레탄)"
+  },
+  {
+    "define_code_key": "70759",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW918",
+    "define_code_kor_name": "투수성고무탄성포장재"
+  },
+  {
+    "define_code_key": "70760",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW919",
+    "define_code_kor_name": "투수아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "70761",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW920",
+    "define_code_kor_name": "투수콘크리트"
+  },
+  {
+    "define_code_key": "70762",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW921",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "70763",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW922",
+    "define_code_kor_name": "AC"
+  },
+  {
+    "define_code_key": "70764",
+    "define_code_field_key": "7452",
+    "define_code_name": "SMW923",
+    "define_code_kor_name": "EPDM고무칩"
+  }
+]

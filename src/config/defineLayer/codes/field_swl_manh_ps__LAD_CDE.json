@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "1015",
+    "define_code_field_key": "4626",
+    "define_code_name": "LAD000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1016",
+    "define_code_field_key": "4626",
+    "define_code_name": "LAD001",
+    "define_code_kor_name": "유"
+  },
+  {
+    "define_code_key": "1017",
+    "define_code_field_key": "4626",
+    "define_code_name": "LAD002",
+    "define_code_kor_name": "무"
+  },
+  {
+    "define_code_key": "1018",
+    "define_code_field_key": "4626",
+    "define_code_name": "LAD900",
+    "define_code_kor_name": "개폐불가"
+  },
+  {
+    "define_code_key": "1019",
+    "define_code_field_key": "4626",
+    "define_code_name": "LAD901",
+    "define_code_kor_name": "매몰"
+  },
+  {
+    "define_code_key": "1020",
+    "define_code_field_key": "4626",
+    "define_code_name": "LAD999",
+    "define_code_kor_name": "기타"
+  }
+]

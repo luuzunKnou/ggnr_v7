@@ -1,0 +1,146 @@
+[
+  {
+    "define_code_key": "63640",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "63641",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT001",
+    "define_code_kor_name": "탐사"
+  },
+  {
+    "define_code_key": "63642",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT002",
+    "define_code_kor_name": "조사"
+  },
+  {
+    "define_code_key": "63643",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT003",
+    "define_code_kor_name": "굴착 흔적"
+  },
+  {
+    "define_code_key": "63644",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT004",
+    "define_code_kor_name": "불탐사(비금속)"
+  },
+  {
+    "define_code_key": "63645",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT005",
+    "define_code_kor_name": "불탐사(지상장애물)"
+  },
+  {
+    "define_code_key": "63646",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT006",
+    "define_code_kor_name": "불탐사(지하타시설물)"
+  },
+  {
+    "define_code_key": "63647",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT007",
+    "define_code_kor_name": "불탐사(고심도)"
+  },
+  {
+    "define_code_key": "63648",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT008",
+    "define_code_kor_name": "불탐사(접지불가)"
+  },
+  {
+    "define_code_key": "63649",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT009",
+    "define_code_kor_name": "불탐사(보호관)"
+  },
+  {
+    "define_code_key": "63650",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT010",
+    "define_code_kor_name": "조사불가"
+  },
+  {
+    "define_code_key": "63651",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT900",
+    "define_code_kor_name": "가상관"
+  },
+  {
+    "define_code_key": "63652",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT901",
+    "define_code_kor_name": "굴착/조사"
+  },
+  {
+    "define_code_key": "63653",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT902",
+    "define_code_kor_name": "굴착/탐사"
+  },
+  {
+    "define_code_key": "63654",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT903",
+    "define_code_kor_name": "단순이기"
+  },
+  {
+    "define_code_key": "63655",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT904",
+    "define_code_kor_name": "불탐관로"
+  },
+  {
+    "define_code_key": "63656",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT905",
+    "define_code_kor_name": "자료편집"
+  },
+  {
+    "define_code_key": "63657",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT906",
+    "define_code_kor_name": "조사/탐사구간"
+  },
+  {
+    "define_code_key": "63658",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT907",
+    "define_code_kor_name": "조사/탐사불가능구간"
+  },
+  {
+    "define_code_key": "63659",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT908",
+    "define_code_kor_name": "준탐"
+  },
+  {
+    "define_code_key": "63660",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT909",
+    "define_code_kor_name": "측량(절대)"
+  },
+  {
+    "define_code_key": "63661",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT910",
+    "define_code_kor_name": "측량(지거)"
+  },
+  {
+    "define_code_key": "63662",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT911",
+    "define_code_kor_name": "편집관로"
+  },
+  {
+    "define_code_key": "63663",
+    "define_code_field_key": "7101",
+    "define_code_name": "IQT999",
+    "define_code_kor_name": "기타"
+  }
+]

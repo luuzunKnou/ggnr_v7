@@ -1,0 +1,10 @@
+{
+  "totalTables": 543,
+  "totalFields": 6835,
+  "totalCodes": 20287,
+  "originalFileSize": 3164842,
+  "splitFilesSizeSum": 13587317,
+  "splitAt": "2026-04-18T06:35:16.100Z",
+  "mergedFrom": "docs\\_SELECT_FROM_layer_standard_L_JOIN_field_standard_f_ON_L_layer_i_202604181421.csv",
+  "mapping": "layer_code, layer_name_kor, geom_type, group / field_name, field_name_kor, data_type, length / code, code_kor only"
+}

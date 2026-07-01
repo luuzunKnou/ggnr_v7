@@ -1,0 +1,20 @@
+[
+  {
+    "define_code_key": "69945",
+    "define_code_field_key": "11324",
+    "define_code_name": "AE220",
+    "define_code_kor_name": "방지책"
+  },
+  {
+    "define_code_key": "69946",
+    "define_code_field_key": "11324",
+    "define_code_name": "AE221",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_key": "69947",
+    "define_code_field_key": "11324",
+    "define_code_name": "AE222",
+    "define_code_kor_name": "가드펜스"
+  }
+]

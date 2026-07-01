@@ -1,0 +1,494 @@
+[
+  {
+    "define_code_key": "63778",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "63779",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF001",
+    "define_code_kor_name": "베르누이식"
+  },
+  {
+    "define_code_key": "63780",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF002",
+    "define_code_kor_name": "원심력식"
+  },
+  {
+    "define_code_key": "63781",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF100",
+    "define_code_kor_name": "월트만식"
+  },
+  {
+    "define_code_key": "63782",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF101",
+    "define_code_kor_name": "삽입식"
+  },
+  {
+    "define_code_key": "63783",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF102",
+    "define_code_kor_name": "벤츄리분류관식"
+  },
+  {
+    "define_code_key": "63784",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF103",
+    "define_code_kor_name": "부관부연결식"
+  },
+  {
+    "define_code_key": "63785",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF104",
+    "define_code_kor_name": "초음파식"
+  },
+  {
+    "define_code_key": "63786",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF105",
+    "define_code_kor_name": "익차형"
+  },
+  {
+    "define_code_key": "63787",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF106",
+    "define_code_kor_name": "전자유량계"
+  },
+  {
+    "define_code_key": "63788",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF107",
+    "define_code_kor_name": "단갑식(익차형)"
+  },
+  {
+    "define_code_key": "63789",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF108",
+    "define_code_kor_name": "복갑식(익차형)"
+  },
+  {
+    "define_code_key": "63790",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF200",
+    "define_code_kor_name": "지상단구"
+  },
+  {
+    "define_code_key": "63791",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF201",
+    "define_code_kor_name": "지상쌍구"
+  },
+  {
+    "define_code_key": "63792",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF202",
+    "define_code_kor_name": "지하단구"
+  },
+  {
+    "define_code_key": "63793",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF203",
+    "define_code_kor_name": "지하쌍구"
+  },
+  {
+    "define_code_key": "63794",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF300",
+    "define_code_kor_name": "BV(Butterfly식)"
+  },
+  {
+    "define_code_key": "63795",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF301",
+    "define_code_kor_name": "GV(Gate식)"
+  },
+  {
+    "define_code_key": "63796",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF302",
+    "define_code_kor_name": "SV(Sluice식)"
+  },
+  {
+    "define_code_key": "63797",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF303",
+    "define_code_kor_name": "SG(Sluice Gate식)"
+  },
+  {
+    "define_code_key": "63798",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF304",
+    "define_code_kor_name": "SC(Saing 직폐식)"
+  },
+  {
+    "define_code_key": "63799",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF305",
+    "define_code_kor_name": "PC(완폐식)"
+  },
+  {
+    "define_code_key": "63800",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF306",
+    "define_code_kor_name": "SS(단구)"
+  },
+  {
+    "define_code_key": "63801",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF307",
+    "define_code_kor_name": "DS(쌍구)"
+  },
+  {
+    "define_code_key": "63802",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF308",
+    "define_code_kor_name": "QS(급속단구)"
+  },
+  {
+    "define_code_key": "63803",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF309",
+    "define_code_kor_name": "QD(급속쌍구)"
+  },
+  {
+    "define_code_key": "63804",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF310",
+    "define_code_kor_name": "PR(피스톤식)"
+  },
+  {
+    "define_code_key": "63805",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF311",
+    "define_code_kor_name": "DR(다이어램프식)"
+  },
+  {
+    "define_code_key": "63806",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF312",
+    "define_code_kor_name": "BR(벨로우즈식)"
+  },
+  {
+    "define_code_key": "63807",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF313",
+    "define_code_kor_name": "LS(지렛대식)"
+  },
+  {
+    "define_code_key": "63808",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF314",
+    "define_code_kor_name": "WS(추식)"
+  },
+  {
+    "define_code_key": "63809",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF315",
+    "define_code_kor_name": "SS(스프링식)"
+  },
+  {
+    "define_code_key": "63810",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF400",
+    "define_code_kor_name": "개착식"
+  },
+  {
+    "define_code_key": "63811",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF401",
+    "define_code_kor_name": "터널식"
+  },
+  {
+    "define_code_key": "63812",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF402",
+    "define_code_kor_name": "압입형"
+  },
+  {
+    "define_code_key": "63813",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF403",
+    "define_code_kor_name": "고정식"
+  },
+  {
+    "define_code_key": "63814",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF404",
+    "define_code_kor_name": "부동식"
+  },
+  {
+    "define_code_key": "63815",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68889",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "68890",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF001",
+    "define_code_kor_name": "베르누이식"
+  },
+  {
+    "define_code_key": "68891",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF002",
+    "define_code_kor_name": "원심력식"
+  },
+  {
+    "define_code_key": "68892",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF100",
+    "define_code_kor_name": "월트만식"
+  },
+  {
+    "define_code_key": "68893",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF101",
+    "define_code_kor_name": "삽입식"
+  },
+  {
+    "define_code_key": "68894",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF102",
+    "define_code_kor_name": "벤츄리분류관식"
+  },
+  {
+    "define_code_key": "68895",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF103",
+    "define_code_kor_name": "부관부연결식"
+  },
+  {
+    "define_code_key": "68896",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF104",
+    "define_code_kor_name": "초음파식"
+  },
+  {
+    "define_code_key": "68897",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF105",
+    "define_code_kor_name": "익차형"
+  },
+  {
+    "define_code_key": "68898",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF106",
+    "define_code_kor_name": "전자유량계"
+  },
+  {
+    "define_code_key": "68899",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF107",
+    "define_code_kor_name": "단갑식(익차형)"
+  },
+  {
+    "define_code_key": "68900",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF108",
+    "define_code_kor_name": "복갑식(익차형)"
+  },
+  {
+    "define_code_key": "68901",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF200",
+    "define_code_kor_name": "지상단구"
+  },
+  {
+    "define_code_key": "68902",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF201",
+    "define_code_kor_name": "지상쌍구"
+  },
+  {
+    "define_code_key": "68903",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF202",
+    "define_code_kor_name": "지하단구"
+  },
+  {
+    "define_code_key": "68904",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF203",
+    "define_code_kor_name": "지하쌍구"
+  },
+  {
+    "define_code_key": "68905",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF300",
+    "define_code_kor_name": "BV(Butterfly식)"
+  },
+  {
+    "define_code_key": "68906",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF301",
+    "define_code_kor_name": "GV(Gate식)"
+  },
+  {
+    "define_code_key": "68907",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF302",
+    "define_code_kor_name": "SV(Sluice식)"
+  },
+  {
+    "define_code_key": "68908",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF303",
+    "define_code_kor_name": "SG(Sluice Gate식)"
+  },
+  {
+    "define_code_key": "68909",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF304",
+    "define_code_kor_name": "SC(Saing 직폐식)"
+  },
+  {
+    "define_code_key": "68910",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF305",
+    "define_code_kor_name": "PC(완폐식)"
+  },
+  {
+    "define_code_key": "68911",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF306",
+    "define_code_kor_name": "SS(단구)"
+  },
+  {
+    "define_code_key": "68912",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF307",
+    "define_code_kor_name": "DS(쌍구)"
+  },
+  {
+    "define_code_key": "68913",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF308",
+    "define_code_kor_name": "QS(급속단구)"
+  },
+  {
+    "define_code_key": "68914",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF309",
+    "define_code_kor_name": "QD(급속쌍구)"
+  },
+  {
+    "define_code_key": "68915",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF310",
+    "define_code_kor_name": "PR(피스톤식)"
+  },
+  {
+    "define_code_key": "68916",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF311",
+    "define_code_kor_name": "DR(다이어램프식)"
+  },
+  {
+    "define_code_key": "68917",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF312",
+    "define_code_kor_name": "BR(벨로우즈식)"
+  },
+  {
+    "define_code_key": "68918",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF313",
+    "define_code_kor_name": "LS(지렛대식)"
+  },
+  {
+    "define_code_key": "68919",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF314",
+    "define_code_kor_name": "WS(추식)"
+  },
+  {
+    "define_code_key": "68920",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF315",
+    "define_code_kor_name": "SS(스프링식)"
+  },
+  {
+    "define_code_key": "68921",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF400",
+    "define_code_kor_name": "개착식"
+  },
+  {
+    "define_code_key": "68922",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF401",
+    "define_code_kor_name": "터널식"
+  },
+  {
+    "define_code_key": "68923",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF402",
+    "define_code_kor_name": "압입형"
+  },
+  {
+    "define_code_key": "68924",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF403",
+    "define_code_kor_name": "고정식"
+  },
+  {
+    "define_code_key": "68925",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF404",
+    "define_code_kor_name": "부동식"
+  },
+  {
+    "define_code_key": "68926",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68927",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF900",
+    "define_code_kor_name": "고감도터빈식"
+  },
+  {
+    "define_code_key": "68928",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF901",
+    "define_code_kor_name": "방향식"
+  },
+  {
+    "define_code_key": "68929",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF902",
+    "define_code_kor_name": "역류방지"
+  },
+  {
+    "define_code_key": "68930",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF903",
+    "define_code_kor_name": "자연식"
+  },
+  {
+    "define_code_key": "68931",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF904",
+    "define_code_kor_name": "전자수압계"
+  },
+  {
+    "define_code_key": "68932",
+    "define_code_field_key": "4817",
+    "define_code_name": "MOF905",
+    "define_code_kor_name": "터빈식"
+  }
+]

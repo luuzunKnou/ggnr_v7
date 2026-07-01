@@ -1,0 +1,338 @@
+[
+  {
+    "define_code_key": "71344",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71345",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD001",
+    "define_code_kor_name": "아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "71346",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD002",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "71347",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD003",
+    "define_code_kor_name": "사리도"
+  },
+  {
+    "define_code_key": "71348",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD004",
+    "define_code_kor_name": "블록"
+  },
+  {
+    "define_code_key": "71349",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD005",
+    "define_code_kor_name": "일반사각블록"
+  },
+  {
+    "define_code_key": "71350",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD006",
+    "define_code_kor_name": "고압블록"
+  },
+  {
+    "define_code_key": "71351",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD007",
+    "define_code_kor_name": "특수콘크리트"
+  },
+  {
+    "define_code_key": "71352",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD100",
+    "define_code_kor_name": "AC"
+  },
+  {
+    "define_code_key": "71353",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD111",
+    "define_code_kor_name": "OM"
+  },
+  {
+    "define_code_key": "71354",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD112",
+    "define_code_kor_name": "SB"
+  },
+  {
+    "define_code_key": "71355",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD113",
+    "define_code_kor_name": "GB"
+  },
+  {
+    "define_code_key": "71356",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD114",
+    "define_code_kor_name": "투수콘"
+  },
+  {
+    "define_code_key": "71357",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD200",
+    "define_code_kor_name": "비포장"
+  },
+  {
+    "define_code_key": "71358",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD900",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "71359",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD902",
+    "define_code_kor_name": "강재슬래그"
+  },
+  {
+    "define_code_key": "71360",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71361",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD901",
+    "define_code_kor_name": "강재슬래그+미끄럼방지모르터"
+  },
+  {
+    "define_code_key": "71362",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD903",
+    "define_code_kor_name": "개립도마찰층"
+  },
+  {
+    "define_code_key": "71363",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD904",
+    "define_code_kor_name": "그루빙"
+  },
+  {
+    "define_code_key": "71364",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD905",
+    "define_code_kor_name": "노면평삭"
+  },
+  {
+    "define_code_key": "71365",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD906",
+    "define_code_kor_name": "대리석"
+  },
+  {
+    "define_code_key": "71366",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD907",
+    "define_code_kor_name": "모르터"
+  },
+  {
+    "define_code_key": "71367",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD908",
+    "define_code_kor_name": "미끄럼장지모르터"
+  },
+  {
+    "define_code_key": "71368",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD909",
+    "define_code_kor_name": "석재"
+  },
+  {
+    "define_code_key": "71369",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD910",
+    "define_code_kor_name": "세라믹"
+  },
+  {
+    "define_code_key": "71370",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD911",
+    "define_code_kor_name": "세라믹블록"
+  },
+  {
+    "define_code_key": "71371",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD912",
+    "define_code_kor_name": "소형고압블럭"
+  },
+  {
+    "define_code_key": "71372",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD913",
+    "define_code_kor_name": "숏 블라스팅"
+  },
+  {
+    "define_code_key": "71373",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD914",
+    "define_code_kor_name": "수지계 표면처리"
+  },
+  {
+    "define_code_key": "71374",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD915",
+    "define_code_kor_name": "스톤블럭"
+  },
+  {
+    "define_code_key": "71375",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD916",
+    "define_code_kor_name": "슬러리실"
+  },
+  {
+    "define_code_key": "71376",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD917",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "71377",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD918",
+    "define_code_kor_name": "연성블럭(화학재료)"
+  },
+  {
+    "define_code_key": "71378",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD919",
+    "define_code_kor_name": "연성포장(화학재료)"
+  },
+  {
+    "define_code_key": "71379",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD920",
+    "define_code_kor_name": "오너멘트블록"
+  },
+  {
+    "define_code_key": "71380",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD921",
+    "define_code_kor_name": "유색"
+  },
+  {
+    "define_code_key": "71381",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD922",
+    "define_code_kor_name": "이격식(1-3방식)"
+  },
+  {
+    "define_code_key": "71382",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD923",
+    "define_code_kor_name": "이격식(3-6방식)"
+  },
+  {
+    "define_code_key": "71383",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD924",
+    "define_code_kor_name": "적층벽관"
+  },
+  {
+    "define_code_key": "71384",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD925",
+    "define_code_kor_name": "전면처리식(칼라)"
+  },
+  {
+    "define_code_key": "71385",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD926",
+    "define_code_kor_name": "전면처리식(흑색)"
+  },
+  {
+    "define_code_key": "71386",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD927",
+    "define_code_kor_name": "점토블럭"
+  },
+  {
+    "define_code_key": "71387",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD928",
+    "define_code_kor_name": "철재"
+  },
+  {
+    "define_code_key": "71388",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD929",
+    "define_code_kor_name": "철판"
+  },
+  {
+    "define_code_key": "71389",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD930",
+    "define_code_kor_name": "칼라논슬립"
+  },
+  {
+    "define_code_key": "71390",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD931",
+    "define_code_kor_name": "칼라아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "71391",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD932",
+    "define_code_kor_name": "칼라콘크리트"
+  },
+  {
+    "define_code_key": "71392",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD933",
+    "define_code_kor_name": "타일"
+  },
+  {
+    "define_code_key": "71393",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD934",
+    "define_code_kor_name": "탄성칼라고무칩"
+  },
+  {
+    "define_code_key": "71394",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD935",
+    "define_code_kor_name": "테라조"
+  },
+  {
+    "define_code_key": "71395",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD936",
+    "define_code_kor_name": "투수성아스팔트"
+  },
+  {
+    "define_code_key": "71396",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD937",
+    "define_code_kor_name": "투수아스팔트콘크리트"
+  },
+  {
+    "define_code_key": "71397",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD938",
+    "define_code_kor_name": "화강석타일"
+  },
+  {
+    "define_code_key": "71398",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD939",
+    "define_code_kor_name": "화강석판재"
+  },
+  {
+    "define_code_key": "71399",
+    "define_code_field_key": "7734",
+    "define_code_name": "ADD940",
+    "define_code_kor_name": "GSP"
+  }
+]

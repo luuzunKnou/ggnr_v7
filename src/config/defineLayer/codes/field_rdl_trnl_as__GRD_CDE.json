@@ -1,0 +1,62 @@
+[
+  {
+    "define_code_key": "72385",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "72386",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD001",
+    "define_code_kor_name": "A등급"
+  },
+  {
+    "define_code_key": "72387",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD002",
+    "define_code_kor_name": "B등급"
+  },
+  {
+    "define_code_key": "72388",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD003",
+    "define_code_kor_name": "C등급"
+  },
+  {
+    "define_code_key": "72389",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD004",
+    "define_code_kor_name": "D등급"
+  },
+  {
+    "define_code_key": "72390",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD005",
+    "define_code_kor_name": "E등급"
+  },
+  {
+    "define_code_key": "72391",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "72392",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD900",
+    "define_code_kor_name": "1종"
+  },
+  {
+    "define_code_key": "72393",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD901",
+    "define_code_kor_name": "2종"
+  },
+  {
+    "define_code_key": "72394",
+    "define_code_field_key": "7972",
+    "define_code_name": "GRD902",
+    "define_code_kor_name": "규모이하"
+  }
+]

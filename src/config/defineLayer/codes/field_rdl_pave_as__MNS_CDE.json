@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "71338",
+    "define_code_field_key": "7728",
+    "define_code_name": "MNS000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71339",
+    "define_code_field_key": "7728",
+    "define_code_name": "MNS001",
+    "define_code_kor_name": "덧씌우기"
+  },
+  {
+    "define_code_key": "71340",
+    "define_code_field_key": "7728",
+    "define_code_name": "MNS002",
+    "define_code_kor_name": "기층개량"
+  },
+  {
+    "define_code_key": "71341",
+    "define_code_field_key": "7728",
+    "define_code_name": "MNS003",
+    "define_code_kor_name": "소성변형개량"
+  },
+  {
+    "define_code_key": "71342",
+    "define_code_field_key": "7728",
+    "define_code_name": "MNS004",
+    "define_code_kor_name": "소파보수"
+  },
+  {
+    "define_code_key": "71343",
+    "define_code_field_key": "7728",
+    "define_code_name": "MNS999",
+    "define_code_kor_name": "기타"
+  }
+]

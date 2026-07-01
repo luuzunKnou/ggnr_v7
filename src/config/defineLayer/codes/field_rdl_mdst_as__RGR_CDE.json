@@ -1,0 +1,152 @@
+[
+  {
+    "define_code_key": "70972",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70973",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID001",
+    "define_code_kor_name": "녹지대"
+  },
+  {
+    "define_code_key": "70974",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID002",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_key": "70975",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70976",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID900",
+    "define_code_kor_name": "가요성몸체형(합성수지)"
+  },
+  {
+    "define_code_key": "70977",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID901",
+    "define_code_kor_name": "가요성보형(가드파이프)"
+  },
+  {
+    "define_code_key": "70978",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID902",
+    "define_code_kor_name": "가요성보형(BOX형보)"
+  },
+  {
+    "define_code_key": "70979",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID903",
+    "define_code_kor_name": "가요성케이블형(가드케이블)"
+  },
+  {
+    "define_code_key": "70980",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID904",
+    "define_code_kor_name": "강성몸체형(콘크리트)"
+  },
+  {
+    "define_code_key": "70981",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID905",
+    "define_code_kor_name": "광폭형"
+  },
+  {
+    "define_code_key": "70982",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID906",
+    "define_code_kor_name": "규제봉"
+  },
+  {
+    "define_code_key": "70983",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID907",
+    "define_code_kor_name": "난간(보형)"
+  },
+  {
+    "define_code_key": "70984",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID908",
+    "define_code_kor_name": "난간(패널형)"
+  },
+  {
+    "define_code_key": "70985",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID909",
+    "define_code_kor_name": "방호벽"
+  },
+  {
+    "define_code_key": "70986",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID910",
+    "define_code_kor_name": "봉"
+  },
+  {
+    "define_code_key": "70987",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID911",
+    "define_code_kor_name": "시설유도봉"
+  },
+  {
+    "define_code_key": "70988",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID912",
+    "define_code_kor_name": "연석형"
+  },
+  {
+    "define_code_key": "70989",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID913",
+    "define_code_kor_name": "차선규제봉45cm"
+  },
+  {
+    "define_code_key": "70990",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID914",
+    "define_code_kor_name": "차선규제봉45cm+75cm혼합형"
+  },
+  {
+    "define_code_key": "70991",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID915",
+    "define_code_kor_name": "차선규제봉75cm"
+  },
+  {
+    "define_code_key": "70992",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID916",
+    "define_code_kor_name": "충격흡수시설"
+  },
+  {
+    "define_code_key": "70993",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID917",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "70994",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID918",
+    "define_code_kor_name": "탄력대"
+  },
+  {
+    "define_code_key": "70995",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID919",
+    "define_code_kor_name": "파워봉"
+  },
+  {
+    "define_code_key": "70996",
+    "define_code_field_key": "7620",
+    "define_code_name": "MID920",
+    "define_code_kor_name": "플라스틱"
+  }
+]

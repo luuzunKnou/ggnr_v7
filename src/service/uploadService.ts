@@ -5,7 +5,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
-import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
+import { getSessionUsrId } from '@/lib/auth/guard';
+import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
 import { assertSafeServiceFileBasename, fileDataRelativeDir } from '@/lib/serviceFileData';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { appendUploadConvertHistory, ensureBaseStructure } from './fileManagerService';
@@ -108,7 +109,7 @@ export async function initServiceFileDataUpload(params: {
   ownerUsrId: string;
   serEng: string;
 }): Promise<InitChunkedUploadResult> {
-  if (!(await userHasSerAccess(params.ownerUsrId, params.serEng.trim(), 'write'))) {
+  if (!(await userCanAccessServiceFileData(params.ownerUsrId, params.serEng.trim(), 'write'))) {
     throw new Error('Forbidden');
   }
   const safeName = assertSafeServiceFileBasename(params.fileName);
@@ -208,7 +209,7 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     if (!uid || uid !== meta.ownerUsrId) {
       throw new Error('Forbidden');
     }
-    if (!(await userHasSerAccess(uid, meta.serEng, 'write'))) {
+    if (!(await userCanAccessServiceFileData(uid, meta.serEng, 'write'))) {
       throw new Error('Forbidden');
     }
   }

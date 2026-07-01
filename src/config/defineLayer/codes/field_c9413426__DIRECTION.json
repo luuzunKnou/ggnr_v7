@@ -1,0 +1,22 @@
+[
+  {
+    "define_code_name": "0",
+    "define_code_kor_name": "상행(우)"
+  },
+  {
+    "define_code_name": "1",
+    "define_code_kor_name": "하행(좌)"
+  },
+  {
+    "define_code_name": "2",
+    "define_code_kor_name": "양방향(횡단 등)"
+  },
+  {
+    "define_code_name": "3",
+    "define_code_kor_name": "중앙"
+  },
+  {
+    "define_code_name": "4",
+    "define_code_kor_name": "램프"
+  }
+]

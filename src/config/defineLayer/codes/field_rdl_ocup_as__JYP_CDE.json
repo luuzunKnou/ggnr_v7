@@ -1,0 +1,452 @@
+[
+  {
+    "define_code_key": "71006",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71007",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA001",
+    "define_code_kor_name": "주택점용부"
+  },
+  {
+    "define_code_key": "71008",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA002",
+    "define_code_kor_name": "가건물"
+  },
+  {
+    "define_code_key": "71009",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA003",
+    "define_code_kor_name": "차량진입로"
+  },
+  {
+    "define_code_key": "71010",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71011",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA900",
+    "define_code_kor_name": "가판대"
+  },
+  {
+    "define_code_key": "71012",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA901",
+    "define_code_kor_name": "고가도로 노면 밑"
+  },
+  {
+    "define_code_key": "71013",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA902",
+    "define_code_kor_name": "고가도로 노면밑에 설치하는 사무소, 점포, 창고 등"
+  },
+  {
+    "define_code_key": "71014",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA903",
+    "define_code_kor_name": "고가도로 노면밑에 설치하는 사무소, 점포, 창고 등(조례)"
+  },
+  {
+    "define_code_key": "71015",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA904",
+    "define_code_kor_name": "공사(기타)"
+  },
+  {
+    "define_code_key": "71016",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA905",
+    "define_code_kor_name": "공사(일시점용)"
+  },
+  {
+    "define_code_key": "71017",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA906",
+    "define_code_kor_name": "공사용 판자벽, 공사용시설, 굴착부분 등 기타"
+  },
+  {
+    "define_code_key": "71018",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA907",
+    "define_code_kor_name": "공사용 판자벽, 공사용시설, 굴착부분 등 기타(조례)"
+  },
+  {
+    "define_code_key": "71019",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA908",
+    "define_code_kor_name": "공사용 판자벽, 공사용시설, 굴착부분 등 일시 점용한 것"
+  },
+  {
+    "define_code_key": "71020",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA909",
+    "define_code_kor_name": "공사용 판자벽, 공사용시설, 굴착부분 등 일시 점용한 것(조례)"
+  },
+  {
+    "define_code_key": "71021",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA910",
+    "define_code_kor_name": "공작물(기타)"
+  },
+  {
+    "define_code_key": "71022",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA911",
+    "define_code_kor_name": "공작물(농업,주택 및 식물재배)"
+  },
+  {
+    "define_code_key": "71023",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA912",
+    "define_code_kor_name": "공중 또는 지하에 설치하는 통로"
+  },
+  {
+    "define_code_key": "71024",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA913",
+    "define_code_kor_name": "공중전화"
+  },
+  {
+    "define_code_key": "71025",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA914",
+    "define_code_kor_name": "광고탑, 광고판, 간판(기타)"
+  },
+  {
+    "define_code_key": "71026",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA915",
+    "define_code_kor_name": "광고탑, 광고판, 간판(일시설치한 것-1월미만점용)"
+  },
+  {
+    "define_code_key": "71027",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA916",
+    "define_code_kor_name": "광고탑,광고판(기타)"
+  },
+  {
+    "define_code_key": "71028",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA917",
+    "define_code_kor_name": "광고탑,광고판(일시)"
+  },
+  {
+    "define_code_key": "71029",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA918",
+    "define_code_kor_name": "구두수선대"
+  },
+  {
+    "define_code_key": "71030",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA919",
+    "define_code_kor_name": "기타 공작물,물건,시설"
+  },
+  {
+    "define_code_key": "71031",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA920",
+    "define_code_kor_name": "노점, 자동판매기, 상품진열대"
+  },
+  {
+    "define_code_key": "71032",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA921",
+    "define_code_kor_name": "농업,주택,식물재배"
+  },
+  {
+    "define_code_key": "71033",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA922",
+    "define_code_kor_name": "도로굴착"
+  },
+  {
+    "define_code_key": "71034",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA923",
+    "define_code_kor_name": "면형점용물 미분류"
+  },
+  {
+    "define_code_key": "71035",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA924",
+    "define_code_kor_name": "무인카메라"
+  },
+  {
+    "define_code_key": "71036",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA925",
+    "define_code_kor_name": "방범초소"
+  },
+  {
+    "define_code_key": "71037",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA926",
+    "define_code_kor_name": "버스표판매대"
+  },
+  {
+    "define_code_key": "71038",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA927",
+    "define_code_kor_name": "버스표판매대, 구두수선대, 가로판매대"
+  },
+  {
+    "define_code_key": "71039",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA928",
+    "define_code_kor_name": "변압기"
+  },
+  {
+    "define_code_key": "71040",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA929",
+    "define_code_kor_name": "변압탑,기지국,우체통"
+  },
+  {
+    "define_code_key": "71041",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA930",
+    "define_code_kor_name": "아스콘 덧씌우기"
+  },
+  {
+    "define_code_key": "71042",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA931",
+    "define_code_kor_name": "아스콘 덧씌우기 기층+표층(12m 이상)"
+  },
+  {
+    "define_code_key": "71043",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA932",
+    "define_code_kor_name": "아스콘 덧씌우기 기층+표층(12m 이하)"
+  },
+  {
+    "define_code_key": "71044",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA933",
+    "define_code_kor_name": "아스팔트"
+  },
+  {
+    "define_code_key": "71045",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA934",
+    "define_code_kor_name": "아취(기타)"
+  },
+  {
+    "define_code_key": "71046",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA935",
+    "define_code_kor_name": "아취(도로횡단)"
+  },
+  {
+    "define_code_key": "71047",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA936",
+    "define_code_kor_name": "제1호 내지 제9호의 시설 기타"
+  },
+  {
+    "define_code_key": "71048",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA937",
+    "define_code_kor_name": "제1호 내지 제9호의 시설(농업 및 식물재배)"
+  },
+  {
+    "define_code_key": "71049",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA938",
+    "define_code_kor_name": "제1호 내지 제9호의 시설(농업, 주택 및 식물재배)(조례)"
+  },
+  {
+    "define_code_key": "71050",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA939",
+    "define_code_kor_name": "제1호 내지 제9호의 시설(주택)"
+  },
+  {
+    "define_code_key": "71051",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA940",
+    "define_code_kor_name": "주유소, 주차장, 화물터미널 등 건축물(1층인 건축물)"
+  },
+  {
+    "define_code_key": "71052",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA941",
+    "define_code_kor_name": "주유소, 주차장, 화물터미널 등 건축물(2층인 건축물)"
+  },
+  {
+    "define_code_key": "71053",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA942",
+    "define_code_kor_name": "주유소, 주차장, 화물터미널 등 건축물(3층인 건축물)"
+  },
+  {
+    "define_code_key": "71054",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA943",
+    "define_code_kor_name": "주유소, 주차장, 화물터미널 등 건축물(4층 이상 건축물)"
+  },
+  {
+    "define_code_key": "71055",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA944",
+    "define_code_kor_name": "주유소, 주차장, 화물터미널 등 기타"
+  },
+  {
+    "define_code_key": "71056",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA945",
+    "define_code_kor_name": "주유소,주차장(건물1층)"
+  },
+  {
+    "define_code_key": "71057",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA946",
+    "define_code_kor_name": "주유소,주차장(건물2층)"
+  },
+  {
+    "define_code_key": "71058",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA947",
+    "define_code_kor_name": "주유소,주차장(건물3층)"
+  },
+  {
+    "define_code_key": "71059",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA948",
+    "define_code_kor_name": "주유소,주차장(건물4층이상)"
+  },
+  {
+    "define_code_key": "71060",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA949",
+    "define_code_kor_name": "주유소,주차장(기타)"
+  },
+  {
+    "define_code_key": "71061",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA950",
+    "define_code_kor_name": "주유소,주차장(진입로)"
+  },
+  {
+    "define_code_key": "71062",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA951",
+    "define_code_kor_name": "지상건축물-1층"
+  },
+  {
+    "define_code_key": "71063",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA952",
+    "define_code_kor_name": "지상건축물-2층"
+  },
+  {
+    "define_code_key": "71064",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA953",
+    "define_code_kor_name": "지상건축물-3층"
+  },
+  {
+    "define_code_key": "71065",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA954",
+    "define_code_kor_name": "지상건축물-4층이상"
+  },
+  {
+    "define_code_key": "71066",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA955",
+    "define_code_kor_name": "지하건축물-1층"
+  },
+  {
+    "define_code_key": "71067",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA956",
+    "define_code_kor_name": "지하건축물-2층"
+  },
+  {
+    "define_code_key": "71068",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA957",
+    "define_code_kor_name": "지하건축물-3층이상"
+  },
+  {
+    "define_code_key": "71069",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA958",
+    "define_code_kor_name": "지하상가(건물1층)"
+  },
+  {
+    "define_code_key": "71070",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA959",
+    "define_code_kor_name": "지하상가(건물2층)"
+  },
+  {
+    "define_code_key": "71071",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA960",
+    "define_code_kor_name": "지하상가(건물3층)"
+  },
+  {
+    "define_code_key": "71072",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA961",
+    "define_code_kor_name": "지하상가(기타)"
+  },
+  {
+    "define_code_key": "71073",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA962",
+    "define_code_kor_name": "지하상가, 지하실, 통로 등 건축물(1층인 건축물)"
+  },
+  {
+    "define_code_key": "71074",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA963",
+    "define_code_kor_name": "지하상가, 지하실, 통로 등 건축물(2층인 건축물)"
+  },
+  {
+    "define_code_key": "71075",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA964",
+    "define_code_kor_name": "지하상가, 지하실, 통로 등 건축물(3층인 건축물)"
+  },
+  {
+    "define_code_key": "71076",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA965",
+    "define_code_kor_name": "지하상가, 지하실, 통로 등 기타"
+  },
+  {
+    "define_code_key": "71077",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA966",
+    "define_code_kor_name": "진입로"
+  },
+  {
+    "define_code_key": "71078",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA967",
+    "define_code_kor_name": "현수막(기타용도)"
+  },
+  {
+    "define_code_key": "71079",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA968",
+    "define_code_kor_name": "현수막(일시)"
+  },
+  {
+    "define_code_key": "71080",
+    "define_code_field_key": "7635",
+    "define_code_name": "JYA969",
+    "define_code_kor_name": "현수막(제사나 종교행사의 용도로 일시 설치한 것)"
+  }
+]

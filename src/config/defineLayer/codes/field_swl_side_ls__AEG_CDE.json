@@ -1,0 +1,122 @@
+[
+  {
+    "define_code_key": "68302",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "68303",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG001",
+    "define_code_kor_name": "U형 측구(복개)"
+  },
+  {
+    "define_code_key": "68304",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG002",
+    "define_code_kor_name": "U형 측구(미복개)"
+  },
+  {
+    "define_code_key": "68305",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG003",
+    "define_code_kor_name": "L형 측구"
+  },
+  {
+    "define_code_key": "68306",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG004",
+    "define_code_kor_name": "LU형"
+  },
+  {
+    "define_code_key": "68307",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG005",
+    "define_code_kor_name": "LO형"
+  },
+  {
+    "define_code_key": "68308",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "68309",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG900",
+    "define_code_kor_name": "개거측구"
+  },
+  {
+    "define_code_key": "68310",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG901",
+    "define_code_kor_name": "반원형"
+  },
+  {
+    "define_code_key": "68311",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG902",
+    "define_code_kor_name": "산마루형측구"
+  },
+  {
+    "define_code_key": "68312",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG903",
+    "define_code_kor_name": "석축개거"
+  },
+  {
+    "define_code_key": "68313",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG904",
+    "define_code_kor_name": "옹벽개거"
+  },
+  {
+    "define_code_key": "68314",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG905",
+    "define_code_kor_name": "원형"
+  },
+  {
+    "define_code_key": "68315",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG906",
+    "define_code_kor_name": "토사형측구"
+  },
+  {
+    "define_code_key": "68316",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG907",
+    "define_code_kor_name": "LU형 측구(미복개)"
+  },
+  {
+    "define_code_key": "68317",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG908",
+    "define_code_kor_name": "O형"
+  },
+  {
+    "define_code_key": "68318",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG909",
+    "define_code_kor_name": "U형(복개)"
+  },
+  {
+    "define_code_key": "68319",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG910",
+    "define_code_kor_name": "U형측구(스틸-SG)"
+  },
+  {
+    "define_code_key": "68320",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG911",
+    "define_code_kor_name": "U형측구(콘크리트)"
+  },
+  {
+    "define_code_key": "68321",
+    "define_code_field_key": "4743",
+    "define_code_name": "AEG912",
+    "define_code_kor_name": "V형측구"
+  }
+]

@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+
+/** 하천 기본계획 진입 시 항상 켜야 하는 레이어 (하천 선택 시 DetailPanel과 동일) */
+const RIVER_BASIC_PLAN_DEFAULT_LAYERS = ["river_d_index", "river_plan_as"] as const;
 
 type RiverType = "river" | "smallRiver";
 
@@ -31,10 +35,38 @@ export function RiverBasicPlanListPanel({
   onClose,
 }: Props) {
   const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<RiverItem[]>([]);
+
+  /** 패널 진입 시 기본 레이어 켜기, 언마운트 시 끄기 */
+  useEffect(() => {
+    const ctx = mapContextRef.current;
+    if (!ctx?.setVisibleLayerNames) return;
+    ctx.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of RIVER_BASIC_PLAN_DEFAULT_LAYERS) {
+        if (!next.has(id)) { next.add(id); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    return () => {
+      const c = mapContextRef.current;
+      if (!c?.setVisibleLayerNames) return;
+      c.setVisibleLayerNames((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const id of RIVER_BASIC_PLAN_DEFAULT_LAYERS) {
+          if (next.delete(id)) changed = true;
+        }
+        return changed ? next : prev;
+      });
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -153,25 +185,12 @@ export function RiverBasicPlanListPanel({
                         }
                         const map = mapContext?.mapInstanceRef?.current;
                         if (!map || !ext || ext.length !== 4) return;
-                        const [xmin, ymin, xmax, ymax] = ext.map((v: unknown) => Number(v));
-                        if (![xmin, ymin, xmax, ymax].every((v) => Number.isFinite(v))) return;
-                        const view = map.getView();
-                        const width = Math.abs(xmax - xmin);
-                        const height = Math.abs(ymax - ymin);
-                        /** View.fit는 이미 view.padding(좌측 패널)을 반영한 뷰포트로 계산 — option.padding에 view.padding을 다시 넣지 않음 */
-                        if (width < 1 && height < 1) {
-                          view.animate({
-                            center: [(xmin + xmax) / 2, (ymin + ymax) / 2],
-                            zoom: MAP_AUTO_NAV_MAX_ZOOM,
-                            duration: 500,
-                          });
-                        } else {
-                          view.fit([xmin, ymin, xmax, ymax], {
-                            padding: [80, 80, 80, 80],
-                            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-                            duration: 500,
-                          });
-                        }
+                        scheduleFitMapToExtent3857(map, ext as number[], {
+                          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+                          pointThreshold: 1,
+                          applyMapViewPadding: () =>
+                            mapContext?.applyMapViewPaddingRef?.current?.(),
+                        });
                       } catch {
                         // 지도 이동 실패는 사용자 동작을 막지 않음
                       }

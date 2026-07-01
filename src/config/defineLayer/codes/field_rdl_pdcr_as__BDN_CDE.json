@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "71531",
+    "define_code_field_key": "7780",
+    "define_code_name": "BDN000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71532",
+    "define_code_field_key": "7780",
+    "define_code_name": "BDN001",
+    "define_code_kor_name": "없음"
+  },
+  {
+    "define_code_key": "71533",
+    "define_code_field_key": "7780",
+    "define_code_name": "BDN002",
+    "define_code_kor_name": "있음"
+  },
+  {
+    "define_code_key": "71534",
+    "define_code_field_key": "7780",
+    "define_code_name": "BDN003",
+    "define_code_kor_name": "파손"
+  },
+  {
+    "define_code_key": "71535",
+    "define_code_field_key": "7780",
+    "define_code_name": "BDN999",
+    "define_code_kor_name": "기타"
+  }
+]

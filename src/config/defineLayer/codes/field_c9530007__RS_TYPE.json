@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "5401",
+    "define_code_kor_name": "제설함(적사함)"
+  },
+  {
+    "define_code_name": "5402",
+    "define_code_kor_name": "저장탱크(슈트장)"
+  },
+  {
+    "define_code_name": "5403",
+    "define_code_kor_name": "제설창고(비축장)"
+  },
+  {
+    "define_code_name": "5404",
+    "define_code_kor_name": "중앙비축창고"
+  },
+  {
+    "define_code_name": "5405",
+    "define_code_kor_name": "빙방사"
+  },
+  {
+    "define_code_name": "5499",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_name": "EC02",
+    "define_code_kor_name": "천정크레인"
+  },
+  {
+    "define_code_name": "EC03",
+    "define_code_kor_name": "염수교반기"
+  },
+  {
+    "define_code_name": "EC04",
+    "define_code_kor_name": "염수저장탱크"
+  }
+]

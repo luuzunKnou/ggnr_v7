@@ -24,6 +24,7 @@ import { upMap } from '@/database/schema/up_map';
 import { usr } from '@/database/schema/usr';
 import { getServiceList, getSystemList, getSystemListAll } from '@/service/configService';
 import { loadUserAccess } from '@/lib/auth/access';
+import { listConsoleMenuCatalog as buildConsoleMenuCatalog } from '@/lib/consoleMenuAccess/registry';
 
 type Params = Record<string, unknown> & { _sessionUsrId?: string };
 
@@ -59,7 +60,14 @@ export async function getMyAccessSnapshot(p: Params) {
   return {
     privateSerLevel: snap.privateSerLevel,
     privateSysKeys: snap.privateSysKeys,
+    consoleMenuLevel: snap.consoleMenuLevel,
   };
+}
+
+/** 권한관리 UI: 콘솔 메뉴 카탈로그 (registry 기준) */
+export async function listConsoleMenuCatalog(_p: Params) {
+  requireSession(_p);
+  return buildConsoleMenuCatalog();
 }
 
 export async function listPerms(_p: Params) {

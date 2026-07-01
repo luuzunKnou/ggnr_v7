@@ -1,0 +1,86 @@
+[
+  {
+    "define_code_key": "70774",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "70775",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY001",
+    "define_code_kor_name": "경계석"
+  },
+  {
+    "define_code_key": "70776",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY002",
+    "define_code_kor_name": "고압블록"
+  },
+  {
+    "define_code_key": "70777",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY003",
+    "define_code_kor_name": "도색"
+  },
+  {
+    "define_code_key": "70778",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY004",
+    "define_code_kor_name": "포장"
+  },
+  {
+    "define_code_key": "70779",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "70780",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY900",
+    "define_code_kor_name": "무"
+  },
+  {
+    "define_code_key": "70781",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY901",
+    "define_code_kor_name": "옹벽"
+  },
+  {
+    "define_code_key": "70782",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY902",
+    "define_code_kor_name": "재질변화"
+  },
+  {
+    "define_code_key": "70783",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY903",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "70784",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY904",
+    "define_code_kor_name": "표석"
+  },
+  {
+    "define_code_key": "70785",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY905",
+    "define_code_kor_name": "현장타설콘크리트"
+  },
+  {
+    "define_code_key": "70786",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY906",
+    "define_code_kor_name": "화강석"
+  },
+  {
+    "define_code_key": "70787",
+    "define_code_field_key": "7458",
+    "define_code_name": "DWY907",
+    "define_code_kor_name": "화단"
+  }
+]

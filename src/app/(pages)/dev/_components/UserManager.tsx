@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/shadcnCo
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import { Building2, CalendarClock, Check, FileText, IdCard, Lock, Mail, Phone, User, Users, X } from "lucide-react"
+import { PermRoleMappingPanel } from "./perm/PermRoleMappingPanel"
 
 type UserRow = {
   usrId: string
@@ -154,6 +155,10 @@ export function UserManager() {
   const [permList, setPermList] = useState<PermRow[]>([])
   const [selectedPermKeys, setSelectedPermKeys] = useState<Set<number>>(new Set())
   const [permLoading, setPermLoading] = useState(false)
+  const [permMappingOpen, setPermMappingOpen] = useState(false)
+  const [permMappingKey, setPermMappingKey] = useState<number | null>(null)
+  const [permMappingName, setPermMappingName] = useState<string>("")
+  const [permMappingError, setPermMappingError] = useState<string | null>(null)
 
   const filteredUtList = useMemo(() => {
     if (!form.ug_name) return utList
@@ -231,6 +236,13 @@ export function UserManager() {
       cancelled = true
     }
   }, [])
+
+  const openPermMapping = (permKey: number, permName: string) => {
+    setPermMappingKey(permKey)
+    setPermMappingName(permName)
+    setPermMappingError(null)
+    setPermMappingOpen(true)
+  }
 
   const startAdd = () => {
     setEditingUsrId(null)
@@ -566,20 +578,27 @@ export function UserManager() {
                           key={p.permKey}
                           className="flex items-center border-b border-border/50 px-2 py-1 last:border-b-0"
                         >
-                          <span className="min-w-0 flex-1 text-xs text-foreground leading-snug truncate" title={name}>
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-left text-xs text-foreground leading-snug truncate hover:text-primary hover:underline underline-offset-2"
+                            title={`${name} — 권한 매핑 편집`}
+                            onClick={() => openPermMapping(p.permKey, name)}
+                          >
                             {name}
-                          </span>
-                          <UserPermGrantSegments
-                            granted={granted}
-                            onChange={(on) => {
-                              setSelectedPermKeys((prev) => {
-                                const next = new Set(prev)
-                                if (on) next.add(p.permKey)
-                                else next.delete(p.permKey)
-                                return next
-                              })
-                            }}
-                          />
+                          </button>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <UserPermGrantSegments
+                              granted={granted}
+                              onChange={(on) => {
+                                setSelectedPermKeys((prev) => {
+                                  const next = new Set(prev)
+                                  if (on) next.add(p.permKey)
+                                  else next.delete(p.permKey)
+                                  return next
+                                })
+                              }}
+                            />
+                          </div>
                         </div>
                       )
                     })
@@ -632,6 +651,66 @@ export function UserManager() {
                   닫기
                 </Button>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={permMappingOpen}
+        onOpenChange={(open) => {
+          setPermMappingOpen(open)
+          if (!open) {
+            setPermMappingKey(null)
+            setPermMappingName("")
+            setPermMappingError(null)
+          }
+        }}
+      >
+        <DialogContent
+          className="w-[920px] h-[830px] min-w-[920px] min-h-[830px] max-w-[920px] max-h-[830px] p-0 gap-0 overflow-hidden flex flex-col"
+          showCloseButton={false}
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>권한 매핑</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 shrink-0 bg-slate-50/40">
+            <span className="text-xs font-medium text-slate-600">
+              권한 매핑 — {permMappingName || "—"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPermMappingOpen(false)}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="닫기"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="flex flex-col min-h-0 flex-1 overflow-hidden p-3">
+            {permMappingError ? (
+              <p className="shrink-0 mb-2 text-sm text-red-600">{permMappingError}</p>
+            ) : null}
+            <PermRoleMappingPanel
+              permKey={permMappingKey}
+              permName={permMappingName}
+              showHeader={false}
+              className="flex-1 min-h-0"
+              onError={(message) => setPermMappingError(message)}
+            />
+          </div>
+          <div className="px-3 pb-3 shrink-0">
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setPermMappingOpen(false)}
+                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-3 w-3" />
+                닫기
+              </Button>
             </div>
           </div>
         </DialogContent>

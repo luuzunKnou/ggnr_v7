@@ -1,0 +1,44 @@
+[
+  {
+    "define_code_key": "70999",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "71000",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB001",
+    "define_code_kor_name": "보도"
+  },
+  {
+    "define_code_key": "71001",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB002",
+    "define_code_kor_name": "차도"
+  },
+  {
+    "define_code_key": "71002",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "71003",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB900",
+    "define_code_kor_name": "굴착 및 점용"
+  },
+  {
+    "define_code_key": "71004",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB901",
+    "define_code_kor_name": "일반점용"
+  },
+  {
+    "define_code_key": "71005",
+    "define_code_field_key": "7634",
+    "define_code_name": "CHB902",
+    "define_code_kor_name": "일시점용"
+  }
+]

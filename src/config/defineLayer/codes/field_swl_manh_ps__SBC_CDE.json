@@ -1,0 +1,206 @@
+[
+  {
+    "define_code_key": "1027",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1028",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC001",
+    "define_code_kor_name": "주철"
+  },
+  {
+    "define_code_key": "1029",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC002",
+    "define_code_kor_name": "철판"
+  },
+  {
+    "define_code_key": "1030",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC003",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "1031",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC004",
+    "define_code_kor_name": "그레이팅"
+  },
+  {
+    "define_code_key": "1032",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC005",
+    "define_code_kor_name": "스틸 그레이팅"
+  },
+  {
+    "define_code_key": "1033",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC006",
+    "define_code_kor_name": "칼라(인조석)"
+  },
+  {
+    "define_code_key": "1034",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC900",
+    "define_code_kor_name": "각주철"
+  },
+  {
+    "define_code_key": "1035",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC901",
+    "define_code_kor_name": "강재"
+  },
+  {
+    "define_code_key": "1036",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC902",
+    "define_code_kor_name": "나무"
+  },
+  {
+    "define_code_key": "1037",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC903",
+    "define_code_kor_name": "나무,널판지,합판"
+  },
+  {
+    "define_code_key": "1038",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC904",
+    "define_code_kor_name": "대리석"
+  },
+  {
+    "define_code_key": "1039",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC905",
+    "define_code_kor_name": "뚜껑없음"
+  },
+  {
+    "define_code_key": "1040",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC906",
+    "define_code_kor_name": "보도용콘크리트"
+  },
+  {
+    "define_code_key": "1041",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC907",
+    "define_code_kor_name": "스틸(ST)"
+  },
+  {
+    "define_code_key": "1042",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC908",
+    "define_code_kor_name": "신형 CON"
+  },
+  {
+    "define_code_key": "1043",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC909",
+    "define_code_kor_name": "알루미늄"
+  },
+  {
+    "define_code_key": "1044",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC910",
+    "define_code_kor_name": "염화비닐(PE)"
+  },
+  {
+    "define_code_key": "1045",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC911",
+    "define_code_kor_name": "인조석"
+  },
+  {
+    "define_code_key": "1046",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC912",
+    "define_code_kor_name": "인조석(주철)"
+  },
+  {
+    "define_code_key": "1047",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC913",
+    "define_code_kor_name": "인조CONC"
+  },
+  {
+    "define_code_key": "1048",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC914",
+    "define_code_kor_name": "철, 철근"
+  },
+  {
+    "define_code_key": "1049",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC915",
+    "define_code_kor_name": "칼라콘크리트"
+  },
+  {
+    "define_code_key": "1050",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC916",
+    "define_code_kor_name": "플라스틱"
+  },
+  {
+    "define_code_key": "1051",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC917",
+    "define_code_kor_name": "PVC"
+  },
+  {
+    "define_code_key": "1052",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC918",
+    "define_code_kor_name": "SP"
+  },
+  {
+    "define_code_key": "1053",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC919",
+    "define_code_kor_name": "SS"
+  },
+  {
+    "define_code_key": "1054",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC920",
+    "define_code_kor_name": "닥타일주철"
+  },
+  {
+    "define_code_key": "1055",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC921",
+    "define_code_kor_name": "철근G"
+  },
+  {
+    "define_code_key": "1056",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC922",
+    "define_code_kor_name": "폴리에틸렌(PE)"
+  },
+  {
+    "define_code_key": "1057",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC923",
+    "define_code_kor_name": "회주철"
+  },
+  {
+    "define_code_key": "1058",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "65670",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC091",
+    "define_code_kor_name": "칼라"
+  },
+  {
+    "define_code_key": "65671",
+    "define_code_field_key": "4624",
+    "define_code_name": "SBC092",
+    "define_code_kor_name": "S.G"
+  }
+]

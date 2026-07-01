@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "3701",
+    "define_code_kor_name": "낙석방지망"
+  },
+  {
+    "define_code_name": "3702",
+    "define_code_kor_name": "낙석방지 울타리"
+  },
+  {
+    "define_code_name": "3703",
+    "define_code_kor_name": "낙석방지 옹벽"
+  },
+  {
+    "define_code_name": "3704",
+    "define_code_kor_name": "피암터널"
+  },
+  {
+    "define_code_name": "3705",
+    "define_code_kor_name": "보강공법_콘크리트뿜어붙이기(숏크리트)"
+  },
+  {
+    "define_code_name": "3706",
+    "define_code_kor_name": "보강공법_콘크리트블록 붙이기"
+  },
+  {
+    "define_code_name": "3707",
+    "define_code_kor_name": "보강공법_콘크리트 격자"
+  },
+  {
+    "define_code_name": "3708",
+    "define_code_kor_name": "보강공법_비탈면녹화(식생공법)"
+  },
+  {
+    "define_code_name": "3799",
+    "define_code_kor_name": "기타"
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "4401",
+    "define_code_kor_name": "국유지"
+  },
+  {
+    "define_code_name": "4402",
+    "define_code_kor_name": "공유지"
+  },
+  {
+    "define_code_name": "4403",
+    "define_code_kor_name": "사유지"
+  },
+  {
+    "define_code_name": "4499",
+    "define_code_kor_name": "기타"
+  }
+]
