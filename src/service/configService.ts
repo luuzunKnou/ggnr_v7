@@ -142,6 +142,68 @@ function extractAddressFromFooterAddr(footerAddr: string): string {
   return raw.replace(/^\d{5}\s+/, "").trim()
 }
 
+const SIDO_ABBREV_TO_FULL: Record<string, string> = {
+  경북: "경상북도",
+  경남: "경상남도",
+  경상북: "경상북도",
+  경상남: "경상남도",
+  전북: "전북특별자치도",
+  전남: "전라남도",
+  전라북: "전북특별자치도",
+  전라남: "전라남도",
+  충북: "충청북도",
+  충남: "충청남도",
+  충청북: "충청북도",
+  충청남: "충청남도",
+  강원: "강원특별자치도",
+  경기: "경기도",
+  제주: "제주특별자치도",
+}
+
+const RE_SIDO_FULL = /^([가-힣]+)(특별자치도|특별자치시|특별시|광역시|도)(\s+|$)/u
+const RE_SIGUNGU_TOKEN = /([가-힣]+)(시|군|구)(\s+|$)/u
+const RE_SIGUNGU_HEAD = /^([가-힣]+)(시|군|구)(\s+|$)/u
+
+function normalizeSidoToken(token: string): string {
+  const t = token.trim()
+  if (!t) return ""
+  if (SIDO_ABBREV_TO_FULL[t]) return SIDO_ABBREV_TO_FULL[t]
+  if (/도$|특별|광역/.test(t)) return t
+  if ((t.endsWith("북") || t.endsWith("남")) && t.length >= 2 && !t.endsWith("도")) {
+    return `${t}도`
+  }
+  return t
+}
+
+/** 주소 문자열 앞에서 시도·시군구명 추출 (푸터 주소·지오코딩 입력용) */
+function parseSidoSigunguFromAddress(address: string): { sido: string; sigungu: string } {
+  const rest0 = String(address ?? "").trim()
+  if (!rest0) return { sido: "", sigungu: "" }
+
+  let rest = rest0
+  let sido = ""
+
+  const fullSido = rest.match(RE_SIDO_FULL)
+  if (fullSido) {
+    sido = fullSido[1] + fullSido[2]
+    rest = rest.slice(fullSido[0].length).trim()
+  } else {
+    const sgMatch = rest.match(RE_SIGUNGU_TOKEN)
+    if (sgMatch?.index != null && sgMatch.index > 0) {
+      const prefix = rest.slice(0, sgMatch.index).trim()
+      const sidoToken = prefix.split(/\s+/).pop() ?? prefix
+      sido = normalizeSidoToken(sidoToken)
+      rest = rest.slice(sgMatch.index).trim()
+    }
+  }
+
+  let sigungu = ""
+  const sg = rest.match(RE_SIGUNGU_HEAD)
+  if (sg) sigungu = sg[1] + sg[2]
+
+  return { sido, sigungu }
+}
+
 async function geocodeAddressVworld(
   address: string,
   apiKey: string,
@@ -201,6 +263,20 @@ export async function getDefaultMapCenterFromFooter(): Promise<{ lon: number; la
   const road = await geocodeAddressVworld(address, apiKey, "ROAD")
   if (road) return road
   return geocodeAddressVworld(address, apiKey, "PARCEL")
+}
+
+/**
+ * 필지분석 행정경계 고정 시도·시군구.
+ * runtime.env FOOTER_ADDR 마지막 주소 조각에서 파싱 (예: build_yy → 경상북도, 영양군).
+ */
+export function getParcelAnalysisRegionFromFooter(_params?: unknown): {
+  sido: string
+  sigungu: string
+} {
+  const vars = getRuntimeEnvVars()
+  const footerAddr = vars.FOOTER_ADDR?.trim() || DEFAULT_FOOTER_ADDR
+  const address = extractAddressFromFooterAddr(footerAddr)
+  return parseSidoSigunguFromAddress(address)
 }
 
 /**
