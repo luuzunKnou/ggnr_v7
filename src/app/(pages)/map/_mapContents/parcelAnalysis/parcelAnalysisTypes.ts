@@ -37,5 +37,6 @@ export function cloneBoundarySelection(selection: BoundaryEmdSelection[]): Bound
     emdName: s.emdName,
     allRi: s.allRi,
     riCodes: [...s.riCodes],
+    riNames: s.riNames ? [...s.riNames] : undefined,
   }));
 }
