@@ -29,20 +29,22 @@ export function expandBoundaryDisplayLabels(selection: BoundaryEmdSelection[]): 
 
 export function formatBoundaryAreaSummary(
   selection: BoundaryEmdSelection[],
-  areaHa: number
-): { itemCount: number; summaryLabel: string; summaryDetail?: string } {
+  areaSqm: number
+): { itemCount: number; summaryLabel: string; summaryDetail?: string; targetLabel: string } {
   const itemCount = countBoundarySelection(selection);
   const labels = expandBoundaryDisplayLabels(selection);
-  const areaText = `약 ${areaHa} ha`;
+  const areaText = `약 ${areaSqm.toLocaleString('ko-KR')} ㎡`;
+  const targetLabel = labels.length > 0 ? labels.join(', ') : '행정경계';
 
   if (itemCount <= 0) {
-    return { itemCount: 0, summaryLabel: `행정경계 · ${areaText}` };
+    return { itemCount: 0, summaryLabel: `행정경계 · ${areaText}`, targetLabel };
   }
 
   if (itemCount === 1 && labels.length === 1) {
     return {
       itemCount,
       summaryLabel: `행정경계 · ${labels[0]} · ${areaText}`,
+      targetLabel,
     };
   }
 
@@ -50,5 +52,6 @@ export function formatBoundaryAreaSummary(
     itemCount,
     summaryLabel: `행정경계 ${itemCount}개 · ${areaText}`,
     summaryDetail: labels.join(', '),
+    targetLabel,
   };
 }

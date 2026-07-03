@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { ArrowLeft, Circle, MapPin, Pentagon, Pencil, Square, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
@@ -25,8 +25,9 @@ type Props = {
   onStepChange: (step: ParcelModalStep) => void;
   onClose: () => void;
   onDismiss: () => void;
-  onApplyDraw: () => void;
+  onStartDraw: (tool: DrawTool) => void;
   onApplyBoundary: (selection: BoundaryEmdSelection[]) => void;
+  applyingArea: boolean;
 };
 
 const DRAW_TOOLS: { id: DrawTool; icon: typeof Square; label: string }[] = [
@@ -55,11 +56,10 @@ export function ParcelAnalysisMethodModal({
   onStepChange,
   onClose,
   onDismiss,
-  onApplyDraw,
+  onStartDraw,
   onApplyBoundary,
+  applyingArea,
 }: Props) {
-  const [activeDrawTool, setActiveDrawTool] = useState<DrawTool>('rectangle');
-
   const dismissOrExit = useCallback(() => {
     if (hasConfirmedArea) onDismiss();
     else onClose();
@@ -87,7 +87,7 @@ export function ParcelAnalysisMethodModal({
       <DialogContent
         showCloseButton={false}
         className={cn(
-          'gap-0 overflow-hidden rounded-[10px] border-slate-200/80 p-0 shadow-xl',
+          'gap-0 overflow-hidden rounded-[5px] border-slate-200/80 p-0 shadow-xl',
           'flex max-h-[min(560px,88vh)] flex-col',
           STEP_MAX_WIDTH[step]
         )}
@@ -157,8 +157,7 @@ export function ParcelAnalysisMethodModal({
           {step === 'draw' && (
             <div className="space-y-4">
               <p className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 text-sm leading-relaxed text-slate-600">
-                도구를 선택한 뒤 지도에 영역을 그립니다.
-                <span className="mt-1 block text-amber-700">(1차: 적용 시 mock 영역)</span>
+                도구를 선택하면 이 창이 닫히고 지도에 그릴 수 있어요. 다 그린 뒤 꼭짓점을 드래그해 수정하고 «적용»하세요.
               </p>
               <div className="flex flex-wrap gap-2">
                 {DRAW_TOOLS.map((t) => {
@@ -167,13 +166,8 @@ export function ParcelAnalysisMethodModal({
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setActiveDrawTool(t.id)}
-                      className={cn(
-                        'flex cursor-pointer items-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-normal transition-colors',
-                        activeDrawTool === t.id
-                          ? 'border-blue-600 bg-blue-50 text-blue-800 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                      )}
+                      onClick={() => onStartDraw(t.id)}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-normal text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
                     >
                       <Icon className="size-3.5" />
                       {t.label}
@@ -196,19 +190,14 @@ export function ParcelAnalysisMethodModal({
           <Button type="button" variant="outline" size="sm" onClick={handleSecondaryAction}>
             {step === 'choose' ? '취소' : '뒤로'}
           </Button>
-          {step === 'draw' && (
-            <Button type="button" size="sm" onClick={onApplyDraw}>
-              적용
-            </Button>
-          )}
           {step === 'boundary' && (
             <Button
               type="button"
               size="sm"
-              disabled={!canApplyBoundary}
+              disabled={!canApplyBoundary || applyingArea}
               onClick={() => onApplyBoundary(boundarySessionDraft)}
             >
-              적용
+              {applyingArea ? '적용 중…' : '적용'}
             </Button>
           )}
         </DialogFooter>

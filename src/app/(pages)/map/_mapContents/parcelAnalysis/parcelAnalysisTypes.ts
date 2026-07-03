@@ -10,9 +10,12 @@ export type ParcelAnalysisArea = {
   summaryLabel: string;
   /** 2건 이상일 때 읍·면·동·리 목록 */
   summaryDetail?: string;
+  /** 대상 행 표시용 (면적 제외) */
+  targetLabel: string;
   wkt: string;
   itemCount: number;
-  areaHa: number;
+  /** 분석 영역 면적 (제곱미터, 정수) */
+  areaSqm: number;
 };
 
 export type ParcelModalStep = 'choose' | 'draw' | 'boundary';
