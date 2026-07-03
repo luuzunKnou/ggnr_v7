@@ -2041,6 +2041,43 @@ export async function getEmdGeometry(params: { schema?: string; emdCode: string 
 }
 
 /**
+ * schema.emd 전체 읍면동 도형을 합쳐(union) 사업 시군구 외곽선 WKT(EPSG:5181)로 반환.
+ * 필지분석 진입 시 지도에 대상 시군구 경계를 표시하는 용도.
+ */
+export async function getProjectEmdBoundary5181(params: { schema?: string } = {}) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const esc = (s: string) => s.replace(/'/g, "''");
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'emd' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) return { wkt: null as string | null, error: 'emd geometry column not found' };
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const col = `"${geomCol}"`;
+    const srid = normalizedLayerSrid5181(gcRow.srid);
+    const unionExpr =
+      srid === 5181
+        ? `ST_Union(${col})`
+        : `ST_Transform(ST_SetSRID(ST_Union(${col}), ${srid}), 5181)`;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(${unionExpr}) AS wkt FROM "${schema.replace(/"/g, '""')}"."emd"`
+      )
+    );
+    const row = res.rows?.[0] as { wkt?: string } | undefined;
+    const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
+    return { wkt };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { wkt: null as string | null, error: msg };
+  }
+}
+
+/**
  * schema.emd 테이블의 모든 읍면동 도형 envelope를 WGS84(4326) 경위도 bbox로 반환.
  * ITS CCTV 등 bbox 고정용 — geometry_columns 기준으로 SRID 처리(getEmdGeometry와 동일).
  */

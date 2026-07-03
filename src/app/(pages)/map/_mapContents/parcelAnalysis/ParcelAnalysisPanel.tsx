@@ -38,8 +38,9 @@ export function ParcelAnalysisPanel({
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col bg-white">
-      <header className="border-b border-slate-200 px-3 py-2.5">
-        <h1 className="text-sm font-bold text-slate-900">필지분석</h1>
+      <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5">
+        <h3 className="text-sm font-semibold text-slate-800">필지분석</h3>
+        <span className="text-[11px] text-slate-500">분석 영역·항목 선택</span>
       </header>
 
       <ParcelAnalysisAreaSummary
@@ -62,7 +63,7 @@ export function ParcelAnalysisPanel({
         disabled={!hasArea}
       />
 
-      <div className="border-t border-slate-200 p-3">
+      <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
         <Button
           type="button"
           className="w-full"

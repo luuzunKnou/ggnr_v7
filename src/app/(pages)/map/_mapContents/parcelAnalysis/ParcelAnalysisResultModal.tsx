@@ -322,22 +322,19 @@ export function ParcelAnalysisResultModal({
         showCloseButton={false}
         className={cn(
           '!flex h-[min(680px,82vh)] max-h-[min(680px,82vh)] min-h-0 w-[min(920px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden',
-          'rounded-[10px] border-slate-200/80 p-0 shadow-xl sm:max-w-[min(920px,calc(100vw-2rem))]'
+          'rounded-[5px] border-slate-200/80 p-0 shadow-xl sm:max-w-[min(920px,calc(100vw-2rem))]'
         )}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-3">
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-base font-semibold text-slate-900">분석 결과</DialogTitle>
             <DialogDescription className="mt-0.5 truncate text-xs text-slate-500">
-              교차 필지 {mockResult.parcelCount} · 합계 {mockResult.totalAreaHa} ha · 항목{' '}
+              교차 필지 {mockResult.parcelCount} · 합계 {mockResult.totalAreaSqm.toLocaleString('ko-KR')} ㎡ · 항목{' '}
               {mockResult.itemCount}
               {areaSummary ? ` · ${areaSummary}` : ''}
             </DialogDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button type="button" variant="outline" size="sm" disabled title="4차 CSV">
-              CSV
-            </Button>
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               닫기
             </Button>

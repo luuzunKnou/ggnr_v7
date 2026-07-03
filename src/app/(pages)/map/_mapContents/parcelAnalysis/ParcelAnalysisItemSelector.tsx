@@ -91,7 +91,7 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
       <div className="shrink-0 border-b border-slate-200 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-slate-800">분석 항목</p>
+            <p className="text-[12px] font-semibold text-[#666]">분석 항목</p>
             <p className="mt-0.5 text-[10px] text-slate-500">
               {selectedCount}/{totalCount} 선택
             </p>
@@ -122,11 +122,11 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
                   className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 py-0.5 text-left"
                 >
                   {isOpen ? (
-                    <ChevronDown className="size-3.5 shrink-0 text-slate-500" />
+                    <ChevronDown className="size-3.5 shrink-0 text-primary" />
                   ) : (
                     <ChevronRight className="size-3.5 shrink-0 text-slate-500" />
                   )}
-                  <span className="truncate text-xs font-semibold text-slate-800">{group.title}</span>
+                  <span className="truncate text-[12px] font-semibold text-[#666]">{group.title}</span>
                   {!isOpen && (allOn || someOn) && (
                     <span className="shrink-0 text-[10px] font-normal text-slate-500">
                       {selected}/{total}
@@ -159,7 +159,7 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
                             checked={checked}
                             onChange={() => toggleItem(item.id)}
                           />
-                          <span className="text-xs text-slate-800">{item.title}</span>
+                          <span className="text-[11px] text-[#666]">{item.title}</span>
                         </label>
                       </li>
                     );

@@ -10,7 +10,7 @@ export function ParcelAnalysisMapSidePanel() {
     selectedIds,
     setSelectedIds,
     openChangeAreaModal,
-    clearConfirmedArea,
+    resetArea,
     handleAnalyze,
     analyzing,
   } = useParcelAnalysis();
@@ -24,7 +24,7 @@ export function ParcelAnalysisMapSidePanel() {
       selectedIds={selectedIds}
       onSelectedIdsChange={setSelectedIds}
       onChangeArea={openChangeAreaModal}
-      onClearArea={clearConfirmedArea}
+      onClearArea={resetArea}
       onSpecifyArea={openChangeAreaModal}
       onAnalyze={handleAnalyze}
       analyzing={analyzing}

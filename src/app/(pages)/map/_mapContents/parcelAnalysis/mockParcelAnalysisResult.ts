@@ -13,7 +13,7 @@ export type MockJimokStat = { jimok: string; count: number; area: string; ratio:
 
 export type MockParcelAnalysisResult = {
   parcelCount: number;
-  totalAreaHa: number;
+  totalAreaSqm: number;
   itemCount: number;
   landRows: MockLandRow[];
   ownerStats: MockOwnerStat[];
@@ -29,21 +29,21 @@ export function buildMockParcelAnalysisResult(selectedItemIds: string[]): MockPa
 
   return {
     parcelCount: 12,
-    totalAreaHa: 4.2,
+    totalAreaSqm: 42000,
     itemCount: selectedItemIds.length,
     landRows: selectedItemIds.some((id) => id.startsWith('parcel:land')) ? landRows : [],
     ownerStats: selectedItemIds.some((id) => id.startsWith('parcel:owner'))
       ? [
-          { label: '개인', count: 8, area: '2.8 ha', ratio: '66.7%' },
-          { label: '국유', count: 3, area: '1.1 ha', ratio: '26.2%' },
-          { label: '법인', count: 1, area: '0.3 ha', ratio: '7.1%' },
+          { label: '개인', count: 8, area: '28,000㎡', ratio: '66.7%' },
+          { label: '국유', count: 3, area: '11,000㎡', ratio: '26.2%' },
+          { label: '법인', count: 1, area: '3,000㎡', ratio: '7.1%' },
         ]
       : [],
     jimokStats: selectedItemIds.some((id) => id.startsWith('parcel:jimok'))
       ? [
-          { jimok: '대', count: 5, area: '1.9 ha', ratio: '45.2%' },
-          { jimok: '전', count: 4, area: '1.4 ha', ratio: '33.3%' },
-          { jimok: '답', count: 3, area: '0.9 ha', ratio: '21.5%' },
+          { jimok: '대', count: 5, area: '19,000㎡', ratio: '45.2%' },
+          { jimok: '전', count: 4, area: '14,000㎡', ratio: '33.3%' },
+          { jimok: '답', count: 3, area: '9,000㎡', ratio: '21.5%' },
         ]
       : [],
   };

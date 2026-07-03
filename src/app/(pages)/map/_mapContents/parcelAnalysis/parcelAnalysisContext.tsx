@@ -6,19 +6,53 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type MutableRefObject,
   type ReactNode,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { BoundaryEmdSelection, ParcelModalStep } from './parcelAnalysisTypes';
+import { call } from '@/lib/api';
+import type { BoundaryEmdSelection, DrawTool, ParcelModalStep } from './parcelAnalysisTypes';
 import { cloneBoundarySelection } from './parcelAnalysisTypes';
 import { useParcelAnalysisArea } from './useParcelAnalysisArea';
 import { useParcelAnalysisMapZoom } from './useParcelAnalysisMapZoom';
 import { ALL_PARCEL_ITEM_IDS } from './parcelAnalysisItems';
+import { useMapContext } from '../../_mapComponents/MapContext';
+import { canStartMapDrawInteraction } from '../../_mapComponents/mapDrawInteraction';
 
 export const PARCEL_ANALYSIS_OPENED_KEY = 'parcelAnalysis';
 
 const DEFAULT_SELECTED = new Set(ALL_PARCEL_ITEM_IDS);
+
+/** 읍면동·리 경계 WKT(5181) 조회 — 실패 시 null */
+async function fetchBoundaryWkt5181(
+  action: 'getEmdGeometry' | 'getRiGeometry',
+  params: Record<string, string>
+): Promise<string | null> {
+  try {
+    const res = await call('', 'POST', { service: 'devTestService', action, params });
+    const data = res?.data ?? res;
+    return data?.wkt ? String(data.wkt) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 여러 경계 WKT를 하나로 합침(5181) — 실패 시 null */
+async function fetchUnionWkt5181(wkts: string[]): Promise<string | null> {
+  try {
+    const res = await call('', 'POST', {
+      service: 'devTestService',
+      action: 'unionWkts5181',
+      params: { wkts },
+    });
+    const data = res?.data ?? res;
+    return data?.wkt ? String(data.wkt) : null;
+  } catch {
+    return null;
+  }
+}
 
 type ParcelAnalysisContextValue = {
   isOpen: boolean;
@@ -40,9 +74,17 @@ type ParcelAnalysisContextValue = {
   exitParcelAnalysis: () => void;
   closeAreaModal: () => void;
   openChangeAreaModal: () => void;
-  handleApplyDraw: () => void;
+  startDraw: (tool: DrawTool) => void;
+  cancelDraw: () => void;
+  redrawShape: () => void;
+  confirmDraw: () => void;
+  drawTool: DrawTool | null;
+  drawPhase: 'drawing' | 'editing';
+  setDrawPhase: (phase: 'drawing' | 'editing') => void;
+  drawWktRef: MutableRefObject<string | null>;
   handleApplyBoundary: (selection: BoundaryEmdSelection[]) => void;
-  clearConfirmedArea: () => void;
+  applyingArea: boolean;
+  resetArea: () => void;
   handleAnalyze: () => void;
 };
 
@@ -51,6 +93,7 @@ const ParcelAnalysisContext = createContext<ParcelAnalysisContextValue | null>(n
 export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const mapContext = useMapContext();
 
   const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) ?? [];
   const openedWindows = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
@@ -59,12 +102,12 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   const {
     area,
     boundaryDraft,
-    applyMockDraw,
-    applyMockBoundary,
+    applyDrawArea,
+    applyBoundaryArea,
     clearArea,
     setBoundaryDraft,
   } = useParcelAnalysisArea();
-  const { resetZoomFlag } = useParcelAnalysisMapZoom();
+  const { fitProjectEmdExtent, resetZoomFlag } = useParcelAnalysisMapZoom();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<ParcelModalStep>('choose');
@@ -76,6 +119,10 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(DEFAULT_SELECTED));
   const [analyzing, setAnalyzing] = useState(false);
   const [panelEngaged, setPanelEngaged] = useState(false);
+  const [applyingArea, setApplyingArea] = useState(false);
+  const [drawTool, setDrawTool] = useState<DrawTool | null>(null);
+  const [drawPhase, setDrawPhase] = useState<'drawing' | 'editing'>('drawing');
+  const drawWktRef = useRef<string | null>(null);
 
   const sidePanelOpen = panelEngaged;
 
@@ -90,24 +137,86 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setModalStep('choose');
   }, []);
 
-  const handleApplyDraw = useCallback(() => {
-    applyMockDraw();
+  // 도구 선택 → 모달을 닫고 그리기 세션 시작(그리기 단계). 실제 Draw/Modify는 useParcelAnalysisDraw가 처리.
+  const startDraw = useCallback(
+    (tool: DrawTool) => {
+      if (!mapContext) return;
+      if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return;
+      setModalOpen(false);
+      drawWktRef.current = null;
+      setDrawPhase('drawing');
+      setDrawTool(tool);
+    },
+    [mapContext]
+  );
+
+  // 편집 단계에서 다시 그리기 → 그린 도형을 지우고 그리기 단계로
+  const redrawShape = useCallback(() => {
+    drawWktRef.current = null;
+    setDrawPhase('drawing');
+  }, []);
+
+  // 그리기/편집 취소 → 세션 종료 후 도형선택 화면으로 복귀(도구 미선택 상태)
+  const cancelDraw = useCallback(() => {
+    setDrawTool(null);
+    setDrawPhase('drawing');
+    drawWktRef.current = null;
+    setModalStep('draw');
+    setModalOpen(true);
+  }, []);
+
+  // 편집한 도형을 확정 → 5181 WKT로 영역 확정, 패널 오픈
+  const confirmDraw = useCallback(() => {
+    const wkt = drawWktRef.current;
+    if (!wkt) {
+      window.alert('그린 도형이 없습니다. 지도에 도형을 그려 주세요.');
+      return;
+    }
+    applyDrawArea(wkt);
+    setDrawTool(null);
+    setDrawPhase('drawing');
+    drawWktRef.current = null;
     setPanelEngaged(true);
     setModalOpen(false);
     setModalStep('choose');
-  }, [applyMockDraw]);
+  }, [applyDrawArea]);
 
   const handleApplyBoundary = useCallback(
-    (selection: BoundaryEmdSelection[]) => {
+    async (selection: BoundaryEmdSelection[]) => {
       const cloned = cloneBoundarySelection(selection);
-      setBoundaryDraft(cloned);
-      setBoundarySessionDraft(cloned);
-      applyMockBoundary(selection);
-      setPanelEngaged(true);
-      setModalOpen(false);
-      setModalStep('choose');
+      setApplyingArea(true);
+      try {
+        const wkts: string[] = [];
+        for (const sel of cloned) {
+          if (sel.allRi) {
+            const wkt = await fetchBoundaryWkt5181('getEmdGeometry', { emdCode: sel.emdCode });
+            if (wkt) wkts.push(wkt);
+          } else {
+            for (const riCode of sel.riCodes) {
+              const wkt = await fetchBoundaryWkt5181('getRiGeometry', { riCode });
+              if (wkt) wkts.push(wkt);
+            }
+          }
+        }
+        if (wkts.length === 0) {
+          window.alert('선택한 행정경계의 경계 정보를 가져오지 못했습니다.');
+          return;
+        }
+        let unionWkt = wkts[0];
+        if (wkts.length > 1) {
+          const merged = await fetchUnionWkt5181(wkts);
+          if (merged) unionWkt = merged;
+        }
+        applyBoundaryArea(cloned, unionWkt);
+        setBoundarySessionDraft(cloned);
+        setPanelEngaged(true);
+        setModalOpen(false);
+        setModalStep('choose');
+      } finally {
+        setApplyingArea(false);
+      }
     },
-    [applyMockBoundary, setBoundaryDraft, setBoundarySessionDraft]
+    [applyBoundaryArea, setBoundarySessionDraft]
   );
 
   const openChangeAreaModal = useCallback(() => {
@@ -129,13 +238,16 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setModalOpen(true);
   }, [area, boundaryDraft, setBoundarySessionDraft]);
 
-  const clearConfirmedArea = useCallback(() => {
+  // 재설정: 확정 영역을 비우고 곧바로 영역 지정 모달을 다시 연다.
+  const resetArea = useCallback(() => {
     clearArea();
     setBoundaryDraft([]);
     setBoundarySessionDraft([]);
     setDrawerOpen(false);
-    setModalOpen(false);
+    setDrawTool(null);
+    drawWktRef.current = null;
     setModalStep('choose');
+    setModalOpen(true);
   }, [clearArea, setBoundaryDraft, setBoundarySessionDraft]);
 
   const handleAnalyze = useCallback(() => {
@@ -152,9 +264,26 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setModalStep('choose');
     setBoundarySessionDraft([]);
     setPanelEngaged(false);
-    // TODO(S1): 시군구가 뷰포트 80% 차도록 fit — 2차에서 재구현
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 진입 시 1회
   }, [isOpen]);
+
+  // 진입 시 1회만 사업 시군구를 기준 배율로 확대(zoomedRef 가드 — 진입/종료 시에만 리셋).
+  // 취소·다시 그리기·변경/재지정으로 모달을 다시 열어도 현재 지도(확대 상태)를 유지한다.
+  useEffect(() => {
+    if (!isOpen || !modalOpen) return;
+    if (area != null) return;
+    void fitProjectEmdExtent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 모달 열림·영역 상태 변화 시
+  }, [isOpen, modalOpen, area]);
+
+  // 영역 지정 모달이 다시 열리면(그리기 세션 밖) 진행 중이던 그리기 세션 종료
+  useEffect(() => {
+    if (!isOpen) return;
+    if (modalOpen && drawTool) {
+      setDrawTool(null);
+      drawWktRef.current = null;
+    }
+  }, [isOpen, modalOpen, drawTool]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -166,6 +295,10 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setDrawerOpen(false);
     setSelectedIds(new Set(DEFAULT_SELECTED));
     setAnalyzing(false);
+    setApplyingArea(false);
+    setDrawTool(null);
+    setDrawPhase('drawing');
+    drawWktRef.current = null;
     resetZoomFlag();
   }, [isOpen, clearArea, resetZoomFlag]);
 
@@ -189,9 +322,17 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       exitParcelAnalysis,
       closeAreaModal,
       openChangeAreaModal,
-      handleApplyDraw,
+      startDraw,
+      cancelDraw,
+      redrawShape,
+      confirmDraw,
+      drawTool,
+      drawPhase,
+      setDrawPhase,
+      drawWktRef,
       handleApplyBoundary,
-      clearConfirmedArea,
+      applyingArea,
+      resetArea,
       handleAnalyze,
     }),
     [
@@ -209,9 +350,15 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       exitParcelAnalysis,
       closeAreaModal,
       openChangeAreaModal,
-      handleApplyDraw,
+      startDraw,
+      cancelDraw,
+      redrawShape,
+      confirmDraw,
+      drawTool,
+      drawPhase,
       handleApplyBoundary,
-      clearConfirmedArea,
+      applyingArea,
+      resetArea,
       handleAnalyze,
     ]
   );

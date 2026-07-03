@@ -3,8 +3,17 @@
 import { useCallback, useRef } from 'react';
 import { call } from '@/lib/api';
 import { useMapContext } from '../../_mapComponents/MapContext';
-import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation';
+import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation';
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
 import { transformCoordinate } from '../../_mapComponents/services/coordinateService';
+
+/**
+ * 시군구가 뷰포트에서 차지할 목표 비율.
+ * 1.0 = 화면에 딱 맞춤, 1.0 초과 = 중심 좌표 기준 더 확대(가장자리 크롭).
+ * (1.5 = 시군구가 화면의 약 150% → 중앙만 크게)
+ * fit(contain)은 100% 초과가 안 되므로 중심+줌 계산 방식으로 처리한다.
+ */
+const TARGET_VIEWPORT_FILL = 1.5;
 
 function extent5181To3857(
   minX: number,
@@ -36,14 +45,15 @@ function extent5181To3857(
 }
 
 /**
- * 필지분석 진입 시 시군구(emd 전체) extent fit.
- * TODO: 뷰포트 80% 채움·필요 시에만 fit — 2차에서 재구현
+ * 필지분석 진입 시 사업 시군구(schema.emd 전체) 범위를 중심 좌표 기준으로 확대.
+ * 좌측 패널이 없는 진입 단계에서 대상 지역을 크게 보여주기 위한 용도.
  */
 export function useParcelAnalysisMapZoom() {
   const mapContext = useMapContext();
   const zoomedRef = useRef(false);
 
   const fitProjectEmdExtent = useCallback(async () => {
+    if (zoomedRef.current) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
 
@@ -63,15 +73,38 @@ export function useParcelAnalysisMapZoom() {
       const ext3857 = extent5181To3857(minX, minY, maxX, maxY);
       if (!ext3857) return;
 
-      scheduleFitMapToExtent3857(map, ext3857, {
-        fitPadding: [48, 48, 48, 48],
-        maxZoom: 16,
+      const [xmin, ymin, xmax, ymax] = ext3857;
+      const center: [number, number] = [(xmin + xmax) / 2, (ymin + ymax) / 2];
+      const extentWidth = xmax - xmin;
+      const extentHeight = ymax - ymin;
+
+      const size = map.getSize();
+      const view = map.getView();
+      if (!size || extentWidth <= 0 || extentHeight <= 0) return;
+
+      // 좌측 패널이 없는 진입 단계 — 사이드바 패딩만 가시영역에서 제외
+      const paddingLeft = mapContext?.mapPaddingLeft ?? 0;
+      const usableWidth = Math.max(1, size[0] - paddingLeft);
+      const usableHeight = Math.max(1, size[1]);
+
+      // 시군구의 큰 변이 가시영역의 (목표 비율)을 차지하도록 해상도 계산
+      const targetResolution = Math.max(
+        extentWidth / (usableWidth * TARGET_VIEWPORT_FILL),
+        extentHeight / (usableHeight * TARGET_VIEWPORT_FILL)
+      );
+
+      const rawZoom = view.getZoomForResolution(targetResolution);
+      if (rawZoom == null || !Number.isFinite(rawZoom)) return;
+      const zoom = Math.min(rawZoom, MAP_AUTO_NAV_MAX_ZOOM);
+
+      scheduleAnimateMapToCenter3857(map, center, zoom, {
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
       });
       zoomedRef.current = true;
     } catch {
-      /* ignore — 1차 UI는 맞춤 실패해도 진행 */
+      /* 맞춤 실패해도 진행 — 사용자가 수동으로 이동 가능 */
     }
-  }, [mapContext?.mapInstanceRef]);
+  }, [mapContext?.mapInstanceRef, mapContext?.applyMapViewPaddingRef, mapContext?.mapPaddingLeft]);
 
   const resetZoomFlag = useCallback(() => {
     zoomedRef.current = false;
