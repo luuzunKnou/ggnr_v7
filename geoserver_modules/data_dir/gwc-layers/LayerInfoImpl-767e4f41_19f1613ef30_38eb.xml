@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cae</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38eb</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:tl_spbd_entrc_dong</name>
+  <name>ggnr:sgg</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.49536547928744</double>
-          <double>36.53275268826153</double>
-          <double>128.80602030594343</double>
-          <double>36.68964169196224</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4304038654449861E7</double>
-          <double>4374177.11945815</double>
-          <double>1.433862059156568E7</double>
-          <double>4395934.681449838</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>tl_spbd_entrc_dong</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

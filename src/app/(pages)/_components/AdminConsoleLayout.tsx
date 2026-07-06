@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { ChevronDown } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
 import { cn } from "@/lib/utils"
 import { signOut } from "next-auth/react"
@@ -271,11 +271,11 @@ export function AdminConsoleLayout({
         <main className="flex-1 overflow-auto p-4">
           <Card className="rounded-none min-h-full">
             <CardHeader>
-              <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle>{currentLabel}</CardTitle>
-                {renderTitleExtra?.(selectedMenu)}
-              </div>
+              <CardTitle>{currentLabel}</CardTitle>
               <CardDescription>{getDescription(selectedMenu)}</CardDescription>
+              {renderTitleExtra?.(selectedMenu) ? (
+                <CardAction className="self-end">{renderTitleExtra(selectedMenu)}</CardAction>
+              ) : null}
             </CardHeader>
             <CardContent>
               {consoleArea && accessLoading ? (

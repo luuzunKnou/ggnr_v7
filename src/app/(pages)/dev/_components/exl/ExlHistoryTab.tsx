@@ -19,7 +19,7 @@ type HistoryRow = {
 
 const PAGE_SIZE = 20;
 
-export function ExlHistoryTab() {
+export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -62,7 +62,9 @@ export function ExlHistoryTab() {
   return (
     <div className="flex flex-col h-full min-h-0 p-2 gap-2">
       <div className="shrink-0 flex items-center gap-2">
-        <span className="text-sm font-medium whitespace-nowrap">Excel 업로드 이력</span>
+        {!embedded && (
+          <span className="text-sm font-medium whitespace-nowrap">Excel 업로드 이력</span>
+        )}
         <span className="text-xs text-muted-foreground flex-1">총 {total}건</span>
         <Button variant="outline" size="sm" onClick={fetchList} className="gap-1">
           <RefreshCw className="w-3.5 h-3.5" /> 새로고침

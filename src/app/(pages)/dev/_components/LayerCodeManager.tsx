@@ -5,7 +5,7 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Search, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { call } from "@/lib/api"
+import type { LayerDefineEmbedProps } from "./layerManager/types"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -14,16 +14,16 @@ type DefineCode = Record<string, unknown>
 const LAYER_LIST_WIDTH = 280
 const FIELD_LIST_WIDTH = 280
 
-export function LayerCodeManager() {
+export function LayerCodeManager({
+  embedded = false,
+  fixedTableKey = null,
+}: LayerDefineEmbedProps = {}) {
   const [tables, setTables] = useState<DefineLayerTable[]>([])
   const [codeTableKeys, setCodeTableKeys] = useState<Set<string>>(new Set())
   const [selectedTableKey, setSelectedTableKey] = useState<string>("")
   const [layerListSearch, setLayerListSearch] = useState("")
   const [debouncedLayerListSearch, setDebouncedLayerListSearch] = useState("")
   const [showPublicLayer, setShowPublicLayer] = useState(false)
-  const [showAllLayers, setShowAllLayers] = useState(false)
-  const [tableExistenceSet, setTableExistenceSet] = useState<Set<string>>(new Set())
-  const [tableExistenceLoading, setTableExistenceLoading] = useState(false)
   const [fields, setFields] = useState<DefineField[]>([])
   const [codeFields, setCodeFields] = useState<DefineField[]>([])
   const [fieldListSearch, setFieldListSearch] = useState("")
@@ -39,6 +39,10 @@ export function LayerCodeManager() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [newCodeName, setNewCodeName] = useState("")
   const [newCodeKorName, setNewCodeKorName] = useState("")
+
+  useEffect(() => {
+    if (fixedTableKey) setSelectedTableKey(fixedTableKey)
+  }, [fixedTableKey])
 
   // CODE 필드가 있는 테이블 키 목록
   useEffect(() => {
@@ -69,28 +73,6 @@ export function LayerCodeManager() {
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
       .finally(() => !cancelled && setLoadingTables(false))
-    return () => { cancelled = true }
-  }, [])
-
-  // DB에 테이블 존재 여부 로드 (layer, public_layer 스키마)
-  useEffect(() => {
-    let cancelled = false
-    setTableExistenceLoading(true)
-    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      .then((res) => {
-        if (cancelled) return
-        const data = res?.data ?? res
-        if (data?.success && Array.isArray(data.tables)) {
-          const set = new Set<string>(
-            data.tables.map(
-              (t: { schema?: string; table?: string }) => `${t.schema ?? "layer"}.${t.table ?? ""}`
-            )
-          )
-          setTableExistenceSet(set)
-        }
-      })
-      .catch(() => !cancelled && setTableExistenceSet(new Set()))
-      .finally(() => !cancelled && setTableExistenceLoading(false))
     return () => { cancelled = true }
   }, [])
 
@@ -158,22 +140,13 @@ export function LayerCodeManager() {
     return () => clearTimeout(t)
   }, [fieldListSearch])
 
-  /** CODE 필드가 있는 테이블만, 스키마/전체 레이어(DB 테이블 존재) 필터 + 검색 */
+  /** defineLayer 중 CODE 필드가 있는 테이블 + 검색 */
   const filteredTables = useMemo(() => {
     let list = tables.filter((t) => codeTableKeys.has(String((t as Record<string, unknown>).define_table_name ?? "")))
     if (!showPublicLayer) {
       list = list.filter(
         (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
       )
-    }
-    if (!showAllLayers) {
-      list = list.filter((t) => {
-        const schema = String((t as Record<string, unknown>).define_table_schema ?? "layer")
-        const tableName = String((t as Record<string, unknown>).define_table_name ?? "")
-        if (!tableName) return true
-        const key = `${schema}.${tableName}`
-        return tableExistenceLoading || tableExistenceSet.has(key)
-      })
     }
     if (debouncedLayerListSearch.trim()) {
       const q = debouncedLayerListSearch.trim().toLowerCase()
@@ -186,7 +159,7 @@ export function LayerCodeManager() {
       })
     }
     return list
-  }, [tables, codeTableKeys, debouncedLayerListSearch, showPublicLayer, showAllLayers, tableExistenceSet, tableExistenceLoading])
+  }, [tables, codeTableKeys, debouncedLayerListSearch, showPublicLayer])
 
   /** 필드 목록 검색 필터 */
   const filteredCodeFields = useMemo(() => {
@@ -261,10 +234,13 @@ export function LayerCodeManager() {
 
   return (
     <div
-      className="flex gap-4 min-h-0 flex-1 overflow-hidden w-full min-w-0"
-      style={{ height: "calc(100vh - 14rem)" }}
+      className={cn(
+        "flex gap-4 min-h-0 flex-1 overflow-hidden w-full min-w-0",
+        embedded && "h-full p-2"
+      )}
+      style={embedded ? undefined : { height: "calc(100vh - 14rem)" }}
     >
-      {/* 1. 왼쪽: 레이어 목록 (CODE 필드가 있는 테이블만) + 검색 */}
+      {!embedded && (
       <div
         className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
         style={{ width: LAYER_LIST_WIDTH, height: "calc(100vh - 14rem)" }}
@@ -279,15 +255,6 @@ export function LayerCodeManager() {
                 className="rounded border-input"
               />
               public_layer 포함
-            </label>
-            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showAllLayers}
-                onChange={(e) => setShowAllLayers(e.target.checked)}
-                className="rounded border-input"
-              />
-              전체 레이어 보기
             </label>
           </div>
           <div className="relative">
@@ -336,11 +303,11 @@ export function LayerCodeManager() {
           )}
         </div>
       </div>
+      )}
 
-      {/* 2. 가운데: 필드 목록 (CODE 타입만) + 검색 */}
       <div
         className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
-        style={{ width: FIELD_LIST_WIDTH, height: "calc(100vh - 14rem)" }}
+        style={{ width: FIELD_LIST_WIDTH, height: embedded ? "100%" : "calc(100vh - 14rem)" }}
       >
         <div className="shrink-0 p-2 border-b bg-muted/50">
           <div className="relative">
@@ -356,7 +323,9 @@ export function LayerCodeManager() {
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {!selectedTableKey ? (
-            <p className="p-3 text-sm text-muted-foreground">레이어를 선택하세요.</p>
+            <p className="p-3 text-sm text-muted-foreground">
+              {embedded ? "목록 탭에서 레이어를 선택하세요." : "레이어를 선택하세요."}
+            </p>
           ) : loadingFields ? (
             <p className="p-3 text-sm text-muted-foreground">필드 로딩 중...</p>
           ) : filteredCodeFields.length === 0 ? (
@@ -397,7 +366,9 @@ export function LayerCodeManager() {
       <div className="flex-1 min-w-0 flex flex-col gap-2 min-h-0 overflow-hidden">
         {!selectedFieldKey ? (
           <p className="text-sm text-muted-foreground py-4">
-            왼쪽에서 레이어를, 가운데에서 CODE 필드를 선택하면 코드 목록을 편집할 수 있습니다.
+            {embedded
+              ? "CODE 타입 필드를 선택하면 코드 목록을 편집할 수 있습니다."
+              : "왼쪽에서 레이어를, 가운데에서 CODE 필드를 선택하면 코드 목록을 편집할 수 있습니다."}
           </p>
         ) : (
           <>

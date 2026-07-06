@@ -433,9 +433,19 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   relativePath: string;
   onSuccess?: () => void;
+  /** 레이어 관리 등: 1단계 파일 선택 옆 서버 선택 버튼 */
+  showServerPickButton?: boolean;
+  onPickFromServer?: () => void;
 };
 
-export function ExlWizardModal({ open, onOpenChange, relativePath, onSuccess }: Props) {
+export function ExlWizardModal({
+  open,
+  onOpenChange,
+  relativePath,
+  onSuccess,
+  showServerPickButton,
+  onPickFromServer,
+}: Props) {
   const [step, setStep] = useState(1);
   const [pathOrResult, setPathOrResult] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -2011,6 +2021,17 @@ export function ExlWizardModal({ open, onOpenChange, relativePath, onSuccess }: 
                   >
                     파일 선택
                   </Button>
+                  {showServerPickButton && onPickFromServer ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onPickFromServer}
+                      disabled={step1Validating}
+                    >
+                      서버에서 선택
+                    </Button>
+                  ) : null}
                   {selectedFileInfo && !step1Validating && (
                     <span className="text-sm text-muted-foreground">
                       {selectedFileInfo.name} · {selectedFileInfo.size.toLocaleString()} bytes

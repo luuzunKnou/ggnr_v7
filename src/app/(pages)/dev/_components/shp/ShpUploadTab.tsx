@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Folder, File as FileIcon, ChevronUp, RefreshCw, Check, X, Loader2, ArrowRight, Minus, AlertTriangle } from 'lucide-react';
-import { useChunkedUpload } from '../useChunkedUpload';
+import { Folder, File as FileIcon, ChevronUp, RefreshCw, Check, X, Loader2, ArrowRight, Minus, AlertTriangle, Upload } from 'lucide-react';
+import { useChunkedUpload, folderUploadOverallPercent } from '../useChunkedUpload';
 import { SyncDetailModal } from './SyncDetailModal';
+import { ShpWizardModal } from './ShpWizardModal';
 
 type DirEntry = { name: string; isDirectory: boolean; size: number; mtime: string };
 type DirListResult = {
@@ -58,6 +59,7 @@ type Props = {
   relativePath: string;
   onPathChange: (p: string) => void;
   onGoHistory?: () => void;
+  onFinished?: () => void;
 };
 
 const SHP_EXTENSIONS = new Set(['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx', '.fbn', '.fbx', '.ain', '.aih', '.ixs', '.mxs', '.atx', '.xml', '.qix']);
@@ -66,15 +68,21 @@ function isShpRelated(name: string) {
   return SHP_EXTENSIONS.has(ext);
 }
 
-export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props) {
+export function ShpUploadTab({
+  relativePath,
+  onPathChange,
+  onGoHistory,
+  onFinished,
+}: Props) {
   const [entries, setEntries] = useState<DirEntry[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const [folderUploading, setFolderUploading] = useState(false);
   const [folderProgress, setFolderProgress] = useState({ current: 0, total: 0 });
+  const [folderUploadFileName, setFolderUploadFileName] = useState('');
   const folderAbortRef = useRef(false);
-  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const [postProcessing, setPostProcessing] = useState(false);
   const [fileLogs, _setFileLogs] = useState<FileLogEntry[]>([]);
@@ -93,7 +101,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [syncModalTable, setSyncModalTable] = useState<{ tableName: string; logIndex: number; shpPath?: string } | null>(null);
 
-  const { upload, cancel, reset } = useChunkedUpload();
+  const { upload, cancel, reset, state: uploadState } = useChunkedUpload();
 
   const updateFileLog = useCallback((index: number, patch: Partial<FileLogEntry>) => {
     setFileLogs((prev) => prev.map((e, i) => (i === index ? { ...e, ...patch } : e)));
@@ -131,7 +139,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
   }, [relativePath]);
 
   useEffect(() => {
-    fetchList();
+    void fetchList();
   }, [fetchList]);
 
   const goUp = useCallback(() => {
@@ -171,22 +179,10 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
     e.dataTransfer.dropEffect = 'copy';
   }, []);
 
-  const handleFolderSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length === 0) return;
-    runBatchUpload(files, false);
-    e.target.value = '';
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleFolderUploadCancel = useCallback(() => {
     folderAbortRef.current = true;
     cancel();
   }, [cancel]);
-
-  const handleFolderUploadClick = useCallback(() => {
-    folderInputRef.current?.click();
-  }, []);
 
   type PreStatus = { table: boolean; layer: boolean; style: boolean; define: boolean; geometryType?: string };
 
@@ -303,7 +299,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
                   updateFileLog(logIndex, { table: 'created' });
                 } else {
                   entry.table = 'fail';
-                  entry.error = ad?.error ?? '동기화 적용 실패';
+                  entry.error = ad?.error ?? '정합성 검증 적용 실패';
                   updateFileLog(logIndex, { table: 'fail', error: entry.error });
                   flushCounts();
                   return entry;
@@ -424,7 +420,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
           const allOk = r.table !== 'fail' && r.table !== 'sync' && r.layer !== 'fail' && r.style !== 'fail' && r.define !== 'fail';
           let type = '신규';
           if (r.table === 'existed') type = '동일';
-          else if (r.table === 'sync' || (r.appendCount || r.conflictCount || r.removeCount)) type = '동기화';
+          else if (r.table === 'sync' || (r.appendCount || r.conflictCount || r.removeCount)) type = '정합성 검증';
           else if (r.oldData != null && r.oldData > 0) type = '업데이트';
           return {
             group: r.group ?? '',
@@ -435,7 +431,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
             appendCount: r.appendCount ?? 0,
             conflictCount: r.conflictCount ?? 0,
             removeCount: r.removeCount ?? 0,
-            contents: allOk ? '업데이트 완료' : (r.table === 'sync' ? '동기화 대기' : (r.error ?? '실패')),
+            contents: allOk ? '업데이트 완료' : (r.table === 'sync' ? '정합성 검증 대기' : (r.error ?? '실패')),
             result: allOk ? '성공' : (r.table === 'sync' ? '대기' : '실패'),
             shpPath: r.shpPath ?? '',
           };
@@ -501,14 +497,16 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
       // Phase 1: Upload
       setFolderUploading(true);
       setFolderProgress({ current: 0, total: shpRelated.length });
+      setFolderUploadFileName('');
       folderAbortRef.current = false;
 
       const uploadedShpPaths: { path: string; name: string }[] = [];
 
       for (let i = 0; i < shpRelated.length; i++) {
         if (folderAbortRef.current) break;
-        setFolderProgress({ current: i + 1, total: shpRelated.length });
         const file = shpRelated[i];
+        setFolderUploadFileName(file.name);
+        setFolderProgress({ current: i, total: shpRelated.length });
 
         let shpSavePath = file.name;
         if (!fromDrop && (file as File & { webkitRelativePath?: string }).webkitRelativePath) {
@@ -534,6 +532,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
 
       setFolderUploading(false);
       setFolderProgress({ current: 0, total: 0 });
+      setFolderUploadFileName('');
       folderAbortRef.current = false;
       fetchList();
       reset();
@@ -600,6 +599,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
       const logDir = uploadDirs.size === 1 ? [...uploadDirs][0] : relativePath;
       await saveLogFile(results, logDir);
       fetchList();
+      onFinished?.();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [upload, reset, fetchList, relativePath, cancel]
@@ -611,10 +611,13 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
   const syncNeedCount = fileLogs.filter((s) => s.table === 'sync').length;
   const successCount = fileLogs.filter((s) => s.table !== 'fail' && s.table !== 'pending' && s.table !== 'sync' && s.layer !== 'fail' && s.layer !== 'pending' && s.style !== 'fail' && s.style !== 'pending' && s.define !== 'fail' && s.define !== 'pending').length;
   const failCount = fileLogs.filter((s) => s.table === 'fail' || s.layer === 'fail' || s.style === 'fail' || s.define === 'fail').length;
+  const folderUploadOverall =
+    folderUploading && folderProgress.total > 0
+      ? folderUploadOverallPercent(folderProgress.current, folderProgress.total, uploadState.progress)
+      : 0;
 
   return (
     <div className="flex flex-col h-full min-h-0 p-2 gap-2">
-      {/* toolbar */}
       <div className="shrink-0 flex items-center gap-2">
         <Button variant="outline" size="sm" disabled={!canGoUp || isBusy} onClick={goUp} className="gap-1">
           <ChevronUp className="w-3.5 h-3.5" /> 상위로
@@ -623,19 +626,12 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
         <Button variant="outline" size="sm" onClick={fetchList} className="gap-1" disabled={isBusy}>
           <RefreshCw className="w-3.5 h-3.5" /> 새로고침
         </Button>
-        <Button variant="default" size="sm" onClick={handleFolderUploadClick} disabled={isBusy}>
+        <Button size="sm" onClick={() => setWizardOpen(true)} disabled={isBusy}>
+          <Upload className="w-3.5 h-3.5" />
           폴더 업로드
         </Button>
-        <input
-          ref={folderInputRef}
-          type="file"
-          className="hidden"
-          {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
-          onChange={handleFolderSelect}
-        />
       </div>
 
-      {/* folder / file list (shown when idle) */}
       {!isBusy && fileLogs.length === 0 && (
         <section
           className="flex-1 min-h-0 overflow-auto border rounded"
@@ -684,12 +680,33 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
       {/* upload progress */}
       {folderUploading && (
         <div className="shrink-0 px-3 py-2 border rounded bg-muted/20">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span>업로드 진행: {folderProgress.current}/{folderProgress.total} 파일</span>
-            <Button variant="ghost" size="sm" className="h-5 text-xs" onClick={handleFolderUploadCancel}>취소</Button>
+          <div className="flex items-center justify-between gap-2 text-xs mb-1">
+            <div className="min-w-0 flex-1">
+              <span className="font-medium">
+                업로드{' '}
+                {folderProgress.total > 0
+                  ? `${Math.min(folderProgress.current + 1, folderProgress.total)}/${folderProgress.total}`
+                  : ''}{' '}
+                · 전체 {folderUploadOverall}%
+              </span>
+              {folderUploadFileName ? (
+                <p className="truncate text-muted-foreground mt-0.5" title={folderUploadFileName}>
+                  {folderUploadFileName}
+                  {uploadState.totalChunks > 0
+                    ? ` · 청크 ${uploadState.currentChunk}/${uploadState.totalChunks} (${uploadState.progress}%)`
+                    : ''}
+                </p>
+              ) : null}
+            </div>
+            <Button variant="ghost" size="sm" className="h-5 shrink-0 text-xs" onClick={handleFolderUploadCancel}>
+              취소
+            </Button>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary transition-all" style={{ width: `${folderProgress.total > 0 ? Math.round((folderProgress.current / folderProgress.total) * 100) : 0}%` }} />
+            <div
+              className="h-full bg-primary transition-all duration-150"
+              style={{ width: `${folderUploadOverall}%` }}
+            />
           </div>
         </div>
       )}
@@ -720,7 +737,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
                 <th className="py-1 px-2 w-20">Layer</th>
                 <th className="py-1 px-2 w-20">Style</th>
                 <th className="py-1 px-2 w-20">Define</th>
-                <th className="py-1 px-2 w-14 text-right" title="처리 후 DB 행 수(동기화 대기 시 동기화 전 DB)">현재</th>
+                <th className="py-1 px-2 w-14 text-right" title="처리 후 DB 행 수(정합성 검증 대기 시 검증 전 DB)">현재</th>
                 <th className="py-1 px-2 w-12 text-right" title="속성 충돌(변경 필요) 건수">변경</th>
                 <th className="py-1 px-2 w-12 text-right" title="SHP 기준 신규 행(추가) 건수">추가</th>
                 <th className="py-1 px-2 text-left min-w-[8rem]">비고</th>
@@ -776,7 +793,7 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
             후처리 완료:
             <strong className="text-green-600 ml-1">{successCount}건 성공</strong>
             {failCount > 0 && <strong className="text-red-500 ml-1">, {failCount}건 실패</strong>}
-            {syncNeedCount > 0 && <strong className="text-orange-600 ml-1">, {syncNeedCount}건 동기화 대기</strong>}
+            {syncNeedCount > 0 && <strong className="text-orange-600 ml-1">, {syncNeedCount}건 정합성 검증 대기</strong>}
           </span>
           <div className="flex items-center gap-2">
             {onGoHistory && (
@@ -802,6 +819,17 @@ export function ShpUploadTab({ relativePath, onPathChange, onGoHistory }: Props)
           onRollbackDone={handleSyncDone}
         />
       )}
+
+      <ShpWizardModal
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        relativePath={relativePath}
+        onSuccess={() => {
+          fetchList();
+          onGoHistory?.();
+          onFinished?.();
+        }}
+      />
     </div>
   );
 }
@@ -817,7 +845,7 @@ function StepBadge({ status }: { status: StepStatus }) {
     case 'existed':
       return <span className="inline-flex items-center justify-center w-full text-[10px] font-medium text-blue-600 dark:text-blue-400">기존</span>;
     case 'sync':
-      return <span className="inline-flex items-center justify-center w-full text-[10px] font-medium text-orange-600 dark:text-orange-400">동기화</span>;
+      return <span className="inline-flex items-center justify-center w-full text-[10px] font-medium text-orange-600 dark:text-orange-400">정합성 검증</span>;
     case 'fail':
       return <X className="w-3.5 h-3.5 text-red-500 mx-auto" />;
     default:

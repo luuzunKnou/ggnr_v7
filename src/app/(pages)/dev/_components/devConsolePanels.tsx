@@ -2,9 +2,7 @@ import type { ReactNode } from "react"
 import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
-import { LayerInfoManager } from "./LayerInfoManager"
-import { LayerAttrManager } from "./LayerAttrManager"
-import { LayerCodeManager } from "./LayerCodeManager"
+import { LayerManagerContent } from "./LayerManagerContent"
 import { GeoserverManagerContent } from "./GeoserverManagerContent"
 import { LasFileUploaderContent } from "./LasFileUploaderContent"
 import { ShpFileUploaderContent } from "./ShpFileUploaderContent"
@@ -12,7 +10,6 @@ import { ExlFileUploaderContent } from "./ExlFileUploaderContent"
 import { DataFileUploaderContent } from "./DataFileUploaderContent"
 import { FileManagerContent } from "./FileManagerContent"
 import { FileConverterContent } from "./FileConverterContent"
-import { DataMigrationContent } from "./DataMigrationContent"
 import { LasFixerContent } from "./LasFixerContent"
 import { OrthophotoManagerContent } from "./OrthophotoManagerContent"
 import { PermissionFeatureManager } from "./PermissionFeatureManager"
@@ -38,9 +35,6 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "userManager",
       "permissionFeature",
       "accessRequestQueue",
-      "layerInfo",
-      "layerAttr",
-      "layerCode",
       "systemVar",
     ],
   },
@@ -48,20 +42,12 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     id: "dataManagement",
     label: "데이터관리",
     menuIds: [
+      "layerManager",
+      "orthophotoManager",
+      "dataFileUploader",
       "systemIntegration",
-      "geocodingTest",
       "fileManager",
       "fileConverter",
-      "dataMigration",
-    ],
-  },
-  {
-    id: "tools",
-    label: "Tools",
-    menuIds: [
-      "dbManager",
-      "geoserverManagerLayer",
-      "geoserverManagerPublic",
     ],
   },
   {
@@ -70,10 +56,12 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     menuIds: [
       "shpFileUploader",
       "exlFileUploader",
-      "dataFileUploader",
-      "orthophotoManager",
       "lasFileUploader",
       "lasFixer",
+      "geocodingTest",
+      "dbManager",
+      "geoserverManagerLayer",
+      "geoserverManagerPublic",
     ],
   },
   {
@@ -105,12 +93,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "비공개 서비스·시스템에 대한 perm(역할) 매핑입니다."
     case "accessRequestQueue":
       return "비공개 리소스 개별 신청 승인·반려"
-    case "layerInfo":
-      return "레이어 정보관리 설정 화면입니다."
-    case "layerAttr":
-      return "레이어 속성관리 설정 화면입니다."
-    case "layerCode":
-      return "레이어 코드관리 설정 화면입니다."
+    case "layerManager":
+      return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
     case "systemVar":
       return "현재 프로젝트 runtime.env (GGNR_PROJECT) 를 표에서 바로 편집합니다."
     case "dbManager":
@@ -124,13 +108,11 @@ export function getDevMenuDescription(menuId: string): string {
     case "fileManager":
       return "GGNR_DATA_DIR 현재 프로젝트 폴더 전체 탐색 및 업로드·다운로드·이동·이름변경·삭제"
     case "fileConverter":
-      return "LAS -> PNTS, OBJ -> B3DM, TIF -> JPG 변환 화면"
-    case "dataMigration":
-      return "OCR 등 데이터 마이그레이션 (GPT Vision → DB·file_data)"
+      return "TIF·PDF·OBJ·LAS 변환, OCR 마이그레이션"
     case "shpFileUploader":
       return "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
     case "dataFileUploader":
-      return "첨부 file_data 폴더 업로드·테이블·키 검증·이력"
+      return "첨부파일(file_data) 업로드·테이블·키 검증·이력"
     case "sourceCodeUploader":
       return "현재 워크스페이스 소스코드를 압축/청크 전송 방식으로 원격 서버에 업로드"
     case "versionManager":
@@ -172,14 +154,10 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       )
     case "accessRequestQueue":
       return <AccessRequestQueue />
-    case "layerInfo":
-      return <LayerInfoManager />
-    case "layerAttr":
-      return <LayerAttrManager />
-    case "layerCode":
+    case "layerManager":
       return (
-        <div className="overflow-hidden max-h-[calc(100vh-10rem)] min-h-0">
-          <LayerCodeManager />
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <LayerManagerContent />
         </div>
       )
     case "systemVar":
@@ -218,12 +196,6 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <FileConverterContent />
-        </div>
-      )
-    case "dataMigration":
-      return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-          <DataMigrationContent />
         </div>
       )
     case "shpFileUploader":
