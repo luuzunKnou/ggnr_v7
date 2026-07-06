@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cb7</id>
+  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38e3</id>
   <name>jijuk</name>
   <nativeName>jijuk</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>327950.2622200436</minx>
-    <maxx>379099.47020771215</maxx>
-    <miny>312531.33963256935</miny>
-    <maxy>370905.4133164596</maxy>
+    <minx>377136.72997657</minx>
+    <maxx>406588.12914078</maxx>
+    <miny>334597.22495385</miny>
+    <maxy>444951.36467021</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.4245011389381</minx>
-    <maxx>129.00724818012225</maxx>
-    <miny>36.29417164002223</miny>
-    <maxy>36.82818315636876</maxy>
+    <minx>128.9768818523373</minx>
+    <maxx>129.3355342630378</maxx>
+    <miny>36.487370846758466</miny>
+    <maxy>37.48704972403547</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

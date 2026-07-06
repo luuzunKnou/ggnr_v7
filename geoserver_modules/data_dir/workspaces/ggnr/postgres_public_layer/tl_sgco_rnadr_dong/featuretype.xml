@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cb1</id>
+  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38ec</id>
   <name>tl_sgco_rnadr_dong</name>
   <nativeName>tl_sgco_rnadr_dong</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>328985.27331217</minx>
-    <maxx>378641.5324885</maxx>
-    <miny>313534.83798351</miny>
-    <maxy>369298.5804675</maxy>
+    <minx>130538.921875</minx>
+    <maxx>418755.25</maxx>
+    <miny>-22491.75</miny>
+    <maxy>524892.6875</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.43618671870624</minx>
-    <maxx>129.00174177357007</maxx>
-    <miny>36.30329446802122</miny>
-    <maxy>36.81356796302335</maxy>
+    <minx>126.20677725197808</minx>
+    <maxx>129.49712806352545</maxx>
+    <miny>33.26868384430625</miny>
+    <maxy>38.22425757696982</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

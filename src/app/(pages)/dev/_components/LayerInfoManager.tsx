@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from "@/app/shadcnComponents/ui/dialog"
 import { Save, RotateCcw, Download } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { SchemaBadge, SourceBadge } from "./layerManager/defineBadges"
 import { call } from "@/lib/api"
 import type { GeometryType } from "@/lib/geoserverStyleUtils"
 import type { StyleProps } from "@/lib/geoserverStyleUtils"
@@ -49,15 +51,10 @@ type TableColumnDef =
       alignCenter?: boolean
       shapeType?: boolean
       share?: "read" | "write"
-      schemaSelect?: boolean
-      tableSourceSelect?: boolean
+      badge?: "schema" | "source"
     }
-  | { id: string; label: string; width: string; kind: "table_status" }
-  | { id: string; label: string; width: string; kind: "layer_status" }
-  | { id: string; label: string; width: string; kind: "style_status" }
-  | { id: string; label: string; width: string; kind: "attr_actions" }
-  | { id: string; label: string; width: string; kind: "style_actions" }
   | { id: string; label: string; width: string; kind: "style_legend" }
+  | { id: string; label: string; width: string; kind: "layer_delete" }
 
 const GEOSERVER_WORKSPACE = "ggnr"
 
@@ -69,48 +66,33 @@ function getLegendGraphicUrl(layerName: string, styleName?: string): string {
     REQUEST: "GetLegendGraphic",
     VERSION: "1.0.0",
     LAYER: `${GEOSERVER_WORKSPACE}:${layerName}`,
+    STYLE: styleName?.trim() || layerName,
     FORMAT: "image/png",
     WIDTH: "32",
     HEIGHT: "32",
   })
-  if (styleName) params.set("STYLE", styleName)
   return `${base}/wms?${params.toString()}`
 }
 
-const SCHEMA_OPTIONS = [
-  { value: "layer", label: "layer" },
-  { value: "public_layer", label: "public_layer" },
-]
-
-const TABLE_SOURCE_OPTIONS = [
-  { value: "shp", label: "SHP" },
-  { value: "excel", label: "Excel" },
-] as const
-
 const TABLE_COLUMNS: TableColumnDef[] = [
-  { id: "define_table_schema", label: "스키마", width: "120px", kind: "field", schemaSelect: true },
-  { id: "define_table_source", label: "출처", width: "88px", kind: "field", tableSourceSelect: true },
+  { id: "define_table_schema", label: "스키마", width: "92px", kind: "field", badge: "schema" },
+  { id: "define_table_source", label: "출처", width: "64px", kind: "field", badge: "source" },
   { id: "define_table_group", label: "그룹", width: "130px", kind: "field" },
   { id: "define_table_name", label: "테이블명", width: "flex", kind: "field", readonly: true },
-  { id: "define_table_kor_name", label: "한글명", width: "200px", kind: "field" },
-  { id: "__style_legend", label: "범례", width: "80px", kind: "style_legend" },
+  { id: "define_table_kor_name", label: "한글명", width: "flex", kind: "field" },
+  { id: "__style_legend", label: "스타일", width: "80px", kind: "style_legend" },
   { id: "define_table_idx", label: "순서", width: "50px", kind: "field", alignCenter: true },
   { id: "define_table_shp_type", label: "도형", width: "120px", kind: "field", shapeType: true },
   { id: "define_table_read_share", label: "읽기", width: "70px", kind: "field", share: "read" },
   { id: "define_table_write_share", label: "쓰기", width: "70px", kind: "field", share: "write" },
-  { id: "__table_status", label: "테이블 상태", width: "100px", kind: "table_status" },
-  { id: "__layer_status", label: "레이어 상태", width: "100px", kind: "layer_status" },
-  { id: "__style_status", label: "스타일 상태", width: "110px", kind: "style_status" },
-  { id: "__attr_actions", label: "속성", width: "120px", kind: "attr_actions" },
-  { id: "__style_actions", label: "스타일", width: "160px", kind: "style_actions" },
+  { id: "__layer_delete", label: "삭제", width: "56px", kind: "layer_delete" },
   //{ id: "define_table_etc", label: "비고", width: "flex", kind: "field" },
 ]
 
-/** px 컬럼은 고정 너비, "flex"는 남은 공간 채움. 테이블명만 살짝 최소 너비(과도한 압축 방지) */
+/** px 컬럼은 고정 너비, "flex"는 남은 공간을 1:1로 채움 */
 function getColumnStyle(col: Pick<TableColumnDef, "id" | "width">): React.CSSProperties {
   if (col.width === "flex") {
-    const minW = col.id === "define_table_name" ? 200 : 0
-    return { flex: 1, minWidth: minW, flexShrink: 1 }
+    return { flex: 1, minWidth: 0, flexShrink: 1 }
   }
   return { width: col.width, flexShrink: 0 }
 }
@@ -129,7 +111,17 @@ const SHARE_OPTIONS = [
 const PAGE_SIZE = 50
 const SCROLL_LOAD_THRESHOLD = 200
 
-export function LayerInfoManager() {
+type LayerInfoManagerProps = {
+  embedded?: boolean
+  fixedTableKey?: string | null
+  fixedSchema?: string | null
+}
+
+export function LayerInfoManager({
+  embedded = false,
+  fixedTableKey = null,
+  fixedSchema = null,
+}: LayerInfoManagerProps = {}) {
   const [config, setConfig] = useState<DefineLayerConfig | null>(null)
   const [total, setTotal] = useState(0)
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
@@ -137,12 +129,9 @@ export function LayerInfoManager() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
-  const [searchName, setSearchName] = useState("")
-  const [debouncedSearchName, setDebouncedSearchName] = useState("")
-  const [searchGroup, setSearchGroup] = useState("")
-  const [debouncedSearchGroup, setDebouncedSearchGroup] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [showPublicLayer, setShowPublicLayer] = useState(false)
-  const [showAllLayers, setShowAllLayers] = useState(false)
   const parentRef = useRef<HTMLDivElement>(null)
 
   // 스타일: GeoServer 레이어별 스타일 보유 여부 (테이블명 기준)
@@ -156,6 +145,11 @@ export function LayerInfoManager() {
   const [targetLayerName, setTargetLayerName] = useState<string | null>(null)
   const [targetStyleName, setTargetStyleName] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [layerDefineDeleteOpen, setLayerDefineDeleteOpen] = useState(false)
+  const [layerDefineDeleteTarget, setLayerDefineDeleteTarget] = useState<{
+    tableName: string
+    schema: string
+  } | null>(null)
   const [attrDeleteOpen, setAttrDeleteOpen] = useState(false)
   const [attrDeleteTarget, setAttrDeleteTarget] = useState<string | null>(null)
   const [formName, setFormName] = useState("")
@@ -235,46 +229,49 @@ export function LayerInfoManager() {
 
   // 디바운싱: 검색어 입력 후 300ms 대기
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearchName(searchName), 300)
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
     return () => clearTimeout(timer)
-  }, [searchName])
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearchGroup(searchGroup), 300)
-    return () => clearTimeout(timer)
-  }, [searchGroup])
+  }, [searchQuery])
 
   const filteredTables = useMemo(() => {
     if (!config?.tables) return []
     let list = [...config.tables]
+    if (embedded && fixedTableKey) {
+      const key = fixedTableKey.trim().toLowerCase()
+      const schema = fixedSchema?.trim() || null
+      return list.filter((t) => {
+        const name = String((t as Record<string, unknown>).define_table_name ?? "")
+          .trim()
+          .toLowerCase()
+        const tSchema = String((t as Record<string, unknown>).define_table_schema ?? "layer").trim()
+        if (name !== key) return false
+        if (schema && tSchema !== schema) return false
+        return true
+      })
+    }
     if (!showPublicLayer) {
       list = list.filter(
         (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
       )
     }
-    if (!showAllLayers) {
-      list = list.filter((t) => {
-        const tableName = String((t as Record<string, unknown>).define_table_name ?? "")
-        if (!tableName) return true
-        const info = styleInfoMap[tableName]
-        return styleLoading || info === undefined || info.tableExists === true
-      })
-    }
-    if (debouncedSearchGroup.trim()) {
-      const g = debouncedSearchGroup.trim().toLowerCase()
-      list = list.filter((t) =>
-        String((t as Record<string, unknown>).define_table_group ?? "").toLowerCase().includes(g)
-      )
-    }
-    if (debouncedSearchName.trim()) {
-      const n = debouncedSearchName.trim().toLowerCase()
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase()
       list = list.filter(
         (t) =>
-          String((t as Record<string, unknown>).define_table_name ?? "").toLowerCase().includes(n) ||
-          String((t as Record<string, unknown>).define_table_kor_name ?? "").toLowerCase().includes(n)
+          String((t as Record<string, unknown>).define_table_group ?? "").toLowerCase().includes(q) ||
+          String((t as Record<string, unknown>).define_table_name ?? "").toLowerCase().includes(q) ||
+          String((t as Record<string, unknown>).define_table_kor_name ?? "").toLowerCase().includes(q)
       )
     }
     return list
-  }, [config?.tables, debouncedSearchName, debouncedSearchGroup, showPublicLayer, showAllLayers, styleInfoMap, styleLoading])
+  }, [
+    config?.tables,
+    embedded,
+    fixedTableKey,
+    fixedSchema,
+    debouncedSearch,
+    showPublicLayer,
+  ])
 
   const displayedTables = useMemo(
     () => filteredTables.slice(0, displayCount),
@@ -284,7 +281,7 @@ export function LayerInfoManager() {
 
   useEffect(() => {
     setDisplayCount(PAGE_SIZE)
-  }, [showPublicLayer, showAllLayers, debouncedSearchName, debouncedSearchGroup])
+  }, [showPublicLayer, debouncedSearch])
 
   const handleScroll = useCallback(() => {
     const el = parentRef.current
@@ -395,6 +392,81 @@ export function LayerInfoManager() {
       setEditEditable(false)
     }
   }, [])
+
+  const openLayerDefineDelete = useCallback((tableName: string, schema: string) => {
+    setLayerDefineDeleteTarget({ tableName, schema })
+    setLayerDefineDeleteOpen(true)
+  }, [])
+
+  const handleLayerDefineDeleteConfirm = useCallback(async () => {
+    if (!layerDefineDeleteTarget || !config) return
+    const { tableName, schema } = layerDefineDeleteTarget
+    setActionLoading(tableName)
+    setError(null)
+    try {
+      const fieldsRes = await fetch(
+        `/api/config/defineLayer/fields/${encodeURIComponent(tableName)}`
+      )
+      const fieldsBody = await fieldsRes.json()
+      const fields: Record<string, unknown>[] =
+        fieldsBody?.success && Array.isArray(fieldsBody.data) ? fieldsBody.data : []
+
+      for (const f of fields) {
+        if (String(f.define_field_type ?? "").toUpperCase() !== "CODE") continue
+        const fieldName = String(f.define_field_name ?? "").trim()
+        if (!fieldName) continue
+        const codeKey = `${tableName}__${fieldName}`
+        await fetch(`/api/config/defineLayer/codes/${encodeURIComponent(codeKey)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: [] }),
+        })
+      }
+
+      await fetch(`/api/config/defineLayer/fields/${encodeURIComponent(tableName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: [] }),
+      })
+
+      const nextTables = config.tables.filter((t) => {
+        const name = String((t as Record<string, unknown>).define_table_name ?? "").trim()
+        const tSchema = String((t as Record<string, unknown>).define_table_schema ?? "layer").trim()
+        return !(name === tableName && tSchema === schema)
+      })
+      const saveRes = await fetch("/api/config/defineLayer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: nextTables }),
+      })
+      const saveBody = await saveRes.json()
+      if (!saveBody?.success) {
+        setError(saveBody?.error ?? "레이어 설정 삭제 실패")
+        return
+      }
+
+      setConfig({ ...config, tables: nextTables })
+      setTotal(nextTables.length)
+      setLayerDefineDeleteOpen(false)
+      setLayerDefineDeleteTarget(null)
+      setSuccessMsg(`"${tableName}" 레이어·필드·코드 정의가 삭제되었습니다.`)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "레이어 설정 삭제 실패")
+    } finally {
+      setActionLoading(null)
+    }
+  }, [config, layerDefineDeleteTarget])
+
+  const openStyleEditor = useCallback(
+    (layerName: string, shpType: string, hasCssStyle: boolean, styleName?: string) => {
+      if (hasCssStyle && styleName) {
+        void openEdit(layerName, styleName)
+      } else {
+        openAdd(layerName, shpType || undefined)
+      }
+    },
+    [openAdd, openEdit]
+  )
 
   const openDelete = useCallback((layerName: string) => {
     setDeleteTarget(layerName)
@@ -709,95 +781,89 @@ export function LayerInfoManager() {
   if (loading) return <p className="text-sm text-muted-foreground">로딩 중...</p>
   if (error && !config) return <p className="text-sm text-destructive">{error}</p>
   if (!config?.tables?.length) return <p className="text-sm text-muted-foreground">테이블이 없습니다.</p>
+  if (embedded && fixedTableKey && filteredTables.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground p-2">
+        defineLayer에 이 레이어 설정이 없습니다. DB 테이블만 존재하는 상태입니다.
+      </p>
+    )
+  }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3 p-2 min-h-0 h-full", embedded && "overflow-hidden")}>
       <div className="flex items-center gap-3 flex-wrap shrink-0">
-        <Button variant="outline" size="sm" className="rounded-md" onClick={saveConfig} disabled={saving}>
-          <Save className="w-4 h-4 mr-1.5 opacity-70" />
-          {saving ? "저장 중..." : "저장"}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-md"
-          onClick={() => {
-            setSearchGroup("")
-            setSearchName("")
-            setDebouncedSearchGroup("")
-            setDebouncedSearchName("")
-          }}
-        >
-          <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
-          초기화
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-md"
-          onClick={handleAutoApply}
-          disabled={autoApplyLoading || styleLoading}
-        >
-          {autoApplyLoading ? "적용 중..." : "전체 자동 스타일 설정"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-md"
-          onClick={() => {
-            window.open("/api/config/defineLayer/export", "_blank")
-          }}
-        >
-          <Download className="w-4 h-4 mr-1.5 opacity-70" />
-          엑셀 다운로드
-        </Button>
-        {successMsg && <span className="text-sm text-green-600 dark:text-green-400">{successMsg}</span>}
-        {error && <span className="text-sm text-destructive">{error}</span>}
-        <span className="text-sm text-muted-foreground">
-          {filteredTables.length} / {total}
-        </span>
-        {displayCount < filteredTables.length && (
-          <span className="text-xs text-muted-foreground">
-            (표시: {displayedTables.length})
-          </span>
+        {!embedded && (
+          <>
+            <Input
+              placeholder="그룹명·테이블명·한글명 검색"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 w-56 rounded-md text-sm"
+            />
+            <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPublicLayer}
+                onChange={(e) => setShowPublicLayer(e.target.checked)}
+                className="rounded border-input"
+              />
+              public_layer
+            </label>
+            <span className="text-sm text-muted-foreground">
+              {filteredTables.length} / {total}
+              {displayCount < filteredTables.length && (
+                <span className="text-xs text-muted-foreground ml-1">
+                  (표시: {displayedTables.length})
+                </span>
+              )}
+            </span>
+          </>
         )}
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showPublicLayer}
-            onChange={(e) => setShowPublicLayer(e.target.checked)}
-            className="rounded border-input"
-          />
-          public_layer 포함
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showAllLayers}
-            onChange={(e) => setShowAllLayers(e.target.checked)}
-            className="rounded border-input"
-          />
-          전체 레이어 보기
-        </label>
-        <Input
-          placeholder="그룹명 검색"
-          value={searchGroup}
-          onChange={(e) => setSearchGroup(e.target.value)}
-          className="h-8 w-40 rounded-md text-sm"
-        />
-        <Input
-          placeholder="테이블명/한글명 검색"
-          value={searchName}
-          onChange={(e) => setSearchName(e.target.value)}
-          className="h-8 w-48 rounded-md text-sm"
-        />
+        <div className="ml-auto flex items-center gap-3 flex-wrap">
+          {successMsg && <span className="text-sm text-green-600 dark:text-green-400">{successMsg}</span>}
+          <Button variant="outline" size="sm" className="rounded-md" onClick={saveConfig} disabled={saving}>
+            <Save className="w-4 h-4 mr-1.5 opacity-70" />
+            {saving ? "저장 중..." : "저장"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-md"
+            onClick={() => {
+              setSearchQuery("")
+              setDebouncedSearch("")
+              setShowPublicLayer(false)
+              void loadFullList()
+            }}
+          >
+            <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
+            초기화
+          </Button>
+          {!embedded && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-md"
+              onClick={() => {
+                window.open("/api/config/defineLayer/export", "_blank")
+              }}
+            >
+              <Download className="w-4 h-4 mr-1.5 opacity-70" />
+              엑셀 다운로드
+            </Button>
+          )}
+        </div>
       </div>
+
+      {error && <span className="text-sm text-destructive">{error}</span>}
       <div
         ref={parentRef}
         onScroll={handleScroll}
-        className="min-h-[400px] max-h-[73vh] overflow-auto border rounded-none bg-muted/20"
+        className={cn(
+          "flex-1 min-h-0 overflow-auto border rounded-none bg-muted/20",
+          embedded ? "max-h-none" : "min-h-[400px] max-h-[73vh]"
+        )}
       >
         {/* 헤더 (고정) */}
         <div className="sticky top-0 z-10 bg-muted border-b">
@@ -823,7 +889,6 @@ export function LayerInfoManager() {
 
             const tableName = String(row.define_table_name ?? "")
             const styleInfo = tableName ? styleInfoMap[tableName] : undefined
-            const tableExists = styleInfo?.tableExists ?? false
             const published = styleInfo?.published ?? false
             const hasCssStyle = styleInfo?.hasCssStyle ?? false
             const styleName = styleInfo?.styleName
@@ -839,144 +904,59 @@ export function LayerInfoManager() {
                   const cellClass = `py-0 px-1 overflow-hidden border-r flex items-center min-h-[28px] min-w-0 ${isLast ? "border-r-0" : ""}`
                   const cellStyle = getColumnStyle(col)
 
-                  if (col.kind === "table_status") {
-                    return (
-                      <div key={col.id} className={cellClass} style={cellStyle}>
-                        {styleLoading ? (
-                          <span className="text-xs text-muted-foreground">...</span>
-                        ) : (
-                          <span
-                            className={
-                              tableExists
-                                ? "inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 px-2 py-0.5 text-xs font-medium"
-                                : "inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-2 py-0.5 text-xs font-medium"
-                            }
-                          >
-                            {tableExists ? "테이블 있음" : "테이블 없음"}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  }
-                  if (col.kind === "layer_status") {
-                    return (
-                      <div key={col.id} className={cellClass} style={cellStyle}>
-                        {styleLoading ? (
-                          <span className="text-xs text-muted-foreground">...</span>
-                        ) : (
-                          <span
-                            className={
-                              published
-                                ? "inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 px-2 py-0.5 text-xs font-medium"
-                                : "inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-2 py-0.5 text-xs font-medium"
-                            }
-                          >
-                            {published ? "레이어 있음" : "레이어 없음"}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  }
-                  if (col.kind === "style_status") {
-                    return (
-                      <div key={col.id} className={cellClass} style={cellStyle}>
-                        {styleLoading ? (
-                          <span className="text-xs text-muted-foreground">...</span>
-                        ) : (
-                          <span
-                            className={
-                              hasCssStyle
-                                ? "inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 px-2 py-0.5 text-xs font-medium"
-                                : "inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-2 py-0.5 text-xs font-medium"
-                            }
-                          >
-                            {hasCssStyle ? "스타일 있음" : "스타일 없음"}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  }
                   if (col.kind === "style_legend") {
+                    const canShowLegend = hasCssStyle || published
                     const legendUrl = tableName
                       ? getLegendGraphicUrl(tableName, styleName ?? undefined)
                       : ""
                     return (
-                      <div key={col.id} className={`${cellClass} justify-center`} style={cellStyle}>
-                        {legendUrl ? (
+                      <div
+                        key={col.id}
+                        role="button"
+                        tabIndex={0}
+                        className={`${cellClass} justify-center cursor-pointer hover:bg-muted/40`}
+                        style={cellStyle}
+                        title="클릭하여 스타일 수정"
+                        onClick={() => openStyleEditor(tableName, shpType, hasCssStyle, styleName)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            openStyleEditor(tableName, shpType, hasCssStyle, styleName)
+                          }
+                        }}
+                      >
+                        {legendUrl && canShowLegend ? (
                           <img
                             src={legendUrl}
                             alt=""
-                            className="max-h-7 max-w-full object-contain"
-                            title={`${tableName} 범례`}
+                            className="max-h-7 max-w-full object-contain pointer-events-none"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none"
+                              const fallback = e.currentTarget.nextElementSibling
+                              if (fallback instanceof HTMLElement) fallback.style.display = "inline"
+                            }}
                           />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        ) : null}
+                        <span
+                          className="text-xs text-muted-foreground pointer-events-none"
+                          style={{ display: legendUrl && canShowLegend ? "none" : "inline" }}
+                        >
+                          —
+                        </span>
                       </div>
                     )
                   }
-                  if (col.kind === "attr_actions") {
+                  if (col.kind === "layer_delete") {
+                    const schema = String(row.define_table_schema ?? "layer").trim()
                     return (
-                      <div key={col.id} className={`${cellClass} gap-1 flex-wrap`} style={cellStyle}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
-                          disabled={actionLoading === tableName}
-                          onClick={() => handleAttrAutoApplyOne(tableName)}
-                        >
-                          자동
-                        </Button>
+                      <div key={col.id} className={`${cellClass} justify-center`} style={cellStyle}>
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
                           disabled={actionLoading === tableName}
-                          onClick={() => openAttrDelete(tableName)}
-                        >
-                          삭제
-                        </Button>
-                      </div>
-                    )
-                  }
-                  if (col.kind === "style_actions") {
-                    return (
-                      <div key={col.id} className={`${cellClass} gap-1 flex-wrap`} style={cellStyle}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
-                          onClick={() =>
-                            hasCssStyle && styleName
-                              ? openEdit(tableName, styleName)
-                              : openAdd(tableName, shpType || undefined)
-                          }
-                        >
-                          수정
-                        </Button>
-                        {!hasCssStyle && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
-                            disabled={actionLoading === tableName}
-                            onClick={() => handleAutoApplyOne(tableName)}
-                          >
-                            {actionLoading === tableName ? "적용 중..." : "자동"}
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
-                          disabled={actionLoading === tableName || !hasCssStyle}
-                          onClick={() => openDelete(tableName)}
-                          title={!hasCssStyle ? "스타일이 없습니다" : undefined}
+                          onClick={() => openLayerDefineDelete(tableName, schema)}
                         >
                           삭제
                         </Button>
@@ -996,34 +976,10 @@ export function LayerInfoManager() {
                         <span className="block min-w-0 w-full truncate text-sm font-mono py-1" title={val}>
                           {val}
                         </span>
-                      ) : col.schemaSelect ? (
-                        <select
-                          value={val || "layer"}
-                          onChange={(e) => updateCell(tableIdx, key, e.target.value)}
-                          className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
-                        >
-                          {SCHEMA_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : col.tableSourceSelect ? (
-                        <select
-                          value={
-                            String(row.define_table_source ?? "").toLowerCase() === "excel"
-                              ? "excel"
-                              : "shp"
-                          }
-                          onChange={(e) => updateCell(tableIdx, key, e.target.value)}
-                          className="h-6 w-full rounded-none text-sm font-mono border border-input bg-background py-0 px-1 min-w-0"
-                        >
-                          {TABLE_SOURCE_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                      ) : col.badge === "schema" ? (
+                        <SchemaBadge value={val} />
+                      ) : col.badge === "source" ? (
+                        <SourceBadge value={String(row.define_table_source ?? "")} />
                       ) : col.shapeType ? (
                         <select
                           value={val}
@@ -1163,40 +1119,30 @@ export function LayerInfoManager() {
         </DialogContent>
       </Dialog>
 
-      {/* 스타일 삭제 확인 */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      {/* 레이어·필드·코드 정의 전체 삭제 확인 */}
+      <Dialog open={layerDefineDeleteOpen} onOpenChange={setLayerDefineDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>스타일 삭제</DialogTitle>
+            <DialogTitle>레이어 설정 삭제</DialogTitle>
           </DialogHeader>
           <p className="py-2 text-sm">
-            레이어 &quot;{deleteTarget}&quot;에 적용된 스타일을 삭제하고 기본 스타일로 바꿉니다. 계속하시겠습니까?
+            테이블 &quot;{layerDefineDeleteTarget?.tableName}&quot;의 레이어·필드·코드 정의를 모두 삭제합니다.
+            GeoServer 스타일은 삭제되지 않습니다. 계속하시겠습니까?
           </p>
           <DialogFooter>
-            <Button variant="outline" className="text-muted-foreground" onClick={() => setDeleteOpen(false)}>
+            <Button
+              variant="outline"
+              className="text-muted-foreground"
+              onClick={() => setLayerDefineDeleteOpen(false)}
+            >
               취소
             </Button>
-            <Button variant="outline" className="text-destructive/90 hover:bg-destructive/10" onClick={handleDeleteConfirm} disabled={!!actionLoading}>
-              {actionLoading ? "삭제 중..." : "삭제"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 속성 삭제 확인 */}
-      <Dialog open={attrDeleteOpen} onOpenChange={setAttrDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>속성 삭제</DialogTitle>
-          </DialogHeader>
-          <p className="py-2 text-sm">
-            테이블 &quot;{attrDeleteTarget}&quot;의 속성 정의(필드 목록)를 삭제합니다. 계속하시겠습니까?
-          </p>
-          <DialogFooter>
-            <Button variant="outline" className="text-muted-foreground" onClick={() => setAttrDeleteOpen(false)}>
-              취소
-            </Button>
-            <Button variant="outline" className="text-destructive/90 hover:bg-destructive/10" onClick={handleAttrDeleteConfirm} disabled={!!actionLoading}>
+            <Button
+              variant="outline"
+              className="text-destructive/90 hover:bg-destructive/10"
+              onClick={() => void handleLayerDefineDeleteConfirm()}
+              disabled={!!actionLoading}
+            >
               {actionLoading ? "삭제 중..." : "삭제"}
             </Button>
           </DialogFooter>

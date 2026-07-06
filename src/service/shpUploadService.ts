@@ -1382,11 +1382,11 @@ export async function getLayerStatusList(params?: {
         sql`SELECT dh_name, MAX(lh.lh_create_date) AS last_date
             FROM layer_detail_history dh
             JOIN layer_history lh ON dh.dh_lh_key = lh.lh_key
-            WHERE dh.dh_result = '성공'
+            WHERE dh.dh_result IN ('성공', '대기')
             GROUP BY dh_name`
       );
       for (const r of (res.rows as Array<{ dh_name: string; last_date: string }>) ?? []) {
-        if (r.dh_name) updateDates[r.dh_name] = r.last_date;
+        if (r.dh_name) updateDates[r.dh_name.toLowerCase()] = r.last_date;
       }
     } catch { /* ignore */ }
 
@@ -1404,7 +1404,7 @@ export async function getLayerStatusList(params?: {
           layer: geoLayerSet.has(t.table),
           style: geoStyleSet.has(t.table),
           define: defineMap.has(t.table) && defineFieldSet.has(t.table),
-          updatedAt: updateDates[t.table] ?? null,
+          updatedAt: updateDates[t.table.toLowerCase()] ?? null,
           dbSchema,
         };
       });
@@ -1511,6 +1511,289 @@ export type CompareResult = {
   removes: SyncRemoveRow[];
   error?: string;
 };
+
+export type ShpSchemaField = { name: string; ogrType: string };
+
+export type ShpSchemaCompareResult = {
+  success: boolean;
+  ok: boolean;
+  isNew: boolean;
+  sourceFile: string;
+  pathOrResult: string;
+  tableName: string;
+  shpFields: ShpSchemaField[];
+  dbFields: Array<{ name: string; dataType: string }>;
+  missingInDb: string[];
+  missingInShp: string[];
+  typeMismatches: Array<{ name: string; shpType: string; dbType: string }>;
+  message?: string;
+  error?: string;
+};
+
+const DB_SCHEMA_SKIP_COLUMNS = new Set(['ogc_fid', 'geom', 'wkb_geometry', 'shape']);
+
+async function runOgrinfoStdout(absoluteShpPath: string, extraArgs: string[]): Promise<string> {
+  const normalized = path.normalize(absoluteShpPath).replace(/\\/g, path.sep);
+  if (!fsSync.existsSync(normalized)) return '';
+
+  const { cmd: ogrinfoCmd, args: prefix } = resolveOgrInfoRun();
+  const args = [...prefix, ...extraArgs, normalized];
+  const isWin = process.platform === 'win32';
+  const useConda = prefix.length > 0;
+  const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
+  const spawnArgs = useConda ? args : (isWin ? ['/c', 'ogrinfo', ...args.slice(prefix.length)] : args);
+
+  return new Promise<string>((resolve) => {
+    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false });
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
+    child.on('close', (code) => {
+      const out = Buffer.concat(chunks).toString('utf8');
+      resolve(code === 0 ? out : '');
+    });
+    child.on('error', () => resolve(''));
+  });
+}
+
+function normalizeFieldName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function normalizeOgrFieldType(raw: string): string {
+  const base = raw.trim().split(/[\s(]/)[0]?.toLowerCase() ?? '';
+  if (base.includes('string') || base === 'str') return 'string';
+  if (base.includes('int')) return 'integer';
+  if (base.includes('real') || base.includes('float') || base.includes('double') || base === 'number') return 'float';
+  if (base.includes('date') || base.includes('time')) return 'datetime';
+  if (base.includes('bool')) return 'boolean';
+  return base;
+}
+
+function normalizePgFieldType(raw: string): string {
+  const u = raw.trim().toLowerCase();
+  if (u.includes('character') || u === 'text' || u === 'varchar') return 'string';
+  if (u === 'integer' || u === 'bigint' || u === 'smallint') return 'integer';
+  if (u.includes('double') || u.includes('real') || u.includes('numeric') || u.includes('decimal')) return 'float';
+  if (u.includes('timestamp') || u.includes('date') || u.includes('time')) return 'datetime';
+  if (u.includes('bool')) return 'boolean';
+  if (u === 'geometry' || u.includes('user-defined')) return 'geometry';
+  return u;
+}
+
+function parseShpFieldsFromOgrinfoJson(stdout: string): ShpSchemaField[] | null {
+  try {
+    const parsed = JSON.parse(stdout) as {
+      layers?: Array<{
+        fields?: Array<{ name?: string; type?: string }>;
+        geometryFields?: Array<{ name?: string }>;
+      }>;
+    };
+    const layer = parsed.layers?.[0];
+    if (!layer) return null;
+    const geomNames = new Set(
+      (layer.geometryFields ?? []).map((g) => normalizeFieldName(String(g.name ?? ''))).filter(Boolean)
+    );
+    const fields: ShpSchemaField[] = [];
+    for (const f of layer.fields ?? []) {
+      const name = String(f.name ?? '').trim();
+      if (!name) continue;
+      const norm = normalizeFieldName(name);
+      if (geomNames.has(norm) || DB_SCHEMA_SKIP_COLUMNS.has(norm)) continue;
+      fields.push({ name, ogrType: String(f.type ?? '').trim() || 'String' });
+    }
+    return fields.length > 0 || (layer.fields ?? []).length === 0 ? fields : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseShpFieldsFromOgrinfoText(stdout: string): ShpSchemaField[] {
+  const fields: ShpSchemaField[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S+(?:\s*\([^)]*\))?)\s*$/);
+    if (!m) continue;
+    const name = m[1];
+    const norm = normalizeFieldName(name);
+    if (DB_SCHEMA_SKIP_COLUMNS.has(norm)) continue;
+    if (/^(layer name|geometry|feature count|extent|layer srs|fid column|geometry column|info)$/i.test(name)) continue;
+    fields.push({ name, ogrType: m[2].trim() });
+  }
+  return fields;
+}
+
+async function getShpAttributeFields(absoluteShpPath: string): Promise<ShpSchemaField[]> {
+  const jsonOut = await runOgrinfoStdout(absoluteShpPath, ['-json', '-so']);
+  const fromJson = jsonOut ? parseShpFieldsFromOgrinfoJson(jsonOut) : null;
+  if (fromJson) return fromJson;
+
+  const textOut = await runOgrinfoStdout(absoluteShpPath, ['-al', '-so']);
+  return parseShpFieldsFromOgrinfoText(textOut);
+}
+
+/**
+ * SHP 속성 필드 vs 기존 layer 테이블 컬럼 구성·타입 비교.
+ * 테이블이 없으면 isNew=true, ok=true.
+ */
+export async function compareShpSchemaWithTable(params: {
+  pathOrResult: string;
+}): Promise<ShpSchemaCompareResult> {
+  const pathOrResult = params?.pathOrResult?.trim();
+  const sourceFile = pathOrResult ? path.basename(pathOrResult) : '';
+  const fail = (error: string, partial?: Partial<ShpSchemaCompareResult>): ShpSchemaCompareResult => ({
+    success: false,
+    ok: false,
+    isNew: false,
+    sourceFile,
+    pathOrResult: pathOrResult ?? '',
+    tableName: '',
+    shpFields: [],
+    dbFields: [],
+    missingInDb: [],
+    missingInShp: [],
+    typeMismatches: [],
+    error,
+    ...partial,
+  });
+
+  if (!pathOrResult) return fail('pathOrResult가 필요합니다.');
+
+  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const basename = path.basename(pathOrResult, '.shp');
+  const tableName = safeTableName(basename);
+
+  try {
+    await fs.stat(absolutePath);
+  } catch {
+    return fail('SHP 파일을 찾을 수 없습니다.');
+  }
+
+  let shpFields: ShpSchemaField[];
+  try {
+    shpFields = await getShpAttributeFields(absolutePath);
+  } catch (e: unknown) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+
+  const listRes = await getLayerTableList();
+  const matched = listRes.success && listRes.tables
+    ? findLayerTableByName(listRes.tables, tableName)
+    : null;
+
+  if (!matched) {
+    return {
+      success: true,
+      ok: true,
+      isNew: true,
+      sourceFile,
+      pathOrResult,
+      tableName,
+      shpFields,
+      dbFields: [],
+      missingInDb: [],
+      missingInShp: [],
+      typeMismatches: [],
+      message: '신규',
+    };
+  }
+
+  const colRes = await getTableColumnInfo({ schema: 'layer', table: tableName });
+  if (!colRes.success) {
+    return fail(colRes.error ?? 'DB 컬럼 정보를 가져올 수 없습니다.', { tableName, shpFields });
+  }
+
+  const dbFields = colRes.columns.filter((c) => !DB_SCHEMA_SKIP_COLUMNS.has(normalizeFieldName(c.name)));
+  const shpMap = new Map(shpFields.map((f) => [normalizeFieldName(f.name), f]));
+  const dbMap = new Map(dbFields.map((f) => [normalizeFieldName(f.name), f]));
+
+  const missingInDb: string[] = [];
+  const missingInShp: string[] = [];
+  const typeMismatches: Array<{ name: string; shpType: string; dbType: string }> = [];
+
+  for (const sf of shpFields) {
+    const key = normalizeFieldName(sf.name);
+    const dbCol = dbMap.get(key);
+    if (!dbCol) {
+      missingInDb.push(sf.name);
+      continue;
+    }
+    const shpNorm = normalizeOgrFieldType(sf.ogrType);
+    const dbNorm = normalizePgFieldType(dbCol.dataType);
+    if (shpNorm !== dbNorm && shpNorm !== 'geometry' && dbNorm !== 'geometry') {
+      typeMismatches.push({ name: sf.name, shpType: sf.ogrType, dbType: dbCol.dataType });
+    }
+  }
+
+  for (const df of dbFields) {
+    if (!shpMap.has(normalizeFieldName(df.name))) {
+      missingInShp.push(df.name);
+    }
+  }
+
+  const ok = missingInDb.length === 0 && missingInShp.length === 0 && typeMismatches.length === 0;
+  const message = ok ? '일치' : buildShpSchemaMismatchMessage({ tableName, missingInDb, missingInShp, typeMismatches });
+
+  return {
+    success: true,
+    ok,
+    isNew: false,
+    sourceFile,
+    pathOrResult,
+    tableName,
+    shpFields,
+    dbFields,
+    missingInDb,
+    missingInShp,
+    typeMismatches,
+    message,
+  };
+}
+
+function buildShpSchemaMismatchMessage(params: {
+  tableName: string;
+  missingInDb: string[];
+  missingInShp: string[];
+  typeMismatches: Array<{ name: string; shpType: string; dbType: string }>;
+}): string {
+  const { tableName, missingInDb, missingInShp, typeMismatches } = params;
+  const parts: string[] = [];
+
+  if (missingInShp.length === 1) {
+    parts.push(`SHP 파일에 ${missingInShp[0]} 필드가 존재하지 않습니다.`);
+  } else if (missingInShp.length > 1) {
+    parts.push(`SHP 파일에 ${missingInShp.join(', ')} 필드가 존재하지 않습니다.`);
+  }
+
+  if (missingInDb.length === 1) {
+    parts.push(
+      `DB 테이블(layer.${tableName})에 ${missingInDb[0]} 필드가 없습니다. SHP 파일에만 존재하는 필드입니다.`
+    );
+  } else if (missingInDb.length > 1) {
+    parts.push(
+      `DB 테이블(layer.${tableName})에 ${missingInDb.join(', ')} 필드가 없습니다. SHP 파일에만 존재하는 필드입니다.`
+    );
+  }
+
+  for (const t of typeMismatches) {
+    parts.push(
+      `${t.name} 필드의 데이터 타입이 일치하지 않습니다. (SHP: ${t.shpType}, DB: ${t.dbType})`
+    );
+  }
+
+  return parts.join(' ');
+}
+
+/** 폴더 내 .shp 파일별 스키마 검증 일괄 실행 */
+export async function compareShpFolderSchema(params?: {
+  relativePath?: string;
+}): Promise<{ success: boolean; results: ShpSchemaCompareResult[]; error?: string }> {
+  const statusRes = await getShpStatusList(params);
+  const results: ShpSchemaCompareResult[] = [];
+  for (const row of statusRes.rows) {
+    results.push(await compareShpSchemaWithTable({ pathOrResult: row.pathOrResult }));
+  }
+  const allOk = results.every((r) => r.success && (r.ok || r.isNew));
+  return { success: allOk, results };
+}
 
 /**
  * SHP를 임시 테이블로 import 후 기존 테이블과 key 기준 diff 비교.
