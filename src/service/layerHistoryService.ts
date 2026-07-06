@@ -8,6 +8,11 @@ import { dh } from '@/database/schema/layer_detail_history';
 import { sql } from 'drizzle-orm';
 import { desc, eq } from 'drizzle-orm';
 
+/** 작업일 — KST 기준 YYYY-MM-DD (UTC toISOString().slice(0,10)는 KST 오전에 전날로 기록됨) */
+function todayWorkDateString(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+}
+
 export type LayerHistoryRow = {
   lhKey: number;
   lhContents: string | null;
@@ -32,6 +37,54 @@ export type LayerDetailRow = {
   dhContents: string | null;
   dhResult: string | null;
   dhShpPath: string | null;
+};
+
+/** 테이블별 수정 이력 (layer_detail_history + layer_history) */
+export async function getLayerDetailHistoryByTable(params: {
+  tableName: string;
+  limit?: number;
+}): Promise<{ success: boolean; data: LayerDetailHistoryByTableRow[]; error?: string }> {
+  const tableName = params?.tableName?.trim();
+  if (!tableName) return { success: false, data: [], error: 'tableName이 필요합니다.' };
+  const limit = Math.min(200, Math.max(1, params?.limit ?? 50));
+  try {
+    const res = await db.execute(sql`
+      SELECT
+        dh.dh_key AS "dhKey",
+        dh.dh_lh_key AS "dhLhKey",
+        dh.dh_group AS "dhGroup",
+        dh.dh_name AS "dhName",
+        dh.dh_kor_name AS "dhKorName",
+        dh.dh_type AS "dhType",
+        dh.dh_old_data AS "dhOldData",
+        dh.dh_new_data AS "dhNewData",
+        dh.dh_append_count AS "dhAppendCount",
+        dh.dh_conflict_count AS "dhConflictCount",
+        dh.dh_remove_count AS "dhRemoveCount",
+        dh.dh_contents AS "dhContents",
+        dh.dh_result AS "dhResult",
+        dh.dh_shp_path AS "dhShpPath",
+        lh.lh_create_date AS "lhCreateDate",
+        lh.lh_contents AS "lhContents"
+      FROM layer_detail_history dh
+      JOIN layer_history lh ON dh.dh_lh_key = lh.lh_key
+      WHERE LOWER(dh.dh_name) = LOWER(${tableName})
+      ORDER BY lh.lh_key DESC, dh.dh_key DESC
+      LIMIT ${limit}
+    `);
+    return {
+      success: true,
+      data: (res.rows as LayerDetailHistoryByTableRow[]) ?? [],
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, data: [], error: msg };
+  }
+}
+
+export type LayerDetailHistoryByTableRow = LayerDetailRow & {
+  lhCreateDate: string | null;
+  lhContents: string | null;
 };
 
 /** 이력 목록 조회 (페이징) */
@@ -112,7 +165,7 @@ export async function createLayerHistory(params: {
       lhSuccessCount: params.successCount,
       lhFailCount: params.failCount,
       lhCreateUser: params.createUser ?? null,
-      lhCreateDate: new Date().toISOString().slice(0, 10),
+      lhCreateDate: todayWorkDateString(),
     }).returning({ lhKey: lh.lhKey });
     return { success: true, lhKey: rows[0]?.lhKey };
   } catch (e: unknown) {

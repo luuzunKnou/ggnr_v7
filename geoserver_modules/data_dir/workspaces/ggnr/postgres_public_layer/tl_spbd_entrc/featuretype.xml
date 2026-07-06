@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cb3</id>
+  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38f0</id>
   <name>tl_spbd_entrc</name>
   <nativeName>tl_spbd_entrc</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>329044.85062001</minx>
-    <maxx>378655.69330554</maxx>
-    <miny>313299.5108146</miny>
-    <maxy>369410.50020622</maxy>
+    <minx>129971.9453125</minx>
+    <maxx>425149.84375</maxx>
+    <miny>-28485.16015625</miny>
+    <maxy>524901.0625</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.43681098744884</minx>
-    <maxx>129.00192661086535</maxx>
-    <miny>36.30117238639369</miny>
-    <maxy>36.81456804458932</maxy>
+    <minx>126.20030231967469</minx>
+    <maxx>129.57005924055935</maxx>
+    <miny>33.213378419938664</miny>
+    <maxy>38.22432888144312</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7caa</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38f1</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:tl_sprd_manage</name>
+  <name>ggnr:tl_spbd_entrc</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.4245306640364</double>
-          <double>36.29485405745404</double>
-          <double>129.0053083601021</double>
-          <double>36.81588870029481</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.429615335888568E7</double>
-          <double>4341269.0517576905</double>
-          <double>1.4360805236275805E7</double>
-          <double>4413475.0225855885</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>tl_sprd_manage</defaultStyle>
+      <defaultStyle>point</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

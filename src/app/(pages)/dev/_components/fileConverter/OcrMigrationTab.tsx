@@ -9,22 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-type MigrationTabId = 'ocr';
-
 type OcrJobRow = {
   jobName: string;
   imageCount: number;
   modified?: string;
 };
-
-const TAB_ITEMS: { id: MigrationTabId; label: string; description: string }[] = [
-  {
-    id: 'ocr',
-    label: 'OCR',
-    description:
-      'OCR/{작업명} 이미지를 PaddleOCR → GPT-4o Vision(이미지+Paddle)으로 분석해 DB·file_data에 적재합니다. PDF별 하위 폴더 단위로 첨부를 묶습니다.',
-  },
-];
 
 function BracketInput({
   value,
@@ -55,35 +44,7 @@ function BracketInput({
   );
 }
 
-function MigrationTabButton({
-  active,
-  label,
-  description,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-lg border px-3 py-2 text-left transition-colors',
-        active
-          ? 'border-primary bg-primary/5 text-foreground'
-          : 'border-border bg-background hover:bg-muted/50'
-      )}
-    >
-      <div className="text-sm font-medium">{label}</div>
-      <div className="text-xs text-muted-foreground">{description}</div>
-    </button>
-  );
-}
-
-function OcrTab() {
+export function OcrMigrationTab() {
   const [selectedName, setSelectedName] = useState('');
   const [rows, setRows] = useState<OcrJobRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -304,29 +265,6 @@ function OcrTab() {
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-export function DataMigrationContent() {
-  const [activeTab, setActiveTab] = useState<MigrationTabId>('ocr');
-
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-2">
-      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        {TAB_ITEMS.map((tab) => (
-          <MigrationTabButton
-            key={tab.id}
-            active={activeTab === tab.id}
-            label={tab.label}
-            description={tab.description}
-            onClick={() => setActiveTab(tab.id)}
-          />
-        ))}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col">
-        {activeTab === 'ocr' && <OcrTab />}
-      </div>
     </div>
   );
 }

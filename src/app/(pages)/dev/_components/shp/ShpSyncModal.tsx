@@ -96,7 +96,7 @@ export function ShpSyncModal({ data, onApply, onCancel }: Props) {
         {/* header */}
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b">
           <div>
-            <h3 className="text-sm font-semibold">레이어 데이터 동기화 — {data.tableName}</h3>
+            <h3 className="text-sm font-semibold">레이어 데이터 정합성 검증 — {data.tableName}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               동일 {data.unchangedCount}건 · 신규 <span className="text-green-600">{data.appendCount}</span>건 · 충돌 <span className="text-orange-600">{data.conflictCount}</span>건 · 삭제 <span className="text-red-500">{data.removeCount}</span>건
             </p>

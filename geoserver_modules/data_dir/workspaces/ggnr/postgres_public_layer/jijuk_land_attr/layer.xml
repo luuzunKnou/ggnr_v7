@@ -1,0 +1,19 @@
+<layer>
+  <name>jijuk_land_attr</name>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38e6</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-767e4f41:19f1613ef30:38e7</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38e5</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-05 23:27:16.354 UTC</dateCreated>
+  <dateModified>2026-07-05 23:27:16.493 UTC</dateModified>
+</layer>

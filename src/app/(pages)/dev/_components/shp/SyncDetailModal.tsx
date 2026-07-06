@@ -7,6 +7,11 @@ import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { X, RotateCcw, Check, Loader2, Plus, AlertTriangle, Trash2, ShieldCheck, Play } from 'lucide-react';
 import { GeoJsonMiniMap } from './GeoJsonMiniMap';
+import {
+  SHP_SYNC_DETAIL_MODAL_ATTR,
+  SHP_SYNC_DETAIL_MODAL_Z,
+  SHP_SYNC_DETAIL_NESTED_Z,
+} from './shpModalLayers';
 
 type SyncLogRow = {
   sl_key: number;
@@ -202,7 +207,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
       await call('', 'POST', {
         service: 'layerHistoryService',
         action: 'updateDetailResult',
-        params: { dhKey, result: '성공', contents: `동기화 완료 (${parts})` },
+        params: { dhKey, result: '성공', contents: `정합성 검증 완료 (${parts})` },
       });
     } catch { /* ignore */ }
   }, [dhKey]);
@@ -402,20 +407,21 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
-      onClick={onClose}
-      role="presentation"
+      {...{ [SHP_SYNC_DETAIL_MODAL_ATTR]: true }}
+      className="fixed inset-0 isolate"
+      style={{ zIndex: SHP_SYNC_DETAIL_MODAL_Z }}
     >
-      <div
-        className="bg-background rounded-lg shadow-xl w-[92vw] min-w-[92vw] max-w-[1100px] min-h-[85vh] max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+      <div className="absolute inset-0 bg-black/50" aria-hidden />
+      <div className="relative flex min-h-full items-center justify-center p-4">
+        <div
+          className="bg-background flex max-h-[85vh] min-h-[85vh] w-[92vw] min-w-[92vw] max-w-[1100px] flex-col rounded-lg shadow-xl"
+          role="dialog"
+          aria-modal="true"
+        >
         {/* header */}
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b">
           <div>
-            <h3 className="text-sm font-semibold">동기화 내역 — {tableName}</h3>
+            <h3 className="text-sm font-semibold">정합성 검증 내역 — {tableName}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               전체 {counts.all}건
               {counts.pending > 0 && <> · 미결 <span className="text-amber-600 font-semibold">{counts.pending}</span>건</>}
@@ -656,6 +662,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
         <div className="shrink-0 flex items-center justify-end gap-2 px-4 py-3 border-t">
           <Button variant="outline" size="sm" onClick={onClose}>닫기</Button>
         </div>
+        </div>
       </div>
 
       {/* 상세 정보 모달 */}
@@ -678,13 +685,12 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
         const isBusyDetail = busyKey === detailLog.sl_key;
         return (
           <div
-            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50"
-            onClick={(e) => { e.stopPropagation(); closeDetail(); }}
-            role="presentation"
+            className="absolute inset-0 flex items-center justify-center p-4"
+            style={{ zIndex: SHP_SYNC_DETAIL_NESTED_Z }}
           >
+            <div className="absolute inset-0 bg-black/50" aria-hidden />
             <div
-              className="bg-background rounded-lg shadow-xl w-[90vw] max-w-[800px] max-h-[90vh] flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
+              className="relative flex max-h-[90vh] w-[90vw] max-w-[800px] flex-col overflow-hidden rounded-lg bg-background shadow-xl"
               role="dialog"
               aria-modal="true"
             >
