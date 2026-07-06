@@ -5,7 +5,7 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { call } from "@/lib/api"
+import type { LayerDefineEmbedProps } from "./layerManager/types"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -154,7 +154,11 @@ function getGridTemplateColumns(): string {
   ).join(" ")
 }
 
-export function LayerAttrManager() {
+export function LayerAttrManager({
+  embedded = false,
+  fixedTableKey = null,
+  fixedSchema = null,
+}: LayerDefineEmbedProps = {}) {
   const [tables, setTables] = useState<DefineLayerTable[]>([])
   const [selectedTableKey, setSelectedTableKey] = useState<string>("")
   const [layerListSearch, setLayerListSearch] = useState("")
@@ -172,14 +176,15 @@ export function LayerAttrManager() {
   const [searchName, setSearchName] = useState("")
   const [debouncedSearchName, setDebouncedSearchName] = useState("")
   const [showPublicLayer, setShowPublicLayer] = useState(false)
-  const [showAllLayers, setShowAllLayers] = useState(false)
-  const [tableExistenceSet, setTableExistenceSet] = useState<Set<string>>(new Set())
-  const [tableExistenceLoading, setTableExistenceLoading] = useState(false)
   const parentRef = useRef<HTMLDivElement>(null)
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
   loadingMoreRef.current = loadingMore
   hasMoreRef.current = hasMore
+
+  useEffect(() => {
+    if (fixedTableKey) setSelectedTableKey(fixedTableKey)
+  }, [fixedTableKey])
 
   // 테이블 목록 로드 (전체)
   useEffect(() => {
@@ -191,7 +196,7 @@ export function LayerAttrManager() {
         if (cancelled) return
         if (body.success && Array.isArray(body.data)) {
           setTables(body.data)
-          if (body.data.length > 0 && !selectedTableKey) {
+          if (body.data.length > 0 && !selectedTableKey && !fixedTableKey) {
             const first = String((body.data[0] as Record<string, unknown>).define_table_name ?? "")
             if (first) setSelectedTableKey(first)
           }
@@ -199,28 +204,6 @@ export function LayerAttrManager() {
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
       .finally(() => !cancelled && setLoadingTables(false))
-    return () => { cancelled = true }
-  }, [])
-
-  // DB에 테이블 존재 여부 로드 (layer, public_layer 스키마)
-  useEffect(() => {
-    let cancelled = false
-    setTableExistenceLoading(true)
-    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      .then((res) => {
-        if (cancelled) return
-        const data = res?.data ?? res
-        if (data?.success && Array.isArray(data.tables)) {
-          const set = new Set<string>(
-            data.tables.map(
-              (t: { schema?: string; table?: string }) => `${t.schema ?? "layer"}.${t.table ?? ""}`
-            )
-          )
-          setTableExistenceSet(set)
-        }
-      })
-      .catch(() => !cancelled && setTableExistenceSet(new Set()))
-      .finally(() => !cancelled && setTableExistenceLoading(false))
     return () => { cancelled = true }
   }, [])
 
@@ -318,7 +301,7 @@ export function LayerAttrManager() {
     return () => clearTimeout(timer)
   }, [searchName])
 
-  /** 왼쪽 패널: 스키마/전체 레이어(DB 테이블 존재) 필터 + 그룹/테이블명/한글명 검색 */
+  /** 왼쪽 패널: defineLayer 목록 + 그룹/테이블명/한글명 검색 */
   const filteredTables = useMemo(() => {
     if (!tables.length) return []
     let list = [...tables]
@@ -326,15 +309,6 @@ export function LayerAttrManager() {
       list = list.filter(
         (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
       )
-    }
-    if (!showAllLayers) {
-      list = list.filter((t) => {
-        const schema = String((t as Record<string, unknown>).define_table_schema ?? "layer")
-        const tableName = String((t as Record<string, unknown>).define_table_name ?? "")
-        if (!tableName) return true
-        const key = `${schema}.${tableName}`
-        return tableExistenceLoading || tableExistenceSet.has(key)
-      })
     }
     if (debouncedLayerListSearch.trim()) {
       const q = debouncedLayerListSearch.trim().toLowerCase()
@@ -347,7 +321,7 @@ export function LayerAttrManager() {
       })
     }
     return list
-  }, [tables, debouncedLayerListSearch, showPublicLayer, showAllLayers, tableExistenceSet, tableExistenceLoading])
+  }, [tables, debouncedLayerListSearch, showPublicLayer])
 
   const filteredFields = useMemo(() => {
     if (!fields.length) return []
@@ -430,8 +404,14 @@ export function LayerAttrManager() {
   if (loadingTables) return <p className="text-sm text-muted-foreground">테이블 목록 로딩 중...</p>
 
   return (
-    <div className="flex gap-4 min-h-0 flex-1 overflow-hidden max-h-[calc(100vh-14rem)]" style={{ minHeight: "50vh" }}>
-      {/* 왼쪽: 레이어 목록 + 검색 (리스트 영역만 스크롤) */}
+    <div
+      className={cn(
+        "flex gap-4 min-h-0 flex-1 overflow-hidden",
+        embedded ? "h-full max-h-none p-2" : "max-h-[calc(100vh-14rem)]"
+      )}
+      style={embedded ? undefined : { minHeight: "50vh" }}
+    >
+      {!embedded && (
       <div
         className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden max-h-[calc(100vh-14rem)]"
         style={{ width: LAYER_LIST_WIDTH }}
@@ -446,15 +426,6 @@ export function LayerAttrManager() {
                 className="rounded border-input"
               />
               public_layer 포함
-            </label>
-            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showAllLayers}
-                onChange={(e) => setShowAllLayers(e.target.checked)}
-                className="rounded border-input"
-              />
-              전체 레이어 보기
             </label>
           </div>
           <div className="relative">
@@ -503,12 +474,14 @@ export function LayerAttrManager() {
           )}
         </div>
       </div>
+      )}
 
-      {/* 오른쪽: 선택한 레이어의 데이터 속성 (리스트 안에만 스크롤) */}
       <div className="flex-1 min-w-0 flex flex-col gap-2 min-h-0 overflow-hidden">
         {!selectedTableKey ? (
           <p className="text-sm text-muted-foreground py-4">
-            왼쪽에서 레이어를 선택하면 해당 레이어의 속성(필드)을 편집할 수 있습니다.
+            {embedded
+              ? "목록 탭에서 레이어를 선택하세요."
+              : "왼쪽에서 레이어를 선택하면 해당 레이어의 속성(필드)을 편집할 수 있습니다."}
           </p>
         ) : (
           <>

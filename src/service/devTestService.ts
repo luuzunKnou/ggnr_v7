@@ -1104,9 +1104,13 @@ export async function createGeoServerStyle(params: {
       contentType: 'application/vnd.geoserver.geocss+css',
     });
     if (postRes.ok || postRes.status === 201) {
+      writeCssStyleToDataDir(name, cssBody);
       return { success: true };
     }
     const text = await postRes.text();
+    if (postRes.status === 403 && /already exists/i.test(text)) {
+      return { success: true, alreadyExists: true as const };
+    }
     return { success: false, error: `스타일 생성 실패: ${postRes.status} ${text}` };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1234,13 +1238,39 @@ function getCssStyleNamesFromDataDir(): Set<string> {
     const stylesDir = getStylesDir();
     if (fs.existsSync(stylesDir)) {
       for (const f of fs.readdirSync(stylesDir)) {
-        if (f.endsWith('.css')) set.add(path.basename(f, '.css'));
+        if (f.endsWith('.css')) set.add(path.basename(f, '.css').toLowerCase());
       }
     }
   } catch {
     // ignore
   }
   return set;
+}
+
+function writeCssStyleToDataDir(name: string, cssBody: string): void {
+  try {
+    const stylesDir = getStylesDir();
+    fs.mkdirSync(stylesDir, { recursive: true });
+    fs.writeFileSync(path.join(stylesDir, `${name}.css`), cssBody, 'utf-8');
+  } catch {
+    // non-fatal — GeoServer REST 등록은 이미 됐을 수 있음
+  }
+}
+
+async function getGeoServerStyleNameSet(baseUrl: string): Promise<Set<string>> {
+  const set = new Set<string>();
+  const res = await getGeoServerStyleList({ url: baseUrl });
+  if (res.success) {
+    for (const s of res.styles ?? []) {
+      if (s.name) set.add(s.name.toLowerCase());
+    }
+  }
+  return set;
+}
+
+async function geoServerStyleExists(baseUrl: string, name: string): Promise<boolean> {
+  const res = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.json`);
+  return res.ok;
 }
 
 type DefineLayerRow = {
@@ -1296,7 +1326,8 @@ const VALID_GEOMETRY_TYPES = new Set<string>(['POINT', 'LINE', 'POLYGON']);
 
 /**
  * GeoServer 레이어 목록: 전체 레이어 목록은 tables.json(defineLayer) 기준으로 조회.
- * 도형 타입·제목은 tables.json, 발행 여부·styleName은 GeoServer API, 스타일 보유(hasCssStyle)는 data_dir/styles 폴더 기준.
+ * 도형 타입·제목은 tables.json, 발행 여부·styleName은 GeoServer API,
+ * 스타일 보유(hasCssStyle)는 data_dir/styles + GeoServer REST 스타일 목록 기준.
  * 분할 레이어(define_table_parents_layer + define_table_div_query)는 자식 이름에 해당하는 물리 테이블이 없어도
  * 부모 테이블이 layer 스키마에 있으면 tableExists를 true로 둔다(레이어 정보관리 기본 목록 노출용).
  */
@@ -1321,6 +1352,7 @@ export async function getGeoServerLayersWithStyleInfo(params: {
     );
 
     const cssStyleNamesFromDir = getCssStyleNamesFromDataDir();
+    const geoServerStyleNames = await getGeoServerStyleNameSet(baseUrl);
     const layers: GeoServerLayerWithStyle[] = [];
 
     for (const row of defineRes.tables) {
@@ -1342,7 +1374,9 @@ export async function getGeoServerLayersWithStyleInfo(params: {
       const title = String(row.define_table_kor_name ?? '').trim() || undefined;
       const group = String(row.define_table_group ?? '').trim() || undefined;
       const hasCssStyle =
-        cssStyleNamesFromDir.has(geoLayerKey) || cssStyleNamesFromDir.has(layerName);
+        cssStyleNamesFromDir.has(geoLayerKey) ||
+        cssStyleNamesFromDir.has(layerName.toLowerCase()) ||
+        geoServerStyleNames.has(geoLayerKey);
 
       const layerRes = await geoserverFetch(
         baseUrl,
@@ -1664,25 +1698,37 @@ export async function applyDefaultStyleToLayer(params: {
       };
     }
 
+    const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
     const createRes = await createGeoServerStyle({
       url: baseUrl,
       name: layerName,
       geometryType,
       styleProps,
     });
-    if (!createRes.success) {
-      const styleRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}.css`, {
-        accept: 'text/css',
+
+    if (createRes.success && 'alreadyExists' in createRes && createRes.alreadyExists) {
+      const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
+        method: 'PUT',
+        body: cssBody,
+        contentType: 'application/vnd.geoserver.geocss+css',
       });
-      if (styleRes.ok) {
-        const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
-        const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
-          method: 'PUT',
-          body: cssBody,
-          contentType: 'application/vnd.geoserver.geocss+css',
-        });
-        if (!putRes.ok) return { success: false, error: '스타일 수정 실패' };
-      } else return { success: false, error: createRes.error ?? '스타일 생성 실패' };
+      if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
+    } else if (!createRes.success) {
+      const exists = await geoServerStyleExists(baseUrl, layerName);
+      if (!exists) {
+        return { success: false, error: createRes.error ?? '스타일 생성 실패' };
+      }
+      const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
+        method: 'PUT',
+        body: cssBody,
+        contentType: 'application/vnd.geoserver.geocss+css',
+      });
+      if (putRes.ok) {
+        writeCssStyleToDataDir(layerName, cssBody);
+      } else if (!(await geoServerStyleExists(baseUrl, layerName))) {
+        const text = await putRes.text().catch(() => '');
+        return { success: false, error: `스타일 수정 실패: ${putRes.status} ${text}` };
+      }
     }
     const setRes = await setLayerDefaultStyle({
       url: baseUrl,
@@ -2460,5 +2506,348 @@ export async function getGeometryByFieldValue(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { wkt: null, center: null, error: msg };
+  }
+}
+
+const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+const DEFINE_LAYER_CODES_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'codes');
+const LAYER_SETUP_SKIP_COLUMNS = new Set(['ogc_fid', 'geom']);
+
+export type LayerSetupIssueType =
+  | 'geoserver_layer'
+  | 'geoserver_style'
+  | 'define_layer'
+  | 'define_field'
+  | 'define_code';
+
+export type LayerSetupIssueRow = {
+  rowKey: string;
+  schema: 'layer' | 'public_layer';
+  tableName: string;
+  korName: string;
+  group: string;
+  shpType: string;
+  source: string;
+  issues: LayerSetupIssueType[];
+  missingFields: string[];
+  missingCodeFields: string[];
+};
+
+function readDefineFieldsFile(tableName: string): Record<string, unknown>[] {
+  const safe = String(tableName).replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function readDefineCodesFile(tableName: string, fieldName: string): unknown[] {
+  const safe = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = path.join(DEFINE_LAYER_CODES_DIR, `field_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadAllLayerSchemaColumns(): Promise<
+  Map<string, Array<{ name: string; dataType: string }>>
+> {
+  const map = new Map<string, Array<{ name: string; dataType: string }>>();
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT table_schema AS schema, table_name AS table_name, column_name AS name, data_type AS data_type
+         FROM information_schema.columns
+         WHERE table_schema IN ('layer', 'public_layer')
+         ORDER BY table_schema, table_name, ordinal_position`
+      )
+    );
+    for (const row of res.rows as Array<{ schema?: string; table_name?: string; name?: string; data_type?: string }>) {
+      const schema = String(row.schema ?? '').trim();
+      const table = String(row.table_name ?? '').trim();
+      const name = String(row.name ?? '').trim();
+      if (!schema || !table || !name) continue;
+      const key = `${schema}:${table.toLowerCase()}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push({ name, dataType: String(row.data_type ?? '').trim() });
+    }
+  } catch {
+    // empty map — per-table fallback in scan
+  }
+  return map;
+}
+
+/**
+ * 레이어 목록 탭과 동일 기준(DB 테이블 전체)으로 설정 누락·오류 스캔
+ */
+export async function scanLayerSetupIssues(params: { url?: string } = {}) {
+  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+
+  try {
+    const [listRes, defineRes, geomLayerRes, geomPublicRes, styleInfoRes, allColumns, geoServerStyleNames] =
+      await Promise.all([
+        getLayerTableList(),
+        getDefineLayerTables(),
+        getLayerTableGeometryTypes({ schema: 'layer' }),
+        getLayerTableGeometryTypes({ schema: 'public_layer' }),
+        getGeoServerLayersWithStyleInfo({ url: baseUrl }),
+        loadAllLayerSchemaColumns(),
+        getGeoServerStyleNameSet(baseUrl),
+      ]);
+
+    if (!listRes.success) {
+      return { success: false, error: listRes.error ?? 'DB 테이블 목록 조회 실패', layers: [] as LayerSetupIssueRow[], issueCount: 0 };
+    }
+
+    const defineTables = defineRes.success && defineRes.tables?.length ? defineRes.tables : [];
+    const defineByKey = new Map<string, Record<string, unknown>>();
+    for (const t of defineTables) {
+      const name = String((t as Record<string, unknown>).define_table_name ?? '').trim();
+      if (!name) continue;
+      const schema = String((t as Record<string, unknown>).define_table_schema ?? 'layer').trim() || 'layer';
+      defineByKey.set(`${schema}:${name.toLowerCase()}`, t as Record<string, unknown>);
+    }
+
+    const styleInfoMap: Record<string, { published: boolean; hasCssStyle: boolean }> = {};
+    if (styleInfoRes.success && Array.isArray(styleInfoRes.layers)) {
+      for (const layer of styleInfoRes.layers) {
+        if (layer.name) {
+          const key = String(layer.name).toLowerCase();
+          styleInfoMap[key] = {
+            published: layer.published ?? false,
+            hasCssStyle: layer.hasCssStyle ?? false,
+          };
+        }
+      }
+    }
+
+    const geomTypes: Record<string, string> = {
+      ...((geomLayerRes as { types?: Record<string, string> }).types ?? {}),
+      ...((geomPublicRes as { types?: Record<string, string> }).types ?? {}),
+    };
+
+    const layers: LayerSetupIssueRow[] = [];
+
+    for (const t of listRes.tables ?? []) {
+      if (t.schema !== 'layer' && t.schema !== 'public_layer') continue;
+      const schema = t.schema === 'public_layer' ? 'public_layer' : 'layer';
+      const tableName = String(t.table ?? '').trim();
+      if (!tableName) continue;
+
+      const defineKey = `${schema}:${tableName.toLowerCase()}`;
+      const define = defineByKey.get(defineKey);
+      const issues: LayerSetupIssueType[] = [];
+      const missingFields: string[] = [];
+      const missingCodeFields: string[] = [];
+
+      if (!define) {
+        issues.push('define_layer');
+      }
+
+      const colKey = `${schema}:${tableName.toLowerCase()}`;
+      let dbColumns = allColumns.get(colKey) ?? [];
+      if (dbColumns.length === 0) {
+        const colRes = await getTableColumnInfo({ schema, table: tableName });
+        dbColumns = colRes.success ? colRes.columns : [];
+      }
+      const dbFieldNames = dbColumns
+        .map((c) => c.name.toLowerCase())
+        .filter((n) => n && !LAYER_SETUP_SKIP_COLUMNS.has(n));
+
+      const defineFields = readDefineFieldsFile(tableName);
+      const defineFieldNames = new Set(
+        defineFields.map((f) => String(f.define_field_name ?? '').trim().toLowerCase()).filter(Boolean)
+      );
+
+      for (const name of dbFieldNames) {
+        if (!defineFieldNames.has(name)) missingFields.push(name);
+      }
+      if (missingFields.length > 0) issues.push('define_field');
+
+      for (const f of defineFields) {
+        if (String(f.define_field_type ?? '').toUpperCase() !== 'CODE') continue;
+        const fieldName = String(f.define_field_name ?? '').trim();
+        if (!fieldName) continue;
+        const codes = readDefineCodesFile(tableName, fieldName);
+        if (codes.length === 0) missingCodeFields.push(fieldName);
+      }
+      if (missingCodeFields.length > 0) issues.push('define_code');
+
+      const styleInfo = styleInfoMap[tableName.toLowerCase()];
+      const published = styleInfo?.published ?? false;
+      let hasCssStyle = styleInfo?.hasCssStyle ?? false;
+      if (!hasCssStyle) {
+        hasCssStyle = geoServerStyleNames.has(tableName.toLowerCase());
+      }
+      if (!published) issues.push('geoserver_layer');
+      if (!hasCssStyle) issues.push('geoserver_style');
+
+      if (issues.length === 0) continue;
+
+      const shpType =
+        String(define?.define_table_shp_type ?? '').trim() ||
+        String(geomTypes[tableName] ?? geomTypes[tableName.toLowerCase()] ?? '').trim();
+
+      layers.push({
+        rowKey: defineKey,
+        schema,
+        tableName,
+        korName: String(define?.define_table_kor_name ?? '').trim(),
+        group: String(define?.define_table_group ?? '').trim(),
+        shpType,
+        source: String(define?.define_table_source ?? '').trim(),
+        issues,
+        missingFields,
+        missingCodeFields,
+      });
+    }
+
+    return { success: true, layers, issueCount: layers.length };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg, layers: [] as LayerSetupIssueRow[], issueCount: 0 };
+  }
+}
+
+async function writeDefineCodesFile(tableName: string, fieldName: string, codes: unknown[]) {
+  const safe = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = path.join(DEFINE_LAYER_CODES_DIR, `field_${safe}.json`);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(codes, null, 2), 'utf-8');
+}
+
+/** CODE 필드 코드 정의를 DB DISTINCT 값으로 생성 (값 없으면 미분류 1건) */
+export async function syncDefineCodesFromDb(params: {
+  schema: 'layer' | 'public_layer';
+  tableName: string;
+  fieldName: string;
+}) {
+  const schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
+  const tableName = String(params.tableName ?? '').trim();
+  const fieldName = String(params.fieldName ?? '').trim();
+  if (!tableName || !fieldName) return { success: false, error: 'tableName, fieldName이 필요합니다.' };
+
+  try {
+    const valRes = await getDataSelectValueList({ schema, table: tableName, field: fieldName });
+    const values = Array.isArray(valRes.values) ? valRes.values.filter(Boolean) : [];
+    const codes =
+      values.length > 0
+        ? values.map((v, i) => ({
+            define_code_key: String(90000 + i),
+            define_code_field_key: '',
+            define_code_name: v,
+            define_code_kor_name: v,
+          }))
+        : [
+            {
+              define_code_key: '90000',
+              define_code_field_key: '',
+              define_code_name: '000',
+              define_code_kor_name: '미분류',
+            },
+          ];
+    await writeDefineCodesFile(tableName, fieldName, codes);
+    return { success: true, count: codes.length };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * 레이어 설정 오류 자동 수정 (define → code → geoserver layer → style 순)
+ */
+export async function fixLayerSetupIssues(params: {
+  tableName: string;
+  schema?: 'layer' | 'public_layer';
+  issues?: LayerSetupIssueType[];
+  missingCodeFields?: string[];
+  url?: string;
+  geometryType?: string;
+  group?: string;
+}) {
+  const tableName = String(params.tableName ?? '').trim();
+  const schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
+  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+
+  const issueSet = new Set(params.issues ?? []);
+  const fixed: string[] = [];
+  const errors: string[] = [];
+
+  try {
+    if (issueSet.has('define_layer') || issueSet.has('define_field')) {
+      const { createDefineTableAndFieldsByTableName } = await import('./shpUploadService');
+      const geom =
+        params.geometryType && VALID_GEOMETRY_TYPES.has(params.geometryType.toUpperCase())
+          ? (params.geometryType.toUpperCase() as 'POINT' | 'LINE' | 'POLYGON')
+          : undefined;
+      const defRes = await createDefineTableAndFieldsByTableName({
+        tableName,
+        dbSchema: schema,
+        geometryType: geom,
+        group: params.group?.trim() || undefined,
+      });
+      if (!defRes.success) {
+        errors.push(defRes.error ?? '레이어/필드 정의 생성 실패');
+      } else {
+        if (issueSet.has('define_layer')) fixed.push('define_layer');
+        if (issueSet.has('define_field')) fixed.push('define_field');
+      }
+    }
+
+    if (issueSet.has('define_code')) {
+      let codeFields = params.missingCodeFields ?? [];
+      if (codeFields.length === 0) {
+        const fields = readDefineFieldsFile(tableName);
+        codeFields = fields
+          .filter((f) => String(f.define_field_type ?? '').toUpperCase() === 'CODE')
+          .map((f) => String(f.define_field_name ?? '').trim())
+          .filter((name) => name && readDefineCodesFile(tableName, name).length === 0);
+      }
+      for (const fieldName of codeFields) {
+        const codeRes = await syncDefineCodesFromDb({ schema, tableName, fieldName });
+        if (!codeRes.success) errors.push(`${fieldName}: ${codeRes.error ?? '코드 생성 실패'}`);
+      }
+      if (codeFields.length > 0 && errors.length === 0) fixed.push('define_code');
+    }
+
+    if (issueSet.has('geoserver_layer')) {
+      const layerRes = await createOrUpdateGeoServerLayer({
+        layerName: tableName,
+        url: baseUrl,
+      });
+      if (!layerRes.success) errors.push(layerRes.error ?? 'GeoServer 레이어 생성 실패');
+      else fixed.push('geoserver_layer');
+    }
+
+    if (issueSet.has('geoserver_style')) {
+      const styleRes = await applyDefaultStyleToLayer({
+        layerName: tableName,
+        url: baseUrl,
+      });
+      if (!styleRes.success) errors.push(styleRes.error ?? 'GeoServer 스타일 생성 실패');
+      else fixed.push('geoserver_style');
+    }
+
+    return {
+      success: errors.length === 0,
+      fixed,
+      errors,
+      error: errors.length ? errors.join(' | ') : undefined,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, fixed, errors: [...errors, msg], error: msg };
   }
 }

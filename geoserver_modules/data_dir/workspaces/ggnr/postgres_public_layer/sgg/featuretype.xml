@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7ca3</id>
+  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38ea</id>
   <name>sgg</name>
   <nativeName>sgg</nativeName>
   <namespace>
@@ -12,17 +12,16 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>327950.34375</minx>
-    <maxx>379099.375</maxx>
-    <miny>312532.9375</miny>
-    <maxy>370906.84375</maxy>
-    <crs class="projected">EPSG:5181</crs>
+    <minx>377136.40016042</minx>
+    <maxx>406587.7433722</maxx>
+    <miny>334599.15796033</miny>
+    <maxy>378064.21968029</maxy>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.42450230821242</minx>
-    <maxx>129.00724745022012</maxx>
-    <miny>36.29418604876176</miny>
-    <maxy>36.828196031056095</maxy>
+    <minx>128.9768786161138</minx>
+    <maxx>129.31705359292275</maxx>
+    <miny>36.48738833525946</miny>
+    <maxy>36.8847266834835</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

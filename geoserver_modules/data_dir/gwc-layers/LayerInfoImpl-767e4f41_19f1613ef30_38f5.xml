@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cb4</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38f5</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:tl_sgco_rnadr_mst</name>
+  <name>ggnr:tl_sprd_manage</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.43549133757682</double>
-          <double>36.3011585037033</double>
-          <double>129.00196194614662</double>
-          <double>36.814653818801006</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4297373495482951E7</double>
-          <double>4342139.836198975</double>
-          <double>1.4360432715178298E7</double>
-          <double>4413303.312316425</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>tl_sgco_rnadr_mst</defaultStyle>
+      <defaultStyle>line</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

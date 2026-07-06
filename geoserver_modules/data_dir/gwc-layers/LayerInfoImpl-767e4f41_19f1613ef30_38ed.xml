@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7ca2</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38ed</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:sgg</name>
+  <name>ggnr:tl_sgco_rnadr_dong</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.42450230821242</double>
-          <double>36.29418604876176</double>
-          <double>129.00724745022012</double>
-          <double>36.828196031056095</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4296150202329794E7</double>
-          <double>4341176.78900262</double>
-          <double>1.4361021094800346E7</double>
-          <double>4415186.508315389</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>sgg</defaultStyle>
+      <defaultStyle>polygon</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
