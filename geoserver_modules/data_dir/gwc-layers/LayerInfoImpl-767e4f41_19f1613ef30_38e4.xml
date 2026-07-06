@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cb6</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38e4</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:jijuk</name>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.4245011389381</double>
-          <double>36.29417164002223</double>
-          <double>129.00724818012225</double>
-          <double>36.82818315636876</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.429615007216677E7</double>
-          <double>4341174.798932417</double>
-          <double>1.4361021176052677E7</double>
-          <double>4415184.717787918</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>jijuk</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
