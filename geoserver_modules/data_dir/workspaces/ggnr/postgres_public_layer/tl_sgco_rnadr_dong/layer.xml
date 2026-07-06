@@ -1,19 +1,16 @@
 <layer>
   <name>tl_sgco_rnadr_dong</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cb0</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38ed</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4bf97568:19c4d6c3053:-7ae8</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffe</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7cb1</id>
+    <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38ec</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:01:10.451 UTC</dateCreated>
-  <dateModified>2026-02-11 16:02:17.683 UTC</dateModified>
+  <dateCreated>2026-07-05 23:27:17.694 UTC</dateCreated>
 </layer>

@@ -33,7 +33,7 @@ type DetailRow = {
   dhShpPath: string | null;
 };
 
-export function ShpHistoryTab() {
+export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -147,7 +147,9 @@ export function ShpHistoryTab() {
   return (
     <div className="flex flex-col h-full min-h-0 p-2 gap-2">
       <div className="shrink-0 flex items-center gap-2">
-        <span className="text-sm font-medium">레이어 업데이트 이력</span>
+        {!embedded && (
+          <span className="text-sm font-medium">레이어 업데이트 이력</span>
+        )}
         <span className="text-xs text-muted-foreground flex-1">총 {total}건</span>
         <Button variant="outline" size="sm" onClick={fetchList} className="gap-1">
           <RefreshCw className="w-3.5 h-3.5" /> 새로고침
@@ -254,7 +256,7 @@ export function ShpHistoryTab() {
                                             {syncLoading === d.dhKey
                                               ? <Loader2 className="w-3 h-3 animate-spin" />
                                               : <Search className="w-3 h-3" />}
-                                            동기화
+                                            정합성 검증
                                           </button>
                                         )}
                                       </td>

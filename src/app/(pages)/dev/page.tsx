@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_MENU_GROUPS, DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
+import { LayerManagerUploadButtons } from "./_components/layerManager/LayerManagerUploadButtons"
 import { call } from "@/lib/api"
 import { signOut } from "next-auth/react"
 
@@ -152,7 +153,9 @@ export default function DevPage() {
       getDescription={getDevMenuDescription}
       renderContent={renderDevMenuContent}
       renderTitleExtra={(menuId) =>
-        menuId === "lasFileUploader" ? (
+        menuId === "layerManager" ? (
+          <LayerManagerUploadButtons />
+        ) : menuId === "lasFileUploader" ? (
           <>
             <Button
               type="button"

@@ -13,6 +13,12 @@ export type ChunkedUploadState = {
   totalChunks: number;
 };
 
+/** 다중 파일 업로드 시 현재 파일 청크 진행률을 반영한 전체 % (fileIndex: 0-based) */
+export function folderUploadOverallPercent(fileIndex: number, fileTotal: number, chunkPercent: number): number {
+  if (fileTotal <= 0) return 0;
+  return Math.min(100, Math.round(((fileIndex + chunkPercent / 100) / fileTotal) * 100));
+}
+
 export type UseChunkedUploadReturn = {
   state: ChunkedUploadState;
   upload: (

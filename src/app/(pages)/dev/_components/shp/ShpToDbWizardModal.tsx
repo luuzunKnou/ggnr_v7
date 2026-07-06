@@ -11,6 +11,7 @@ import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Loader2, Minus, X, AlertTriangle } from 'lucide-react';
 import { SyncDetailModal } from './SyncDetailModal';
+import { extractFolderPartsFromPath } from './parseShpFolderMeta';
 
 type StepStatus = 'pending' | 'running' | 'created' | 'existed' | 'fail' | 'sync';
 
@@ -60,22 +61,10 @@ type Props = {
   folderName: string;
   /** GGNR_DATA_DIR 기준 상대 경로 (예: shp_data/폴더명) */
   relativePath: string;
+  /** 1단계에서 수정한 작업명 — 이력 contents에 사용 */
+  workName?: string;
   onSuccess?: () => void;
 };
-
-function extractFolderParts(shpPath: string): { group?: string; memo?: string } {
-  const parts = shpPath.replace(/\\/g, '/').split('/');
-  const shpDataIdx = parts.indexOf('shp_data');
-  if (shpDataIdx >= 0 && shpDataIdx + 1 < parts.length - 1) {
-    const folder = parts[shpDataIdx + 1];
-    const segs = folder.split('_');
-    return {
-      group: segs.length >= 3 ? segs[2] : undefined,
-      memo: segs.length >= 4 ? segs.slice(3).join('_') : undefined,
-    };
-  }
-  return {};
-}
 
 async function getTableRowCount(tableName: string): Promise<number> {
   try {
@@ -112,7 +101,7 @@ function StepBadge({ status }: { status: StepStatus }) {
     case 'sync':
       return (
         <span className="inline-flex items-center justify-center w-full text-[10px] font-medium text-orange-600 dark:text-orange-400">
-          동기화
+          정합성 검증
         </span>
       );
     case 'fail':
@@ -126,7 +115,7 @@ function formatCountCell(n: number | undefined) {
   return n === undefined ? '—' : String(n);
 }
 
-export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePath, onSuccess }: Props) {
+export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePath, workName, onSuccess }: Props) {
   const [postProcessing, setPostProcessing] = useState(false);
   const [fileLogs, setFileLogs] = useState<FileLogEntry[]>([]);
   const [postProgress, setPostProgress] = useState<{ current: number; total: number } | null>(null);
@@ -263,7 +252,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
                     updateFileLog(logIndex, { table: 'created' });
                   } else {
                     entry.table = 'fail';
-                    entry.error = ad?.error ?? '동기화 적용 실패';
+                    entry.error = ad?.error ?? '정합성 검증 적용 실패';
                     updateFileLog(logIndex, { table: 'fail', error: entry.error });
                     flushCounts();
                     return entry;
@@ -391,7 +380,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
             r.table !== 'fail' && r.table !== 'sync' && r.layer !== 'fail' && r.style !== 'fail' && r.define !== 'fail';
           let type = '신규';
           if (r.table === 'existed') type = '동일';
-          else if (r.table === 'sync' || (r.appendCount || r.conflictCount || r.removeCount)) type = '동기화';
+          else if (r.table === 'sync' || (r.appendCount || r.conflictCount || r.removeCount)) type = '정합성 검증';
           else if (r.oldData != null && r.oldData > 0) type = '업데이트';
           return {
             group: r.group ?? '',
@@ -402,7 +391,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
             appendCount: r.appendCount ?? 0,
             conflictCount: r.conflictCount ?? 0,
             removeCount: r.removeCount ?? 0,
-            contents: allOk ? '업데이트 완료' : r.table === 'sync' ? '동기화 대기' : (r.error ?? '실패'),
+            contents: allOk ? '업데이트 완료' : r.table === 'sync' ? '정합성 검증 대기' : (r.error ?? '실패'),
             result: allOk ? '성공' : r.table === 'sync' ? '대기' : '실패',
             shpPath: r.shpPath ?? '',
           };
@@ -489,7 +478,8 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
       setFileLogs(initialLogs);
 
       const results: FileLogEntry[] = [...initialLogs];
-      const { memo: folderMemo } = extractFolderParts(shpRows[0]?.pathOrResult ?? rp);
+      const { memo: parsedMemo } = extractFolderPartsFromPath(shpRows[0]?.pathOrResult ?? rp);
+      const folderMemo = workName?.trim() || parsedMemo;
 
       for (let i = 0; i < shpRows.length; i++) {
         const row = shpRows[i];
@@ -501,7 +491,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
           define: row.define,
           geometryType: row.geometryType,
         };
-        const { group } = extractFolderParts(row.pathOrResult);
+        const { group } = extractFolderPartsFromPath(row.pathOrResult);
         const result = await postProcessOneFile(row.pathOrResult, row.sourceFile, i, pre, group);
         result.group = group;
         results[i] = result;
@@ -517,7 +507,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
     } finally {
       setPostProcessing(false);
     }
-  }, [relativePath, postProcessOneFile, saveHistory, saveLogFile, onSuccess]);
+  }, [relativePath, workName, postProcessOneFile, saveHistory, saveLogFile, onSuccess]);
 
   useEffect(() => {
     if (!open) {
@@ -709,7 +699,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
                 <strong className="text-green-600 ml-1">{successCount}건 성공</strong>
                 {failCount > 0 && <strong className="text-red-500 ml-1">, {failCount}건 실패</strong>}
                 {syncNeedCount > 0 && (
-                  <strong className="text-orange-600 ml-1">, {syncNeedCount}건 동기화 대기</strong>
+                  <strong className="text-orange-600 ml-1">, {syncNeedCount}건 정합성 검증 대기</strong>
                 )}
               </div>
             )}
