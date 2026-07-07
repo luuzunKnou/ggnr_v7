@@ -1,15 +1,17 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
-import { ALL_PARCEL_ITEM_IDS, PARCEL_ANALYSIS_GROUPS } from './parcelAnalysisItems';
+import type { ParcelAnalysisGroupDef } from './parcelAnalysisItems';
 
 type Props = {
+  groups: ParcelAnalysisGroupDef[];
   selectedIds: Set<string>;
   onSelectedIdsChange: (ids: Set<string>) => void;
   disabled?: boolean;
+  itemsReady?: boolean;
 };
 
 const CHECKBOX_CLASS =
@@ -19,16 +21,33 @@ function bulkSwitchTitle(allOn: boolean): string {
   return allOn ? '전체 해제' : '전체 선택';
 }
 
-function initialOpenGroups(): Record<string, boolean> {
+function initialOpenGroups(groups: ParcelAnalysisGroupDef[]): Record<string, boolean> {
   const initial: Record<string, boolean> = {};
-  for (const g of PARCEL_ANALYSIS_GROUPS) initial[g.id] = true;
+  for (const g of groups) initial[g.id] = true;
   return initial;
 }
 
-export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, disabled }: Props) {
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpenGroups);
+export function ParcelAnalysisItemSelector({
+  groups,
+  selectedIds,
+  onSelectedIdsChange,
+  disabled,
+  itemsReady = true,
+}: Props) {
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => initialOpenGroups(groups));
 
-  const totalCount = ALL_PARCEL_ITEM_IDS.length;
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = { ...prev };
+      for (const g of groups) {
+        if (!(g.id in next)) next[g.id] = true;
+      }
+      return next;
+    });
+  }, [groups]);
+
+  const allItemIds = useMemo(() => groups.flatMap((g) => g.items.map((i) => i.id)), [groups]);
+  const totalCount = allItemIds.length;
   const selectedCount = selectedIds.size;
   const allSelected = totalCount > 0 && selectedCount === totalCount;
   const someSelected = selectedCount > 0 && !allSelected;
@@ -39,14 +58,14 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
 
   const setAll = useCallback(
     (on: boolean) => {
-      onSelectedIdsChange(on ? new Set(ALL_PARCEL_ITEM_IDS) : new Set());
+      onSelectedIdsChange(on ? new Set(allItemIds) : new Set());
     },
-    [onSelectedIdsChange]
+    [onSelectedIdsChange, allItemIds]
   );
 
   const setGroupAll = useCallback(
     (groupId: string, on: boolean) => {
-      const group = PARCEL_ANALYSIS_GROUPS.find((g) => g.id === groupId);
+      const group = groups.find((g) => g.id === groupId);
       if (!group) return;
       const next = new Set(selectedIds);
       for (const item of group.items) {
@@ -73,7 +92,7 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
       string,
       { allOn: boolean; someOn: boolean; selected: number; total: number }
     > = {};
-    for (const group of PARCEL_ANALYSIS_GROUPS) {
+    for (const group of groups) {
       const groupIds = group.items.map((i) => i.id);
       const selected = groupIds.filter((id) => selectedIds.has(id)).length;
       stats[group.id] = {
@@ -84,7 +103,7 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
       };
     }
     return stats;
-  }, [selectedIds]);
+  }, [selectedIds, groups]);
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', disabled && 'pointer-events-none opacity-50')}>
@@ -93,7 +112,7 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-[#666]">분석 항목</p>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              {selectedCount}/{totalCount} 선택
+              {itemsReady ? `${selectedCount}/${totalCount} 선택` : '항목 불러오는 중…'}
             </p>
           </div>
           <Switch
@@ -102,13 +121,14 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
             title={bulkSwitchTitle(allSelected)}
             checked={allSelected}
             indeterminate={someSelected}
+            disabled={!itemsReady}
             onCheckedChange={(on) => setAll(on || someSelected)}
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-        {PARCEL_ANALYSIS_GROUPS.map((group) => {
+        {groups.map((group) => {
           const { allOn, someOn, selected, total } = groupStats[group.id];
           const isOpen = openGroups[group.id] !== false;
           const groupSwitchId = `parcel-group-${group.id}`;
@@ -139,6 +159,7 @@ export function ParcelAnalysisItemSelector({ selectedIds, onSelectedIdsChange, d
                   title={bulkSwitchTitle(allOn)}
                   checked={allOn}
                   indeterminate={someOn}
+                  disabled={!itemsReady}
                   onCheckedChange={(on) => setGroupAll(group.id, on || someOn)}
                 />
               </div>

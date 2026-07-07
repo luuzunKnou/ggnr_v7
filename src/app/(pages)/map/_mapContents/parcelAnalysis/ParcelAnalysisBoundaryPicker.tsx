@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
   type BoundaryEmdSelection,
@@ -14,10 +13,15 @@ import {
   PARCEL_PREVIEW_MANY_EMD_PARAM,
   PREVIEW_MANY_EMD_OPTIONS,
 } from './parcelAnalysisBoundaryPreview';
+import { fetchRiOptionsCached } from './parcelAnalysisBoundaryRiCache';
 
 type Props = {
   initialSelection?: BoundaryEmdSelection[];
   onSelectionChange?: (selection: BoundaryEmdSelection[]) => void;
+  emdOptions: EmdRiOption[];
+  emdLoading: boolean;
+  emdError: string | null;
+  onReloadEmd: () => void;
 };
 
 type RiState = Record<string, { allRi: boolean; riCodes: Set<string> }>;
@@ -27,31 +31,19 @@ const EMD_SCROLL_THRESHOLD = 9;
 export function ParcelAnalysisBoundaryPicker({
   initialSelection = [],
   onSelectionChange,
+  emdOptions,
+  emdLoading,
+  emdError,
+  onReloadEmd,
 }: Props) {
   const searchParams = useSearchParams();
   const { sido, sigungu } = useParcelAnalysisRegion();
   const previewManyEmd = searchParams.get('parcelPreview') === PARCEL_PREVIEW_MANY_EMD_PARAM;
 
-  const [emdOptions, setEmdOptions] = useState<EmdRiOption[]>([]);
   const [selectedEmdCodes, setSelectedEmdCodes] = useState<Set<string>>(() => new Set());
   const [riByEmd, setRiByEmd] = useState<Record<string, EmdRiOption[]>>({});
   const [riState, setRiState] = useState<RiState>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    call('', 'POST', { service: 'devTestService', action: 'getEmdRiOptions', params: {} })
-      .then((res) => {
-        if (cancelled) return;
-        const data = res?.data ?? res;
-        setEmdOptions(Array.isArray(data?.emd) ? data.emd : []);
-      })
-      .catch(() => {
-        if (!cancelled) setEmdOptions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [riLoadingCodes, setRiLoadingCodes] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +79,6 @@ export function ParcelAnalysisBoundaryPicker({
   }, []);
 
   const loadRiForEmd = useCallback(async (emdCode: string) => {
-    if (riByEmd[emdCode]) return riByEmd[emdCode];
     if (emdCode.startsWith('preview-')) {
       const mockRi: EmdRiOption[] = [
         { code: `${emdCode}-r1`, name: '리1' },
@@ -97,16 +88,27 @@ export function ParcelAnalysisBoundaryPicker({
       setRiByEmd((prev) => ({ ...prev, [emdCode]: mockRi }));
       return mockRi;
     }
-    const res = await call('', 'POST', {
-      service: 'devTestService',
-      action: 'getRiOptionsByEmd',
-      params: { emdCode },
+
+    let cached: EmdRiOption[] | undefined;
+    setRiByEmd((prev) => {
+      if (prev[emdCode]?.length) cached = prev[emdCode];
+      return prev;
     });
-    const data = res?.data ?? res;
-    const ri = Array.isArray(data?.ri) ? (data.ri as EmdRiOption[]) : [];
-    setRiByEmd((prev) => ({ ...prev, [emdCode]: ri }));
-    return ri;
-  }, [riByEmd]);
+    if (cached) return cached;
+
+    setRiLoadingCodes((prev) => new Set(prev).add(emdCode));
+    try {
+      const ri = await fetchRiOptionsCached(emdCode);
+      setRiByEmd((prev) => ({ ...prev, [emdCode]: ri }));
+      return ri;
+    } finally {
+      setRiLoadingCodes((prev) => {
+        const next = new Set(prev);
+        next.delete(emdCode);
+        return next;
+      });
+    }
+  }, []);
 
   const optionSource = previewManyEmd ? PREVIEW_MANY_EMD_OPTIONS : emdOptions;
 
@@ -230,6 +232,27 @@ export function ParcelAnalysisBoundaryPicker({
           emdScrollable && 'max-h-24 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]'
         )}
       >
+        {emdLoading && optionSource.length === 0 && (
+          <p className="text-sm text-slate-500">읍·면·동 목록을 불러오는 중…</p>
+        )}
+        {!emdLoading && emdError && optionSource.length === 0 && (
+          <div className="space-y-2">
+            <p className="text-sm text-red-600">{emdError}</p>
+            <button
+              type="button"
+              onClick={onReloadEmd}
+              className="cursor-pointer text-xs font-medium text-blue-600 hover:underline"
+            >
+              다시 불러오기
+            </button>
+          </div>
+        )}
+        {!emdLoading && !emdError && optionSource.length === 0 && (
+          <p className="text-sm text-slate-500">표시할 읍·면·동이 없습니다.</p>
+        )}
+        {emdLoading && optionSource.length > 0 && (
+          <p className="w-full text-xs text-slate-400">목록 갱신 중…</p>
+        )}
         {optionSource.map((emd) => {
           const selected = selectedEmdCodes.has(emd.code);
           return (
@@ -248,9 +271,6 @@ export function ParcelAnalysisBoundaryPicker({
             </button>
           );
         })}
-        {optionSource.length === 0 && (
-          <p className="text-sm text-slate-500">읍·면·동 목록을 불러오는 중…</p>
-        )}
       </div>
 
       {previewManyEmd && (
@@ -265,6 +285,7 @@ export function ParcelAnalysisBoundaryPicker({
             const emd = optionSource.find((e) => e.code === emdCode);
             const riList = riByEmd[emdCode] ?? [];
             const st = riState[emdCode];
+            const riLoading = riLoadingCodes.has(emdCode);
             if (!emd || !st) return null;
             const allRiChecked = st.allRi;
             const someRiChecked = st.riCodes.size > 0;
@@ -286,7 +307,14 @@ export function ParcelAnalysisBoundaryPicker({
                   <span className="text-slate-500">전체</span>
                 </label>
                 <div className="flex flex-wrap gap-x-4 gap-y-2 pl-6">
-                  {riList.map((ri) => (
+                  {riLoading && (
+                    <p className="text-xs text-slate-500">리 목록을 불러오는 중…</p>
+                  )}
+                  {!riLoading && riList.length === 0 && (
+                    <p className="text-xs text-amber-700">리 목록이 없습니다.</p>
+                  )}
+                  {!riLoading &&
+                    riList.map((ri) => (
                     <label
                       key={ri.code}
                       className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-700"
@@ -299,7 +327,7 @@ export function ParcelAnalysisBoundaryPicker({
                       />
                       {ri.name}
                     </label>
-                  ))}
+                    ))}
                 </div>
               </div>
             );

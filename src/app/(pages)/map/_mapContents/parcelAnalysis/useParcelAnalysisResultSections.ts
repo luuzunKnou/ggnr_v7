@@ -1,26 +1,23 @@
 'use client';
 
 import { useMemo } from 'react';
-import { PARCEL_ANALYSIS_GROUPS } from './parcelAnalysisItems';
+import type { ParcelAnalysisGroupDef } from './parcelAnalysisItems';
 import {
-  buildMockParcelAnalysisResult,
   buildResultSections,
   type MockParcelAnalysisResult,
   type ResultSectionDef,
 } from './mockParcelAnalysisResult';
 
-export function useParcelAnalysisResultSections(selectedItemIds: string[]) {
+export function useParcelAnalysisResultSections(
+  selectedItemIds: string[],
+  groups: ParcelAnalysisGroupDef[]
+) {
   const sections = useMemo(
-    () => buildResultSections(selectedItemIds, PARCEL_ANALYSIS_GROUPS),
-    [selectedItemIds]
+    () => buildResultSections(selectedItemIds, groups),
+    [selectedItemIds, groups]
   );
 
-  const mockResult: MockParcelAnalysisResult = useMemo(
-    () => buildMockParcelAnalysisResult(selectedItemIds),
-    [selectedItemIds]
-  );
-
-  return { sections, mockResult };
+  return { sections };
 }
 
 export type { ResultSectionDef, MockParcelAnalysisResult };

@@ -7,10 +7,11 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog';
-import type { BoundaryEmdSelection, DrawTool, ParcelModalStep } from './parcelAnalysisTypes';
+import type { BoundaryEmdSelection, DrawTool, EmdRiOption, ParcelModalStep } from './parcelAnalysisTypes';
 import {
   getBoundarySelectionCount,
   ParcelAnalysisBoundaryPicker,
@@ -28,6 +29,10 @@ type Props = {
   onStartDraw: (tool: DrawTool) => void;
   onApplyBoundary: (selection: BoundaryEmdSelection[]) => void;
   applyingArea: boolean;
+  boundaryEmdOptions: EmdRiOption[];
+  boundaryEmdLoading: boolean;
+  boundaryEmdError: string | null;
+  onReloadBoundaryEmd: () => void;
 };
 
 const DRAW_TOOLS: { id: DrawTool; icon: typeof Square; label: string }[] = [
@@ -59,6 +64,10 @@ export function ParcelAnalysisMethodModal({
   onStartDraw,
   onApplyBoundary,
   applyingArea,
+  boundaryEmdOptions,
+  boundaryEmdLoading,
+  boundaryEmdError,
+  onReloadBoundaryEmd,
 }: Props) {
   const dismissOrExit = useCallback(() => {
     if (hasConfirmedArea) onDismiss();
@@ -87,7 +96,7 @@ export function ParcelAnalysisMethodModal({
       <DialogContent
         showCloseButton={false}
         className={cn(
-          'gap-0 overflow-hidden rounded-[5px] border-slate-200/80 p-0 shadow-xl',
+          'z-[60] gap-0 overflow-hidden rounded-[5px] border-slate-200/80 p-0 shadow-xl',
           'flex max-h-[min(560px,88vh)] flex-col',
           STEP_MAX_WIDTH[step]
         )}
@@ -112,6 +121,9 @@ export function ParcelAnalysisMethodModal({
                 </span>
               )}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              도형 그리기 또는 행정경계 선택으로 분석 영역을 지정합니다.
+            </DialogDescription>
           </div>
           <button
             type="button"
@@ -182,6 +194,10 @@ export function ParcelAnalysisMethodModal({
             <ParcelAnalysisBoundaryPicker
               initialSelection={boundarySessionDraft}
               onSelectionChange={onBoundarySessionDraftChange}
+              emdOptions={boundaryEmdOptions}
+              emdLoading={boundaryEmdLoading}
+              emdError={boundaryEmdError}
+              onReloadEmd={onReloadBoundaryEmd}
             />
           )}
         </div>
