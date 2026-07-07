@@ -279,8 +279,7 @@ export function getParcelAnalysisRegionFromFooter(_params?: unknown): {
   return parseSidoSigunguFromAddress(address)
 }
 
-/**
- * 지도용 클라이언트 설정 (주소 검색 등).
+/** 지도용 클라이언트 설정 (주소 검색 등).
  * runtime.env 의 지도/외부연계 키를 반환.
  */
 export function getMapConfig(_params?: unknown): {
@@ -306,6 +305,57 @@ export function getMapConfig(_params?: unknown): {
     SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
     DATA_PORTAL_KEY: dataPortalKey,
     dataPotalKey: dataPortalKey,
+  }
+}
+
+/** 필지 연계(행망 KRAS·브이월드 fallback) 설정 */
+export function getLandLinkageConfig(_params?: unknown): {
+  useKras: boolean
+  useKrasFallback: boolean
+  maskPersonalInfo: boolean
+  krasKey: string
+  krasIp: string
+  krasPort: string
+  krasPath: string
+  sggCode: string
+  vworldKey: string
+  dataPortalKey: string
+} {
+  const vars = getRuntimeEnvVars()
+  const map = getMapConfig()
+  const truthy = (v: string | undefined) => String(v ?? "").trim().toLowerCase() === "true"
+  const falsy = (v: string | undefined) => String(v ?? "").trim().toLowerCase() === "false"
+  return {
+    useKras: truthy(vars.USE_KRAS),
+    useKrasFallback: !falsy(vars.USE_KRAS_FALLBACK),
+    maskPersonalInfo: truthy(vars.MASK_PERSONAL_INFO),
+    krasKey: vars.KRAS_KEY?.trim() ?? vars.KRAS_API_KEY?.trim() ?? "",
+    krasIp: vars.KRAS_IP?.trim() ?? "",
+    krasPort: vars.KRAS_PORT?.trim() ?? "",
+    krasPath: vars.KRAS_PATH?.trim() ?? "",
+    sggCode: vars.SGG_CODE?.trim() ?? "",
+    vworldKey: map.VWORLD_API_KEY,
+    dataPortalKey: map.DATA_PORTAL_KEY,
+  }
+}
+
+function clampInt(value: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(String(value ?? "").trim(), 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, n))
+}
+
+/** 필지분석 외부 API 동시성·청크 (runtime.env, 서버 전용) */
+export function getParcelAnalysisTuning(_params?: unknown): {
+  landChunk: number
+  buildingConcurrency: number
+  linkageConcurrency: number
+} {
+  const vars = getRuntimeEnvVars()
+  return {
+    landChunk: clampInt(vars.PARCEL_ANALYSIS_LAND_CHUNK, 100, 25, 200),
+    buildingConcurrency: clampInt(vars.PARCEL_ANALYSIS_BUILDING_CONCURRENCY, 8, 1, 16),
+    linkageConcurrency: clampInt(vars.PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, 8, 1, 16),
   }
 }
 
@@ -678,4 +728,20 @@ export function saveServiceList(params: { ser: SerConfigItem[] }): { saved: numb
   const serviceListPath = resolveConfigPath("serviceList.config")
   writeFileSync(serviceListPath, content, "utf-8")
   return { saved: normalized.length }
+}
+
+/** runtime.env ENABLED_SYSTEMS 원문 (필지분석 시설 카탈로그 필터) */
+export function getEnabledSystemsRaw(_params?: unknown): string {
+  return (getRuntimeEnvVars().ENABLED_SYSTEMS ?? "").trim()
+}
+
+/** 필지분석 MapCapture WMS 설정 */
+export function getParcelAnalysisMapConfig(_params?: unknown): {
+  geoserverUrl: string
+  workspace: string
+} {
+  const vars = getRuntimeEnvVars()
+  const geoserverUrl = (process.env.GEOSERVER_URL ?? "http://localhost:8080/geoserver").replace(/\/$/, "")
+  const workspace = vars.SYSTEM_NAME?.trim() || process.env.GGNR_PROJECT?.trim() || "ggnr"
+  return { geoserverUrl, workspace }
 }
