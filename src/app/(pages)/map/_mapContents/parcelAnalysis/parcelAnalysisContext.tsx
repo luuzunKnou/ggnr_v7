@@ -13,17 +13,32 @@ import {
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { call } from '@/lib/api';
-import type { BoundaryEmdSelection, DrawTool, ParcelModalStep } from './parcelAnalysisTypes';
+import { toParcelAnalyzeUserError } from '@/lib/parcelAnalyzeUserError';
+import type { BoundaryEmdSelection, DrawTool, EmdRiOption, ParcelModalStep } from './parcelAnalysisTypes';
 import { cloneBoundarySelection } from './parcelAnalysisTypes';
 import { useParcelAnalysisArea } from './useParcelAnalysisArea';
 import { useParcelAnalysisMapZoom } from './useParcelAnalysisMapZoom';
-import { ALL_PARCEL_ITEM_IDS } from './parcelAnalysisItems';
+import { STATIC_PARCEL_ITEM_IDS, type ParcelAnalysisGroupDef } from './parcelAnalysisItems';
+import {
+  buildParcelAnalysisResult,
+  type AnalyzeExtendedResponse,
+} from './buildParcelAnalysisResult';
+import type { MockParcelAnalysisResult } from './mockParcelAnalysisResult';
+import { useParcelAnalysisGroups } from './useParcelAnalysisGroups';
+import { useParcelAnalysisBoundaryCatalog } from './useParcelAnalysisBoundaryCatalog';
+import {
+  buildLargeAreaConfirmMessage,
+  delayForMinElapsed,
+  isLargeParcelAnalysisArea,
+  PARCEL_ANALYZE_MIN_SPINNER_MS,
+} from './parcelAnalysisAnalyzeLimits';
+import { runParcelAnalysisProgressiveLoad } from './parcelAnalysisProgressiveLoad';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { canStartMapDrawInteraction } from '../../_mapComponents/mapDrawInteraction';
 
 export const PARCEL_ANALYSIS_OPENED_KEY = 'parcelAnalysis';
 
-const DEFAULT_SELECTED = new Set(ALL_PARCEL_ITEM_IDS);
+const DEFAULT_SELECTED = new Set(STATIC_PARCEL_ITEM_IDS);
 
 /** 읍면동·리 경계 WKT(5181) 조회 — 실패 시 null */
 async function fetchBoundaryWkt5181(
@@ -68,8 +83,13 @@ type ParcelAnalysisContextValue = {
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
   analyzing: boolean;
+  cancelAnalyze: () => void;
+  enriching: boolean;
+  result: MockParcelAnalysisResult | null;
+  analyzeError: string | null;
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
+  closeResultDrawer: () => void;
   setModalStep: (step: ParcelModalStep) => void;
   exitParcelAnalysis: () => void;
   closeAreaModal: () => void;
@@ -86,6 +106,13 @@ type ParcelAnalysisContextValue = {
   applyingArea: boolean;
   resetArea: () => void;
   handleAnalyze: () => void;
+  analysisGroups: ParcelAnalysisGroupDef[];
+  facilityCatalogLoaded: boolean;
+  mapCaptureConfig: { geoserverUrl: string; workspace: string };
+  boundaryEmdOptions: EmdRiOption[];
+  boundaryEmdLoading: boolean;
+  boundaryEmdError: string | null;
+  reloadBoundaryEmd: () => void;
 };
 
 const ParcelAnalysisContext = createContext<ParcelAnalysisContextValue | null>(null);
@@ -108,6 +135,13 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setBoundaryDraft,
   } = useParcelAnalysisArea();
   const { fitProjectEmdExtent, resetZoomFlag } = useParcelAnalysisMapZoom();
+  const { groups: analysisGroups, allItemIds, facilityLayerMap, catalogLoaded } =
+    useParcelAnalysisGroups(isOpen);
+
+  const [mapCaptureConfig, setMapCaptureConfig] = useState({
+    geoserverUrl: 'http://localhost:8080/geoserver',
+    workspace: 'build_yy',
+  });
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<ParcelModalStep>('choose');
@@ -118,17 +152,46 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(DEFAULT_SELECTED));
   const [analyzing, setAnalyzing] = useState(false);
+  const {
+    emdOptions: boundaryEmdOptions,
+    emdLoading: boundaryEmdLoading,
+    emdError: boundaryEmdError,
+    reloadEmdOptions: reloadBoundaryEmd,
+    syncEmdFromCache: syncBoundaryEmdFromCache,
+  } = useParcelAnalysisBoundaryCatalog(isOpen);
+  const [enriching, setEnriching] = useState(false);
+  const [result, setResult] = useState<MockParcelAnalysisResult | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [panelEngaged, setPanelEngaged] = useState(false);
   const [applyingArea, setApplyingArea] = useState(false);
   const [drawTool, setDrawTool] = useState<DrawTool | null>(null);
   const [drawPhase, setDrawPhase] = useState<'drawing' | 'editing'>('drawing');
   const drawWktRef = useRef<string | null>(null);
+  const analyzeRunIdRef = useRef(0);
+  const analyzingRunIdRef = useRef<number | null>(null);
 
-  const sidePanelOpen = panelEngaged;
+  const sidePanelOpen = isOpen;
+
+  const finishAnalyzingRun = useCallback((runId: number) => {
+    if (analyzingRunIdRef.current === runId) {
+      analyzingRunIdRef.current = null;
+      setAnalyzing(false);
+    }
+  }, []);
+
+  const closeResultDrawer = useCallback(() => {
+    analyzeRunIdRef.current += 1;
+    setEnriching(false);
+    setDrawerOpen(false);
+  }, []);
 
   const exitParcelAnalysis = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
-    current.delete('opened');
+    const raw = current.get('opened')?.split(',').filter(Boolean) ?? [];
+    const next = raw.filter((w) => w !== PARCEL_ANALYSIS_OPENED_KEY);
+    if (next.length > 0) current.set('opened', next.join(','));
+    else current.delete('opened');
+    setModalOpen(false);
     router.push(`/map?${current.toString()}`);
   }, [router, searchParams]);
 
@@ -238,8 +301,16 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setModalOpen(true);
   }, [area, boundaryDraft, setBoundarySessionDraft]);
 
+  const cancelAnalyze = useCallback(() => {
+    analyzeRunIdRef.current += 1;
+    analyzingRunIdRef.current = null;
+    setAnalyzing(false);
+    setEnriching(false);
+  }, []);
+
   // 재설정: 확정 영역을 비우고 곧바로 영역 지정 모달을 다시 연다.
   const resetArea = useCallback(() => {
+    cancelAnalyze();
     clearArea();
     setBoundaryDraft([]);
     setBoundarySessionDraft([]);
@@ -248,15 +319,132 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     drawWktRef.current = null;
     setModalStep('choose');
     setModalOpen(true);
-  }, [clearArea, setBoundaryDraft, setBoundarySessionDraft]);
+    syncBoundaryEmdFromCache();
+  }, [clearArea, setBoundaryDraft, setBoundarySessionDraft, cancelAnalyze, syncBoundaryEmdFromCache]);
 
-  const handleAnalyze = useCallback(() => {
+  const handleAnalyze = useCallback(async () => {
+    if (!area?.wkt) {
+      window.alert('분석 영역을 먼저 지정하세요.');
+      return;
+    }
+    if (isLargeParcelAnalysisArea(area)) {
+      const proceed = window.confirm(buildLargeAreaConfirmMessage(area));
+      if (!proceed) return;
+    }
+
+    const runId = ++analyzeRunIdRef.current;
+    const analyzeStartedAt = Date.now();
+
+    setDrawerOpen(false);
+    analyzingRunIdRef.current = runId;
     setAnalyzing(true);
-    window.setTimeout(() => {
-      setAnalyzing(false);
-      setDrawerOpen(true);
-    }, 400);
-  }, []);
+    setEnriching(false);
+    setAnalyzeError(null);
+    const itemCount = selectedIds.size;
+    let baseData: AnalyzeExtendedResponse | undefined;
+    let openDrawer = false;
+
+    try {
+      const res = await call('', 'POST', {
+        service: 'mapAnalyseService',
+        action: 'analyzeParcels',
+        params: { wkt5181: area.wkt },
+      });
+      if (runId !== analyzeRunIdRef.current) return;
+
+      baseData = (res?.data ?? res) as AnalyzeExtendedResponse | undefined;
+      if (!baseData || baseData.ok === false) {
+        setAnalyzeError(toParcelAnalyzeUserError(baseData?.error || '분석 결과를 가져오지 못했습니다.'));
+        setResult(buildParcelAnalysisResult(null, itemCount));
+      } else {
+        baseData = { ...baseData, wkt5181: area.wkt };
+        setResult(buildParcelAnalysisResult(baseData, itemCount));
+      }
+      openDrawer = true;
+    } catch {
+      if (runId !== analyzeRunIdRef.current) return;
+
+      setAnalyzeError('분석 요청 중 오류가 발생했습니다.');
+      setResult(buildParcelAnalysisResult(null, itemCount));
+      openDrawer = true;
+    } finally {
+      await delayForMinElapsed(analyzeStartedAt, PARCEL_ANALYZE_MIN_SPINNER_MS);
+      finishAnalyzingRun(runId);
+      if (runId === analyzeRunIdRef.current && openDrawer) {
+        setDrawerOpen(true);
+      }
+    }
+
+    if (runId !== analyzeRunIdRef.current || !baseData?.ok) return;
+
+    const totalCount = Number(baseData.parcelCount ?? 0) || 0;
+    const totalAreaSqm = Number(baseData.totalAreaSqm ?? 0) || 0;
+    const needsLandRowPages =
+      selectedIds.has('parcel:land') ||
+      selectedIds.has('building:ledger') ||
+      selectedIds.has('parcel:landUse');
+    let current: AnalyzeExtendedResponse = {
+      ...baseData,
+      wkt5181: area.wkt,
+      landRows: [],
+      landRowsProgress:
+        needsLandRowPages && totalCount > 0
+          ? { loaded: 0, total: totalCount, loading: true }
+          : undefined,
+    };
+    setResult(buildParcelAnalysisResult(current, itemCount));
+
+    const applyPatch = (patch: Partial<AnalyzeExtendedResponse>) => {
+      if (runId !== analyzeRunIdRef.current) return;
+      current = { ...current, ...patch };
+      setResult(buildParcelAnalysisResult(current, itemCount));
+    };
+
+    await runParcelAnalysisProgressiveLoad({
+        runId,
+        isCancelled: () => runId !== analyzeRunIdRef.current,
+        wkt5181: area.wkt,
+        totalCount,
+        totalAreaSqm,
+        selectedIds,
+        facilityLayerMap,
+        onPatch: applyPatch,
+        onEnriching: (active) => {
+          if (runId === analyzeRunIdRef.current) setEnriching(active);
+        },
+      });
+  }, [area, selectedIds, facilityLayerMap]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    void (async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'configService',
+          action: 'getParcelAnalysisMapConfig',
+          params: {},
+        });
+        const data = (res?.data ?? res) as { geoserverUrl?: string; workspace?: string } | undefined;
+        if (data?.geoserverUrl && data?.workspace) {
+          setMapCaptureConfig({
+            geoserverUrl: data.geoserverUrl,
+            workspace: data.workspace,
+          });
+        }
+      } catch {
+        /* 기본값 유지 */
+      }
+    })();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !catalogLoaded) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of allItemIds) next.add(id);
+      return next;
+    });
+  }, [isOpen, catalogLoaded, allItemIds]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -267,14 +455,21 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 진입 시 1회
   }, [isOpen]);
 
-  // 진입 시 1회만 사업 시군구를 기준 배율로 확대(zoomedRef 가드 — 진입/종료 시에만 리셋).
+  // 행정경계 단계 진입 시 캐시에서 즉시 복원
+  useEffect(() => {
+    if (!isOpen || modalStep !== 'boundary') return;
+    syncBoundaryEmdFromCache();
+  }, [isOpen, modalStep, syncBoundaryEmdFromCache]);
+
+  // 진입 시 1회만 사업 시군구를 기준 배율로 확대
   // 취소·다시 그리기·변경/재지정으로 모달을 다시 열어도 현재 지도(확대 상태)를 유지한다.
   useEffect(() => {
     if (!isOpen || !modalOpen) return;
     if (area != null) return;
+    if (boundaryEmdLoading) return;
     void fitProjectEmdExtent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 모달 열림·영역 상태 변화 시
-  }, [isOpen, modalOpen, area]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 모달 열림·영역·목록 로딩 상태 변화 시
+  }, [isOpen, modalOpen, area, boundaryEmdLoading]);
 
   // 영역 지정 모달이 다시 열리면(그리기 세션 밖) 진행 중이던 그리기 세션 종료
   useEffect(() => {
@@ -287,6 +482,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isOpen) return;
+    cancelAnalyze();
     clearArea();
     setModalOpen(false);
     setModalStep('choose');
@@ -295,12 +491,15 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setDrawerOpen(false);
     setSelectedIds(new Set(DEFAULT_SELECTED));
     setAnalyzing(false);
+    setEnriching(false);
+    setResult(null);
+    setAnalyzeError(null);
     setApplyingArea(false);
     setDrawTool(null);
     setDrawPhase('drawing');
     drawWktRef.current = null;
     resetZoomFlag();
-  }, [isOpen, clearArea, resetZoomFlag]);
+  }, [isOpen, clearArea, resetZoomFlag, cancelAnalyze]);
 
   const value = useMemo<ParcelAnalysisContextValue>(
     () => ({
@@ -316,8 +515,13 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       selectedIds,
       setSelectedIds,
       analyzing,
+      cancelAnalyze,
+      enriching,
+      result,
+      analyzeError,
       drawerOpen,
       setDrawerOpen,
+      closeResultDrawer,
       setModalStep,
       exitParcelAnalysis,
       closeAreaModal,
@@ -334,6 +538,13 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       applyingArea,
       resetArea,
       handleAnalyze,
+      analysisGroups,
+      facilityCatalogLoaded: catalogLoaded,
+      mapCaptureConfig,
+      boundaryEmdOptions,
+      boundaryEmdLoading,
+      boundaryEmdError,
+      reloadBoundaryEmd,
     }),
     [
       isOpen,
@@ -346,7 +557,12 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       boundarySessionDraft,
       selectedIds,
       analyzing,
+      cancelAnalyze,
+      enriching,
+      result,
+      analyzeError,
       drawerOpen,
+      closeResultDrawer,
       exitParcelAnalysis,
       closeAreaModal,
       openChangeAreaModal,
@@ -360,6 +576,13 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       applyingArea,
       resetArea,
       handleAnalyze,
+      analysisGroups,
+      catalogLoaded,
+      mapCaptureConfig,
+      boundaryEmdOptions,
+      boundaryEmdLoading,
+      boundaryEmdError,
+      reloadBoundaryEmd,
     ]
   );
 

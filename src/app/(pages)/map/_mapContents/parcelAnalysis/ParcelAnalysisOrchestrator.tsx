@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { X } from 'lucide-react';
 import { useParcelAnalysis } from './parcelAnalysisContext';
 import { useParcelAnalysisResultSections } from './useParcelAnalysisResultSections';
+import { EMPTY_PARCEL_ANALYSIS_RESULT } from './buildParcelAnalysisResult';
 import { useParcelAnalysisSigunguBoundary } from './useParcelAnalysisSigunguBoundary';
 import { useParcelAnalysisAreaLayer } from './useParcelAnalysisAreaLayer';
 import { useParcelAnalysisDraw } from './useParcelAnalysisDraw';
@@ -17,15 +18,18 @@ export function ParcelAnalysisOrchestrator() {
   const {
     isOpen,
     area,
-    panelEngaged,
     modalOpen,
     modalStep,
     boundarySessionDraft,
     setBoundarySessionDraft,
     selectedIds,
     analyzing,
+    cancelAnalyze,
+    enriching,
+    result,
+    analyzeError,
     drawerOpen,
-    setDrawerOpen,
+    closeResultDrawer,
     setModalStep,
     exitParcelAnalysis,
     closeAreaModal,
@@ -37,12 +41,19 @@ export function ParcelAnalysisOrchestrator() {
     drawPhase,
     handleApplyBoundary,
     applyingArea,
+    analysisGroups,
+    mapCaptureConfig,
+    boundaryEmdOptions,
+    boundaryEmdLoading,
+    boundaryEmdError,
+    reloadBoundaryEmd,
   } = useParcelAnalysis();
 
   const selectedIdList = useMemo(() => [...selectedIds], [selectedIds]);
-  const { sections, mockResult } = useParcelAnalysisResultSections(selectedIdList);
+  const { sections } = useParcelAnalysisResultSections(selectedIdList, analysisGroups);
+  const displayResult = result ?? EMPTY_PARCEL_ANALYSIS_RESULT;
 
-  useParcelAnalysisSigunguBoundary(isOpen);
+  useParcelAnalysisSigunguBoundary(isOpen && !boundaryEmdLoading);
   // 새 도형을 다 그리기 전(그리기 단계)까지는 기존 확정 영역을 유지(참고용).
   // 다 그려 편집 단계로 넘어가면 기존 영역을 숨겨 새 도형만 남긴다.
   const hideConfirmedArea = drawTool != null && drawPhase === 'editing';
@@ -56,7 +67,7 @@ export function ParcelAnalysisOrchestrator() {
       <ParcelAnalysisMethodModal
         open={modalOpen}
         step={modalStep}
-        hasConfirmedArea={area != null || panelEngaged}
+        hasConfirmedArea={area != null}
         boundarySessionDraft={boundarySessionDraft}
         onBoundarySessionDraftChange={setBoundarySessionDraft}
         onStepChange={setModalStep}
@@ -65,6 +76,10 @@ export function ParcelAnalysisOrchestrator() {
         onStartDraw={startDraw}
         onApplyBoundary={handleApplyBoundary}
         applyingArea={applyingArea}
+        boundaryEmdOptions={boundaryEmdOptions}
+        boundaryEmdLoading={boundaryEmdLoading}
+        boundaryEmdError={boundaryEmdError}
+        onReloadBoundaryEmd={() => void reloadBoundaryEmd()}
       />
 
       {drawTool && (
@@ -105,14 +120,18 @@ export function ParcelAnalysisOrchestrator() {
         </div>
       )}
 
-      <ParcelAnalysisAnalyzingModal open={analyzing} />
+      <ParcelAnalysisAnalyzingModal open={analyzing && !modalOpen} onCancel={cancelAnalyze} />
 
       <ParcelAnalysisResultModal
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        open={drawerOpen && !modalOpen}
+        onClose={closeResultDrawer}
         sections={sections}
-        mockResult={mockResult}
-        areaSummary={area?.summaryLabel}
+        result={displayResult}
+        analyzeError={analyzeError}
+        enriching={enriching}
+        scopeAreaSqm={area?.areaSqm ?? 0}
+        itemCount={displayResult.itemCount}
+        mapCaptureConfig={mapCaptureConfig}
       />
     </>
   );

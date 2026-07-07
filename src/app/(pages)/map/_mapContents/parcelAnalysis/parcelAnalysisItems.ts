@@ -40,13 +40,17 @@ export const PARCEL_ANALYSIS_GROUPS: ParcelAnalysisGroupDef[] = [
   {
     id: 'facility',
     title: '시설목록',
-    items: [
-      { id: 'facility:sample1', title: '도로시설', description: '1차 mock' },
-      { id: 'facility:sample2', title: '하천시설', description: '1차 mock' },
-    ],
+    items: [],
   },
 ];
 
 export const ALL_PARCEL_ITEM_IDS = PARCEL_ANALYSIS_GROUPS.flatMap((g) =>
+  g.items.map((i) => i.id)
+);
+
+/** 시설목록 제외 고정 그룹 — SSR·수화 전 표시용 */
+export const STATIC_PARCEL_ANALYSIS_GROUPS = PARCEL_ANALYSIS_GROUPS.filter((g) => g.id !== 'facility');
+
+export const STATIC_PARCEL_ITEM_IDS = STATIC_PARCEL_ANALYSIS_GROUPS.flatMap((g) =>
   g.items.map((i) => i.id)
 );
