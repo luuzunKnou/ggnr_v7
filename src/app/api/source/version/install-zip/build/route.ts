@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { resolveRequestClientMeta } from '@/lib/requestClientMeta';
+import { pickClientIpFromRequest, resolveRequestClientMeta } from '@/lib/requestClientMeta';
 import {
   buildInstallZip,
   recordInstallZipHistory,
@@ -23,12 +23,15 @@ export async function POST(req: NextRequest) {
   const clientMeta = resolveRequestClientMeta(req);
   let progressId = '';
   let profile: SourcePackageProfile = 'closed';
+  let clientIp = clientMeta.ip;
   try {
     if (!(await getSessionUsrId())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     profile = parseProfile(body.profile);
+    const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
+    clientIp = pickClientIpFromRequest(req, bodyIp);
     progressId =
       typeof body.progressId === 'string' && body.progressId.trim()
         ? body.progressId.trim()
@@ -39,8 +42,7 @@ export async function POST(req: NextRequest) {
     await recordInstallZipHistory({
       ok: true,
       message: `${result.zipName} (${result.fileCount}건)`,
-      ip: clientMeta.ip,
-      clientHost: clientMeta.clientHost,
+      ip: clientIp,
       profile,
     });
     return NextResponse.json({
@@ -57,8 +59,7 @@ export async function POST(req: NextRequest) {
     await recordInstallZipHistory({
       ok: false,
       message,
-      ip: clientMeta.ip,
-      clientHost: clientMeta.clientHost,
+      ip: clientIp,
       profile,
     });
     return NextResponse.json({ error: message, progressId }, { status: 500 });

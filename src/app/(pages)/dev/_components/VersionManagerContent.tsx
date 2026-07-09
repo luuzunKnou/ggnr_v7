@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { ProgressStagesList } from './ProgressStagesList';
@@ -22,7 +22,9 @@ import {
   type VersionRelayProgress,
   type VersionRelayResult,
 } from '@/lib/sourceVersionClientRelay';
+import { resolveClientMachineIp } from '@/lib/clientMachineIp';
 import { streamDownloadFile } from '@/lib/streamFileDownload';
+import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
 
 const INSTALL_MANUAL_URL =
@@ -64,8 +66,11 @@ export function VersionManagerContent() {
   const rightVersionDetailRef = useRef('');
   const leftPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastLeftPhaseRef = useRef('');
+  const lastLeftLogMessageRef = useRef('');
   const leftAbortRef = useRef<AbortController | null>(null);
   const rightAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => closeDevVersionHistory(), []);
 
   const anyBusy = leftBusy || rightBusy;
 
@@ -103,15 +108,17 @@ export function VersionManagerContent() {
     setLeftStages(buildInstallStagesFromProgress(p, leftInfoDetailRef.current));
     if (p.phase !== lastLeftPhaseRef.current && p.phase !== 'idle') {
       lastLeftPhaseRef.current = p.phase;
-      if (p.phase !== 'scan' || (p.fileCount != null && p.fileCount % 500 < 200)) {
-        pushLeftLog(p.message);
-      }
     }
+    const msg = p.message?.trim();
+    if (!msg || msg === lastLeftLogMessageRef.current) return;
+    lastLeftLogMessageRef.current = msg;
+    pushLeftLog(msg);
   };
 
   const startInstallProgressPoll = (progressId: string) => {
     stopLeftPoll();
     lastLeftPhaseRef.current = '';
+    lastLeftLogMessageRef.current = '';
     const tick = () => {
       void fetch(`/api/source/version/install-zip/progress?id=${encodeURIComponent(progressId)}`, {
         cache: 'no-store',
@@ -135,6 +142,7 @@ export function VersionManagerContent() {
     leftLogRef.current = [];
     leftInfoDetailRef.current = '';
     lastLeftPhaseRef.current = '';
+    lastLeftLogMessageRef.current = '';
     setLeft({ ...emptySideProgress(), message: '서버 정보 확인 중...', pct: 2 });
     setLeftStages(buildInstallBaseStages());
     setLeftStages((prev) => setStageActive(prev, 'info'));
@@ -172,7 +180,11 @@ export function VersionManagerContent() {
       const buildRes = await fetch('/api/source/version/install-zip/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: leftProfile, progressId }),
+        body: JSON.stringify({
+          profile: leftProfile,
+          progressId,
+          clientIp: await resolveClientMachineIp(),
+        }),
         signal,
       });
       const buildJson = (await buildRes.json()) as {
@@ -224,11 +236,16 @@ export function VersionManagerContent() {
 
       await streamDownloadFile(downloadUrl, fileName, (received, total) => {
         const pct = total && total > 0 ? Math.min(99, 90 + Math.round((received / total) * 10)) : 92;
+        const msg = total ? `다운로드 ${formatBytes(received)} / ${formatBytes(total)}` : 'ZIP 다운로드 중...';
         setLeft((p) => ({
           ...p,
-          message: total ? `다운로드 ${formatBytes(received)} / ${formatBytes(total)}` : 'ZIP 다운로드 중...',
+          message: msg,
           pct,
         }));
+        if (msg !== lastLeftLogMessageRef.current) {
+          lastLeftLogMessageRef.current = msg;
+          pushLeftLog(msg);
+        }
         setLeftStages((prev) =>
           patchStages(prev, {
             download: {
@@ -251,6 +268,7 @@ export function VersionManagerContent() {
         error: null,
       });
       pushLeftLog(`다운로드 완료: ${fileName}`);
+      notifyDevVersionHistoryRefresh();
     } catch (e: unknown) {
       const isAbort = isAbortError(e);
       const msg = isAbort ? '사용자가 취소했습니다.' : e instanceof Error ? e.message : String(e);
@@ -339,6 +357,7 @@ export function VersionManagerContent() {
         logs: rightLogRef.current,
         error: null,
       });
+      notifyDevVersionHistoryRefresh();
     } catch (e: unknown) {
       const isAbort = isAbortError(e);
       const msg = isAbort ? '사용자가 취소했습니다.' : e instanceof Error ? e.message : String(e);
@@ -394,7 +413,6 @@ export function VersionManagerContent() {
       <div className="mt-2 rounded border bg-muted/20 px-3 py-2">
         <div className="mb-1 flex items-center justify-between text-xs">
           <span className="flex items-center gap-1">
-            <Loader2 className="h-3 w-3 animate-spin" />
             진행 중
           </span>
           <span className="text-muted-foreground">{pct}%</span>

@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import { resolveClientMachineIp } from '@/lib/clientMachineIp';
+import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 
 type UploadRow = {
@@ -193,6 +195,13 @@ export function SourceCodeUploaderContent() {
   const lastChunkLoggedRef = useRef(0);
   const lastScanLoggedRef = useRef(0);
   const lastPhaseLoggedRef = useRef('');
+
+  useEffect(() => {
+    return () => {
+      closeDevVersionHistory();
+      setDbConfirm(null);
+    };
+  }, []);
 
   const appendLog = (line: string) => {
     const ts = new Date().toLocaleTimeString('ko-KR', { hour12: false });
@@ -395,6 +404,7 @@ export function SourceCodeUploaderContent() {
           progressId,
           includeNodeModules,
           confirmDbMismatch,
+          clientIp: await resolveClientMachineIp(),
         }),
         signal,
       });
@@ -482,6 +492,7 @@ export function SourceCodeUploaderContent() {
       setProgressText(
         `업로드 완료 (성공 ${json.ok ?? 0} / 제외 ${json.skipped ?? 0} / 실패 ${json.fail ?? 0})`
       );
+      notifyDevVersionHistoryRefresh();
     } catch (e: unknown) {
       stopPoll();
       const msg = e instanceof Error ? e.message : String(e);

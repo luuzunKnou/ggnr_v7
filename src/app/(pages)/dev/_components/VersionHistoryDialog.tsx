@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { DevFloatingPanel } from './DevFloatingPanel';
+import { registerDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 
 type HistoryFilter = 'source_upload_only' | 'version_all' | 'install_zip' | 'apply_latest';
 
@@ -93,6 +94,12 @@ export function VersionHistoryDialog({
     if (open) void load();
   }, [open, load]);
 
+  useEffect(() => {
+    return registerDevVersionHistoryRefresh(() => {
+      void load();
+    });
+  }, [load]);
+
   return (
     <DevFloatingPanel open={open} onClose={onClose} title="이력" minHeight="500px">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
@@ -139,8 +146,8 @@ export function VersionHistoryDialog({
                 {row.mvhStatus === 'success' ? '성공' : '실패'}
               </span>
             </div>
-            <div className="truncate text-muted-foreground" title={row.mvhClientHost ?? ''}>
-              {row.mvhClientHost ?? row.mvhIp ?? '-'}
+            <div className="truncate text-muted-foreground" title={row.mvhIp ?? row.mvhClientHost ?? ''}>
+              {row.mvhIp ?? row.mvhClientHost ?? '-'}
             </div>
             <div className="break-all">{row.mvhMessage ?? ''}</div>
           </div>

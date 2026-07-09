@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { resolveRequestClientMeta } from '@/lib/requestClientMeta';
+import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
 import {
   listVersionHistory,
   recordVersionHistory,
@@ -53,11 +53,8 @@ export async function POST(req: NextRequest) {
     const historyType = String(body.historyType ?? '').trim() as VersionHistoryType;
     const status = body.status === 'success' ? 'success' : 'fail';
     const message = typeof body.message === 'string' ? body.message.trim() : '';
-    const clientMeta = resolveRequestClientMeta(req);
-    const clientHost =
-      typeof body.clientHost === 'string' && body.clientHost.trim()
-        ? body.clientHost.trim()
-        : clientMeta.clientHost;
+    const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
+    const ip = pickClientIpFromRequest(req, bodyIp);
 
     if (historyType !== 'source_upload' && historyType !== 'install_zip' && historyType !== 'apply_latest') {
       return NextResponse.json({ error: 'invalid historyType' }, { status: 400 });
@@ -67,8 +64,7 @@ export async function POST(req: NextRequest) {
       historyType,
       status,
       message: message || undefined,
-      ip: clientMeta.ip,
-      clientHost,
+      ip,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error ?? '기록 실패' }, { status: 500 });

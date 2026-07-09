@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
       ok: true,
       message: result.zipName,
       ip: clientMeta.ip,
-      clientHost: clientMeta.clientHost,
       profile,
     });
     const downloadUrl = `/api/source/version/install-zip/download?zipName=${encodeURIComponent(result.zipName)}`;
@@ -37,7 +36,6 @@ export async function GET(req: NextRequest) {
       ok: false,
       message,
       ip: clientMeta.ip,
-      clientHost: clientMeta.clientHost,
       profile,
     });
     return NextResponse.json({ error: message }, { status: 500 });

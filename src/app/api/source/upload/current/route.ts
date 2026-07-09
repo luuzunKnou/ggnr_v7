@@ -5,7 +5,7 @@ import os from 'node:os';
 import { NextRequest, NextResponse } from 'next/server';
 import archiver from 'archiver';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { resolveRequestClientMeta } from '@/lib/requestClientMeta';
+import { pickClientIpFromRequest, resolveRequestClientMeta } from '@/lib/requestClientMeta';
 import {
   classifySourcePath,
   shouldSkipSourceDir,
@@ -159,6 +159,7 @@ export async function POST(req: NextRequest) {
   let remoteStages: RemoteStageReport[] = [];
   let progressId = '';
   const clientMeta = resolveRequestClientMeta(req);
+  let clientIp = clientMeta.ip;
   let includeNodeModules = false;
 
   try {
@@ -168,6 +169,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
+    clientIp = pickClientIpFromRequest(req, bodyIp);
     const modeRaw = typeof body.mode === 'string' ? body.mode.trim() : 'install';
     const mode: SourceUploadMode = modeRaw === 'install' ? 'install' : 'update';
     const dateRaw = typeof body.date === 'string' ? body.date.trim() : '';
@@ -274,8 +277,8 @@ export async function POST(req: NextRequest) {
         historyType: 'source_upload',
         status: 'fail',
         message: `DB 불일치 ${dbCompare.diffCount}건 — 업로드 중단`,
-        ip: clientMeta.ip,
-        clientHost: clientMeta.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+        ip: clientIp,
+        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message: '접속 DB와 스키마 SQL이 다릅니다.',
@@ -302,8 +305,8 @@ export async function POST(req: NextRequest) {
         historyType: 'source_upload',
         status: 'fail',
         message: '업로드 대상 없음',
-        ip: clientMeta.ip,
-        clientHost: clientMeta.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+        ip: clientIp,
+        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message: '업로드 대상 파일이 없습니다.',
@@ -344,8 +347,8 @@ export async function POST(req: NextRequest) {
         historyType: 'source_upload',
         status: 'fail',
         message,
-        ip: clientMeta.ip,
-        clientHost: clientMeta.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+        ip: clientIp,
+        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message,
@@ -402,8 +405,8 @@ export async function POST(req: NextRequest) {
       historyType: 'source_upload',
       status: 'success',
       message: `업로드 완료 — node_modules ${includeNodeModules ? '포함' : '미포함'} — ${npmMsg}`,
-      ip: clientMeta.ip,
-      clientHost: clientMeta.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+      ip: clientIp,
+      clientHost: SOURCE_UPLOAD_REMOTE_BASE,
     });
 
     return NextResponse.json({
@@ -439,8 +442,8 @@ export async function POST(req: NextRequest) {
         historyType: 'source_upload',
         status: 'fail',
         message: err.message,
-        ip: clientMeta.ip,
-        clientHost: clientMeta.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+        ip: clientIp,
+        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message: err.message,
@@ -462,8 +465,8 @@ export async function POST(req: NextRequest) {
       historyType: 'source_upload',
       status: 'fail',
       message,
-      ip: clientMeta.ip,
-      clientHost: clientMeta.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+      ip: clientIp,
+      clientHost: SOURCE_UPLOAD_REMOTE_BASE,
     });
     return uploadErrorResponse({
       message,

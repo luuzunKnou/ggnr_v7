@@ -323,7 +323,6 @@ export async function relayLatestSourceFromGnms(options: {
       historyType: 'apply_latest',
       status: 'success',
       message: `적용 ${completeJson.appliedFiles}건 · 제외 ${completeJson.skippedFiles}건 · ${packageProfile === 'closed' ? '폐쇄망' : '개방망'}`,
-      clientHost: cfg!.gnmsBaseUrl,
     });
 
     return {
@@ -340,7 +339,6 @@ export async function relayLatestSourceFromGnms(options: {
         historyType: 'apply_latest',
         status: 'fail',
         message: msg,
-        clientHost: cfg?.gnmsBaseUrl,
       }).catch(() => {});
     }
     throw e;

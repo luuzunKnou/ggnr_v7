@@ -9,6 +9,7 @@ import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_MENU_GROUPS, DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
 import { VersionHistoryDialog } from "./_components/VersionHistoryDialog"
+import { registerDevVersionHistoryClose } from "./_components/devVersionHistoryBridge"
 import { call } from "@/lib/api"
 import { signOut } from "next-auth/react"
 
@@ -34,6 +35,10 @@ export default function DevPage() {
     const stored = typeof window !== "undefined" ? sessionStorage.getItem(DEV_AUTH_KEY) : null
     setAuthenticated(stored === "1")
   }, [mounted])
+
+  useEffect(() => {
+    return registerDevVersionHistoryClose(() => setHistoryOpen(false))
+  }, [])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
