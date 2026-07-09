@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
-import { VersionHistoryDialog } from './VersionHistoryDialog';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 
 type UploadRow = {
@@ -172,7 +171,6 @@ function buildStagesFromProgress(
 export function SourceCodeUploaderContent() {
   const [mode, setMode] = useState<SourceUploadMode>('install');
   const [includeNodeModules, setIncludeNodeModules] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [dbConfirm, setDbConfirm] = useState<{
     open: boolean;
     diffCount: number;
@@ -528,24 +526,6 @@ export function SourceCodeUploaderContent() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium">소스코드 업로더</div>
-          <p className="text-xs text-muted-foreground">
-            현재 워크스페이스 소스코드를 압축/청크 전송 방식으로 원격 서버에 업로드
-          </p>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
-          이력
-        </Button>
-      </div>
-
-      <VersionHistoryDialog
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        defaultFilter="source_upload_only"
-      />
-
       {dbConfirm?.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded border bg-background p-4 shadow-lg">

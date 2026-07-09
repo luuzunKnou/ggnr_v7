@@ -29,6 +29,8 @@ type AdminConsoleLayoutProps = {
   renderContent: (menuId: string) => ReactNode
   /** 카드 제목 옆 보조 UI (예: 개발자 모드 LAS 샘플 버튼) */
   renderTitleExtra?: (menuId: string) => ReactNode
+  /** 카드 제목 행 우측 액션 (예: 이력 버튼) */
+  renderHeaderActions?: (menuId: string) => ReactNode
   onLogout?: () => void | Promise<void>
   /** 설정 시 서브메뉴별 console:{area}:{menuId} 권한 적용 */
   consoleArea?: ConsoleAreaId
@@ -43,6 +45,7 @@ export function AdminConsoleLayout({
   getDescription,
   renderContent,
   renderTitleExtra,
+  renderHeaderActions,
   onLogout,
   consoleArea,
 }: AdminConsoleLayoutProps) {
@@ -271,9 +274,12 @@ export function AdminConsoleLayout({
         <main className="flex-1 overflow-auto p-4">
           <Card className="rounded-none min-h-full">
             <CardHeader>
-              <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle>{currentLabel}</CardTitle>
-                {renderTitleExtra?.(selectedMenu)}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <CardTitle>{currentLabel}</CardTitle>
+                  {renderTitleExtra?.(selectedMenu)}
+                </div>
+                {renderHeaderActions?.(selectedMenu)}
               </div>
               <CardDescription>{getDescription(selectedMenu)}</CardDescription>
             </CardHeader>

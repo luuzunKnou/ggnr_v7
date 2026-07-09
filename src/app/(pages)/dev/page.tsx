@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_MENU_GROUPS, DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
+import { VersionHistoryDialog } from "./_components/VersionHistoryDialog"
 import { call } from "@/lib/api"
 import { signOut } from "next-auth/react"
 
@@ -21,6 +22,8 @@ export default function DevPage() {
   const [error, setError] = useState("")
   const [sampleGenLoading, setSampleGenLoading] = useState(false)
   const [sampleGenMessage, setSampleGenMessage] = useState("")
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyMenuId, setHistoryMenuId] = useState<"sourceCodeUploader" | "versionManager">("sourceCodeUploader")
 
   useEffect(() => {
     setMounted(true)
@@ -143,6 +146,7 @@ export default function DevPage() {
   }
 
   return (
+    <>
     <AdminConsoleLayout
       title="개발자 모드"
       menus={DEV_SUBMENUS}
@@ -171,8 +175,30 @@ export default function DevPage() {
           </>
         ) : null
       }
+      renderHeaderActions={(menuId) =>
+        menuId === "sourceCodeUploader" || menuId === "versionManager" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setHistoryMenuId(menuId)
+              setHistoryOpen(true)
+            }}
+          >
+            이력
+          </Button>
+        ) : null
+      }
       onLogout={handleLogout}
       consoleArea="dev"
     />
+    <VersionHistoryDialog
+      open={historyOpen}
+      onClose={() => setHistoryOpen(false)}
+      defaultFilter={historyMenuId === "versionManager" ? "version_all" : "source_upload_only"}
+      showFeatureFilter={historyMenuId === "versionManager"}
+    />
+    </>
   )
 }

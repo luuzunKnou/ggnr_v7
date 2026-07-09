@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
     }
 
     const fileName = path.basename(zipPath);
+    const { size } = await fs.stat(zipPath);
     const cleanup = scheduleInstallZipCleanup(zipPath);
     const nodeStream = fsSync.createReadStream(zipPath);
     nodeStream.on('close', cleanup);
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(webStream, {
       headers: {
         'Content-Type': 'application/zip',
+        'Content-Length': String(size),
         'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
         'Cache-Control': 'no-store',
       },
