@@ -1,0 +1,125 @@
+import { getDefaultDbConfig, getSchemaSyncComparison, getTableColumnComparison } from '@/service/dbManagerService';
+
+export type SchemaDiffItem = {
+  kind: 'missing_table' | 'extra_table' | 'missing_column' | 'extra_column' | 'modified_column';
+  schema: string;
+  table: string;
+  column?: string;
+  detail?: string;
+};
+
+export type DbCompareSummary = {
+  ok: boolean;
+  diffCount: number;
+  items: SchemaDiffItem[];
+  summaryText: string;
+  error?: string;
+};
+
+const MAX_ITEMS = 40;
+
+function pushItem(items: SchemaDiffItem[], item: SchemaDiffItem): void {
+  if (items.length < MAX_ITEMS) items.push(item);
+}
+
+export async function compareSchemaWithConnectedDb(): Promise<DbCompareSummary> {
+  const cfg = getDefaultDbConfig();
+  if (!cfg.host || !cfg.database) {
+    return {
+      ok: false,
+      diffCount: 0,
+      items: [],
+      summaryText: 'DB 연결 정보 없음',
+      error: 'DB 연결 정보 없음',
+    };
+  }
+
+  const conn = {
+    host: cfg.host,
+    port: Number(cfg.port) || 5432,
+    database: cfg.database,
+    username: cfg.username ?? '',
+    password: cfg.password ?? '',
+  };
+
+  try {
+    const comparison = await getSchemaSyncComparison(conn);
+    const items: SchemaDiffItem[] = [];
+
+    for (const t of comparison.onlyInSchema) {
+      pushItem(items, {
+        kind: 'missing_table',
+        schema: t.schema,
+        table: t.table,
+        detail: '스키마에만 존재',
+      });
+    }
+    for (const t of comparison.onlyInDb) {
+      if (t.schema === 'public' && t.table === 'spatial_ref_sys') continue;
+      pushItem(items, {
+        kind: 'extra_table',
+        schema: t.schema,
+        table: t.table,
+        detail: 'DB에만 존재',
+      });
+    }
+
+    for (const t of comparison.inBoth) {
+      const colDiff = await getTableColumnComparison({ ...conn, schema: t.schema, table: t.table });
+      if (!colDiff) continue;
+      for (const c of colDiff.toAdd) {
+        pushItem(items, {
+          kind: 'missing_column',
+          schema: t.schema,
+          table: t.table,
+          column: c.name,
+          detail: c.type,
+        });
+      }
+      for (const c of colDiff.toRemove) {
+        pushItem(items, {
+          kind: 'extra_column',
+          schema: t.schema,
+          table: t.table,
+          column: c.name,
+          detail: c.type,
+        });
+      }
+      for (const m of colDiff.toModify) {
+        pushItem(items, {
+          kind: 'modified_column',
+          schema: t.schema,
+          table: t.table,
+          column: m.name,
+          detail: `${m.actual.type} → ${m.defined.type}`,
+        });
+      }
+    }
+
+    const uniqueCount = items.length;
+    const summaryParts: string[] = [];
+    if (comparison.onlyInSchema.length) summaryParts.push(`미생성 테이블 ${comparison.onlyInSchema.length}`);
+    if (comparison.onlyInDb.length) summaryParts.push(`추가 테이블 ${comparison.onlyInDb.length}`);
+    const colIssues = items.filter((i) => i.column).length;
+    if (colIssues) summaryParts.push(`컬럼 차이 ${colIssues}`);
+
+    return {
+      ok: uniqueCount === 0,
+      diffCount: uniqueCount,
+      items,
+      summaryText: uniqueCount === 0 ? '차이 없음' : summaryParts.join(', ') || `차이 ${uniqueCount}건`,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, diffCount: 0, items: [], summaryText: msg, error: msg };
+  }
+}
+
+export function formatDbCompareDialogSummary(summary: DbCompareSummary): string {
+  if (summary.diffCount === 0) return '차이 없음';
+  const lines = summary.items.slice(0, 8).map((i) => {
+    const col = i.column ? `.${i.column}` : '';
+    return `${i.schema}.${i.table}${col} — ${i.detail ?? i.kind}`;
+  });
+  return lines.join('\n');
+}

@@ -1,11 +1,13 @@
 export type UploadProgressPhase =
   | 'idle'
   | 'scan'
+  | 'dbCompare'
   | 'zip'
   | 'preflight'
   | 'init'
   | 'chunk'
   | 'complete'
+  | 'npmInstall'
   | 'finalize'
   | 'done'
   | 'error';
@@ -25,8 +27,14 @@ export type SourceUploadProgress = {
   scanIncluded?: number;
   scanSkipped?: number;
   scanPath?: string;
+  scanDbSql?: number;
+  scanDbReview?: number;
+  scanImages?: number;
+  scanPackages?: number;
+  schemaDbDiffCount?: number;
   zipProcessed?: number;
   zipTotal?: number;
+  includeNodeModules?: boolean;
   updatedAt: number;
   done: boolean;
 };
@@ -110,6 +118,8 @@ function phasePct(
   switch (phase) {
     case 'scan':
       return 10;
+    case 'dbCompare':
+      return 12;
     case 'zip':
       if (zipProcessed != null && zipTotal != null && zipTotal > 0) {
         return clampPct(16 + (zipProcessed / zipTotal) * 6);
@@ -125,7 +135,9 @@ function phasePct(
       }
       return 25;
     case 'complete':
-      return 94;
+      return 90;
+    case 'npmInstall':
+      return 96;
     case 'finalize':
       return 98;
     case 'done':
@@ -140,9 +152,20 @@ function phasePct(
 /** scan walk 중 주기적 갱신 (포함/제외 건수 + 현재 경로) */
 export function setScanProgress(
   progressId: string,
-  params: { included: number; skipped: number; currentPath: string; dirsVisited: number }
+  params: {
+    included: number;
+    skipped: number;
+    currentPath: string;
+    dirsVisited: number;
+    dbSql?: number;
+    dbReview?: number;
+    images?: number;
+    packages?: number;
+    schemaDbDiffCount?: number;
+  }
 ): void {
-  const { included, skipped, currentPath, dirsVisited } = params;
+  const { included, skipped, currentPath, dirsVisited, dbSql, dbReview, images, packages, schemaDbDiffCount } =
+    params;
   const pulse = Math.min(5, Math.floor((included + skipped) / 200));
   const pct = clampPct(5 + pulse);
   const shortPath = currentPath.length > 60 ? `...${currentPath.slice(-57)}` : currentPath;
@@ -151,6 +174,11 @@ export function setScanProgress(
     scanIncluded: included,
     scanSkipped: skipped,
     scanPath: currentPath,
+    scanDbSql: dbSql,
+    scanDbReview: dbReview,
+    scanImages: images,
+    scanPackages: packages,
+    schemaDbDiffCount,
     progressPct: pct,
     message: `스캔 중 (폴더 ${dirsVisited}) — 포함 ${included}, 제외 ${skipped} — ${shortPath || '.'}`,
     done: false,

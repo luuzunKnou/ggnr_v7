@@ -34,6 +34,7 @@ import * as layerRowService from './layerRowService';
 import * as memoService from './memoService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
+import * as mngVersionHistoryService from './mngVersionHistoryService';
 
 export {
   configService,
@@ -69,4 +70,5 @@ export {
   memoService,
   noticeService,
   boardService,
+  mngVersionHistoryService,
 };

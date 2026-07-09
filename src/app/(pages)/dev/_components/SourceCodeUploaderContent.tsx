@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import { VersionHistoryDialog } from './VersionHistoryDialog';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 
 type UploadRow = {
@@ -12,7 +13,7 @@ type UploadRow = {
   error?: string;
 };
 
-type StageId = 'preflight' | 'scan' | 'zip' | 'init' | 'chunk' | 'complete' | 'finalize';
+type StageId = 'preflight' | 'scan' | 'dbCompare' | 'zip' | 'init' | 'chunk' | 'complete' | 'npmInstall' | 'finalize';
 type StageState = 'pending' | 'active' | 'done' | 'error';
 type StageItem = { id: StageId; label: string; state: StageState; detail?: string };
 
@@ -40,28 +41,36 @@ type UploadProgressPayload = {
   scanPath?: string;
   zipProcessed?: number;
   zipTotal?: number;
+  scanDbDiffCount?: number;
   done: boolean;
 };
 
-const BASE_STAGES: StageItem[] = [
-  { id: 'preflight', label: '대상 서버 상태 확인', state: 'pending' },
-  { id: 'scan', label: '소스 스캔/필터링', state: 'pending' },
-  { id: 'zip', label: 'ZIP 압축', state: 'pending' },
-  { id: 'init', label: '원격 업로드 세션 생성', state: 'pending' },
-  { id: 'chunk', label: '청크 전송', state: 'pending' },
-  { id: 'complete', label: '원격 병합/압축 해제', state: 'pending' },
-  { id: 'finalize', label: '결과 집계', state: 'pending' },
-];
-
-const STAGE_ORDER: StageId[] = ['preflight', 'scan', 'zip', 'init', 'chunk', 'complete', 'finalize'];
+function buildBaseStages(includeNodeModules: boolean): StageItem[] {
+  const stages: StageItem[] = [
+    { id: 'preflight', label: '대상 서버 상태 확인', state: 'pending' },
+    { id: 'scan', label: '소스 스캔/필터링', state: 'pending' },
+    { id: 'dbCompare', label: '스키마 SQL ↔ DB 비교', state: 'pending' },
+    { id: 'zip', label: 'ZIP 압축', state: 'pending' },
+    { id: 'init', label: '원격 업로드 세션 생성', state: 'pending' },
+    { id: 'chunk', label: '청크 전송', state: 'pending' },
+    { id: 'complete', label: '원격 병합/압축 해제', state: 'pending' },
+  ];
+  if (!includeNodeModules) {
+    stages.push({ id: 'npmInstall', label: 'npm install', state: 'pending' });
+  }
+  stages.push({ id: 'finalize', label: '결과 집계', state: 'pending' });
+  return stages;
+}
 
 const PHASE_TO_STAGE: Record<string, StageId> = {
   preflight: 'preflight',
   scan: 'scan',
+  dbCompare: 'dbCompare',
   zip: 'zip',
   init: 'init',
   chunk: 'chunk',
   complete: 'complete',
+  npmInstall: 'npmInstall',
   finalize: 'finalize',
   done: 'finalize',
 };
@@ -69,10 +78,12 @@ const PHASE_TO_STAGE: Record<string, StageId> = {
 const STAGE_LABEL: Record<StageId, string> = {
   preflight: '대상 서버 상태 확인 중...',
   scan: '소스 스캔/필터링 중...',
+  dbCompare: '스키마 SQL ↔ DB 비교 중...',
   zip: 'ZIP 압축 중...',
   init: '원격 업로드 세션 생성 중...',
   chunk: 'ZIP 청크 전송 중...',
   complete: '원격 병합/압축 해제 중...',
+  npmInstall: 'npm install 진행 중...',
   finalize: '결과 집계 중...',
 };
 
@@ -118,15 +129,21 @@ function stageDetailForProgress(id: StageId, p: UploadProgressPayload): string |
   return undefined;
 }
 
-function buildStagesFromProgress(p: UploadProgressPayload, preflightDetail?: string): StageItem[] {
+function buildStagesFromProgress(
+  p: UploadProgressPayload,
+  preflightDetail?: string,
+  includeNodeModules = false
+): StageItem[] {
+  const baseStages = buildBaseStages(includeNodeModules);
+  const stageOrder = baseStages.map((s) => s.id);
   const activeStage: StageId =
     p.phase === 'error' && p.failedStage && isStageId(p.failedStage)
       ? p.failedStage
       : (PHASE_TO_STAGE[p.phase] ?? 'scan');
-  const activeIdx = STAGE_ORDER.indexOf(activeStage);
+  const activeIdx = stageOrder.indexOf(activeStage);
 
-  return BASE_STAGES.map((base) => {
-    const idx = STAGE_ORDER.indexOf(base.id);
+  return baseStages.map((base) => {
+    const idx = stageOrder.indexOf(base.id);
 
     if (p.phase === 'error' && base.id === activeStage) {
       return { ...base, state: 'error' as StageState, detail: p.error ?? p.message };
@@ -154,6 +171,14 @@ function buildStagesFromProgress(p: UploadProgressPayload, preflightDetail?: str
 
 export function SourceCodeUploaderContent() {
   const [mode, setMode] = useState<SourceUploadMode>('install');
+  const [includeNodeModules, setIncludeNodeModules] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [dbConfirm, setDbConfirm] = useState<{
+    open: boolean;
+    diffCount: number;
+    summary: string;
+    progressId: string;
+  } | null>(null);
   const [date, setDate] = useState(todayYmd());
   const [changeNote, setChangeNote] = useState('');
   const [rows, setRows] = useState<UploadRow[]>([]);
@@ -161,7 +186,7 @@ export function SourceCodeUploaderContent() {
   const [lastSavedRoot, setLastSavedRoot] = useState<string | null>(null);
   const [progressPct, setProgressPct] = useState(0);
   const [progressText, setProgressText] = useState('대기 중');
-  const [stages, setStages] = useState<StageItem[]>(BASE_STAGES);
+  const [stages, setStages] = useState<StageItem[]>(() => buildBaseStages(false));
   const [liveLogs, setLiveLogs] = useState<string[]>([]);
   const [chunkProgress, setChunkProgress] = useState<{ sent: number; expected: number } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -186,7 +211,7 @@ export function SourceCodeUploaderContent() {
   const applyProgressSnapshot = (p: UploadProgressPayload) => {
     setProgressPct(p.progressPct);
     setProgressText(p.message);
-    setStages(buildStagesFromProgress(p, preflightDetailRef.current));
+    setStages(buildStagesFromProgress(p, preflightDetailRef.current, includeNodeModules));
 
     if (p.sentChunks != null && p.expectedChunks != null && p.expectedChunks > 0) {
       setChunkProgress({ sent: p.sentChunks, expected: p.expectedChunks });
@@ -271,10 +296,11 @@ export function SourceCodeUploaderContent() {
   };
 
   const setStageActive = (id: StageId, detail?: string) => {
-    const idx = STAGE_ORDER.indexOf(id);
+    const stageOrder = buildBaseStages(includeNodeModules).map((s) => s.id);
+    const idx = stageOrder.indexOf(id);
     setStages((prev) =>
       prev.map((s) => {
-        const sidx = STAGE_ORDER.indexOf(s.id);
+        const sidx = stageOrder.indexOf(s.id);
         if (s.id === id) return { ...s, state: 'active', detail: detail ?? s.detail };
         if (sidx < idx && s.state !== 'error') return { ...s, state: 'done' };
         return s;
@@ -289,13 +315,14 @@ export function SourceCodeUploaderContent() {
     return merged;
   };
 
-  const runUploadCurrentWorkspace = async () => {
+  const runUploadCurrentWorkspace = async (confirmDbMismatch = false) => {
     setRows([]);
     setLiveLogs([]);
     setChunkProgress(null);
     setUploading(true);
     setProgressPct(2);
-    setStages(BASE_STAGES);
+    setStages(buildBaseStages(includeNodeModules));
+    setDbConfirm(null);
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
     const progressId = createProgressId();
@@ -362,7 +389,15 @@ export function SourceCodeUploaderContent() {
       const res = await fetch('/api/source/upload/current', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, date, changeNote, skipPreflight: true, progressId }),
+        body: JSON.stringify({
+          mode,
+          date,
+          changeNote,
+          skipPreflight: true,
+          progressId,
+          includeNodeModules,
+          confirmDbMismatch,
+        }),
         signal,
       });
 
@@ -373,6 +408,26 @@ export function SourceCodeUploaderContent() {
         json = (await res.json()) as Record<string, unknown>;
       } catch {
         throw new Error('서버 응답을 읽을 수 없습니다 (연결 끊김 또는 타임아웃)');
+      }
+
+      if (res.status === 409 && json.dbCompareRequired) {
+        const dbCompare = json.dbCompare as { diffCount?: number; dialogSummary?: string } | undefined;
+        setUploading(false);
+        setDbConfirm({
+          open: true,
+          diffCount: dbCompare?.diffCount ?? 0,
+          summary: dbCompare?.dialogSummary ?? String(json.error ?? ''),
+          progressId,
+        });
+        patchStages({
+          dbCompare: {
+            state: 'error',
+            detail: `스키마 SQL ↔ DB 차이 ${dbCompare?.diffCount ?? '?'}건`,
+          },
+        });
+        setProgressText('DB 스키마 불일치 — 확인 필요');
+        appendLog('DB 불일치 — 사용자 확인 대기');
+        return;
       }
 
       mergeServerStages(
@@ -410,10 +465,14 @@ export function SourceCodeUploaderContent() {
 
       patchStages({
         scan: { state: 'done' },
+        dbCompare: { state: 'done' },
         zip: { state: 'done', detail: typeof json.zipName === 'string' ? json.zipName : undefined },
         init: { state: 'done' },
         chunk: { state: 'done', detail: chunkDetail },
         complete: { state: 'done' },
+        npmInstall: includeNodeModules
+          ? { state: 'done', detail: '생략 (node_modules 포함)' }
+          : { state: 'done', detail: '완료' },
         finalize: {
           state: 'done',
           detail: `성공 ${json.ok ?? 0}, 제외 ${json.skipped ?? 0}, 실패 ${json.fail ?? 0}`,
@@ -469,6 +528,60 @@ export function SourceCodeUploaderContent() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">소스코드 업로더</div>
+          <p className="text-xs text-muted-foreground">
+            현재 워크스페이스 소스코드를 압축/청크 전송 방식으로 원격 서버에 업로드
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+          이력
+        </Button>
+      </div>
+
+      <VersionHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        defaultFilter="source_upload_only"
+      />
+
+      {dbConfirm?.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded border bg-background p-4 shadow-lg">
+            <div className="mb-2 text-sm font-medium">접속 DB와 스키마 SQL이 다릅니다.</div>
+            <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">
+              차이 {dbConfirm.diffCount}건
+              {'\n'}
+              {dbConfirm.summary}
+            </p>
+            <p className="mb-3 text-xs">이 상태로 업로드를 계속하시겠습니까?</p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDbConfirm(null);
+                  appendLog('업로드 중단 — DB 스키마 불일치');
+                  setProgressText('업로드 중단 — DB 스키마 불일치');
+                }}
+              >
+                중단
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setDbConfirm(null);
+                  void runUploadCurrentWorkspace(true);
+                }}
+              >
+                계속 진행
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rounded border p-3">
         <div className="mb-2 flex items-center gap-3 text-sm">
           <label className="flex items-center gap-1">
@@ -484,6 +597,26 @@ export function SourceCodeUploaderContent() {
               title="현재는 설치용 업로드만 지원합니다."
             />
             <span title="현재는 설치용 업로드만 지원합니다.">업데이트 (준비 중)</span>
+          </label>
+        </div>
+        <div className="mb-2 flex items-center gap-3 text-sm">
+          <label className="flex items-center gap-1">
+            <input
+              type="radio"
+              checked={includeNodeModules}
+              onChange={() => setIncludeNodeModules(true)}
+              disabled={uploading}
+            />
+            node_modules 포함
+          </label>
+          <label className="flex items-center gap-1">
+            <input
+              type="radio"
+              checked={!includeNodeModules}
+              onChange={() => setIncludeNodeModules(false)}
+              disabled={uploading}
+            />
+            node_modules 미포함
           </label>
         </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
@@ -503,13 +636,13 @@ export function SourceCodeUploaderContent() {
           />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          설치: core/runtime/data 업로드 + <code>node_modules</code> 포함. 전송 전 대상 서버(API) 연결을 확인합니다.
+          설치: core/runtime/data 업로드. 미포함 시 원격 npm install 실행.
         </p>
         <div className="mt-3 flex items-center gap-2">
           <Button
             type="button"
             disabled={uploading}
-            onClick={() => void runUploadCurrentWorkspace()}
+            onClick={() => void runUploadCurrentWorkspace(false)}
             className="gap-1"
           >
             <Upload className="h-4 w-4" />

@@ -60,6 +60,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
+    "undici": "^7.28.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

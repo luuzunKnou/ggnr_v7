@@ -15,6 +15,7 @@ type RelayMeta = {
   requestedBy: string;
   restart: boolean;
   restartMode: RestartMode;
+  includeNodeModules: boolean;
 };
 
 function getRelayTempDir(uploadId: string): string {
@@ -39,8 +40,9 @@ export async function initVersionRelay(params: {
   requestedBy: string;
   restart: boolean;
   restartMode: RestartMode;
+  includeNodeModules?: boolean;
 }): Promise<InitVersionRelayResult> {
-  const { fileName, totalSize, version, requestedBy, restart, restartMode } = params;
+  const { fileName, totalSize, version, requestedBy, restart, restartMode, includeNodeModules = true } = params;
   if (!fileName.trim()) throw new Error('fileName required');
   if (!Number.isFinite(totalSize) || totalSize <= 0) throw new Error('totalSize must be positive');
 
@@ -58,6 +60,7 @@ export async function initVersionRelay(params: {
     requestedBy,
     restart,
     restartMode,
+    includeNodeModules,
   };
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
 
@@ -127,6 +130,7 @@ export async function completeVersionRelay(params: { uploadId: string }) {
     requestedBy: meta.requestedBy,
     restart: meta.restart,
     restartMode: meta.restartMode,
+    includeNodeModules: meta.includeNodeModules,
   });
 
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});

@@ -1,3 +1,7 @@
+import type { SourcePackageProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { includeNodeModulesFromProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
+
 export type RestartMode = 'none' | 'exit' | 'command';
 
 export type VersionRelayPhase = 'latest' | 'download' | 'relay-init' | 'relay-chunk' | 'relay-complete';
@@ -104,16 +108,20 @@ async function readJsonError(res: Response, fallback: string): Promise<string> {
 export async function relayLatestSourceFromGnms(options: {
   restart: boolean;
   restartMode: RestartMode;
+  packageProfile?: SourcePackageProfile;
   onProgress?: (p: VersionRelayProgress) => void;
   onLog?: (line: string) => void;
 }): Promise<VersionRelayResult> {
-  const { restart, restartMode, onProgress, onLog } = options;
+  const { restart, restartMode, packageProfile = 'closed', onProgress, onLog } = options;
+  const includeNodeModules = includeNodeModulesFromProfile(packageProfile);
   const log = (line: string) => onLog?.(line);
+  let cfg: GnmsConfigResponse | undefined;
 
+  try {
   onProgress?.({ phase: 'latest', message: 'GNMS 설정 조회 중...' });
   const cfgRes = await fetch('/api/source/version/gnms-config', { cache: 'no-store' });
-  const cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
-  if (!cfgRes.ok) throw new Error(cfg.error ?? 'GNMS 설정 조회 실패');
+  cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
+  if (!cfgRes.ok) throw new Error(cfg?.error ?? 'GNMS 설정 조회 실패');
 
   log(`GNMS: ${cfg.gnmsBaseUrl}`);
 
@@ -160,7 +168,7 @@ export async function relayLatestSourceFromGnms(options: {
   const initRes = await fetch('/api/source/version/relay/init', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName, totalSize, version, restart, restartMode }),
+    body: JSON.stringify({ fileName, totalSize, version, restart, restartMode, includeNodeModules }),
   });
   const initJson = (await initRes.json().catch(() => ({}))) as {
     uploadId?: string;
@@ -262,10 +270,27 @@ export async function relayLatestSourceFromGnms(options: {
 
   log(`적용 완료: ${completeJson.appliedFiles}건, 재시작: ${completeJson.restart?.message ?? '-'}`);
 
+  await recordVersionHistoryClient({
+    historyType: 'apply_latest',
+    status: 'success',
+    message: `적용 ${completeJson.appliedFiles}건 · 제외 ${completeJson.skippedFiles}건 · ${packageProfile === 'closed' ? '폐쇄망' : '개방망'}`,
+    clientHost: cfg!.gnmsBaseUrl,
+  });
+
   return {
     ...completeJson,
-    gnmsBaseUrl: cfg.gnmsBaseUrl,
-    latestUrl: cfg.latestUrl,
+    gnmsBaseUrl: cfg!.gnmsBaseUrl,
+    latestUrl: cfg!.latestUrl,
     downloadUrl,
   };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await recordVersionHistoryClient({
+      historyType: 'apply_latest',
+      status: 'fail',
+      message: msg,
+      clientHost: cfg?.gnmsBaseUrl,
+    }).catch(() => {});
+    throw e;
+  }
 }

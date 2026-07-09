@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadChunk } from '@/service/uploadService';
+import { saveSourceBundleChunk, readSourceBundleMeta } from '@/service/sourceUploadBundleService';
 import { getSessionUsrId } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
@@ -25,11 +26,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid chunkIndex or totalChunks' }, { status: 400 });
     }
     const buffer = await request.arrayBuffer();
+    const chunkData = Buffer.from(buffer);
+
+    const bundleMeta = await readSourceBundleMeta(uploadId);
+    if (bundleMeta) {
+      await saveSourceBundleChunk({ uploadId, chunkIndex, totalChunks, chunkData });
+      return NextResponse.json({ ok: true });
+    }
+
     await uploadChunk({
       uploadId,
       chunkIndex,
       totalChunks,
-      chunkData: Buffer.from(buffer),
+      chunkData,
       sessionUsrId: usrId,
     });
     return NextResponse.json({ ok: true });
@@ -39,4 +48,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status });
   }
 }
-

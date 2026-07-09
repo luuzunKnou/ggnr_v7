@@ -65,14 +65,21 @@ function normalizeSlashes(value: string): string {
   return value.replace(/\\/g, '/');
 }
 
-function parseExcludePrefixes(): string[] {
+function parseExcludePrefixes(includeNodeModules = true): string[] {
   const raw = process.env.GGNR_SOURCE_UPDATE_EXCLUDE_PREFIXES?.trim();
-  if (!raw) return DEFAULT_EXCLUDE_PREFIXES;
-  return raw
-    .split(',')
-    .map((x) => normalizeSlashes(x.trim()))
-    .filter(Boolean)
-    .map((x) => (x.endsWith('/') ? x : `${x}/`));
+  let prefixes = raw
+    ? raw
+        .split(',')
+        .map((x) => normalizeSlashes(x.trim()))
+        .filter(Boolean)
+        .map((x) => (x.endsWith('/') ? x : `${x}/`))
+    : [...DEFAULT_EXCLUDE_PREFIXES];
+  if (includeNodeModules) {
+    prefixes = prefixes.filter((p) => p !== 'node_modules/');
+  } else if (!prefixes.includes('node_modules/')) {
+    prefixes.push('node_modules/');
+  }
+  return prefixes;
 }
 
 function shouldSkipRelPath(relPath: string, excludePrefixes: string[]): boolean {
@@ -122,6 +129,8 @@ export type ApplySourceZipOptions = {
   requestedBy: string;
   restart: boolean;
   restartMode: RestartMode;
+  /** false=개방망(node_modules 제외), true=폐쇄망(포함) */
+  includeNodeModules?: boolean;
 };
 
 export type ApplySourceZipResult = Omit<
@@ -131,7 +140,7 @@ export type ApplySourceZipResult = Omit<
 
 /** ZIP 파일 경로 기준 워크스페이스 적용 (GNMS fetch 없음) */
 export async function applySourceZipFile(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
-  const { zipPath, version, fileName, requestedBy, restart, restartMode } = options;
+  const { zipPath, version, fileName, requestedBy, restart, restartMode, includeNodeModules = true } = options;
   const workspaceRoot = process.cwd();
   const stat = await fs.stat(zipPath);
   const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
@@ -140,7 +149,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   await extractZip(zipPath, extractDir);
   const extractedRoot = await pickExtractedRoot(extractDir);
 
-  const excludePrefixes = parseExcludePrefixes();
+  const excludePrefixes = parseExcludePrefixes(includeNodeModules);
   const copyResult = await copyRecursive({
     srcRoot: extractedRoot,
     dstRoot: workspaceRoot,

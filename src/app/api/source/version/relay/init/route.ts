@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const version = String(body.version ?? '').trim() || new Date().toISOString();
     const restart = body.restart === true;
     const restartMode = toRestartMode(body.restartMode);
+    const includeNodeModules = body.includeNodeModules !== false;
 
     const result = await initVersionRelay({
       fileName,
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
       requestedBy: String(usrId),
       restart,
       restartMode,
+      includeNodeModules,
     });
 
     return NextResponse.json({ ok: true, ...result });

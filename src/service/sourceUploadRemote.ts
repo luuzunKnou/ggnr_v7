@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import dns from 'node:dns/promises';
+import { Agent } from 'undici';
 import {
   failUploadProgress,
   setChunkProgress,
@@ -163,8 +164,36 @@ async function readResponseJson(res: Response): Promise<{ json: JsonRecord; text
   }
 }
 
-/** complete(병합+압축해제)는 대용량 ZIP에서 5분 이상 걸릴 수 있음 */
+/** complete(병합+압축해제+npm install)는 대용량 ZIP에서 5분 이상 걸릴 수 있음 */
 const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Node fetch(undici) 기본 headersTimeout=300s — complete 응답 대기용 */
+const longRunningFetchAgent = new Agent({
+  headersTimeout: COMPLETE_FETCH_TIMEOUT_MS,
+  bodyTimeout: COMPLETE_FETCH_TIMEOUT_MS,
+});
+
+type UndiciFetchInit = RequestInit & { dispatcher?: Agent };
+
+async function fetchCompleteLongRunning(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), COMPLETE_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      ...init,
+      cache: 'no-store',
+      signal: controller.signal,
+      dispatcher: longRunningFetchAgent,
+    } as UndiciFetchInit);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`요청 시간 초과 (${COMPLETE_FETCH_TIMEOUT_MS}ms)`);
+    }
+    throw new Error(formatFetchCause(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -308,6 +337,7 @@ type UploadZipParams = {
   bundleRoot: string;
   skipPreflight?: boolean;
   progressId?: string;
+  includeNodeModules?: boolean;
 };
 
 export type RemoteUploadResult = {
@@ -334,7 +364,18 @@ function reportFail(progressId: string | undefined, stage: string, message: stri
 }
 
 export async function uploadZipByChunks(params: UploadZipParams): Promise<RemoteUploadResult> {
-  const { zipPath, zipName, totalSize, mode, date, changeNote, bundleRoot, skipPreflight, progressId } = params;
+  const {
+    zipPath,
+    zipName,
+    totalSize,
+    mode,
+    date,
+    changeNote,
+    bundleRoot,
+    skipPreflight,
+    progressId,
+    includeNodeModules = false,
+  } = params;
   const base = getRemoteUploadBase();
   const initUrl = `${base}/init`;
   const chunkUrl = `${base}/chunk`;
@@ -386,6 +427,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     changeNote,
     bundleRoot,
     bundleType: 'sourceZip',
+    includeNodeModules,
   };
 
   let initRes: Response;
@@ -575,8 +617,15 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     setUploadProgressPhase(progressId, 'complete', `청크 ${sentChunks}/${expectedChunks} 완료 — 병합/압축 해제 중...`, {
       sentChunks,
       expectedChunks,
-      progressPct: 94,
+      progressPct: 90,
     });
+    if (!includeNodeModules) {
+      setUploadProgressPhase(progressId, 'npmInstall', '원격 npm install 대기 중...', {
+        sentChunks,
+        expectedChunks,
+        progressPct: 92,
+      });
+    }
   }
 
   try {
@@ -600,11 +649,11 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
 
   let completeRes: Response;
   try {
-    completeRes = await fetchWithTimeout(
-      completeUrl,
-      { method: 'POST', headers, body: JSON.stringify(completeBody) },
-      COMPLETE_FETCH_TIMEOUT_MS
-    );
+    completeRes = await fetchCompleteLongRunning(completeUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(completeBody),
+    });
   } catch (err) {
     const message = `complete 호출 실패: ${formatFetchCause(err)}`;
     stages.push({ id: 'complete', ok: false, error: message });
@@ -658,6 +707,19 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     status: completeRes.status,
     detail: completeDetail || 'complete 성공',
   });
+
+  const npmInstall = completeJson.npmInstall as { ok?: boolean; message?: string; skipped?: boolean } | undefined;
+  if (progressId) {
+    if (npmInstall?.skipped) {
+      setUploadProgressPhase(progressId, 'npmInstall', 'npm install 생략 (node_modules 포함)', {
+        progressPct: 98,
+      });
+    } else if (npmInstall) {
+      setUploadProgressPhase(progressId, 'npmInstall', npmInstall.message ?? 'npm install 완료', {
+        progressPct: npmInstall.ok ? 98 : 95,
+      });
+    }
+  }
 
   return {
     uploadId,
