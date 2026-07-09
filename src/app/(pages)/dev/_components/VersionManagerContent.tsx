@@ -27,7 +27,7 @@ import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
 
 const INSTALL_MANUAL_URL =
   process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
-  'https://www.notion.so/';
+  'https://app.notion.com/p/daeguk/v7-2f2f538d1f598020a2a1dca9fb051e7b?source=copy_link';
 
 type SideProgress = {
   message: string;
@@ -406,11 +406,12 @@ export function VersionManagerContent() {
     );
   };
 
-  const LiveLogs = ({ logs, busy }: { logs: string[]; busy: boolean }) => {
-    if (!busy && logs.length === 0) return null;
-    return (
-      <div className="mt-2 max-h-28 overflow-auto rounded border bg-muted/10 px-3 py-2 font-mono text-[11px]">
-        <div className="mb-1 font-sans font-medium text-muted-foreground">실시간 로그</div>
+  const LiveLogs = ({ logs }: { logs: string[] }) => (
+    <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
+      <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
+        실시간 로그
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px]">
         {logs.length === 0 ? (
           <div className="text-muted-foreground">로그 대기 중...</div>
         ) : (
@@ -421,122 +422,126 @@ export function VersionManagerContent() {
           ))
         )}
       </div>
-    );
-  };
+    </div>
+  );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-2">
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className={`flex min-h-0 flex-col gap-2 rounded border p-3 ${rightBusy ? 'opacity-60' : ''}`}>
-          <div className="mb-2 text-sm font-medium">설치파일 다운로드</div>
-          <p className="mb-2 text-xs text-muted-foreground">현재 서버를 설치용 ZIP으로 받습니다.</p>
-          <a
-            href={INSTALL_MANUAL_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="mb-2 inline-block text-xs text-blue-600 underline"
-          >
-            설치 매뉴얼
-          </a>
-          <ProfileRadios profile={leftProfile} setProfile={setLeftProfile} disabled={anyBusy} />
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={anyBusy}
-              onClick={() => void downloadInstallZip()}
-              className="gap-1"
+    <div className="flex h-full min-h-0 flex-col p-2">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-3 lg:grid-cols-2 lg:grid-rows-1">
+        <div className={`flex min-h-0 flex-col rounded border p-3 ${rightBusy ? 'opacity-60' : ''}`}>
+          <div className="shrink-0 space-y-2">
+            <div className="text-sm font-medium">설치파일 다운로드</div>
+            <p className="text-xs text-muted-foreground">현재 서버를 설치용 ZIP으로 받습니다.</p>
+            <a
+              href={INSTALL_MANUAL_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-xs text-blue-600 underline"
             >
-              {leftBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              설치파일 다운로드
-            </Button>
-            <Button type="button" variant="outline" disabled={!leftBusy} onClick={cancelLeft}>
-              취소
-            </Button>
+              설치 매뉴얼
+            </a>
+            <ProfileRadios profile={leftProfile} setProfile={setLeftProfile} disabled={anyBusy} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={anyBusy}
+                onClick={() => void downloadInstallZip()}
+                className="gap-1"
+              >
+                {leftBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                설치파일 다운로드
+              </Button>
+              <Button type="button" variant="outline" disabled={!leftBusy} onClick={cancelLeft}>
+                취소
+              </Button>
+            </div>
+            {rightBusy && <p className="text-xs text-muted-foreground">대기 — 오른쪽 작업 중</p>}
+            <ProgressBar pct={left.pct} busy={leftBusy} />
+            <p className="text-xs text-muted-foreground">{left.message}</p>
+            {left.error && <p className="text-xs text-red-600">{left.error}</p>}
+            <ProgressStagesList stages={leftStages} />
           </div>
-          {rightBusy && <p className="text-xs text-muted-foreground">대기 — 오른쪽 작업 중</p>}
-          <ProgressBar pct={left.pct} busy={leftBusy} />
-          <p className="text-xs text-muted-foreground">{left.message}</p>
-          {left.error && <p className="text-xs text-red-600">{left.error}</p>}
-          <ProgressStagesList stages={leftStages} />
-          <LiveLogs logs={left.logs} busy={leftBusy} />
+          <LiveLogs logs={left.logs} />
         </div>
 
-        <div className={`flex min-h-0 flex-col gap-2 rounded border p-3 ${leftBusy ? 'opacity-60' : ''}`}>
-          <div className="mb-2 text-sm font-medium">최신 소스 적용</div>
-          <p className="mb-2 text-xs text-muted-foreground">
-            GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
-          </p>
-          <ProfileRadios profile={rightProfile} setProfile={setRightProfile} disabled={anyBusy} />
-          <div className="mt-3 space-y-2 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={restart}
-                disabled={anyBusy}
-                onChange={(e) => setRestart(e.target.checked)}
-              />
-              적용 후 서버 재시작
-            </label>
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <label className="flex items-center gap-1">
+        <div className={`flex min-h-0 flex-col rounded border p-3 ${leftBusy ? 'opacity-60' : ''}`}>
+          <div className="shrink-0 space-y-2">
+            <div className="text-sm font-medium">최신 소스 적용</div>
+            <p className="text-xs text-muted-foreground">
+              GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
+            </p>
+            <ProfileRadios profile={rightProfile} setProfile={setRightProfile} disabled={anyBusy} />
+            <div className="space-y-2 text-sm">
+              <label className="flex items-center gap-2">
                 <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'exit'}
-                  disabled={anyBusy || !restart}
-                  onChange={() => setRestartMode('exit')}
+                  type="checkbox"
+                  checked={restart}
+                  disabled={anyBusy}
+                  onChange={(e) => setRestart(e.target.checked)}
                 />
-                프로세스 종료
+                적용 후 서버 재시작
               </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'command'}
-                  disabled={anyBusy || !restart}
-                  onChange={() => setRestartMode('command')}
-                />
-                명령 실행
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'none'}
-                  disabled={anyBusy || !restart}
-                  onChange={() => setRestartMode('none')}
-                />
-                재시작 안 함
-              </label>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="restartMode"
+                    checked={restartMode === 'exit'}
+                    disabled={anyBusy || !restart}
+                    onChange={() => setRestartMode('exit')}
+                  />
+                  프로세스 종료
+                </label>
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="restartMode"
+                    checked={restartMode === 'command'}
+                    disabled={anyBusy || !restart}
+                    onChange={() => setRestartMode('command')}
+                  />
+                  명령 실행
+                </label>
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="restartMode"
+                    checked={restartMode === 'none'}
+                    disabled={anyBusy || !restart}
+                    onChange={() => setRestartMode('none')}
+                  />
+                  재시작 안 함
+                </label>
+              </div>
             </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button type="button" disabled={anyBusy} onClick={() => void runUpdate()} className="gap-1">
-              {rightBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              최신 소스 전체 적용
-            </Button>
-            <Button type="button" variant="outline" disabled={!rightBusy} onClick={cancelRight}>
-              취소
-            </Button>
-            <Button type="button" variant="outline" disabled title="준비 중">
-              최신소스 일부 적용(준비중)
-            </Button>
-          </div>
-          {leftBusy && <p className="text-xs text-muted-foreground">대기 — 왼쪽 작업 중</p>}
-          <ProgressBar pct={right.pct} busy={rightBusy} />
-          <p className="text-xs text-muted-foreground">{right.message}</p>
-          {right.error && <p className="text-xs text-red-600">{right.error}</p>}
-          <ProgressStagesList stages={rightStages} />
-          <LiveLogs logs={right.logs} busy={rightBusy} />
-          {relayResult && (
-            <div className="rounded border bg-muted/10 p-2 text-xs">
-              <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
-              <div>적용: {relayResult.appliedFiles}건</div>
-              <div>제외: {relayResult.skippedFiles}건</div>
-              <div>재시작: {relayResult.restart?.message}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" disabled={anyBusy} onClick={() => void runUpdate()} className="gap-1">
+                {rightBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                최신 소스 전체 적용
+              </Button>
+              <Button type="button" variant="outline" disabled title="준비 중">
+                최신소스 일부 적용(준비중)
+              </Button>
+              <Button type="button" variant="outline" disabled={!rightBusy} onClick={cancelRight}>
+                취소
+              </Button>
             </div>
-          )}
+            {leftBusy && <p className="text-xs text-muted-foreground">대기 — 왼쪽 작업 중</p>}
+            <ProgressBar pct={right.pct} busy={rightBusy} />
+            <p className="text-xs text-muted-foreground">{right.message}</p>
+            {right.error && <p className="text-xs text-red-600">{right.error}</p>}
+            <ProgressStagesList stages={rightStages} />
+            {relayResult && (
+              <div className="rounded border bg-muted/10 p-2 text-xs">
+                <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
+                <div>적용: {relayResult.appliedFiles}건</div>
+                <div>제외: {relayResult.skippedFiles}건</div>
+                <div>재시작: {relayResult.restart?.message}</div>
+              </div>
+            )}
+          </div>
+          <LiveLogs logs={right.logs} />
         </div>
       </div>
     </div>

@@ -251,7 +251,11 @@ export function renderDevMenuContent(menuId: string): ReactNode {
         </div>
       )
     case "versionManager":
-      return <VersionManagerContent />
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <VersionManagerContent />
+        </div>
+      )
     case "lasFixer":
       return <LasFixerContent />
     case "orthophotoManager":

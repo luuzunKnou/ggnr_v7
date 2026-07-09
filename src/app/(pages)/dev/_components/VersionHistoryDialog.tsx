@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import { DevFloatingPanel } from './DevFloatingPanel';
 
 type HistoryFilter = 'source_upload_only' | 'version_all' | 'install_zip' | 'apply_latest';
 
@@ -63,6 +64,10 @@ export function VersionHistoryDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (open) setFilter(defaultFilter);
+  }, [open, defaultFilter]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -88,69 +93,59 @@ export function VersionHistoryDialog({
     if (open) void load();
   }, [open, load]);
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 pointer-events-none">
-      <div className="pointer-events-auto w-full max-w-xl rounded border bg-background shadow-lg">
-        <div className="flex items-center justify-between border-b px-3 py-2">
-          <span className="text-sm font-medium">이력</span>
-          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-            닫기
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
-          {showFeatureFilter && (
-            <select
-              className="h-8 rounded border px-2"
-              value={filter === 'source_upload_only' ? 'source_upload' : filter}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === 'all') setFilter('version_all');
-                else if (v === 'install_zip' || v === 'apply_latest') setFilter(v);
-                else setFilter('version_all');
-              }}
-            >
-              <option value="all">전체</option>
-              <option value="install_zip">설치파일 다운로드</option>
-              <option value="apply_latest">최신 소스 적용</option>
-            </select>
-          )}
-          <input
-            type="date"
+    <DevFloatingPanel open={open} onClose={onClose} title="이력" minHeight="500px">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
+        {showFeatureFilter && (
+          <select
             className="h-8 rounded border px-2"
-            value={dateYmd}
-            onChange={(e) => setDateYmd(e.target.value)}
-          />
-          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void load()}>
-            검색
-          </Button>
-        </div>
-        <div className="max-h-72 overflow-auto px-3 py-2 text-xs">
-          {loading && <div className="text-muted-foreground">조회 중...</div>}
-          {error && <div className="text-red-600">{error}</div>}
-          {!loading && !error && items.length === 0 && (
-            <div className="text-muted-foreground">이력이 없습니다.</div>
-          )}
-          {items.map((row) => (
-            <div key={row.mvhKey} className="mb-2 border-b pb-2 last:mb-0 last:border-0">
-              <div className="flex flex-wrap gap-2">
-                <span>{formatDt(row.mvhCreateDate)}</span>
-                {showFeatureFilter && (
-                  <span className="text-muted-foreground">{historyTypeLabel(row.mvhHistoryType)}</span>
-                )}
-                <span className={row.mvhStatus === 'success' ? 'text-green-700' : 'text-red-600'}>
-                  {row.mvhStatus === 'success' ? '성공' : '실패'}
-                </span>
-              </div>
-              <div className="text-muted-foreground truncate" title={row.mvhClientHost ?? ''}>
-                {row.mvhClientHost ?? row.mvhIp ?? '-'}
-              </div>
-              <div className="break-all">{row.mvhMessage ?? ''}</div>
-            </div>
-          ))}
-        </div>
+            value={filter === 'source_upload_only' ? 'source_upload' : filter}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === 'all') setFilter('version_all');
+              else if (v === 'install_zip' || v === 'apply_latest') setFilter(v);
+              else setFilter('version_all');
+            }}
+          >
+            <option value="all">전체</option>
+            <option value="install_zip">설치파일 다운로드</option>
+            <option value="apply_latest">최신 소스 적용</option>
+          </select>
+        )}
+        <input
+          type="date"
+          className="h-8 rounded border px-2"
+          value={dateYmd}
+          onChange={(e) => setDateYmd(e.target.value)}
+        />
+        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void load()}>
+          검색
+        </Button>
       </div>
-    </div>
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-2 text-xs">
+        {loading && <div className="text-muted-foreground">조회 중...</div>}
+        {error && <div className="text-red-600">{error}</div>}
+        {!loading && !error && items.length === 0 && (
+          <div className="text-muted-foreground">이력이 없습니다.</div>
+        )}
+        {items.map((row) => (
+          <div key={row.mvhKey} className="mb-2 border-b pb-2 last:mb-0 last:border-0">
+            <div className="flex flex-wrap gap-2">
+              <span>{formatDt(row.mvhCreateDate)}</span>
+              {showFeatureFilter && (
+                <span className="text-muted-foreground">{historyTypeLabel(row.mvhHistoryType)}</span>
+              )}
+              <span className={row.mvhStatus === 'success' ? 'text-green-700' : 'text-red-600'}>
+                {row.mvhStatus === 'success' ? '성공' : '실패'}
+              </span>
+            </div>
+            <div className="truncate text-muted-foreground" title={row.mvhClientHost ?? ''}>
+              {row.mvhClientHost ?? row.mvhIp ?? '-'}
+            </div>
+            <div className="break-all">{row.mvhMessage ?? ''}</div>
+          </div>
+        ))}
+      </div>
+    </DevFloatingPanel>
   );
 }
