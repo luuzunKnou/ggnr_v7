@@ -292,6 +292,8 @@ export async function runPdfToJpgConversion(params: {
     jobName: string;
     convertedPdfCount: number;
     totalJpgCount: number;
+    failedPdfCount: number;
+    failures: { file: string; error: string }[];
   } | null = null;
 
   try {

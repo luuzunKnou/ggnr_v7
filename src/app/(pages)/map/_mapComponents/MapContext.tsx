@@ -266,7 +266,7 @@ export type MapContextValue = {
   /** 좌측 서비스 메뉴 전환 시 증가 — 패널이 레이어를 다시 켜도록 트리거 */
   serviceMenuEpoch: number;
   bumpServiceMenuEpoch: () => void;
-} | null;
+};
 
 export type LayerRowGeomEditState = {
   /** GeoServer 레이어명 (define_table_name) */
@@ -278,7 +278,7 @@ export type LayerRowGeomEditState = {
   mode: 'draw' | 'modify';
 } | null;
 
-const MapContext = createContext<MapContextValue>(null);
+const MapContext = createContext<MapContextValue | null>(null);
 
 export function MapContextProvider({ children }: { children: React.ReactNode }) {
   const mapInstanceRef = useRef<Map | null>(null);
@@ -460,6 +460,6 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   );
 }
 
-export function useMapContext(): MapContextValue {
+export function useMapContext(): MapContextValue | null {
   return useContext(MapContext);
 }
