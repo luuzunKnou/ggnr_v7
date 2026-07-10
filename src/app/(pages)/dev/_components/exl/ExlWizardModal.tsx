@@ -2085,7 +2085,7 @@ export function ExlWizardModal({
                       value={tableEng}
                       onChange={(e) => setTableEng(e.target.value)}
                       className="h-8 w-56 text-sm !text-gray-600"
-                      placeholder="영문_숫자_언더스코어"
+                      placeholder="예: water_facility"
                     />
                   </div>
                 </div>
