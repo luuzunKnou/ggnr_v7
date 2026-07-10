@@ -38,19 +38,17 @@ function historyTypeLabel(type: string): string {
   }
 }
 
-function todayYmd(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 function formatDt(value: string | null): string {
   if (!value) return '-';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString('ko-KR', { hour12: false });
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${y}.${m}.${day} ${h}:${min}:${s}`;
 }
 
 export function VersionHistoryDialog({
@@ -60,13 +58,16 @@ export function VersionHistoryDialog({
   showFeatureFilter = false,
 }: VersionHistoryDialogProps) {
   const [filter, setFilter] = useState<HistoryFilter>(defaultFilter);
-  const [dateYmd, setDateYmd] = useState(todayYmd());
+  const [dateYmd, setDateYmd] = useState('');
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setFilter(defaultFilter);
+    if (open) {
+      setFilter(defaultFilter);
+      setDateYmd('');
+    }
   }, [open, defaultFilter]);
 
   const load = useCallback(async () => {
@@ -75,9 +76,9 @@ export function VersionHistoryDialog({
     try {
       const qs = new URLSearchParams({
         filter,
-        date: dateYmd,
         limit: '50',
       });
+      if (dateYmd.trim()) qs.set('date', dateYmd.trim());
       const res = await fetch(`/api/dev/version-history?${qs.toString()}`, { cache: 'no-store' });
       const json = (await res.json()) as { items?: HistoryItem[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? '조회 실패');

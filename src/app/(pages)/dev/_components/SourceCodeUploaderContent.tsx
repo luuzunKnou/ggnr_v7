@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
-import { resolveClientMachineIp } from '@/lib/clientMachineIp';
+import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 
@@ -195,8 +195,15 @@ export function SourceCodeUploaderContent() {
   const lastChunkLoggedRef = useRef(0);
   const lastScanLoggedRef = useRef(0);
   const lastPhaseLoggedRef = useRef('');
+  const liveLogScrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = liveLogScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [liveLogs]);
 
   useEffect(() => {
+    prefetchClientMachineIp();
     return () => {
       closeDevVersionHistory();
       setDbConfirm(null);
@@ -724,17 +731,21 @@ export function SourceCodeUploaderContent() {
       </div>
 
       {(uploading || liveLogs.length > 0) && (
-        <div className="rounded border bg-muted/10 px-3 py-2 text-xs font-mono max-h-32 overflow-auto">
-          <div className="mb-1 font-sans font-medium text-muted-foreground">실시간 로그</div>
-          {liveLogs.length === 0 ? (
-            <div className="text-muted-foreground">로그 대기 중...</div>
-          ) : (
-            liveLogs.map((line, i) => (
-              <div key={`${i}-${line}`} className="whitespace-pre-wrap break-all leading-relaxed">
-                {line}
-              </div>
-            ))
-          )}
+        <div className="overflow-hidden rounded border bg-muted/10">
+          <div className="border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
+            실시간 로그
+          </div>
+          <div ref={liveLogScrollRef} className="max-h-32 overflow-auto px-3 py-2 font-mono text-[11px]">
+            {liveLogs.length === 0 ? (
+              <div className="text-muted-foreground">로그 대기 중...</div>
+            ) : (
+              liveLogs.map((line, i) => (
+                <div key={`${i}-${line}`} className="whitespace-pre-wrap break-all leading-relaxed">
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 

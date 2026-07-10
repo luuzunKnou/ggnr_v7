@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { pickClientIpFromRequest, resolveRequestClientMeta } from '@/lib/requestClientMeta';
+import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
 import {
   buildInstallZip,
   recordInstallZipHistory,
@@ -20,10 +20,9 @@ function parseProfile(raw: unknown): SourcePackageProfile {
 }
 
 export async function POST(req: NextRequest) {
-  const clientMeta = resolveRequestClientMeta(req);
   let progressId = '';
   let profile: SourcePackageProfile = 'closed';
-  let clientIp = clientMeta.ip;
+  let clientIp: string | undefined;
   try {
     if (!(await getSessionUsrId())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

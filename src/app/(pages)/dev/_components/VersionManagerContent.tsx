@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { ProgressStagesList } from './ProgressStagesList';
@@ -22,7 +22,7 @@ import {
   type VersionRelayProgress,
   type VersionRelayResult,
 } from '@/lib/sourceVersionClientRelay';
-import { resolveClientMachineIp } from '@/lib/clientMachineIp';
+import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { streamDownloadFile } from '@/lib/streamFileDownload';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
@@ -30,6 +30,34 @@ import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
 const INSTALL_MANUAL_URL =
   process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
   'https://app.notion.com/p/daeguk/v7-2f2f538d1f598020a2a1dca9fb051e7b?source=copy_link';
+
+function LiveLogsPanel({ logs }: { logs: string[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logs]);
+
+  return (
+    <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
+      <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
+        실시간 로그
+      </div>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px]">
+        {logs.length === 0 ? (
+          <div className="text-muted-foreground">로그 대기 중...</div>
+        ) : (
+          logs.map((line, i) => (
+            <div key={`${i}-${line}`} className="whitespace-pre-wrap break-all leading-relaxed">
+              {line}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 type SideProgress = {
   message: string;
@@ -46,6 +74,50 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
   return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+/** 스캔·ZIP·다운로드 전체 예상(초) — 파일 수·압축 용량 기준 */
+function estimateInstallZipTotalSeconds(
+  fileCount: number,
+  zipSizeBytes: number | undefined,
+  profile: SourcePackageProfile
+): number {
+  if (fileCount <= 0) return 0;
+  const closed = profile === 'closed';
+  const scanSec = Math.max(2, fileCount * 0.004);
+  const estZipBytes =
+    zipSizeBytes ?? fileCount * (closed ? 100_000 : 6_000);
+  const zipSec = Math.max(
+    3,
+    fileCount * (closed ? 0.018 : 0.01) + (estZipBytes / (1024 * 1024)) * (closed ? 1.8 : 0.9)
+  );
+  const dlBytes = zipSizeBytes ?? estZipBytes * (closed ? 0.28 : 0.4);
+  const downloadSec = Math.max(2, (dlBytes / (1024 * 1024)) * 0.7);
+  return scanSec + zipSec + downloadSec;
+}
+
+function estimateRemainingSeconds(totalSec: number, pct: number | null, startedAtMs: number): number {
+  if (totalSec <= 0) return 0;
+  if (pct != null && pct > 2 && pct < 100) {
+    const elapsed = (Date.now() - startedAtMs) / 1000;
+    const projected = elapsed / (pct / 100);
+    return Math.max(1, projected - elapsed);
+  }
+  if (pct != null && pct >= 0) {
+    return Math.max(1, totalSec * (1 - pct / 100));
+  }
+  return totalSec;
+}
+
+function formatEtaSeconds(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return '1분 미만';
+  const s = Math.ceil(sec);
+  if (s < 60) return `약 ${s}초`;
+  const m = Math.ceil(s / 60);
+  if (m < 60) return `약 ${m}분`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm > 0 ? `약 ${h}시간 ${rm}분` : `약 ${h}시간`;
 }
 
 export function VersionManagerContent() {
@@ -69,8 +141,20 @@ export function VersionManagerContent() {
   const lastLeftLogMessageRef = useRef('');
   const leftAbortRef = useRef<AbortController | null>(null);
   const rightAbortRef = useRef<AbortController | null>(null);
+  const leftStartedAtRef = useRef(0);
+  const [leftInstallMeta, setLeftInstallMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
+  const [leftEtaTick, setLeftEtaTick] = useState(0);
 
   useEffect(() => () => closeDevVersionHistory(), []);
+  useEffect(() => {
+    prefetchClientMachineIp();
+  }, []);
+
+  useEffect(() => {
+    if (!leftBusy) return;
+    const id = setInterval(() => setLeftEtaTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [leftBusy]);
 
   const anyBusy = leftBusy || rightBusy;
 
@@ -105,6 +189,12 @@ export function VersionManagerContent() {
 
   const applyInstallProgress = (p: InstallZipProgress) => {
     setLeft((prev) => ({ ...prev, message: p.message, pct: p.progressPct }));
+    if (p.fileCount != null || p.zipSize != null) {
+      setLeftInstallMeta((prev) => ({
+        fileCount: p.fileCount ?? prev.fileCount,
+        zipSize: p.zipSize ?? prev.zipSize,
+      }));
+    }
     setLeftStages(buildInstallStagesFromProgress(p, leftInfoDetailRef.current));
     if (p.phase !== lastLeftPhaseRef.current && p.phase !== 'idle') {
       lastLeftPhaseRef.current = p.phase;
@@ -141,6 +231,8 @@ export function VersionManagerContent() {
     setLeftBusy(true);
     leftLogRef.current = [];
     leftInfoDetailRef.current = '';
+    leftStartedAtRef.current = Date.now();
+    setLeftInstallMeta({});
     lastLeftPhaseRef.current = '';
     lastLeftLogMessageRef.current = '';
     setLeft({ ...emptySideProgress(), message: '서버 정보 확인 중...', pct: 2 });
@@ -213,6 +305,10 @@ export function VersionManagerContent() {
       }
 
       pushLeftLog(`ZIP 생성 완료: ${buildJson.zipName ?? ''} (${buildJson.fileCount ?? '?'}건)`);
+      setLeftInstallMeta({
+        fileCount: buildJson.fileCount,
+        zipSize: buildJson.zipSize,
+      });
       setLeftStages((prev) =>
         patchStages(setStageActive(prev, 'download'), {
           scan: { state: 'done', detail: `${buildJson.fileCount ?? '?'}건` },
@@ -407,41 +503,43 @@ export function VersionManagerContent() {
     </div>
   );
 
-  const ProgressBar = ({ pct, busy }: { pct: number | null; busy: boolean }) => {
+  const leftEtaLabel = (() => {
+    void leftEtaTick;
+    if (!leftBusy) return null;
+    const fc = leftInstallMeta.fileCount;
+    if (fc == null || fc <= 0) return '산출 중...';
+    const total = estimateInstallZipTotalSeconds(fc, leftInstallMeta.zipSize, leftProfile);
+    const remain = estimateRemainingSeconds(total, left.pct, leftStartedAtRef.current);
+    return formatEtaSeconds(remain);
+  })();
+
+  const ProgressBar = ({
+    pct,
+    busy,
+    etaLabel,
+  }: {
+    pct: number | null;
+    busy: boolean;
+    etaLabel?: string | null;
+  }) => {
     if (!busy || pct == null) return null;
     return (
       <div className="mt-2 rounded border bg-muted/20 px-3 py-2">
-        <div className="mb-1 flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1">
-            진행 중
-          </span>
-          <span className="text-muted-foreground">{pct}%</span>
+        <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+          <span className="flex shrink-0 items-center gap-1">진행 중</span>
+          {etaLabel ? (
+            <span className="truncate text-muted-foreground">(예상 소요 시간: {etaLabel})</span>
+          ) : null}
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+        <div className="flex items-center gap-2">
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="shrink-0 text-muted-foreground">{pct}%</span>
         </div>
       </div>
     );
   };
-
-  const LiveLogs = ({ logs }: { logs: string[] }) => (
-    <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
-      <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
-        실시간 로그
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px]">
-        {logs.length === 0 ? (
-          <div className="text-muted-foreground">로그 대기 중...</div>
-        ) : (
-          logs.map((line, i) => (
-            <div key={`${i}-${line}`} className="whitespace-pre-wrap break-all leading-relaxed">
-              {line}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div className="flex h-full min-h-0 flex-col p-2">
@@ -475,12 +573,12 @@ export function VersionManagerContent() {
               </Button>
             </div>
             {rightBusy && <p className="text-xs text-muted-foreground">대기 — 오른쪽 작업 중</p>}
-            <ProgressBar pct={left.pct} busy={leftBusy} />
+            <ProgressBar pct={left.pct} busy={leftBusy} etaLabel={leftEtaLabel} />
             <p className="text-xs text-muted-foreground">{left.message}</p>
             {left.error && <p className="text-xs text-red-600">{left.error}</p>}
             <ProgressStagesList stages={leftStages} />
           </div>
-          <LiveLogs logs={left.logs} />
+          <LiveLogsPanel logs={left.logs} />
         </div>
 
         <div className={`flex min-h-0 flex-col rounded border p-3 ${leftBusy ? 'opacity-60' : ''}`}>
@@ -559,7 +657,7 @@ export function VersionManagerContent() {
               </div>
             )}
           </div>
-          <LiveLogs logs={right.logs} />
+          <LiveLogsPanel logs={right.logs} />
         </div>
       </div>
     </div>

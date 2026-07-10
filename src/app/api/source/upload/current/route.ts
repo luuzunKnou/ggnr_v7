@@ -5,7 +5,7 @@ import os from 'node:os';
 import { NextRequest, NextResponse } from 'next/server';
 import archiver from 'archiver';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { pickClientIpFromRequest, resolveRequestClientMeta } from '@/lib/requestClientMeta';
+import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
 import {
   classifySourcePath,
   shouldSkipSourceDir,
@@ -158,8 +158,7 @@ export async function POST(req: NextRequest) {
   const localStages: LocalStageReport[] = [];
   let remoteStages: RemoteStageReport[] = [];
   let progressId = '';
-  const clientMeta = resolveRequestClientMeta(req);
-  let clientIp = clientMeta.ip;
+  let clientIp: string | undefined;
   let includeNodeModules = false;
 
   try {
