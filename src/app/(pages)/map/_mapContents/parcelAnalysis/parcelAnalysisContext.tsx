@@ -14,25 +14,27 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { call } from '@/lib/api';
 import { toParcelAnalyzeUserError } from '@/lib/parcelAnalyzeUserError';
-import type { BoundaryEmdSelection, DrawTool, EmdRiOption, ParcelModalStep } from './parcelAnalysisTypes';
-import { cloneBoundarySelection } from './parcelAnalysisTypes';
-import { useParcelAnalysisArea } from './useParcelAnalysisArea';
-import { useParcelAnalysisMapZoom } from './useParcelAnalysisMapZoom';
-import { STATIC_PARCEL_ITEM_IDS, type ParcelAnalysisGroupDef } from './parcelAnalysisItems';
+import type { BoundaryEmdSelection, DrawProjectScope, DrawTool, EmdRiOption, ParcelModalStep } from './parcelAnalysis.types';
+import { cloneBoundarySelection } from './parcelAnalysis.types';
+import {
+  useParcelAnalysisArea,
+  useParcelAnalysisMapZoom,
+  type DrawToolbarMapAnchor,
+} from './ParcelAnalysis.area';
+import { STATIC_PARCEL_ITEM_IDS, type ParcelAnalysisGroupDef, useParcelAnalysisGroups } from './ParcelAnalysis.items';
 import {
   buildParcelAnalysisResult,
+  runParcelAnalysisProgressiveLoad,
   type AnalyzeExtendedResponse,
-} from './buildParcelAnalysisResult';
-import type { MockParcelAnalysisResult } from './mockParcelAnalysisResult';
-import { useParcelAnalysisGroups } from './useParcelAnalysisGroups';
-import { useParcelAnalysisBoundaryCatalog } from './useParcelAnalysisBoundaryCatalog';
+  type MockParcelAnalysisResult,
+} from './parcelAnalysis.result';
+import { useParcelAnalysisBoundaryCatalog } from './ParcelAnalysis.boundary';
 import {
   buildLargeAreaConfirmMessage,
   delayForMinElapsed,
   isLargeParcelAnalysisArea,
   PARCEL_ANALYZE_MIN_SPINNER_MS,
-} from './parcelAnalysisAnalyzeLimits';
-import { runParcelAnalysisProgressiveLoad } from './parcelAnalysisProgressiveLoad';
+} from './parcelAnalysis.types';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { canStartMapDrawInteraction } from '../../_mapComponents/mapDrawInteraction';
 
@@ -52,6 +54,38 @@ async function fetchBoundaryWkt5181(
   } catch {
     return null;
   }
+}
+
+type DrawEmdLookup = { names: string[]; projectScope: DrawProjectScope };
+
+/** 편집 단계(적용 전) 도형의 구역 이탈·대상 미리보기 */
+type DrawPreview = { wkt: string; projectScope: DrawProjectScope; label: string };
+
+/** 그린 도형과 겹치는 읍/면/동·사업 구역 위치 조회 */
+async function fetchDrawEmdLookup(wkt: string): Promise<DrawEmdLookup> {
+  try {
+    const res = await call('', 'POST', {
+      service: 'devTestService',
+      action: 'getEmdNamesByWkt',
+      params: { wkt },
+    });
+    const data = res?.data ?? res;
+    const names = Array.isArray(data?.names) ? data.names.map((n: unknown) => String(n)).filter(Boolean) : [];
+    const rawScope = String(data?.projectScope ?? 'inside');
+    const projectScope: DrawProjectScope =
+      rawScope === 'fully_outside' || rawScope === 'partially_outside' ? rawScope : 'inside';
+    return { names, projectScope };
+  } catch {
+    return { names: [], projectScope: 'inside' };
+  }
+}
+
+/** 겹치는 읍/면/동·구역 위치 → «대상» 라벨 */
+function formatDrawTargetLabel(names: string[], projectScope: DrawProjectScope): string {
+  if (projectScope === 'fully_outside') return '분석 영역 밖';
+  if (names.length === 0) return '직접 그린 영역';
+  if (names.length === 1) return `${names[0]} (일부)`;
+  return `${names[0]} 외 ${names.length - 1}곳 (일부)`;
 }
 
 /** 여러 경계 WKT를 하나로 합침(5181) — 실패 시 null */
@@ -89,7 +123,7 @@ type ParcelAnalysisContextValue = {
   analyzeError: string | null;
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
-  closeResultDrawer: () => void;
+  closeResultDrawer: (options?: { force?: boolean }) => void;
   setModalStep: (step: ParcelModalStep) => void;
   exitParcelAnalysis: () => void;
   closeAreaModal: () => void;
@@ -102,12 +136,25 @@ type ParcelAnalysisContextValue = {
   drawPhase: 'drawing' | 'editing';
   setDrawPhase: (phase: 'drawing' | 'editing') => void;
   drawWktRef: MutableRefObject<string | null>;
+  /** 편집 단계에서 도형 구역 이탈 여부 미리 조회 (drawend·modifyend) */
+  previewDrawArea: (wkt: string) => void;
+  drawPreview: DrawPreview | null;
+  drawPreviewLoading: boolean;
+  /** 편집 단계 플로팅 바 앵커 (도형 bbox 상단 중앙, EPSG:3857) */
+  drawToolbarAnchor: DrawToolbarMapAnchor | null;
+  setDrawToolbarAnchor: (anchor: DrawToolbarMapAnchor | null) => void;
+  clearDrawToolbarAnchor: () => void;
   handleApplyBoundary: (selection: BoundaryEmdSelection[]) => void;
   applyingArea: boolean;
   resetArea: () => void;
   handleAnalyze: () => void;
   analysisGroups: ParcelAnalysisGroupDef[];
   facilityCatalogLoaded: boolean;
+  facilityLayerMap: Record<
+    string,
+    Array<{ layerKey: string; layerKorName: string; geomType: string; schema: string }>
+  >;
+  facilityWmsLayerMap: Record<string, string[]>;
   mapCaptureConfig: { geoserverUrl: string; workspace: string };
   boundaryEmdOptions: EmdRiOption[];
   boundaryEmdLoading: boolean;
@@ -130,17 +177,18 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     area,
     boundaryDraft,
     applyDrawArea,
+    setDrawAreaLookup,
     applyBoundaryArea,
     clearArea,
     setBoundaryDraft,
   } = useParcelAnalysisArea();
   const { fitProjectEmdExtent, resetZoomFlag } = useParcelAnalysisMapZoom();
-  const { groups: analysisGroups, allItemIds, facilityLayerMap, catalogLoaded } =
+  const { groups: analysisGroups, allItemIds, facilityLayerMap, facilityWmsLayerMap, catalogLoaded } =
     useParcelAnalysisGroups(isOpen);
 
   const [mapCaptureConfig, setMapCaptureConfig] = useState({
     geoserverUrl: 'http://localhost:8080/geoserver',
-    workspace: 'build_yy',
+    workspace: 'ggnr',
   });
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -167,10 +215,20 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   const [drawTool, setDrawTool] = useState<DrawTool | null>(null);
   const [drawPhase, setDrawPhase] = useState<'drawing' | 'editing'>('drawing');
   const drawWktRef = useRef<string | null>(null);
+  const [drawPreview, setDrawPreview] = useState<DrawPreview | null>(null);
+  const [drawPreviewLoading, setDrawPreviewLoading] = useState(false);
+  const [drawToolbarAnchor, setDrawToolbarAnchorState] = useState<DrawToolbarMapAnchor | null>(null);
+  const drawPreviewSeqRef = useRef(0);
   const analyzeRunIdRef = useRef(0);
   const analyzingRunIdRef = useRef<number | null>(null);
+  /** 웨일·OS 캡쳐(Alt+1~3 등) 직후 브라우저가 보내는 닫힘 이벤트 차단 */
+  const suppressResultCloseUntilRef = useRef(0);
 
   const sidePanelOpen = isOpen;
+
+  const armResultCloseSuppress = useCallback((ms = 5000) => {
+    suppressResultCloseUntilRef.current = Date.now() + ms;
+  }, []);
 
   const finishAnalyzingRun = useCallback((runId: number) => {
     if (analyzingRunIdRef.current === runId) {
@@ -179,11 +237,45 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const closeResultDrawer = useCallback(() => {
+  const closeResultDrawer = useCallback((options?: { force?: boolean }) => {
+    if (!options?.force && Date.now() < suppressResultCloseUntilRef.current) return;
     analyzeRunIdRef.current += 1;
     setEnriching(false);
     setDrawerOpen(false);
   }, []);
+
+  // 결과 모달 열림 중 캡쳐 단축키·창 blur 시 자동 닫힘 억제 (단축키가 페이지에 안 와도 blur로 arm)
+  useEffect(() => {
+    if (!drawerOpen) return;
+
+    const arm = () => armResultCloseSuppress();
+
+    const onKeyDownCapture = (event: KeyboardEvent) => {
+      if (
+        event.altKey ||
+        event.key === 'Alt' ||
+        event.key === 'PrintScreen' ||
+        (event.ctrlKey && event.shiftKey) ||
+        event.key === 'Control' ||
+        event.key === 'Shift'
+      ) {
+        arm();
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) arm();
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    window.addEventListener('blur', arm);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('keydown', onKeyDownCapture, true);
+      window.removeEventListener('blur', arm);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [drawerOpen, armResultCloseSuppress]);
 
   const exitParcelAnalysis = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
@@ -200,6 +292,32 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setModalStep('choose');
   }, []);
 
+  // 편집 단계 도형의 구역 이탈·대상 미리 조회 (최신 요청만 반영)
+  const clearDrawPreview = useCallback(() => {
+    drawPreviewSeqRef.current += 1;
+    setDrawPreview(null);
+    setDrawPreviewLoading(false);
+  }, []);
+
+  const clearDrawToolbarAnchor = useCallback(() => {
+    setDrawToolbarAnchorState(null);
+  }, []);
+
+  const setDrawToolbarAnchor = useCallback((anchor: DrawToolbarMapAnchor | null) => {
+    setDrawToolbarAnchorState(anchor);
+  }, []);
+
+  const previewDrawArea = useCallback((wkt: string) => {
+    const seq = ++drawPreviewSeqRef.current;
+    setDrawPreviewLoading(true);
+    void (async () => {
+      const { names, projectScope } = await fetchDrawEmdLookup(wkt);
+      if (drawPreviewSeqRef.current !== seq) return; // 더 최신 편집이 있으면 무시
+      setDrawPreview({ wkt, projectScope, label: formatDrawTargetLabel(names, projectScope) });
+      setDrawPreviewLoading(false);
+    })();
+  }, []);
+
   // 도구 선택 → 모달을 닫고 그리기 세션 시작(그리기 단계). 실제 Draw/Modify는 useParcelAnalysisDraw가 처리.
   const startDraw = useCallback(
     (tool: DrawTool) => {
@@ -207,26 +325,32 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return;
       setModalOpen(false);
       drawWktRef.current = null;
+      clearDrawPreview();
+      clearDrawToolbarAnchor();
       setDrawPhase('drawing');
       setDrawTool(tool);
     },
-    [mapContext]
+    [mapContext, clearDrawPreview, clearDrawToolbarAnchor]
   );
 
   // 편집 단계에서 다시 그리기 → 그린 도형을 지우고 그리기 단계로
   const redrawShape = useCallback(() => {
     drawWktRef.current = null;
+    clearDrawPreview();
+    clearDrawToolbarAnchor();
     setDrawPhase('drawing');
-  }, []);
+  }, [clearDrawPreview, clearDrawToolbarAnchor]);
 
   // 그리기/편집 취소 → 세션 종료 후 도형선택 화면으로 복귀(도구 미선택 상태)
   const cancelDraw = useCallback(() => {
     setDrawTool(null);
     setDrawPhase('drawing');
     drawWktRef.current = null;
+    clearDrawPreview();
+    clearDrawToolbarAnchor();
     setModalStep('draw');
     setModalOpen(true);
-  }, []);
+  }, [clearDrawPreview, clearDrawToolbarAnchor]);
 
   // 편집한 도형을 확정 → 5181 WKT로 영역 확정, 패널 오픈
   const confirmDraw = useCallback(() => {
@@ -236,13 +360,24 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       return;
     }
     applyDrawArea(wkt);
+    // 편집 단계에서 이미 조회한 미리보기가 있으면 재사용, 없으면 비동기 조회
+    if (drawPreview && drawPreview.wkt === wkt) {
+      setDrawAreaLookup(wkt, drawPreview.label, drawPreview.projectScope);
+    } else {
+      void (async () => {
+        const { names, projectScope } = await fetchDrawEmdLookup(wkt);
+        setDrawAreaLookup(wkt, formatDrawTargetLabel(names, projectScope), projectScope);
+      })();
+    }
     setDrawTool(null);
     setDrawPhase('drawing');
     drawWktRef.current = null;
+    clearDrawPreview();
+    clearDrawToolbarAnchor();
     setPanelEngaged(true);
     setModalOpen(false);
     setModalStep('choose');
-  }, [applyDrawArea]);
+  }, [applyDrawArea, setDrawAreaLookup, drawPreview, clearDrawPreview, clearDrawToolbarAnchor]);
 
   const handleApplyBoundary = useCallback(
     async (selection: BoundaryEmdSelection[]) => {
@@ -283,6 +418,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   );
 
   const openChangeAreaModal = useCallback(() => {
+    setDrawerOpen(false);
     if (area == null) {
       setBoundarySessionDraft([]);
       setModalStep('choose');
@@ -323,6 +459,10 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
   }, [clearArea, setBoundaryDraft, setBoundarySessionDraft, cancelAnalyze, syncBoundaryEmdFromCache]);
 
   const handleAnalyze = useCallback(async () => {
+    if (drawTool != null) {
+      window.alert('도형을 적용한 뒤 분석하세요.');
+      return;
+    }
     if (!area?.wkt) {
       window.alert('분석 영역을 먼저 지정하세요.');
       return;
@@ -413,7 +553,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
           if (runId === analyzeRunIdRef.current) setEnriching(active);
         },
       });
-  }, [area, selectedIds, facilityLayerMap]);
+  }, [area, selectedIds, facilityLayerMap, drawTool]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -534,12 +674,20 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       drawPhase,
       setDrawPhase,
       drawWktRef,
+      previewDrawArea,
+      drawPreview,
+      drawPreviewLoading,
+      drawToolbarAnchor,
+      setDrawToolbarAnchor,
+      clearDrawToolbarAnchor,
       handleApplyBoundary,
       applyingArea,
       resetArea,
       handleAnalyze,
       analysisGroups,
       facilityCatalogLoaded: catalogLoaded,
+      facilityLayerMap,
+      facilityWmsLayerMap,
       mapCaptureConfig,
       boundaryEmdOptions,
       boundaryEmdLoading,
@@ -572,12 +720,20 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
       confirmDraw,
       drawTool,
       drawPhase,
+      previewDrawArea,
+      drawPreview,
+      drawPreviewLoading,
+      drawToolbarAnchor,
+      setDrawToolbarAnchor,
+      clearDrawToolbarAnchor,
       handleApplyBoundary,
       applyingArea,
       resetArea,
       handleAnalyze,
       analysisGroups,
       catalogLoaded,
+      facilityLayerMap,
+      facilityWmsLayerMap,
       mapCaptureConfig,
       boundaryEmdOptions,
       boundaryEmdLoading,

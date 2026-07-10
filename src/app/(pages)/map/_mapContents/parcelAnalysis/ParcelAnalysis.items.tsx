@@ -2,9 +2,155 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
-import type { ParcelAnalysisGroupDef } from './parcelAnalysisItems';
+
+export type ParcelAnalysisItemDef = {
+  id: string;
+  title: string;
+  description?: string;
+};
+
+export type ParcelAnalysisGroupDef = {
+  id: string;
+  title: string;
+  items: ParcelAnalysisItemDef[];
+};
+
+/** v6 data.json 구조 + 시설목록(1차 mock) */
+export const PARCEL_ANALYSIS_GROUPS: ParcelAnalysisGroupDef[] = [
+  {
+    id: 'basicMap',
+    title: '기본도',
+    items: [
+      { id: 'basicMap:aerial', title: '항공영상', description: '결과보고서 배경 항공영상' },
+      { id: 'basicMap:jijuk', title: '연속지적도', description: '연속지적도·지번주소' },
+      { id: 'basicMap:building', title: '건물 및 건물군' },
+      { id: 'basicMap:road', title: '실폭도로' },
+    ],
+  },
+  {
+    id: 'building',
+    title: '건축물',
+    items: [{ id: 'building:ledger', title: '건축물대장', description: '건축물대장 현황 분석' }],
+  },
+  {
+    id: 'parcel',
+    title: '필지분석',
+    items: [
+      { id: 'parcel:land', title: '토지현황', description: '필지 목록·필지정보' },
+      { id: 'parcel:owner', title: '소유자 현황' },
+      { id: 'parcel:jimok', title: '지목별 현황' },
+      { id: 'parcel:landUse', title: '토지이용계획 현황' },
+    ],
+  },
+  {
+    id: 'facility',
+    title: '시설목록 현황',
+    items: [],
+  },
+];
+
+export const ALL_PARCEL_ITEM_IDS = PARCEL_ANALYSIS_GROUPS.flatMap((g) =>
+  g.items.map((i) => i.id)
+);
+
+/** 시설목록 제외 고정 그룹 — SSR·수화 전 표시용 */
+export const STATIC_PARCEL_ANALYSIS_GROUPS = PARCEL_ANALYSIS_GROUPS.filter((g) => g.id !== 'facility');
+
+export const STATIC_PARCEL_ITEM_IDS = STATIC_PARCEL_ANALYSIS_GROUPS.flatMap((g) =>
+  g.items.map((i) => i.id)
+);
+
+export type FacilityLayerMeta = {
+  layerKey: string;
+  layerKorName: string;
+  geomType: string;
+  schema: string;
+  physicalTableName?: string;
+  rowFilterSql?: string | null;
+};
+
+type FacilityCatalogResponse = {
+  ok?: boolean;
+  groups?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    layers: FacilityLayerMeta[];
+    wmsLayerKeys?: string[];
+  }>;
+};
+
+export function useParcelAnalysisGroups(isOpen: boolean) {
+  const [facilityLayerMap, setFacilityLayerMap] = useState<Record<string, FacilityLayerMeta[]>>({});
+  const [facilityWmsLayerMap, setFacilityWmsLayerMap] = useState<Record<string, string[]>>({});
+  const [facilityItems, setFacilityItems] = useState<ParcelAnalysisGroupDef['items']>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFacilityLayerMap({});
+      setFacilityWmsLayerMap({});
+      setFacilityItems([]);
+      setCatalogLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'mapAnalyseService',
+          action: 'getParcelAnalysisFacilityCatalog',
+          params: {},
+        });
+        const data = (res?.data ?? res) as FacilityCatalogResponse | undefined;
+        if (cancelled) return;
+        const groups = data?.groups ?? [];
+        const layerMap: Record<string, FacilityLayerMeta[]> = {};
+        const wmsMap: Record<string, string[]> = {};
+        const items = groups.map((g) => {
+          const layerCount = g.layers?.length ?? 0;
+          layerMap[g.id] = g.layers ?? [];
+          if (g.wmsLayerKeys?.length) wmsMap[g.id] = g.wmsLayerKeys;
+          const baseTitle = g.title;
+          return {
+            id: g.id,
+            title: layerCount > 0 ? `${baseTitle} (${layerCount}개)` : baseTitle,
+            description: g.description,
+          };
+        });
+        setFacilityLayerMap(layerMap);
+        setFacilityWmsLayerMap(wmsMap);
+        setFacilityItems(items);
+      } catch {
+        if (!cancelled) {
+          setFacilityLayerMap({});
+          setFacilityWmsLayerMap({});
+          setFacilityItems([]);
+        }
+      } finally {
+        if (!cancelled) setCatalogLoaded(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  const groups = useMemo<ParcelAnalysisGroupDef[]>(() => {
+    const staticGroups = PARCEL_ANALYSIS_GROUPS.filter((g) => g.id !== 'facility');
+    if (!facilityItems.length) return staticGroups;
+    return [...staticGroups, { id: 'facility', title: '시설목록 현황', items: facilityItems }];
+  }, [facilityItems]);
+
+  const allItemIds = useMemo(() => groups.flatMap((g) => g.items.map((i) => i.id)), [groups]);
+
+  return { groups, allItemIds, facilityLayerMap, facilityWmsLayerMap, catalogLoaded };
+}
 
 type Props = {
   groups: ParcelAnalysisGroupDef[];
