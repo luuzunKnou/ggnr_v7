@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import {
@@ -9,15 +9,239 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog';
-import type { MockParcelAnalysisResult, ResultSectionDef } from './useParcelAnalysisResultSections';
-import { formatParcelAnalysisHeader } from './buildParcelAnalysisResult';
-import { ParcelAnalysisMapCapture } from './ParcelAnalysisMapCapture';
-import { PARCEL_ANALYSIS_ANALYZING_SPINNER } from './parcelAnalysisSpinner';
-import { BASIC_MAP_TOC_TITLE, basicMapCompositeTitle } from './parcelAnalysisBasicMapConfig';
+import {
+  formatParcelAnalysisHeader,
+  type MockParcelAnalysisResult,
+  type ResultSectionDef,
+} from './parcelAnalysis.result';
+import { ParcelAnalysisMapCapture } from './ParcelAnalysis.mapCapture';
+import {
+  FacilityLayerLegendIcon,
+  ParcelAnalysisThemeMap,
+  PARCEL_ANALYSIS_ANALYZING_SPINNER,
+} from './ParcelAnalysis.themeMap';
+import type { LayerDbGeometryKind } from '@/lib/mapLayerGeometryOrder';
+import { BASIC_MAP_TOC_TITLE, basicMapCompositeTitle } from './parcelAnalysis.mapStyle';
+
+export type ParcelAnalysisTocGroup = {
+  title: string;
+  items: ResultSectionDef[];
+};
+
+type TocNavProps = {
+  groups: ParcelAnalysisTocGroup[];
+  activeSectionId: string | null;
+  activeGroupTitle: string | null;
+  activeNavButtonRef: RefObject<HTMLButtonElement | null>;
+  onScrollToSection: (id: string) => void;
+  resolveItemLabel: (section: ResultSectionDef) => string;
+};
+
+type TocIndicator = {
+  top: number;
+  height: number;
+  visible: boolean;
+};
+
+const HIDDEN_INDICATOR: TocIndicator = { top: 0, height: 0, visible: false };
+
+/** 목차 선택 — 앱 primary(#0F91B2) 기준, 도로대장 목록 패널과 동일 톤 */
+const TOC_ITEM_ACTIVE =
+  'rounded-r-sm bg-primary/[0.11] pl-2.5 font-medium text-slate-900';
+const TOC_ITEM_IDLE = 'rounded-sm pl-2.5 text-slate-600 font-medium hover:bg-primary/5 hover:text-slate-900';
+const TOC_GROUP_ACTIVE = 'text-primary';
+const TOC_GROUP_IDLE = 'text-slate-800 hover:text-primary';
+
+function TocGroupHeading({
+  title,
+  groupActive,
+  onClick,
+}: {
+  title: string;
+  groupActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'text-left text-xs font-semibold',
+        groupActive ? TOC_GROUP_ACTIVE : TOC_GROUP_IDLE
+      )}
+    >
+      · {title}
+    </button>
+  );
+}
+
+function TocItemButton({
+  label,
+  active,
+  onClick,
+  setButtonRef,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  setButtonRef: (el: HTMLButtonElement | null) => void;
+}) {
+  return (
+    <button
+      ref={setButtonRef}
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'block w-full py-1 pr-1 text-left text-xs leading-snug whitespace-nowrap',
+        active ? TOC_ITEM_ACTIVE : TOC_ITEM_IDLE
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function TocGroupItemList({
+  group,
+  activeSectionId,
+  activeNavButtonRef,
+  onScrollToSection,
+  resolveItemLabel,
+}: {
+  group: ParcelAnalysisTocGroup;
+  activeSectionId: string | null;
+  activeNavButtonRef: RefObject<HTMLButtonElement | null>;
+  onScrollToSection: (id: string) => void;
+  resolveItemLabel: (section: ResultSectionDef) => string;
+}) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const itemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [indicator, setIndicator] = useState<TocIndicator>(HIDDEN_INDICATOR);
+
+  const updateIndicator = useCallback(() => {
+    const listEl = listRef.current;
+    if (!listEl || !activeSectionId) {
+      setIndicator(HIDDEN_INDICATOR);
+      return;
+    }
+
+    const activeInGroup = group.items.some((item) => item.id === activeSectionId);
+    if (!activeInGroup) {
+      setIndicator(HIDDEN_INDICATOR);
+      return;
+    }
+
+    const buttonEl = itemRefs.current.get(activeSectionId);
+    if (!buttonEl) {
+      setIndicator(HIDDEN_INDICATOR);
+      return;
+    }
+
+    const listTop = listEl.getBoundingClientRect().top;
+    const buttonRect = buttonEl.getBoundingClientRect();
+    setIndicator({
+      top: buttonRect.top - listTop + listEl.scrollTop,
+      height: buttonRect.height,
+      visible: true,
+    });
+  }, [activeSectionId, group.items]);
+
+  useLayoutEffect(() => {
+    updateIndicator();
+  }, [updateIndicator]);
+
+  useLayoutEffect(() => {
+    const listEl = listRef.current;
+    if (!listEl) return;
+
+    const navEl = listEl.closest('nav');
+    const onScroll = () => updateIndicator();
+    navEl?.addEventListener('scroll', onScroll, { passive: true });
+
+    const observer = new ResizeObserver(() => updateIndicator());
+    observer.observe(listEl);
+    for (const buttonEl of itemRefs.current.values()) {
+      observer.observe(buttonEl);
+    }
+
+    return () => {
+      navEl?.removeEventListener('scroll', onScroll);
+      observer.disconnect();
+    };
+  }, [updateIndicator, group.items]);
+
+  return (
+    <ul ref={listRef} className="relative ml-1.5 mt-1 space-y-0.5 border-l border-slate-200">
+      {indicator.visible ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-0 z-10 w-px -translate-x-1/2 bg-primary transition-[top,height] duration-200 ease-out"
+          style={{ top: indicator.top, height: indicator.height }}
+        />
+      ) : null}
+      {group.items.map((section) => {
+        const active = activeSectionId === section.id;
+        return (
+          <li key={section.id}>
+            <TocItemButton
+              label={resolveItemLabel(section)}
+              active={active}
+              onClick={() => onScrollToSection(section.id)}
+              setButtonRef={(el) => {
+                if (el) {
+                  itemRefs.current.set(section.id, el);
+                  if (active) {
+                    activeNavButtonRef.current = el;
+                  }
+                } else {
+                  itemRefs.current.delete(section.id);
+                }
+              }}
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function ParcelAnalysisResultTocNav({
+  groups,
+  activeSectionId,
+  activeGroupTitle,
+  activeNavButtonRef,
+  onScrollToSection,
+  resolveItemLabel,
+}: TocNavProps) {
+  return (
+    <nav className="min-h-0 w-[200px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-3 py-3">
+      <p className="mb-2 text-xs font-semibold text-slate-800">목차</p>
+      <div className="space-y-3">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <TocGroupHeading
+              title={group.title}
+              groupActive={activeGroupTitle === group.title}
+              onClick={() => onScrollToSection(group.items[0].id)}
+            />
+            <TocGroupItemList
+              group={group}
+              activeSectionId={activeSectionId}
+              activeNavButtonRef={activeNavButtonRef}
+              onScrollToSection={onScrollToSection}
+              resolveItemLabel={resolveItemLabel}
+            />
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 type ResultModalProps = {
   open: boolean;
   onClose: () => void;
+  onForceClose: () => void;
   sections: ResultSectionDef[];
   result: MockParcelAnalysisResult;
   analyzeError?: string | null;
@@ -27,10 +251,7 @@ type ResultModalProps = {
   mapCaptureConfig?: { geoserverUrl: string; workspace: string };
 };
 
-type TocGroup = {
-  title: string;
-  items: ResultSectionDef[];
-};
+type TocGroup = ParcelAnalysisTocGroup;
 
 function groupSectionsForToc(sections: ResultSectionDef[]): TocGroup[] {
   const groups: TocGroup[] = [];
@@ -50,9 +271,13 @@ function groupSectionsForToc(sections: ResultSectionDef[]): TocGroup[] {
 
 const SCROLL_ANCHOR_OFFSET = 8;
 const ACTIVE_SECTION_THRESHOLD = 12;
+/** 모달 바깥 «클릭»과 캡쳐 «드래그» 구분 (px) */
+const OUTSIDE_CLICK_MOVE_THRESHOLD_PX = 5;
 
 const RESULT_MODAL_WIDTH = 'min(1100px, calc(100vw - 2rem))';
 const RESULT_MODAL_HEIGHT = 'min(720px, 85vh)';
+/** 지도 패널·사이드바 위 — body portal 대신 레이아웃 트리에 렌더 (캡쳐 시 유지) */
+const RESULT_MODAL_Z = 'z-[1300]';
 /** 우측 본문 최소 폭 — 모달이 좁아지면 패널 전체 가로 스크롤 */
 const RESULT_CONTENT_MIN_WIDTH_PX = 720;
 /** 건축물대장·토지현황 표 공통 최대 높이 — 초과 시 표 영역 내부 세로 스크롤 */
@@ -62,32 +287,57 @@ const TH_CELL = 'border border-slate-200 px-2 py-1.5 whitespace-nowrap';
 const TH_CELL_STICKY = cn(TH_CELL, 'sticky top-0 z-10 bg-slate-100');
 const TD_CELL = 'border border-slate-200 px-2 py-1.5 whitespace-nowrap';
 
+const FACILITY_STAT_EMPTY = '—';
+
+function facilityStatCell(
+  row: { geomType: string; stats: string; unit: string },
+  target: 'POINT' | 'LINE' | 'POLYGON'
+): string {
+  if (row.geomType !== target) return FACILITY_STAT_EMPTY;
+  return `${row.stats}${row.unit}`;
+}
+
+function sortFacilityStatRows<T extends { layerKorName: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => a.layerKorName.localeCompare(b.layerKorName, 'ko'));
+}
+
 function resolveSectionHeading(section: ResultSectionDef, landSectionTitle: string): string {
   if (section.kind === 'land') return landSectionTitle;
+  if (section.kind === 'facility') {
+    const base = section.itemTitle.replace(/\s*\(\d+개\)\s*$/, '');
+    return `${base} 현황`;
+  }
   return section.itemTitle;
 }
 
 function resolveTocItemLabel(section: ResultSectionDef): string {
   if (section.kind === 'basicMap') return BASIC_MAP_TOC_TITLE;
+  if (section.kind === 'facility') {
+    const base = section.itemTitle.replace(/\s*\(\d+개\)\s*$/, '');
+    return `${base} 현황`;
+  }
   return section.itemTitle;
 }
 
-const SCROLL_CHAIN_EPSILON = 1;
+const SCROLL_CHAIN_EPSILON = 2;
 
-/** 내부 스크롤이 세로 끝에 닿으면 바깥 스크롤 컨테이너로 휠 전달 */
+/** 내부 스크롤이 세로 끝(또는 스크롤 불가)일 때 바깥 스크롤 컨테이너로 휠 전달 */
 function chainVerticalWheelScroll(inner: HTMLElement, outer: HTMLElement, event: WheelEvent) {
-  const { scrollTop, scrollHeight, clientHeight } = inner;
-  if (scrollHeight - clientHeight <= SCROLL_CHAIN_EPSILON) return;
-
   const { deltaY } = event;
   if (deltaY === 0) return;
 
+  const { scrollTop, scrollHeight, clientHeight } = inner;
+  const canScrollInner = scrollHeight - clientHeight > SCROLL_CHAIN_EPSILON;
   const atTop = scrollTop <= SCROLL_CHAIN_EPSILON;
   const atBottom = scrollTop + clientHeight >= scrollHeight - SCROLL_CHAIN_EPSILON;
 
-  if ((deltaY < 0 && atTop) || (deltaY > 0 && atBottom)) {
+  const scrollUpAtTop = deltaY < 0 && (!canScrollInner || atTop);
+  const scrollDownAtBottom = deltaY > 0 && (!canScrollInner || atBottom);
+
+  if (scrollUpAtTop || scrollDownAtBottom) {
+    // 내부가 끝점이면 기본 동작을 막고 바깥(본문) 스크롤로 직접 넘긴다.
     event.preventDefault();
-    outer.scrollTop += deltaY;
+    outer.scrollBy({ top: deltaY });
   }
 }
 
@@ -147,7 +397,7 @@ function ResultTable({
       className="flex w-full max-w-full flex-col overflow-hidden"
       style={{ maxHeight: `${maxHeight}px` }}
     >
-      <div ref={innerRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={innerRef} className="min-h-0 flex-1 overflow-auto overscroll-contain">
         {table}
       </div>
       {footer ? (
@@ -223,18 +473,27 @@ function resolveActiveSectionId(root: HTMLElement, sections: ResultSectionDef[])
 export function ParcelAnalysisResultModal({
   open,
   onClose,
+  onForceClose,
   sections,
   result,
   analyzeError,
   enriching = false,
   scopeAreaSqm = 0,
   itemCount = 0,
-  mapCaptureConfig = { geoserverUrl: 'http://localhost:8080/geoserver', workspace: 'build_yy' },
+  mapCaptureConfig = { geoserverUrl: 'http://localhost:8080/geoserver', workspace: 'ggnr' },
 }: ResultModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionsRef = useRef(sections);
   const activeNavButtonRef = useRef<HTMLButtonElement>(null);
+  const pendingTocScrollTargetRef = useRef<string | null>(null);
+  const skipTocScrollIntoViewRef = useRef(false);
+  const tocScrollUnlockTimerRef = useRef<number | null>(null);
+  const backdropPointerSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const tocGroups = useMemo(() => groupSectionsForToc(sections), [sections]);
   const activeGroupTitle = useMemo(
     () => sections.find((section) => section.id === activeSectionId)?.groupTitle ?? null,
@@ -256,11 +515,18 @@ export function ParcelAnalysisResultModal({
     return `토지현황 [ ${result.parcelCount}개 필지, 총면적 ${areaText} ]`;
   }, [result.parcelCount, result.totalAreaSqm]);
 
-  sectionsRef.current = sections;
+  useEffect(() => {
+    sectionsRef.current = sections;
+  }, [sections]);
 
   const syncActiveSectionFromScroll = useCallback(() => {
     const root = scrollRef.current;
     if (!root) return;
+    const lockedId = pendingTocScrollTargetRef.current;
+    if (lockedId) {
+      setActiveSectionId((prev) => (prev === lockedId ? prev : lockedId));
+      return;
+    }
     const nextId = resolveActiveSectionId(root, sectionsRef.current);
     if (!nextId) return;
     setActiveSectionId((prev) => (prev === nextId ? prev : nextId));
@@ -269,14 +535,21 @@ export function ParcelAnalysisResultModal({
   const scrollToSection = useCallback((id: string) => {
     const root = scrollRef.current;
     if (!root) return;
-    scrollRootToSection(root, id, sectionsRef.current, 'smooth');
+    if (tocScrollUnlockTimerRef.current != null) {
+      window.clearTimeout(tocScrollUnlockTimerRef.current);
+      tocScrollUnlockTimerRef.current = null;
+    }
+    pendingTocScrollTargetRef.current = id;
+    skipTocScrollIntoViewRef.current = true;
     setActiveSectionId(id);
+    scrollRootToSection(root, id, sectionsRef.current, 'smooth');
   }, []);
 
   useEffect(() => {
     if (!open) return;
     if (sections.length > 0 && !sections.some((s) => s.id === activeSectionId)) {
-      setActiveSectionId(sections[0].id);
+      const firstId = sections[0].id;
+      queueMicrotask(() => setActiveSectionId(firstId));
     }
   }, [open, sections, activeSectionId]);
 
@@ -296,6 +569,19 @@ export function ParcelAnalysisResultModal({
     // 네이티브 스크롤 + CSS 근접 스냅에 맡기고, 스크롤 위치에 따라 활성 목차만 갱신한다.
     const handleScroll = () => {
       if (!root || cancelled) return;
+      if (pendingTocScrollTargetRef.current) {
+        const lockedId = pendingTocScrollTargetRef.current;
+        setActiveSectionId((prev) => (prev === lockedId ? prev : lockedId));
+        if (tocScrollUnlockTimerRef.current != null) {
+          window.clearTimeout(tocScrollUnlockTimerRef.current);
+        }
+        tocScrollUnlockTimerRef.current = window.setTimeout(() => {
+          pendingTocScrollTargetRef.current = null;
+          tocScrollUnlockTimerRef.current = null;
+          syncActiveSectionFromScroll();
+        }, 150);
+        return;
+      }
       syncActiveSectionFromScroll();
     };
 
@@ -313,6 +599,10 @@ export function ParcelAnalysisResultModal({
 
     return () => {
       cancelled = true;
+      if (tocScrollUnlockTimerRef.current != null) {
+        window.clearTimeout(tocScrollUnlockTimerRef.current);
+        tocScrollUnlockTimerRef.current = null;
+      }
       if (root) {
         root.removeEventListener('scroll', handleScroll);
       }
@@ -321,23 +611,91 @@ export function ParcelAnalysisResultModal({
 
   useEffect(() => {
     if (!open) return;
+    if (skipTocScrollIntoViewRef.current) {
+      skipTocScrollIntoViewRef.current = false;
+      return;
+    }
     activeNavButtonRef.current?.scrollIntoView({ block: 'nearest' });
   }, [open, activeSectionId]);
 
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (!nextOpen) onClose();
+  /** 배경(어두운 영역) 짧은 클릭 → guarded onClose (캡쳐 중에는 context에서 차단) */
+  const handleBackdropPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) return;
+
+      backdropPointerSessionRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+      };
+
+      const onPointerUp = (up: PointerEvent) => {
+        const session = backdropPointerSessionRef.current;
+        if (!session || up.pointerId !== session.pointerId) return;
+        backdropPointerSessionRef.current = null;
+        document.removeEventListener('pointerup', onPointerUp);
+        document.removeEventListener('pointercancel', onPointerCancel);
+
+        const dx = Math.abs(up.clientX - session.startX);
+        const dy = Math.abs(up.clientY - session.startY);
+        if (
+          dx <= OUTSIDE_CLICK_MOVE_THRESHOLD_PX &&
+          dy <= OUTSIDE_CLICK_MOVE_THRESHOLD_PX
+        ) {
+          onClose();
+        }
+      };
+
+      const onPointerCancel = (up: PointerEvent) => {
+        if (backdropPointerSessionRef.current?.pointerId === up.pointerId) {
+          backdropPointerSessionRef.current = null;
+        }
+        document.removeEventListener('pointerup', onPointerUp);
+        document.removeEventListener('pointercancel', onPointerCancel);
+      };
+
+      document.addEventListener('pointerup', onPointerUp);
+      document.addEventListener('pointercancel', onPointerCancel);
     },
     [onClose]
   );
 
+  useEffect(() => {
+    if (open) return;
+    backdropPointerSessionRef.current = null;
+  }, [open]);
+
+  /** 결과 모달 동안 body 세로 스크롤 잠금 — 캡처·콘텐츠 높이 변화로 바깥 스크롤 깜빡임 방지 */
+  useEffect(() => {
+    if (!open) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, [open]);
+
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        showCloseButton={false}
+    <div className={cn('pointer-events-none fixed inset-0', RESULT_MODAL_Z)}>
+      <div
+        className="pointer-events-auto absolute inset-0 bg-black/50"
+        aria-hidden
+        onPointerDown={handleBackdropPointerDown}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parcel-analysis-result-title"
         className={cn(
-          '!flex min-h-0 flex-col gap-0 overflow-hidden',
-          'rounded-[5px] border-slate-200/80 p-0 shadow-xl sm:!max-w-none'
+          'bg-background pointer-events-auto fixed top-[50%] left-[50%] flex min-h-0 -translate-x-1/2 -translate-y-1/2 flex-col gap-0 overflow-hidden',
+          'rounded-[5px] border border-slate-200/80 p-0 shadow-xl outline-none'
         )}
         style={{
           width: RESULT_MODAL_WIDTH,
@@ -345,16 +703,19 @@ export function ParcelAnalysisResultModal({
           height: RESULT_MODAL_HEIGHT,
           maxHeight: RESULT_MODAL_HEIGHT,
         }}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-base font-semibold text-slate-900">○ 공간분석 결과</DialogTitle>
-            <DialogDescription className="mt-0.5 truncate text-xs text-slate-500">
+            <h2 id="parcel-analysis-result-title" className="text-base font-semibold text-slate-900">
+              ○ 공간분석 결과
+            </h2>
+            <p className="mt-0.5 truncate text-xs text-slate-500">
               [ {headerBracket} ] · 항목 {itemCount}
-            </DialogDescription>
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" size="sm" onClick={onForceClose}>
               닫기
             </Button>
           </div>
@@ -374,50 +735,14 @@ export function ParcelAnalysisResultModal({
         ) : null}
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <nav className="min-h-0 w-[200px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-3 py-3">
-            <p className="mb-2 text-xs font-semibold text-slate-800">목차</p>
-            <div className="space-y-3">
-              {tocGroups.map((group) => {
-                const groupActive = activeGroupTitle === group.title;
-                return (
-                <div key={group.title}>
-                  <button
-                    type="button"
-                    onClick={() => scrollToSection(group.items[0].id)}
-                    className={cn(
-                      'text-left text-xs font-semibold transition-colors',
-                      groupActive ? 'text-blue-700' : 'text-slate-800 hover:text-blue-700'
-                    )}
-                  >
-                    · {group.title}
-                  </button>
-                  <ul className="ml-1.5 mt-1 space-y-0.5 border-l border-slate-200 pl-2">
-                    {group.items.map((s) => {
-                      const active = activeSectionId === s.id;
-                      return (
-                        <li key={s.id}>
-                          <button
-                            ref={active ? activeNavButtonRef : undefined}
-                            type="button"
-                            onClick={() => scrollToSection(s.id)}
-                            className={cn(
-                              'block w-full rounded-sm py-1 pr-1 text-left text-xs leading-snug transition-colors whitespace-nowrap',
-                              active
-                                ? 'bg-blue-50 font-semibold text-blue-700'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                            )}
-                          >
-                            {resolveTocItemLabel(s)}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-              })}
-            </div>
-          </nav>
+          <ParcelAnalysisResultTocNav
+            groups={tocGroups}
+            activeSectionId={activeSectionId}
+            activeGroupTitle={activeGroupTitle}
+            activeNavButtonRef={activeNavButtonRef}
+            onScrollToSection={scrollToSection}
+            resolveItemLabel={resolveTocItemLabel}
+          />
 
           <div
             ref={scrollRef}
@@ -432,7 +757,7 @@ export function ParcelAnalysisResultModal({
                 key={s.id}
                 id={s.id}
                 data-section-id={s.id}
-                className="px-3 pb-6 last:pb-3 sm:px-4"
+                className="px-3 pt-3 pb-6 last:pb-3 sm:px-4"
               >
                 <div className="mb-2 snap-start border-b border-slate-200 pb-1.5">
                   <h3 className="text-sm font-bold text-slate-900">
@@ -457,8 +782,8 @@ export function ParcelAnalysisResultModal({
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
@@ -626,7 +951,7 @@ function renderSectionBody(
     mapCaptureConfig: { geoserverUrl: string; workspace: string };
     outerScrollRef?: RefObject<HTMLElement | null>;
   } = {
-    mapCaptureConfig: { geoserverUrl: 'http://localhost:8080/geoserver', workspace: 'build_yy' },
+    mapCaptureConfig: { geoserverUrl: 'http://localhost:8080/geoserver', workspace: 'ggnr' },
   }
 ) {
   const landEnriching = opts.landEnriching ?? false;
@@ -712,45 +1037,70 @@ function renderSectionBody(
 
   if (section.kind === 'facility') {
     const rows = result.facilityStats[section.id] ?? [];
-    if (!rows.length) {
-      return (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
-          분석 영역에서 해당 시설을 찾지 못했습니다.
-        </div>
-      );
-    }
-    const pointRows = rows.filter((r) => r.geomType === 'POINT');
-    const lineRows = rows.filter((r) => r.geomType === 'LINE');
-    const polyRows = rows.filter((r) => r.geomType === 'POLYGON');
-    const tables = [
-      { title: '시설 수', unit: '개', data: pointRows },
-      { title: '연장', unit: 'm', data: lineRows },
-      { title: '면적', unit: '㎡', data: polyRows },
-    ].filter((t) => t.data.length > 0);
+    const publishedKeys = section.facilityWmsLayerKeys ?? [];
+    const wmsKeysForMap = publishedKeys.map((k) => k.toLowerCase());
+    const wmsGeomTypes = Object.fromEntries(
+      publishedKeys.map((key) => {
+        const lower = key.toLowerCase();
+        const row = rows.find((r) => r.layerKey.toLowerCase() === lower);
+        return [lower, row?.geomType ?? 'POLYGON'];
+      })
+    ) as Record<string, LayerDbGeometryKind>;
+    const mapBlock =
+      result.wkt5181 && rows.length > 0 ? (
+        <ParcelAnalysisMapCapture
+          wkt5181={result.wkt5181}
+          wmsLayerKeys={wmsKeysForMap.length ? wmsKeysForMap : undefined}
+          wmsLayerGeomTypes={wmsGeomTypes}
+          showSatellite
+          hideOnFailure={false}
+          geoserverUrl={opts.mapCaptureConfig.geoserverUrl}
+          workspace={opts.mapCaptureConfig.workspace}
+        />
+      ) : null;
+
+    const facilityTableRows = sortFacilityStatRows(rows);
 
     return (
       <div className="space-y-3">
-        {tables.map((table) => (
-          <ResultTable key={table.title}>
+        {mapBlock}
+        {!rows.length ? (
+          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+            분석 영역에서 해당 시설을 찾지 못했습니다.
+          </div>
+        ) : (
+          <ResultTable>
             <thead>
               <tr className="bg-slate-100 text-left">
                 <th className={TH_CELL}>구분</th>
-                <th className={TH_CELL}>{table.title}</th>
+                <th className={TH_CELL}>시설 수(개)</th>
+                <th className={TH_CELL}>연장(m)</th>
+                <th className={TH_CELL}>면적(㎡)</th>
               </tr>
             </thead>
             <tbody>
-              {table.data.map((row) => (
-                <tr key={`${row.layerKey}-${table.title}`}>
-                  <td className={TD_CELL}>{row.layerKorName}</td>
-                  <td className={cn(TD_CELL, 'whitespace-nowrap')}>
-                    {row.stats}
-                    {row.unit}
+              {facilityTableRows.map((row) => (
+                <tr key={row.layerKey}>
+                  <td className={TD_CELL}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <FacilityLayerLegendIcon layerKey={row.layerKey} geomType={row.geomType} />
+                      {row.layerKorName}
+                    </span>
+                  </td>
+                  <td className={cn(TD_CELL, 'text-right tabular-nums')}>
+                    {facilityStatCell(row, 'POINT')}
+                  </td>
+                  <td className={cn(TD_CELL, 'text-right tabular-nums')}>
+                    {facilityStatCell(row, 'LINE')}
+                  </td>
+                  <td className={cn(TD_CELL, 'text-right tabular-nums')}>
+                    {facilityStatCell(row, 'POLYGON')}
                   </td>
                 </tr>
               ))}
             </tbody>
           </ResultTable>
-        ))}
+        )}
       </div>
     );
   }
@@ -842,6 +1192,9 @@ function renderSectionBody(
               loading
             />
           ) : null}
+          {result.linkageNotice ? (
+            <p className="text-[11px] text-amber-700">{result.linkageNotice}</p>
+          ) : null}
           <ResultTable
             maxHeight={RESULT_SCROLL_TABLE_MAX_HEIGHT_PX}
             outerScrollRef={opts.outerScrollRef}
@@ -891,51 +1244,61 @@ function renderSectionBody(
 
   if (section.kind === 'owner' && result.ownerStats.length > 0) {
     return (
-      <ResultTable>
-        <thead>
-          <tr className="bg-slate-100 text-left">
-            <th className={TH_CELL}>소유구분</th>
-            <th className={TH_CELL}>필지수</th>
-            <th className={TH_CELL}>면적</th>
-            <th className={TH_CELL}>비율</th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.ownerStats.map((row) => (
-            <tr key={row.label}>
-              <td className={TD_CELL}>{row.label}</td>
-              <td className={TD_CELL}>{row.count}</td>
-              <td className={TD_CELL}>{row.area}</td>
-              <td className={TD_CELL}>{row.ratio}</td>
+      <div className="space-y-2">
+        {result.wkt5181 ? (
+          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="owner" />
+        ) : null}
+        <ResultTable>
+          <thead>
+            <tr className="bg-slate-100 text-left">
+              <th className={TH_CELL}>소유구분</th>
+              <th className={TH_CELL}>필지수</th>
+              <th className={TH_CELL}>면적</th>
+              <th className={TH_CELL}>비율</th>
             </tr>
-          ))}
-        </tbody>
-      </ResultTable>
+          </thead>
+          <tbody>
+            {result.ownerStats.map((row) => (
+              <tr key={row.label}>
+                <td className={TD_CELL}>{row.label}</td>
+                <td className={TD_CELL}>{row.count}</td>
+                <td className={TD_CELL}>{row.area}</td>
+                <td className={TD_CELL}>{row.ratio}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ResultTable>
+      </div>
     );
   }
 
   if (section.kind === 'jimok' && result.jimokStats.length > 0) {
     return (
-      <ResultTable>
-        <thead>
-          <tr className="bg-slate-100 text-left">
-            <th className={TH_CELL}>지목</th>
-            <th className={TH_CELL}>필지수</th>
-            <th className={TH_CELL}>면적</th>
-            <th className={TH_CELL}>비율</th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.jimokStats.map((row) => (
-            <tr key={row.jimok}>
-              <td className={TD_CELL}>{row.jimok}</td>
-              <td className={TD_CELL}>{row.count}</td>
-              <td className={TD_CELL}>{row.area}</td>
-              <td className={TD_CELL}>{row.ratio}</td>
+      <div className="space-y-2">
+        {result.wkt5181 ? (
+          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="jimok" />
+        ) : null}
+        <ResultTable>
+          <thead>
+            <tr className="bg-slate-100 text-left">
+              <th className={TH_CELL}>지목</th>
+              <th className={TH_CELL}>필지수</th>
+              <th className={TH_CELL}>면적</th>
+              <th className={TH_CELL}>비율</th>
             </tr>
-          ))}
-        </tbody>
-      </ResultTable>
+          </thead>
+          <tbody>
+            {result.jimokStats.map((row) => (
+              <tr key={row.jimok}>
+                <td className={TD_CELL}>{row.jimok}</td>
+                <td className={TD_CELL}>{row.count}</td>
+                <td className={TD_CELL}>{row.area}</td>
+                <td className={TD_CELL}>{row.ratio}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ResultTable>
+      </div>
     );
   }
 
@@ -943,9 +1306,6 @@ function renderSectionBody(
     section.kind === 'land' ||
     section.kind === 'owner' ||
     section.kind === 'jimok' ||
-    section.kind === 'landUse' ||
-    section.kind === 'building' ||
-    section.kind === 'facility' ||
     section.kind === 'basicMap'
   ) {
     return (

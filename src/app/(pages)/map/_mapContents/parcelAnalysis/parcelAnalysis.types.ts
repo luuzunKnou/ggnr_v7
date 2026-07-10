@@ -1,4 +1,52 @@
-import type { ParcelAnalysisArea } from './parcelAnalysisTypes';
+export type ParcelAreaMethod = 'draw' | 'boundary';
+
+export type ParcelAnalysisRegion = {
+  sido: string;
+  sigungu: string;
+};
+
+export type DrawProjectScope = 'inside' | 'partially_outside' | 'fully_outside';
+
+export type ParcelAnalysisArea = {
+  method: ParcelAreaMethod;
+  summaryLabel: string;
+  /** 2건 이상일 때 읍·면·동·리 목록 */
+  summaryDetail?: string;
+  /** 대상 행 표시용 (면적 제외) */
+  targetLabel: string;
+  wkt: string;
+  itemCount: number;
+  /** 분석 영역 면적 (제곱미터, 정수) */
+  areaSqm: number;
+  /** 도형 그리기 — 사업 구역(읍면동 union) 대비 위치. boundary 방식은 미사용 */
+  drawProjectScope?: DrawProjectScope;
+};
+
+export type ParcelModalStep = 'choose' | 'draw' | 'boundary';
+
+export type DrawTool = 'rectangle' | 'polygon' | 'circle';
+
+/** 읍·면·동 선택 + 리 체크 상태 (모달 복원용) */
+export type BoundaryEmdSelection = {
+  emdCode: string;
+  emdName: string;
+  allRi: boolean;
+  riCodes: string[];
+  /** 리 일부 선택 시 표시명 (riCodes 순서와 대응) */
+  riNames?: string[];
+};
+
+export type EmdRiOption = { code: string; name: string };
+
+export function cloneBoundarySelection(selection: BoundaryEmdSelection[]): BoundaryEmdSelection[] {
+  return selection.map((s) => ({
+    emdCode: s.emdCode,
+    emdName: s.emdName,
+    allRi: s.allRi,
+    riCodes: [...s.riCodes],
+    riNames: s.riNames ? [...s.riNames] : undefined,
+  }));
+}
 
 /** PostgreSQL statement_timeout — analyzeParcels DB 집계 (서버 한도, 클라이언트는 기다림) */
 export const PARCEL_ANALYZE_DB_STATEMENT_TIMEOUT = '600s';

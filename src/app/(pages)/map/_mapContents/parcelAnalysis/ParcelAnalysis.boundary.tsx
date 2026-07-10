@@ -1,19 +1,386 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Feature from 'ol/Feature';
+import WKT from 'ol/format/WKT';
+import VectorLayer from 'ol/layer/Vector';
+import VectorSource from 'ol/source/Vector';
+import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
   type BoundaryEmdSelection,
   type EmdRiOption,
-} from './parcelAnalysisTypes';
-import { countBoundarySelection } from './boundarySelectionUtils';
-import { useParcelAnalysisRegion } from './useParcelAnalysisRegion';
-import {
-  PARCEL_PREVIEW_MANY_EMD_PARAM,
-  PREVIEW_MANY_EMD_OPTIONS,
-} from './parcelAnalysisBoundaryPreview';
-import { fetchRiOptionsCached } from './parcelAnalysisBoundaryRiCache';
+  type ParcelAnalysisRegion,
+} from './parcelAnalysis.types';
+import { PARCEL_ANALYSIS_SIGUNGU_BOUNDARY_STYLE } from './parcelAnalysis.mapStyle';
+import { useMapContext } from '../../_mapComponents/MapContext';
+
+const EMPTY_REGION: ParcelAnalysisRegion = { sido: '', sigungu: '' };
+const REGION_TIMEOUT_MS = 12_000;
+
+/** 푸터 설정 기준 시·군구 — 행정경계 선택 기본값 */
+function useParcelAnalysisRegion(): ParcelAnalysisRegion {
+  const [region, setRegion] = useState<ParcelAnalysisRegion>(EMPTY_REGION);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), REGION_TIMEOUT_MS);
+
+    call(
+      '',
+      'POST',
+      {
+        service: 'configService',
+        action: 'getParcelAnalysisRegionFromFooter',
+        params: {},
+      },
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setRegion({
+          sido: String(data?.sido ?? '').trim(),
+          sigungu: String(data?.sigungu ?? '').trim(),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setRegion(EMPTY_REGION);
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  return region;
+}
+
+/** 모달·패널 공통 건수 (리 전체 = 1건, 리 일부 = 리 수) */
+export function countBoundarySelection(selection: BoundaryEmdSelection[]): number {
+  return selection.reduce((n, s) => {
+    if (s.allRi) return n + 1;
+    return n + Math.max(s.riCodes.length, 0);
+  }, 0);
+}
+
+/** 패널·모달 하단 표시용 라벨 목록 */
+export function expandBoundaryDisplayLabels(selection: BoundaryEmdSelection[]): string[] {
+  const labels: string[] = [];
+  for (const s of selection) {
+    if (s.allRi) {
+      labels.push(s.emdName);
+      continue;
+    }
+    if (s.riNames && s.riNames.length > 0) {
+      for (const riName of s.riNames) {
+        labels.push(`${s.emdName} ${riName}`);
+      }
+    } else if (s.riCodes.length > 0) {
+      labels.push(`${s.emdName} (${s.riCodes.length}개 리)`);
+    }
+  }
+  return labels;
+}
+
+export function formatBoundaryAreaSummary(
+  selection: BoundaryEmdSelection[],
+  areaSqm: number
+): { itemCount: number; summaryLabel: string; summaryDetail?: string; targetLabel: string } {
+  const itemCount = countBoundarySelection(selection);
+  const labels = expandBoundaryDisplayLabels(selection);
+  const areaText = `약 ${areaSqm.toLocaleString('ko-KR')} ㎡`;
+  const targetLabel = labels.length > 0 ? labels.join(', ') : '행정경계';
+
+  if (itemCount <= 0) {
+    return { itemCount: 0, summaryLabel: `행정경계 · ${areaText}`, targetLabel };
+  }
+
+  if (itemCount === 1 && labels.length === 1) {
+    return {
+      itemCount,
+      summaryLabel: `행정경계 · ${labels[0]} · ${areaText}`,
+      targetLabel,
+    };
+  }
+
+  return {
+    itemCount,
+    summaryLabel: `행정경계 ${itemCount}개 · ${areaText}`,
+    summaryDetail: labels.join(', '),
+    targetLabel,
+  };
+}
+
+/** UI 확인용 — `/map?opened=parcelAnalysis&parcelPreview=manyEmd` */
+export const PREVIEW_MANY_EMD_OPTIONS: EmdRiOption[] = [
+  { code: 'preview-01', name: '가락동' },
+  { code: 'preview-02', name: '거여동' },
+  { code: 'preview-03', name: '마천동' },
+  { code: 'preview-04', name: '문정동' },
+  { code: 'preview-05', name: '방이동' },
+  { code: 'preview-06', name: '삼전동' },
+  { code: 'preview-07', name: '석촌동' },
+  { code: 'preview-08', name: '송파동' },
+  { code: 'preview-09', name: '신천동' },
+  { code: 'preview-10', name: '오금동' },
+  { code: 'preview-11', name: '오륜동' },
+  { code: 'preview-12', name: '잠실동' },
+  { code: 'preview-13', name: '장지동' },
+  { code: 'preview-14', name: '풍납동' },
+  { code: 'preview-15', name: '하남동' },
+  { code: 'preview-16', name: '학동' },
+  { code: 'preview-17', name: '헬리오시티' },
+  { code: 'preview-18', name: '화양동' },
+];
+
+export const PARCEL_PREVIEW_MANY_EMD_PARAM = 'manyEmd';
+
+export type EmdRiOptionsResult = { emd: EmdRiOption[]; error?: string };
+
+const FETCH_TIMEOUT_MS = 20_000;
+
+let cached: EmdRiOptionsResult | null = null;
+let inflight: Promise<EmdRiOptionsResult> | null = null;
+
+function parseEmdResponse(res: unknown): EmdRiOptionsResult {
+  const data = (res as { data?: unknown })?.data ?? res;
+  const raw = data as { emd?: EmdRiOption[]; error?: string };
+  const emd = Array.isArray(raw?.emd) ? raw.emd : [];
+  if (!emd.length) {
+    const msg = raw?.error ? String(raw.error) : '읍·면·동 목록이 비어 있습니다.';
+    return { emd: [], error: msg };
+  }
+  return { emd };
+}
+
+async function fetchEmdRiOptions(): Promise<EmdRiOptionsResult> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await call(
+      '',
+      'POST',
+      { service: 'devTestService', action: 'getEmdRiOptions', params: {} },
+      { signal: controller.signal }
+    );
+    return parseEmdResponse(res);
+  } catch (error: unknown) {
+    const aborted =
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'AbortError');
+    return {
+      emd: [],
+      error: aborted
+        ? '목록 조회가 지연되고 있습니다. «다시 불러오기»를 눌러 주세요.'
+        : '읍·면·동 목록을 불러오지 못했습니다.',
+    };
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+/** 세션 내 읍·면·동 목록 — 동시 요청은 하나로 합침 */
+export function fetchEmdRiOptionsCached(force = false): Promise<EmdRiOptionsResult> {
+  if (force) {
+    cached = null;
+    inflight = null;
+  }
+  if (!force && cached) return Promise.resolve(cached);
+  if (!force && inflight) return inflight;
+
+  inflight = fetchEmdRiOptions()
+    .then((result) => {
+      cached = result;
+      return result;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+
+  return inflight;
+}
+
+export function clearEmdRiOptionsCache(): void {
+  cached = null;
+  inflight = null;
+}
+
+export function getCachedEmdRiOptions(): EmdRiOptionsResult | null {
+  return cached;
+}
+
+const RI_FETCH_TIMEOUT_MS = 15_000;
+
+const riCache = new Map<string, EmdRiOption[]>();
+const riInflight = new Map<string, Promise<EmdRiOption[]>>();
+
+export function getCachedRiOptions(emdCode: string): EmdRiOption[] | null {
+  const hit = riCache.get(emdCode);
+  return hit && hit.length > 0 ? hit : null;
+}
+
+export function fetchRiOptionsCached(emdCode: string, force = false): Promise<EmdRiOption[]> {
+  const code = emdCode.trim();
+  if (!code) return Promise.resolve([]);
+
+  if (!force) {
+    const hit = riCache.get(code);
+    if (hit) return Promise.resolve(hit);
+    const pending = riInflight.get(code);
+    if (pending) return pending;
+  }
+
+  const promise = (async () => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), RI_FETCH_TIMEOUT_MS);
+    try {
+      const res = await call(
+        '',
+        'POST',
+        {
+          service: 'devTestService',
+          action: 'getRiOptionsByEmd',
+          params: { emdCode: code },
+        },
+        { signal: controller.signal }
+      );
+      const data = res?.data ?? res;
+      const ri = Array.isArray(data?.ri) ? (data.ri as EmdRiOption[]) : [];
+      riCache.set(code, ri);
+      return ri;
+    } catch {
+      riCache.set(code, []);
+      return [] as EmdRiOption[];
+    } finally {
+      window.clearTimeout(timer);
+      riInflight.delete(code);
+    }
+  })();
+
+  riInflight.set(code, promise);
+  return promise;
+}
+
+export function clearRiOptionsCache(): void {
+  riCache.clear();
+  riInflight.clear();
+}
+
+export function useParcelAnalysisBoundaryCatalog(isOpen: boolean) {
+  const [emdOptions, setEmdOptions] = useState<EmdRiOption[]>(() => getCachedEmdRiOptions()?.emd ?? []);
+  const [emdLoading, setEmdLoading] = useState(false);
+  const [emdError, setEmdError] = useState<string | null>(() => getCachedEmdRiOptions()?.error ?? null);
+
+  const applyResult = useCallback((result: { emd: EmdRiOption[]; error?: string }) => {
+    setEmdOptions(result.emd);
+    setEmdError(result.error ?? null);
+  }, []);
+
+  const syncEmdFromCache = useCallback(() => {
+    const hit = getCachedEmdRiOptions();
+    if (!hit?.emd?.length) return false;
+    applyResult(hit);
+    setEmdLoading(false);
+    return true;
+  }, [applyResult]);
+
+  const reloadEmdOptions = useCallback(() => {
+    clearEmdRiOptionsCache();
+    setEmdLoading(true);
+    setEmdError(null);
+    return fetchEmdRiOptionsCached(true)
+      .then(applyResult)
+      .finally(() => setEmdLoading(false));
+  }, [applyResult]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEmdLoading(false);
+      return;
+    }
+
+    if (syncEmdFromCache()) return;
+
+    let cancelled = false;
+    setEmdLoading(true);
+    setEmdError(null);
+
+    void fetchEmdRiOptionsCached()
+      .then((result) => {
+        if (!cancelled) applyResult(result);
+      })
+      .finally(() => {
+        if (!cancelled) setEmdLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      setEmdLoading(false);
+    };
+  }, [isOpen, applyResult, syncEmdFromCache]);
+
+  return { emdOptions, emdLoading, emdError, reloadEmdOptions, syncEmdFromCache };
+}
+
+/** 지적 편집(900)보다 아래, 배경 위 — 경계는 참고 표시용 */
+const BOUNDARY_LAYER_Z = 850;
+
+/**
+ * 필지분석 진입 시 사업 시군구(읍면동 union) 경계를 지도에 표시.
+ * 좌측 패널 없이 영역을 지정하는 단계에서 대상 지역을 눈으로 확인하기 위한 참고 레이어.
+ * 필지분석 종료 시 레이어를 제거한다.
+ */
+export function useParcelAnalysisSigunguBoundary(active: boolean) {
+  const mapContext = useMapContext();
+  const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
+
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map || !active) return;
+
+    let cancelled = false;
+    const source = new VectorSource();
+    const layer = new VectorLayer({ source, style: PARCEL_ANALYSIS_SIGUNGU_BOUNDARY_STYLE, zIndex: BOUNDARY_LAYER_Z });
+    layer.set('parcelAnalysisBoundary', true);
+    map.addLayer(layer);
+    layerRef.current = layer;
+
+    void (async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'devTestService',
+          action: 'getProjectEmdBoundary5181',
+          params: {},
+        });
+        const data = res?.data ?? res;
+        const wkt = data?.wkt ? String(data.wkt) : null;
+        if (!wkt || cancelled) return;
+        const geom = new WKT().readGeometry(wkt, {
+          dataProjection: 'EPSG:5181',
+          featureProjection: 'EPSG:3857',
+        });
+        source.clear();
+        source.addFeature(new Feature(geom));
+      } catch {
+        /* 경계 표시는 참고용 — 실패해도 필지분석 진행 */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      map.removeLayer(layer);
+      if (layerRef.current === layer) layerRef.current = null;
+    };
+  }, [active, mapContext?.mapInstanceRef]);
+}
 
 type Props = {
   initialSelection?: BoundaryEmdSelection[];

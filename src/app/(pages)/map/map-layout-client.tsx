@@ -27,18 +27,18 @@ import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPan
 import { RoadCctvPanel } from "./_mapContents/road/roadCCTV/RoadCctvPanel"
 import { RoadInfraPanel } from "./_mapContents/road/roadInfra/RoadInfraPanel"
 import { RoadDataFlowAnalysisOrchestrator } from "./_mapContents/road/roadDataFlow/RoadDataFlowAnalysisOrchestrator"
-import { ParcelAnalysisOrchestrator } from "./_mapContents/parcelAnalysis/ParcelAnalysisOrchestrator"
+import {
+  ParcelAnalysisOrchestrator,
+  ParcelAnalysisMapSidePanel,
+  PARCEL_ANALYSIS_PANEL_DEFAULT_WIDTH,
+  PARCEL_ANALYSIS_PANEL_MAX_WIDTH,
+  PARCEL_ANALYSIS_PANEL_MIN_WIDTH,
+} from "./_mapContents/parcelAnalysis/ParcelAnalysis.shell"
 import {
   PARCEL_ANALYSIS_OPENED_KEY,
   ParcelAnalysisProvider,
   useParcelAnalysis,
 } from "./_mapContents/parcelAnalysis/parcelAnalysisContext"
-import { ParcelAnalysisMapSidePanel } from "./_mapContents/parcelAnalysis/ParcelAnalysisMapSidePanel"
-import {
-  PARCEL_ANALYSIS_PANEL_DEFAULT_WIDTH,
-  PARCEL_ANALYSIS_PANEL_MAX_WIDTH,
-  PARCEL_ANALYSIS_PANEL_MIN_WIDTH,
-} from "./_mapContents/parcelAnalysis/ParcelAnalysisPanel"
 import { RoadUseLedgerListPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerListPanel"
 import { RoadUseLedgerDetailPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerDetailPanel"
 import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerListPanel"
