@@ -1,5 +1,6 @@
 import type { SourcePackageProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import { includeNodeModulesFromProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 
 export type RestartMode = 'none' | 'exit' | 'command';
@@ -56,14 +57,6 @@ const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
-}
-
-function absoluteUrl(base: string, maybeRelative: string): string {
-  try {
-    return new URL(maybeRelative).toString();
-  } catch {
-    return new URL(maybeRelative.replace(/^\//, ''), `${base.replace(/\/+$/, '')}/`).toString();
-  }
 }
 
 function gnmsHeaders(bearer: string): Record<string, string> {
@@ -171,7 +164,7 @@ export async function relayLatestSourceFromGnms(options: {
     const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
     const fileName = String(latestJson.fileName ?? '').trim() || `source_latest_${Date.now()}.zip`;
     const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || cfg.downloadUrlFallback;
-    const downloadUrl = absoluteUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
+    const downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
     log(`latest: version=${version}, file=${fileName}`);
 
     throwIfAborted(signal);

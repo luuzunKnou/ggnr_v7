@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 
 export type RestartMode = 'none' | 'exit' | 'command';
 
@@ -87,14 +88,6 @@ function shouldSkipRelPath(relPath: string, excludePrefixes: string[]): boolean 
   return excludePrefixes.some((prefix) => posixRel === prefix.slice(0, -1) || posixRel.startsWith(prefix));
 }
 
-export function absoluteUrl(base: string, maybeRelative: string): string {
-  try {
-    return new URL(maybeRelative).toString();
-  } catch {
-    return new URL(maybeRelative.replace(/^\//, ''), `${base.replace(/\/+$/, '')}/`).toString();
-  }
-}
-
 export type GnmsClientConfig = {
   gnmsBaseUrl: string;
   latestUrl: string;
@@ -116,8 +109,8 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     '';
   return {
     gnmsBaseUrl,
-    latestUrl: absoluteUrl(gnmsBaseUrl, latestPath),
-    downloadUrlFallback: absoluteUrl(gnmsBaseUrl, downloadPath),
+    latestUrl: resolveGnmsApiUrl(gnmsBaseUrl, latestPath),
+    downloadUrlFallback: resolveGnmsApiUrl(gnmsBaseUrl, downloadPath),
     bearer,
   };
 }
@@ -334,7 +327,7 @@ export async function applyLatestSourceFromGnms(options: ApplyLatestSourceOption
   const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
   const fileName = String(latestJson.fileName ?? '').trim() || `source_latest_${Date.now()}.zip`;
   const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || cfg.downloadUrlFallback;
-  const downloadUrl = absoluteUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
+  const downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
 
   const downloadRes = await fetch(downloadUrl, {
     method: 'GET',
