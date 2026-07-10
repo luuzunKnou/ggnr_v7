@@ -5,7 +5,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { DevFloatingPanel } from './DevFloatingPanel';
 import { registerDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 
-type HistoryFilter = 'source_upload_only' | 'version_all' | 'install_zip' | 'apply_latest';
+type HistoryFilter = 'source_upload_only' | 'source_all' | 'version_all' | 'install_zip' | 'apply_latest';
 
 type HistoryItem = {
   mvhKey: number;
@@ -20,9 +20,11 @@ type HistoryItem = {
 type VersionHistoryDialogProps = {
   open: boolean;
   onClose: () => void;
-  /** 업로더: source_upload_only, 버전관리: version_all */
+  /** 소스코드: source_all, 버전관리: version_all(최신 소스 적용) */
   defaultFilter: HistoryFilter;
   showFeatureFilter?: boolean;
+  /** source_all 필터 시 기능 구분 옵션 */
+  sourceMenu?: boolean;
 };
 
 function historyTypeLabel(type: string): string {
@@ -56,11 +58,15 @@ function toApiHistoryFilter(filter: HistoryFilter): string {
   return filter;
 }
 
+const filterControlClass =
+  'h-8 rounded border border-input bg-background px-2 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark]';
+
 export function VersionHistoryDialog({
   open,
   onClose,
   defaultFilter,
   showFeatureFilter = false,
+  sourceMenu = false,
 }: VersionHistoryDialogProps) {
   const [filter, setFilter] = useState<HistoryFilter>(defaultFilter);
   const [dateYmd, setDateYmd] = useState('');
@@ -111,23 +117,48 @@ export function VersionHistoryDialog({
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
         {showFeatureFilter && (
           <select
-            className="h-8 rounded border px-2"
-            value={filter === 'source_upload_only' ? 'source_upload' : filter}
+            className={filterControlClass}
+            value={
+              filter === 'source_upload_only'
+                ? 'source_upload'
+                : filter === 'source_all'
+                  ? 'all'
+                  : filter === 'install_zip'
+                    ? 'install_zip'
+                    : filter === 'apply_latest'
+                      ? 'apply_latest'
+                      : 'all'
+            }
             onChange={(e) => {
               const v = e.target.value;
+              if (sourceMenu) {
+                if (v === 'source_upload') setFilter('source_upload_only');
+                else if (v === 'install_zip') setFilter('install_zip');
+                else setFilter('source_all');
+                return;
+              }
               if (v === 'all') setFilter('version_all');
               else if (v === 'install_zip' || v === 'apply_latest') setFilter(v);
               else setFilter('version_all');
             }}
           >
-            <option value="all">전체</option>
-            <option value="install_zip">설치파일 다운로드</option>
-            <option value="apply_latest">최신 소스 적용</option>
+            {sourceMenu ? (
+              <>
+                <option value="all">전체</option>
+                <option value="source_upload">소스코드 업로드</option>
+                <option value="install_zip">설치파일 다운로드</option>
+              </>
+            ) : (
+              <>
+                <option value="all">전체</option>
+                <option value="apply_latest">최신 소스 적용</option>
+              </>
+            )}
           </select>
         )}
         <input
           type="date"
-          className="h-8 rounded border px-2"
+          className={filterControlClass}
           value={dateYmd}
           onChange={(e) => setDateYmd(e.target.value)}
         />
@@ -137,7 +168,7 @@ export function VersionHistoryDialog({
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-4 py-2 text-xs">
         {loading && <div className="text-muted-foreground">조회 중...</div>}
-        {error && <div className="text-red-600">{error}</div>}
+        {error && <div className="text-red-600 dark:text-red-400">{error}</div>}
         {!loading && !error && items.length === 0 && (
           <div className="text-muted-foreground">이력이 없습니다.</div>
         )}
@@ -148,7 +179,7 @@ export function VersionHistoryDialog({
               {showFeatureFilter && (
                 <span className="text-muted-foreground">{historyTypeLabel(row.mvhHistoryType)}</span>
               )}
-              <span className={row.mvhStatus === 'success' ? 'text-green-700' : 'text-red-600'}>
+              <span className={row.mvhStatus === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                 {row.mvhStatus === 'success' ? '성공' : '실패'}
               </span>
             </div>

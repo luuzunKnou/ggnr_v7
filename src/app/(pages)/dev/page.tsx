@@ -201,8 +201,9 @@ export default function DevPage() {
     <VersionHistoryDialog
       open={historyOpen}
       onClose={() => setHistoryOpen(false)}
-      defaultFilter={historyMenuId === "versionManager" ? "version_all" : "source_upload_only"}
-      showFeatureFilter={historyMenuId === "versionManager"}
+      defaultFilter={historyMenuId === "versionManager" ? "version_all" : "source_all"}
+      showFeatureFilter
+      sourceMenu={historyMenuId === "sourceCodeUploader"}
     />
     </>
   )

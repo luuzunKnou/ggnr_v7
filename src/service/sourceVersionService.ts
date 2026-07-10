@@ -263,6 +263,29 @@ async function writeRestartSignal(signalFile: string, payload: Record<string, un
   await fs.writeFile(signalFile, JSON.stringify(payload, null, 2), 'utf-8');
 }
 
+/** 부모 프로세스 종료 후에도 대기·실행이 이어지도록 detached 자식으로 예약 */
+function spawnDelayedRestartCommand(restartCommand: string, cwd: string, delayMs: number): void {
+  const delaySec = Math.max(1, Math.ceil(delayMs / 1000));
+  if (process.platform === 'win32') {
+    const script = `timeout /t ${delaySec} /nobreak >nul && ${restartCommand}`;
+    spawn('cmd.exe', ['/c', script], {
+      cwd,
+      detached: true,
+      stdio: 'ignore',
+      env: process.env,
+      windowsHide: false,
+    }).unref();
+    return;
+  }
+  const delaySecFloat = Math.max(0.5, delayMs / 1000);
+  spawn('sh', ['-c', `sleep ${delaySecFloat} && ${restartCommand}`], {
+    cwd,
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  }).unref();
+}
+
 function scheduleRestart(mode: RestartMode): {
   scheduled: boolean;
   commandConfigured: boolean;
@@ -284,18 +307,14 @@ function scheduleRestart(mode: RestartMode): {
         message: 'GGNR_RESTART_COMMAND 미설정으로 command 재시작을 실행하지 못했습니다.',
       };
     }
-    const child = spawn(restartCommand, {
-      cwd: process.cwd(),
-      detached: true,
-      shell: true,
-      stdio: 'ignore',
-      env: process.env,
-    });
-    child.unref();
+    spawnDelayedRestartCommand(restartCommand, process.cwd(), safeDelay);
+    setTimeout(() => {
+      process.exit(0);
+    }, 500).unref();
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `재시작 명령 실행 예약 완료 (${restartCommand})`,
+      message: `재시작 예약: 프로세스 종료 후 ${safeDelay}ms 대기 → 명령 실행 (${restartCommand})`,
     };
   }
 

@@ -11,7 +11,10 @@ import {
   formatSourceUploadHistoryMessage,
 } from '@/lib/sourceUploadHistoryMessage';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
+import { InstallZipDownloadPanel } from './InstallZipDownloadPanel';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
+
+type MainTab = 'install_download' | 'source_upload';
 
 type UploadRow = {
   file: string;
@@ -184,6 +187,7 @@ function buildStagesFromProgress(
 }
 
 export function SourceCodeUploaderContent() {
+  const [mainTab, setMainTab] = useState<MainTab>('source_upload');
   const [mode, setMode] = useState<SourceUploadMode>('install');
   const [includeNodeModules, setIncludeNodeModules] = useState(false);
   const [dbConfirm, setDbConfirm] = useState<{
@@ -677,6 +681,36 @@ export function SourceCodeUploaderContent() {
         </div>
       )}
 
+      <div className="flex shrink-0 gap-1 border-b text-sm">
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 ${
+            mainTab === 'install_download'
+              ? 'border-primary font-medium text-foreground'
+              : 'border-transparent text-muted-foreground'
+          }`}
+          disabled={uploading}
+          onClick={() => setMainTab('install_download')}
+        >
+          설치파일 다운로드
+        </button>
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 ${
+            mainTab === 'source_upload'
+              ? 'border-primary font-medium text-foreground'
+              : 'border-transparent text-muted-foreground'
+          }`}
+          onClick={() => setMainTab('source_upload')}
+        >
+          소스코드 업로드
+        </button>
+      </div>
+
+      {mainTab === 'install_download' ? (
+        <InstallZipDownloadPanel />
+      ) : (
+        <>
       <div className="rounded border p-3">
         <div className="mb-2 flex items-center gap-3 text-sm">
           <label className="flex items-center gap-1">
@@ -912,6 +946,8 @@ export function SourceCodeUploaderContent() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -132,9 +132,9 @@ export function getDevMenuDescription(menuId: string): string {
     case "dataFileUploader":
       return "첨부 file_data 폴더 업로드·테이블·키 검증·이력"
     case "sourceCodeUploader":
-      return "현재 워크스페이스 소스코드를 압축/청크 전송 방식으로 원격 서버에 업로드"
+      return "설치파일 다운로드·소스코드 업로드(GNMS 전송)"
     case "versionManager":
-      return "GNMS 최신 소스코드 다운로드/덮어쓰기/재시작"
+      return "GNMS 최신 소스 적용·재시작"
     case "lasFixer":
       return "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
     case "orthophotoManager":

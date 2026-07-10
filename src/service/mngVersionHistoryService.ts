@@ -11,7 +11,8 @@ export type VersionHistoryType = 'source_upload' | 'install_zip' | 'apply_latest
 export type VersionHistoryFilter =
   | VersionHistoryType
   | 'version_all'
-  | 'source_upload_only';
+  | 'source_upload_only'
+  | 'source_all';
 
 export type VersionHistoryRow = {
   mvhKey: number;
@@ -103,10 +104,10 @@ export async function listVersionHistory(params: {
 
     if (params.filter === 'source_upload_only') {
       conditions.push(eq(mvh.mvhHistoryType, 'source_upload'));
+    } else if (params.filter === 'source_all') {
+      conditions.push(sql`${mvh.mvhHistoryType} IN ('source_upload', 'install_zip')`);
     } else if (params.filter === 'version_all') {
-      conditions.push(
-        sql`${mvh.mvhHistoryType} IN ('install_zip', 'apply_latest')`
-      );
+      conditions.push(eq(mvh.mvhHistoryType, 'apply_latest'));
     } else {
       conditions.push(eq(mvh.mvhHistoryType, params.filter));
     }
