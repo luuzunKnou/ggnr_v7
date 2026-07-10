@@ -3,12 +3,21 @@
  */
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  buildDataQueryLayerGroups,
+  resolveFacilityStatsGeomType,
+  type DefineLayerMetaRow,
+} from '@/lib/dataQueryLayerGroups';
 
 export type ParcelAnalysisLayerDef = {
   layerKey: string;
   layerKorName: string;
   geomType: 'POINT' | 'LINE' | 'POLYGON';
   schema: string;
+  /** 분할 레이어 — 부모 물리 테이블 */
+  physicalTableName?: string;
+  /** define_table_div_query */
+  rowFilterSql?: string | null;
 };
 
 export type ParcelAnalysisFacilityGroupDef = {
@@ -16,38 +25,102 @@ export type ParcelAnalysisFacilityGroupDef = {
   title: string;
   description: string;
   layers: ParcelAnalysisLayerDef[];
-};
-
-type DefineLayerRow = {
-  define_table_name?: string;
-  define_table_kor_name?: string;
-  define_table_shp_type?: string;
-  define_table_group?: string;
-  define_table_schema?: string;
+  /** GeoServer publish 된 레이어만 — 결과 지도 캡처용 */
+  wmsLayerKeys?: string[];
 };
 
 const TABLES_PATH = join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
 
 const EXCLUDED_GROUPS = new Set(['메모', '민원']);
 
-/** ENABLED_SYSTEMS(road,river,…) → define_table_group 키워드 */
-const SYSTEM_GROUP_KEYWORDS: Record<string, string[]> = {
-  road: ['도로'],
-  river: ['하천', '맑은물', '하수'],
-  build: ['공사', '사업', '건축', '인허가', '개발'],
-  safety: ['안전', '재난'],
-};
-
-function readDefineLayerTables(): DefineLayerRow[] {
+function readDefineLayerTables(): DefineLayerMetaRow[] {
   if (!existsSync(TABLES_PATH)) return [];
   try {
     const raw = readFileSync(TABLES_PATH, 'utf-8');
-    const data = JSON.parse(raw) as DefineLayerRow[];
+    const data = JSON.parse(raw) as DefineLayerMetaRow[];
     return Array.isArray(data) ? data : [];
   } catch {
     return [];
   }
 }
+
+function slugifyGroup(group: string): string {
+  return group.replace(/\s+/g, '_');
+}
+
+function toParcelLayer(layer: {
+  layerKey: string;
+  layerKorName: string;
+  geomType: 'POINT' | 'LINE' | 'POLYGON';
+  schema: string;
+  physicalTableName?: string;
+  rowFilterSql?: string | null;
+}): ParcelAnalysisLayerDef {
+  return {
+    layerKey: layer.layerKey,
+    layerKorName: layer.layerKorName,
+    geomType: layer.geomType,
+    schema: layer.schema,
+    physicalTableName: layer.physicalTableName,
+    rowFilterSql: layer.rowFilterSql,
+  };
+}
+
+/**
+ * 데이터조회와 동일한 그룹 규칙 — layer 스키마 DB 테이블 + defineLayer 메타
+ */
+export function buildParcelAnalysisFacilityCatalogFromDbTables(
+  dbLayerTableNamesLower: Set<string>,
+  publishedLayerNamesLower?: Set<string>,
+  geomTypes?: Record<string, 'POINT' | 'LINE' | 'POLYGON'>
+): ParcelAnalysisFacilityGroupDef[] {
+  const tables = readDefineLayerTables();
+  const dataQueryGroups = buildDataQueryLayerGroups(dbLayerTableNamesLower, tables, geomTypes, {
+    excludeGroups: EXCLUDED_GROUPS,
+  });
+
+  return dataQueryGroups
+    .map(({ groupName, layers }) => {
+      const parcelLayers = layers.map(toParcelLayer);
+      const wmsLayerKeys = publishedLayerNamesLower
+        ? parcelLayers
+            .map((l) => l.layerKey)
+            .filter((key) => publishedLayerNamesLower.has(key.toLowerCase()))
+        : undefined;
+      return {
+        id: `facility:${slugifyGroup(groupName)}`,
+        title: groupName,
+        description: `${groupName} 시설 목록을 분석합니다.`,
+        layers: parcelLayers,
+        wmsLayerKeys: wmsLayerKeys?.length ? wmsLayerKeys : undefined,
+      };
+    })
+    .filter((group) => group.layers.length > 0);
+}
+
+/** @deprecated DB 목록 없이 tables.json 전체 그룹 — 테스트·폴백용 */
+export function buildParcelAnalysisFacilityCatalog(_enabledSystemsRaw?: string): ParcelAnalysisFacilityGroupDef[] {
+  const tables = readDefineLayerTables();
+  const allNames = new Set(
+    tables
+      .filter((r) => (r.define_table_schema || 'layer').toLowerCase() === 'layer')
+      .map((r) => String(r.define_table_name ?? '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  return buildParcelAnalysisFacilityCatalogFromDbTables(allNames);
+}
+
+const tableIndex = new Map<
+  string,
+  {
+    schema: string;
+    geomType: 'POINT' | 'LINE' | 'POLYGON';
+    korName: string;
+    groupName: string;
+    physicalTableName?: string;
+    rowFilterSql?: string | null;
+  }
+>();
 
 function normalizeGeomType(value: string | undefined): 'POINT' | 'LINE' | 'POLYGON' {
   const v = String(value ?? '').toUpperCase();
@@ -56,95 +129,56 @@ function normalizeGeomType(value: string | undefined): 'POINT' | 'LINE' | 'POLYG
   return 'POLYGON';
 }
 
-function slugifyGroup(group: string): string {
-  return group.replace(/\s+/g, '_');
-}
-
-function groupMatchesEnabledSystems(group: string, enabledSystems: string[]): boolean {
-  if (!enabledSystems.length) return true;
-  for (const sys of enabledSystems) {
-    const keywords = SYSTEM_GROUP_KEYWORDS[sys.trim().toLowerCase()];
-    if (!keywords) continue;
-    if (keywords.some((kw) => group.includes(kw))) return true;
-  }
-  return false;
-}
-
-export function parseEnabledSystems(raw: string | undefined): string[] {
-  return String(raw ?? '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-/** 시설목록 동적 카탈로그 (4-E) */
-export function buildParcelAnalysisFacilityCatalog(enabledSystemsRaw?: string): ParcelAnalysisFacilityGroupDef[] {
-  const enabledSystems = parseEnabledSystems(enabledSystemsRaw);
-  const tables = readDefineLayerTables();
-  const groupMap = new Map<string, ParcelAnalysisLayerDef[]>();
-
-  for (const row of tables) {
-    const group = String(row.define_table_group ?? '').trim();
-    const tableName = String(row.define_table_name ?? '').trim();
-    if (!group || !tableName || EXCLUDED_GROUPS.has(group)) continue;
-    if (tableName.endsWith('_jijuk')) continue;
-    if (enabledSystems.length && !groupMatchesEnabledSystems(group, enabledSystems)) continue;
-
-    const layer: ParcelAnalysisLayerDef = {
-      layerKey: tableName,
-      layerKorName: String(row.define_table_kor_name ?? tableName).trim() || tableName,
-      geomType: normalizeGeomType(row.define_table_shp_type),
-      schema: String(row.define_table_schema ?? 'layer').trim() || 'layer',
-    };
-    const prev = groupMap.get(group) ?? [];
-    prev.push(layer);
-    groupMap.set(group, prev);
-  }
-
-  return [...groupMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, 'ko'))
-    .map(([group, layers]) => ({
-      id: `facility:${slugifyGroup(group)}`,
-      title: group,
-      description: `${group} 시설 목록을 분석합니다.`,
-      layers: layers.sort((a, b) => a.layerKorName.localeCompare(b.layerKorName, 'ko')),
-    }));
-}
-
-const tableIndex = new Map<string, { schema: string; geomType: 'POINT' | 'LINE' | 'POLYGON'; korName: string }>();
-
 function ensureTableIndex(): void {
   if (tableIndex.size) return;
   for (const row of readDefineLayerTables()) {
     const key = String(row.define_table_name ?? '').trim();
     if (!key) continue;
+    const parent = String(row.define_table_parents_layer ?? '').trim();
+    const divQ = String(row.define_table_div_query ?? '').trim();
     tableIndex.set(key, {
       schema: String(row.define_table_schema ?? 'layer').trim() || 'layer',
       geomType: normalizeGeomType(row.define_table_shp_type),
       korName: String(row.define_table_kor_name ?? key).trim() || key,
+      groupName: String(row.define_table_group ?? '').trim(),
+      physicalTableName: parent ? parent.toLowerCase() : undefined,
+      rowFilterSql: divQ || null,
     });
+    tableIndex.set(key.toLowerCase(), tableIndex.get(key)!);
   }
 }
 
-/** SQL 인젝션 방지 — defineLayer 화이트리스트만 허용 */
+/** SQL 인젝션 방지 — defineLayer 화이트리스트 우선, 카탈로그에서 온 메타는 허용 */
 export function resolveParcelAnalysisLayers(
-  layers: Array<{ layerKey?: string; layerKorName?: string; geomType?: string; schema?: string }>
+  layers: Array<{
+    layerKey?: string;
+    layerKorName?: string;
+    geomType?: string;
+    schema?: string;
+    physicalTableName?: string;
+    rowFilterSql?: string | null;
+  }>,
+  dbGeomTypes?: Record<string, 'POINT' | 'LINE' | 'POLYGON'>
 ): ParcelAnalysisLayerDef[] {
   ensureTableIndex();
   const out: ParcelAnalysisLayerDef[] = [];
   for (const layer of layers ?? []) {
-    const key = String(layer.layerKey ?? '').trim();
+    const key = String(layer.layerKey ?? '').trim().toLowerCase();
     if (!key) continue;
-    const meta = tableIndex.get(key);
-    if (!meta) continue;
-    const geom = String(layer.geomType ?? meta.geomType).toUpperCase();
-    const geomType =
-      geom === 'POINT' ? 'POINT' : geom === 'LINE' || geom === 'LINESTRING' ? 'LINE' : 'POLYGON';
+    const meta = tableIndex.get(key) ?? tableIndex.get(key.toLowerCase());
+    const geomType = resolveFacilityStatsGeomType(key, {
+      groupName: meta?.groupName,
+      shpType: meta?.geomType,
+      dbGeomTypes,
+      passedGeomType: layer.geomType ?? meta?.geomType,
+    });
     out.push({
       layerKey: key,
-      layerKorName: String(layer.layerKorName ?? meta.korName).trim() || meta.korName,
+      layerKorName: String(layer.layerKorName ?? meta?.korName ?? key).trim() || key,
       geomType,
-      schema: String(layer.schema ?? meta.schema).trim() || meta.schema,
+      schema: String(layer.schema ?? meta?.schema ?? 'layer').trim() || 'layer',
+      physicalTableName: layer.physicalTableName ?? meta?.physicalTableName,
+      rowFilterSql: layer.rowFilterSql ?? meta?.rowFilterSql ?? null,
     });
   }
   return out;

@@ -22,7 +22,7 @@ function resolveSchema(raw?: string): string {
  * 스키마 내 실제 릴레이션 이름(relname, 대소문자 보존)을 대소문자 무관하게 찾는다.
  * information_schema / geometry_columns / "schema"."Table" 인용 조회에 사용.
  */
-async function resolveLayerPhysicalRelName(schema: string, tableGuess: string): Promise<string | null> {
+export async function resolveLayerPhysicalRelName(schema: string, tableGuess: string): Promise<string | null> {
   const sch = String(schema ?? '').trim();
   const guess = String(tableGuess ?? '').trim();
   if (!sch || !guess) return null;
