@@ -47,6 +47,76 @@ function getField(row: Record<string, unknown> | undefined, keys: string[], fall
   return fallback;
 }
 
+const EUM_LAND_DET_URL = 'https://www.eum.go.kr/web/ar/lu/luLandDet.jsp';
+const EUM_FORM_ID = 'ggnr-eum-land-det-form';
+const EUM_WINDOW_NAME = 'Eum';
+
+/** v6 RightClickTooltip.openEumm — 숨김 폼 POST로 pnu·sggcd 전달 */
+function openLandEum(pnu: string) {
+  const trimmed = String(pnu ?? '').trim();
+  if (!/^\d{19}$/.test(trimmed)) return;
+
+  const sggcd = trimmed.slice(0, 5);
+  const popup = window.open('', EUM_WINDOW_NAME, 'width=1400,height=970');
+  if (popup) {
+    popup.document.write(
+      '<html><head><title>토지이음</title></head><body><p>페이지 이동 중입니다…</p></body></html>'
+    );
+  }
+
+  let form = document.getElementById(EUM_FORM_ID) as HTMLFormElement | null;
+  if (!form) {
+    form = document.createElement('form');
+    form.id = EUM_FORM_ID;
+    form.method = 'post';
+    form.action = EUM_LAND_DET_URL;
+    form.style.display = 'none';
+
+    const fixed: Record<string, string> = {
+      selGbn: 'umd',
+      isNoScr: 'script',
+      s_type: '1',
+      mode: 'search',
+      viewType: '',
+      p_location: '',
+      p_type: '',
+      p_type1: '',
+      p_type2: '',
+      p_type3: '',
+      p_type4: '',
+      p_type5: '',
+      p_type6: '',
+      p_type7: '',
+      ucodes: '',
+      markUcodes: '',
+      adzoom: '',
+      scale: '',
+      scaleFlag: '',
+      hash: '',
+      mobile_yn: '',
+      sggcd: '',
+      pnu: '',
+    };
+    for (const [name, value] of Object.entries(fixed)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.id = `${EUM_FORM_ID}-${name}`;
+      input.value = value;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+  }
+
+  const pnuEl = form.querySelector(`#${EUM_FORM_ID}-pnu`) as HTMLInputElement | null;
+  const sggcdEl = form.querySelector(`#${EUM_FORM_ID}-sggcd`) as HTMLInputElement | null;
+  if (pnuEl) pnuEl.value = trimmed;
+  if (sggcdEl) sggcdEl.value = sggcd;
+
+  form.target = EUM_WINDOW_NAME;
+  form.submit();
+}
+
 function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
     <div className="overflow-auto border border-slate-200 rounded">
@@ -443,8 +513,9 @@ export function LandInfoPanelContent({
           </button>
           <button
             type="button"
-            onClick={() => window.open('https://www.eum.go.kr/web/ar/lu/luLandDet.jsp', '_blank', 'noopener,noreferrer')}
-            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200"
+            onClick={() => effectivePnu && openLandEum(effectivePnu)}
+            disabled={!effectivePnu || !/^\d{19}$/.test(effectivePnu)}
+            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
             aria-label="토지이음"
           >
             <img src="/image/addressInfoIcon/toji-e-um.png" alt="" className="w-5 h-5 object-contain" />

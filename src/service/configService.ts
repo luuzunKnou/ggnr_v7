@@ -5,6 +5,12 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
+import {
+  PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
+  PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
+  PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+  PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+} from "@/lib/parcelAnalysisTheme"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -142,6 +148,68 @@ function extractAddressFromFooterAddr(footerAddr: string): string {
   return raw.replace(/^\d{5}\s+/, "").trim()
 }
 
+const SIDO_ABBREV_TO_FULL: Record<string, string> = {
+  경북: "경상북도",
+  경남: "경상남도",
+  경상북: "경상북도",
+  경상남: "경상남도",
+  전북: "전북특별자치도",
+  전남: "전라남도",
+  전라북: "전북특별자치도",
+  전라남: "전라남도",
+  충북: "충청북도",
+  충남: "충청남도",
+  충청북: "충청북도",
+  충청남: "충청남도",
+  강원: "강원특별자치도",
+  경기: "경기도",
+  제주: "제주특별자치도",
+}
+
+const RE_SIDO_FULL = /^([가-힣]+)(특별자치도|특별자치시|특별시|광역시|도)(\s+|$)/u
+const RE_SIGUNGU_TOKEN = /([가-힣]+)(시|군|구)(\s+|$)/u
+const RE_SIGUNGU_HEAD = /^([가-힣]+)(시|군|구)(\s+|$)/u
+
+function normalizeSidoToken(token: string): string {
+  const t = token.trim()
+  if (!t) return ""
+  if (SIDO_ABBREV_TO_FULL[t]) return SIDO_ABBREV_TO_FULL[t]
+  if (/도$|특별|광역/.test(t)) return t
+  if ((t.endsWith("북") || t.endsWith("남")) && t.length >= 2 && !t.endsWith("도")) {
+    return `${t}도`
+  }
+  return t
+}
+
+/** 주소 문자열 앞에서 시도·시군구명 추출 (푸터 주소·지오코딩 입력용) */
+function parseSidoSigunguFromAddress(address: string): { sido: string; sigungu: string } {
+  const rest0 = String(address ?? "").trim()
+  if (!rest0) return { sido: "", sigungu: "" }
+
+  let rest = rest0
+  let sido = ""
+
+  const fullSido = rest.match(RE_SIDO_FULL)
+  if (fullSido) {
+    sido = fullSido[1] + fullSido[2]
+    rest = rest.slice(fullSido[0].length).trim()
+  } else {
+    const sgMatch = rest.match(RE_SIGUNGU_TOKEN)
+    if (sgMatch?.index != null && sgMatch.index > 0) {
+      const prefix = rest.slice(0, sgMatch.index).trim()
+      const sidoToken = prefix.split(/\s+/).pop() ?? prefix
+      sido = normalizeSidoToken(sidoToken)
+      rest = rest.slice(sgMatch.index).trim()
+    }
+  }
+
+  let sigungu = ""
+  const sg = rest.match(RE_SIGUNGU_HEAD)
+  if (sg) sigungu = sg[1] + sg[2]
+
+  return { sido, sigungu }
+}
+
 async function geocodeAddressVworld(
   address: string,
   apiKey: string,
@@ -204,7 +272,20 @@ export async function getDefaultMapCenterFromFooter(): Promise<{ lon: number; la
 }
 
 /**
- * 지도용 클라이언트 설정 (주소 검색 등).
+ * 필지분석 행정경계 고정 시도·시군구.
+ * runtime.env FOOTER_ADDR 마지막 주소 조각에서 파싱 (예: build_yy → 경상북도, 영양군).
+ */
+export function getParcelAnalysisRegionFromFooter(_params?: unknown): {
+  sido: string
+  sigungu: string
+} {
+  const vars = getRuntimeEnvVars()
+  const footerAddr = vars.FOOTER_ADDR?.trim() || DEFAULT_FOOTER_ADDR
+  const address = extractAddressFromFooterAddr(footerAddr)
+  return parseSidoSigunguFromAddress(address)
+}
+
+/** 지도용 클라이언트 설정 (주소 검색 등).
  * runtime.env 의 지도/외부연계 키를 반환.
  */
 export function getMapConfig(_params?: unknown): {
@@ -230,6 +311,83 @@ export function getMapConfig(_params?: unknown): {
     SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
     DATA_PORTAL_KEY: dataPortalKey,
     dataPotalKey: dataPortalKey,
+  }
+}
+
+/** 필지 연계(행망 KRAS·브이월드 fallback) 설정 */
+export function getLandLinkageConfig(_params?: unknown): {
+  useKras: boolean
+  useKrasFallback: boolean
+  maskPersonalInfo: boolean
+  krasKey: string
+  krasIp: string
+  krasPort: string
+  krasPath: string
+  sggCode: string
+  vworldKey: string
+  dataPortalKey: string
+} {
+  const vars = getRuntimeEnvVars()
+  const map = getMapConfig()
+  const truthy = (v: string | undefined) => String(v ?? "").trim().toLowerCase() === "true"
+  const falsy = (v: string | undefined) => String(v ?? "").trim().toLowerCase() === "false"
+  return {
+    useKras: truthy(vars.USE_KRAS),
+    useKrasFallback: !falsy(vars.USE_KRAS_FALLBACK),
+    maskPersonalInfo: truthy(vars.MASK_PERSONAL_INFO),
+    krasKey: vars.KRAS_KEY?.trim() ?? vars.KRAS_API_KEY?.trim() ?? "",
+    krasIp: vars.KRAS_IP?.trim() ?? "",
+    krasPort: vars.KRAS_PORT?.trim() ?? "",
+    krasPath: vars.KRAS_PATH?.trim() ?? "",
+    sggCode: vars.SGG_CODE?.trim() ?? "",
+    vworldKey: map.VWORLD_API_KEY,
+    dataPortalKey: map.DATA_PORTAL_KEY,
+  }
+}
+
+function clampInt(value: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(String(value ?? "").trim(), 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, n))
+}
+
+/**
+ * 필지분석 서버 외부 API 동시성·단건 타임아웃 (runtime.env 선택 오버라이드).
+ * 기본값은 parcelAnalysisTheme.ts. 키 미설정 시 동일.
+ * 토지 청크(PARCEL_ANALYSIS_LAND_CHUNK)는 클라이언트 parcelAnalysisChunk.ts 전용 — 여기서 다루지 않음.
+ */
+export function getParcelAnalysisTuning(_params?: unknown): {
+  buildingConcurrency: number
+  linkageConcurrency: number
+  buildingTimeoutMs: number
+  linkageTimeoutMs: number
+} {
+  const vars = getRuntimeEnvVars()
+  return {
+    buildingConcurrency: clampInt(
+      vars.PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
+      PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
+      1,
+      16
+    ),
+    linkageConcurrency: clampInt(
+      vars.PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+      PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+      1,
+      16
+    ),
+    buildingTimeoutMs: clampInt(
+      vars.PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
+      PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
+      2_000,
+      60_000
+    ),
+    linkageTimeoutMs: clampInt(
+      vars.PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+      PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+      2_000,
+      60_000
+    ),
   }
 }
 
@@ -602,4 +760,20 @@ export function saveServiceList(params: { ser: SerConfigItem[] }): { saved: numb
   const serviceListPath = resolveConfigPath("serviceList.config")
   writeFileSync(serviceListPath, content, "utf-8")
   return { saved: normalized.length }
+}
+
+/** runtime.env ENABLED_SYSTEMS 원문 (필지분석 시설 카탈로그 필터) */
+export function getEnabledSystemsRaw(_params?: unknown): string {
+  return (getRuntimeEnvVars().ENABLED_SYSTEMS ?? "").trim()
+}
+
+/** 필지분석 MapCapture WMS 설정 */
+export function getParcelAnalysisMapConfig(_params?: unknown): {
+  geoserverUrl: string
+  workspace: string
+} {
+  const geoserverUrl = (process.env.GEOSERVER_URL ?? "http://localhost:8080/geoserver").replace(/\/$/, "")
+  // 메인 지도(serviceLayerFactory)와 동일하게 ggnr 워크스페이스 고정
+  const workspace = "ggnr"
+  return { geoserverUrl, workspace }
 }
