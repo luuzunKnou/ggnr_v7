@@ -19,6 +19,7 @@ type SourceBundleMeta = {
   bundleRoot: string;
   includeNodeModules: boolean;
   runNpmInstall: boolean;
+  mergeCompleted?: boolean;
 };
 
 function tempDir(uploadId: string): string {
@@ -169,15 +170,44 @@ export type CompleteSourceBundleResult = {
   totalSize: number;
   appliedFiles?: number;
   npmInstall?: { ok: boolean; message: string; skipped?: boolean };
+  npmInstallPending?: boolean;
   versionMeta?: Awaited<ReturnType<typeof registerSourceVersion>>;
   ok: true;
 };
+
+export async function runPendingSourceBundleNpmInstall(params: {
+  uploadId: string;
+  onNpmLine?: NpmInstallProgressCallback;
+}): Promise<{ ok: boolean; message: string; skipped?: boolean }> {
+  const dir = tempDir(params.uploadId);
+  let meta: SourceBundleMeta;
+  try {
+    meta = JSON.parse(await fs.readFile(path.join(dir, 'meta.json'), 'utf-8')) as SourceBundleMeta;
+  } catch {
+    throw new Error('업로드 세션을 찾을 수 없습니다.');
+  }
+  if (!meta.mergeCompleted) {
+    throw new Error('병합/압축 해제가 완료되지 않았습니다.');
+  }
+  if (!meta.runNpmInstall) {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    return { ok: true, message: 'node_modules 포함 — npm install 생략', skipped: true };
+  }
+  const workspaceRoot = process.cwd();
+  const npmInstall = await runNpmInstallAtRoot(workspaceRoot, params.onNpmLine);
+  await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  if (!npmInstall.ok) {
+    throw new Error(npmInstall.message);
+  }
+  return npmInstall;
+}
 
 export async function completeSourceBundleUpload(params: {
   uploadId: string;
   extract?: boolean;
   extractFolder?: string;
   preserveBundleZip?: boolean;
+  skipNpmInstall?: boolean;
   onNpmLine?: NpmInstallProgressCallback;
 }): Promise<CompleteSourceBundleResult> {
   const dir = tempDir(params.uploadId);
@@ -212,7 +242,9 @@ export async function completeSourceBundleUpload(params: {
     extractedPath = srcRoot;
     appliedFiles = await copyIntoWorkspace(srcRoot, workspaceRoot);
 
-    if (meta.runNpmInstall) {
+    if (params.skipNpmInstall && meta.runNpmInstall) {
+      /* npm install 는 별도 API에서 실행 */
+    } else if (meta.runNpmInstall) {
       npmInstall = await runNpmInstallAtRoot(workspaceRoot, params.onNpmLine);
       if (!npmInstall.ok) {
         throw new Error(npmInstall.message);
@@ -231,6 +263,22 @@ export async function completeSourceBundleUpload(params: {
   });
 
   const savedPath = versionMeta.zipPath;
+
+  if (params.skipNpmInstall && meta.runNpmInstall) {
+    meta.mergeCompleted = true;
+    await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta), 'utf-8');
+    return {
+      ok: true,
+      mergedZipPath: zipPath,
+      extractedPath,
+      savedPath,
+      totalSize: stat.size,
+      appliedFiles,
+      npmInstallPending: true,
+      versionMeta,
+    };
+  }
+
   await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
 
   return {

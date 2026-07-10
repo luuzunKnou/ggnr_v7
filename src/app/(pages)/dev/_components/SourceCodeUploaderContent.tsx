@@ -4,6 +4,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
+import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
+import {
+  buildSourceUploadFailBody,
+  buildSourceUploadSuccessBody,
+  formatSourceUploadHistoryMessage,
+} from '@/lib/sourceUploadHistoryMessage';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 
@@ -126,6 +132,13 @@ function stageDetailForProgress(id: StageId, p: UploadProgressPayload): string |
   if (id === 'scan' && p.scanIncluded != null) {
     return `포함 ${p.scanIncluded}, 제외 ${p.scanSkipped ?? 0}`;
   }
+  if (id === 'complete' && (p.phase === 'complete' || p.phase === 'npmInstall' || p.phase === 'done')) {
+    if (p.phase === 'complete') return p.message;
+    return '병합/압축 해제 완료';
+  }
+  if (id === 'npmInstall' && p.phase === 'npmInstall') {
+    return p.message;
+  }
   if (p.phase === 'done' && id === 'finalize') return p.message;
   return undefined;
 }
@@ -196,6 +209,17 @@ export function SourceCodeUploaderContent() {
   const lastScanLoggedRef = useRef(0);
   const lastPhaseLoggedRef = useRef('');
   const liveLogScrollRef = useRef<HTMLDivElement>(null);
+  const uploadHistoryRecordedRef = useRef(false);
+  const stagesRef = useRef(stages);
+  const includeNodeModulesRef = useRef(includeNodeModules);
+
+  useEffect(() => {
+    stagesRef.current = stages;
+  }, [stages]);
+
+  useEffect(() => {
+    includeNodeModulesRef.current = includeNodeModules;
+  }, [includeNodeModules]);
 
   useLayoutEffect(() => {
     const el = liveLogScrollRef.current;
@@ -215,6 +239,27 @@ export function SourceCodeUploaderContent() {
     setLiveLogs((prev) => [...prev.slice(-49), `[${ts}] ${line}`]);
   };
 
+  const recordFinalUploadHistoryClient = async (params: {
+    status: 'success' | 'fail';
+    body: string;
+  }) => {
+    if (uploadHistoryRecordedRef.current) return;
+    uploadHistoryRecordedRef.current = true;
+
+    const message = formatSourceUploadHistoryMessage(
+      includeNodeModulesRef.current,
+      params.status,
+      params.body
+    );
+
+    await recordVersionHistoryClient({
+      historyType: 'source_upload',
+      status: params.status,
+      message,
+    });
+    notifyDevVersionHistoryRefresh();
+  };
+
   const stopPoll = () => {
     if (pollTimerRef.current) {
       clearInterval(pollTimerRef.current);
@@ -225,7 +270,8 @@ export function SourceCodeUploaderContent() {
   const applyProgressSnapshot = (p: UploadProgressPayload) => {
     setProgressPct(p.progressPct);
     setProgressText(p.message);
-    setStages(buildStagesFromProgress(p, preflightDetailRef.current, includeNodeModules));
+    const nextStages = buildStagesFromProgress(p, preflightDetailRef.current, includeNodeModules);
+    setStages(nextStages);
 
     if (p.sentChunks != null && p.expectedChunks != null && p.expectedChunks > 0) {
       setChunkProgress({ sent: p.sentChunks, expected: p.expectedChunks });
@@ -340,6 +386,7 @@ export function SourceCodeUploaderContent() {
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
     const progressId = createProgressId();
+    uploadHistoryRecordedRef.current = false;
 
     try {
       setStageActive('preflight');
@@ -363,6 +410,10 @@ export function SourceCodeUploaderContent() {
           '대상 서버 preflight 실패';
         patchStages({
           preflight: { state: 'error', detail: msg },
+        });
+        await recordFinalUploadHistoryClient({
+          status: 'fail',
+          body: buildSourceUploadFailBody(msg),
         });
         throw new Error(msg);
       }
@@ -425,6 +476,13 @@ export function SourceCodeUploaderContent() {
         throw new Error('서버 응답을 읽을 수 없습니다 (연결 끊김 또는 타임아웃)');
       }
 
+      if (res.status === 401) {
+        await recordFinalUploadHistoryClient({
+          status: 'fail',
+          body: buildSourceUploadFailBody('인증 필요'),
+        });
+      }
+
       if (res.status === 409 && json.dbCompareRequired) {
         const dbCompare = json.dbCompare as { diffCount?: number; dialogSummary?: string } | undefined;
         setUploading(false);
@@ -440,6 +498,15 @@ export function SourceCodeUploaderContent() {
             detail: `스키마 SQL ↔ DB 차이 ${dbCompare?.diffCount ?? '?'}건`,
           },
         });
+        if (json.historyRecorded === true) {
+          uploadHistoryRecordedRef.current = true;
+          notifyDevVersionHistoryRefresh();
+        } else {
+          await recordFinalUploadHistoryClient({
+            status: 'fail',
+            body: buildSourceUploadFailBody(String(json.error ?? 'DB 스키마 불일치')),
+          });
+        }
         setProgressText('DB 스키마 불일치 — 확인 필요');
         appendLog('DB 불일치 — 사용자 확인 대기');
         return;
@@ -460,6 +527,15 @@ export function SourceCodeUploaderContent() {
           sentChunks != null && expectedChunks != null ? ` (청크 ${sentChunks}/${expectedChunks}` : '';
         const chunkIdx = chunkIndex != null ? `, 중단 index=${chunkIndex})` : chunkMsg ? ')' : '';
         const errText = String(json.error ?? 'source upload failed');
+        if (json.historyRecorded === true) {
+          uploadHistoryRecordedRef.current = true;
+          notifyDevVersionHistoryRefresh();
+        } else {
+          await recordFinalUploadHistoryClient({
+            status: 'fail',
+            body: buildSourceUploadFailBody(errText),
+          });
+        }
         throw new Error(`${stageMsg}${errText}${chunkMsg}${chunkIdx}`);
       }
 
@@ -494,12 +570,26 @@ export function SourceCodeUploaderContent() {
         },
       });
 
+      if (json.historyRecorded === true) {
+        uploadHistoryRecordedRef.current = true;
+        notifyDevVersionHistoryRefresh();
+      } else {
+        await recordFinalUploadHistoryClient({
+          status: 'success',
+          body: buildSourceUploadSuccessBody(
+            Number(json.ok ?? 0),
+            Number(json.skipped ?? 0),
+            Number(json.fail ?? 0),
+            includeNodeModules ? 'npm install 생략' : 'npm install 완료'
+          ),
+        });
+      }
+
       setProgressPct(100);
       appendLog('업로드 전체 완료');
       setProgressText(
         `업로드 완료 (성공 ${json.ok ?? 0} / 제외 ${json.skipped ?? 0} / 실패 ${json.fail ?? 0})`
       );
-      notifyDevVersionHistoryRefresh();
     } catch (e: unknown) {
       stopPoll();
       const msg = e instanceof Error ? e.message : String(e);
@@ -521,6 +611,13 @@ export function SourceCodeUploaderContent() {
         } catch {
           /* ignore */
         }
+      }
+
+      if (!isAbort && !uploadHistoryRecordedRef.current) {
+        await recordFinalUploadHistoryClient({
+          status: 'fail',
+          body: buildSourceUploadFailBody(display),
+        });
       }
 
       setRows([{ file: '(전체)', category: 'core', status: 'fail', error: display }]);
@@ -730,12 +827,79 @@ export function SourceCodeUploaderContent() {
         ))}
       </div>
 
-      {(uploading || liveLogs.length > 0) && (
-        <div className="overflow-hidden rounded border bg-muted/10">
-          <div className="border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
+      <div className="flex min-h-0 flex-1 gap-2">
+        <div className="flex min-h-0 min-w-0 flex-[2] flex-col gap-2">
+          <div className="rounded border p-2 text-xs">
+            <span className="mr-3">core {stats.core}</span>
+            <span className="mr-3">runtime {stats.runtime}</span>
+            <span className="mr-3">data {stats.data}</span>
+            <span className="mr-3 text-green-700 dark:text-green-400">성공 {stats.ok}</span>
+            <span className="mr-3 text-red-700 dark:text-red-400">실패 {stats.fail}</span>
+            <span className="text-muted-foreground">스킵 {stats.skipped}</span>
+          </div>
+
+          {!uploading && progressText !== '대기 중' && (
+            <div className="rounded border bg-muted/10 px-3 py-2 text-xs">
+              <div className="mb-1 flex items-center justify-between">
+                <span>{progressText}</span>
+                <span className="text-muted-foreground">{progressPct}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all duration-500"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <section className="min-h-0 flex-1 overflow-auto rounded border">
+            <table className="w-full table-fixed text-xs">
+              <thead className="sticky top-0 bg-muted">
+                <tr className="text-left text-muted-foreground">
+                  <th className="w-16 px-2 py-1">분류</th>
+                  <th className="w-[50%] max-w-[12rem] px-2 py-1">파일</th>
+                  <th className="w-14 px-2 py-1 text-center">상태</th>
+                  <th className="px-2 py-1">비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-3 text-center text-muted-foreground">
+                      업로드 결과가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r, i) => (
+                    <tr key={`${r.file}-${i}`} className="border-t">
+                      <td className="px-2 py-1">{r.category}</td>
+                      <td className="truncate px-2 py-1" title={r.file}>
+                        {r.file}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        {r.status === 'ok'
+                          ? '완료'
+                          : r.status === 'skipped'
+                            ? '제외'
+                            : r.status === 'fail'
+                              ? '실패'
+                              : '대기'}
+                      </td>
+                      <td className="truncate px-2 py-1 text-red-600 dark:text-red-400">{r.error ?? ''}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
+          <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
             실시간 로그
           </div>
-          <div ref={liveLogScrollRef} className="max-h-32 overflow-auto px-3 py-2 font-mono text-[11px]">
+          <div ref={liveLogScrollRef} className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px]">
             {liveLogs.length === 0 ? (
               <div className="text-muted-foreground">로그 대기 중...</div>
             ) : (
@@ -747,66 +911,7 @@ export function SourceCodeUploaderContent() {
             )}
           </div>
         </div>
-      )}
-
-      <div className="rounded border p-2 text-xs">
-        <span className="mr-3">core {stats.core}</span>
-        <span className="mr-3">runtime {stats.runtime}</span>
-        <span className="mr-3">data {stats.data}</span>
-        <span className="mr-3 text-green-700 dark:text-green-400">성공 {stats.ok}</span>
-        <span className="mr-3 text-red-700 dark:text-red-400">실패 {stats.fail}</span>
-        <span className="text-muted-foreground">스킵 {stats.skipped}</span>
       </div>
-
-      {!uploading && progressText !== '대기 중' && (
-        <div className="rounded border bg-muted/10 px-3 py-2 text-xs">
-          <div className="mb-1 flex items-center justify-between">
-            <span>{progressText}</span>
-            <span className="text-muted-foreground">{progressPct}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-primary transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      <section className="flex-1 min-h-0 overflow-auto rounded border">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-muted">
-            <tr className="text-left text-muted-foreground">
-              <th className="px-2 py-1 w-20">분류</th>
-              <th className="px-2 py-1">파일</th>
-              <th className="px-2 py-1 w-20 text-center">상태</th>
-              <th className="px-2 py-1">비고</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-2 py-3 text-center text-muted-foreground">
-                  업로드 결과가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              rows.map((r, i) => (
-                <tr key={`${r.file}-${i}`} className="border-t">
-                  <td className="px-2 py-1">{r.category}</td>
-                  <td className="px-2 py-1 truncate max-w-[30rem]" title={r.file}>
-                    {r.file}
-                  </td>
-                  <td className="px-2 py-1 text-center">
-                    {r.status === 'ok' ? '완료' : r.status === 'skipped' ? '제외' : r.status === 'fail' ? '실패' : '대기'}
-                  </td>
-                  <td className="px-2 py-1 text-red-600 dark:text-red-400 truncate">{r.error ?? ''}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
     </div>
   );
 }

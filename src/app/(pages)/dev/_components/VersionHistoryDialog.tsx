@@ -51,6 +51,11 @@ function formatDt(value: string | null): string {
   return `${y}.${m}.${day} ${h}:${min}:${s}`;
 }
 
+function toApiHistoryFilter(filter: HistoryFilter): string {
+  if (filter === 'source_upload_only') return 'source_upload';
+  return filter;
+}
+
 export function VersionHistoryDialog({
   open,
   onClose,
@@ -75,7 +80,7 @@ export function VersionHistoryDialog({
     setError(null);
     try {
       const qs = new URLSearchParams({
-        filter,
+        filter: toApiHistoryFilter(filter),
         limit: '50',
       });
       if (dateYmd.trim()) qs.set('date', dateYmd.trim());
@@ -150,7 +155,7 @@ export function VersionHistoryDialog({
             <div className="truncate text-muted-foreground" title={row.mvhIp ?? row.mvhClientHost ?? ''}>
               {row.mvhIp ?? row.mvhClientHost ?? '-'}
             </div>
-            <div className="break-all">{row.mvhMessage ?? ''}</div>
+            <div className="whitespace-pre-wrap break-all">{row.mvhMessage ?? ''}</div>
           </div>
         ))}
       </div>

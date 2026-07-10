@@ -164,7 +164,7 @@ async function readResponseJson(res: Response): Promise<{ json: JsonRecord; text
   }
 }
 
-/** complete(병합+압축해제+npm install)는 대용량 ZIP에서 5분 이상 걸릴 수 있음 */
+/** complete(병합+압축해제) 및 npm install 은 대용량에서 5분 이상 걸릴 수 있음 */
 const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** Node fetch(undici) 기본 headersTimeout=300s — complete 응답 대기용 */
@@ -614,18 +614,16 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   });
 
   if (progressId) {
-    setUploadProgressPhase(progressId, 'complete', `청크 ${sentChunks}/${expectedChunks} 완료 — 병합/압축 해제 중...`, {
-      sentChunks,
-      expectedChunks,
-      progressPct: 90,
-    });
-    if (!includeNodeModules) {
-      setUploadProgressPhase(progressId, 'npmInstall', '원격 npm install 대기 중...', {
+    setUploadProgressPhase(
+      progressId,
+      'complete',
+      `청크 ${sentChunks}/${expectedChunks} 완료 — 원격 병합/압축 해제 중...`,
+      {
         sentChunks,
         expectedChunks,
-        progressPct: 92,
-      });
-    }
+        progressPct: 90,
+      }
+    );
   }
 
   try {
@@ -645,7 +643,10 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     extract: true,
     extractFolder: bundleRoot,
     preserveBundleZip: true,
+    skipNpmInstall: !includeNodeModules,
   };
+
+  const npmInstallUrl = `${base}/npm-install`;
 
   let completeRes: Response;
   try {
@@ -661,7 +662,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     throw new RemoteUploadError({ stage: 'complete', message, sentChunks, expectedChunks, stages });
   }
 
-  const { json: completeJson, text: completeText } = await readResponseJson(completeRes);
+  let { json: completeJson, text: completeText } = await readResponseJson(completeRes);
   logStage('complete', {
     url: completeUrl,
     request: completeBody,
@@ -708,7 +709,68 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     detail: completeDetail || 'complete 성공',
   });
 
-  const npmInstall = completeJson.npmInstall as { ok?: boolean; message?: string; skipped?: boolean } | undefined;
+  let npmInstall = completeJson.npmInstall as
+    | { ok?: boolean; message?: string; skipped?: boolean }
+    | undefined;
+
+  const npmInstallPending = completeJson.npmInstallPending === true;
+
+  if (npmInstallPending) {
+    if (progressId) {
+      setUploadProgressPhase(progressId, 'npmInstall', 'npm install 중...', {
+        sentChunks,
+        expectedChunks,
+        progressPct: 93,
+      });
+    }
+
+    let npmRes: Response;
+    try {
+      npmRes = await fetchCompleteLongRunning(npmInstallUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ uploadId }),
+      });
+    } catch (err) {
+      const message = `npm install 호출 실패: ${formatFetchCause(err)}`;
+      reportFail(progressId, 'npmInstall', message, { sentChunks, expectedChunks });
+      throw new RemoteUploadError({
+        stage: 'npmInstall',
+        message,
+        sentChunks,
+        expectedChunks,
+        stages,
+      });
+    }
+
+    const { json: npmJson, text: npmText } = await readResponseJson(npmRes);
+    logStage('npm-install', {
+      url: npmInstallUrl,
+      request: { uploadId },
+      status: npmRes.status,
+      response: npmJson,
+    });
+
+    if (!npmRes.ok || npmJson.error) {
+      const message =
+        (typeof npmJson.error === 'string' ? npmJson.error : null) ??
+        (npmText.slice(0, 800) || 'npm install 실패');
+      reportFail(progressId, 'npmInstall', message, { sentChunks, expectedChunks });
+      throw new RemoteUploadError({
+        stage: 'npmInstall',
+        message,
+        status: npmRes.status,
+        responseBody: npmText,
+        stages,
+        sentChunks,
+        expectedChunks,
+      });
+    }
+
+    npmInstall = npmJson.npmInstall as typeof npmInstall;
+    completeJson = { ...completeJson, npmInstall };
+  }
+
   if (progressId) {
     if (npmInstall?.skipped) {
       setUploadProgressPhase(progressId, 'npmInstall', 'npm install 생략 (node_modules 포함)', {

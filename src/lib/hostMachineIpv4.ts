@@ -1,5 +1,4 @@
 import os from 'node:os';
-import { describeIpv4, logMvhIp } from '@/lib/clientIpDebug';
 
 function isPrivateIpv4(ip: string): boolean {
   const parts = ip.split('.').map((p) => Number(p));
@@ -28,11 +27,9 @@ function privateIpv4Rank(ip: string): number {
 export type HostNicRow = {
   adapter: string;
   address: string;
-  kind: ReturnType<typeof describeIpv4>['kind'];
   internal: boolean;
 };
 
-/** os.networkInterfaces()에서 수집한 NIC 목록 (디버그·선택용) */
 export function listHostNicIpv4(): HostNicRow[] {
   const rows: HostNicRow[] = [];
   const nets = os.networkInterfaces();
@@ -44,7 +41,6 @@ export function listHostNicIpv4(): HostNicRow[] {
       rows.push({
         adapter,
         address: net.address,
-        kind: describeIpv4(net.address).kind,
         internal: Boolean(net.internal),
       });
     }
@@ -60,17 +56,5 @@ export function pickHostMachinePrivateIpv4(): string | undefined {
 
   const unique = [...new Set(candidates)];
   unique.sort((a, b) => privateIpv4Rank(a) - privateIpv4Rank(b));
-
-  logMvhIp('hostMachineIpv4.pick', {
-    nics: listHostNicIpv4().map((row) => ({
-      adapter: row.adapter,
-      address: row.address,
-      kind: row.kind,
-      internal: row.internal,
-    })),
-    candidates: unique.map((ip) => describeIpv4(ip)),
-    selected: describeIpv4(unique[0]),
-  });
-
   return unique[0];
 }

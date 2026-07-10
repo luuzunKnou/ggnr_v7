@@ -27,7 +27,11 @@ import {
   createEmptyScanSummary,
   formatScanDetail,
 } from '@/service/sourceUploadScanSummary';
-import { recordVersionHistory } from '@/service/mngVersionHistoryService';
+import {
+  buildSourceUploadFailBody,
+  buildSourceUploadSuccessBody,
+} from '@/lib/sourceUploadHistoryMessage';
+import { recordUploadFlowHistory } from '@/service/sourceUploadHistoryService';
 import {
   completeUploadProgress,
   createProgressId,
@@ -139,6 +143,7 @@ function uploadErrorResponse(params: {
   partial?: Record<string, unknown>;
   dbCompareRequired?: boolean;
   dbCompare?: Record<string, unknown>;
+  historyRecorded?: boolean;
 }) {
   return NextResponse.json(
     {
@@ -148,10 +153,20 @@ function uploadErrorResponse(params: {
       remoteStages: params.remoteStages ?? [],
       dbCompareRequired: params.dbCompareRequired,
       dbCompare: params.dbCompare,
+      historyRecorded: params.historyRecorded === true,
       ...params.partial,
     },
     { status: params.dbCompareRequired ? 409 : 500 }
   );
+}
+
+function npmInstallNote(
+  includeNodeModules: boolean,
+  npmInstall?: { ok?: boolean; message?: string; skipped?: boolean }
+): string | undefined {
+  if (includeNodeModules) return 'npm install 생략';
+  if (!npmInstall) return undefined;
+  return npmInstall.message ?? (npmInstall.ok !== false ? 'npm install 완료' : 'npm install 실패');
 }
 
 export async function POST(req: NextRequest) {
@@ -272,18 +287,18 @@ export async function POST(req: NextRequest) {
 
     if (dbCompare.diffCount > 0 && !confirmDbMismatch) {
       failUploadProgress(progressId, 'dbCompare', 'DB 스키마 불일치 — 사용자 확인 필요');
-      await recordVersionHistory({
-        historyType: 'source_upload',
+      const historyRecorded = await recordUploadFlowHistory({
+        includeNodeModules,
         status: 'fail',
-        message: `DB 불일치 ${dbCompare.diffCount}건 — 업로드 중단`,
+        body: buildSourceUploadFailBody(`DB 스키마 불일치 (${dbCompare.diffCount}건)`),
         ip: clientIp,
-        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message: '접속 DB와 스키마 SQL이 다릅니다.',
         failedStage: 'dbCompare',
         localStages,
         remoteStages,
+        historyRecorded,
         dbCompareRequired: true,
         dbCompare: {
           diffCount: dbCompare.diffCount,
@@ -300,18 +315,18 @@ export async function POST(req: NextRequest) {
     if (included.length === 0) {
       localStages.push({ id: 'zip', ok: false, error: '업로드 대상 파일이 없습니다.' });
       failUploadProgress(progressId, 'scan', '업로드 대상 파일이 없습니다.');
-      await recordVersionHistory({
-        historyType: 'source_upload',
+      const historyRecorded = await recordUploadFlowHistory({
+        includeNodeModules,
         status: 'fail',
-        message: '업로드 대상 없음',
+        body: buildSourceUploadFailBody('업로드 대상 파일이 없습니다.'),
         ip: clientIp,
-        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message: '업로드 대상 파일이 없습니다.',
         failedStage: 'scan',
         localStages,
         remoteStages,
+        historyRecorded,
         partial: { progressId, items, total: items.length, ok: 0, skipped: items.length, fail: 0 },
       });
     }
@@ -342,18 +357,18 @@ export async function POST(req: NextRequest) {
       const message = err instanceof Error ? err.message : 'ZIP 압축 실패';
       localStages.push({ id: 'zip', ok: false, error: message });
       failUploadProgress(progressId, 'zip', message);
-      await recordVersionHistory({
-        historyType: 'source_upload',
+      const historyRecorded = await recordUploadFlowHistory({
+        includeNodeModules,
         status: 'fail',
-        message,
+        body: buildSourceUploadFailBody(message),
         ip: clientIp,
-        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message,
         failedStage: 'zip',
         localStages,
         remoteStages,
+        historyRecorded,
         partial: { progressId, items, total: items.length },
       });
     }
@@ -392,7 +407,10 @@ export async function POST(req: NextRequest) {
       items.push({ file: f.relPath, category: f.category, status: 'ok' });
     }
 
-    const npmMsg = includeNodeModules ? 'npm install 생략' : 'npm install 완료';
+    const npmInstall = remoteResult.complete?.npmInstall as
+      | { ok?: boolean; message?: string; skipped?: boolean }
+      | undefined;
+    const npmMsg = includeNodeModules ? 'npm install 생략' : npmInstall?.message ?? 'npm install 완료';
     localStages.push({
       id: 'finalize',
       ok: true,
@@ -400,12 +418,14 @@ export async function POST(req: NextRequest) {
     });
     completeUploadProgress(progressId, '업로드 완료');
 
-    await recordVersionHistory({
-      historyType: 'source_upload',
+    const okCount = items.filter((x) => x.status === 'ok').length;
+    const skippedCount = items.filter((x) => x.status === 'skipped').length;
+    const failCount = items.filter((x) => x.status === 'fail').length;
+    const historyRecorded = await recordUploadFlowHistory({
+      includeNodeModules,
       status: 'success',
-      message: `업로드 완료 — node_modules ${includeNodeModules ? '포함' : '미포함'} — ${npmMsg}`,
+      body: buildSourceUploadSuccessBody(okCount, skippedCount, failCount, npmInstallNote(includeNodeModules, npmInstall)),
       ip: clientIp,
-      clientHost: SOURCE_UPLOAD_REMOTE_BASE,
     });
 
     return NextResponse.json({
@@ -426,6 +446,7 @@ export async function POST(req: NextRequest) {
       localStages,
       remoteStages,
       items,
+      historyRecorded,
     });
   } catch (err: unknown) {
     if (err instanceof RemoteUploadError) {
@@ -437,18 +458,18 @@ export async function POST(req: NextRequest) {
           chunkIndex: err.chunkIndex,
         });
       }
-      await recordVersionHistory({
-        historyType: 'source_upload',
+      const historyRecorded = await recordUploadFlowHistory({
+        includeNodeModules,
         status: 'fail',
-        message: err.message,
+        body: buildSourceUploadFailBody(err.message),
         ip: clientIp,
-        clientHost: SOURCE_UPLOAD_REMOTE_BASE,
       });
       return uploadErrorResponse({
         message: err.message,
         failedStage: err.stage,
         localStages,
-        remoteStages,
+        remoteStages: err.stages,
+        historyRecorded,
         partial: {
           progressId,
           chunkIndex: err.chunkIndex,
@@ -460,18 +481,18 @@ export async function POST(req: NextRequest) {
     }
     const message = err instanceof Error ? err.message : 'Upload failed';
     if (progressId) failUploadProgress(progressId, 'unknown', message);
-    await recordVersionHistory({
-      historyType: 'source_upload',
+    const historyRecorded = await recordUploadFlowHistory({
+      includeNodeModules,
       status: 'fail',
-      message,
+      body: buildSourceUploadFailBody(message),
       ip: clientIp,
-      clientHost: SOURCE_UPLOAD_REMOTE_BASE,
     });
     return uploadErrorResponse({
       message,
       failedStage: 'unknown',
       localStages,
       remoteStages,
+      historyRecorded,
       partial: { progressId },
     });
   }

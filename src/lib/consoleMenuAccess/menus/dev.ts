@@ -12,7 +12,7 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'shpFileUploader', label: 'SHP File Uploader' },
   { id: 'exlFileUploader', label: 'Excel File Uploader' },
   { id: 'dataFileUploader', label: 'Data File Upload' },
-  { id: 'sourceCodeUploader', label: '소스코드 업로더' },
+  { id: 'sourceCodeUploader', label: '소스코드 업로더1234' },
   { id: 'versionManager', label: '버전관리' },
   { id: 'layerInfo', label: '레이어 정보관리' },
   { id: 'layerAttr', label: '레이어 속성관리' },

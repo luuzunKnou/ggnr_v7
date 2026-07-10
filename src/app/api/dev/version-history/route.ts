@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 function parseFilter(raw: string): VersionHistoryFilter {
   const v = raw.trim();
-  if (v === 'source_upload') return 'source_upload_only';
+  if (v === 'source_upload' || v === 'source_upload_only') return 'source_upload_only';
   if (v === 'install_zip' || v === 'apply_latest') return v as VersionHistoryType;
   if (v === 'all' || v === 'version_all') return 'version_all';
   return 'version_all';

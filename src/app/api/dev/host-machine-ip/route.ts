@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { describeIpv4 } from '@/lib/clientIpDebug';
-import { listHostNicIpv4, pickHostMachinePrivateIpv4 } from '@/lib/hostMachineIpv4';
+import { pickHostMachinePrivateIpv4 } from '@/lib/hostMachineIpv4';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,17 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const ip = pickHostMachinePrivateIpv4();
-    const nics = listHostNicIpv4();
-    return NextResponse.json({
-      ip: ip ?? null,
-      nics: nics.map((row) => ({
-        adapter: row.adapter,
-        address: row.address,
-        kind: row.kind,
-        internal: row.internal,
-      })),
-      selected: describeIpv4(ip),
-    });
+    return NextResponse.json({ ip: ip ?? null });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'host ip query failed';
     return NextResponse.json({ error: message }, { status: 500 });

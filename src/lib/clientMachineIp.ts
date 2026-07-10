@@ -1,5 +1,3 @@
-import { describeIpv4, logMvhIp } from '@/lib/clientIpDebug';
-
 let cachedIp: string | undefined;
 
 function isLoopbackHost(host: string): boolean {
@@ -65,33 +63,19 @@ function extractIpv4FromSdp(sdp: string): string[] {
 
 async function extractIpv4FromGetStats(pc: RTCPeerConnection): Promise<string[]> {
   const ips: string[] = [];
-  const reports: Array<{ type: string; address?: string; ip?: string }> = [];
   try {
     const stats = await pc.getStats();
     stats.forEach((report) => {
       if (report.type !== 'local-candidate' && report.type !== 'candidate-pair') return;
       const row = report as RTCStats & { address?: string; ip?: string };
       const addr = row.address ?? row.ip;
-      reports.push({ type: report.type, address: addr, ip: row.ip });
-      if (addr && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(addr)) ips.push(addr);
+      if (addr && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(addr) && isUsableHostIpv4(addr)) ips.push(addr);
     });
-  } catch (err) {
-    logMvhIp('clientMachineIp.getStats.error', { message: err instanceof Error ? err.message : String(err) });
+  } catch {
+    /* ignore */
   }
-  logMvhIp('clientMachineIp.getStats', {
-    reports,
-    ipv4: ips.map((ip) => describeIpv4(ip)),
-  });
   return ips;
 }
-
-type IceLogRow = {
-  typ?: string;
-  address?: string;
-  extractedIp?: string;
-  extractedKind?: ReturnType<typeof describeIpv4>;
-  raw: string;
-};
 
 function readCandidateAddress(candidate: RTCIceCandidate | null): string | undefined {
   if (!candidate) return undefined;
@@ -104,23 +88,10 @@ function readCandidateAddress(candidate: RTCIceCandidate | null): string | undef
 async function fetchHostMachineIpFromServer(): Promise<string | undefined> {
   try {
     const res = await fetch('/api/dev/host-machine-ip', { cache: 'no-store' });
-    const json = (await res.json()) as {
-      ip?: string | null;
-      nics?: Array<{ adapter: string; address: string; kind: string; internal: boolean }>;
-      selected?: ReturnType<typeof describeIpv4>;
-    };
-    logMvhIp('clientMachineIp.serverNic', {
-      ok: res.ok,
-      ip: json.ip ?? null,
-      selected: json.selected ?? describeIpv4(json.ip ?? undefined),
-      nics: json.nics ?? [],
-    });
+    const json = (await res.json()) as { ip?: string | null };
     if (!res.ok || !json.ip) return undefined;
     return isUsableHostIpv4(json.ip) ? json.ip : undefined;
-  } catch (err) {
-    logMvhIp('clientMachineIp.serverNic.error', {
-      message: err instanceof Error ? err.message : String(err),
-    });
+  } catch {
     return undefined;
   }
 }
@@ -128,48 +99,27 @@ async function fetchHostMachineIpFromServer(): Promise<string | undefined> {
 function collectHostIpv4ViaWebRtc(): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (typeof RTCPeerConnection === 'undefined') {
-      logMvhIp('clientMachineIp.webrtc', { error: 'RTCPeerConnection 없음' });
       resolve(undefined);
       return;
     }
 
     let settled = false;
     const hostIps: string[] = [];
-    const iceLogs: IceLogRow[] = [];
 
-    const finish = async (trigger: string) => {
+    const finish = async () => {
       if (settled) return;
       settled = true;
 
       const sdp = pc.localDescription?.sdp ?? '';
-      const sdpIps = sdp ? extractIpv4FromSdp(sdp) : [];
-      if (sdpIps.length) hostIps.push(...sdpIps);
-      const statsIps = await extractIpv4FromGetStats(pc);
-
-      hostIps.push(...statsIps);
-
-      const selected = pickBestPrivateIpv4(hostIps);
-      const ranked = [...new Set(hostIps)].sort(
-        (a, b) => privateIpv4Rank(a) - privateIpv4Rank(b)
-      );
-
-      logMvhIp('clientMachineIp.webrtc.done', {
-        trigger,
-        iceGatheringState: pc.iceGatheringState,
-        iceCandidates: iceLogs,
-        sdpIpv4: sdpIps.map((ip) => describeIpv4(ip)),
-        statsIpv4: statsIps.map((ip) => describeIpv4(ip)),
-        allCollected: hostIps.map((ip) => describeIpv4(ip)),
-        rankedPrivate: ranked.map((ip) => describeIpv4(ip)),
-        selected: describeIpv4(selected),
-      });
+      if (sdp) hostIps.push(...extractIpv4FromSdp(sdp));
+      hostIps.push(...(await extractIpv4FromGetStats(pc)));
 
       try {
         pc.close();
       } catch {
         /* ignore */
       }
-      resolve(selected);
+      resolve(pickBestPrivateIpv4(hostIps));
     };
 
     const pc = new RTCPeerConnection({ iceServers: [] });
@@ -178,86 +128,50 @@ function collectHostIpv4ViaWebRtc(): Promise<string | undefined> {
     pc.onicecandidate = (ev) => {
       const cand = ev.candidate?.candidate ?? '';
       if (!cand) {
-        if (ev.candidate === null) void finish('ice-null');
+        if (ev.candidate === null) void finish();
         return;
       }
-      const ipFromObj = readCandidateAddress(ev.candidate);
-      const ip = ipFromObj ?? extractIpv4FromIceCandidate(cand);
+      const ip = readCandidateAddress(ev.candidate) ?? extractIpv4FromIceCandidate(cand);
       const typ = candidateType(cand);
-      iceLogs.push({
-        typ,
-        raw: cand,
-        address: ipFromObj,
-        extractedIp: ip,
-        extractedKind: describeIpv4(ip),
-      });
       if (ip && typ !== 'srflx' && typ !== 'relay' && typ !== 'prflx') {
         hostIps.push(ip);
       }
     };
     pc.onicegatheringstatechange = () => {
-      if (pc.iceGatheringState === 'complete') void finish('ice-complete');
+      if (pc.iceGatheringState === 'complete') void finish();
     };
 
     pc.createOffer()
       .then((offer) => pc.setLocalDescription(offer))
-      .catch((err) => {
-        logMvhIp('clientMachineIp.webrtc.offerError', {
-          message: err instanceof Error ? err.message : String(err),
-        });
-        void finish('offer-error');
-      });
+      .catch(() => void finish());
 
-    setTimeout(() => void finish('timeout-5s'), 5000);
+    setTimeout(() => void finish(), 5000);
   });
 }
 
 /** 브라우저 PC 사설 IPv4 (localhost·공인 IP·접속 URL hostname 미사용) */
 export async function resolveClientMachineIp(): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
+  if (cachedIp && isUsableHostIpv4(cachedIp)) return cachedIp;
 
-  if (cachedIp && isUsableHostIpv4(cachedIp)) {
-    logMvhIp('clientMachineIp.resolve', {
-      source: 'cache',
-      selected: describeIpv4(cachedIp),
-    });
-    return cachedIp;
-  }
-
-  logMvhIp('clientMachineIp.resolve', { source: 'webrtc-start', location: window.location.href });
   const rtcIp = await collectHostIpv4ViaWebRtc();
   if (rtcIp && isUsableHostIpv4(rtcIp)) {
     cachedIp = rtcIp;
-    logMvhIp('clientMachineIp.resolve', {
-      source: 'webrtc',
-      selected: describeIpv4(cachedIp),
-    });
     return cachedIp;
   }
 
   const serverNicIp = await fetchHostMachineIpFromServer();
   if (serverNicIp && isUsableHostIpv4(serverNicIp)) {
     cachedIp = serverNicIp;
-    logMvhIp('clientMachineIp.resolve', {
-      source: 'server-nic-api',
-      selected: describeIpv4(cachedIp),
-      note: 'WebRTC mDNS 차단 — localhost 동일 PC ipconfig fallback',
-    });
     return cachedIp;
   }
 
   cachedIp = undefined;
-  logMvhIp('clientMachineIp.resolve', {
-    source: 'failed',
-    selected: describeIpv4(undefined),
-    note: '사설 IPv4 수집 실패',
-  });
   return undefined;
 }
 
 /** dev 화면 진입 시 미리 조회 — 작업 클릭 전 WebRTC 수집 시간 확보 */
 export function prefetchClientMachineIp(): void {
   if (typeof window === 'undefined') return;
-  logMvhIp('clientMachineIp.prefetch', { action: 'start' });
   void resolveClientMachineIp();
 }

@@ -1,5 +1,4 @@
 import type { NextRequest } from 'next/server';
-import { describeIpv4, logMvhIp } from '@/lib/clientIpDebug';
 import { pickHostMachinePrivateIpv4 } from '@/lib/hostMachineIpv4';
 
 export function normalizeClientIp(raw?: string | null): string | undefined {
@@ -63,72 +62,33 @@ export function pickClientIp(
   serverIp?: string,
   bodyIp?: string,
   requestHost?: string | null,
-  debugScope = 'pickClientIp',
   options?: { osFallback?: boolean }
 ): string | undefined {
   const server = normalizeClientIp(serverIp);
   let client = normalizeClientIp(bodyIp);
   const hostIp = extractIpv4FromHost(requestHost);
-  const steps: string[] = [];
 
   if (client && hostIp && client === hostIp) {
-    steps.push(`body=${client} Host와 동일 → body 제외`);
     client = undefined;
   }
-  if (client && isPublicIpv4(client)) {
-    steps.push(`body=${client} 공인 IP → body 제외`);
-    client = undefined;
-  }
-  if (client && isLoopbackIp(client)) {
-    steps.push(`body=${client} 루프백 → body 제외`);
+  if (client && (isPublicIpv4(client) || isLoopbackIp(client))) {
     client = undefined;
   }
 
   let effectiveServer = server;
-  if (effectiveServer && isPublicIpv4(effectiveServer)) {
-    steps.push(`server=${effectiveServer} 공인 IP → server 제외`);
-    effectiveServer = undefined;
-  }
-  if (effectiveServer && isLoopbackIp(effectiveServer)) {
-    steps.push(`server=${effectiveServer} 루프백 → server 제외`);
+  if (effectiveServer && (isPublicIpv4(effectiveServer) || isLoopbackIp(effectiveServer))) {
     effectiveServer = undefined;
   }
 
-  let selected: string | undefined;
-  let reason = '기록할 IP 없음';
+  if (client && isPrivateIpv4(client)) return client;
+  if (effectiveServer && isPrivateIpv4(effectiveServer)) return effectiveServer;
 
-  if (client && isPrivateIpv4(client)) {
-    selected = client;
-    reason = 'body 사설 IPv4 우선';
-  } else if (effectiveServer && isPrivateIpv4(effectiveServer)) {
-    selected = effectiveServer;
-    reason = 'server 사설 IPv4 (LAN 직접 접속)';
-  } else if (options?.osFallback) {
+  if (options?.osFallback) {
     const osNicIp = pickHostMachinePrivateIpv4();
-    if (osNicIp && isPrivateIpv4(osNicIp)) {
-      selected = osNicIp;
-      reason = 'localhost 접속 — 서버 OS NIC 사설 IPv4 (ipconfig)';
-    }
+    if (osNicIp && isPrivateIpv4(osNicIp)) return osNicIp;
   }
 
-  logMvhIp(debugScope, {
-    inputs: {
-      serverRaw: serverIp ?? null,
-      server: describeIpv4(server),
-      bodyRaw: bodyIp ?? null,
-      body: describeIpv4(client ?? bodyIp),
-      bodyAfterFilter: describeIpv4(client),
-      hostHeader: requestHost ?? null,
-      hostIp: describeIpv4(hostIp),
-      serverEffective: describeIpv4(effectiveServer),
-      osFallback: options?.osFallback ?? false,
-    },
-    steps,
-    selected: describeIpv4(selected),
-    reason,
-  });
-
-  return selected;
+  return undefined;
 }
 
 export function resolveRequestClientMeta(req: NextRequest): { ip?: string } {
@@ -140,17 +100,7 @@ export function resolveRequestClientMeta(req: NextRequest): { ip?: string } {
   const fromReq = reqWithIp.ip?.trim();
   const serverIp = fromForwarded || fromReal || fromCf || fromReq;
 
-  logMvhIp('resolveRequestClientMeta.headers', {
-    xForwardedFor: forwarded ?? null,
-    xRealIp: fromReal ?? null,
-    cfConnectingIp: fromCf ?? null,
-    reqIp: fromReq ?? null,
-    host: req.headers.get('host'),
-    chosenServerRaw: serverIp ?? null,
-    chosenServer: describeIpv4(normalizeClientIp(serverIp)),
-  });
-
-  const ip = pickClientIp(serverIp, undefined, req.headers.get('host'), 'resolveRequestClientMeta');
+  const ip = pickClientIp(serverIp, undefined, req.headers.get('host'));
   return { ip };
 }
 
@@ -163,19 +113,7 @@ export function pickClientIpFromRequest(req: NextRequest, bodyIp?: string): stri
   const fromReq = reqWithIp.ip?.trim();
   const serverIp = fromForwarded || fromReal || fromCf || fromReq;
 
-  logMvhIp('pickClientIpFromRequest.headers', {
-    xForwardedFor: forwarded ?? null,
-    xRealIp: fromReal ?? null,
-    cfConnectingIp: fromCf ?? null,
-    reqIp: fromReq ?? null,
-    host: req.headers.get('host'),
-    bodyRaw: bodyIp ?? null,
-    body: describeIpv4(normalizeClientIp(bodyIp)),
-    chosenServerRaw: serverIp ?? null,
-    chosenServer: describeIpv4(normalizeClientIp(serverIp)),
-  });
-
-  return pickClientIp(serverIp, bodyIp, req.headers.get('host'), 'pickClientIpFromRequest', {
+  return pickClientIp(serverIp, bodyIp, req.headers.get('host'), {
     osFallback: isLoopbackIp(normalizeClientIp(serverIp)),
   });
 }

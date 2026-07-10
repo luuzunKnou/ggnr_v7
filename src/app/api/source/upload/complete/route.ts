@@ -20,13 +20,15 @@ export async function POST(req: NextRequest) {
     const extract = body.extract === true;
     const extractFolder = typeof body.extractFolder === 'string' ? body.extractFolder.trim() : undefined;
     const preserveBundleZip = body.preserveBundleZip === true;
+    const skipNpmInstall = body.skipNpmInstall === true;
 
-    if (extract || extractFolder || preserveBundleZip) {
+    if (extract || extractFolder || preserveBundleZip || skipNpmInstall) {
       const result = await completeSourceBundleUpload({
         uploadId,
         extract,
         extractFolder,
         preserveBundleZip,
+        skipNpmInstall,
       });
       return NextResponse.json({
         ok: true,
@@ -36,6 +38,7 @@ export async function POST(req: NextRequest) {
         totalSize: result.totalSize,
         appliedFiles: result.appliedFiles,
         npmInstall: result.npmInstall,
+        npmInstallPending: result.npmInstallPending === true,
         versionMeta: result.versionMeta,
       });
     }
