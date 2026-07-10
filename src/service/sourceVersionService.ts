@@ -157,10 +157,17 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     fileName,
     restartRequested: restart,
     restartMode,
+    includeNodeModules,
+    runNpmInstallBefore: restart && restartMode === 'command' && includeNodeModules === false,
     source: 'versionManagerClientRelay',
   });
 
-  const restartResult = scheduleRestart(restart ? restartMode : 'none');
+  /** 개방망(node_modules 미포함) + 명령 실행: 재기동 전 npm install */
+  const runNpmInstallBefore =
+    restart && restartMode === 'command' && includeNodeModules === false;
+  const restartResult = scheduleRestart(restart ? restartMode : 'none', {
+    runNpmInstallBefore,
+  });
   await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
 
   return {
@@ -263,11 +270,21 @@ async function writeRestartSignal(signalFile: string, payload: Record<string, un
   await fs.writeFile(signalFile, JSON.stringify(payload, null, 2), 'utf-8');
 }
 
-/** 부모 프로세스 종료 후에도 대기·실행이 이어지도록 detached 자식으로 예약 */
-function spawnDelayedRestartCommand(restartCommand: string, cwd: string, delayMs: number): void {
+const NPM_INSTALL_CMD = 'npm install --no-audit --no-fund';
+
+/** 부모 프로세스 종료 후에도 대기·(선택) npm install·실행이 이어지도록 detached 자식으로 예약 */
+function spawnDelayedRestartCommand(
+  restartCommand: string,
+  cwd: string,
+  delayMs: number,
+  runNpmInstallBefore: boolean
+): void {
   const delaySec = Math.max(1, Math.ceil(delayMs / 1000));
+  const afterWait = runNpmInstallBefore
+    ? `${NPM_INSTALL_CMD} && ${restartCommand}`
+    : restartCommand;
   if (process.platform === 'win32') {
-    const script = `timeout /t ${delaySec} /nobreak >nul && ${restartCommand}`;
+    const script = `timeout /t ${delaySec} /nobreak >nul && ${afterWait}`;
     spawn('cmd.exe', ['/c', script], {
       cwd,
       detached: true,
@@ -278,7 +295,7 @@ function spawnDelayedRestartCommand(restartCommand: string, cwd: string, delayMs
     return;
   }
   const delaySecFloat = Math.max(0.5, delayMs / 1000);
-  spawn('sh', ['-c', `sleep ${delaySecFloat} && ${restartCommand}`], {
+  spawn('sh', ['-c', `sleep ${delaySecFloat} && ${afterWait}`], {
     cwd,
     detached: true,
     stdio: 'ignore',
@@ -286,7 +303,10 @@ function spawnDelayedRestartCommand(restartCommand: string, cwd: string, delayMs
   }).unref();
 }
 
-function scheduleRestart(mode: RestartMode): {
+function scheduleRestart(
+  mode: RestartMode,
+  options?: { runNpmInstallBefore?: boolean }
+): {
   scheduled: boolean;
   commandConfigured: boolean;
   message: string;
@@ -294,6 +314,7 @@ function scheduleRestart(mode: RestartMode): {
   const restartCommand = process.env.GGNR_RESTART_COMMAND?.trim() ?? '';
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
+  const runNpmInstallBefore = options?.runNpmInstallBefore === true;
 
   if (mode === 'none') {
     return { scheduled: false, commandConfigured: Boolean(restartCommand), message: '재시작 요청 안 함' };
@@ -307,14 +328,15 @@ function scheduleRestart(mode: RestartMode): {
         message: 'GGNR_RESTART_COMMAND 미설정으로 command 재시작을 실행하지 못했습니다.',
       };
     }
-    spawnDelayedRestartCommand(restartCommand, process.cwd(), safeDelay);
+    spawnDelayedRestartCommand(restartCommand, process.cwd(), safeDelay, runNpmInstallBefore);
     setTimeout(() => {
       process.exit(0);
     }, 500).unref();
+    const npmStep = runNpmInstallBefore ? ' → npm install' : '';
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `재시작 예약: 프로세스 종료 후 ${safeDelay}ms 대기 → 명령 실행 (${restartCommand})`,
+      message: `재시작 예약: 프로세스 종료 후 ${safeDelay}ms 대기${npmStep} → 명령 실행 (${restartCommand})`,
     };
   }
 

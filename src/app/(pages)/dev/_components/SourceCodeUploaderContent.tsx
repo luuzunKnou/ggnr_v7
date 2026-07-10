@@ -862,6 +862,22 @@ export function SourceCodeUploaderContent() {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-2">
+        <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden rounded border bg-muted/10">
+          <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
+            실시간 로그
+          </div>
+          <div ref={liveLogScrollRef} className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px]">
+            {liveLogs.length === 0 ? (
+              <div className="text-muted-foreground">로그 대기 중...</div>
+            ) : (
+              liveLogs.map((line, i) => (
+                <div key={`${i}-${line}`} className="whitespace-pre-wrap break-all leading-relaxed">
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
         <div className="flex min-h-0 min-w-0 flex-[2] flex-col gap-2">
           <div className="rounded border p-2 text-xs">
             <span className="mr-3">core {stats.core}</span>
@@ -929,22 +945,7 @@ export function SourceCodeUploaderContent() {
           </section>
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
-          <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
-            실시간 로그
-          </div>
-          <div ref={liveLogScrollRef} className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px]">
-            {liveLogs.length === 0 ? (
-              <div className="text-muted-foreground">로그 대기 중...</div>
-            ) : (
-              liveLogs.map((line, i) => (
-                <div key={`${i}-${line}`} className="whitespace-pre-wrap break-all leading-relaxed">
-                  {line}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        
       </div>
         </>
       )}

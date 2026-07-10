@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { DevFloatingPanel } from './DevFloatingPanel';
 import { registerDevVersionHistoryRefresh } from './devVersionHistoryBridge';
@@ -20,11 +20,10 @@ type HistoryItem = {
 type VersionHistoryDialogProps = {
   open: boolean;
   onClose: () => void;
-  /** 소스코드: source_all, 버전관리: version_all(최신 소스 적용) */
+  /** 소스코드: source_all, 버전관리: apply_latest */
   defaultFilter: HistoryFilter;
+  /** 소스코드 관리만 기능 구분 select 표시 */
   showFeatureFilter?: boolean;
-  /** source_all 필터 시 기능 구분 옵션 */
-  sourceMenu?: boolean;
 };
 
 function historyTypeLabel(type: string): string {
@@ -66,30 +65,29 @@ export function VersionHistoryDialog({
   onClose,
   defaultFilter,
   showFeatureFilter = false,
-  sourceMenu = false,
 }: VersionHistoryDialogProps) {
   const [filter, setFilter] = useState<HistoryFilter>(defaultFilter);
   const [dateYmd, setDateYmd] = useState('');
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const filterRef = useRef(filter);
+  const dateYmdRef = useRef(dateYmd);
 
-  useEffect(() => {
-    if (open) {
-      setFilter(defaultFilter);
-      setDateYmd('');
-    }
-  }, [open, defaultFilter]);
+  filterRef.current = filter;
+  dateYmdRef.current = dateYmd;
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setHasSearched(true);
     try {
       const qs = new URLSearchParams({
-        filter: toApiHistoryFilter(filter),
+        filter: toApiHistoryFilter(filterRef.current),
         limit: '50',
       });
-      if (dateYmd.trim()) qs.set('date', dateYmd.trim());
+      if (dateYmdRef.current.trim()) qs.set('date', dateYmdRef.current.trim());
       const res = await fetch(`/api/dev/version-history?${qs.toString()}`, { cache: 'no-store' });
       const json = (await res.json()) as { items?: HistoryItem[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? '조회 실패');
@@ -100,20 +98,27 @@ export function VersionHistoryDialog({
     } finally {
       setLoading(false);
     }
-  }, [filter, dateYmd]);
+  }, []);
 
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
+    if (!open) return;
+    setFilter(defaultFilter);
+    setDateYmd('');
+    filterRef.current = defaultFilter;
+    dateYmdRef.current = '';
+    setError(null);
+    void load();
+  }, [open, defaultFilter, load]);
 
   useEffect(() => {
     return registerDevVersionHistoryRefresh(() => {
+      if (!open) return;
       void load();
     });
-  }, [load]);
+  }, [load, open]);
 
   return (
-    <DevFloatingPanel open={open} onClose={onClose} title="이력" minHeight="500px">
+    <DevFloatingPanel open={open} onClose={onClose} title="이력" minHeight="500px" maxHeight="500px">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
         {showFeatureFilter && (
           <select
@@ -125,35 +130,18 @@ export function VersionHistoryDialog({
                   ? 'all'
                   : filter === 'install_zip'
                     ? 'install_zip'
-                    : filter === 'apply_latest'
-                      ? 'apply_latest'
-                      : 'all'
+                    : 'all'
             }
             onChange={(e) => {
               const v = e.target.value;
-              if (sourceMenu) {
-                if (v === 'source_upload') setFilter('source_upload_only');
-                else if (v === 'install_zip') setFilter('install_zip');
-                else setFilter('source_all');
-                return;
-              }
-              if (v === 'all') setFilter('version_all');
-              else if (v === 'install_zip' || v === 'apply_latest') setFilter(v);
-              else setFilter('version_all');
+              if (v === 'source_upload') setFilter('source_upload_only');
+              else if (v === 'install_zip') setFilter('install_zip');
+              else setFilter('source_all');
             }}
           >
-            {sourceMenu ? (
-              <>
-                <option value="all">전체</option>
-                <option value="source_upload">소스코드 업로드</option>
-                <option value="install_zip">설치파일 다운로드</option>
-              </>
-            ) : (
-              <>
-                <option value="all">전체</option>
-                <option value="apply_latest">최신 소스 적용</option>
-              </>
-            )}
+            <option value="all">전체</option>
+            <option value="source_upload">소스코드 업로드</option>
+            <option value="install_zip">설치파일 다운로드</option>
           </select>
         )}
         <input
@@ -169,7 +157,10 @@ export function VersionHistoryDialog({
       <div className="min-h-0 flex-1 overflow-auto px-4 py-2 text-xs">
         {loading && <div className="text-muted-foreground">조회 중...</div>}
         {error && <div className="text-red-600 dark:text-red-400">{error}</div>}
-        {!loading && !error && items.length === 0 && (
+        {!loading && !error && !hasSearched && (
+          <div className="text-muted-foreground">기능·날짜를 선택한 뒤 «검색»을 눌러 주세요.</div>
+        )}
+        {!loading && !error && hasSearched && items.length === 0 && (
           <div className="text-muted-foreground">이력이 없습니다.</div>
         )}
         {items.map((row) => (
