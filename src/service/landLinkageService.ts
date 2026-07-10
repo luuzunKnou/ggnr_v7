@@ -19,11 +19,10 @@ import {
   mapKrasToParcelLandInfoTab,
   type ParcelLandInfoTabData,
 } from '@/lib/parcelLandInfoTab';
-import { getJijukLandAttrsByPnus, getParcelTabDataFromCache, upsertJijukLandAttrFromParcelData } from '@/service/jijukLandAttrService';
+import { getJijukLandAttrsByPnus, getParcelTabDataFromCache, mergeJijukLandAttrSummary, upsertJijukLandAttrFromParcelData } from '@/service/jijukLandAttrService';
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
-const BATCH_CHUNK = 100;
 
 function toStr(value: unknown): string {
   if (value == null) return '';
@@ -67,9 +66,10 @@ function buildKrasUrl(cfg: ReturnType<typeof getLandLinkageConfig>): string | nu
   return `http://${cfg.krasIp}:${cfg.krasPort}${path === '/' ? '' : path}`;
 }
 
-async function postKrasXml(url: string, body: string, timeoutMs = 5000): Promise<string> {
+async function postKrasXml(url: string, body: string, timeoutMs?: number): Promise<string> {
+  const ms = timeoutMs ?? getParcelAnalysisTuning().linkageTimeoutMs;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -105,15 +105,14 @@ async function fetchKrasBatch(
   pnus: string[],
   cfg: ReturnType<typeof getLandLinkageConfig>
 ): Promise<ParcelLandEnrichmentMap> {
+  const results = await mapPool(pnus, getParcelAnalysisTuning().linkageConcurrency, (pnu) =>
+    fetchKrasForPnu(pnu, cfg)
+  );
   const out: ParcelLandEnrichmentMap = {};
-  for (let i = 0; i < pnus.length; i += BATCH_CHUNK) {
-    const chunk = pnus.slice(i, i + BATCH_CHUNK);
-    const results = await Promise.all(chunk.map((pnu) => fetchKrasForPnu(pnu, cfg)));
-    chunk.forEach((pnu, idx) => {
-      const row = results[idx];
-      if (row) out[pnu] = row;
-    });
-  }
+  pnus.forEach((pnu, idx) => {
+    const row = results[idx];
+    if (row) out[pnu] = row;
+  });
   return out;
 }
 
@@ -132,13 +131,18 @@ function pickVworldField(payload: VworldJson | null, rootKey: keyof VworldJson):
   return field as Record<string, unknown>;
 }
 
-async function fetchVworldJson(url: string): Promise<VworldJson | null> {
+async function fetchVworldJson(url: string, timeoutMs?: number): Promise<VworldJson | null> {
+  const ms = timeoutMs ?? getParcelAnalysisTuning().linkageTimeoutMs;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
     if (!res.ok) return null;
     return (await res.json()) as VworldJson;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -226,6 +230,32 @@ function missingPnus(pnus: string[], map: ParcelLandEnrichmentMap): string[] {
   return pnus.filter((p) => !map[p]);
 }
 
+/** 연계 성공분(KRAS·브이월드)만 캐시 — 오류·빈 결과는 저장하지 않음 */
+async function cacheFreshEnrichments(map: ParcelLandEnrichmentMap): Promise<void> {
+  const rows = Object.values(map).filter(
+    (row) =>
+      (row.source === 'kras' || row.source === 'vworld') &&
+      (Boolean(row.jimok && row.jimok !== '미상') ||
+        Boolean(row.ownerType && row.ownerType !== '미상') ||
+        (row.publicPrice != null && row.publicPrice > 0) ||
+        row.areaSqm > 0)
+  );
+  if (!rows.length) return;
+  await mapPool(rows, Math.min(4, getParcelAnalysisTuning().linkageConcurrency), async (row) => {
+    try {
+      await mergeJijukLandAttrSummary({
+        pnu: row.pnu,
+        jimok: row.jimokNm || row.jimok || null,
+        ownshipSe: row.ownerType && row.ownerType !== '미상' ? row.ownerType : null,
+        pblntfPclnd: row.publicPrice,
+        lndpclAr: row.areaSqm > 0 ? row.areaSqm : null,
+      });
+    } catch {
+      /* 캐시 실패는 보강 결과와 무관 */
+    }
+  });
+}
+
 /** PNU 목록 보강 — 행망 우선, fallback 시 캐시→브이월드 */
 export async function enrichParcelLandsByPnus(params: {
   pnus: string[];
@@ -260,6 +290,8 @@ export async function enrichParcelLandsByPnus(params: {
     }
   }
 
+  void cacheFreshEnrichments(enrichments);
+
   let source: ParcelLandSource | 'mixed' | 'db' = 'db';
   if (usedSources.size === 1) source = [...usedSources][0]!;
   else if (usedSources.size > 1) source = 'mixed';
@@ -276,12 +308,17 @@ type VworldLandUseJson = {
 };
 
 async function fetchVworldLandUseJson(url: string): Promise<VworldLandUseJson | null> {
+  const ms = getParcelAnalysisTuning().linkageTimeoutMs;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
     if (!res.ok) return null;
     return (await res.json()) as VworldLandUseJson;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -406,12 +443,17 @@ type VworldNedJson = {
 };
 
 async function fetchVworldNedJson(url: string): Promise<VworldNedJson | null> {
+  const ms = getParcelAnalysisTuning().linkageTimeoutMs;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
     if (!res.ok) return null;
     return (await res.json()) as VworldNedJson;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

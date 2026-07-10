@@ -70,8 +70,11 @@ async function fetchLedgerUpstream(pnu: string, serviceKey: string): Promise<Led
   const qs = buildPnuQueryParams(pnu);
   qs.set('serviceKey', serviceKey);
   const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?${qs.toString()}`;
+  const timeoutMs = getParcelAnalysisTuning().buildingTimeoutMs;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
     const text = await res.text();
     if (!res.ok) return { kind: 'error' };
     if (text.trim().startsWith('{')) {
@@ -81,6 +84,8 @@ async function fetchLedgerUpstream(pnu: string, serviceKey: string): Promise<Led
     return xmlRows.length ? { kind: 'data', rows: xmlRows } : { kind: 'empty' };
   } catch {
     return { kind: 'error' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

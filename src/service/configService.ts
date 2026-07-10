@@ -5,6 +5,12 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
+import {
+  PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
+  PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
+  PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+  PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+} from "@/lib/parcelAnalysisTheme"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -345,17 +351,43 @@ function clampInt(value: string | undefined, fallback: number, min: number, max:
   return Math.max(min, Math.min(max, n))
 }
 
-/** 필지분석 외부 API 동시성·청크 (runtime.env, 서버 전용) */
+/**
+ * 필지분석 서버 외부 API 동시성·단건 타임아웃 (runtime.env 선택 오버라이드).
+ * 기본값은 parcelAnalysisTheme.ts. 키 미설정 시 동일.
+ * 토지 청크(PARCEL_ANALYSIS_LAND_CHUNK)는 클라이언트 parcelAnalysisChunk.ts 전용 — 여기서 다루지 않음.
+ */
 export function getParcelAnalysisTuning(_params?: unknown): {
-  landChunk: number
   buildingConcurrency: number
   linkageConcurrency: number
+  buildingTimeoutMs: number
+  linkageTimeoutMs: number
 } {
   const vars = getRuntimeEnvVars()
   return {
-    landChunk: clampInt(vars.PARCEL_ANALYSIS_LAND_CHUNK, 100, 25, 200),
-    buildingConcurrency: clampInt(vars.PARCEL_ANALYSIS_BUILDING_CONCURRENCY, 8, 1, 16),
-    linkageConcurrency: clampInt(vars.PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, 8, 1, 16),
+    buildingConcurrency: clampInt(
+      vars.PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
+      PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
+      1,
+      16
+    ),
+    linkageConcurrency: clampInt(
+      vars.PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+      PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+      1,
+      16
+    ),
+    buildingTimeoutMs: clampInt(
+      vars.PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
+      PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
+      2_000,
+      60_000
+    ),
+    linkageTimeoutMs: clampInt(
+      vars.PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+      PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+      2_000,
+      60_000
+    ),
   }
 }
 
@@ -740,8 +772,8 @@ export function getParcelAnalysisMapConfig(_params?: unknown): {
   geoserverUrl: string
   workspace: string
 } {
-  const vars = getRuntimeEnvVars()
   const geoserverUrl = (process.env.GEOSERVER_URL ?? "http://localhost:8080/geoserver").replace(/\/$/, "")
-  const workspace = vars.SYSTEM_NAME?.trim() || process.env.GGNR_PROJECT?.trim() || "ggnr"
+  // 메인 지도(serviceLayerFactory)와 동일하게 ggnr 워크스페이스 고정
+  const workspace = "ggnr"
   return { geoserverUrl, workspace }
 }

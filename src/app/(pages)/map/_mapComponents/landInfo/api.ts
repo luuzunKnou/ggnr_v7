@@ -1,6 +1,7 @@
 'use client';
 
 import { call } from '@/lib/api';
+import { hasParcelLandInfoTabData } from '@/lib/parcelLandInfoTab';
 import { transformCoordinate } from '../services/coordinateService';
 
 type JsonObject = Record<string, unknown>;
@@ -241,7 +242,23 @@ function emptyParcelTabData(): ParcelTabData {
   };
 }
 
-/** 행망 우선·실패 시 캐시·브이월드 (landLinkageService) */
+function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): ParcelTabData {
+  return {
+    characteristics: Array.isArray(payload.characteristics) ? payload.characteristics : [],
+    landUses: Array.isArray(payload.landUses) ? payload.landUses : [],
+    prices: Array.isArray(payload.prices) ? payload.prices : [],
+    possessions: Array.isArray(payload.possessions) ? payload.possessions : [],
+    source:
+      payload.source === 'kras' ||
+      payload.source === 'cache' ||
+      payload.source === 'vworld' ||
+      payload.source === 'mixed'
+        ? payload.source
+        : undefined,
+  };
+}
+
+/** 행망·캐시 우선(서버) — 내용 없으면 브라우저 VWorld JSONP 폴백 (v6 동일) */
 export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
@@ -254,26 +271,18 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
     });
     const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
     if (payload?.ok !== false) {
-      return {
-        characteristics: Array.isArray(payload.characteristics) ? payload.characteristics : [],
-        landUses: Array.isArray(payload.landUses) ? payload.landUses : [],
-        prices: Array.isArray(payload.prices) ? payload.prices : [],
-        possessions: Array.isArray(payload.possessions) ? payload.possessions : [],
-        source:
-          payload.source === 'kras' ||
-          payload.source === 'cache' ||
-          payload.source === 'vworld' ||
-          payload.source === 'mixed'
-            ? payload.source
-            : undefined,
-      };
+      const tab = normalizeParcelTabPayload(payload);
+      // 서버 VWorld 직접 호출은 키 도메인·망 제약으로 빈 결과가 올 수 있음 → 실데이터 있을 때만 사용
+      if (hasParcelLandInfoTabData(tab)) {
+        return tab;
+      }
     }
   } catch {
     /* 서버 실패 시 클라이언트 fallback */
   }
 
   const cached = await fetchParcelTabDataFromCache(pnu);
-  if (cached) return cached;
+  if (cached && hasParcelLandInfoTabData(cached)) return cached;
 
   if (!toStr(args.vworldKey)) return emptyParcelTabData();
 
