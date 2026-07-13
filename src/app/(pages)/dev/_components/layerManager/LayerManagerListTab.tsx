@@ -10,6 +10,8 @@ import { SchemaBadge, SourceBadge } from "./defineBadges"
 import { downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh } from "./layerManagerUploadBridge"
+import { StylePreviewSwatch } from "./StylePreviewSwatch"
+import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 
 const GEOSERVER_DEFAULT_URL =
   typeof window !== "undefined"
@@ -108,16 +110,19 @@ function pickLatestDate(...values: Array<string | null | undefined>): string | n
   return best
 }
 
-function getLegendGraphicUrl(layerName: string, styleName?: string): string {
+function getLegendGraphicUrl(layerName: string, styleName?: string, version?: number): string {
+  // GeoServer 레이어·스타일은 항상 소문자로 생성되므로 원본 대소문자와 무관하게 소문자로 조회
+  const layerKey = layerName.toLowerCase()
   const params = new URLSearchParams({
     SERVICE: "WMS",
     REQUEST: "GetLegendGraphic",
     VERSION: "1.0.0",
-    LAYER: `${GEOSERVER_WORKSPACE}:${layerName}`,
-    STYLE: styleName?.trim() || layerName,
+    LAYER: `${GEOSERVER_WORKSPACE}:${layerKey}`,
+    STYLE: styleName?.trim() || layerKey,
     FORMAT: "image/png",
     WIDTH: "32",
     HEIGHT: "32",
+    ...(version != null ? { _v: String(version) } : {}),
   })
   return `${GEOSERVER_DEFAULT_URL}/wms?${params.toString()}`
 }
@@ -166,8 +171,8 @@ type FilterMode = "all" | "public_layer" | "layer" | "error"
 
 const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
   { value: "all", label: "전체" },
-  { value: "public_layer", label: "공용레이어" },
-  { value: "layer", label: "레이어" },
+  { value: "public_layer", label: "public_layer" },
+  { value: "layer", label: "layer" },
   { value: "error", label: "오류" },
 ]
 
@@ -177,6 +182,11 @@ export function LayerManagerListTab() {
   const [error, setError] = useState<string | null>(null)
   const [styleInfoMap, setStyleInfoMap] = useState<Record<string, StyleInfo>>({})
   const [styleLoading, setStyleLoading] = useState(false)
+  const [styleVersion, setStyleVersion] = useState(0)
+  /** WMS 범례(GetLegendGraphic) 실패 시 CSS를 직접 파싱해서 보여주는 미리보기 캐시 — DB 테이블이 없어도 스타일 자체는 볼 수 있게 함 */
+  const [cssFallbackMap, setCssFallbackMap] = useState<
+    Record<string, "loading" | "error" | (StyleProps & { geometryType: GeometryType })>
+  >({})
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [filterMode, setFilterMode] = useState<FilterMode>("all")
@@ -298,12 +308,33 @@ export function LayerManagerListTab() {
           }
         }
         setStyleInfoMap(map)
+        setStyleVersion((v) => v + 1)
       }
     } catch {
       // 스타일 정보 실패해도 목록은 유지
     } finally {
       setStyleLoading(false)
     }
+  }, [])
+
+  /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
+  const loadCssFallback = useCallback((key: string) => {
+    setCssFallbackMap((prev) => (prev[key] ? prev : { ...prev, [key]: "loading" }))
+    call("", "POST", {
+      service: "devTestService",
+      action: "getGeoServerStyle",
+      params: { url: GEOSERVER_DEFAULT_URL, name: key },
+    })
+      .then((res) => {
+        const data = res?.data ?? res
+        if (data?.success && data.format === "css" && data.body) {
+          const { styleProps, geometryType } = parseSimpleStyleFromCss(data.body)
+          setCssFallbackMap((prev) => ({ ...prev, [key]: { ...styleProps, geometryType } }))
+        } else {
+          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+        }
+      })
+      .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
   }, [])
 
   const loadRowMeta = useCallback(async () => {
@@ -414,6 +445,9 @@ export function LayerManagerListTab() {
       list = list.filter((r) => r.define_table_schema === "public_layer")
     } else if (filterMode === "layer") {
       list = list.filter((r) => r.define_table_schema !== "public_layer")
+      if (!styleLoading) {
+        list = list.filter((r) => !rowHasInfraError(r.define_table_name, styleInfoMap))
+      }
     } else if (filterMode === "error" && !styleLoading) {
       list = list.filter((r) => rowHasInfraError(r.define_table_name, styleInfoMap))
     }
@@ -426,7 +460,17 @@ export function LayerManagerListTab() {
           r.define_table_kor_name.toLowerCase().includes(q)
       )
     }
-    return list
+    // 정렬: layer/SHP → layer/Excel → public_layer/SHP → public_layer/Excel → 그 외
+    const sortRank = (r: LayerManagerRow) => {
+      const isPublic = r.define_table_schema === "public_layer"
+      const source = r.define_table_source.toLowerCase()
+      if (!isPublic && source === "shp") return 0
+      if (!isPublic && source === "excel") return 1
+      if (isPublic && source === "shp") return 2
+      if (isPublic && source === "excel") return 3
+      return 4
+    }
+    return [...list].sort((a, b) => sortRank(a) - sortRank(b))
   }, [rows, filterMode, styleLoading, styleInfoMap, debouncedSearch])
 
   const categoryTotal = useMemo(() => {
@@ -434,7 +478,11 @@ export function LayerManagerListTab() {
       return rows.filter((r) => r.define_table_schema === "public_layer").length
     }
     if (filterMode === "layer") {
-      return rows.filter((r) => r.define_table_schema !== "public_layer").length
+      return rows.filter(
+        (r) =>
+          r.define_table_schema !== "public_layer" &&
+          (styleLoading || !rowHasInfraError(r.define_table_name, styleInfoMap))
+      ).length
     }
     if (filterMode === "error") {
       return styleLoading ? 0 : rows.filter((r) => rowHasInfraError(r.define_table_name, styleInfoMap)).length
@@ -483,7 +531,7 @@ export function LayerManagerListTab() {
               type="button"
               disabled={opt.value === "error" && styleLoading}
               onClick={() => setFilterMode(opt.value)}
-              className={`h-7 rounded-sm px-2.5 text-sm transition-colors disabled:opacity-50 ${
+              className={`h-7 rounded-sm px-2.5 text-sm transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                 filterMode === opt.value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted"
@@ -653,29 +701,41 @@ export function LayerManagerListTab() {
                     }
                     if (col.kind === "style_legend") {
                       const legendUrl = tableName
-                        ? getLegendGraphicUrl(tableName, styleName ?? undefined)
+                        ? getLegendGraphicUrl(tableName, styleName ?? undefined, styleVersion)
                         : ""
+                      const fallbackKey = (styleName || tableName || "").toLowerCase()
+                      const fallbackState = fallbackKey ? cssFallbackMap[fallbackKey] : undefined
+                      const showImg = Boolean(legendUrl && canShowLegend && fallbackState === undefined)
+                      const showSwatch = fallbackState && typeof fallbackState === "object"
+                      const showLoading = fallbackState === "loading"
                       return (
                         <div key={col.id} className={`${cellClass} justify-center`} style={cellStyle}>
-                          {legendUrl && canShowLegend ? (
+                          {showImg && (
                             <img
                               src={legendUrl}
                               alt=""
                               className="max-h-7 max-w-full object-contain"
                               title={`${tableName} 범례`}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none"
-                                const fallback = e.currentTarget.nextElementSibling
-                                if (fallback instanceof HTMLElement) fallback.style.display = "inline"
+                              onError={() => {
+                                if (!fallbackKey) return
+                                if (hasCssStyle) loadCssFallback(fallbackKey)
+                                else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
                               }}
                             />
-                          ) : null}
-                          <span
-                            className="text-xs text-muted-foreground"
-                            style={{ display: legendUrl && canShowLegend ? "none" : "inline" }}
-                          >
-                            —
-                          </span>
+                          )}
+                          {showSwatch && (
+                            <StylePreviewSwatch
+                              geometryType={(fallbackState as StyleProps & { geometryType: GeometryType }).geometryType}
+                              fillColor={(fallbackState as StyleProps & { geometryType: GeometryType }).fillColor}
+                              strokeColor={(fallbackState as StyleProps & { geometryType: GeometryType }).strokeColor}
+                              opacity={(fallbackState as StyleProps & { geometryType: GeometryType }).opacity}
+                              showFrame={false}
+                            />
+                          )}
+                          {showLoading && <span className="text-xs text-muted-foreground">…</span>}
+                          {!showImg && !showSwatch && !showLoading && (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </div>
                       )
                     }

@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.44987625605242</double>
+          <double>36.36291481080331</double>
+          <double>128.99133182510298</double>
+          <double>36.795570341871745</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4298974817282757E7</double>
+          <double>4350673.482923703</double>
+          <double>1.4359249375516646E7</double>
+          <double>4410650.106953028</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_religi</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

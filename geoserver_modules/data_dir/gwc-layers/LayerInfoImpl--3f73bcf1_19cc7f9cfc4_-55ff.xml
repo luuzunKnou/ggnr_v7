@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.4592912492893</double>
+          <double>36.44996951533603</double>
+          <double>128.92660359830546</double>
+          <double>36.756264527005555</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4300022889535708E7</double>
+          <double>4362714.4389083125</double>
+          <double>1.4352043862269595E7</double>
+          <double>4405187.440416166</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>swl_manh_ps_sewage</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

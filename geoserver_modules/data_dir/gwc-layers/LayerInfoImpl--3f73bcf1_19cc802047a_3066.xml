@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.45766377453464</double>
+          <double>36.367444028654354</double>
+          <double>128.99503392237455</double>
+          <double>36.795493271954676</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4299841719874742E7</double>
+          <double>4351299.608399576</double>
+          <double>1.4359661491099784E7</double>
+          <double>4410639.393143414</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_school</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

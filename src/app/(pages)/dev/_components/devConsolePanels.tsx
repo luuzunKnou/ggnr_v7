@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { Settings, Database, Wrench, GitBranch } from "lucide-react"
 import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
@@ -29,6 +30,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   {
     id: "systemManagement",
     label: "시스템관리",
+    icon: Settings,
     menuIds: [
       "systemList",
       "serviceList",
@@ -41,6 +43,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   {
     id: "dataManagement",
     label: "데이터관리",
+    icon: Database,
     menuIds: [
       "layerManager",
       "orthophotoManager",
@@ -53,6 +56,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   {
     id: "etcFeatures",
     label: "기타기능",
+    icon: Wrench,
     menuIds: [
       "shpFileUploader",
       "exlFileUploader",
@@ -67,6 +71,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   {
     id: "versionControl",
     label: "버전관리",
+    icon: GitBranch,
     menuIds: ["sourceCodeUploader", "versionManager"],
   },
 ]
@@ -156,7 +161,7 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return <AccessRequestQueue />
     case "layerManager":
       return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-13rem)]">
           <LayerManagerContent />
         </div>
       )

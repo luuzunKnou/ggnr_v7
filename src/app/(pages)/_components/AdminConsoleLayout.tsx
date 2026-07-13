@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
 import Link from "next/link"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
@@ -17,7 +17,13 @@ import {
 import { ConsoleMenuAccessDeniedDialog } from "@/app/(pages)/_components/ConsoleMenuAccessDeniedDialog"
 
 export type AdminConsoleMenuItem = { id: string; label: string }
-export type AdminConsoleMenuGroup = { id: string; label: string; menuIds: readonly string[] }
+export type AdminConsoleMenuGroup = {
+  id: string
+  label: string
+  menuIds: readonly string[]
+  /** 사이드 메뉴 접힘 상태에서 표시할 아이콘 */
+  icon?: ComponentType<{ className?: string }>
+}
 
 type AdminConsoleLayoutProps = {
   title: string
@@ -83,6 +89,8 @@ export function AdminConsoleLayout({
   })
   const expandedGroupStorageKey = stateStorageKey ? `${stateStorageKey}:expandedGroupIds` : null
   const selectedMenuStorageKey = stateStorageKey ? `${stateStorageKey}:selectedMenu` : null
+  const collapsedStorageKey = stateStorageKey ? `${stateStorageKey}:sidebarCollapsed` : null
+  const [collapsed, setCollapsed] = useState(false)
 
   const currentLabel = menus.find((m) => m.id === selectedMenu)?.label ?? selectedMenu
   const menuById = new Map(menus.map((m) => [m.id, m]))
@@ -135,6 +143,17 @@ export function AdminConsoleLayout({
     if (!expandedGroupStorageKey || typeof window === "undefined") return
     window.localStorage.setItem(expandedGroupStorageKey, JSON.stringify(expandedGroupIds))
   }, [expandedGroupIds, menuGroups, expandedGroupStorageKey])
+
+  useEffect(() => {
+    if (!collapsedStorageKey || typeof window === "undefined") return
+    const saved = window.localStorage.getItem(collapsedStorageKey)
+    if (saved !== null) setCollapsed(saved === "1")
+  }, [collapsedStorageKey])
+
+  useEffect(() => {
+    if (!collapsedStorageKey || typeof window === "undefined") return
+    window.localStorage.setItem(collapsedStorageKey, collapsed ? "1" : "0")
+  }, [collapsed, collapsedStorageKey])
 
   useEffect(() => {
     if (accessLoading || !consoleArea) return
@@ -190,8 +209,87 @@ export function AdminConsoleLayout({
       </header>
 
       <div className="flex flex-1 min-h-0">
-        <aside className="w-64 shrink-0 border-r bg-muted/30 flex flex-col py-2 overflow-auto">
-          {menuGroups && menuGroups.length > 0 ? (
+        <aside
+          className={cn(
+            "shrink-0 border-r bg-muted/30 flex flex-col transition-[width] duration-150",
+            collapsed ? "w-12 overflow-visible" : "w-64 py-2 overflow-auto"
+          )}
+        >
+          <div className={cn("flex shrink-0", collapsed ? "justify-center py-2" : "justify-end px-2 pb-1")}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setCollapsed((prev) => !prev)}
+              title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </Button>
+          </div>
+          {collapsed && menuGroups && menuGroups.length > 0 ? (
+            <div className="flex flex-col items-center gap-1 pt-1">
+              {menuGroups.map((group) => {
+                const Icon = group.icon
+                const isActiveGroup = group.menuIds.includes(selectedMenu)
+                return (
+                  <div key={group.id} className="group/navicon relative w-full flex justify-center">
+                    <button
+                      type="button"
+                      title={group.label}
+                      className={cn(
+                        "flex items-center justify-center w-8 h-8 rounded-md transition-colors",
+                        isActiveGroup
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {Icon ? (
+                        <Icon className="h-4 w-4" />
+                      ) : (
+                        <span className="text-[10px] font-semibold">{group.label.slice(0, 2)}</span>
+                      )}
+                    </button>
+                    <div
+                      className={cn(
+                        "invisible opacity-0 group-hover/navicon:visible group-hover/navicon:opacity-100",
+                        "transition-opacity absolute left-full top-0 ml-1 z-50 min-w-40 rounded-md border bg-popover shadow-md py-1"
+                      )}
+                    >
+                      <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1 whitespace-nowrap">
+                        {group.label}
+                      </div>
+                      {group.menuIds.map((menuId) => {
+                        const menu = menuById.get(menuId)
+                        if (!menu) return null
+                        const policy = resolvePolicy(menu.id)
+                        if (consoleArea && policy === "hidden") return null
+                        const isBlock = policy === "block"
+                        return (
+                          <button
+                            key={menu.id}
+                            type="button"
+                            onClick={() => handleMenuClick(menu.id)}
+                            className={cn(
+                              "w-full text-left px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+                              selectedMenu === menu.id && !isBlock
+                                ? "bg-primary text-primary-foreground"
+                                : isBlock
+                                  ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            {menu.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : null}
+          {collapsed ? null : menuGroups && menuGroups.length > 0 ? (
             menuGroups.map((group) => {
               const isOpen = expandedGroupIds.includes(group.id)
               return (
