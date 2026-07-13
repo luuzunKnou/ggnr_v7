@@ -40,6 +40,8 @@ type GnmsConfigResponse = {
   latestUrl: string;
   downloadUrlFallback: string;
   bearer: string;
+  /** 운영 서버 env에 GGNR_RESTART_COMMAND 존재 여부 */
+  restartCommandConfigured?: boolean;
   error?: string;
 };
 
@@ -55,6 +57,23 @@ type GnmsLatestPayload = {
 const CHUNK_FETCH_TIMEOUT_MS = 120_000;
 const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
 
+/** fetchWithTimeout 시간 초과 — AbortError(사용자 취소)와 구분 */
+export class RelayTimeoutError extends Error {
+  override name = 'RelayTimeoutError';
+  constructor(timeoutMs: number, label?: string) {
+    const sec = Math.round(timeoutMs / 1000);
+    super(label ? `${label} 시간 초과 (${sec}초)` : `요청 시간 초과 (${sec}초)`);
+  }
+}
+
+export function isUserAbortError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'AbortError';
+}
+
+export function isRelayTimeoutError(e: unknown): boolean {
+  return e instanceof RelayTimeoutError || (e instanceof Error && e.name === 'RelayTimeoutError');
+}
+
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 }
@@ -63,15 +82,70 @@ function gnmsHeaders(bearer: string): Record<string, string> {
   return bearer ? { Authorization: `Bearer ${bearer}` } : {};
 }
 
+function urlLabel(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  try {
+    return String((input as Request).url ?? input);
+  } catch {
+    return String(input);
+  }
+}
+
+/** 네트워크/CORS(응답 없음) vs 그 외 — 화면·로그용 한국어 메시지 */
+function classifyNetworkFetchError(err: unknown, context: string, input: RequestInfo | URL): Error {
+  if (isUserAbortError(err) || isRelayTimeoutError(err)) {
+    return err instanceof Error ? err : new Error(String(err));
+  }
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+  const looksCorsOrNetwork =
+    err instanceof TypeError ||
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network error') ||
+    lower.includes('load failed') ||
+    lower.includes('cors') ||
+    lower.includes('access-control');
+
+  if (looksCorsOrNetwork) {
+    return new Error(
+      `[CORS/네트워크] ${context} 실패 — HTTP 응답 없이 브라우저가 연결을 거부했습니다 (${urlLabel(input)}). CORS·주소·방화벽을 확인하세요. 원본: ${raw}`
+    );
+  }
+  return err instanceof Error ? err : new Error(raw);
+}
+
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit,
   timeoutMs: number,
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  options?: { label?: string; classifyNetwork?: boolean }
 ): Promise<Response> {
   throwIfAborted(externalSignal);
+  const label = options?.label;
+  const classifyNetwork = options?.classifyNetwork === true;
+
+  const runFetch = async (signal: AbortSignal | undefined): Promise<Response> => {
+    try {
+      return await fetch(input, { ...init, signal });
+    } catch (err: unknown) {
+      throwIfAborted(externalSignal);
+      if (classifyNetwork) throw classifyNetworkFetchError(err, label ?? '요청', input);
+      throw err;
+    }
+  };
+
   if (timeoutMs <= 0) {
-    if (!externalSignal && !init.signal) return fetch(input, init);
+    if (!externalSignal && !init.signal) {
+      try {
+        return await fetch(input, init);
+      } catch (err: unknown) {
+        if (classifyNetwork) throw classifyNetworkFetchError(err, label ?? '요청', input);
+        throw err;
+      }
+    }
     const signals: AbortSignal[] = [];
     if (init.signal) signals.push(init.signal);
     if (externalSignal) signals.push(externalSignal);
@@ -79,11 +153,15 @@ async function fetchWithTimeout(
       signals.length > 1 && typeof AbortSignal !== 'undefined' && 'any' in AbortSignal
         ? AbortSignal.any(signals)
         : (externalSignal ?? init.signal);
-    return fetch(input, { ...init, signal: mergedSignal });
+    return runFetch(mergedSignal);
   }
 
   const timeoutController = new AbortController();
-  const timer = timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : null;
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    timeoutController.abort();
+  }, timeoutMs);
   const onExternalAbort = () => timeoutController.abort();
   externalSignal?.addEventListener('abort', onExternalAbort);
 
@@ -95,10 +173,14 @@ async function fetchWithTimeout(
       : timeoutController.signal;
 
   try {
-    return await fetch(input, { ...init, signal: mergedSignal });
+    return await runFetch(mergedSignal);
+  } catch (err: unknown) {
+    throwIfAborted(externalSignal);
+    if (timedOut) throw new RelayTimeoutError(timeoutMs, label);
+    throw err;
   } finally {
     externalSignal?.removeEventListener('abort', onExternalAbort);
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
@@ -126,6 +208,27 @@ async function readJsonError(res: Response, fallback: string): Promise<string> {
   return String(json.error ?? json.message ?? fallback);
 }
 
+/** 취소·실패 시 운영 서버 relay tmp 정리 (AbortSignal 없이 keepalive) */
+async function cleanupRelaySession(uploadId: string, log: (line: string) => void): Promise<void> {
+  try {
+    const res = await fetch('/api/source/version/relay/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId }),
+      keepalive: true,
+    });
+    const json = (await res.json().catch(() => ({}))) as { ok?: boolean; removed?: boolean; error?: string };
+    if (!res.ok) {
+      log(`WARNING: relay tmp 정리 실패 — ${json.error ?? `HTTP ${res.status}`}`);
+      return;
+    }
+    log(json.removed ? `relay tmp 정리 완료: ${uploadId}` : `relay tmp 없음(이미 정리됨): ${uploadId}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`WARNING: relay tmp 정리 요청 실패 — ${msg}`);
+  }
+}
+
 export async function relayLatestSourceFromGnms(options: {
   restart: boolean;
   restartMode: RestartMode;
@@ -138,6 +241,9 @@ export async function relayLatestSourceFromGnms(options: {
   const includeNodeModules = includeNodeModulesFromProfile(packageProfile);
   const log = (line: string) => onLog?.(line);
   let cfg: GnmsConfigResponse | undefined;
+  /** init 이후 세션 — 성공 complete(서버가 삭제) 제외하고 취소·실패 시 정리 */
+  let activeUploadId: string | null = null;
+  let relayCompleted = false;
 
   try {
     throwIfAborted(signal);
@@ -146,19 +252,38 @@ export async function relayLatestSourceFromGnms(options: {
     cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
     if (!cfgRes.ok) throw new Error(cfg?.error ?? 'GNMS 설정 조회 실패');
 
+    if (restart && restartMode === 'command' && cfg.restartCommandConfigured !== true) {
+      const msg =
+        'GGNR_RESTART_COMMAND가 설정되지 않았습니다. 명령 실행 재시작을 쓸 수 없어 적용을 중단합니다.';
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
+    }
+
     log(`GNMS: ${cfg.gnmsBaseUrl}`);
 
     throwIfAborted(signal);
     onProgress?.({ phase: 'latest', message: 'GNMS 최신 버전 조회 중...' });
-    const latestRes = await fetchWithTimeout(
-      cfg.latestUrl,
-      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
-      60_000,
-      signal
-    );
+    let latestRes: Response;
+    try {
+      latestRes = await fetchWithTimeout(
+        cfg.latestUrl,
+        { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+        60_000,
+        signal,
+        { label: 'GNMS latest 조회', classifyNetwork: true }
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
+        log(`ERROR: ${err.message}`);
+      }
+      throw err;
+    }
     const latestJson = (await latestRes.json().catch(() => ({}))) as GnmsLatestPayload;
     if (!latestRes.ok) {
-      throw new Error(`GNMS latest 조회 실패 (${latestRes.status}): ${await readJsonError(latestRes, '')}`);
+      const apiMsg = await readJsonError(latestRes, '');
+      const msg = `GNMS latest API 오류 (${latestRes.status})${apiMsg ? `: ${apiMsg}` : ''}`;
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
     }
 
     const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
@@ -169,14 +294,26 @@ export async function relayLatestSourceFromGnms(options: {
 
     throwIfAborted(signal);
     onProgress?.({ phase: 'download', message: 'GNMS ZIP 다운로드 시작...' });
-    const downloadRes = await fetchWithTimeout(
-      downloadUrl,
-      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
-      0,
-      signal
-    );
+    let downloadRes: Response;
+    try {
+      downloadRes = await fetchWithTimeout(
+        downloadUrl,
+        { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+        0,
+        signal,
+        { label: 'GNMS ZIP 다운로드', classifyNetwork: true }
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
+        log(`ERROR: ${err.message}`);
+      }
+      throw err;
+    }
     if (!downloadRes.ok) {
-      throw new Error(`GNMS 소스 다운로드 실패 (${downloadRes.status})`);
+      const apiMsg = await readJsonError(downloadRes, '');
+      const msg = `GNMS download API 오류 (${downloadRes.status})${apiMsg ? `: ${apiMsg}` : ''}`;
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
     }
     if (!downloadRes.body) {
       throw new Error('GNMS 다운로드 body 없음');
@@ -210,6 +347,7 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     const { uploadId, chunkSize, expectedChunks } = initJson;
+    activeUploadId = uploadId;
     log(`relay init: uploadId=${uploadId}, chunks=${expectedChunks}, chunkSize=${chunkSize}`);
 
     const reader = downloadRes.body.getReader();
@@ -251,7 +389,8 @@ export async function relayLatestSourceFromGnms(options: {
             body: chunkBody,
           },
           CHUNK_FETCH_TIMEOUT_MS,
-          signal
+          signal,
+          { label: `relay 청크 ${chunkIndex + 1}/${expectedChunks}` }
         );
         const chunkJson = (await chunkRes.json().catch(() => ({}))) as { error?: string; ok?: boolean };
         if (!chunkRes.ok || chunkJson.error || chunkJson.ok === false) {
@@ -283,10 +422,14 @@ export async function relayLatestSourceFromGnms(options: {
       throw new DOMException('The operation was aborted', 'AbortError');
     }
     if (chunkIndex !== expectedChunks) {
-      throw new Error(`청크 수 불일치: sent=${chunkIndex}, expected=${expectedChunks}`);
+      const msg = `청크 수 불일치: sent=${chunkIndex}, expected=${expectedChunks}`;
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
     }
     if (bytesDone !== totalSize) {
-      throw new Error(`전송 바이트 불일치: sent=${bytesDone}, expected=${totalSize}`);
+      const msg = `전송 바이트 불일치: sent=${bytesDone}, expected=${totalSize}`;
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
     }
 
     throwIfAborted(signal);
@@ -300,16 +443,21 @@ export async function relayLatestSourceFromGnms(options: {
         body: JSON.stringify({ uploadId }),
       },
       COMPLETE_FETCH_TIMEOUT_MS,
-      signal
+      signal,
+      { label: '병합·적용·재시작' }
     );
     const completeJson = (await completeRes.json().catch(() => ({}))) as VersionRelayResult & {
       error?: string;
       ok?: boolean;
     };
     if (!completeRes.ok || completeJson.error || completeJson.ok === false) {
-      throw new Error(completeJson.error ?? 'relay complete 실패');
+      const msg = completeJson.error ?? 'relay complete 실패';
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
     }
 
+    relayCompleted = true;
+    activeUploadId = null;
     log(`적용 완료: ${completeJson.appliedFiles}건, 재시작: ${completeJson.restart?.message ?? '-'}`);
 
     await recordVersionHistoryClient({
@@ -325,8 +473,11 @@ export async function relayLatestSourceFromGnms(options: {
       downloadUrl,
     };
   } catch (e: unknown) {
-    const isAbort = e instanceof Error && e.name === 'AbortError';
-    if (!isAbort) {
+    if (activeUploadId && !relayCompleted) {
+      await cleanupRelaySession(activeUploadId, log);
+      activeUploadId = null;
+    }
+    if (!isUserAbortError(e)) {
       const msg = e instanceof Error ? e.message : String(e);
       await recordVersionHistoryClient({
         historyType: 'apply_latest',

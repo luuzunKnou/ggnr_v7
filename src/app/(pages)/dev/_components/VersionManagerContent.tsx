@@ -12,6 +12,8 @@ import {
 } from './versionManagerStages';
 import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
 import {
+  isRelayTimeoutError,
+  isUserAbortError,
   relayLatestSourceFromGnms,
   type RestartMode,
   type VersionRelayProgress,
@@ -34,7 +36,7 @@ function emptySideProgress(): SideProgress {
 export function VersionManagerContent() {
   const [profile, setProfile] = useState<SourcePackageProfile>('closed');
   const [restart, setRestart] = useState(true);
-  const [restartMode, setRestartMode] = useState<RestartMode>('exit');
+  const [restartMode, setRestartMode] = useState<RestartMode>('command');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<SideProgress>(emptySideProgress());
   const [stages, setStages] = useState(() => buildRelayBaseStages());
@@ -47,8 +49,6 @@ export function VersionManagerContent() {
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
-
-  const isAbortError = (e: unknown): boolean => e instanceof Error && e.name === 'AbortError';
 
   const pushLog = (line: string) => {
     const next = [...logRef.current, `[${new Date().toLocaleTimeString('ko-KR', { hour12: false })}] ${line}`].slice(-60);
@@ -130,9 +130,19 @@ export function VersionManagerContent() {
       });
       notifyDevVersionHistoryRefresh();
     } catch (e: unknown) {
-      const isAbort = isAbortError(e);
-      const msg = isAbort ? '사용자가 취소했습니다.' : e instanceof Error ? e.message : String(e);
-      setProgress({ message: isAbort ? msg : '실패', pct: null, logs: logRef.current, error: isAbort ? null : msg });
+      const isAbort = isUserAbortError(e);
+      const isTimeout = isRelayTimeoutError(e);
+      const msg = isAbort
+        ? '사용자가 취소했습니다.'
+        : e instanceof Error
+          ? e.message
+          : String(e);
+      setProgress({
+        message: isAbort ? msg : isTimeout ? '시간 초과' : '실패',
+        pct: null,
+        logs: logRef.current,
+        error: isAbort ? null : msg,
+      });
       setStages(
         buildRelayStagesFromProgress({
           phase: 'error',
@@ -141,6 +151,9 @@ export function VersionManagerContent() {
         })
       );
       pushLog(isAbort ? msg : `ERROR: ${msg}`);
+      if (!isAbort) {
+        notifyDevVersionHistoryRefresh();
+      }
     } finally {
       abortRef.current = null;
       setBusy(false);
@@ -209,21 +222,21 @@ export function VersionManagerContent() {
                 <input
                   type="radio"
                   name="restartMode"
-                  checked={restartMode === 'exit'}
+                  checked={restartMode === 'command'}
                   disabled={busy || !restart}
-                  onChange={() => setRestartMode('exit')}
+                  onChange={() => setRestartMode('command')}
                 />
-                프로세스 종료
+                명령 실행 재시작(`GGNR_RESTART_COMMAND`)
               </label>
               <label className="flex items-center gap-1">
                 <input
                   type="radio"
                   name="restartMode"
-                  checked={restartMode === 'command'}
+                  checked={restartMode === 'exit'}
                   disabled={busy || !restart}
-                  onChange={() => setRestartMode('command')}
+                  onChange={() => setRestartMode('exit')}
                 />
-                명령 실행
+                process.exit 재시작(프로세스 매니저 필요)
               </label>
               <label className="flex items-center gap-1">
                 <input

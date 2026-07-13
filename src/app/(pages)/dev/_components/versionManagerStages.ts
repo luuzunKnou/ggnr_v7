@@ -130,15 +130,18 @@ export function buildRelayStagesFromProgress(p: {
 }): StageItem[] {
   const base = buildRelayBaseStages();
   if (p.phase === 'error') {
-    const failedId: RelayStageId = p.error?.includes('청크') || p.message.includes('청크')
+    const text = `${p.error ?? ''} ${p.message}`;
+    const failedId: RelayStageId = text.includes('바이트 불일치') || text.includes('청크')
       ? 'relay-chunk'
-      : p.message.includes('relay init') || p.message.includes('relay 세션')
+      : text.includes('relay init') || text.includes('relay 세션')
         ? 'relay-init'
-        : p.message.includes('complete') || p.message.includes('병합')
+        : text.includes('complete') || text.includes('병합') || text.includes('크기 불일치')
           ? 'relay-complete'
-          : p.message.includes('다운로드')
+          : text.includes('다운로드') || text.includes('download')
             ? 'download'
-            : 'latest';
+            : text.includes('CORS') || text.includes('시간 초과') || text.includes('GGNR_RESTART')
+              ? 'latest'
+              : 'latest';
     const activeIdx = RELAY_STAGE_ORDER.indexOf(failedId);
     return base.map((s, idx) => {
       if (s.id === failedId) {

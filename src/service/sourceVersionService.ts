@@ -134,6 +134,16 @@ export type ApplySourceZipResult = Omit<
 /** ZIP 파일 경로 기준 워크스페이스 적용 (GNMS fetch 없음) */
 export async function applySourceZipFile(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
   const { zipPath, version, fileName, requestedBy, restart, restartMode, includeNodeModules = true } = options;
+
+  if (restart && restartMode === 'command') {
+    const restartCommand = process.env.GGNR_RESTART_COMMAND?.trim() ?? '';
+    if (!restartCommand) {
+      throw new Error(
+        'GGNR_RESTART_COMMAND가 설정되지 않았습니다. 명령 실행 재시작을 쓸 수 없어 적용을 중단합니다.'
+      );
+    }
+  }
+
   const workspaceRoot = process.cwd();
   const stat = await fs.stat(zipPath);
   const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
@@ -322,11 +332,9 @@ function scheduleRestart(
 
   if (mode === 'command') {
     if (!restartCommand) {
-      return {
-        scheduled: false,
-        commandConfigured: false,
-        message: 'GGNR_RESTART_COMMAND 미설정으로 command 재시작을 실행하지 못했습니다.',
-      };
+      throw new Error(
+        'GGNR_RESTART_COMMAND가 설정되지 않았습니다. 명령 실행 재시작을 쓸 수 없어 적용을 중단합니다.'
+      );
     }
     spawnDelayedRestartCommand(restartCommand, process.cwd(), safeDelay, runNpmInstallBefore);
     setTimeout(() => {

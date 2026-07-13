@@ -10,12 +10,14 @@ export async function GET() {
     if (!usrId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const cfg = getGnmsClientConfig();
+    const restartCommandConfigured = Boolean(process.env.GGNR_RESTART_COMMAND?.trim());
     return NextResponse.json({
       ok: true,
       gnmsBaseUrl: cfg.gnmsBaseUrl,
       latestUrl: cfg.latestUrl,
       downloadUrlFallback: cfg.downloadUrlFallback,
       bearer: cfg.bearer,
+      restartCommandConfigured,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'gnms config failed';

@@ -18,8 +18,28 @@ type RelayMeta = {
   includeNodeModules: boolean;
 };
 
+function assertSafeUploadId(uploadId: string): void {
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(uploadId)) {
+    throw new Error('Invalid uploadId');
+  }
+}
+
 function getRelayTempDir(uploadId: string): string {
+  assertSafeUploadId(uploadId);
   return path.join(os.tmpdir(), 'ggnr_version_relay', uploadId);
+}
+
+/** 취소·실패 시 청크 tmp 디렉터리 삭제 (없으면 ok) */
+export async function abortVersionRelay(params: { uploadId: string }): Promise<{ ok: boolean; removed: boolean }> {
+  const { uploadId } = params;
+  const tempDir = getRelayTempDir(uploadId);
+  try {
+    await fs.access(tempDir);
+  } catch {
+    return { ok: true, removed: false };
+  }
+  await fs.rm(tempDir, { recursive: true, force: true });
+  return { ok: true, removed: true };
 }
 
 async function readMeta(tempDir: string): Promise<RelayMeta> {
