@@ -14,6 +14,7 @@ import archiver from 'archiver';
 import iconv from 'iconv-lite';
 import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, getTableColumnInfo, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
+import { matchEpsgFromLooseText } from '@/lib/matchCoordinateSystemText';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const GEOSERVER_DEFAULT_URL = 'http://localhost:8080/geoserver';
@@ -43,6 +44,55 @@ async function geoserverFetch(
 /** SHP → PostGIS 업로드 시 ogr2ogr `-t_srs` 목표 좌표계 (Korea 2000 / Unified) */
 const SHP_UPLOAD_TARGET_SRS = 'EPSG:5181';
 
+function extractWktParam(content: string, name: string): number | null {
+  const re = new RegExp(`PARAMETER\\s*\\[\\s*["']${name}["']\\s*,\\s*(-?\\d+(?:\\.\\d+)?)`, 'i');
+  const m = content.match(re);
+  return m ? parseFloat(m[1]) : null;
+}
+
+function detectEllipsoidFamily(content: string): 'grs80' | 'bessel' | null {
+  if (/bessel/i.test(content)) return 'bessel';
+  if (/GRS[_ ]?1980|GRS80/i.test(content)) return 'grs80';
+  return null;
+}
+
+/** projections.ts 에 등록된 한국 TM 좌표계 정의(중앙자오선/false easting·northing/축척)와 일치 여부로 EPSG 추정 */
+const KOREA_TM_EPSG_CANDIDATES: Array<{ code: number; lon0: number; x0: number; y0: number; k: number; ellps: 'grs80' | 'bessel' }> = [
+  { code: 5179, lon0: 127.5, x0: 1000000, y0: 2000000, k: 0.9996, ellps: 'grs80' },
+  { code: 5181, lon0: 127, x0: 200000, y0: 500000, k: 1, ellps: 'grs80' },
+  { code: 5180, lon0: 125, x0: 200000, y0: 500000, k: 1, ellps: 'grs80' },
+  { code: 5182, lon0: 127, x0: 200000, y0: 550000, k: 1, ellps: 'grs80' },
+  { code: 5183, lon0: 129, x0: 200000, y0: 500000, k: 1, ellps: 'grs80' },
+  { code: 5184, lon0: 131, x0: 200000, y0: 500000, k: 1, ellps: 'grs80' },
+  { code: 5185, lon0: 125, x0: 200000, y0: 600000, k: 1, ellps: 'grs80' },
+  { code: 5186, lon0: 127, x0: 200000, y0: 600000, k: 1, ellps: 'grs80' },
+  { code: 5187, lon0: 129, x0: 200000, y0: 600000, k: 1, ellps: 'grs80' },
+  { code: 5188, lon0: 131, x0: 200000, y0: 600000, k: 1, ellps: 'grs80' },
+  { code: 5174, lon0: 127.0028902777778, x0: 200000, y0: 500000, k: 1, ellps: 'bessel' },
+  { code: 5176, lon0: 129.0028902777778, x0: 200000, y0: 500000, k: 1, ellps: 'bessel' },
+];
+
+/** AUTHORITY 태그가 없는 일반적인 ESRI .prj용: WKT 투영 파라미터를 알려진 한국 TM 좌표계와 매칭 */
+function matchEpsgFromWktParams(content: string): string | null {
+  if (!/PROJECTION/i.test(content)) return null;
+  const lon0 = extractWktParam(content, 'Central_Meridian');
+  const x0 = extractWktParam(content, 'False_Easting');
+  const y0 = extractWktParam(content, 'False_Northing');
+  const k = extractWktParam(content, 'Scale_Factor');
+  if (lon0 == null || x0 == null || y0 == null) return null;
+  const ellps = detectEllipsoidFamily(content);
+  const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
+  const matches = KOREA_TM_EPSG_CANDIDATES.filter(
+    (c) =>
+      near(c.lon0, lon0, 0.01) &&
+      near(c.x0, x0, 1) &&
+      near(c.y0, y0, 1) &&
+      (k == null || near(c.k, k, 0.0005)) &&
+      (!ellps || c.ellps === ellps)
+  );
+  return matches.length === 1 ? `EPSG:${matches[0].code}` : null;
+}
+
 /** .prj 파일에서 EPSG 코드 추출. 마지막 AUTHORITY 사용 (타원체 7019보다 좌표계 5187 등이 뒤에 옴) */
 function parseEpsgFromPrj(content: string): string | null {
   if (!content || typeof content !== 'string') return null;
@@ -56,18 +106,41 @@ function parseEpsgFromPrj(content: string): string | null {
     const lastNum = match2[match2.length - 1].replace(/\D/g, '');
     if (lastNum) return `EPSG:${lastNum}`;
   }
+  // ESRI 스타일 .prj는 보통 AUTHORITY 태그가 없으므로 투영 파라미터로 추정
+  const paramMatch = matchEpsgFromWktParams(content);
+  if (paramMatch) return paramMatch;
+  // 투영 없이 경위도(GEOGCS)만 있는 경우
+  if (/GEOGCS/i.test(content) && !/PROJCS/i.test(content)) return 'EPSG:4326';
   return null;
 }
 
-/** 파일명(또는 폴더명)을 _ 로 나눴을 때 2번째 조각이 4자리 숫자면 EPSG로 사용 (.prj 없을 때 2순위) */
+/**
+ * 파일명(또는 폴더명)을 _ 로 나눴을 때 2번째 조각이 4자리 숫자면 EPSG로 사용 (.prj 없을 때 2순위).
+ * 숫자가 아니면 "GRS중부60" 같은 COORDINATE_SYSTEM_OPTIONS 라벨 텍스트로도 시도한다.
+ */
 function parseEpsgFromBasename(basename: string): string | null {
   const parts = basename.split('_');
   const second = parts[1];
-  if (second && /^\d{4}$/.test(second)) return `EPSG:${second}`;
-  return null;
+  if (!second) return null;
+  if (/^\d{4}$/.test(second)) return `EPSG:${second}`;
+  return matchEpsgFromLooseText(second);
 }
 
-async function resolveShpSrs(dir: string, basename: string): Promise<{ sourceSrs: string | null; targetSrs: string }> {
+/**
+ * @param override 프런트에서 파일별로 확정한 EPSG(예: 'EPSG:5186' 또는 '5186'). 있으면 자동판별보다 우선.
+ */
+async function resolveShpSrs(
+  dir: string,
+  basename: string,
+  override?: string | null
+): Promise<{ sourceSrs: string | null; targetSrs: string }> {
+  const trimmedOverride = override?.trim();
+  if (trimmedOverride) {
+    const normalized = /^EPSG:/i.test(trimmedOverride) ? trimmedOverride.toUpperCase() : `EPSG:${trimmedOverride}`;
+    if (/^EPSG:\d{3,5}$/.test(normalized)) {
+      return { sourceSrs: normalized, targetSrs: SHP_UPLOAD_TARGET_SRS };
+    }
+  }
   const folderName = path.basename(dir);
   let sourceSrs: string | null = null;
   try {
@@ -178,6 +251,28 @@ function resolveShapefileDbfEncoding(dir: string, basename: string): string {
 }
 
 /**
+ * SHP 파일의 .prj만 읽어 EPSG 코드 판별 (파일명·폴더명 폴백 없음).
+ * 마법사에서 "prj 기준" vs "폴더명 기준" 값을 구분해서 보여주기 위한 용도.
+ */
+export async function getShpPrjEpsg(params: { pathOrResult: string }): Promise<{ success: boolean; epsg: number | null; error?: string }> {
+  try {
+    const absolutePath = path.join(GGNR_DATA_DIR, params.pathOrResult.replace(/\//g, path.sep));
+    const dir = path.dirname(absolutePath);
+    const basename = path.basename(absolutePath, '.shp');
+    const prjPath = path.join(dir, `${basename}.prj`);
+    const prjContent = await fs.readFile(prjPath, 'utf-8').catch(() => '');
+    const epsgStr = parseEpsgFromPrj(prjContent);
+    if (!epsgStr || !epsgStr.startsWith('EPSG:')) {
+      return { success: true, epsg: null };
+    }
+    const num = parseInt(epsgStr.replace('EPSG:', ''), 10);
+    return { success: true, epsg: Number.isFinite(num) ? num : null };
+  } catch (e: unknown) {
+    return { success: false, epsg: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
  * SHP 파일 경로에서 좌표계(EPSG 코드) 조회. .prj → shp 파일명 → 상위 폴더명 순으로 파싱.
  * 동기화 상세 모달에서 변경값(SHP) 지도 뷰 중심용.
  */
@@ -200,6 +295,171 @@ export async function getShpEpsg(params: { pathOrResult: string }): Promise<{ su
     return { success: true, epsg: Number.isFinite(num) ? num : null };
   } catch (e: unknown) {
     return { success: false, epsg: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const EMD_SCHEMA = 'public_layer';
+const EMD_TABLE = 'emd';
+
+/** ogrinfo -so -al 로 SHP 원시 범위(Extent) 조회. 좌표계 해석 없이 파일에 저장된 숫자 그대로. */
+async function getShpRawExtent(absoluteShpPath: string): Promise<{ minX: number; minY: number; maxX: number; maxY: number } | null> {
+  const normalized = path.normalize(absoluteShpPath);
+  if (!fsSync.existsSync(normalized)) return null;
+
+  const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
+  const args = [...prefix, '-al', '-so', normalized];
+  const isWin = process.platform === 'win32';
+  const useConda = prefix.length > 0;
+  const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
+  const spawnArgs = useConda ? args : (isWin ? ['/c', ogrinfoCmd, ...args.slice(prefix.length)] : args);
+
+  const stdout = await new Promise<string>((resolve, reject) => {
+    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
+    child.on('close', (code) => resolve(code === 0 ? Buffer.concat(chunks).toString('utf8') : ''));
+    child.on('error', reject);
+  }).catch(() => '');
+
+  const line = stdout.split(/\r?\n/).find((l) => /^Extent:/i.test(l.trim()));
+  if (!line) return null;
+  const m = line.match(/Extent:\s*\(([-\d.]+),\s*([-\d.]+)\)\s*-\s*\(([-\d.]+),\s*([-\d.]+)\)/i);
+  if (!m) return null;
+  const [minX, minY, maxX, maxY] = m.slice(1).map(Number);
+  if (![minX, minY, maxX, maxY].every(Number.isFinite)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
+export type ShpCrsCandidate = {
+  epsg: number;
+  sourceCrs: string;
+  intersectsEmd: boolean;
+  overlapRatio: number;
+};
+
+/**
+ * .prj/폴더명 모두로 EPSG 판별이 안 될 때의 마지막 폴백.
+ * SHP 원시 범위를 후보 EPSG(한국 TM 계열)로 각각 해석해 EPSG:5181로 변환한 뒤,
+ * 대한민국 읍면동(emd) 경계와 얼마나 겹치는지로 순위를 매긴다 (정사영상관리와 동일한 방식).
+ */
+export async function detectShpCrsCandidates(params: { pathOrResult: string }): Promise<{
+  success: boolean;
+  candidates?: ShpCrsCandidate[];
+  /** EPSG:5181(임포트 시 최종 목표 좌표계) 비교용 참고 값. 후보 목록(경계 교차)에 없어도 항상 계산해서 반환 */
+  reference5181?: ShpCrsCandidate;
+  error?: string;
+}> {
+  try {
+    const pathOrResult = params?.pathOrResult?.trim();
+    if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+    const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+    const box = await getShpRawExtent(absolutePath);
+    if (!box) return { success: false, error: 'SHP 범위를 확인할 수 없습니다.' };
+
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+
+    const gc = await db.execute(sql`
+      SELECT f_geometry_column AS name, srid
+      FROM geometry_columns
+      WHERE f_table_schema = ${EMD_SCHEMA} AND f_table_name = ${EMD_TABLE}
+      LIMIT 1
+    `);
+    const gcRow = gc.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) return { success: false, error: 'emd 경계 테이블을 찾을 수 없습니다.' };
+    const geomCol = `"${String(gcRow.name).replace(/"/g, '""')}"`;
+    const emdSrid = Number(gcRow.srid ?? 0) > 0 ? Number(gcRow.srid) : 5181;
+    const emdGeomExpr =
+      emdSrid === 5181
+        ? `ST_SetSRID(ST_Union(${geomCol}), 5181)`
+        : `ST_Transform(ST_SetSRID(ST_Union(${geomCol}), ${emdSrid}), 5181)`;
+
+    const candidateCodes = KOREA_TM_EPSG_CANDIDATES.map((c) => c.code);
+    const candidates: ShpCrsCandidate[] = [];
+    let reference5181: ShpCrsCandidate | undefined;
+    for (const epsg of candidateCodes) {
+      const q = await db.execute(sql.raw(`
+        WITH src AS (
+          SELECT
+            ST_Transform(ST_SetSRID(ST_MakePoint(${box.minX}, ${box.minY}), ${epsg}), 5181) AS p1,
+            ST_Transform(ST_SetSRID(ST_MakePoint(${box.maxX}, ${box.minY}), ${epsg}), 5181) AS p2,
+            ST_Transform(ST_SetSRID(ST_MakePoint(${box.maxX}, ${box.maxY}), ${epsg}), 5181) AS p3,
+            ST_Transform(ST_SetSRID(ST_MakePoint(${box.minX}, ${box.maxY}), ${epsg}), 5181) AS p4
+        ),
+        env AS (
+          SELECT ST_MakeEnvelope(
+            LEAST(ST_X(p1), ST_X(p2), ST_X(p3), ST_X(p4)),
+            LEAST(ST_Y(p1), ST_Y(p2), ST_Y(p3), ST_Y(p4)),
+            GREATEST(ST_X(p1), ST_X(p2), ST_X(p3), ST_X(p4)),
+            GREATEST(ST_Y(p1), ST_Y(p2), ST_Y(p3), ST_Y(p4)),
+            5181
+          ) AS g
+          FROM src
+        ),
+        emd AS (
+          SELECT ${emdGeomExpr} AS g
+          FROM "${EMD_SCHEMA}"."${EMD_TABLE}"
+        )
+        SELECT
+          ST_Intersects(env.g, emd.g) AS intersects_emd,
+          CASE WHEN ST_Area(env.g) <= 0 THEN 0
+               ELSE ST_Area(ST_Intersection(env.g, emd.g)) / ST_Area(env.g)
+          END AS overlap_ratio
+        FROM env, emd
+      `));
+      const row = q.rows?.[0] as { intersects_emd?: boolean; overlap_ratio?: number } | undefined;
+      const intersectsEmd = !!row?.intersects_emd;
+      const overlapRatio = Number(row?.overlap_ratio ?? 0);
+      const entry: ShpCrsCandidate = { epsg, sourceCrs: `EPSG:${epsg}`, intersectsEmd, overlapRatio };
+      if (epsg === 5181) reference5181 = entry;
+      if (intersectsEmd) {
+        candidates.push(entry);
+      }
+    }
+    candidates.sort((a, b) => b.overlapRatio - a.overlapRatio);
+    return { success: true, candidates, reference5181 };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 좌표계 후보 확인 모달 미리보기용: SHP 도형을 좌표계 해석 없이(원시 숫자 그대로) GeoJSON으로 변환.
+ * 프런트에서 후보 EPSG를 dataProjection으로 지정해 지도에 겹쳐 그리면, 각 후보를 눈으로 비교할 수 있다.
+ */
+export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatures?: number }): Promise<{
+  success: boolean;
+  geojson?: Record<string, unknown>;
+  error?: string;
+}> {
+  try {
+    const pathOrResult = params?.pathOrResult?.trim();
+    if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+    const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+    if (!fsSync.existsSync(absolutePath)) return { success: false, error: '파일을 찾을 수 없습니다.' };
+
+    const tmpDir = path.join(GGNR_DATA_DIR, 'tmp');
+    await fs.mkdir(tmpDir, { recursive: true });
+    const tmpOut = path.join(tmpDir, `shp_raw_preview_${Date.now()}_${Math.random().toString(36).slice(2)}.geojson`);
+
+    const result = await runOgr2ogr([
+      '-f', 'GeoJSON', tmpOut, absolutePath,
+      '-a_srs', 'EPSG:4326',
+    ]);
+    if (result.code !== 0) {
+      return { success: false, error: result.stderr || 'ogr2ogr 실패' };
+    }
+
+    const raw = await fs.readFile(tmpOut, 'utf-8');
+    await fs.unlink(tmpOut).catch(() => {});
+    const geojson = JSON.parse(raw) as { features?: unknown[] };
+    const maxFeatures = Math.max(1, Math.min(params?.maxFeatures ?? 2000, 5000));
+    if (Array.isArray(geojson.features) && geojson.features.length > maxFeatures) {
+      geojson.features = geojson.features.slice(0, maxFeatures);
+    }
+    return { success: true, geojson: geojson as Record<string, unknown> };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -397,10 +657,34 @@ function getDbConfig(): { host: string; port: number; database: string; user: st
 }
 
 /**
- * ogr2ogr 실행 방식: GGNR_GDAL_OGR2OGR → 프로젝트 python/env(conda run) → PATH
- * python/env 사용 시 conda run으로 실행해야 libpq 등 env 내 라이브러리를 찾을 수 있음.
+ * ogr2ogr/ogrinfo를 conda env에서 직접 호출할 때 필요한 환경변수.
+ * `conda run` 활성화가 실제로 잡아주는 값들을 activate 전/후 환경변수 전체를 덤프해 비교 확인했다
+ * (GDAL_DATA, GDAL_DRIVER_PATH, PROJ_DATA, PATH 4개가 전부 — 그 외엔 CONDA_* 내부 북키핑,
+ * PYTHONUTF8, SSL_CERT_* 등 GDAL과 무관한 값들뿐이었음).
+ * `conda run` 자체는 매 호출마다 활성화 오버헤드로 수 초씩 걸리고 ogrinfo 쪽은 이 환경에서
+ * 활성화 래퍼가 아예 멈추는(hang) 문제까지 있어, 실행 파일을 직접 호출하고 이 값만 대신 지정한다.
  */
-function resolveOgr2ogrRun(): { cmd: string; args: string[] } {
+function buildGdalEnv(envDir: string): NodeJS.ProcessEnv {
+  const isWin = process.platform === 'win32';
+  const shareDir = isWin ? path.join(envDir, 'Library', 'share') : path.join(envDir, 'share');
+  const binDir = isWin ? path.join(envDir, 'Library', 'bin') : path.join(envDir, 'bin');
+  const pluginDir = isWin ? path.join(envDir, 'Library', 'lib', 'gdalplugins') : path.join(envDir, 'lib', 'gdalplugins');
+  const pathKey = isWin ? 'Path' : 'PATH';
+  const existingPath = process.env[pathKey] ?? process.env.PATH ?? '';
+  return {
+    ...process.env,
+    GDAL_DATA: path.join(shareDir, 'gdal'),
+    GDAL_DRIVER_PATH: pluginDir,
+    PROJ_DATA: path.join(shareDir, 'proj'),
+    PROJ_LIB: path.join(shareDir, 'proj'),
+    [pathKey]: `${binDir}${path.delimiter}${existingPath}`,
+  };
+}
+
+/**
+ * ogr2ogr 실행 방식: GGNR_GDAL_OGR2OGR → 프로젝트 python/env(직접 호출 + buildGdalEnv) → PATH
+ */
+function resolveOgr2ogrRun(): { cmd: string; args: string[]; env?: NodeJS.ProcessEnv } {
   const root = process.cwd();
   if (process.env.GGNR_GDAL_OGR2OGR) {
     const custom = path.resolve(root, process.env.GGNR_GDAL_OGR2OGR);
@@ -415,14 +699,14 @@ function resolveOgr2ogrRun(): { cmd: string; args: string[] } {
       ? path.join(envDir, 'Library', 'bin', 'ogr2ogr.exe')
       : path.join(envDir, 'bin', 'ogr2ogr');
     if (fsSync.existsSync(candidate)) {
-      return { cmd: 'conda', args: ['run', '--no-capture-output', '--prefix', envDir, 'ogr2ogr'] };
+      return { cmd: candidate, args: [], env: buildGdalEnv(envDir) };
     }
   }
   return { cmd: 'ogr2ogr', args: [] };
 }
 
 /** ogrinfo 실행 방식: ogr2ogr와 동일(conda env 또는 GGNR_GDAL 경로). 도구명만 ogrinfo */
-function resolveOgrInfoRun(): { cmd: string; args: string[] } {
+function resolveOgrInfoRun(): { cmd: string; args: string[]; env?: NodeJS.ProcessEnv } {
   const root = process.cwd();
   if (process.env.GGNR_GDAL_OGR2OGR) {
     const custom = path.resolve(root, process.env.GGNR_GDAL_OGR2OGR);
@@ -440,8 +724,9 @@ function resolveOgrInfoRun(): { cmd: string; args: string[] } {
     const candidate = isWin
       ? path.join(envDir, 'Library', 'bin', 'ogrinfo.exe')
       : path.join(envDir, 'bin', 'ogrinfo');
+    // `conda run`은 이 환경에서 활성화 래퍼가 멈추는(hang) 문제가 있어, 실행 파일이 실제로 있으면 직접 호출한다.
     if (fsSync.existsSync(candidate)) {
-      return { cmd: 'conda', args: ['run', '--no-capture-output', '--prefix', envDir, 'ogrinfo'] };
+      return { cmd: candidate, args: [], env: buildGdalEnv(envDir) };
     }
   }
   return { cmd: 'ogrinfo', args: [] };
@@ -456,15 +741,15 @@ export async function getShpGeometryType(absoluteShpPath: string): Promise<ShpGe
   const normalized = path.normalize(absoluteShpPath).replace(/\\/g, path.sep);
   if (!fsSync.existsSync(normalized)) return 'POLYGON';
 
-  const { cmd: ogrinfoCmd, args: prefix } = resolveOgrInfoRun();
+  const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
   const args = [...prefix, '-al', '-so', normalized];
   const isWin = process.platform === 'win32';
   const useConda = prefix.length > 0;
   const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
-  const spawnArgs = useConda ? args : (isWin ? ['/c', 'ogrinfo', ...args.slice(prefix.length)] : args);
+  const spawnArgs = useConda ? args : (isWin ? ['/c', ogrinfoCmd, ...args.slice(prefix.length)] : args);
 
   const stdout = await new Promise<string>((resolve, reject) => {
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false });
+    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
     const chunks: Buffer[] = [];
     child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
     child.on('close', (code) => {
@@ -489,6 +774,7 @@ export async function getShpGeometryType(absoluteShpPath: string): Promise<ShpGe
  */
 export async function createTableFromShp(params: {
   pathOrResult: string;
+  sourceSrsOverride?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
@@ -506,14 +792,14 @@ export async function createTableFromShp(params: {
   }
 
   const dir = path.dirname(absolutePath);
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
+  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
   const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const db = getDbConfig();
   const pgConnection = `PG:host=${db.host} port=${db.port} dbname=${db.database} user=${db.user} password=${db.password}`;
   const layerTable = `layer.${tableName}`;
 
-  const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix } = resolveOgr2ogrRun();
+  const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv } = resolveOgr2ogrRun();
   const ogr2ogrArgs = [
     '-f', 'PostgreSQL',
     pgConnection,
@@ -550,6 +836,7 @@ export async function createTableFromShp(params: {
     const child = spawn(spawnCmd, spawnArgs, {
       windowsHide: true,
       shell: false,
+      env: gdalEnv ?? process.env,
     });
     const stderrChunks: Buffer[] = [];
     if (child.stderr) {
@@ -1015,6 +1302,8 @@ export type ShpBatchResultItem = {
 export async function processShpBatch(params: {
   relativePath?: string;
   shpPaths?: string[];
+  /** pathOrResult 별 프런트에서 확정한 EPSG override (예: {'shp_data/.../a.shp': 'EPSG:5186'}) */
+  sourceSrsByPath?: Record<string, string>;
 }): Promise<{ success: boolean; results: ShpBatchResultItem[]; error?: string }> {
   let rows: ShpStatusRow[];
 
@@ -1054,7 +1343,8 @@ export async function processShpBatch(params: {
     if (row.table) {
       item.table = { success: true, skipped: true };
     } else {
-      const res = await createTableFromShp({ pathOrResult: row.pathOrResult });
+      const sourceSrsOverride = params.sourceSrsByPath?.[row.pathOrResult.replace(/\\/g, '/')];
+      const res = await createTableFromShp({ pathOrResult: row.pathOrResult, sourceSrsOverride });
       item.table = { success: res.success, error: res.error };
       if (!res.success) {
         results.push(item);
@@ -1456,7 +1746,7 @@ export async function getTitleFieldName(params: { tableName: string }): Promise<
 
 /** ogr2ogr 실행 공통 래퍼 (createTableFromShp와 동일한 stderr 디코딩) */
 async function runOgr2ogr(ogr2ogrArgs: string[]): Promise<{ code: number; stderr: string }> {
-  const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix } = resolveOgr2ogrRun();
+  const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv } = resolveOgr2ogrRun();
   const execArgs = ogr2ogrRunPrefix.length > 0 ? [...ogr2ogrRunPrefix, ...ogr2ogrArgs] : ogr2ogrArgs;
 
   const decodeStderr = (chunk: Buffer | string): string => {
@@ -1473,7 +1763,7 @@ async function runOgr2ogr(ogr2ogrArgs: string[]): Promise<{ code: number; stderr
     const useConda = ogr2ogrRunPrefix.length > 0;
     const spawnCmd = useConda ? ogr2ogrCmd : (isWin ? 'cmd.exe' : ogr2ogrCmd);
     const spawnArgs = useConda ? execArgs : (isWin ? ['/c', ogr2ogrCmd, ...execArgs] : execArgs);
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false });
+    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
     const stderrChunks: Buffer[] = [];
     if (child.stderr) {
       child.stderr.on('data', (d) => stderrChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
@@ -1536,15 +1826,15 @@ async function runOgrinfoStdout(absoluteShpPath: string, extraArgs: string[]): P
   const normalized = path.normalize(absoluteShpPath).replace(/\\/g, path.sep);
   if (!fsSync.existsSync(normalized)) return '';
 
-  const { cmd: ogrinfoCmd, args: prefix } = resolveOgrInfoRun();
+  const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
   const args = [...prefix, ...extraArgs, normalized];
   const isWin = process.platform === 'win32';
   const useConda = prefix.length > 0;
   const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
-  const spawnArgs = useConda ? args : (isWin ? ['/c', 'ogrinfo', ...args.slice(prefix.length)] : args);
+  const spawnArgs = useConda ? args : (isWin ? ['/c', ogrinfoCmd, ...args.slice(prefix.length)] : args);
 
   return new Promise<string>((resolve) => {
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false });
+    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
     const chunks: Buffer[] = [];
     child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
     child.on('close', (code) => {
@@ -1801,6 +2091,7 @@ export async function compareShpFolderSchema(params?: {
  */
 export async function compareShpWithTable(params: {
   pathOrResult: string;
+  sourceSrsOverride?: string;
 }): Promise<CompareResult> {
   const empty: CompareResult = { success: false, appendCount: 0, conflictCount: 0, removeCount: 0, unchangedCount: 0, conflicts: [], removes: [] };
   const pathOrResult = params?.pathOrResult?.trim();
@@ -1821,7 +2112,7 @@ export async function compareShpWithTable(params: {
   if (!keyField) return { ...empty, error: `key 필드가 설정되어 있지 않습니다. 레이어 속성정보에서 key를 설정하세요. (${tableName})` };
 
   const dir = path.dirname(absolutePath);
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
+  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
   const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const dbCfg = getDbConfig();
@@ -1899,26 +2190,58 @@ export async function compareShpWithTable(params: {
 
     const unchangedWhere = `NOT ((${attrClause}) OR (${geomClause}))`;
 
+    // 이미 "유지"로 검토를 마쳤고 그 이후 SHP 값이 그대로인 건은 다시 충돌로 잡지 않음
+    const keptMatchClause = `EXISTS (
+      SELECT 1 FROM sync_log sl
+      WHERE sl.sl_table_name = '${tableName}'
+        AND sl.sl_key_value = t."${keyField}"::text
+        AND sl.sl_operation = 'kept'
+        AND sl.sl_rolled_back = false
+        AND sl.sl_new_data = row_to_json(t.*)::jsonb
+    )`;
+
+    // 이미 "유지"로 검토를 마친 신규(append) 건은 다시 신규로 잡지 않음
+    const keptAppendMatchClause = `EXISTS (
+      SELECT 1 FROM sync_log sl
+      WHERE sl.sl_table_name = '${tableName}'
+        AND sl.sl_key_value = t."${keyField}"::text
+        AND sl.sl_operation = 'kept'
+        AND sl.sl_rolled_back = false
+        AND sl.sl_old_data IS NULL
+        AND sl.sl_new_data = row_to_json(t.*)::jsonb
+    )`;
+
+    // 이미 "유지"로 검토를 마친 삭제(remove) 건은 다시 삭제 대상으로 잡지 않음
+    const keptRemoveMatchClause = `EXISTS (
+      SELECT 1 FROM sync_log sl
+      WHERE sl.sl_table_name = '${tableName}'
+        AND sl.sl_key_value = e."${keyField}"::text
+        AND sl.sl_operation = 'kept'
+        AND sl.sl_rolled_back = false
+        AND sl.sl_new_data IS NULL
+        AND sl.sl_old_data = row_to_json(e.*)::jsonb
+    )`;
+
     const [appendRes, conflictRes, removeRes, unchangedRes] = await Promise.all([
       db.execute(sql.raw(
         `SELECT count(*)::int AS cnt FROM layer."${syncTableName}" t
          LEFT JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE e."${keyField}" IS NULL`
+         WHERE e."${keyField}" IS NULL AND NOT (${keptAppendMatchClause})`
       )),
       db.execute(sql.raw(
         `SELECT count(*)::int AS cnt FROM layer."${syncTableName}" t
          JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE ${whereClause}`
+         WHERE (${whereClause}) AND NOT (${keptMatchClause})`
       )),
       db.execute(sql.raw(
         `SELECT count(*)::int AS cnt FROM layer."${tableName}" e
          LEFT JOIN layer."${syncTableName}" t ON e."${keyField}" = t."${keyField}"
-         WHERE t."${keyField}" IS NULL`
+         WHERE t."${keyField}" IS NULL AND NOT (${keptRemoveMatchClause})`
       )),
       db.execute(sql.raw(
         `SELECT count(*)::int AS cnt FROM layer."${syncTableName}" t
          JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE ${unchangedWhere}`
+         WHERE (${unchangedWhere}) OR ((${whereClause}) AND (${keptMatchClause}))`
       )),
     ]);
 
@@ -1940,7 +2263,7 @@ export async function compareShpWithTable(params: {
         `SELECT t."${keyField}" AS key_val${selectCols ? `, ${selectCols}` : ''}${geomPair}${geomSelect}
          FROM layer."${syncTableName}" t
          JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE ${whereClause}
+         WHERE (${whereClause}) AND NOT (${keptMatchClause})
          LIMIT 500`
       ));
       conflicts = (conflictRows.rows as Array<Record<string, unknown>>).map((r) => {
@@ -1975,7 +2298,7 @@ export async function compareShpWithTable(params: {
       const removeRows = await db.execute(sql.raw(
         `SELECT ${removeCols} FROM layer."${tableName}" e
          LEFT JOIN layer."${syncTableName}" t ON e."${keyField}" = t."${keyField}"
-         WHERE t."${keyField}" IS NULL
+         WHERE t."${keyField}" IS NULL AND NOT (${keptRemoveMatchClause})
          LIMIT 500`
       ));
       removes = (removeRows.rows as Array<Record<string, unknown>>).map((r) => ({
@@ -1990,7 +2313,7 @@ export async function compareShpWithTable(params: {
       `DELETE FROM sync_log WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL`
     ));
 
-    // append: old=NULL, new=SHP
+    // append: old=NULL, new=SHP (단, 이미 "유지"로 검토 끝난 동일 SHP 값은 재등록하지 않음)
     if (appendCount > 0) {
       await db.execute(sql.raw(
         `INSERT INTO sync_log (sl_table_name, sl_key_field, sl_key_value, sl_old_data, sl_new_data)
@@ -1998,11 +2321,11 @@ export async function compareShpWithTable(params: {
                 NULL, row_to_json(t.*)::jsonb
          FROM layer."${syncTableName}" t
          LEFT JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE e."${keyField}" IS NULL`
+         WHERE e."${keyField}" IS NULL AND NOT (${keptAppendMatchClause})`
       ));
     }
 
-    // conflict: old=DB, new=SHP
+    // conflict: old=DB, new=SHP (단, 이미 "유지"로 검토 끝난 동일 SHP 값은 재등록하지 않음)
     if (conflictCount > 0) {
       await db.execute(sql.raw(
         `INSERT INTO sync_log (sl_table_name, sl_key_field, sl_key_value, sl_old_data, sl_new_data)
@@ -2010,11 +2333,11 @@ export async function compareShpWithTable(params: {
                 row_to_json(e.*)::jsonb, row_to_json(t.*)::jsonb
          FROM layer."${syncTableName}" t
          JOIN layer."${tableName}" e ON t."${keyField}" = e."${keyField}"
-         WHERE ${whereClause}`
+         WHERE (${whereClause}) AND NOT (${keptMatchClause})`
       ));
     }
 
-    // remove: old=DB, new=NULL
+    // remove: old=DB, new=NULL (단, 이미 "유지"로 검토 끝난 동일 DB 값은 재등록하지 않음)
     if (removeCount > 0) {
       await db.execute(sql.raw(
         `INSERT INTO sync_log (sl_table_name, sl_key_field, sl_key_value, sl_old_data, sl_new_data)
@@ -2022,7 +2345,7 @@ export async function compareShpWithTable(params: {
                 row_to_json(e.*)::jsonb, NULL
          FROM layer."${tableName}" e
          LEFT JOIN layer."${syncTableName}" t ON e."${keyField}" = t."${keyField}"
-         WHERE t."${keyField}" IS NULL`
+         WHERE t."${keyField}" IS NULL AND NOT (${keptRemoveMatchClause})`
       ));
     }
 

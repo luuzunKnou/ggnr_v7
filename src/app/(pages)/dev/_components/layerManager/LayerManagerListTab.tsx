@@ -55,17 +55,17 @@ type ExcelMeta = {
 }
 
 const TABLE_COLUMNS: TableColumnDef[] = [
-  { id: "define_table_schema", label: "스키마", width: "92px", kind: "field", fieldKey: "define_table_schema" },
-  { id: "define_table_source", label: "출처", width: "64px", kind: "field", fieldKey: "define_table_source" },
-  { id: "define_table_group", label: "그룹", width: "130px", kind: "field", fieldKey: "define_table_group" },
+  { id: "define_table_schema", label: "스키마", width: "92px", kind: "field", alignCenter: true, fieldKey: "define_table_schema" },
+  { id: "define_table_source", label: "출처", width: "64px", kind: "field", alignCenter: true, fieldKey: "define_table_source" },
+  { id: "define_table_group", label: "그룹", width: "130px", kind: "field", alignCenter: true, fieldKey: "define_table_group" },
   { id: "define_table_name", label: "테이블명", width: "flex", kind: "field", fieldKey: "define_table_name" },
   { id: "define_table_kor_name", label: "한글명", width: "flex", kind: "field", fieldKey: "define_table_kor_name" },
   { id: "__updated_at", label: "갱신일", width: "130px", kind: "updated_at" },
   { id: "__style_legend", label: "스타일", width: "80px", kind: "style_legend" },
   { id: "define_table_idx", label: "순서", width: "50px", kind: "field", alignCenter: true, fieldKey: "define_table_idx" },
   { id: "define_table_shp_type", label: "도형", width: "120px", kind: "field", fieldKey: "define_table_shp_type" },
-  { id: "define_table_read_share", label: "읽기", width: "70px", kind: "field", fieldKey: "define_table_read_share" },
-  { id: "define_table_write_share", label: "쓰기", width: "70px", kind: "field", fieldKey: "define_table_write_share" },
+  { id: "define_table_read_share", label: "읽기", width: "70px", kind: "field", alignCenter: true, fieldKey: "define_table_read_share" },
+  { id: "define_table_write_share", label: "쓰기", width: "70px", kind: "field", alignCenter: true, fieldKey: "define_table_write_share" },
   { id: "__infra_table", label: "테이블", width: "52px", kind: "infra_status", infraKey: "table" },
   { id: "__infra_layer", label: "레이어", width: "52px", kind: "infra_status", infraKey: "layer" },
   { id: "__infra_style", label: "스타일", width: "52px", kind: "infra_status", infraKey: "style" },
@@ -162,6 +162,15 @@ function rowHasInfraError(tableName: string, styleInfoMap: Record<string, StyleI
 const PAGE_SIZE = 50
 const SCROLL_LOAD_THRESHOLD = 200
 
+type FilterMode = "all" | "public_layer" | "layer" | "error"
+
+const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "public_layer", label: "공용레이어" },
+  { value: "layer", label: "레이어" },
+  { value: "error", label: "오류" },
+]
+
 export function LayerManagerListTab() {
   const [rows, setRows] = useState<LayerManagerRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -170,8 +179,7 @@ export function LayerManagerListTab() {
   const [styleLoading, setStyleLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [showPublicLayer, setShowPublicLayer] = useState(true)
-  const [showErrorsOnly, setShowErrorsOnly] = useState(false)
+  const [filterMode, setFilterMode] = useState<FilterMode>("all")
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [updateDateMap, setUpdateDateMap] = useState<Record<string, string>>({})
   const [excelMetaMap, setExcelMetaMap] = useState<Record<string, ExcelMeta>>({})
@@ -402,10 +410,11 @@ export function LayerManagerListTab() {
 
   const filteredRows = useMemo(() => {
     let list = rows
-    if (!showPublicLayer) {
+    if (filterMode === "public_layer") {
+      list = list.filter((r) => r.define_table_schema === "public_layer")
+    } else if (filterMode === "layer") {
       list = list.filter((r) => r.define_table_schema !== "public_layer")
-    }
-    if (showErrorsOnly && !styleLoading) {
+    } else if (filterMode === "error" && !styleLoading) {
       list = list.filter((r) => rowHasInfraError(r.define_table_name, styleInfoMap))
     }
     const q = debouncedSearch.trim().toLowerCase()
@@ -418,7 +427,22 @@ export function LayerManagerListTab() {
       )
     }
     return list
-  }, [rows, showPublicLayer, showErrorsOnly, styleLoading, styleInfoMap, debouncedSearch])
+  }, [rows, filterMode, styleLoading, styleInfoMap, debouncedSearch])
+
+  const categoryTotal = useMemo(() => {
+    if (filterMode === "public_layer") {
+      return rows.filter((r) => r.define_table_schema === "public_layer").length
+    }
+    if (filterMode === "layer") {
+      return rows.filter((r) => r.define_table_schema !== "public_layer").length
+    }
+    if (filterMode === "error") {
+      return styleLoading ? 0 : rows.filter((r) => rowHasInfraError(r.define_table_name, styleInfoMap)).length
+    }
+    return rows.length
+  }, [rows, filterMode, styleLoading, styleInfoMap])
+
+  const categoryLabel = FILTER_OPTIONS.find((o) => o.value === filterMode)?.label ?? ""
 
   const displayedRows = useMemo(
     () => filteredRows.slice(0, displayCount),
@@ -438,7 +462,7 @@ export function LayerManagerListTab() {
 
   useEffect(() => {
     setDisplayCount(PAGE_SIZE)
-  }, [debouncedSearch, showPublicLayer, showErrorsOnly])
+  }, [debouncedSearch, filterMode])
 
   if (loading) return <p className="text-sm text-muted-foreground p-2">로딩 중...</p>
   if (error && rows.length === 0) return <p className="text-sm text-destructive p-2">{error}</p>
@@ -452,27 +476,25 @@ export function LayerManagerListTab() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="h-8 w-56 rounded-md text-sm"
         />
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showPublicLayer}
-            onChange={(e) => setShowPublicLayer(e.target.checked)}
-            className="rounded border-input"
-          />
-          public_layer
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showErrorsOnly}
-            onChange={(e) => setShowErrorsOnly(e.target.checked)}
-            disabled={styleLoading}
-            className="rounded border-input"
-          />
-          오류
-        </label>
+        <div className="flex items-center gap-1 rounded-md border p-0.5">
+          {FILTER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={opt.value === "error" && styleLoading}
+              onClick={() => setFilterMode(opt.value)}
+              className={`h-7 rounded-sm px-2.5 text-sm transition-colors disabled:opacity-50 ${
+                filterMode === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <span className="text-sm text-muted-foreground">
-          {filteredRows.length} / {rows.length}
+          {categoryLabel} 총 {categoryTotal}개 중 {filteredRows.length}개
           {displayCount < filteredRows.length && (
             <span className="text-xs text-muted-foreground ml-1">(표시: {displayedRows.length})</span>
           )}
