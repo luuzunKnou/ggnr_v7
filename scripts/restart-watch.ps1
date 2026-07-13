@@ -2,8 +2,11 @@
 # - restartMode=exit 일 때만 npm 재실행
 # - restartMode=command 이면 GGNR_RESTART_COMMAND에 맡기고 PowerShell은 재시작하지 않음
 #
-# 사용:
+# 실행 위치: 이 스크립트의 바로 상위 폴더(= 저장소 루트). 상위 폴더 이름은 상관없음.
+#   cd <저장소루트>
 #   .\scripts\restart-watch.ps1 -Project build_yy -Type dev
+#
+# RepoRoot 는 스크립트 위치(scripts/)의 상위 폴더로 자동 결정됩니다.
 #   .\scripts\restart-watch.ps1 -Project build_yy -Type demo
 #   .\scripts\restart-watch.ps1 -Project river_yd -Type prod
 

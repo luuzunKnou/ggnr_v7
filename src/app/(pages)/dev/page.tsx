@@ -8,12 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_MENU_GROUPS, DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
-<<<<<<< HEAD
 import { VersionHistoryDialog } from "./_components/VersionHistoryDialog"
 import { registerDevVersionHistoryClose } from "./_components/devVersionHistoryBridge"
-=======
 import { LayerManagerUploadButtons } from "./_components/layerManager/LayerManagerUploadButtons"
->>>>>>> e5bea0341c7e497c334379f06cd5a41374eeffb2
 import { call } from "@/lib/api"
 import { signOut } from "next-auth/react"
 
