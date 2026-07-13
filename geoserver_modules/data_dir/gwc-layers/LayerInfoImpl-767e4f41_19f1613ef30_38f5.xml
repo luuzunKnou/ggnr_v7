@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>126.189944137224</double>
+          <double>34.98322323241124</double>
+          <double>129.56610747630353</double>
+          <double>38.087125823710316</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4047400324587414E7</double>
+          <double>4161601.482018514</double>
+          <double>1.4423233108328667E7</double>
+          <double>4591741.091461631</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>line</defaultStyle>
+      <defaultStyle>tl_sprd_manage</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

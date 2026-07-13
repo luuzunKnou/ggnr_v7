@@ -9,10 +9,26 @@
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
+      <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4297130303586736E7</double>
+          <double>4343333.268924548</double>
+          <double>1.4360359451054778E7</double>
+          <double>4413380.00179413</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
+      <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.43330670760338</double>
+          <double>36.30979808352182</double>
+          <double>129.0013038033273</double>
+          <double>36.815205345742115</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_graveyard</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.43396605537862</double>
+          <double>36.36314390874628</double>
+          <double>129.00528754137954</double>
+          <double>36.813499807245584</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4297203701845331E7</double>
+          <double>4350705.1528720055</double>
+          <double>1.436080291874621E7</double>
+          <double>4413142.849515893</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_sidoyuji</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
