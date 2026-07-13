@@ -13,7 +13,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { useChunkedUpload, folderUploadOverallPercent } from '../useChunkedUpload';
 import { Check, Loader2, X, ChevronLeft, ChevronRight, Minus, AlertTriangle, Download } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { parseShpFolderName } from './parseShpFolderMeta';
 import { type FolderPickFile } from './pickShpFolderFiles';
 import { SyncDetailModal } from './SyncDetailModal';
@@ -579,12 +579,9 @@ export function ShpWizardModal({
 
   const copyRemark = useCallback((text: string, key: string) => {
     if (!text) return;
-    try {
-      void navigator.clipboard.writeText(text);
-      setToastMsg('복사됨');
-    } catch {
-      // ignore
-    }
+    void copyTextToClipboard(text).then((ok) => {
+      if (ok) setToastMsg('복사됨');
+    });
   }, []);
 
   const loadReport = useCallback(async () => {

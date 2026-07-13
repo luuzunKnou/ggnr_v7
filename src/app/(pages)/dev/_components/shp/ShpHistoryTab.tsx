@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { RefreshCw, ChevronDown, ChevronRight, Check, X, RotateCcw, Search, Loader2 } from 'lucide-react';
 import { SyncDetailModal } from './SyncDetailModal';
 
@@ -56,12 +56,9 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
 
   const copyContents = useCallback((text: string) => {
     if (!text) return;
-    try {
-      void navigator.clipboard.writeText(text);
-      setToastMsg('복사됨');
-    } catch {
-      // ignore
-    }
+    void copyTextToClipboard(text).then((ok) => {
+      if (ok) setToastMsg('복사됨');
+    });
   }, []);
 
   const PAGE_SIZE = 20;
@@ -173,7 +170,7 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
         </Button>
       </div>
 
-      <section className="flex-1 min-h-0 overflow-auto border rounded">
+      <section className="min-h-0 max-h-[32rem] overflow-auto border rounded">
         {loading ? (
           <div className="flex items-center justify-center h-full text-xs text-muted-foreground">로딩 중…</div>
         ) : error ? (

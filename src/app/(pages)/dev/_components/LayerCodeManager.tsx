@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Search, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
 
 type DefineLayerTable = Record<string, unknown>
@@ -13,6 +14,14 @@ type DefineCode = Record<string, unknown>
 
 const LAYER_LIST_WIDTH = 280
 const FIELD_LIST_WIDTH = 280
+
+type LayerFilterMode = "all" | "public_layer" | "layer"
+
+const LAYER_FILTER_OPTIONS: { value: LayerFilterMode; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "public_layer", label: "public_layer" },
+  { value: "layer", label: "layer" },
+]
 
 export function LayerCodeManager({
   embedded = false,
@@ -23,7 +32,9 @@ export function LayerCodeManager({
   const [selectedTableKey, setSelectedTableKey] = useState<string>("")
   const [layerListSearch, setLayerListSearch] = useState("")
   const [debouncedLayerListSearch, setDebouncedLayerListSearch] = useState("")
-  const [showPublicLayer, setShowPublicLayer] = useState(false)
+  const [layerFilterMode, setLayerFilterMode] = useState<LayerFilterMode>("all")
+  const [usedOnly, setUsedOnly] = useState(false)
+  const [dbTableKeySet, setDbTableKeySet] = useState<Set<string>>(new Set())
   const [fields, setFields] = useState<DefineField[]>([])
   const [codeFields, setCodeFields] = useState<DefineField[]>([])
   const [fieldListSearch, setFieldListSearch] = useState("")
@@ -39,6 +50,7 @@ export function LayerCodeManager({
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [newCodeName, setNewCodeName] = useState("")
   const [newCodeKorName, setNewCodeKorName] = useState("")
+  const fieldListContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (fixedTableKey) setSelectedTableKey(fixedTableKey)
@@ -74,6 +86,29 @@ export function LayerCodeManager({
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
       .finally(() => !cancelled && setLoadingTables(false))
     return () => { cancelled = true }
+  }, [])
+
+  /** "사용중" 필터용 — 현재 접속된 DB(layer/public_layer 스키마)에 실제로 존재하는 테이블 목록 */
+  useEffect(() => {
+    let cancelled = false
+    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        if (!data?.success || !Array.isArray(data.tables)) return
+        const keys = new Set<string>(
+          (data.tables as Array<{ schema: string; table: string }>).map(
+            (t) => `${t.schema === "public_layer" ? "public_layer" : "layer"}:${String(t.table).toLowerCase()}`
+          )
+        )
+        setDbTableKeySet(keys)
+      })
+      .catch(() => {
+        // 조회 실패해도 "사용중" 필터만 못 쓰게 되고 나머지는 정상 동작
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // 선택한 테이블의 필드 로드 → CODE 타입만
@@ -143,10 +178,22 @@ export function LayerCodeManager({
   /** defineLayer 중 CODE 필드가 있는 테이블 + 검색 */
   const filteredTables = useMemo(() => {
     let list = tables.filter((t) => codeTableKeys.has(String((t as Record<string, unknown>).define_table_name ?? "")))
-    if (!showPublicLayer) {
+    if (layerFilterMode === "public_layer") {
+      list = list.filter(
+        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") === "public_layer"
+      )
+    } else if (layerFilterMode === "layer") {
       list = list.filter(
         (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
       )
+    }
+    if (usedOnly) {
+      list = list.filter((t) => {
+        const r = t as Record<string, unknown>
+        const schema = String(r.define_table_schema ?? "layer") === "public_layer" ? "public_layer" : "layer"
+        const name = String(r.define_table_name ?? "").trim().toLowerCase()
+        return name && dbTableKeySet.has(`${schema}:${name}`)
+      })
     }
     if (debouncedLayerListSearch.trim()) {
       const q = debouncedLayerListSearch.trim().toLowerCase()
@@ -159,7 +206,7 @@ export function LayerCodeManager({
       })
     }
     return list
-  }, [tables, codeTableKeys, debouncedLayerListSearch, showPublicLayer])
+  }, [tables, codeTableKeys, debouncedLayerListSearch, layerFilterMode, usedOnly, dbTableKeySet])
 
   /** 필드 목록 검색 필터 */
   const filteredCodeFields = useMemo(() => {
@@ -235,28 +282,46 @@ export function LayerCodeManager({
   return (
     <div
       className={cn(
-        "flex gap-4 min-h-0 flex-1 overflow-hidden w-full min-w-0",
-        embedded && "h-full p-2"
+        "flex gap-4 min-h-0 flex-1 overflow-hidden w-full min-w-0 p-2",
+        embedded && "h-full"
       )}
       style={embedded ? undefined : { height: "calc(100vh - 14rem)" }}
     >
       {!embedded && (
       <div
-        className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
-        style={{ width: LAYER_LIST_WIDTH, height: "calc(100vh - 14rem)" }}
+        className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden max-h-[calc(100vh-10rem)]"
+        style={{ width: LAYER_LIST_WIDTH }}
       >
         <div className="shrink-0 p-2 border-b bg-muted/50 space-y-2">
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
-            <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showPublicLayer}
-                onChange={(e) => setShowPublicLayer(e.target.checked)}
-                className="rounded border-input"
-              />
-              public_layer 포함
-            </label>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 rounded-md border p-0.5 w-fit">
+              {LAYER_FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setLayerFilterMode(opt.value)}
+                  className={cn(
+                    "h-6 rounded-sm px-2 text-xs transition-colors",
+                    layerFilterMode === opt.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">총 {filteredTables.length}건</span>
           </div>
+          <label className="flex items-center px-2 gap-1.5 text-sm text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={usedOnly}
+              onChange={(e) => setUsedOnly(e.target.checked)}
+              className="rounded border-input"
+            />
+            사용중인 레이어만 보기
+          </label>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
@@ -285,10 +350,18 @@ export function LayerCodeManager({
                     <button
                       type="button"
                       onClick={() => setSelectedTableKey(key)}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowRight") {
+                          e.preventDefault()
+                          fieldListContainerRef.current
+                            ?.querySelector<HTMLButtonElement>("button")
+                            ?.focus()
+                        }
+                      }}
                       title={label}
                       className={cn(
-                        "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0",
-                        "hover:bg-muted/70",
+                        "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0 outline-none",
+                        "hover:bg-primary/10 focus-visible:bg-primary/10",
                         isSelected
                           ? "border-l-primary bg-primary/10 text-foreground font-medium"
                           : "border-l-transparent text-muted-foreground"
@@ -306,8 +379,11 @@ export function LayerCodeManager({
       )}
 
       <div
-        className="shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden"
-        style={{ width: FIELD_LIST_WIDTH, height: embedded ? "100%" : "calc(100vh - 14rem)" }}
+        className={cn(
+          "shrink-0 flex flex-col border rounded-none bg-muted/20 overflow-hidden",
+          embedded ? "h-full" : "max-h-[calc(100vh-14rem)]"
+        )}
+        style={{ width: FIELD_LIST_WIDTH }}
       >
         <div className="shrink-0 p-2 border-b bg-muted/50">
           <div className="relative">
@@ -321,7 +397,7 @@ export function LayerCodeManager({
             />
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <div ref={fieldListContainerRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {!selectedTableKey ? (
             <p className="p-3 text-sm text-muted-foreground">
               {embedded ? "목록 탭에서 레이어를 선택하세요." : "레이어를 선택하세요."}
@@ -345,8 +421,8 @@ export function LayerCodeManager({
                       onClick={() => setSelectedFieldKey(key)}
                       title={name}
                       className={cn(
-                        "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0",
-                        "hover:bg-muted/70",
+                        "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0 outline-none",
+                        "hover:bg-primary/10 focus-visible:bg-primary/10",
                         isSelected
                           ? "border-l-primary bg-primary/10 text-foreground font-medium"
                           : "border-l-transparent text-muted-foreground"

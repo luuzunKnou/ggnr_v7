@@ -13,9 +13,10 @@ import {
 import { Save, RotateCcw, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SchemaBadge, SourceBadge } from "./layerManager/defineBadges"
+import { requestLayerManagerListRefresh } from "./layerManager/layerManagerUploadBridge"
+import { StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { call } from "@/lib/api"
-import type { GeometryType } from "@/lib/geoserverStyleUtils"
-import type { StyleProps } from "@/lib/geoserverStyleUtils"
+import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 
 const GEOSERVER_DEFAULT_URL =
   typeof window !== "undefined"
@@ -28,6 +29,40 @@ const GEOMETRY_TYPES: { value: GeometryType; label: string }[] = [
   { value: "POLYGON", label: "POLYGON" },
 ]
 
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{6})$/
+
+/** 색상 텍스트 입력 + 우측 끝 컬러피커 버튼 (직접입력·피커 모두 지원) */
+function ColorField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+}) {
+  const pickerValue = HEX_COLOR_RE.test(value) ? value : "#000000"
+  return (
+    <div className="relative">
+      <Input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-9"
+      />
+      <input
+        type="color"
+        value={pickerValue}
+        onChange={(e) => onChange(e.target.value)}
+        title="색상 선택"
+        className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded border border-input bg-transparent p-0 cursor-pointer"
+      />
+    </div>
+  )
+}
+
+
 const defaultStyleProps: StyleProps = {
   fillColor: "#808080",
   strokeColor: "#000000",
@@ -39,6 +74,14 @@ const defaultStyleProps: StyleProps = {
 
 type DefineLayerTable = Record<string, unknown> & { fields?: unknown[] }
 type DefineLayerConfig = { version?: string; generatedAt?: string; tables: DefineLayerTable[] }
+
+type LayerFilterMode = "all" | "public_layer" | "layer"
+
+const LAYER_FILTER_OPTIONS: { value: LayerFilterMode; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "public_layer", label: "public_layer" },
+  { value: "layer", label: "layer" },
+]
 
 /** 테이블 컬럼 정의: 순서·타이틀·너비 통일 (정보 필드 + 스타일 컬럼) */
 type TableColumnDef =
@@ -58,33 +101,36 @@ type TableColumnDef =
 
 const GEOSERVER_WORKSPACE = "ggnr"
 
-/** GeoServer WMS GetLegendGraphic URL (범례 이미지) */
-function getLegendGraphicUrl(layerName: string, styleName?: string): string {
+/** GeoServer WMS GetLegendGraphic URL (범례 이미지). version이 바뀌면 URL도 바뀌어 브라우저 캐시를 무시하고 새로 받아온다. */
+function getLegendGraphicUrl(layerName: string, styleName?: string, version?: number): string {
   const base = GEOSERVER_DEFAULT_URL
+  // GeoServer 레이어·스타일은 항상 소문자로 생성되므로 원본 대소문자와 무관하게 소문자로 조회
+  const layerKey = layerName.toLowerCase()
   const params = new URLSearchParams({
     SERVICE: "WMS",
     REQUEST: "GetLegendGraphic",
     VERSION: "1.0.0",
-    LAYER: `${GEOSERVER_WORKSPACE}:${layerName}`,
-    STYLE: styleName?.trim() || layerName,
+    LAYER: `${GEOSERVER_WORKSPACE}:${layerKey}`,
+    STYLE: styleName?.trim() || layerKey,
     FORMAT: "image/png",
     WIDTH: "32",
     HEIGHT: "32",
+    ...(version != null ? { _v: String(version) } : {}),
   })
   return `${base}/wms?${params.toString()}`
 }
 
 const TABLE_COLUMNS: TableColumnDef[] = [
-  { id: "define_table_schema", label: "스키마", width: "92px", kind: "field", badge: "schema" },
-  { id: "define_table_source", label: "출처", width: "64px", kind: "field", badge: "source" },
-  { id: "define_table_group", label: "그룹", width: "130px", kind: "field" },
+  { id: "define_table_schema", label: "스키마", width: "92px", kind: "field", badge: "schema", alignCenter: true },
+  { id: "define_table_source", label: "출처", width: "64px", kind: "field", badge: "source", alignCenter: true },
+  { id: "define_table_group", label: "그룹", width: "130px", kind: "field", alignCenter: true },
   { id: "define_table_name", label: "테이블명", width: "flex", kind: "field", readonly: true },
   { id: "define_table_kor_name", label: "한글명", width: "flex", kind: "field" },
   { id: "__style_legend", label: "스타일", width: "80px", kind: "style_legend" },
   { id: "define_table_idx", label: "순서", width: "50px", kind: "field", alignCenter: true },
   { id: "define_table_shp_type", label: "도형", width: "120px", kind: "field", shapeType: true },
-  { id: "define_table_read_share", label: "읽기", width: "70px", kind: "field", share: "read" },
-  { id: "define_table_write_share", label: "쓰기", width: "70px", kind: "field", share: "write" },
+  { id: "define_table_read_share", label: "읽기", width: "70px", kind: "field", share: "read", alignCenter: true },
+  { id: "define_table_write_share", label: "쓰기", width: "70px", kind: "field", share: "write", alignCenter: true },
   { id: "__layer_delete", label: "삭제", width: "56px", kind: "layer_delete" },
   //{ id: "define_table_etc", label: "비고", width: "flex", kind: "field" },
 ]
@@ -131,7 +177,9 @@ export function LayerInfoManager({
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [showPublicLayer, setShowPublicLayer] = useState(false)
+  const [layerFilterMode, setLayerFilterMode] = useState<LayerFilterMode>("all")
+  const [usedOnly, setUsedOnly] = useState(false)
+  const [dbTableKeySet, setDbTableKeySet] = useState<Set<string>>(new Set())
   const parentRef = useRef<HTMLDivElement>(null)
 
   // 스타일: GeoServer 레이어별 스타일 보유 여부 (테이블명 기준)
@@ -139,6 +187,11 @@ export function LayerInfoManager({
     Record<string, { tableExists?: boolean; published?: boolean; hasCssStyle: boolean; styleName?: string }>
   >({})
   const [styleLoading, setStyleLoading] = useState(false)
+  const [styleVersion, setStyleVersion] = useState(0)
+  /** WMS 범례(GetLegendGraphic) 실패 시 CSS를 직접 파싱해서 보여주는 미리보기 캐시 — DB 테이블이 없어도 스타일 자체는 볼 수 있게 함 */
+  const [cssFallbackMap, setCssFallbackMap] = useState<
+    Record<string, "loading" | "error" | (StyleProps & { geometryType: GeometryType })>
+  >({})
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -155,6 +208,7 @@ export function LayerInfoManager({
   const [formName, setFormName] = useState("")
   const [formGeometryType, setFormGeometryType] = useState<GeometryType>("POLYGON")
   const [formProps, setFormProps] = useState<StyleProps>(defaultStyleProps)
+  const [labelFieldOptions, setLabelFieldOptions] = useState<{ name: string; korName: string }[]>([])
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [editEditable, setEditEditable] = useState(false)
@@ -213,6 +267,7 @@ export function LayerInfoManager({
           }
         }
         setStyleInfoMap(map)
+        setStyleVersion((v) => v + 1)
       }
     } catch {
       // 스타일 정보 실패해도 정보 테이블은 유지
@@ -227,11 +282,54 @@ export function LayerInfoManager({
     }
   }, [config?.tables?.length, loadStyleInfo])
 
+  /** "사용중" 필터용 — 현재 접속된 DB(layer/public_layer 스키마)에 실제로 존재하는 테이블 목록 */
+  useEffect(() => {
+    let cancelled = false
+    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        if (!data?.success || !Array.isArray(data.tables)) return
+        const keys = new Set<string>(
+          (data.tables as Array<{ schema: string; table: string }>).map(
+            (t) => `${t.schema === "public_layer" ? "public_layer" : "layer"}:${String(t.table).toLowerCase()}`
+          )
+        )
+        setDbTableKeySet(keys)
+      })
+      .catch(() => {
+        // 조회 실패해도 "사용중" 필터만 못 쓰게 되고 나머지는 정상 동작
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // 디바운싱: 검색어 입력 후 300ms 대기
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
     return () => clearTimeout(timer)
   }, [searchQuery])
+
+  /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
+  const loadCssFallback = useCallback((key: string) => {
+    setCssFallbackMap((prev) => (prev[key] ? prev : { ...prev, [key]: "loading" }))
+    call("", "POST", {
+      service: "devTestService",
+      action: "getGeoServerStyle",
+      params: { url: GEOSERVER_DEFAULT_URL, name: key },
+    })
+      .then((res) => {
+        const data = res?.data ?? res
+        if (data?.success && data.format === "css" && data.body) {
+          const { styleProps, geometryType } = parseSimpleStyleFromCss(data.body)
+          setCssFallbackMap((prev) => ({ ...prev, [key]: { ...styleProps, geometryType } }))
+        } else {
+          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+        }
+      })
+      .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
+  }, [])
 
   const filteredTables = useMemo(() => {
     if (!config?.tables) return []
@@ -249,10 +347,22 @@ export function LayerInfoManager({
         return true
       })
     }
-    if (!showPublicLayer) {
+    if (layerFilterMode === "public_layer") {
+      list = list.filter(
+        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") === "public_layer"
+      )
+    } else if (layerFilterMode === "layer") {
       list = list.filter(
         (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
       )
+    }
+    if (usedOnly) {
+      list = list.filter((t) => {
+        const row = t as Record<string, unknown>
+        const schema = String(row.define_table_schema ?? "layer") === "public_layer" ? "public_layer" : "layer"
+        const name = String(row.define_table_name ?? "").trim().toLowerCase()
+        return name && dbTableKeySet.has(`${schema}:${name}`)
+      })
     }
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.trim().toLowerCase()
@@ -263,14 +373,27 @@ export function LayerInfoManager({
           String((t as Record<string, unknown>).define_table_kor_name ?? "").toLowerCase().includes(q)
       )
     }
-    return list
+    // 정렬: layer/SHP → layer/Excel → public_layer/SHP → public_layer/Excel → 그 외
+    const sortRank = (t: DefineLayerTable) => {
+      const row = t as Record<string, unknown>
+      const isPublic = String(row.define_table_schema ?? "layer") === "public_layer"
+      const source = String(row.define_table_source ?? "").toLowerCase()
+      if (!isPublic && source === "shp") return 0
+      if (!isPublic && source === "excel") return 1
+      if (isPublic && source === "shp") return 2
+      if (isPublic && source === "excel") return 3
+      return 4
+    }
+    return [...list].sort((a, b) => sortRank(a) - sortRank(b))
   }, [
     config?.tables,
     embedded,
     fixedTableKey,
     fixedSchema,
     debouncedSearch,
-    showPublicLayer,
+    layerFilterMode,
+    usedOnly,
+    dbTableKeySet,
   ])
 
   const displayedTables = useMemo(
@@ -281,7 +404,7 @@ export function LayerInfoManager({
 
   useEffect(() => {
     setDisplayCount(PAGE_SIZE)
-  }, [showPublicLayer, debouncedSearch])
+  }, [layerFilterMode, usedOnly, debouncedSearch])
 
   const handleScroll = useCallback(() => {
     const el = parentRef.current
@@ -351,6 +474,32 @@ export function LayerInfoManager({
     }
   }, [config])
 
+  /** 스타일 모달의 라벨필드 드롭다운용 — 해당 테이블의 실제 필드 목록 조회 (gid/geom 제외) */
+  const loadLabelFieldOptions = useCallback(async (tableName: string) => {
+    setLabelFieldOptions([])
+    try {
+      const res = await fetch(`/api/config/defineLayer/fields/${encodeURIComponent(tableName)}`)
+      const body = await res.json()
+      if (body.success && Array.isArray(body.data)) {
+        const seen = new Set<string>()
+        const options = (body.data as Record<string, unknown>[])
+          .map((f) => ({
+            name: String(f.define_field_name ?? "").trim(),
+            korName: String(f.define_field_kor_name ?? "").trim(),
+          }))
+          .filter((o) => {
+            if (!o.name || ["gid", "geom"].includes(o.name.toLowerCase())) return false
+            if (seen.has(o.name)) return false
+            seen.add(o.name)
+            return true
+          })
+        setLabelFieldOptions(options)
+      }
+    } catch {
+      // 라벨필드 목록 실패해도 직접입력은 계속 가능
+    }
+  }, [])
+
   const openAdd = useCallback((layerName: string, shpType?: string) => {
     setTargetLayerName(layerName)
     setFormName(layerName)
@@ -362,7 +511,8 @@ export function LayerInfoManager({
     setFormProps({ ...defaultStyleProps })
     setFormError(null)
     setAddOpen(true)
-  }, [])
+    void loadLabelFieldOptions(layerName)
+  }, [loadLabelFieldOptions])
 
   const openEdit = useCallback(async (layerName: string, styleName: string) => {
     setTargetLayerName(layerName)
@@ -370,6 +520,7 @@ export function LayerInfoManager({
     setFormError(null)
     setEditOpen(true)
     setFormSaving(false)
+    void loadLabelFieldOptions(layerName)
     try {
       const res = await call("", "POST", {
         service: "devTestService",
@@ -391,7 +542,7 @@ export function LayerInfoManager({
       setFormError(e instanceof Error ? e.message : "조회 실패")
       setEditEditable(false)
     }
-  }, [])
+  }, [loadLabelFieldOptions])
 
   const openLayerDefineDelete = useCallback((tableName: string, schema: string) => {
     setLayerDefineDeleteTarget({ tableName, schema })
@@ -512,7 +663,9 @@ export function LayerInfoManager({
         setAddOpen(false)
         setTargetLayerName(null)
         setSuccessMsg(`레이어 "${targetLayerName}"에 스타일이 적용되었습니다.`)
+        setStyleVersion((v) => v + 1)
         loadStyleInfo()
+        requestLayerManagerListRefresh()
       } else {
         setFormError(setData?.error ?? "레이어에 스타일 지정 실패")
       }
@@ -544,8 +697,10 @@ export function LayerInfoManager({
         setEditOpen(false)
         setTargetStyleName(null)
         setTargetLayerName(null)
-        setSuccessMsg(`스타일 "${targetStyleName}"이(가) 수정되었습니다.`)
+        setSuccessMsg(`레이어 "${targetLayerName}"의 스타일이 수정되었습니다.`)
+        setStyleVersion((v) => v + 1)
         loadStyleInfo()
+        requestLayerManagerListRefresh()
       } else {
         setFormError(data?.error ?? "수정 실패")
       }
@@ -554,7 +709,7 @@ export function LayerInfoManager({
     } finally {
       setFormSaving(false)
     }
-  }, [targetStyleName, editEditable, formGeometryType, formProps, loadStyleInfo])
+  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, loadStyleInfo])
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget) return
@@ -595,6 +750,7 @@ export function LayerInfoManager({
       if (data?.success) {
         setSuccessMsg(`"${layerName}"에 자동 스타일이 적용되었습니다.`)
         loadStyleInfo()
+        requestLayerManagerListRefresh()
       } else {
         setError(data?.error ?? "자동 설정 실패")
       }
@@ -685,16 +841,43 @@ export function LayerInfoManager({
   }, [loadStyleInfo])
 
   const renderFormFields = useCallback((geometryType: GeometryType) => {
-    const common = (
+    const opacityField = (
+      <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+        <label className="text-sm">투명도</label>
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step={0.1}
+          value={formProps.opacity ?? 1}
+          onChange={(e) =>
+            setFormProps((p) => ({ ...p, opacity: parseFloat(e.target.value) ?? 1 }))
+          }
+        />
+      </div>
+    )
+    const renderStrokeAndLabelFields = (showLinePreview: boolean) => (
       <>
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
           <label className="text-sm">선색상</label>
-          <Input
-            type="text"
-            value={formProps.strokeColor ?? ""}
-            onChange={(e) => setFormProps((p) => ({ ...p, strokeColor: e.target.value }))}
-            placeholder="#000000"
-          />
+          {showLinePreview ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <ColorField
+                  value={formProps.strokeColor ?? ""}
+                  onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
+                  placeholder="#000000"
+                />
+              </div>
+              <StylePreviewSwatch geometryType="LINE" strokeColor={formProps.strokeColor} />
+            </div>
+          ) : (
+            <ColorField
+              value={formProps.strokeColor ?? ""}
+              onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
+              placeholder="#000000"
+            />
+          )}
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
           <label className="text-sm">선두께</label>
@@ -709,26 +892,22 @@ export function LayerInfoManager({
           />
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <label className="text-sm">투명도</label>
-          <Input
-            type="number"
-            min={0}
-            max={1}
-            step={0.1}
-            value={formProps.opacity ?? 1}
-            onChange={(e) =>
-              setFormProps((p) => ({ ...p, opacity: parseFloat(e.target.value) ?? 1 }))
-            }
-          />
-        </div>
-        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
           <label className="text-sm">라벨필드</label>
-          <Input
-            type="text"
+          <select
             value={formProps.labelField ?? ""}
             onChange={(e) => setFormProps((p) => ({ ...p, labelField: e.target.value }))}
-            placeholder="속성 필드명"
-          />
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">(없음)</option>
+            {formProps.labelField && !labelFieldOptions.some((o) => o.name === formProps.labelField) ? (
+              <option value={formProps.labelField}>{formProps.labelField}</option>
+            ) : null}
+            {labelFieldOptions.map((o) => (
+              <option key={o.name} value={o.name}>
+                {o.korName ? `${o.name} - ${o.korName}` : o.name}
+              </option>
+            ))}
+          </select>
         </div>
       </>
     )
@@ -748,35 +927,60 @@ export function LayerInfoManager({
           </div>
           <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
             <label className="text-sm">색상</label>
-            <Input
-              type="text"
-              value={formProps.fillColor ?? ""}
-              onChange={(e) => setFormProps((p) => ({ ...p, fillColor: e.target.value }))}
-              placeholder="#808080"
-            />
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <ColorField
+                  value={formProps.fillColor ?? ""}
+                  onChange={(v) => setFormProps((p) => ({ ...p, fillColor: v }))}
+                  placeholder="#808080"
+                />
+              </div>
+              <StylePreviewSwatch
+                geometryType="POINT"
+                fillColor={formProps.fillColor}
+                strokeColor={formProps.strokeColor}
+                opacity={formProps.opacity}
+              />
+            </div>
           </div>
-          {common}
+          {opacityField}
+          {renderStrokeAndLabelFields(false)}
         </>
       )
     }
     if (geometryType === "LINE") {
-      return common
+      return (
+        <>
+          {renderStrokeAndLabelFields(true)}
+          {opacityField}
+        </>
+      )
     }
     return (
       <>
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
           <label className="text-sm">색상</label>
-          <Input
-            type="text"
-            value={formProps.fillColor ?? ""}
-            onChange={(e) => setFormProps((p) => ({ ...p, fillColor: e.target.value }))}
-            placeholder="#808080"
-          />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <ColorField
+                value={formProps.fillColor ?? ""}
+                onChange={(v) => setFormProps((p) => ({ ...p, fillColor: v }))}
+                placeholder="#808080"
+              />
+            </div>
+            <StylePreviewSwatch
+              geometryType="POLYGON"
+              fillColor={formProps.fillColor}
+              strokeColor={formProps.strokeColor}
+              opacity={formProps.opacity}
+            />
+          </div>
         </div>
-        {common}
+        {opacityField}
+        {renderStrokeAndLabelFields(false)}
       </>
     )
-  }, [formProps])
+  }, [formProps, labelFieldOptions])
 
   if (loading) return <p className="text-sm text-muted-foreground">로딩 중...</p>
   if (error && !config) return <p className="text-sm text-destructive">{error}</p>
@@ -800,17 +1004,34 @@ export function LayerInfoManager({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-8 w-56 rounded-md text-sm"
             />
+            <div className="flex items-center gap-1 rounded-md border p-0.5 w-fit">
+              {LAYER_FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setLayerFilterMode(opt.value)}
+                  className={cn(
+                    "h-6 rounded-sm px-2 text-xs transition-colors",
+                    layerFilterMode === opt.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
               <input
                 type="checkbox"
-                checked={showPublicLayer}
-                onChange={(e) => setShowPublicLayer(e.target.checked)}
+                checked={usedOnly}
+                onChange={(e) => setUsedOnly(e.target.checked)}
                 className="rounded border-input"
               />
-              public_layer
+              사용중인 레이어만 보기
             </label>
             <span className="text-sm text-muted-foreground">
-              {filteredTables.length} / {total}
+              총 {filteredTables.length}건
               {displayCount < filteredTables.length && (
                 <span className="text-xs text-muted-foreground ml-1">
                   (표시: {displayedTables.length})
@@ -832,7 +1053,8 @@ export function LayerInfoManager({
             onClick={() => {
               setSearchQuery("")
               setDebouncedSearch("")
-              setShowPublicLayer(false)
+              setLayerFilterMode("all")
+              setUsedOnly(false)
               void loadFullList()
             }}
           >
@@ -871,7 +1093,7 @@ export function LayerInfoManager({
             {TABLE_COLUMNS.map((col, i) => (
               <div
                 key={col.id}
-                className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${col.kind === "field" && col.alignCenter ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
+                className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${(col.kind === "field" && col.alignCenter) || col.kind === "style_legend" || col.kind === "layer_delete" ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
                 style={getColumnStyle(col)}
               >
                 {col.label}
@@ -907,8 +1129,13 @@ export function LayerInfoManager({
                   if (col.kind === "style_legend") {
                     const canShowLegend = hasCssStyle || published
                     const legendUrl = tableName
-                      ? getLegendGraphicUrl(tableName, styleName ?? undefined)
+                      ? getLegendGraphicUrl(tableName, styleName ?? undefined, styleVersion)
                       : ""
+                    const fallbackKey = (styleName || tableName || "").toLowerCase()
+                    const fallbackState = fallbackKey ? cssFallbackMap[fallbackKey] : undefined
+                    const showImg = Boolean(legendUrl && canShowLegend && fallbackState === undefined)
+                    const showSwatch = fallbackState && typeof fallbackState === "object"
+                    const showLoading = fallbackState === "loading"
                     return (
                       <div
                         key={col.id}
@@ -925,24 +1152,33 @@ export function LayerInfoManager({
                           }
                         }}
                       >
-                        {legendUrl && canShowLegend ? (
+                        {showImg && (
                           <img
                             src={legendUrl}
                             alt=""
                             className="max-h-7 max-w-full object-contain pointer-events-none"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none"
-                              const fallback = e.currentTarget.nextElementSibling
-                              if (fallback instanceof HTMLElement) fallback.style.display = "inline"
+                            onError={() => {
+                              if (!fallbackKey) return
+                              if (hasCssStyle) loadCssFallback(fallbackKey)
+                              else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
                             }}
                           />
-                        ) : null}
-                        <span
-                          className="text-xs text-muted-foreground pointer-events-none"
-                          style={{ display: legendUrl && canShowLegend ? "none" : "inline" }}
-                        >
-                          —
-                        </span>
+                        )}
+                        {showSwatch && (
+                          <StylePreviewSwatch
+                            geometryType={(fallbackState as StyleProps & { geometryType: GeometryType }).geometryType}
+                            fillColor={(fallbackState as StyleProps & { geometryType: GeometryType }).fillColor}
+                            strokeColor={(fallbackState as StyleProps & { geometryType: GeometryType }).strokeColor}
+                            opacity={(fallbackState as StyleProps & { geometryType: GeometryType }).opacity}
+                            showFrame={false}
+                          />
+                        )}
+                        {showLoading && (
+                          <span className="text-xs text-muted-foreground pointer-events-none">…</span>
+                        )}
+                        {!showImg && !showSwatch && !showLoading && (
+                          <span className="text-xs text-muted-foreground pointer-events-none">—</span>
+                        )}
                       </div>
                     )
                   }
@@ -1014,7 +1250,10 @@ export function LayerInfoManager({
                         <Input
                           value={val}
                           onChange={(e) => updateCell(tableIdx, key, e.target.value)}
-                          className="h-6 rounded-none text-sm font-mono min-w-0 py-0 px-1"
+                          className={cn(
+                            "h-6 rounded-none text-sm font-mono min-w-0 py-0 px-1",
+                            key === "define_table_idx" && "text-right"
+                          )}
                         />
                       )}
                     </div>
@@ -1037,6 +1276,20 @@ export function LayerInfoManager({
           <DialogHeader>
             <DialogTitle>스타일 추가: {targetLayerName}</DialogTitle>
           </DialogHeader>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="hover:cursor-pointer w-fit"
+            disabled={!targetLayerName || actionLoading === targetLayerName}
+            onClick={() => {
+              if (!targetLayerName) return
+              void handleAutoApplyOne(targetLayerName)
+              setAddOpen(false)
+            }}
+          >
+            {actionLoading === targetLayerName ? "자동 생성 중..." : "기본 스타일 자동 생성"}
+          </Button>
           <div className="space-y-3 py-2">
             <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
               <label className="text-sm">스타일 이름</label>
@@ -1049,7 +1302,7 @@ export function LayerInfoManager({
             <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
               <label className="text-sm">도형 타입</label>
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                 value={formGeometryType}
                 onChange={(e) => setFormGeometryType(e.target.value as GeometryType)}
               >
@@ -1066,10 +1319,10 @@ export function LayerInfoManager({
             <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
           )}
           <DialogFooter>
-            <Button variant="outline" className="text-muted-foreground" onClick={() => setAddOpen(false)}>
+            <Button variant="outline" className="hover:cursor-pointer" onClick={() => setAddOpen(false)}>
               취소
             </Button>
-            <Button variant="secondary" onClick={handleAddSubmit} disabled={formSaving}>
+            <Button variant="default" className="hover:cursor-pointer" onClick={handleAddSubmit} disabled={formSaving}>
               {formSaving ? "저장 중..." : "추가"}
             </Button>
           </DialogFooter>
@@ -1080,18 +1333,30 @@ export function LayerInfoManager({
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>스타일 수정: {targetStyleName}</DialogTitle>
+            <DialogTitle>스타일 수정: {targetLayerName}</DialogTitle>
           </DialogHeader>
+          {targetStyleName && (
+            <a
+              href={`${GEOSERVER_DEFAULT_URL}/web/wicket/bookmarkable/org.geoserver.wms.web.data.StyleEditPage?name=${encodeURIComponent(targetStyleName)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary underline underline-offset-4 hover:no-underline"
+            >
+              GeoServer 관리자 화면에서 스타일 직접 수정 →
+            </a>
+          )}
           {!editEditable ? (
-            <p className="text-sm text-muted-foreground py-2">
-              CSS 스타일만 간단 수정 가능합니다. 현재 스타일이 CSS가 아니거나 비어 있습니다.
-            </p>
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-muted-foreground">
+                CSS 스타일만 간단 수정 가능합니다. 현재 스타일이 CSS가 아니거나 비어 있습니다.
+              </p>
+            </div>
           ) : (
             <div className="space-y-3 py-2">
               <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
                 <label className="text-sm">도형 타입</label>
                 <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                   value={formGeometryType}
                   onChange={(e) => setFormGeometryType(e.target.value as GeometryType)}
                 >
@@ -1109,10 +1374,10 @@ export function LayerInfoManager({
             <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
           )}
           <DialogFooter>
-            <Button variant="outline" className="text-muted-foreground" onClick={() => setEditOpen(false)}>
+            <Button variant="outline" className="hover:cursor-pointer" onClick={() => setEditOpen(false)}>
               취소
             </Button>
-            <Button variant="secondary" onClick={handleEditSubmit} disabled={formSaving || !editEditable}>
+            <Button variant="default" className="hover:cursor-pointer" onClick={handleEditSubmit} disabled={formSaving || !editEditable}>
               {formSaving ? "저장 중..." : "저장"}
             </Button>
           </DialogFooter>
