@@ -11,12 +11,15 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'accessRequestQueue', label: '권한 신청 처리' },
   { id: 'shpFileUploader', label: 'SHP File Uploader' },
   { id: 'exlFileUploader', label: 'Excel File Uploader' },
+<<<<<<< HEAD
   { id: 'dataFileUploader', label: 'Data File Upload' },
   { id: 'sourceCodeUploader', label: '소스코드 관리' },
+=======
+  { id: 'dataFileUploader', label: '첨부파일 관리' },
+  { id: 'sourceCodeUploader', label: '소스코드 업로더' },
+>>>>>>> e5bea0341c7e497c334379f06cd5a41374eeffb2
   { id: 'versionManager', label: '버전관리' },
-  { id: 'layerInfo', label: '레이어 정보관리' },
-  { id: 'layerAttr', label: '레이어 속성관리' },
-  { id: 'layerCode', label: '레이어 코드관리' },
+  { id: 'layerManager', label: '레이어 관리' },
   { id: 'systemVar', label: '시스템 변수' },
   { id: 'dbManager', label: 'DB Manager' },
   { id: 'geoserverManagerLayer', label: 'Geoserver Manager [layer]' },
@@ -24,7 +27,6 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'lasFileUploader', label: 'LAS File Uploader' },
   { id: 'fileManager', label: 'File Manager' },
   { id: 'fileConverter', label: 'File Converter' },
-  { id: 'dataMigration', label: 'Data Migration' },
   { id: 'lasFixer', label: 'LAS Fixer' },
   { id: 'orthophotoManager', label: '정사영상관리' },
 ] as const satisfies readonly ConsoleMenuDef[];

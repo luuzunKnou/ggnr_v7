@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7cb2</id>
+  <id>LayerInfoImpl-767e4f41:19f1613ef30:38e6</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:tl_spbd_entrc</name>
+  <name>ggnr:jijuk_land_attr</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>128.43681098744884</double>
-          <double>36.30117238639369</double>
-          <double>129.00192661086535</double>
-          <double>36.81456804458932</double>
+          <double>129.02662094453856</double>
+          <double>36.49795218000535</double>
+          <double>129.2080280412743</double>
+          <double>36.724217011571476</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4297520398234727E7</double>
-          <double>4342141.75378538</double>
-          <double>1.4360428781672778E7</double>
-          <double>4413291.385515356</double>
+          <double>1.436317774232276E7</double>
+          <double>4369356.928738872</double>
+          <double>1.4383371887957668E7</double>
+          <double>4400735.593209263</double>
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>tl_spbd_entrc</defaultStyle>
+      <defaultStyle>jijuk_land_attr</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

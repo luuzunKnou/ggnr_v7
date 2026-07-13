@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7ca5</id>
+  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38e8</id>
   <name>ri</name>
   <nativeName>ri</nativeName>
   <namespace>
@@ -12,17 +12,16 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>327950.2622200436</minx>
-    <maxx>379099.47020771215</maxx>
-    <miny>312531.33963256935</miny>
-    <maxy>370905.4133164596</maxy>
-    <crs class="projected">EPSG:5181</crs>
+    <minx>376989.125</minx>
+    <maxx>406735.0</maxx>
+    <miny>334381.84375</miny>
+    <maxy>378281.5625</maxy>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.4245011389381</minx>
-    <maxx>129.00724818012225</maxx>
-    <miny>36.29417164002223</miny>
-    <maxy>36.82818315636876</maxy>
+    <minx>128.9751861628389</minx>
+    <maxx>129.3187631640765</maxx>
+    <miny>36.48539982437407</miny>
+    <maxy>36.8867115858739</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

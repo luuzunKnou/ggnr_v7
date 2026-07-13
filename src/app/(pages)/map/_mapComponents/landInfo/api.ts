@@ -1,6 +1,7 @@
 'use client';
 
 import { call } from '@/lib/api';
+import { hasParcelLandInfoTabData } from '@/lib/parcelLandInfoTab';
 import { transformCoordinate } from '../services/coordinateService';
 
 type JsonObject = Record<string, unknown>;
@@ -223,31 +224,67 @@ async function fetchParcelTabDataFromCache(pnu: string): Promise<ParcelTabData |
   }
 }
 
-/** 캐시 우선 조회 — 없으면 VWorld 호출 후 DB 캐시 저장 */
+export type ParcelTabData = {
+  characteristics: JsonObject[];
+  landUses: JsonObject[];
+  prices: JsonObject[];
+  possessions: JsonObject[];
+  source?: 'kras' | 'cache' | 'vworld' | 'mixed';
+};
+
+function emptyParcelTabData(): ParcelTabData {
+  return {
+    characteristics: [],
+    landUses: [],
+    prices: [],
+    possessions: [],
+    source: 'vworld',
+  };
+}
+
+function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): ParcelTabData {
+  return {
+    characteristics: Array.isArray(payload.characteristics) ? payload.characteristics : [],
+    landUses: Array.isArray(payload.landUses) ? payload.landUses : [],
+    prices: Array.isArray(payload.prices) ? payload.prices : [],
+    possessions: Array.isArray(payload.possessions) ? payload.possessions : [],
+    source:
+      payload.source === 'kras' ||
+      payload.source === 'cache' ||
+      payload.source === 'vworld' ||
+      payload.source === 'mixed'
+        ? payload.source
+        : undefined,
+  };
+}
+
+/** 행망·캐시 우선(서버) — 내용 없으면 브라우저 VWorld JSONP 폴백 (v6 동일) */
 export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
   const pnu = toStr(args.pnu);
-  if (!pnu) {
-    return {
-      characteristics: [],
-      landUses: [],
-      prices: [],
-      possessions: [],
-      source: 'vworld' as const,
-    };
+  if (!pnu) return emptyParcelTabData();
+
+  try {
+    const res = await call('', 'POST', {
+      service: 'landLinkageService',
+      action: 'fetchParcelLandInfoTab',
+      params: { pnu },
+    });
+    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
+    if (payload?.ok !== false) {
+      const tab = normalizeParcelTabPayload(payload);
+      // 서버 VWorld 직접 호출은 키 도메인·망 제약으로 빈 결과가 올 수 있음 → 실데이터 있을 때만 사용
+      if (hasParcelLandInfoTabData(tab)) {
+        return tab;
+      }
+    }
+  } catch {
+    /* 서버 실패 시 클라이언트 fallback */
   }
 
   const cached = await fetchParcelTabDataFromCache(pnu);
-  if (cached) return cached;
+  if (cached && hasParcelLandInfoTabData(cached)) return cached;
 
-  if (!toStr(args.vworldKey)) {
-    return {
-      characteristics: [],
-      landUses: [],
-      prices: [],
-      possessions: [],
-      source: 'vworld' as const,
-    };
-  }
+  if (!toStr(args.vworldKey)) return emptyParcelTabData();
 
   const fresh = await fetchParcelTabDataFromVworld(args);
   void cacheJijukLandAttrFromParcelData({
@@ -259,14 +296,6 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   });
   return fresh;
 }
-
-export type ParcelTabData = {
-  characteristics: JsonObject[];
-  landUses: JsonObject[];
-  prices: JsonObject[];
-  possessions: JsonObject[];
-  source?: 'cache' | 'vworld';
-};
 
 /** 필지정보(토지기본정보) 조회 결과를 public_layer.jijuk_land_attr에 캐시 */
 export async function cacheJijukLandAttrFromParcelData(args: {

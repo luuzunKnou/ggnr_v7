@@ -239,9 +239,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
               : serEng === 'shapeEditor'
                 ? handleShapeEditorClick
                 : serEng === 'parcelAnalysis'
-                  ? () => {
-                      /* 필지분석: UI만 유지, 패널/URL 토글 없음 */
-                    }
+                  ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
                   : () => toggleWindow(openedKey);
           const svcDisabled =
             policy !== 'block' && roadDataFlowSidebarLock && openedKey !== 'roadDataFlow';
@@ -253,7 +251,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
               onClick={onSvcClick}
               isActive={
                 policy !== 'block' &&
-                serEng !== 'parcelAnalysis' &&
                 serEng !== 'shapeEditor' &&
                 openedWindows.includes(openedKey)
               }
