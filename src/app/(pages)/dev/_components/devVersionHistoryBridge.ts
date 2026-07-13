@@ -25,3 +25,33 @@ export function registerDevVersionHistoryRefresh(handler: () => void): () => voi
 export function notifyDevVersionHistoryRefresh(): void {
   refreshHandler?.();
 }
+
+/**
+ * 서버 재시작 직후 등 일시적 연결 실패를 고려해 이력 새로고침을 여러 번 시도.
+ * 기본 간격: 즉시 → 5초 → 15초 → 30초 → 60초
+ * (process.exit·재시작 대기·개방망 npm install 여유 포함)
+ * @returns clearTimeout 용 타이머 id 목록
+ */
+export function notifyDevVersionHistoryRefreshRetry(
+  delaysMs: number[] = [0, 5_000, 15_000, 30_000, 60_000]
+): ReturnType<typeof setTimeout>[] {
+  const timerIds: ReturnType<typeof setTimeout>[] = [];
+  for (const ms of delaysMs) {
+    if (ms <= 0) {
+      refreshHandler?.();
+    } else {
+      timerIds.push(
+        setTimeout(() => {
+          refreshHandler?.();
+        }, ms)
+      );
+    }
+  }
+  return timerIds;
+}
+
+export function clearDevVersionHistoryRefreshRetry(timerIds: ReturnType<typeof setTimeout>[]): void {
+  for (const id of timerIds) {
+    clearTimeout(id);
+  }
+}

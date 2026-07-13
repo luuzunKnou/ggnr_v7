@@ -1,28 +1,41 @@
 # process.exit 재시작 전용 감시 루프
-# - restartMode=exit 일 때만 npm 재실행
-# - restartMode=command 이면 GGNR_RESTART_COMMAND에 맡기고 PowerShell은 재시작하지 않음
+# - restartMode=exit 일 때만 이 창에서 npm 재실행
+# - command / none / 그 외는 이 스크립트 관여 대상이 아님 (감시 종료만)
 #
-# 실행 위치: 이 스크립트의 바로 상위 폴더(= 저장소 루트). 상위 폴더 이름은 상관없음.
-#   cd <저장소루트>
-#   .\scripts\restart-watch.ps1 -Project build_yy -Type dev
+# 「명령 실행 재시작(GGNR_RESTART_COMMAND)」은 sourceVersionService가
+# 새 창 기동·기존 콘솔 종료를 담당한다. 이 스크립트를 쓰지 않는다.
 #
-# RepoRoot 는 스크립트 위치(scripts/)의 상위 폴더로 자동 결정됩니다.
-#   .\scripts\restart-watch.ps1 -Project build_yy -Type demo
-#   .\scripts\restart-watch.ps1 -Project river_yd -Type prod
+# npm / 감시 명령은 항상 프로젝트 루트(이 스크립트의 상위 폴더)에서 실행됩니다.
+# 현재 디렉터리와 무관하게 스크립트 경로만으로 루트를 잡습니다.
+#
+# 실행 예 (어느 폴더에서든):
+#   powershell -NoProfile -ExecutionPolicy Bypass -File D:\ggnr_v7\scripts\restart-watch.ps1 -Project build_yy -Type dev
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\restart-watch.ps1 -Project build_yy -Type demo
+#
+# 루트를 직접 지정할 때:
+#   ...\restart-watch.ps1 -Project build_yy -Type prod -RepoRoot D:\ggnr_v7
 
 param(
   [Parameter(Mandatory = $true)][string]$Project,
   [Parameter(Mandatory = $true)][string]$Type,
   [string]$RepoRoot = "",
-  [int]$DelaySec = 2,
-  [int]$PollSec = 2
+  [int]$DelaySec = 2
 )
 
 if (-not $RepoRoot) {
-  $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+} else {
+  $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+}
+
+$PackageJson = Join-Path $RepoRoot "package.json"
+if (-not (Test-Path -LiteralPath $PackageJson)) {
+  Write-Host "ERROR: 프로젝트 루트가 아닙니다. package.json 없음: $RepoRoot"
+  exit 1
 }
 
 $SignalPath = Join-Path $RepoRoot ".cursor-runtime\restart-request.json"
+$NpmCommand = "npm run dev -- $Project $Type"
 
 function Get-RestartSignal {
   if (-not (Test-Path -LiteralPath $SignalPath)) {
@@ -36,15 +49,26 @@ function Get-RestartSignal {
   }
 }
 
-Set-Location -LiteralPath $RepoRoot
-Write-Host "감시 시작: $RepoRoot"
+function Enter-RepoRoot {
+  Set-Location -LiteralPath $RepoRoot
+  $cwd = (Get-Location).Path
+  if ($cwd -ne $RepoRoot) {
+    Write-Host "ERROR: 작업 폴더 이동 실패. 기대=$RepoRoot, 현재=$cwd"
+    exit 1
+  }
+}
+
+Enter-RepoRoot
+Write-Host "감시 시작 (프로젝트 루트): $RepoRoot"
+Write-Host "현재 작업 폴더: $((Get-Location).Path)"
 Write-Host "신호 파일: $SignalPath"
-Write-Host "명령: npm run dev -- $Project $Type"
-Write-Host "규칙: restartMode=exit 일 때만 PowerShell이 재기동합니다."
+Write-Host "실행 명령: $NpmCommand"
+Write-Host "규칙: restartMode=exit 일 때만 이 창에서 재기동합니다."
 Write-Host ""
 
 while ($true) {
-  Write-Host "시작: npm run dev -- $Project $Type"
+  Enter-RepoRoot
+  Write-Host "시작 (cwd=$((Get-Location).Path)): $NpmCommand"
   npm run dev -- $Project $Type
   $code = $LASTEXITCODE
   Write-Host "종료 감지 (exitCode=$code)."
@@ -69,27 +93,6 @@ while ($true) {
     continue
   }
 
-  if ($mode -eq "command" -and $requested) {
-    Write-Host "명령 실행 재시작 — PowerShell은 재시작하지 않습니다. (GGNR_RESTART_COMMAND 담당)"
-    Write-Host "다음 적용에서 restartMode=exit 가 될 때까지 대기합니다. (Ctrl+C 종료)"
-    while ($true) {
-      Start-Sleep -Seconds $PollSec
-      $next = Get-RestartSignal
-      if ($null -eq $next) { continue }
-      $nextMode = [string]$next.restartMode
-      $nextReq = $false
-      if ($null -ne $next.restartRequested) {
-        $nextReq = [bool]$next.restartRequested
-      }
-      if ($nextMode -eq "exit" -and $nextReq) {
-        Write-Host "exit 신호 감지 — ${DelaySec}초 대기 후 PowerShell이 기동합니다..."
-        Start-Sleep -Seconds $DelaySec
-        break
-      }
-    }
-    continue
-  }
-
-  Write-Host "재시작 대상 아님 (restartRequested=$requested, restartMode=$mode) — 감시 종료."
+  Write-Host "exit 재시작 아님 (restartRequested=$requested, restartMode=$mode) — 감시 종료."
   break
 }

@@ -55,6 +55,50 @@ type UploadProgressPayload = {
   done: boolean;
 };
 
+function estimateUploadTotalSeconds(
+  fileCount: number | undefined,
+  zipSizeBytes: number | undefined,
+  includeNodeModules: boolean
+): number {
+  const files = fileCount && fileCount > 0 ? fileCount : 0;
+  if (files <= 0 && (zipSizeBytes == null || zipSizeBytes <= 0)) return 0;
+  const closed = includeNodeModules;
+  const scanSec = Math.max(2, files * 0.004);
+  const estZipBytes = zipSizeBytes ?? files * (closed ? 100_000 : 6_000);
+  const zipSec = Math.max(
+    3,
+    files * (closed ? 0.018 : 0.01) + (estZipBytes / (1024 * 1024)) * (closed ? 1.8 : 0.9)
+  );
+  const transferSec = Math.max(3, (estZipBytes / (1024 * 1024)) * (closed ? 1.2 : 0.8));
+  const remoteSec = Math.max(5, (estZipBytes / (1024 * 1024)) * 0.5);
+  const npmSec = closed ? 0 : 90;
+  return scanSec + zipSec + transferSec + remoteSec + npmSec;
+}
+
+function estimateRemainingSeconds(totalSec: number, pct: number, startedAtMs: number): number {
+  if (totalSec <= 0) return 0;
+  if (pct > 2 && pct < 100) {
+    const elapsed = (Date.now() - startedAtMs) / 1000;
+    const projected = elapsed / (pct / 100);
+    return Math.max(1, projected - elapsed);
+  }
+  if (pct >= 0) {
+    return Math.max(1, totalSec * (1 - pct / 100));
+  }
+  return totalSec;
+}
+
+function formatEtaSeconds(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return '1분 미만';
+  const s = Math.ceil(sec);
+  if (s < 60) return `약 ${s}초`;
+  const m = Math.ceil(s / 60);
+  if (m < 60) return `약 ${m}분`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm > 0 ? `약 ${h}시간 ${rm}분` : `약 ${h}시간`;
+}
+
 function buildBaseStages(includeNodeModules: boolean): StageItem[] {
   const stages: StageItem[] = [
     { id: 'preflight', label: '대상 서버 상태 확인', state: 'pending' },
@@ -206,6 +250,8 @@ export function SourceCodeUploaderContent() {
   const [stages, setStages] = useState<StageItem[]>(() => buildBaseStages(false));
   const [liveLogs, setLiveLogs] = useState<string[]>([]);
   const [chunkProgress, setChunkProgress] = useState<{ sent: number; expected: number } | null>(null);
+  const [uploadMeta, setUploadMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
+  const [etaTick, setEtaTick] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const preflightDetailRef = useRef('');
@@ -214,6 +260,7 @@ export function SourceCodeUploaderContent() {
   const lastPhaseLoggedRef = useRef('');
   const liveLogScrollRef = useRef<HTMLDivElement>(null);
   const uploadHistoryRecordedRef = useRef(false);
+  const startedAtRef = useRef(0);
   const stagesRef = useRef(stages);
   const includeNodeModulesRef = useRef(includeNodeModules);
 
@@ -224,6 +271,29 @@ export function SourceCodeUploaderContent() {
   useEffect(() => {
     includeNodeModulesRef.current = includeNodeModules;
   }, [includeNodeModules]);
+
+  useEffect(() => {
+    if (!uploading) return;
+    const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [uploading]);
+
+  const etaLabel = (() => {
+    void etaTick;
+    if (!uploading || startedAtRef.current <= 0) return null;
+    const total = estimateUploadTotalSeconds(
+      uploadMeta.fileCount,
+      uploadMeta.zipSize,
+      includeNodeModules
+    );
+    if (total <= 0 && progressPct < 3) return null;
+    const remain = estimateRemainingSeconds(
+      total > 0 ? total : Math.max(30, (Date.now() - startedAtRef.current) / 1000 / Math.max(progressPct / 100, 0.03)),
+      progressPct,
+      startedAtRef.current
+    );
+    return formatEtaSeconds(remain);
+  })();
 
   useLayoutEffect(() => {
     const el = liveLogScrollRef.current;
@@ -274,6 +344,12 @@ export function SourceCodeUploaderContent() {
   const applyProgressSnapshot = (p: UploadProgressPayload) => {
     setProgressPct(p.progressPct);
     setProgressText(p.message);
+    if (p.scanIncluded != null || p.zipSize != null) {
+      setUploadMeta((prev) => ({
+        fileCount: p.scanIncluded ?? prev.fileCount,
+        zipSize: p.zipSize ?? prev.zipSize,
+      }));
+    }
     const nextStages = buildStagesFromProgress(p, preflightDetailRef.current, includeNodeModules);
     setStages(nextStages);
 
@@ -383,6 +459,8 @@ export function SourceCodeUploaderContent() {
     setRows([]);
     setLiveLogs([]);
     setChunkProgress(null);
+    setUploadMeta({});
+    startedAtRef.current = Date.now();
     setUploading(true);
     setProgressPct(2);
     setStages(buildBaseStages(includeNodeModules));
@@ -793,18 +871,23 @@ export function SourceCodeUploaderContent() {
 
       {uploading && (
         <div className="rounded border bg-muted/20 px-3 py-2">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1">
+          <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+            <span className="flex shrink-0 items-center gap-1">
               <Loader2 className="h-3 w-3 animate-spin" />
               {progressText}
             </span>
-            <span className="text-muted-foreground">{progressPct}%</span>
+            {etaLabel ? (
+              <span className="truncate text-muted-foreground">(예상 소요 시간: {etaLabel})</span>
+            ) : null}
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
+          <div className="flex items-center gap-2">
+            <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <span className="shrink-0 text-muted-foreground">{progressPct}%</span>
           </div>
           {chunkProgress && chunkProgress.expected > 0 && (
             <div className="mt-2">

@@ -5,7 +5,15 @@ import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 
 export type RestartMode = 'none' | 'exit' | 'command';
 
-export type VersionRelayPhase = 'latest' | 'download' | 'relay-init' | 'relay-chunk' | 'relay-complete';
+export type VersionRelayPhase =
+  | 'latest'
+  | 'download'
+  | 'relay-init'
+  | 'relay-chunk'
+  | 'relay-complete'
+  | 'merge-apply'
+  | 'geoserver'
+  | 'restart';
 
 export type VersionRelayProgress = {
   phase: VersionRelayPhase;
@@ -25,6 +33,11 @@ export type VersionRelayResult = {
   gnmsBaseUrl: string;
   latestUrl: string;
   downloadUrl: string;
+  geoserver?: {
+    stopped: boolean;
+    started: boolean;
+    message: string;
+  };
   restart: {
     requested: boolean;
     mode: RestartMode;
@@ -433,7 +446,7 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     throwIfAborted(signal);
-    onProgress?.({ phase: 'relay-complete', message: '병합·적용·재시작 처리 중...' });
+    onProgress?.({ phase: 'relay-complete', message: '병합·적용 처리 중...' });
     log('relay complete 요청...');
     const completeRes = await fetchWithTimeout(
       '/api/source/version/relay/complete',
@@ -444,7 +457,7 @@ export async function relayLatestSourceFromGnms(options: {
       },
       COMPLETE_FETCH_TIMEOUT_MS,
       signal,
-      { label: '병합·적용·재시작' }
+      { label: '병합·적용' }
     );
     const completeJson = (await completeRes.json().catch(() => ({}))) as VersionRelayResult & {
       error?: string;
@@ -458,13 +471,11 @@ export async function relayLatestSourceFromGnms(options: {
 
     relayCompleted = true;
     activeUploadId = null;
-    log(`적용 완료: ${completeJson.appliedFiles}건, 재시작: ${completeJson.restart?.message ?? '-'}`);
+    log(
+      `적용 완료: ${completeJson.appliedFiles}건, GeoServer: ${completeJson.geoserver?.message ?? '-'}, 재시작: ${completeJson.restart?.message ?? '-'}`
+    );
 
-    await recordVersionHistoryClient({
-      historyType: 'apply_latest',
-      status: 'success',
-      message: `적용 ${completeJson.appliedFiles}건 · 제외 ${completeJson.skippedFiles}건 · ${packageProfile === 'closed' ? '폐쇄망' : '개방망'}`,
-    });
+    // 성공 이력은 운영 서버가 재시작 전에 INSERT함. 클라이언트 후기록은 생략.
 
     return {
       ...completeJson,

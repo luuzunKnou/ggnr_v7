@@ -20,7 +20,7 @@ import {
   type VersionRelayResult,
 } from '@/lib/sourceVersionClientRelay';
 import { prefetchClientMachineIp } from '@/lib/clientMachineIp';
-import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
+import { closeDevVersionHistory, notifyDevVersionHistoryRefresh, notifyDevVersionHistoryRefreshRetry, clearDevVersionHistoryRefreshRetry } from './devVersionHistoryBridge';
 
 type SideProgress = {
   message: string;
@@ -44,8 +44,15 @@ export function VersionManagerContent() {
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
+  const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  useEffect(() => () => closeDevVersionHistory(), []);
+  useEffect(() => {
+    return () => {
+      closeDevVersionHistory();
+      clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
+      historyRetryTimersRef.current = [];
+    };
+  }, []);
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
@@ -120,15 +127,28 @@ export function VersionManagerContent() {
           phase: 'done',
           message: json.restart?.scheduled ? '적용 완료 · 재시작 예약' : '적용 완료',
           versionDetail: versionDetailRef.current,
+          applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
+          geoserverDetail: json.geoserver?.message,
+          restartDetail: json.restart?.message,
         })
       );
       setProgress({
-        message: json.restart?.scheduled ? '최신 소스 적용 완료. 서버 재시작 예약됨' : '최신 소스 적용 완료',
+        message: json.restart?.scheduled
+          ? '최신 소스 적용 완료. 서버 재시작 예약됨 — 재기동 후 이력에서 성공 기록을 확인하세요.'
+          : '최신 소스 적용 완료',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
-      notifyDevVersionHistoryRefresh();
+      if (json.restart?.scheduled) {
+        pushLog('서버 재시작 예약됨. 재기동 후 이력에서 성공 기록을 확인하세요.');
+        clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
+        historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
+          0, 5_000, 15_000, 30_000, 60_000,
+        ]);
+      } else {
+        notifyDevVersionHistoryRefresh();
+      }
     } catch (e: unknown) {
       const isAbort = isUserAbortError(e);
       const isTimeout = isRelayTimeoutError(e);
@@ -206,6 +226,9 @@ export function VersionManagerContent() {
           <p className="text-xs text-muted-foreground">
             GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
           </p>
+          <p className="text-xs text-muted-foreground">
+            «적용 후 서버 재시작»은 앱(운영) 재시작만 제어합니다. GeoServer는 적용 시 항상 중지 후 다시 기동합니다.
+          </p>
           <ProfileRadios />
           <div className="space-y-2 text-sm">
             <label className="flex items-center gap-2">
@@ -271,6 +294,7 @@ export function VersionManagerContent() {
               <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
               <div>적용: {relayResult.appliedFiles}건</div>
               <div>제외: {relayResult.skippedFiles}건</div>
+              <div>GeoServer: {relayResult.geoserver?.message ?? '-'}</div>
               <div>재시작: {relayResult.restart?.message}</div>
             </div>
           )}
