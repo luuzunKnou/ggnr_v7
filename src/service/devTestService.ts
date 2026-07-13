@@ -2053,6 +2053,147 @@ export async function getEmdGeometry(params: { schema?: string; emdCode: string 
 }
 
 /**
+ * 그린 도형(EPSG:5181 WKT)과 겹치는 읍/면/동 이름·사업 구역 대비 위치 조회.
+ * 필지분석 «도형 그리기» «대상»·경고 표시용.
+ * 경계만 맞닿는(ST_Touches) 인접 읍면동은 이름 목록에서 제외한다.
+ */
+export async function getEmdNamesByWkt(params: { schema?: string; wkt: string } = { wkt: '' }) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const wkt = String(params?.wkt ?? '').trim();
+  if (!wkt) {
+    return {
+      names: [] as string[],
+      projectScope: 'inside' as const,
+      error: 'wkt required',
+    };
+  }
+
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const qSchema = `"${schema.replace(/"/g, '""')}"`;
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'emd' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) {
+      return { names: [] as string[], projectScope: 'inside' as const, error: 'emd geometry column not found' };
+    }
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const col = `"${geomCol}"`;
+    const srid = normalizedLayerSrid5181(gcRow.srid);
+    const emdGeom5181 =
+      srid === 5181 ? `ST_SetSRID(${col}, 5181)` : `ST_Transform(ST_SetSRID(${col}, ${srid}), 5181)`;
+    const projectUnion5181 =
+      srid === 5181
+        ? `ST_SetSRID(ST_Union(${col}), 5181)`
+        : `ST_Transform(ST_SetSRID(ST_Union(${col}), ${srid}), 5181)`;
+    const drawGeom = `ST_GeomFromText('${esc(wkt)}', 5181)`;
+
+    const scopeRes = await db.execute(
+      sql.raw(
+        `WITH draw AS (
+           SELECT ${drawGeom} AS geom
+         ),
+         project AS (
+           SELECT ${projectUnion5181} AS geom
+           FROM ${qSchema}."emd"
+           WHERE ${col} IS NOT NULL
+         )
+         SELECT
+           CASE
+             WHEN p.geom IS NULL THEN 'inside'
+             WHEN NOT ST_Intersects(d.geom, p.geom) THEN 'fully_outside'
+             WHEN ST_Within(d.geom, p.geom) OR ST_CoveredBy(d.geom, p.geom) THEN 'inside'
+             ELSE 'partially_outside'
+           END AS project_scope
+         FROM draw d
+         CROSS JOIN project p`
+      )
+    );
+    const scopeRow = scopeRes.rows?.[0] as { project_scope?: string } | undefined;
+    const rawScope = String(scopeRow?.project_scope ?? 'inside');
+    const projectScope =
+      rawScope === 'fully_outside' || rawScope === 'partially_outside' ? rawScope : ('inside' as const);
+
+    // 이름 컬럼 결정 (테이블에 실제 존재하는 첫 후보)
+    const colRes = await db.execute(
+      sql.raw(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = '${esc(schema)}' AND table_name = 'emd'`
+      )
+    );
+    const cols = new Set(
+      (colRes.rows as Array<{ column_name?: string }>).map((r) => String(r.column_name ?? ''))
+    );
+    const nameCol = EMD_LIST_NAME_COLUMNS.find((c) => cols.has(c));
+    if (!nameCol) {
+      return { names: [] as string[], projectScope, error: 'emd name column not found' };
+    }
+    const nameColEsc = `"${nameCol.replace(/"/g, '""')}"`;
+
+    const res = await db.execute(
+      sql.raw(
+        `SELECT DISTINCT ${nameColEsc} AS name
+         FROM ${qSchema}."emd"
+         WHERE ${col} IS NOT NULL
+           AND ${nameColEsc} IS NOT NULL
+           AND TRIM(COALESCE(${nameColEsc}::text, '')) <> ''
+           AND ST_Intersects(${emdGeom5181}, ${drawGeom})
+           AND NOT ST_Touches(${emdGeom5181}, ${drawGeom})
+         ORDER BY name`
+      )
+    );
+    const names = (res.rows as Array<{ name?: unknown }>)
+      .map((r) => String(r.name ?? '').trim())
+      .filter((s) => s.length > 0);
+    return { names, projectScope, error: undefined as string | undefined };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { names: [] as string[], projectScope: 'inside' as const, error: msg };
+  }
+}
+
+/**
+ * schema.emd 전체 읍면동 도형을 합쳐(union) 사업 시군구 외곽선 WKT(EPSG:5181)로 반환.
+ * 필지분석 진입 시 지도에 대상 시군구 경계를 표시하는 용도.
+ */
+export async function getProjectEmdBoundary5181(params: { schema?: string } = {}) {
+  const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
+  const esc = (s: string) => s.replace(/'/g, "''");
+  try {
+    const gcRes = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, srid FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = 'emd' LIMIT 1`
+      )
+    );
+    const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+    if (!gcRow?.name) return { wkt: null as string | null, error: 'emd geometry column not found' };
+    const geomCol = String(gcRow.name).trim().replace(/"/g, '""');
+    const col = `"${geomCol}"`;
+    const srid = normalizedLayerSrid5181(gcRow.srid);
+    const unionExpr =
+      srid === 5181
+        ? `ST_Union(${col})`
+        : `ST_Transform(ST_SetSRID(ST_Union(${col}), ${srid}), 5181)`;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(${unionExpr}) AS wkt FROM "${schema.replace(/"/g, '""')}"."emd"`
+      )
+    );
+    const row = res.rows?.[0] as { wkt?: string } | undefined;
+    const wkt = row?.wkt != null ? String(row.wkt).trim() : null;
+    return { wkt };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { wkt: null as string | null, error: msg };
+  }
+}
+
+/**
  * schema.emd 테이블의 모든 읍면동 도형 envelope를 WGS84(4326) 경위도 bbox로 반환.
  * ITS CCTV 등 bbox 고정용 — geometry_columns 기준으로 SRID 처리(getEmdGeometry와 동일).
  */

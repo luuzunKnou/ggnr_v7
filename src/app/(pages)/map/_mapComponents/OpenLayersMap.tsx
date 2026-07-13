@@ -74,6 +74,7 @@ import Draw, { createBox } from 'ol/interaction/Draw';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import WKT from 'ol/format/WKT';
+import { fromCircle } from 'ol/geom/Polygon';
 import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
@@ -491,9 +492,14 @@ export default function OpenLayersMap({
           : new Draw({ source, type: 'Circle' });
     const onDrawEnd = (e: unknown) => {
       const evt = e as { feature: { getGeometry(): import('ol/geom').Geometry } };
-      const geom = evt.feature.getGeometry();
-      if (!geom) return;
+      const rawGeom = evt.feature.getGeometry();
+      if (!rawGeom) return;
       try {
+        // WKT는 Circle을 지원하지 않으므로 원형은 다각형으로 변환 후 저장
+        const geom =
+          rawGeom.getType() === 'Circle'
+            ? fromCircle(rawGeom as import('ol/geom/Circle').default)
+            : rawGeom;
         const cloned = geom.clone();
         cloned.transform('EPSG:3857', 'EPSG:5181');
         const wkt = new WKT().writeGeometry(cloned);
