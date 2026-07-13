@@ -34,8 +34,37 @@ if (-not (Test-Path -LiteralPath $PackageJson)) {
   exit 1
 }
 
-$SignalPath = Join-Path $RepoRoot ".cursor-runtime\restart-request.json"
+$RuntimeDir = Join-Path $RepoRoot ".cursor-runtime"
+$SignalPath = Join-Path $RuntimeDir "restart-request.json"
+$LogPath = Join-Path $RuntimeDir "restart-watch.log"
 $NpmCommand = "npm run dev -- $Project $Type"
+$RunCount = 0
+$LastRestartAt = $null
+
+function Write-WatchLog {
+  param(
+    [Parameter(Mandatory = $true)][string]$Message,
+    [ValidateSet("INFO", "OK", "WARN", "ERROR", "STEP")]
+    [string]$Level = "INFO"
+  )
+  $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+  $line = "[$ts] [$Level] $Message"
+  switch ($Level) {
+    "OK"    { Write-Host $line -ForegroundColor Green }
+    "WARN"  { Write-Host $line -ForegroundColor Yellow }
+    "ERROR" { Write-Host $line -ForegroundColor Red }
+    "STEP"  { Write-Host $line -ForegroundColor Cyan }
+    default { Write-Host $line }
+  }
+  try {
+    if (-not (Test-Path -LiteralPath $RuntimeDir)) {
+      New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
+    }
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
+  } catch {
+    # 파일 기록 실패해도 화면 로그는 유지
+  }
+}
 
 function Get-RestartSignal {
   if (-not (Test-Path -LiteralPath $SignalPath)) {
@@ -44,7 +73,7 @@ function Get-RestartSignal {
   try {
     return (Get-Content -LiteralPath $SignalPath -Raw -Encoding UTF8 | ConvertFrom-Json)
   } catch {
-    Write-Host "WARNING: restart-request.json 파싱 실패 — $($_.Exception.Message)"
+    Write-WatchLog "restart-request.json 파싱 실패 — $($_.Exception.Message)" "WARN"
     return $null
   }
 }
@@ -53,29 +82,57 @@ function Enter-RepoRoot {
   Set-Location -LiteralPath $RepoRoot
   $cwd = (Get-Location).Path
   if ($cwd -ne $RepoRoot) {
-    Write-Host "ERROR: 작업 폴더 이동 실패. 기대=$RepoRoot, 현재=$cwd"
+    Write-WatchLog "작업 폴더 이동 실패. 기대=$RepoRoot, 현재=$cwd" "ERROR"
     exit 1
   }
 }
 
+function Write-Banner {
+  param([string]$Title)
+  Write-Host ""
+  Write-Host ("=" * 72) -ForegroundColor DarkGray
+  Write-WatchLog $Title "STEP"
+  Write-Host ("=" * 72) -ForegroundColor DarkGray
+}
+
 Enter-RepoRoot
-Write-Host "감시 시작 (프로젝트 루트): $RepoRoot"
-Write-Host "현재 작업 폴더: $((Get-Location).Path)"
-Write-Host "신호 파일: $SignalPath"
-Write-Host "실행 명령: $NpmCommand"
-Write-Host "규칙: restartMode=exit 일 때만 이 창에서 재기동합니다."
+Write-Banner "감시 시작 (process.exit 재시작 전용)"
+Write-WatchLog "프로젝트 루트: $RepoRoot"
+Write-WatchLog "현재 작업 폴더: $((Get-Location).Path)"
+Write-WatchLog "신호 파일: $SignalPath"
+Write-WatchLog "로그 파일: $LogPath"
+Write-WatchLog "실행 명령: $NpmCommand"
+Write-WatchLog "규칙: restartMode=exit 일 때만 이 창에서 재기동합니다."
 Write-Host ""
 
 while ($true) {
   Enter-RepoRoot
-  Write-Host "시작 (cwd=$((Get-Location).Path)): $NpmCommand"
+  $RunCount += 1
+  $startedAt = Get-Date
+
+  if ($null -ne $LastRestartAt) {
+    $gapSec = [math]::Round(($startedAt - $LastRestartAt).TotalSeconds, 1)
+    Write-Banner "기동 #$RunCount (재시작) — 이전 종료 후 ${gapSec}초 경과"
+    Write-WatchLog "재기동 확인: 서버를 다시 시작합니다. (회차=$RunCount)" "OK"
+  } else {
+    Write-Banner "기동 #$RunCount (최초)"
+  }
+
+  Write-WatchLog "cwd=$((Get-Location).Path) → $NpmCommand"
+  Write-WatchLog "npm 프로세스 시작 대기 중... (종료되면 아래 '종료 감지'가 찍힙니다)"
+
   npm run dev -- $Project $Type
   $code = $LASTEXITCODE
-  Write-Host "종료 감지 (exitCode=$code)."
+  $endedAt = Get-Date
+  $aliveSec = [math]::Round(($endedAt - $startedAt).TotalSeconds, 1)
+
+  Write-Banner "종료 감지 #$RunCount"
+  Write-WatchLog "exitCode=$code, 가동시간=${aliveSec}초 (시작=$($startedAt.ToString('HH:mm:ss')) ~ 종료=$($endedAt.ToString('HH:mm:ss')))"
 
   $signal = Get-RestartSignal
   if ($null -eq $signal) {
-    Write-Host "restart-request.json 없음/읽기 실패 — PowerShell 재시작 안 함. 감시 종료."
+    Write-WatchLog "restart-request.json 없음/읽기 실패 — 재시작 안 함. 감시 종료." "WARN"
+    Write-WatchLog "결과: 껐지만 다시 켜지 않음 (신호 없음)." "WARN"
     break
   }
 
@@ -84,15 +141,29 @@ while ($true) {
   if ($null -ne $signal.restartRequested) {
     $requested = [bool]$signal.restartRequested
   }
+  $sigAt = [string]$signal.at
+  $sigVer = [string]$signal.version
+  $sigBy = [string]$signal.requestedBy
+  $sigSource = [string]$signal.source
 
-  Write-Host "신호: restartRequested=$requested, restartMode=$mode"
+  Write-WatchLog "신호 읽음: restartRequested=$requested, restartMode=$mode"
+  if ($sigAt) { Write-WatchLog "신호 at=$sigAt, version=$sigVer, by=$sigBy, source=$sigSource" }
 
   if ($mode -eq "exit" -and $requested) {
-    Write-Host "process.exit 재시작 — ${DelaySec}초 후 PowerShell이 다시 실행합니다..."
+    Write-WatchLog "판정: process.exit 재시작 → ${DelaySec}초 대기 후 같은 창에서 다시 기동합니다." "OK"
+    Write-WatchLog "대기 시작 (${DelaySec}초)..."
     Start-Sleep -Seconds $DelaySec
+    $LastRestartAt = Get-Date
+    Write-WatchLog "대기 종료. 재기동 루프로 진입합니다. (다음 회차=$($RunCount + 1))" "OK"
     continue
   }
 
-  Write-Host "exit 재시작 아님 (restartRequested=$requested, restartMode=$mode) — 감시 종료."
+  Write-WatchLog "판정: exit 재시작 아님 (restartRequested=$requested, restartMode=$mode) — 감시 종료." "WARN"
+  Write-WatchLog "결과: 껐지만 이 스크립트는 다시 켜지 않음. (command/none 등은 각자 방식)" "WARN"
   break
 }
+
+Write-Host ""
+Write-Banner "감시 종료"
+Write-WatchLog "총 기동 회차=$RunCount. 로그 파일: $LogPath"
+Write-Host ""
