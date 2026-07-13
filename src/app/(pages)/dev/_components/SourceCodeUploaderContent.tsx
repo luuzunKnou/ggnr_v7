@@ -712,6 +712,9 @@ export function SourceCodeUploaderContent() {
       ) : (
         <>
       <div className="rounded border p-3">
+        <p className="mb-2 text-xs text-muted-foreground">
+            설치: core/runtime/data 업로드. 미포함 시 원격 npm install 실행.
+        </p>
         <div className="mb-2 flex items-center gap-3 text-sm">
           <label className="flex items-center gap-1">
             <input type="radio" checked={mode === 'install'} onChange={() => setMode('install')} disabled={uploading} />
@@ -764,9 +767,6 @@ export function SourceCodeUploaderContent() {
             disabled={uploading}
           />
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          설치: core/runtime/data 업로드. 미포함 시 원격 npm install 실행.
-        </p>
         <div className="mt-3 flex items-center gap-2">
           <Button
             type="button"
