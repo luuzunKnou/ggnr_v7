@@ -1,11 +1,9 @@
 /**
- * 필지분석 외부 API 동시 호출 수·단건 타임아웃 — 기본값(단일 출처).
- * 서버는 runtime.env PARCEL_ANALYSIS_* 로 덮어쓸 수 있다(재배포 없이 운영 조절용).
- * 미설정·주석이면 아래 기본값과 동일하다.
+ * 필지분석 외부 API 동시 호출 수·단건 타임아웃 (소스 상수, 단일 출처).
  */
 export const PARCEL_ANALYSIS_BUILDING_CONCURRENCY = 8;
 
-/** 브이월드·KRAS·캐시 연계 동시 조회 수 (필지분석 보강·토지이용계획) */
+/** 행망(KRAS·KOREPS) 연계 동시 조회 수 (필지분석 보강·토지이용계획) */
 export const PARCEL_ANALYSIS_LINKAGE_CONCURRENCY = 8;
 
 /** KRAS·브이월드 등 연계 단건 요청 타임아웃(ms) */
@@ -53,6 +51,8 @@ export type ParcelThemeMapCategory = {
 };
 
 export type ParcelThemeMapFeature = {
+  /** PNU 단위 도형일 때 — 클라이언트에서 보강 범주/지목으로 색칠 */
+  pnu?: string;
   category: string;
   geometry: GeoJSON.Geometry;
 };
@@ -67,12 +67,62 @@ export type ParcelThemeMapPayload = {
   error?: string;
 };
 
+/** 클라 보강 결과로 테마 범주·지도용 라벨(상위 N) 산출 */
+export type ThemeMapParcelInput = {
+  pnu: string;
+  category: string;
+  areaSqm?: number;
+};
+
+export function buildThemeCategoriesFromParcels(
+  parcels: ThemeMapParcelInput[],
+  parcelCountHint?: number
+): { categories: ParcelThemeMapCategory[]; onMapLabels: Set<string>; mapCategoryLimitApplied: boolean } {
+  const map = new Map<string, { count: number; areaSqm: number }>();
+  for (const p of parcels) {
+    const label = String(p.category ?? '').trim() || '미상';
+    const prev = map.get(label) ?? { count: 0, areaSqm: 0 };
+    map.set(label, {
+      count: prev.count + 1,
+      areaSqm: prev.areaSqm + (Number(p.areaSqm) || 0),
+    });
+  }
+  const ranked = [...map.entries()]
+    .map(([label, v]) => ({ label, count: v.count, areaSqm: v.areaSqm }))
+    .sort((a, b) => b.areaSqm - a.areaSqm || b.count - a.count);
+
+  const parcelCount = parcelCountHint ?? parcels.length;
+  const limitApplied = parcelCount > PARCEL_THEME_MAP_FULL_COLOR_LIMIT;
+  const allowed = new Set(
+    (limitApplied ? ranked.slice(0, PARCEL_THEME_MAP_TOP_CATEGORY_COUNT) : ranked).map((r) => r.label)
+  );
+
+  const categories: ParcelThemeMapCategory[] = ranked.map((r) => ({
+    label: r.label,
+    count: r.count,
+    areaSqm: r.areaSqm,
+    onMap: allowed.has(r.label),
+  }));
+
+  return { categories, onMapLabels: allowed, mapCategoryLimitApplied: limitApplied };
+}
+
+export function resolveThemeFeatureCategory(
+  rawCategory: string,
+  onMapLabels: Set<string>
+): string {
+  const label = String(rawCategory ?? '').trim() || '미상';
+  if (onMapLabels.has(label)) return label;
+  return PARCEL_THEME_MAP_OTHER_CATEGORY;
+}
+
 const OWNER_COLORS: Record<string, string> = {
   개인: '#43A047',
   국유지: '#1E88E5',
   군유지: '#8E24AA',
   '시 도유지': '#FB8C00',
   '시, 도유지': '#FB8C00',
+  '시·도유지': '#FB8C00',
   시도유지: '#FB8C00',
   법인: '#6D4C41',
   종중: '#546E7A',

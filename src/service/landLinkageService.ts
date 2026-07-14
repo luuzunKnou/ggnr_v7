@@ -1,37 +1,79 @@
 /**
- * 필지 토지·소유 보강 — 행망 KRAS 우선, 실패 시 캐시·브이월드.
- * 필지분석 4-A 및 추후 우클릭 필지정보가 공유한다.
+ * 필지 토지·소유 보강 — 행망(KRAS·KOREPS)은 서버, 브이월드는 브라우저(JSONP).
  */
 import { buildPnuFromKrasRow, parseKrasLandInfoRows } from '@/lib/krasLandXml';
-import { parseKrasBodyFieldMaps, zonesFromKrasLandUseRows } from '@/lib/krasLandUseXml';
 import {
-  normalizeFromCacheRow,
-  normalizeFromKrasRow,
-  normalizeFromVworldParts,
-  type NormalizedParcelLand,
-  type ParcelLandEnrichmentMap,
-  type ParcelLandSource,
-} from '@/lib/parcelLandNormalize';
-import { getLandLinkageConfig, getParcelAnalysisTuning } from '@/service/configService';
+  parseKrasBodyFieldMaps,
+  zonesFromKrasLandUseRows,
+  type KrasBodyRecord,
+} from '@/lib/krasLandUseXml';
 import {
   emptyParcelLandInfoTab,
   hasParcelLandInfoTabData,
   mapKrasToParcelLandInfoTab,
+  normalizeFromKrasRow,
+  type NormalizedParcelLand,
+  type ParcelLandEnrichmentMap,
   type ParcelLandInfoTabData,
-} from '@/lib/parcelLandInfoTab';
-import { getJijukLandAttrsByPnus, getParcelTabDataFromCache, mergeJijukLandAttrSummary, upsertJijukLandAttrFromParcelData } from '@/service/jijukLandAttrService';
+  type ParcelLandSource,
+} from '@/lib/parcelLandNormalize';
+import { getLandLinkageConfig } from '@/service/configService';
+import {
+  PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
+  PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
+} from '@/lib/parcelAnalysisTheme';
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
+const KOREPS_PRICE_QUERY_ID = 'KOREPS00011';
 
 function toStr(value: unknown): string {
   if (value == null) return '';
   return String(value).trim();
 }
 
-function toNum(value: unknown): number {
+function toNumPositive(value: unknown): number | null {
   const n = Number(String(value ?? '').replace(/,/g, ''));
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+type KorepsPriceRow = {
+  pannJiga: number | null;
+  pannYmd: string;
+  baseYear: string;
+  baseMon: string;
+  jigaJibn: string;
+  remark: string;
+  raw: KrasBodyRecord;
+};
+
+/** KOREPS00011 BODY → 공시지가 행 (최신 1건 우선: 목록 첫 행) */
+function parseKorepsPriceRows(xml: string): KorepsPriceRow[] {
+  const maps = parseKrasBodyFieldMaps(xml);
+  return maps
+    .map((raw) => {
+      const pannJiga =
+        toNumPositive(raw.PANN_JIGA) ??
+        toNumPositive(raw.PNILP) ??
+        toNumPositive(raw.pblntfPclnd) ??
+        toNumPositive(raw.PBLNTF_PCLND);
+      return {
+        pannJiga,
+        pannYmd: toStr(raw.PANN_YMD),
+        baseYear: toStr(raw.BASE_YEAR) || toStr(raw.base_year),
+        baseMon: toStr(raw.BASE_MON) || toStr(raw.stdmt),
+        jigaJibn: toStr(raw.JIGA_JIBN) || toStr(raw.jiga_jibn),
+        remark: toStr(raw.REMARK) || toStr(raw.etc_cntn),
+        raw,
+      };
+    })
+    .filter((r) => r.pannJiga != null || r.pannYmd || r.baseYear);
+}
+
+function pickLatestKorepsPrice(rows: KorepsPriceRow[]): KorepsPriceRow | null {
+  if (!rows.length) return null;
+  const withPrice = rows.filter((r) => r.pannJiga != null);
+  return (withPrice[0] ?? rows[0]) ?? null;
 }
 
 function parsePnuParts(pnu: string) {
@@ -46,11 +88,12 @@ function parsePnuParts(pnu: string) {
 function buildKrasParam(
   pnu: string,
   queryId: string,
-  cfg: ReturnType<typeof getLandLinkageConfig>
+  cfg: ReturnType<typeof getLandLinkageConfig>,
+  connSysId?: string
 ): string {
   const parts = parsePnuParts(pnu);
   const qs = new URLSearchParams();
-  qs.set('conn_sys_id', cfg.krasKey);
+  qs.set('conn_sys_id', connSysId || cfg.krasKey);
   qs.set('conn_svc_id', queryId);
   qs.set('adm_sect_cd', cfg.sggCode);
   qs.set('land_loc_cd', parts.land_loc_cd);
@@ -66,8 +109,20 @@ function buildKrasUrl(cfg: ReturnType<typeof getLandLinkageConfig>): string | nu
   return `http://${cfg.krasIp}:${cfg.krasPort}${path === '/' ? '' : path}`;
 }
 
+/** KOREPS ※공시지가 시스템 — URL에 쿼리ID 경로 붙임 (v6 동일) */
+function buildKorepsUrl(cfg: ReturnType<typeof getLandLinkageConfig>): string | null {
+  if (!cfg.korepsIp || !cfg.korepsPort || !cfg.korepsKey || !cfg.sggCode) return null;
+  const base = cfg.korepsPath.startsWith('/')
+    ? cfg.korepsPath
+    : cfg.korepsPath
+      ? `/${cfg.korepsPath}`
+      : '';
+  const withSlash = base.endsWith('/') ? base.slice(0, -1) : base;
+  return `http://${cfg.korepsIp}:${cfg.korepsPort}${withSlash}/${KOREPS_PRICE_QUERY_ID}`;
+}
+
 async function postKrasXml(url: string, body: string, timeoutMs?: number): Promise<string> {
-  const ms = timeoutMs ?? getParcelAnalysisTuning().linkageTimeoutMs;
+  const ms = timeoutMs ?? PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
@@ -105,7 +160,7 @@ async function fetchKrasBatch(
   pnus: string[],
   cfg: ReturnType<typeof getLandLinkageConfig>
 ): Promise<ParcelLandEnrichmentMap> {
-  const results = await mapPool(pnus, getParcelAnalysisTuning().linkageConcurrency, (pnu) =>
+  const results = await mapPool(pnus, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, (pnu) =>
     fetchKrasForPnu(pnu, cfg)
   );
   const out: ParcelLandEnrichmentMap = {};
@@ -116,67 +171,68 @@ async function fetchKrasBatch(
   return out;
 }
 
-type VworldJson = {
-  landCharacteristicss?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-  possessions?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-  indvdLandPrices?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-};
-
-function pickVworldField(payload: VworldJson | null, rootKey: keyof VworldJson): Record<string, unknown> | null {
-  if (!payload) return null;
-  const root = payload[rootKey] as { field?: unknown } | undefined;
-  const field = root?.field;
-  if (!field) return null;
-  if (Array.isArray(field)) return (field[0] as Record<string, unknown>) ?? null;
-  return field as Record<string, unknown>;
-}
-
-async function fetchVworldJson(url: string, timeoutMs?: number): Promise<VworldJson | null> {
-  const ms = timeoutMs ?? getParcelAnalysisTuning().linkageTimeoutMs;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
-    if (!res.ok) return null;
-    return (await res.json()) as VworldJson;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchVworldForPnu(
+async function fetchKorepsPriceForPnu(
   pnu: string,
-  vworldKey: string
-): Promise<NormalizedParcelLand | null> {
-  if (!vworldKey) return null;
-  const base = 'https://api.vworld.kr/ned/data';
-  const q = (path: string) => {
-    const u = new URL(`${base}/${path}`);
-    u.searchParams.set('key', vworldKey);
-    u.searchParams.set('pnu', pnu);
-    u.searchParams.set('format', 'json');
-    u.searchParams.set('numOfRows', '1000');
-    return u.toString();
-  };
-  const [charRaw, possRaw, priceRaw] = await Promise.all([
-    fetchVworldJson(q('getLandCharacteristics')),
-    fetchVworldJson(q('getPossessionAttr')),
-    fetchVworldJson(q('getIndvdLandPriceAttr')),
-  ]);
-  const char = pickVworldField(charRaw, 'landCharacteristicss');
-  const poss = pickVworldField(possRaw, 'possessions');
-  const price = pickVworldField(priceRaw, 'indvdLandPrices');
-  if (!char && !poss && !price) return null;
-  return normalizeFromVworldParts(pnu, {
-    jimok: toStr(char?.lndcgrCodeNm),
-    jimokNm: toStr(char?.lndcgrCodeNm),
-    areaSqm: toNum(char?.lndpclAr),
-    ownerName: toStr(poss?.ownerNm),
-    ownerType: toStr(poss?.posesnSeCodeNm) || toStr(poss?.nationInsttSeCodeNm),
-    publicPrice: toNum(price?.pblntfPclnd) || null,
+  cfg: ReturnType<typeof getLandLinkageConfig>
+): Promise<number | null> {
+  const url = buildKorepsUrl(cfg);
+  if (!url) return null;
+  const xml = await postKrasXml(
+    url,
+    buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey)
+  );
+  const latest = pickLatestKorepsPrice(parseKorepsPriceRows(xml));
+  return latest?.pannJiga ?? null;
+}
+
+/** KRAS에 공시가 없거나 행 없을 때 KOREPS00011로 공시지가 보강 */
+async function applyKorepsPrices(
+  pnus: string[],
+  enrichments: ParcelLandEnrichmentMap,
+  cfg: ReturnType<typeof getLandLinkageConfig>
+): Promise<{ enrichments: ParcelLandEnrichmentMap; used: boolean }> {
+  if (!buildKorepsUrl(cfg)) return { enrichments, used: false };
+
+  const targets = pnus.filter((pnu) => {
+    const row = enrichments[pnu];
+    return !row || row.publicPrice == null || !(row.publicPrice > 0);
   });
+  if (!targets.length) return { enrichments, used: false };
+
+  const prices = await mapPool(targets, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, (pnu) =>
+    fetchKorepsPriceForPnu(pnu, cfg)
+  );
+
+  const next = { ...enrichments };
+  let used = false;
+  targets.forEach((pnu, i) => {
+    const price = prices[i];
+    if (price == null || !(price > 0)) return;
+    used = true;
+    const prev = next[pnu];
+    if (prev) {
+      next[pnu] = {
+        ...prev,
+        publicPrice: price,
+        source:
+          prev.source && prev.source !== 'koreps' && prev.source !== 'db'
+            ? 'mixed'
+            : 'koreps',
+      };
+    } else {
+      next[pnu] = {
+        pnu,
+        jimok: '',
+        jimokNm: '',
+        areaSqm: 0,
+        ownerName: '',
+        ownerType: '',
+        publicPrice: price,
+        source: 'koreps',
+      };
+    }
+  });
+  return { enrichments: next, used };
 }
 
 async function mapPool<T, R>(
@@ -197,66 +253,13 @@ async function mapPool<T, R>(
   return out;
 }
 
-async function fetchCacheBatch(pnus: string[]): Promise<ParcelLandEnrichmentMap> {
-  const { rows } = await getJijukLandAttrsByPnus({ pnus });
-  const out: ParcelLandEnrichmentMap = {};
-  for (const pnu of pnus) {
-    const row = rows[pnu];
-    if (row) out[pnu] = normalizeFromCacheRow(pnu, row);
-  }
-  return out;
-}
-
-async function fetchVworldBatch(
-  pnus: string[],
-  vworldKey: string
-): Promise<ParcelLandEnrichmentMap> {
-  const results = await mapPool(pnus, getParcelAnalysisTuning().linkageConcurrency, (pnu) => fetchVworldForPnu(pnu, vworldKey));
-  const out: ParcelLandEnrichmentMap = {};
-  pnus.forEach((pnu, i) => {
-    const row = results[i];
-    if (row) out[pnu] = row;
-  });
-  return out;
-}
-
 function mergeMaps(...maps: ParcelLandEnrichmentMap[]): ParcelLandEnrichmentMap {
   const out: ParcelLandEnrichmentMap = {};
   for (const map of maps) Object.assign(out, map);
   return out;
 }
 
-function missingPnus(pnus: string[], map: ParcelLandEnrichmentMap): string[] {
-  return pnus.filter((p) => !map[p]);
-}
-
-/** 연계 성공분(KRAS·브이월드)만 캐시 — 오류·빈 결과는 저장하지 않음 */
-async function cacheFreshEnrichments(map: ParcelLandEnrichmentMap): Promise<void> {
-  const rows = Object.values(map).filter(
-    (row) =>
-      (row.source === 'kras' || row.source === 'vworld') &&
-      (Boolean(row.jimok && row.jimok !== '미상') ||
-        Boolean(row.ownerType && row.ownerType !== '미상') ||
-        (row.publicPrice != null && row.publicPrice > 0) ||
-        row.areaSqm > 0)
-  );
-  if (!rows.length) return;
-  await mapPool(rows, Math.min(4, getParcelAnalysisTuning().linkageConcurrency), async (row) => {
-    try {
-      await mergeJijukLandAttrSummary({
-        pnu: row.pnu,
-        jimok: row.jimokNm || row.jimok || null,
-        ownshipSe: row.ownerType && row.ownerType !== '미상' ? row.ownerType : null,
-        pblntfPclnd: row.publicPrice,
-        lndpclAr: row.areaSqm > 0 ? row.areaSqm : null,
-      });
-    } catch {
-      /* 캐시 실패는 보강 결과와 무관 */
-    }
-  });
-}
-
-/** PNU 목록 보강 — 행망 우선, fallback 시 캐시→브이월드 */
+/** PNU 목록 보강 — 서버는 행망(KRAS → KOREPS 공시). 브이월드는 클라이언트 JSONP. */
 export async function enrichParcelLandsByPnus(params: {
   pnus: string[];
 }): Promise<{ enrichments: ParcelLandEnrichmentMap; source: ParcelLandSource | 'mixed' | 'db' }> {
@@ -272,77 +275,17 @@ export async function enrichParcelLandsByPnus(params: {
     const kras = await fetchKrasBatch(pnus, cfg);
     enrichments = mergeMaps(enrichments, kras);
     if (Object.keys(kras).length) usedSources.add('kras');
+
+    const koreps = await applyKorepsPrices(pnus, enrichments, cfg);
+    enrichments = koreps.enrichments;
+    if (koreps.used) usedSources.add('koreps');
   }
-
-  const needExternal = cfg.useKras ? cfg.useKrasFallback && missingPnus(pnus, enrichments).length > 0 : true;
-
-  if (needExternal) {
-    const targets = cfg.useKras ? missingPnus(pnus, enrichments) : pnus;
-    const cached = await fetchCacheBatch(targets);
-    enrichments = mergeMaps(enrichments, cached);
-    if (Object.keys(cached).length) usedSources.add('cache');
-
-    const vworldTargets = missingPnus(targets, enrichments);
-    if (vworldTargets.length && cfg.vworldKey) {
-      const vworld = await fetchVworldBatch(vworldTargets, cfg.vworldKey);
-      enrichments = mergeMaps(enrichments, vworld);
-      if (Object.keys(vworld).length) usedSources.add('vworld');
-    }
-  }
-
-  void cacheFreshEnrichments(enrichments);
 
   let source: ParcelLandSource | 'mixed' | 'db' = 'db';
   if (usedSources.size === 1) source = [...usedSources][0]!;
   else if (usedSources.size > 1) source = 'mixed';
 
   return { enrichments, source };
-}
-
-export function shouldMaskParcelOwners(): boolean {
-  return getLandLinkageConfig().maskPersonalInfo;
-}
-
-type VworldLandUseJson = {
-  landUses?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-};
-
-async function fetchVworldLandUseJson(url: string): Promise<VworldLandUseJson | null> {
-  const ms = getParcelAnalysisTuning().linkageTimeoutMs;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
-    if (!res.ok) return null;
-    return (await res.json()) as VworldLandUseJson;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function parseVworldLandUseZones(payload: VworldLandUseJson | null): string[] {
-  if (!payload?.landUses?.field) return [];
-  const field = payload.landUses.field;
-  const rows = Array.isArray(field) ? field : [field];
-  const zones = new Set<string>();
-  for (const row of rows) {
-    const label = toStr(row.prposAreaDstrcCodeNm);
-    if (label) zones.add(label);
-  }
-  return [...zones];
-}
-
-async function fetchVworldLandUseZonesForPnu(pnu: string, vworldKey: string): Promise<string[]> {
-  if (!vworldKey) return [];
-  const u = new URL('https://api.vworld.kr/ned/data/getLandUseAttr');
-  u.searchParams.set('key', vworldKey);
-  u.searchParams.set('pnu', pnu);
-  u.searchParams.set('format', 'json');
-  u.searchParams.set('numOfRows', '1000');
-  const raw = await fetchVworldLandUseJson(u.toString());
-  return parseVworldLandUseZones(raw);
 }
 
 async function fetchKrasLandUseZonesForPnu(
@@ -356,11 +299,7 @@ async function fetchKrasLandUseZonesForPnu(
   return zonesFromKrasLandUseRows(rows);
 }
 
-function missingLandUsePnus(pnus: string[], zonesByPnu: Record<string, string[]>): string[] {
-  return pnus.filter((p) => !(zonesByPnu[p]?.length > 0));
-}
-
-/** 토지이용계획 용도지역 — 행망(KRAS000025) 우선, 실패 시 캐시→브이월드 */
+/** 토지이용계획 용도지역 — 서버는 행망(KRAS)만. 브이월드는 클라이언트 JSONP. */
 export async function fetchLandUseZonesByPnus(params: {
   pnus?: string[];
 }): Promise<{ ok: boolean; zonesByPnu: Record<string, string[]>; error?: string }> {
@@ -373,39 +312,13 @@ export async function fetchLandUseZonesByPnus(params: {
 
   try {
     if (cfg.useKras) {
-      const krasResults = await mapPool(unique, getParcelAnalysisTuning().linkageConcurrency, (pnu) =>
+      const krasResults = await mapPool(unique, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, (pnu) =>
         fetchKrasLandUseZonesForPnu(pnu, cfg)
       );
       unique.forEach((pnu, i) => {
         const zones = krasResults[i] ?? [];
         if (zones.length) zonesByPnu[pnu] = zones;
       });
-    }
-
-    const needExternal = cfg.useKras
-      ? cfg.useKrasFallback && missingLandUsePnus(unique, zonesByPnu).length > 0
-      : true;
-
-    if (needExternal) {
-      const targets = cfg.useKras ? missingLandUsePnus(unique, zonesByPnu) : unique;
-
-      const { rows } = await getJijukLandAttrsByPnus({ pnus: targets });
-      const stillMissing: string[] = [];
-      for (const pnu of targets) {
-        const main = toStr(rows[pnu]?.prpos_area_main);
-        if (main) zonesByPnu[pnu] = [main];
-        else stillMissing.push(pnu);
-      }
-
-      if (stillMissing.length && cfg.vworldKey) {
-        const vworldResults = await mapPool(stillMissing, getParcelAnalysisTuning().linkageConcurrency, (pnu) =>
-          fetchVworldLandUseZonesForPnu(pnu, cfg.vworldKey)
-        );
-        stillMissing.forEach((pnu, i) => {
-          const zones = vworldResults[i] ?? [];
-          if (zones.length) zonesByPnu[pnu] = zones;
-        });
-      }
     }
 
     return { ok: true, zonesByPnu };
@@ -435,105 +348,7 @@ async function fetchKrasLandUseRowsForPnu(
   return parseKrasBodyFieldMaps(xml);
 }
 
-type VworldNedJson = {
-  landCharacteristicss?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-  landUses?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-  indvdLandPrices?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-  possessions?: { field?: Record<string, unknown> | Record<string, unknown>[] };
-};
-
-async function fetchVworldNedJson(url: string): Promise<VworldNedJson | null> {
-  const ms = getParcelAnalysisTuning().linkageTimeoutMs;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
-    if (!res.ok) return null;
-    return (await res.json()) as VworldNedJson;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function pickVworldRows(
-  payload: VworldNedJson | null,
-  rootKey: keyof VworldNedJson
-): Record<string, unknown>[] {
-  if (!payload) return [];
-  const root = payload[rootKey] as { field?: unknown } | undefined;
-  const field = root?.field;
-  if (Array.isArray(field)) {
-    return field.filter((v): v is Record<string, unknown> => !!v && typeof v === 'object');
-  }
-  if (field && typeof field === 'object') return [field as Record<string, unknown>];
-  return [];
-}
-
-function dedupeVworldRows(rows: Record<string, unknown>[], keys: string[]): Record<string, unknown>[] {
-  const seen = new Set<string>();
-  const out: Record<string, unknown>[] = [];
-  for (const row of rows) {
-    const signature = keys.map((k) => toStr(row[k])).join('||');
-    if (seen.has(signature)) continue;
-    seen.add(signature);
-    out.push(row);
-  }
-  return out;
-}
-
-async function fetchVworldParcelTabData(
-  pnu: string,
-  vworldKey: string
-): Promise<ParcelLandInfoTabData> {
-  if (!vworldKey) return emptyParcelLandInfoTab('vworld');
-  const base = 'https://api.vworld.kr/ned/data';
-  const q = (path: string) => {
-    const u = new URL(`${base}/${path}`);
-    u.searchParams.set('key', vworldKey);
-    u.searchParams.set('pnu', pnu);
-    u.searchParams.set('format', 'json');
-    u.searchParams.set('numOfRows', '1000');
-    return u.toString();
-  };
-  const [charRaw, landUseRaw, priceRaw, possRaw] = await Promise.all([
-    fetchVworldNedJson(q('getLandCharacteristics')),
-    fetchVworldNedJson(q('getLandUseAttr')),
-    fetchVworldNedJson(q('getIndvdLandPriceAttr')),
-    fetchVworldNedJson(q('getPossessionAttr')),
-  ]);
-  return {
-    characteristics: dedupeVworldRows(pickVworldRows(charRaw, 'landCharacteristicss'), [
-      'ldCodeNm',
-      'stdrYear',
-      'stdrMt',
-      'pblntfPclnd',
-      'lndcgrCodeNm',
-      'lndpclAr',
-    ]),
-    landUses: dedupeVworldRows(pickVworldRows(landUseRaw, 'landUses'), [
-      'prposAreaDstrcCodeNm',
-      'cnflcAtNm',
-      'registDt',
-    ]),
-    prices: dedupeVworldRows(pickVworldRows(priceRaw, 'indvdLandPrices'), [
-      'pblntfDe',
-      'pblntfPclnd',
-      'registDt',
-    ]),
-    possessions: dedupeVworldRows(pickVworldRows(possRaw, 'possessions'), [
-      'posesnSeCodeNm',
-      'nationInsttSeCodeNm',
-      'ownerNm',
-      'ownerAddr',
-      'ownshipChgDe',
-    ]),
-    source: 'vworld',
-  };
-}
-
-/** 우클릭 필지정보 탭 — 행망(KRAS) 우선, 실패 시 캐시→브이월드 */
+/** 우클릭 필지정보 탭 — 서버는 행망(KRAS)만. 브이월드는 클라이언트 JSONP. */
 export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
   ParcelLandInfoTabData & { ok: boolean; error?: string }
 > {
@@ -555,34 +370,7 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
       }
     }
 
-    const needExternal = cfg.useKras ? cfg.useKrasFallback : true;
-    if (!needExternal) {
-      return { ...emptyParcelLandInfoTab('kras'), ok: true };
-    }
-
-    const cached = await getParcelTabDataFromCache({ pnu });
-    if (cached.hit) {
-      return {
-        characteristics: cached.characteristics ?? [],
-        landUses: cached.landUses ?? [],
-        prices: cached.prices ?? [],
-        possessions: cached.possessions ?? [],
-        source: 'cache',
-        ok: true,
-      };
-    }
-
-    const vworldTab = await fetchVworldParcelTabData(pnu, cfg.vworldKey);
-    if (hasParcelLandInfoTabData(vworldTab)) {
-      void upsertJijukLandAttrFromParcelData({
-        pnu,
-        characteristics: vworldTab.characteristics,
-        landUses: vworldTab.landUses,
-        prices: vworldTab.prices,
-        possessions: vworldTab.possessions,
-      }).catch(() => undefined);
-    }
-    return { ...vworldTab, ok: true };
+    return { ...emptyParcelLandInfoTab(), ok: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ...empty, error: msg };
