@@ -269,11 +269,6 @@ export function fetchRiOptionsCached(emdCode: string, force = false): Promise<Em
   return promise;
 }
 
-export function clearRiOptionsCache(): void {
-  riCache.clear();
-  riInflight.clear();
-}
-
 export function useParcelAnalysisBoundaryCatalog(isOpen: boolean) {
   const [emdOptions, setEmdOptions] = useState<EmdRiOption[]>(() => getCachedEmdRiOptions()?.emd ?? []);
   const [emdLoading, setEmdLoading] = useState(false);

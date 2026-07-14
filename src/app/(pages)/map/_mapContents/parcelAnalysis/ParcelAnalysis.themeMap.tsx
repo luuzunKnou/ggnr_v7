@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import dynamic from 'next/dynamic';
 import Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
 import WKT from 'ol/format/WKT';
-import { Map, View } from 'ol';
+import { Map as OlMap, View } from 'ol';
 import type { Geometry } from 'ol/geom';
 import Polygon from 'ol/geom/Polygon';
 import TileLayer from 'ol/layer/Tile';
@@ -18,14 +18,17 @@ import '@/app/(pages)/map/_mapComponents/config/projections';
 import { getLegendGraphicUrl } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
 import { call } from '@/lib/api';
 import {
+  buildThemeCategoriesFromParcels,
   PARCEL_THEME_MAP_TOP_CATEGORY_COUNT,
   resolveThemeColor,
+  resolveThemeFeatureCategory,
   themeNoParcelSwatchStyle,
   themeOtherSwatchStyle,
   themeSwatchStyle,
   type ParcelThemeMapCategory,
   type ParcelThemeMapKind,
   type ParcelThemeMapPayload,
+  type ThemeMapParcelInput,
 } from '@/lib/parcelAnalysisTheme';
 import {
   applyThemeMapHomeView,
@@ -177,6 +180,8 @@ export function ParcelAnalysisThemeLegend({ theme, categories }: ThemeLegendProp
 type ThemeMapProps = {
   wkt5181: string;
   theme: ParcelThemeMapKind;
+  /** 토지현황 보강 결과 — 소유구분/지목 (없으면 도형만 «미상») */
+  parcels?: ThemeMapParcelInput[];
 };
 
 const MAP_HEIGHT_PX = 320;
@@ -204,14 +209,44 @@ function useThemeMapWhenVisible(rootRef: RefObject<HTMLDivElement | null>) {
   return visible;
 }
 
-function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
+function ParcelAnalysisThemeMapInner({ wkt5181, theme, parcels = [] }: ThemeMapProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mapTargetRef = useRef<HTMLDivElement>(null);
   const visible = useThemeMapWhenVisible(rootRef);
   const [loading, setLoading] = useState(false);
   const [mapRendering, setMapRendering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [payload, setPayload] = useState<ParcelThemeMapPayload | null>(null);
+  const [geomPayload, setGeomPayload] = useState<ParcelThemeMapPayload | null>(null);
+
+  const painted = useMemo(() => {
+    if (!geomPayload?.ok || !geomPayload.features?.length) return null;
+    const { categories, onMapLabels, mapCategoryLimitApplied } = buildThemeCategoriesFromParcels(
+      parcels,
+      geomPayload.parcelCount
+    );
+    const catByPnu = new Map(
+      parcels.map((p) => [String(p.pnu).trim(), String(p.category ?? '').trim() || '미상'])
+    );
+    const features = geomPayload.features.map((f) => {
+      const pnu = String(f.pnu ?? '').trim();
+      const raw = (pnu && catByPnu.get(pnu)) || f.category || '미상';
+      return {
+        ...f,
+        category: resolveThemeFeatureCategory(raw, onMapLabels),
+      };
+    });
+    return {
+      ok: true as const,
+      theme,
+      parcelCount: geomPayload.parcelCount,
+      mapCategoryLimitApplied,
+      categories:
+        categories.length > 0
+          ? categories
+          : [{ label: '미상', count: features.length, areaSqm: 0, onMap: true }],
+      features,
+    };
+  }, [geomPayload, parcels, theme]);
 
   useEffect(() => {
     if (!visible || !wkt5181.trim()) return;
@@ -230,14 +265,14 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
         const data = (res?.data ?? res) as ParcelThemeMapPayload | undefined;
         if (cancelled) return;
         if (!data?.ok) {
-          setPayload(null);
+          setGeomPayload(null);
           setError(data?.error ?? '테마 지도를 불러오지 못했습니다.');
           return;
         }
-        setPayload(data);
+        setGeomPayload(data);
       } catch {
         if (!cancelled) {
-          setPayload(null);
+          setGeomPayload(null);
           setError('테마 지도 요청 중 오류가 발생했습니다.');
         }
       } finally {
@@ -252,9 +287,9 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
 
   useEffect(() => {
     const targetEl = mapTargetRef.current;
-    if (!visible || !targetEl || !wkt5181.trim() || !payload?.ok) return;
+    if (!visible || !targetEl || !wkt5181.trim() || !painted?.ok) return;
 
-    let map: Map | null = null;
+    let map: OlMap | null = null;
     let cancelled = false;
     setMapRendering(true);
 
@@ -263,7 +298,6 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
         dataProjection: 'EPSG:5181',
         featureProjection: 'EPSG:5181',
       });
-      /** 캡처와 동일 — 사각형이면 5181 extent로 직사각형 표시 */
       const boundaryGeom = toCaptureDisplayGeometry(rawBoundaryGeom);
       const analysisExtent = boundaryGeom.getExtent();
       const mapSize: [number, number] = [targetEl.clientWidth || 640, MAP_HEIGHT_PX];
@@ -272,7 +306,7 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
 
       const geoJson = new GeoJSON();
       const parcelFeatures: Feature<Geometry>[] = [];
-      for (const row of payload.features ?? []) {
+      for (const row of painted.features ?? []) {
         if (!row.geometry) continue;
         const feature = geoJson.readFeature(
           { type: 'Feature', geometry: row.geometry, properties: {} },
@@ -283,7 +317,7 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
       }
 
       const onMapLabels = new Set(
-        (payload.categories ?? []).filter((cat) => cat.onMap).map((cat) => cat.label)
+        (painted.categories ?? []).filter((cat) => cat.onMap).map((cat) => cat.label)
       );
       const styleLookup = buildThemeMapStyleLookup(theme, onMapLabels);
 
@@ -346,8 +380,7 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
         })
       );
 
-      /** 캡처 지도와 동일 — 휠·드래그·핀치 등 상호작용 없음 */
-      map = new Map({
+      map = new OlMap({
         target: targetEl,
         layers,
         view,
@@ -374,7 +407,7 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
         map = null;
       }
     };
-  }, [visible, wkt5181, theme, payload]);
+  }, [visible, wkt5181, theme, painted]);
 
   const showMapOverlay = !visible || loading || mapRendering;
   const overlayMessage = !visible
@@ -408,8 +441,8 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme }: ThemeMapProps) {
         ) : null}
       </div>
       {error ? <p className="text-[11px] text-amber-700">{error}</p> : null}
-      {payload?.ok && payload.categories?.length && !showMapOverlay ? (
-        <ParcelAnalysisThemeLegend theme={theme} categories={payload.categories} />
+      {painted?.ok && painted.categories?.length && !showMapOverlay ? (
+        <ParcelAnalysisThemeLegend theme={theme} categories={painted.categories} />
       ) : null}
     </div>
   );

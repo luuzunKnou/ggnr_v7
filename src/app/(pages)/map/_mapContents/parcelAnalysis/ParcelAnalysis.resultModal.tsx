@@ -14,6 +14,17 @@ import {
   type MockParcelAnalysisResult,
   type ResultSectionDef,
 } from './parcelAnalysis.result';
+import {
+  PARCEL_LAND_LINKAGE_FAIL_LABEL,
+  PARCEL_LAND_LINKAGE_FAIL_TITLE,
+  parcelLandLinkageSourceCellClass,
+  parcelLandLinkageSourceLabel,
+  parcelLandLinkageSourceTitle,
+} from '@/lib/parcelLandNormalize';
+import {
+  BuildingLinkageLegend as SharedBuildingLinkageLegend,
+  LandLinkageLegend as SharedLandLinkageLegend,
+} from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 import { ParcelAnalysisMapCapture } from './ParcelAnalysis.mapCapture';
 import {
   FacilityLayerLegendIcon,
@@ -21,6 +32,10 @@ import {
   PARCEL_ANALYSIS_ANALYZING_SPINNER,
 } from './ParcelAnalysis.themeMap';
 import type { LayerDbGeometryKind } from '@/lib/mapLayerGeometryOrder';
+import {
+  PARCEL_THEME_MAP_FULL_COLOR_LIMIT,
+  PARCEL_THEME_MAP_TOP_CATEGORY_COUNT,
+} from '@/lib/parcelAnalysisTheme';
 import { BASIC_MAP_TOC_TITLE, basicMapCompositeTitle } from './parcelAnalysis.mapStyle';
 
 export type ParcelAnalysisTocGroup = {
@@ -286,6 +301,9 @@ const RESULT_SCROLL_TABLE_MAX_HEIGHT_PX = 460;
 const TH_CELL = 'border border-slate-200 px-2 py-1.5 whitespace-nowrap';
 const TH_CELL_STICKY = cn(TH_CELL, 'sticky top-0 z-10 bg-slate-100');
 const TD_CELL = 'border border-slate-200 px-2 py-1.5 whitespace-nowrap';
+/** 구분 열에 레이어 범례 아이콘이 들어가는 시설 현황 표 — 행 높이 압축 */
+const TH_CELL_COMPACT = 'border border-slate-200 px-2 py-1 whitespace-nowrap';
+const TD_CELL_COMPACT = 'border border-slate-200 px-2 py-1 whitespace-nowrap';
 
 const FACILITY_STAT_EMPTY = '—';
 
@@ -317,6 +335,14 @@ function resolveTocItemLabel(section: ResultSectionDef): string {
     return `${base} 현황`;
   }
   return section.itemTitle;
+}
+
+/** 소유자·지목 테마 지도 — 2,000건 초과 시에만 제목 아래 «그 외» 안내 */
+function themeMapGroupingHint(parcelCount: number, kind: 'owner' | 'jimok'): string | null {
+  const n = Number.isFinite(parcelCount) ? Math.max(0, Math.floor(parcelCount)) : 0;
+  if (n <= PARCEL_THEME_MAP_FULL_COLOR_LIMIT) return null;
+  const categoryWord = kind === 'owner' ? '소유구분' : '지목';
+  return `필지 ${PARCEL_THEME_MAP_FULL_COLOR_LIMIT.toLocaleString('ko-KR')}건 초과 · 지도·범례는 면적 상위 ${PARCEL_THEME_MAP_TOP_CATEGORY_COUNT}개 ${categoryWord}만 개별 표시, 나머지는 «그 외»로 묶음 (표는 전부)`;
 }
 
 const SCROLL_CHAIN_EPSILON = 2;
@@ -412,6 +438,55 @@ function ResultTable({
 function DataCell({ value }: { value?: string | null }) {
   const text = value?.trim() ? value : '-';
   return <td className={TD_CELL}>{text}</td>;
+}
+
+/** 토지현황 — 연계 출처 색·텍스트·연계실패(주황) */
+function LandLinkageValueCell({
+  value,
+  linkageSource,
+  showSourceText = false,
+}: {
+  value?: string | null;
+  linkageSource?: string;
+  /** true면 값 아래에 출처 텍스트(브이월드 등) */
+  showSourceText?: boolean;
+}) {
+  const text = value?.trim() ? value : '-';
+  const isFail = text === PARCEL_LAND_LINKAGE_FAIL_LABEL;
+  const hasValue = text !== '-' && !isFail;
+  const srcClass = hasValue ? parcelLandLinkageSourceCellClass(linkageSource) : undefined;
+  const srcLabel = hasValue ? parcelLandLinkageSourceLabel(linkageSource) : undefined;
+  const title = hasValue ? parcelLandLinkageSourceTitle(linkageSource) : isFail ? PARCEL_LAND_LINKAGE_FAIL_TITLE : undefined;
+  return (
+    <td
+      className={cn(TD_CELL, isFail && 'font-medium text-amber-800')}
+      title={title}
+    >
+      <span className={cn(hasValue && srcClass)}>{text}</span>
+      {showSourceText && hasValue && srcLabel ? (
+        <div className={cn('mt-0.5 text-[10px] leading-tight font-medium', srcClass)}>{srcLabel}</div>
+      ) : null}
+      {showSourceText && isFail ? (
+        <div className="mt-0.5 text-[10px] leading-tight font-medium text-amber-800">
+          {PARCEL_LAND_LINKAGE_FAIL_LABEL}
+        </div>
+      ) : null}
+    </td>
+  );
+}
+
+function BuildingLinkageLegend({ rows }: { rows: MockParcelAnalysisResult['buildingRows'] }) {
+  return <SharedBuildingLinkageLegend sources={rows.map((r) => r.linkageSource)} />;
+}
+
+function LandLinkageLegend({ rows }: { rows: MockParcelAnalysisResult['landRows'] }) {
+  return (
+    <SharedLandLinkageLegend
+      sources={rows.map((r) => r.linkageSource)}
+      showFail={rows.some((r) => r.linkageFailed)}
+      showJijukHint
+    />
+  );
 }
 
 type SectionAnchor = { id: string; top: number };
@@ -752,7 +827,12 @@ export function ParcelAnalysisResultModal({
               className="w-full min-w-0"
               style={{ minWidth: `max(100%, ${RESULT_CONTENT_MIN_WIDTH_PX}px)` }}
             >
-            {sections.map((s) => (
+            {sections.map((s) => {
+              const themeHint =
+                s.kind === 'owner' || s.kind === 'jimok'
+                  ? themeMapGroupingHint(result.parcelCount, s.kind)
+                  : null;
+              return (
               <section
                 key={s.id}
                 id={s.id}
@@ -768,6 +848,9 @@ export function ParcelAnalysisResultModal({
                       {basicMapCompositeTitle(s.basicMapLayerIds)}
                     </p>
                   ) : null}
+                  {themeHint ? (
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">{themeHint}</p>
+                  ) : null}
                 </div>
                 {renderSectionBody(s, result, {
                   landEnriching: enriching && s.kind === 'land',
@@ -775,7 +858,8 @@ export function ParcelAnalysisResultModal({
                   outerScrollRef: scrollRef,
                 })}
               </section>
-            ))}
+              );
+            })}
             {sections.length === 0 && (
               <p className="text-sm text-slate-500">선택된 분석 항목이 없습니다.</p>
             )}
@@ -975,15 +1059,29 @@ function renderSectionBody(
 
     if (!loading && found === 0) {
       return (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
-          분석 영역 필지에서 건축물대장을 찾지 못했습니다.
+        <div className="space-y-2">
+          {result.buildingLedgerNotice ? (
+            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              {result.buildingLedgerNotice}
+            </p>
+          ) : (
+            <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+              분석 영역 필지에서 건축물대장을 찾지 못했습니다.
+            </div>
+          )}
         </div>
       );
     }
 
     return (
       <>
+        {result.buildingLedgerNotice ? (
+          <p className="mb-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+            {result.buildingLedgerNotice}
+          </p>
+        ) : null}
         <SectionProgressLine text={ledgerProgress.text} loading={ledgerProgress.loading} />
+        <BuildingLinkageLegend rows={result.buildingRows} />
         <ResultTable
           fullWidth
           maxHeight={RESULT_SCROLL_TABLE_MAX_HEIGHT_PX}
@@ -1017,14 +1115,14 @@ function renderSectionBody(
                 {result.buildingRows.map((row, index) => (
                   <tr key={`${row.pnu}-${index}`}>
                     <td className={TD_CELL}>{index + 1}</td>
-                    <DataCell value={row.bldNm} />
+                    <LandLinkageValueCell value={row.bldNm} linkageSource={row.linkageSource} />
                     <DataCell value={row.platLoc} />
                     <DataCell value={row.jibun} />
                     <DataCell value={row.roadAddr} />
-                    <td className={TD_CELL}>{row.bcRat}</td>
-                    <td className={TD_CELL}>{row.vlRat}</td>
-                    <td className={TD_CELL}>{row.platArea}</td>
-                    <td className={TD_CELL}>{row.totArea}</td>
+                    <LandLinkageValueCell value={row.bcRat} linkageSource={row.linkageSource} />
+                    <LandLinkageValueCell value={row.vlRat} linkageSource={row.linkageSource} />
+                    <LandLinkageValueCell value={row.platArea} linkageSource={row.linkageSource} />
+                    <LandLinkageValueCell value={row.totArea} linkageSource={row.linkageSource} />
                   </tr>
                 ))}
               </>
@@ -1037,14 +1135,18 @@ function renderSectionBody(
 
   if (section.kind === 'facility') {
     const rows = result.facilityStats[section.id] ?? [];
-    const publishedKeys = section.facilityWmsLayerKeys ?? [];
-    const wmsKeysForMap = publishedKeys.map((k) => k.toLowerCase());
+    /** 캡처 WMS는 표에 나온 레이어만 (그룹 publish 전체 아님) · GeoServer에 있는 것만 */
+    const publishedSet = new Set(
+      (section.facilityWmsLayerKeys ?? []).map((k) => k.toLowerCase())
+    );
+    const wmsKeysForMap = rows
+      .map((r) => r.layerKey.trim())
+      .filter((key) => key && (!publishedSet.size || publishedSet.has(key.toLowerCase())))
+      .map((k) => k.toLowerCase());
     const wmsGeomTypes = Object.fromEntries(
-      publishedKeys.map((key) => {
-        const lower = key.toLowerCase();
-        const row = rows.find((r) => r.layerKey.toLowerCase() === lower);
-        return [lower, row?.geomType ?? 'POLYGON'];
-      })
+      rows
+        .filter((r) => wmsKeysForMap.includes(r.layerKey.toLowerCase()))
+        .map((r) => [r.layerKey.toLowerCase(), r.geomType])
     ) as Record<string, LayerDbGeometryKind>;
     const mapBlock =
       result.wkt5181 && rows.length > 0 ? (
@@ -1072,28 +1174,28 @@ function renderSectionBody(
           <ResultTable>
             <thead>
               <tr className="bg-slate-100 text-left">
-                <th className={TH_CELL}>구분</th>
-                <th className={TH_CELL}>시설 수(개)</th>
-                <th className={TH_CELL}>연장(m)</th>
-                <th className={TH_CELL}>면적(㎡)</th>
+                <th className={TH_CELL_COMPACT}>구분</th>
+                <th className={TH_CELL_COMPACT}>시설 수(개)</th>
+                <th className={TH_CELL_COMPACT}>연장(m)</th>
+                <th className={TH_CELL_COMPACT}>면적(㎡)</th>
               </tr>
             </thead>
             <tbody>
               {facilityTableRows.map((row) => (
                 <tr key={row.layerKey}>
-                  <td className={TD_CELL}>
+                  <td className={TD_CELL_COMPACT}>
                     <span className="inline-flex items-center gap-1.5">
                       <FacilityLayerLegendIcon layerKey={row.layerKey} geomType={row.geomType} />
                       {row.layerKorName}
                     </span>
                   </td>
-                  <td className={cn(TD_CELL, 'text-right tabular-nums')}>
+                  <td className={cn(TD_CELL_COMPACT, 'text-right tabular-nums')}>
                     {facilityStatCell(row, 'POINT')}
                   </td>
-                  <td className={cn(TD_CELL, 'text-right tabular-nums')}>
+                  <td className={cn(TD_CELL_COMPACT, 'text-right tabular-nums')}>
                     {facilityStatCell(row, 'LINE')}
                   </td>
-                  <td className={cn(TD_CELL, 'text-right tabular-nums')}>
+                  <td className={cn(TD_CELL_COMPACT, 'text-right tabular-nums')}>
                     {facilityStatCell(row, 'POLYGON')}
                   </td>
                 </tr>
@@ -1176,9 +1278,21 @@ function renderSectionBody(
         );
       }
     } else {
-      const showOwner = result.landRows.some((r) => r.ownerName && r.ownerName !== '-');
-      const showOwnerType = result.landRows.some((r) => r.ownerType);
-      const showPrice = result.landRows.some((r) => r.publicPrice && r.publicPrice !== '-');
+      const showOwner = result.landRows.some(
+        (r) => r.ownerName && r.ownerName !== '-' && r.ownerName !== PARCEL_LAND_LINKAGE_FAIL_LABEL
+      );
+      const showOwnerType = result.landRows.some(
+        (r) =>
+          r.ownerType &&
+          r.ownerType !== '-' &&
+          r.ownerType !== PARCEL_LAND_LINKAGE_FAIL_LABEL
+      );
+      const showPrice = result.landRows.some(
+        (r) =>
+          r.publicPrice &&
+          r.publicPrice !== '-' &&
+          r.publicPrice !== PARCEL_LAND_LINKAGE_FAIL_LABEL
+      );
       const landProgress = result.landRowsProgress;
       const landLoading = landProgress?.loading ?? false;
       return (
@@ -1195,6 +1309,7 @@ function renderSectionBody(
           {result.linkageNotice ? (
             <p className="text-[11px] text-amber-700">{result.linkageNotice}</p>
           ) : null}
+          <LandLinkageLegend rows={result.landRows} />
           <ResultTable
             maxHeight={RESULT_SCROLL_TABLE_MAX_HEIGHT_PX}
             outerScrollRef={opts.outerScrollRef}
@@ -1228,11 +1343,17 @@ function renderSectionBody(
                   <td className={TD_CELL}>{index + 1}</td>
                   <td className={cn(TD_CELL, 'font-mono text-[10px]')}>{row.pnu}</td>
                   <DataCell value={row.addr} />
-                  <td className={TD_CELL}>{row.jimok}</td>
+                  <DataCell value={row.jimok} />
                   <td className={TD_CELL}>{row.area}</td>
-                  {showOwnerType ? <td className={TD_CELL}>{row.ownerType ?? '-'}</td> : null}
-                  {showOwner ? <DataCell value={row.ownerName ?? '-'} /> : null}
-                  {showPrice ? <td className={TD_CELL}>{row.publicPrice ?? '-'}</td> : null}
+                  {showOwnerType ? (
+                    <LandLinkageValueCell value={row.ownerType} linkageSource={row.linkageSource} />
+                  ) : null}
+                  {showOwner ? (
+                    <LandLinkageValueCell value={row.ownerName} linkageSource={row.linkageSource} />
+                  ) : null}
+                  {showPrice ? (
+                    <LandLinkageValueCell value={row.publicPrice} linkageSource={row.linkageSource} />
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -1243,10 +1364,18 @@ function renderSectionBody(
   }
 
   if (section.kind === 'owner' && result.ownerStats.length > 0) {
+    const ownerParcels = result.landRows.map((r) => ({
+      pnu: r.pnu,
+      category:
+        r.ownerType && r.ownerType !== '-' && r.ownerType !== PARCEL_LAND_LINKAGE_FAIL_LABEL
+          ? r.ownerType
+          : '미상',
+      areaSqm: Number(String(r.area).replace(/[^\d.]/g, '')) || 0,
+    }));
     return (
       <div className="space-y-2">
         {result.wkt5181 ? (
-          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="owner" />
+          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="owner" parcels={ownerParcels} />
         ) : null}
         <ResultTable>
           <thead>
@@ -1273,10 +1402,15 @@ function renderSectionBody(
   }
 
   if (section.kind === 'jimok' && result.jimokStats.length > 0) {
+    const jimokParcels = result.landRows.map((r) => ({
+      pnu: r.pnu,
+      category: r.jimok && r.jimok !== '-' ? r.jimok : '미상',
+      areaSqm: Number(String(r.area).replace(/[^\d.]/g, '')) || 0,
+    }));
     return (
       <div className="space-y-2">
         {result.wkt5181 ? (
-          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="jimok" />
+          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="jimok" parcels={jimokParcels} />
         ) : null}
         <ResultTable>
           <thead>
