@@ -47,6 +47,34 @@ const DEFAULT_PROPS: StyleProps = {
 };
 
 /**
+ * 첫 "* {" 시작 위치부터 중괄호 깊이를 세어 매칭되는 닫는 "}"까지의 범위를 찾는다.
+ * ":mark { ... }" 같은 중첩 셀렉터가 있어도 바깥 블록 전체를 온전히 가져온다
+ * (기존 non-greedy 정규식은 첫 "}"에서 멈춰 중첩 블록이 있으면 바깥 블록이 잘렸음).
+ * braceStart/braceEnd는 각각 여는/닫는 중괄호 자체의 인덱스.
+ */
+function findOuterStarBlockRange(cssText: string): { braceStart: number; braceEnd: number } | null {
+  const starIdx = cssText.search(/\*\s*\{/);
+  if (starIdx === -1) return null;
+  const braceStart = cssText.indexOf('{', starIdx);
+  if (braceStart === -1) return null;
+  let depth = 0;
+  for (let i = braceStart; i < cssText.length; i++) {
+    if (cssText[i] === '{') depth++;
+    else if (cssText[i] === '}') {
+      depth--;
+      if (depth === 0) return { braceStart, braceEnd: i };
+    }
+  }
+  return null;
+}
+
+function extractOuterStarBlock(cssText: string): string {
+  const range = findOuterStarBlockRange(cssText);
+  if (!range) return '';
+  return cssText.slice(range.braceStart + 1, range.braceEnd);
+}
+
+/**
  * Extract the first * { ... } block and parse key: value; into StyleProps.
  * Infers geometry type from presence of mark/fill/stroke.
  */
@@ -56,15 +84,19 @@ export function parseSimpleStyleFromCss(cssText: string): {
 } {
   const styleProps: StyleProps = { ...DEFAULT_PROPS };
 
-  const starBlockMatch = cssText.match(/\*\s*\{([\s\S]*?)\}/);
-  const block = starBlockMatch ? starBlockMatch[1] : '';
+  const block = extractOuterStarBlock(cssText);
 
   const parseOne = (key: string, value: string) => {
     const v = value.trim();
     if (key === 'fill') styleProps.fillColor = v;
-    else if (key === 'stroke') styleProps.strokeColor = v;
+    else if (key === 'stroke') {
+      // LINE 스타일은 "#FFFFFF, 실제색상" 형태(흰 테두리+메인색)로 저장되므로 마지막 값만 취함
+      const parts = v.split(',').map((p) => p.trim()).filter(Boolean);
+      styleProps.strokeColor = parts.length > 1 ? parts[parts.length - 1] : v;
+    }
     else if (key === 'stroke-width') styleProps.strokeWidth = parseFloat(v) || 1;
-    else if (key === 'stroke-opacity' || key === 'fill-opacity') styleProps.opacity = parseFloat(v);
+    // "투명도" 입력은 fill-opacity만 반영 (stroke-opacity는 폴리곤에서 항상 1.0으로 고정되는 별개 값)
+    else if (key === 'fill-opacity') styleProps.opacity = parseFloat(v);
     else if (key === 'font-size' || key === 'mark-size') styleProps.size = parseFloat(v) || 8;
     else if (key === 'label') {
       const m = v.match(/\[\s*([^\]]+)\s*\]/);
@@ -72,13 +104,15 @@ export function parseSimpleStyleFromCss(cssText: string): {
     }
   };
 
-  block.split(';').forEach((part) => {
-    const colon = part.indexOf(':');
-    if (colon === -1) return;
-    const key = part.slice(0, colon).trim().toLowerCase().replace(/\s+/g, '-');
-    const value = part.slice(colon + 1).trim();
+  // ":mark { fill: ...; }" 처럼 중첩된 하위 셀렉터의 속성도 그대로 잡아내도록
+  // 블록 전체에서 "key: value;" 패턴을 전역으로 훑는다 (중첩 depth 무시하고 평탄화).
+  const propRe = /([a-zA-Z-]+)\s*:\s*([^;{}]+);/g;
+  let match: RegExpExecArray | null;
+  while ((match = propRe.exec(block))) {
+    const key = match[1].trim().toLowerCase();
+    const value = match[2].trim();
     parseOne(key, value);
-  });
+  }
 
   const hasMark = /\bmark\s*:/i.test(block) || /\bmark-size\b/i.test(block);
   const hasFill = /\bfill\s*:/i.test(block);
@@ -174,10 +208,11 @@ export function buildCssFromSimpleStyle(
  * Replace the first * { ... } block in cssText with newStarBlock; keep the rest.
  */
 export function replaceDefaultRuleInCss(cssText: string, newStarBlock: string): string {
-  const match = cssText.match(/\*\s*\{[\s\S]*?\}/);
-  if (!match) return newStarBlock + (cssText.trim() ? '\n\n' + cssText : '');
-  const idx = match.index!;
-  const end = idx + match[0].length;
+  const range = findOuterStarBlockRange(cssText);
+  if (!range) return newStarBlock + (cssText.trim() ? '\n\n' + cssText : '');
+  const starIdx = cssText.lastIndexOf('*', range.braceStart);
+  const idx = starIdx === -1 ? range.braceStart : starIdx;
+  const end = range.braceEnd + 1;
   const before = cssText.slice(0, idx);
   const after = cssText.slice(end).trim();
   return (before + newStarBlock + (after ? '\n\n' + after : '')).trim();

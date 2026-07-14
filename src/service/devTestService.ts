@@ -227,6 +227,40 @@ function getDbConfig() {
 const GEOSERVER_DEFAULT_URL = 'http://localhost:8080/geoserver';
 const GEOSERVER_AUTH = Buffer.from('admin:geoserver', 'utf8').toString('base64');
 
+/** 작업공간 ggnr의 namespace URI. workspace 생성 시 GeoServer가 부여하는 값과 동일 — PostGIS 저장소에도 명시해야 Web UI NamespacePanel이 정상 동작 */
+const GEOSERVER_NAMESPACE_URI = 'http://ggnr';
+
+/** PostGIS 데이터 스토어 REST body 공통 생성. host/port/database/user/passwd(동적, env) + namespace/dbtype 등 PostGIS 고정 파라미터(정적) 포함 */
+function buildPostgisDataStoreBody(
+  name: string,
+  schema: string,
+  db: { host: string | number; port: string | number; database: string; user: string; password: string }
+) {
+  return {
+    dataStore: {
+      name,
+      type: 'PostGIS',
+      enabled: true,
+      connectionParameters: {
+        entry: [
+          { '@key': 'host', $: String(db.host) },
+          { '@key': 'port', $: String(db.port) },
+          { '@key': 'database', $: db.database },
+          { '@key': 'schema', $: schema },
+          { '@key': 'user', $: db.user },
+          { '@key': 'passwd', $: db.password },
+          { '@key': 'dbtype', $: 'postgis' },
+          { '@key': 'namespace', $: GEOSERVER_NAMESPACE_URI },
+          { '@key': 'Loose bbox', $: 'true' },
+          { '@key': 'Estimated extends', $: 'false' },
+          { '@key': 'validate connections', $: 'true' },
+          { '@key': 'preparedStatements', $: 'false' },
+        ],
+      },
+    },
+  };
+}
+
 async function geoserverFetch(
   baseUrl: string,
   path: string,
@@ -283,23 +317,7 @@ export async function setupGeoServerDb(params: {
 
     const datastores: Array<{ name: string; schema: string; status: 'created' | 'exists' | 'updated' }> = [];
 
-    const buildDataStoreBody = (name: string, schema: string) => ({
-      dataStore: {
-        name,
-        type: 'PostGIS',
-        enabled: true,
-        connectionParameters: {
-          entry: [
-            { '@key': 'host', $: String(db.host) },
-            { '@key': 'port', $: String(db.port) },
-            { '@key': 'database', $: db.database },
-            { '@key': 'schema', $: schema },
-            { '@key': 'user', $: db.user },
-            { '@key': 'passwd', $: db.password },
-          ],
-        },
-      },
-    });
+    const buildDataStoreBody = (name: string, schema: string) => buildPostgisDataStoreBody(name, schema, db);
 
     for (const target of targets) {
       const dsGetRes = await geoserverFetch(
@@ -588,23 +606,7 @@ export async function createGeoServerLayers(params: {
         `/rest/workspaces/${workspace}/datastores/${datastoreName}.json`
       );
       if (!dsRes.ok && dsRes.status === 404) {
-        const dsBody = {
-          dataStore: {
-            name: datastoreName,
-            type: 'PostGIS',
-            enabled: true,
-            connectionParameters: {
-              entry: [
-                { '@key': 'host', $: String(dbConfig.host) },
-                { '@key': 'port', $: String(dbConfig.port) },
-                { '@key': 'database', $: dbConfig.database },
-                { '@key': 'schema', $: schema },
-                { '@key': 'user', $: dbConfig.user },
-                { '@key': 'passwd', $: dbConfig.password },
-              ],
-            },
-          },
-        };
+        const dsBody = buildPostgisDataStoreBody(datastoreName, schema, dbConfig);
         const createDsRes = await geoserverFetch(
           baseUrl,
           `/rest/workspaces/${workspace}/datastores.json`,
@@ -820,23 +822,7 @@ export async function createOrUpdateGeoServerLayer(params: {
         `/rest/workspaces/${workspace}/datastores/${dsName}.json`
       );
       if (!dsRes.ok && dsRes.status === 404) {
-        const dsBody = {
-          dataStore: {
-            name: dsName,
-            type: 'PostGIS',
-            enabled: true,
-            connectionParameters: {
-              entry: [
-                { '@key': 'host', $: String(dbConfig.host) },
-                { '@key': 'port', $: String(dbConfig.port) },
-                { '@key': 'database', $: dbConfig.database },
-                { '@key': 'schema', $: schema },
-                { '@key': 'user', $: dbConfig.user },
-                { '@key': 'passwd', $: dbConfig.password },
-              ],
-            },
-          },
-        };
+        const dsBody = buildPostgisDataStoreBody(dsName, schema, dbConfig);
         const createDsRes = await geoserverFetch(
           baseUrl,
           `/rest/workspaces/${workspace}/datastores.json`,
@@ -1262,79 +1248,59 @@ export async function getGeoServerLayersWithStyleInfo(params: {
 
     const cssStyleNamesFromDir = getCssStyleNamesFromDataDir();
     const geoServerStyleNames = await getGeoServerStyleNameSet(baseUrl);
-    const layers: GeoServerLayerWithStyle[] = [];
 
-    for (const row of defineRes.tables) {
-      const layerName = String(row.define_table_name ?? '').trim();
-      if (!layerName) continue;
-      const geoLayerKey = layerName.toLowerCase();
+    // 레이어별 REST 조회를 병렬로 수행하고, 개별 실패가 전체 스캔을 무효화하지 않도록 행마다 catch 처리
+    const results = await Promise.all(
+      defineRes.tables.map(async (row): Promise<GeoServerLayerWithStyle | null> => {
+        const layerName = String(row.define_table_name ?? '').trim();
+        if (!layerName) return null;
+        const geoLayerKey = layerName.toLowerCase();
 
-      const parentLayer = String(row.define_table_parents_layer ?? '').trim();
-      const divQ = String(row.define_table_div_query ?? '').trim();
-      const isSplitChild = Boolean(parentLayer && divQ);
-      const tableExists =
-        dbLayerTableSetLc.has(layerName.toLowerCase()) ||
-        (isSplitChild && dbLayerTableSetLc.has(parentLayer.toLowerCase()));
+        const parentLayer = String(row.define_table_parents_layer ?? '').trim();
+        const divQ = String(row.define_table_div_query ?? '').trim();
+        const isSplitChild = Boolean(parentLayer && divQ);
+        const tableExists =
+          dbLayerTableSetLc.has(layerName.toLowerCase()) ||
+          (isSplitChild && dbLayerTableSetLc.has(parentLayer.toLowerCase()));
 
-      const shpType = String(row.define_table_shp_type ?? '').toUpperCase();
-      const geometryType = VALID_GEOMETRY_TYPES.has(shpType)
-        ? (shpType as GeometryType)
-        : undefined;
-      const title = String(row.define_table_kor_name ?? '').trim() || undefined;
-      const group = String(row.define_table_group ?? '').trim() || undefined;
-      const hasCssStyle =
-        cssStyleNamesFromDir.has(geoLayerKey) ||
-        cssStyleNamesFromDir.has(layerName.toLowerCase()) ||
-        geoServerStyleNames.has(geoLayerKey);
+        const shpType = String(row.define_table_shp_type ?? '').toUpperCase();
+        const geometryType = VALID_GEOMETRY_TYPES.has(shpType)
+          ? (shpType as GeometryType)
+          : undefined;
+        const title = String(row.define_table_kor_name ?? '').trim() || undefined;
+        const group = String(row.define_table_group ?? '').trim() || undefined;
+        const hasCssStyle =
+          cssStyleNamesFromDir.has(geoLayerKey) ||
+          cssStyleNamesFromDir.has(layerName.toLowerCase()) ||
+          geoServerStyleNames.has(geoLayerKey);
 
-      const layerRes = await geoserverFetch(
-        baseUrl,
-        `/rest/workspaces/${workspace}/layers/${encodeURIComponent(geoLayerKey)}.json`
-      );
+        try {
+          const layerRes = await geoserverFetch(
+            baseUrl,
+            `/rest/workspaces/${workspace}/layers/${encodeURIComponent(geoLayerKey)}.json`
+          );
 
-      if (!layerRes.ok) {
-        layers.push({
-          name: layerName,
-          group,
-          tableExists,
-          published: false,
-          hasCssStyle,
-          geometryType,
-          title,
-        });
-        continue;
-      }
-      const layerData = await layerRes.json();
-      const layerObj = layerData?.layer ?? layerData;
-      const layerType = layerObj?.type ?? undefined;
+          if (!layerRes.ok) {
+            return { name: layerName, group, tableExists, published: false, hasCssStyle, geometryType, title };
+          }
+          const layerData = await layerRes.json();
+          const layerObj = layerData?.layer ?? layerData;
+          const layerType = layerObj?.type ?? undefined;
 
-      const styleName =
-        layerData?.layer?.defaultStyle?.name ?? layerData?.defaultStyle?.name;
-      if (!styleName) {
-        layers.push({
-          name: layerName,
-          group,
-          tableExists,
-          published: true,
-          hasCssStyle,
-          geometryType,
-          layerType,
-          title,
-        });
-        continue;
-      }
-      layers.push({
-        name: layerName,
-        group,
-        tableExists,
-        published: true,
-        styleName,
-        hasCssStyle,
-        geometryType,
-        layerType,
-        title,
-      });
-    }
+          const styleName =
+            layerData?.layer?.defaultStyle?.name ?? layerData?.defaultStyle?.name;
+          if (!styleName) {
+            return { name: layerName, group, tableExists, published: true, hasCssStyle, geometryType, layerType, title };
+          }
+          return { name: layerName, group, tableExists, published: true, styleName, hasCssStyle, geometryType, layerType, title };
+        } catch {
+          // 이 레이어 조회만 실패 처리 — Promise.all 전체를 reject시키지 않고 나머지는 계속 진행
+          return { name: layerName, group, tableExists, published: false, hasCssStyle, geometryType, title };
+        }
+      })
+    );
+
+    const layers = results.filter((l): l is GeoServerLayerWithStyle => l !== null);
 
     return { success: true, layers };
   } catch (e: unknown) {

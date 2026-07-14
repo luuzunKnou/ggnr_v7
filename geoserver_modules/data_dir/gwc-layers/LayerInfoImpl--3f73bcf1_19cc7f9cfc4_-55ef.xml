@@ -9,10 +9,26 @@
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
+      <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.429749664350189E7</double>
+          <double>4341603.707372546</double>
+          <double>1.4360363697877463E7</double>
+          <double>4414272.908144352</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
+      <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.43659759505306</double>
+          <double>36.29727701166482</double>
+          <double>129.00134195318455</double>
+          <double>36.82162655882089</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_fruitfarm</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

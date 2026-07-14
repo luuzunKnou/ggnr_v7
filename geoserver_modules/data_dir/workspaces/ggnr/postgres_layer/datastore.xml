@@ -8,14 +8,16 @@
   </workspace>
   <connectionParameters>
     <entry key="schema">layer</entry>
-    <entry key="database">build_yy</entry>
+    <entry key="Estimated extends">false</entry>
+    <entry key="preparedStatements">false</entry>
+    <entry key="database">build_yy_test</entry>
     <entry key="port">5433</entry>
-<<<<<<< HEAD
-    <entry key="passwd">crypt1:IQGciT7w7lzrQcjD0DPHVkVfyNPVSDE3</entry>
-=======
-    <entry key="passwd">crypt1:gVgbyuDENbZHxD2Du2ku6stisAIPcq4r</entry>
->>>>>>> e5bea0341c7e497c334379f06cd5a41374eeffb2
-    <entry key="host">localhost</entry>
+    <entry key="passwd">crypt1:4gDUUAnHRnupzq9043sq2rlMTXFZ0LOq</entry>
+    <entry key="validate connections">true</entry>
+    <entry key="host">192.168.120.91</entry>
+    <entry key="dbtype">postgis</entry>
+    <entry key="namespace">http://ggnr</entry>
+    <entry key="Loose bbox">true</entry>
     <entry key="user">build_yy</entry>
   </connectionParameters>
   <__default>false</__default>

@@ -19,3 +19,41 @@ export function formatFileSize(bytes: number): string {
   if (i === 0) return `${Math.round(v)} ${units[i]}`;
   return `${v >= 10 || i === 1 ? v.toFixed(1) : v.toFixed(2)} ${units[i]}`;
 }
+
+/**
+ * 텍스트를 클립보드에 복사한다.
+ * navigator.clipboard는 Secure Context(HTTPS 또는 localhost)에서만 존재하므로,
+ * IP 주소로 접속하는 등 비보안 컨텍스트에서는 document.execCommand('copy') 폴백을 사용한다.
+ */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to legacy fallback
+    }
+  }
+
+  if (typeof document === 'undefined') return false;
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.top = '0';
+  textarea.style.left = '0';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let succeeded = false;
+  try {
+    succeeded = document.execCommand('copy');
+  } catch {
+    succeeded = false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+  return succeeded;
+}

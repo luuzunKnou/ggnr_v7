@@ -2095,7 +2095,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       readOnly
                       disabled
                       className="h-8 w-56 text-sm !text-gray-600"
-                      placeholder="영문_숫자_언더스코어"
+                      placeholder="예: water_facility"
                     />
                   </div>
                 </div>

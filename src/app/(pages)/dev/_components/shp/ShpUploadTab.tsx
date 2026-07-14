@@ -768,11 +768,15 @@ export function ShpUploadTab({
                     {log.syncData ? (
                       <button
                         type="button"
-                        className="text-[10px] text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-0.5"
+                        className="inline-flex max-w-full items-center gap-1 truncate text-xs font-normal text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
                         onClick={() => { setSyncModalTable({ tableName: log.syncData!.tableName, logIndex: i, shpPath: fileLogs[i]?.shpPath }); setSyncModalOpen(true); }}
                       >
-                        <AlertTriangle className="w-3 h-3" />
-                        충돌 {log.syncData.conflictCount} / 삭제 {log.syncData.removeCount} / 신규 {log.syncData.appendCount}
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        <span className="whitespace-nowrap">충돌 {log.syncData.conflictCount}</span>
+                        <span className="text-amber-600/70 dark:text-amber-400/70">·</span>
+                        <span className="whitespace-nowrap font-medium text-amber-700 dark:text-amber-300">삭제 {log.syncData.removeCount}</span>
+                        <span className="text-amber-600/70 dark:text-amber-400/70">·</span>
+                        <span className="whitespace-nowrap font-medium text-amber-700 dark:text-amber-300">신규 {log.syncData.appendCount}</span>
                       </button>
                     ) : (
                       <span className="text-red-500" title={log.error ?? ''}>{log.error ?? ''}</span>

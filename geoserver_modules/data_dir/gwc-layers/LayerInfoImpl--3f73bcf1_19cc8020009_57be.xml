@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.43229741548626</double>
+          <double>36.296281237750236</double>
+          <double>129.00483584144112</double>
+          <double>36.81883297159755</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4297017949702196E7</double>
+          <double>4341466.17098062</double>
+          <double>1.4360752635739075E7</double>
+          <double>4413884.43468072</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_river</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

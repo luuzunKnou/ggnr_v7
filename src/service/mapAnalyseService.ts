@@ -4,7 +4,7 @@
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import { applyEnrichmentToLandRows, type AnalyzeLandRow } from '@/lib/parcelLandNormalize';
+import { applyEnrichmentToLandRows } from '@/lib/parcelLandNormalize';
 import { fetchBuildingLedgersByPnus, type BuildingLedgerDisplayRow } from '@/lib/buildingLedgerFetch';
 import {
   buildParcelAnalysisFacilityCatalogFromDbTables,
@@ -330,7 +330,7 @@ export async function enrichParcelLandRows(params: {
   const input = Array.isArray(params?.landRows) ? params.landRows : [];
   if (!input.length) return { ok: true, landRows: [] };
 
-  const baseRows: AnalyzeLandRow[] = input.map((r) => ({
+  const baseRows = input.map((r) => ({
     pnu: String(r.pnu ?? '').trim(),
     jibun: String(r.jibun ?? '').trim(),
     jimok: String(r.jimok ?? '미상'),
@@ -338,10 +338,7 @@ export async function enrichParcelLandRows(params: {
     ownerType: String(r.ownerType ?? '').trim() || '미상',
     ownerName: r.ownerName,
     publicPrice: r.publicPrice ?? null,
-    source:
-      r.source === 'db' || r.source === 'kras' || r.source === 'vworld' || r.source === 'cache'
-        ? r.source
-        : undefined,
+    source: r.source as AnalyzeLandRowResult['source'],
   }));
 
   const pnus = baseRows.map((r) => r.pnu).filter((p) => /^\d{19}$/.test(p));

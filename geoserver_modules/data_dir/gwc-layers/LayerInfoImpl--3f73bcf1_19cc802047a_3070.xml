@@ -9,10 +9,26 @@
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
+      <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4307421448076796E7</double>
+          <double>4350727.5569901345</double>
+          <double>1.4358879518209776E7</double>
+          <double>4409445.498947644</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
+      <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.5257536314684</double>
+          <double>36.3633059779871</double>
+          <double>128.98800934038593</double>
+          <double>36.786904494082535</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_waterworks</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
