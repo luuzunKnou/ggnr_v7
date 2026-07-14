@@ -244,13 +244,14 @@ export function buildRelayStagesFromProgress(p: {
           detail = '생략 (재시작 안 함)';
           state = 'done';
         } else {
+          // 콘솔에서 순차 실행(앱 종료 → build → 앱 기동). HTTP 완료 시점엔 예약만 된 상태.
           detail =
             id === 'app-stop'
               ? (p.appStopDetail ?? '콘솔에서 진행 예약')
               : id === 'build'
                 ? (p.buildDetail ?? '콘솔에서 npm run build 예약')
                 : (p.appStartDetail ?? '콘솔에서 앱 기동 예약');
-          state = 'active';
+          state = id === 'app-stop' ? 'active' : 'pending';
         }
       }
 

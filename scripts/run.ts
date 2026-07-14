@@ -187,6 +187,19 @@ function runNpmBuildSync(): void {
   console.log('[run] npm run build OK');
 }
 
+async function ensureGeoServerIfRequested(signal: RestartSignal): Promise<void> {
+  if (signal.startGeoServerAfter !== true) return;
+  console.log('[run] GeoServer start retry (apply-time start failed)...');
+  try {
+    const { startGeoServer } = await import('../src/service/geoserverProcessService');
+    const r = await startGeoServer();
+    if (r.success) console.log('[run] GeoServer start retry OK');
+    else console.warn('[run] GeoServer start retry failed:', r.error ?? 'unknown');
+  } catch (e) {
+    console.warn('[run] GeoServer start retry error:', e instanceof Error ? e.message : e);
+  }
+}
+
 type NextCmd = 'dev' | 'start';
 
 let nextProc: ChildProcess | null = null;
@@ -277,6 +290,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       runNpmInstallSync();
     } catch (e) {
       console.error('[run] npm install failed:', e instanceof Error ? e.message : e);
+      await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
       spawnNext(cmd);
@@ -289,12 +303,15 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       runNpmBuildSync();
     } catch (e) {
       console.error('[run] npm run build failed:', e instanceof Error ? e.message : e);
+      await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
       spawnNext(cmd);
       return;
     }
   }
+
+  await ensureGeoServerIfRequested(signal);
 
   expectNextExitForRelaunch = false;
   relaunchInFlight = false;

@@ -132,23 +132,31 @@ export function VersionManagerContent() {
           geoserverStartDetail: json.geoserver?.startMessage,
           appStopDetail: json.restart?.scheduled ? '포트 해제 후 진행' : undefined,
           buildDetail: json.restart?.scheduled
-            ? '앱(Next) 종료 후 기동 런처가 npm run build'
+            ? json.restart?.mode === 'command'
+              ? '앱 종료 후 새 창에서 npm run build'
+              : '앱(Next) 종료 후 기동 런처가 npm run build'
             : undefined,
           appStartDetail: json.restart?.message,
           restartScheduled: Boolean(json.restart?.scheduled),
         })
       );
+      const restartHint =
+        json.restart?.mode === 'command'
+          ? '적용 완료. 앱 종료 → 새 창에서 빌드 → 앱 기동 순으로 진행합니다.'
+          : json.restart?.mode === 'launcher'
+            ? '적용 완료. Next 종료 → 기동 런처가 빌드 → Next 재기동 순으로 콘솔에서 진행합니다.'
+            : '적용 완료. 앱(Next) 종료 → 기동 런처가 빌드 → 앱 기동 순으로 콘솔에서 진행합니다.';
       setProgress({
-        message: json.restart?.scheduled
-          ? '적용 완료. 앱(Next) 종료 → 기동 런처가 빌드 → 앱 기동 순으로 콘솔에서 진행합니다.'
-          : '최신 소스 적용 완료',
+        message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
       if (json.restart?.scheduled) {
         pushLog(
-          '재시작 파이프라인 예약: 앱(Next) 종료 → 기동 런처가 npm run build → 앱 기동'
+          json.restart?.mode === 'command'
+            ? '재시작 파이프라인 예약: 앱 종료 → 새 창에서 npm run build → 앱 기동'
+            : '재시작 파이프라인 예약: 앱(Next) 종료 → 기동 런처가 npm run build → 앱 기동'
         );
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
@@ -235,9 +243,9 @@ export function VersionManagerContent() {
             GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
           </p>
           <p className="text-xs text-muted-foreground">
-            «적용 후 서버 재시작»이 켜지면 앱(Next)을 먼저 끄고, 기동 때 남아 있는 Node 런처(또는
-            새 창 스크립트)가 npm run build → 앱 기동을 이어 갑니다. GeoServer는 적용 전에 중지하고,
-            병합·적용이 끝나면 바로 다시 켭니다(앱 재기동과 별도).
+            «적용 후 서버 재시작»이 켜지면 모드에 따라 새 창 또는 기동 런처(Node)가 npm run build →
+            앱 기동을 이어 갑니다. GeoServer는 적용 전에 중지하고 병합·적용 직후 다시 켜며, 그때
+            실패하면 재기동 파이프라인에서만 한 번 더 시도합니다.
           </p>
           <ProfileRadios />
           <div className="space-y-2 text-sm">
@@ -259,7 +267,7 @@ export function VersionManagerContent() {
                   disabled={busy || !restart}
                   onChange={() => setRestartMode('command')}
                 />
-                명령 실행 재시작(새 창)
+                명령 실행 재시작(새 창에서 빌드·기동)
               </label>
               <label className="flex items-center gap-1">
                 <input

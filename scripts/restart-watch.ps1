@@ -229,7 +229,7 @@ while ($true) {
     if ($null -ne $signal.runNpmInstallBefore) { $runNpm = [bool]$signal.runNpmInstallBefore }
     $runBuild = $true
     if ($null -ne $signal.runBuild) { $runBuild = [bool]$signal.runBuild }
-    $startGeo = $true
+    $startGeo = $false
     if ($null -ne $signal.startGeoServerAfter) { $startGeo = [bool]$signal.startGeoServerAfter }
 
     if ($runNpm) {
@@ -252,7 +252,7 @@ while ($true) {
     if ($startGeo) {
       $geoBat = Join-Path $RepoRoot "geoserver_modules/scripts/start-geoserver.bat"
       if (Test-Path -LiteralPath $geoBat) {
-        Write-WatchLog "Starting GeoServer: $geoBat"
+        Write-WatchLog "Starting GeoServer (retry): $geoBat"
         $geoCode = (Start-Process -FilePath $geoBat -WorkingDirectory (Split-Path -Parent $geoBat) -Wait -PassThru -NoNewWindow).ExitCode
         Write-WatchLog "GeoServer start script exit=$geoCode"
       } else {
@@ -260,9 +260,28 @@ while ($true) {
       }
     }
 
+    # Clear one-shot flags so a later exit mode is not blocked by stale command/consumed state
+    try {
+      $signal.restartRequested = $false
+      $signal.launcherConsumed = $false
+      if ($signal.PSObject.Properties.Name -contains "launcherConsumedAt") {
+        $signal.PSObject.Properties.Remove("launcherConsumedAt")
+      }
+      ($signal | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath $SignalPath -Encoding utf8
+      Write-WatchLog "Cleared restartRequested after exit pipeline" "OK"
+    } catch {
+      Write-WatchLog "WARN: failed to clear restart signal: $($_.Exception.Message)" "WARN"
+    }
+
     $LastRestartAt = Get-Date
     Write-WatchLog "Pipeline done. Entering restart loop. (next run=$($RunCount + 1))" "OK"
     continue
+  }
+
+  if ($mode -eq "command") {
+    Write-WatchLog "Decision: restartMode=command — one-shot apply already handled elsewhere; stop watch (not an error)." "OK"
+    Write-WatchLog "Result: stopped after command-mode signal (use exit/startB/launcher for supervised restart)." "OK"
+    break
   }
 
   Write-WatchLog "Decision: not exit restart (restartRequested=$requested restartMode=$mode) - stop watch." "WARN"

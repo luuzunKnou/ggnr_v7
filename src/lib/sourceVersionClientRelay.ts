@@ -276,7 +276,7 @@ export async function relayLatestSourceFromGnms(options: {
 
     if (restart && restartMode === 'command' && cfg.restartCommandConfigured !== true) {
       const msg =
-        '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev|start -- <project> <type> 또는 restart-watch로 기동하세요.';
+        '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev|start -- <project> <type> 으로 기동하세요.';
       log(`ERROR: ${msg}`);
       throw new Error(msg);
     }
