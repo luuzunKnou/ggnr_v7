@@ -1,9 +1,11 @@
 /**
  * 프로젝트·환경별 env 로드 → DB 확장(PostGIS) 및 테이블 생성 → Next 서버 실행
  * 사용: npm run dev -- river_yd dev  |  npm run start -- river_yd prod
+ *
+ * 버전관리 «Node 런처» 재시작: 이 프로세스(Node)는 유지하고 Next 자식만 종료·재기동.
  */
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
@@ -11,6 +13,9 @@ import { loadProjectEnv } from './load-project-env';
 const COMMAND = process.argv[2]; // dev | start
 const PROJECT = process.argv[3]; // e.g. river_yd
 const TYPE = process.argv[4]; // dev | demo | prod
+
+const SIGNAL_PATH = path.join(process.cwd(), '.cursor-runtime', 'restart-request.json');
+const RELAUNCH_POLL_MS = 1000;
 
 /** src/config/projects/<project>.runtime.env 의 KEY=VALUE 를 process.env 에 병합 */
 function loadRuntimeEnv(projectName: string): void {
@@ -81,19 +86,198 @@ async function setupDb(): Promise<void> {
   });
 }
 
-function runNext(cmd: 'dev' | 'start'): void {
-  const nextBin = path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'next.cmd' : 'next');
+function getAppListenPort(): number {
+  const n = Number(process.env.PORT ?? 3000);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3000;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isPortListening(port: number): boolean {
+  try {
+    if (process.platform === 'win32') {
+      const out = execFileSync('netstat', ['-ano'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 5000,
+      });
+      return new RegExp(`:${port}\\s+.*LISTENING`, 'i').test(out);
+    }
+    const out = execFileSync(
+      'sh',
+      ['-c', `(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -E ':${port}[[:space:]]' || true`],
+      { encoding: 'utf8', timeout: 5000 }
+    );
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function waitPortFree(port: number, timeoutSec = 90): Promise<void> {
+  console.log(`[run] waiting until port ${port} is FREE...`);
+  const deadline = Date.now() + timeoutSec * 1000;
+  while (Date.now() < deadline) {
+    if (!isPortListening(port)) {
+      console.log(`[run] port ${port} is FREE`);
+      return;
+    }
+    await sleep(1000);
+  }
+  console.warn(`[run] WARN: port ${port} still busy after ${timeoutSec}s — starting Next anyway`);
+}
+
+type RestartSignal = {
+  at?: string;
+  restartRequested?: boolean;
+  restartMode?: string;
+  runNpmInstallBefore?: boolean;
+  launcherConsumed?: boolean;
+};
+
+function readRestartSignal(): RestartSignal | null {
+  try {
+    if (!fs.existsSync(SIGNAL_PATH)) return null;
+    const raw = fs.readFileSync(SIGNAL_PATH, 'utf8');
+    return JSON.parse(raw) as RestartSignal;
+  } catch {
+    return null;
+  }
+}
+
+function markLauncherConsumed(signal: RestartSignal): void {
+  try {
+    fs.mkdirSync(path.dirname(SIGNAL_PATH), { recursive: true });
+    fs.writeFileSync(
+      SIGNAL_PATH,
+      JSON.stringify({ ...signal, launcherConsumed: true, launcherConsumedAt: new Date().toISOString() }, null, 2),
+      'utf8'
+    );
+  } catch (e) {
+    console.warn('[run] failed to mark launcher signal consumed:', e instanceof Error ? e.message : e);
+  }
+}
+
+function runNpmInstallSync(): void {
+  console.log('[run] npm install --no-audit --no-fund (before app relaunch)');
+  execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    shell: true,
+    env: process.env,
+  });
+}
+
+type NextCmd = 'dev' | 'start';
+
+let nextProc: ChildProcess | null = null;
+let relaunchInFlight = false;
+/** Next 종료 시 런처가 의도적으로 죽인 경우 process.exit 하지 않음 */
+let expectNextExitForRelaunch = false;
+
+function spawnNext(cmd: NextCmd): void {
+  const nextBin = path.join(
+    process.cwd(),
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'next.cmd' : 'next'
+  );
+  console.log(`[run] starting Next.js (${cmd})...`);
   const proc = spawn(nextBin, [cmd], {
     cwd: process.cwd(),
     stdio: 'inherit',
     env: process.env,
     shell: true,
   });
+  nextProc = proc;
   proc.on('error', (err) => {
     console.error('[run] Next failed:', err);
-    process.exit(1);
+    if (!relaunchInFlight) process.exit(1);
   });
-  proc.on('close', (code) => process.exit(code ?? 0));
+  proc.on('close', (code) => {
+    nextProc = null;
+    if (expectNextExitForRelaunch || relaunchInFlight) {
+      console.log(`[run] Next exited (code=${code ?? 0}) for relaunch — Node launcher stays up`);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
+}
+
+async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<void> {
+  if (relaunchInFlight) return;
+  relaunchInFlight = true;
+  const port = getAppListenPort();
+  console.log(`[run] launcher: relaunch Next only (Node stays). port=${port}`);
+  markLauncherConsumed(signal);
+
+  expectNextExitForRelaunch = true;
+  if (nextProc && !nextProc.killed) {
+    console.log('[run] launcher: stopping Next child...');
+    try {
+      nextProc.kill('SIGTERM');
+    } catch {
+      /* ignore */
+    }
+    // Windows: tree kill if still around after a moment
+    await sleep(1500);
+    if (nextProc && !nextProc.killed && nextProc.pid) {
+      try {
+        if (process.platform === 'win32') {
+          execFileSync('taskkill', ['/PID', String(nextProc.pid), '/T', '/F'], {
+            windowsHide: true,
+            stdio: 'ignore',
+          });
+        } else {
+          nextProc.kill('SIGKILL');
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  await waitPortFree(port);
+
+  if (signal.runNpmInstallBefore === true) {
+    try {
+      runNpmInstallSync();
+    } catch (e) {
+      console.error('[run] npm install failed:', e instanceof Error ? e.message : e);
+      relaunchInFlight = false;
+      expectNextExitForRelaunch = false;
+      spawnNext(cmd);
+      return;
+    }
+  }
+
+  expectNextExitForRelaunch = false;
+  relaunchInFlight = false;
+  spawnNext(cmd);
+}
+
+function startLauncherPoll(cmd: NextCmd): void {
+  const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
+  const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
+  console.log(
+    `[run] Node launcher watch enabled — mode=launcher signals will restart Next only (delay ${safeDelay}ms)`
+  );
+
+  setInterval(() => {
+    if (relaunchInFlight) return;
+    const signal = readRestartSignal();
+    if (!signal) return;
+    if (signal.launcherConsumed === true) return;
+    if (signal.restartRequested !== true) return;
+    if (signal.restartMode !== 'launcher') return;
+
+    const atMs = signal.at ? Date.parse(signal.at) : NaN;
+    if (Number.isFinite(atMs) && Date.now() - atMs < safeDelay) return;
+
+    void relaunchNextOnly(signal, cmd);
+  }, RELAUNCH_POLL_MS);
 }
 
 async function main(): Promise<void> {
@@ -167,8 +351,10 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('[run] DB setup done. Starting Next.js...');
-  runNext(COMMAND as 'dev' | 'start');
+  console.log('[run] DB setup done.');
+  const nextCmd = COMMAND as NextCmd;
+  startLauncherPoll(nextCmd);
+  spawnNext(nextCmd);
 }
 
 main().catch((err) => {

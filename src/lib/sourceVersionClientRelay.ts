@@ -1,9 +1,10 @@
 import type { SourcePackageProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import { includeNodeModulesFromProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { resolveClientMachineIp } from '@/lib/clientMachineIp';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 
-export type RestartMode = 'none' | 'exit' | 'command';
+export type RestartMode = 'none' | 'exit' | 'command' | 'startB' | 'launcher';
 
 export type VersionRelayPhase =
   | 'latest'
@@ -53,7 +54,7 @@ type GnmsConfigResponse = {
   latestUrl: string;
   downloadUrlFallback: string;
   bearer: string;
-  /** 운영 서버 env에 GGNR_RESTART_COMMAND 존재 여부 */
+  /** 운영 서버에 구동 프로젝트/타입이 있어 명령 실행 재시작 가능 여부 */
   restartCommandConfigured?: boolean;
   error?: string;
 };
@@ -267,7 +268,19 @@ export async function relayLatestSourceFromGnms(options: {
 
     if (restart && restartMode === 'command' && cfg.restartCommandConfigured !== true) {
       const msg =
-        'GGNR_RESTART_COMMAND가 설정되지 않았습니다. 명령 실행 재시작을 쓸 수 없어 적용을 중단합니다.';
+        '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev -- <project> <type> 또는 restart-watch로 기동하세요.';
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
+    }
+    if (
+      restart &&
+      (restartMode === 'startB' || restartMode === 'launcher') &&
+      cfg.restartCommandConfigured !== true
+    ) {
+      const msg =
+        restartMode === 'startB'
+          ? '구동 프로젝트/타입이 없어 start/b 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev -- <project> <type> 으로 기동하세요.'
+          : '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev -- <project> <type> 으로 기동하세요.';
       log(`ERROR: ${msg}`);
       throw new Error(msg);
     }
@@ -346,7 +359,15 @@ export async function relayLatestSourceFromGnms(options: {
     const initRes = await fetch('/api/source/version/relay/init', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName, totalSize, version, restart, restartMode, includeNodeModules }),
+      body: JSON.stringify({
+        fileName,
+        totalSize,
+        version,
+        restart,
+        restartMode,
+        includeNodeModules,
+        clientIp: await resolveClientMachineIp(),
+      }),
       signal,
     });
     const initJson = (await initRes.json().catch(() => ({}))) as {

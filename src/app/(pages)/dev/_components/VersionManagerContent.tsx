@@ -249,7 +249,7 @@ export function VersionManagerContent() {
                   disabled={busy || !restart}
                   onChange={() => setRestartMode('command')}
                 />
-                명령 실행 재시작(`GGNR_RESTART_COMMAND`)
+                명령 실행 재시작(새 창)
               </label>
               <label className="flex items-center gap-1">
                 <input
@@ -260,6 +260,26 @@ export function VersionManagerContent() {
                   onChange={() => setRestartMode('exit')}
                 />
                 process.exit 재시작(프로세스 매니저 필요)
+              </label>
+              <label className="flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="restartMode"
+                  checked={restartMode === 'startB'}
+                  disabled={busy || !restart}
+                  onChange={() => setRestartMode('startB')}
+                />
+                start/b
+              </label>
+              <label className="flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="restartMode"
+                  checked={restartMode === 'launcher'}
+                  disabled={busy || !restart}
+                  onChange={() => setRestartMode('launcher')}
+                />
+                Node 런처(앱만 재실행)
               </label>
               <label className="flex items-center gap-1">
                 <input

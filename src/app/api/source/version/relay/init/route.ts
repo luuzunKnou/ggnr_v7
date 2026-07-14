@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
 import { initVersionRelay } from '@/service/sourceVersionRelayService';
 import type { RestartMode } from '@/service/sourceVersionService';
 
@@ -7,6 +8,8 @@ export const dynamic = 'force-dynamic';
 
 function toRestartMode(value: unknown): RestartMode {
   if (value === 'command') return 'command';
+  if (value === 'startB' || value === 'nodeWatch') return 'startB';
+  if (value === 'launcher') return 'launcher';
   if (value === 'exit') return 'exit';
   return 'none';
 }
@@ -23,12 +26,15 @@ export async function POST(req: NextRequest) {
     const restart = body.restart === true;
     const restartMode = toRestartMode(body.restartMode);
     const includeNodeModules = body.includeNodeModules !== false;
+    const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
+    const clientIp = pickClientIpFromRequest(req, bodyIp);
 
     const result = await initVersionRelay({
       fileName,
       totalSize,
       version,
       requestedBy: String(usrId),
+      clientIp,
       restart,
       restartMode,
       includeNodeModules,

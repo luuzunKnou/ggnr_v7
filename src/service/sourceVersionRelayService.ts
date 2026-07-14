@@ -13,6 +13,8 @@ type RelayMeta = {
   chunkSize: number;
   version: string;
   requestedBy: string;
+  /** 브라우저에서 확정한 클라이언트 IP */
+  clientIp?: string;
   restart: boolean;
   restartMode: RestartMode;
   includeNodeModules: boolean;
@@ -58,11 +60,21 @@ export async function initVersionRelay(params: {
   totalSize: number;
   version: string;
   requestedBy: string;
+  clientIp?: string;
   restart: boolean;
   restartMode: RestartMode;
   includeNodeModules?: boolean;
 }): Promise<InitVersionRelayResult> {
-  const { fileName, totalSize, version, requestedBy, restart, restartMode, includeNodeModules = true } = params;
+  const {
+    fileName,
+    totalSize,
+    version,
+    requestedBy,
+    clientIp,
+    restart,
+    restartMode,
+    includeNodeModules = true,
+  } = params;
   if (!fileName.trim()) throw new Error('fileName required');
   if (!Number.isFinite(totalSize) || totalSize <= 0) throw new Error('totalSize must be positive');
 
@@ -78,6 +90,7 @@ export async function initVersionRelay(params: {
     chunkSize: VERSION_RELAY_CHUNK_SIZE,
     version,
     requestedBy,
+    clientIp: clientIp?.trim() || undefined,
     restart,
     restartMode,
     includeNodeModules,
@@ -148,6 +161,7 @@ export async function completeVersionRelay(params: { uploadId: string }) {
     version: meta.version,
     fileName: meta.fileName,
     requestedBy: meta.requestedBy,
+    clientIp: meta.clientIp,
     restart: meta.restart,
     restartMode: meta.restartMode,
     includeNodeModules: meta.includeNodeModules,

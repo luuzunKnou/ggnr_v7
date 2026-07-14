@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
@@ -14,10 +15,53 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export type RestartMode = 'none' | 'exit' | 'command';
+export type RestartMode = 'none' | 'exit' | 'command' | 'startB' | 'launcher';
+
+/**
+ * 구동 시 run.ts가 넣는 GGNR_PROJECT / GGNR_ENV로 재시작 명령 조합.
+ * .env의 GGNR_RESTART_COMMAND는 사용하지 않음.
+ */
+export function resolveRestartCommand(mode: 'command' | 'startB' = 'command'): string {
+  const project = process.env.GGNR_PROJECT?.trim() ?? '';
+  const type = process.env.GGNR_ENV?.trim() ?? '';
+  if (!project || !type) return '';
+  if (mode === 'startB') {
+    // start /b: Node 포함 전체 재기동. 평소와 동일 기동 명령.
+    return `npm run dev -- ${project} ${type}`;
+  }
+  if (process.platform === 'win32') {
+    return `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\restart-watch.ps1 -Project ${project} -Type ${type}`;
+  }
+  return `npm run dev -- ${project} ${type}`;
+}
+
+export function isRestartCommandConfigured(): boolean {
+  const project = process.env.GGNR_PROJECT?.trim() ?? '';
+  const type = process.env.GGNR_ENV?.trim() ?? '';
+  return Boolean(project && type);
+}
+
+const RESTART_COMMAND_MISSING_MSG =
+  '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. npm run dev -- <project> <type> 또는 restart-watch로 기동하세요.';
+
+const START_B_MISSING_MSG =
+  '구동 프로젝트/타입이 없어 start/b 재시작을 쓸 수 없습니다. npm run dev -- <project> <type> 으로 기동하세요.';
+
+const LAUNCHER_MISSING_MSG =
+  '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev -- <project> <type> 으로 기동하세요.';
+
+/** 새 콘솔을 띄우는 방식(명령 실행)만 true */
+function needsSpawnedRestartCommand(mode: RestartMode): mode is 'command' {
+  return mode === 'command';
+}
+
+function needsProjectEnvRestart(mode: RestartMode): boolean {
+  return mode === 'command' || mode === 'startB' || mode === 'launcher';
+}
 
 export type ApplyLatestSourceOptions = {
   requestedBy: string;
+  clientIp?: string;
   restart: boolean;
   restartMode: RestartMode;
 };
@@ -137,6 +181,8 @@ export type ApplySourceZipOptions = {
   version: string;
   fileName: string;
   requestedBy: string;
+  /** 브라우저·요청에서 확정한 클라이언트 IPv4 (이력 mvh_ip) */
+  clientIp?: string;
   restart: boolean;
   restartMode: RestartMode;
   /** false=개방망(node_modules 제외), true=폐쇄망(포함) */
@@ -150,15 +196,16 @@ export type ApplySourceZipResult = Omit<
 
 /** ZIP 파일 경로 기준 워크스페이스 적용 (GNMS fetch 없음) */
 export async function applySourceZipFile(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
-  const { zipPath, version, fileName, requestedBy, restart, restartMode, includeNodeModules = true } = options;
+  const { zipPath, version, fileName, requestedBy, clientIp, restart, restartMode, includeNodeModules = true } = options;
 
-  if (restart && restartMode === 'command') {
-    const restartCommand = process.env.GGNR_RESTART_COMMAND?.trim() ?? '';
-    if (!restartCommand) {
-      throw new Error(
-        'GGNR_RESTART_COMMAND가 설정되지 않았습니다. 명령 실행 재시작을 쓸 수 없어 적용을 중단합니다.'
-      );
-    }
+  if (restart && restartMode === 'command' && !resolveRestartCommand('command')) {
+    throw new Error(RESTART_COMMAND_MISSING_MSG);
+  }
+  if (restart && restartMode === 'startB' && !resolveRestartCommand('startB')) {
+    throw new Error(START_B_MISSING_MSG);
+  }
+  if (restart && restartMode === 'launcher' && !isRestartCommandConfigured()) {
+    throw new Error(LAUNCHER_MISSING_MSG);
   }
 
   const workspaceRoot = process.cwd();
@@ -191,7 +238,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       restartRequested: restart,
       restartMode,
       includeNodeModules,
-      runNpmInstallBefore: restart && restartMode === 'command' && includeNodeModules === false,
+      runNpmInstallBefore:
+        restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false,
       source: 'versionManagerClientRelay',
     });
 
@@ -207,22 +255,21 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
       started: startResult.success,
-      message: `${stopPart} → ${startPart}`,
+      message: `${stopPart} -> ${startPart}`,
     };
 
     /** 재시작(process.exit) 전에 이력 INSERT — 클라이언트 후기록은 서버 종료로 실패할 수 있음 */
+    const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
     await recordVersionHistory({
       historyType: 'apply_latest',
       status: 'success',
-      message: `적용 ${copyResult.appliedFiles}건 · 제외 ${copyResult.skippedFiles}건 · ${
-        includeNodeModules ? '폐쇄망' : '개방망'
-      } · GeoServer: ${geoserver.message}`,
-      clientHost: requestedBy || undefined,
+      message: `적용 ${copyResult.appliedFiles}건 / 제외 ${copyResult.skippedFiles}건 / ${netLabel} / GeoServer: ${geoserver.message}`,
+      ip: clientIp?.trim() || undefined,
     });
 
-    /** 개방망(node_modules 미포함) + 명령 실행: 재기동 전 npm install */
+    /** 개방망: command / start/b / 런처 재기동 전 npm install */
     const runNpmInstallBefore =
-      restart && restartMode === 'command' && includeNodeModules === false;
+      restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false;
     const restartResult = scheduleRestart(restart ? restartMode : 'none', {
       runNpmInstallBefore,
     });
@@ -410,6 +457,9 @@ function scheduleClosePreviousConsoleWindow(exitDelayMs: number): void {
   const shellPid = tryGetWindowsShellAncestorPid(process.pid);
   if (shellPid == null) return;
   const killDelaySec = Math.max(1, Math.ceil((exitDelayMs + 1000) / 1000));
+  console.log(
+    `[restart] scheduled close of previous console pid=${shellPid} in ${killDelaySec}s`
+  );
   spawn(
     'cmd.exe',
     ['/c', `timeout /t ${killDelaySec} /nobreak >nul & taskkill /PID ${shellPid} /F`],
@@ -417,37 +467,115 @@ function scheduleClosePreviousConsoleWindow(exitDelayMs: number): void {
   ).unref();
 }
 
-/** 부모 프로세스 종료 후에도 대기·(선택) npm install·실행이 이어지도록 detached 자식으로 예약 */
+/** Next listen port (PORT env or 3000). Same value used by parent and child restart. */
+export function getAppListenPort(): number {
+  const n = Number(process.env.PORT ?? 3000);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3000;
+}
+
+/**
+ * 부모 종료 후 포트가 비었는지 확인·로그한 뒤 재시작 명령을 실행하는 런처 스크립트 작성·기동.
+ * sameConsole=true: 새 창 없이 기존 콘솔에서 백그라운드 기동 (start /b).
+ */
 function spawnDelayedRestartCommand(
   restartCommand: string,
   cwd: string,
   delayMs: number,
-  runNpmInstallBefore: boolean
+  runNpmInstallBefore: boolean,
+  options?: { sameConsole?: boolean }
 ): void {
   const delaySec = Math.max(1, Math.ceil(delayMs / 1000));
-  const afterWait = runNpmInstallBefore
-    ? `${NPM_INSTALL_CMD} && ${restartCommand}`
-    : restartCommand;
+  const port = getAppListenPort();
+  const runtimeDir = path.join(cwd, '.cursor-runtime');
+  const sameConsole = options?.sameConsole === true;
+  fsSync.mkdirSync(runtimeDir, { recursive: true });
+
   if (process.platform === 'win32') {
-    // 따옴표는 start/cmd 중첩 파싱을 깨뜨리므로 제거
-    const safeAfter = afterWait.replace(/"/g, '');
-    const script = `timeout /t ${delaySec} /nobreak >nul && ${safeAfter}`;
-    // start "제목" → 기존 콘솔과 분리된 새 창. 런처 cmd는 숨김.
-    const launcher = `start "ggnr-restart" cmd /c "${script}"`;
-    spawn('cmd.exe', ['/c', launcher], {
+    const safeCmd = restartCommand.replace(/"/g, '');
+    const launcherPath = path.join(
+      runtimeDir,
+      sameConsole ? 'restart-same-console.ps1' : 'restart-launch.ps1'
+    );
+    const lines: string[] = [
+      '$ErrorActionPreference = "Continue"',
+      `$port = ${port}`,
+      `$delaySec = ${delaySec}`,
+      sameConsole
+        ? 'Write-Host "[restart] same-console launcher started"'
+        : 'Write-Host "[restart] child console started"',
+      'Write-Host "[restart] target port=$port (must match previous process)"',
+      'Write-Host "[restart] initial delay $delaySec s..."',
+      'Start-Sleep -Seconds $delaySec',
+      'Write-Host "[restart] waiting until port $port is FREE (LISTENING gone)..."',
+      '$deadline = (Get-Date).AddSeconds(90)',
+      '$freed = $false',
+      'while ((Get-Date) -lt $deadline) {',
+      '  $hit = netstat -ano 2>$null | Select-String -Pattern (":" + $port + "\\s") | Select-String "LISTENING"',
+      '  if (-not $hit) {',
+      '    Write-Host "[restart] port $port is FREE"',
+      '    $freed = $true',
+      '    break',
+      '  }',
+      '  Write-Host "[restart] port $port still LISTENING - wait 1s"',
+      '  Start-Sleep -Seconds 1',
+      '}',
+      'if (-not $freed) {',
+      '  Write-Host "[restart] WARN: port $port still busy after 90s - starting anyway (may bind another port)"',
+      '}',
+    ];
+    if (runNpmInstallBefore) {
+      lines.push(
+        'Write-Host "[restart] running npm install --no-audit --no-fund"',
+        'npm install --no-audit --no-fund',
+        'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] npm install FAILED exit=$LASTEXITCODE"; exit $LASTEXITCODE }'
+      );
+    }
+    lines.push(
+      `Write-Host "[restart] exec: ${safeCmd}"`,
+      'Write-Host "[restart] starting app on expected port=$port"',
+      safeCmd,
+      'Write-Host "[restart] command finished exit=$LASTEXITCODE"'
+    );
+    fsSync.writeFileSync(launcherPath, lines.join('\r\n') + '\r\n', 'utf8');
+    console.log(`[restart] wrote launcher ${launcherPath}`);
+    console.log(
+      `[restart] child will wait for port ${port} free then run${sameConsole ? ' (same console)' : ''}: ${restartCommand}`
+    );
+    // sameConsole: start /b + 빈 title → 새 창 없이 현재 콘솔에서 이어서 실행
+    const startCmd = sameConsole
+      ? `start /b "" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPath}"`
+      : `start "ggnr-restart" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPath}"`;
+    spawn('cmd.exe', ['/c', startCmd], {
       cwd,
       detached: true,
-      stdio: 'ignore',
+      stdio: sameConsole ? 'inherit' : 'ignore',
       env: process.env,
-      windowsHide: true,
+      windowsHide: !sameConsole,
     }).unref();
     return;
   }
+
   const delaySecFloat = Math.max(0.5, delayMs / 1000);
-  spawn('sh', ['-c', `sleep ${delaySecFloat} && ${afterWait}`], {
+  const afterWait = runNpmInstallBefore
+    ? `${NPM_INSTALL_CMD} && ${restartCommand}`
+    : restartCommand;
+  const sh = [
+    `echo "[restart] child started target port=${port}"`,
+    `sleep ${delaySecFloat}`,
+    `echo "[restart] waiting for port ${port} free..."`,
+    `for i in $(seq 1 90); do`,
+    `  if ! (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -q ":${port} "; then`,
+    `    echo "[restart] port ${port} is FREE"; break;`,
+    `  fi`,
+    `  echo "[restart] port ${port} still busy — wait 1s"; sleep 1;`,
+    `done`,
+    `echo "[restart] exec: ${afterWait}"`,
+    afterWait,
+  ].join('\n');
+  spawn('sh', ['-c', sh], {
     cwd,
     detached: true,
-    stdio: 'ignore',
+    stdio: sameConsole ? 'inherit' : 'ignore',
     env: process.env,
   }).unref();
 }
@@ -460,47 +588,99 @@ function scheduleRestart(
   commandConfigured: boolean;
   message: string;
 } {
-  const restartCommand = process.env.GGNR_RESTART_COMMAND?.trim() ?? '';
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   const runNpmInstallBefore = options?.runNpmInstallBefore === true;
+  const port = getAppListenPort();
+  const commandRestart = resolveRestartCommand('command');
+  const startBRestart = resolveRestartCommand('startB');
 
   if (mode === 'none') {
-    return { scheduled: false, commandConfigured: Boolean(restartCommand), message: '재시작 요청 안 함' };
+    return {
+      scheduled: false,
+      commandConfigured: isRestartCommandConfigured(),
+      message: '재시작 요청 안 함',
+    };
   }
 
-  if (mode === 'command') {
-    if (!restartCommand) {
-      throw new Error(
-        'GGNR_RESTART_COMMAND가 설정되지 않았습니다. 명령 실행 재시작을 쓸 수 없어 적용을 중단합니다.'
-      );
+  /** 새 창에서 명령 실행 + 기존 콘솔 종료 */
+  if (needsSpawnedRestartCommand(mode)) {
+    if (!commandRestart) {
+      throw new Error(RESTART_COMMAND_MISSING_MSG);
     }
     const exitDelayMs = 2000;
-    spawnDelayedRestartCommand(restartCommand, process.cwd(), safeDelay, runNpmInstallBefore);
+    console.log(
+      `[restart] mode=command port=${port} — spawn child, exit in ${exitDelayMs}ms, child waits until port free`
+    );
+    spawnDelayedRestartCommand(commandRestart, process.cwd(), safeDelay, runNpmInstallBefore);
     scheduleClosePreviousConsoleWindow(exitDelayMs);
     setTimeout(() => {
+      console.log(`[restart] process.exit(0) — releasing port ${port}`);
       process.exit(0);
     }, exitDelayMs).unref();
     const npmStep = runNpmInstallBefore ? ' → npm install' : '';
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `재시작 예약: 프로세스 종료·기존 콘솔 종료 후 ${safeDelay}ms 대기${npmStep} → 새 창에서 명령 실행 (${restartCommand})`,
+      message: `재시작 예약: 포트 ${port} 해제 후${npmStep} 새 창에서 동일 포트로 실행 (${commandRestart})`,
     };
   }
 
+  /** start /b: 같은 콘솔에서 Node 포함 전체 재기동 */
+  if (mode === 'startB') {
+    if (!startBRestart) {
+      throw new Error(START_B_MISSING_MSG);
+    }
+    const exitDelayMs = 2000;
+    console.log(
+      `[restart] mode=startB port=${port} — same console start /b, exit in ${exitDelayMs}ms`
+    );
+    spawnDelayedRestartCommand(startBRestart, process.cwd(), safeDelay, runNpmInstallBefore, {
+      sameConsole: true,
+    });
+    setTimeout(() => {
+      console.log(`[restart] process.exit(0) — releasing port ${port}; start /b relaunch continues`);
+      process.exit(0);
+    }, exitDelayMs).unref();
+    const npmStep = runNpmInstallBefore ? ' → npm install' : '';
+    return {
+      scheduled: true,
+      commandConfigured: true,
+      message: `start/b 재시작 예약: 포트 ${port} 해제 후${npmStep} (${startBRestart})`,
+    };
+  }
+
+  /** Node 런처: process.exit 없음. run.ts가 신호를 보고 Next 자식만 재기동 */
+  if (mode === 'launcher') {
+    if (!isRestartCommandConfigured()) {
+      throw new Error(LAUNCHER_MISSING_MSG);
+    }
+    console.log(
+      `[restart] mode=launcher port=${port} — signal only; Node parent (run.ts) restarts Next child`
+    );
+    return {
+      scheduled: true,
+      commandConfigured: true,
+      message: `Node 런처 재시작 요청: Node 유지, 앱(Next)만 재기동 대기 (포트 ${port})`,
+    };
+  }
+
+  console.log(
+    `[restart] mode=exit port=${port} — process.exit in ${safeDelay}ms (watcher should reuse same port)`
+  );
   setTimeout(() => {
+    console.log(`[restart] process.exit(0) — releasing port ${port}`);
     process.exit(0);
   }, safeDelay).unref();
   return {
     scheduled: true,
-    commandConfigured: Boolean(restartCommand),
-    message: `프로세스 종료 재시작 예약 완료 (${safeDelay}ms 후 process.exit)`,
+    commandConfigured: isRestartCommandConfigured(),
+    message: `프로세스 종료 재시작 예약 완료 (포트 ${port}, ${safeDelay}ms 후 process.exit)`,
   };
 }
 
 export async function applyLatestSourceFromGnms(options: ApplyLatestSourceOptions): Promise<ApplyLatestSourceResult> {
-  const { requestedBy, restart, restartMode } = options;
+  const { requestedBy, clientIp, restart, restartMode } = options;
   const cfg = getGnmsClientConfig();
   const headers: Record<string, string> = cfg.bearer ? { Authorization: `Bearer ${cfg.bearer}` } : {};
 
@@ -539,6 +719,7 @@ export async function applyLatestSourceFromGnms(options: ApplyLatestSourceOption
     version,
     fileName,
     requestedBy,
+    clientIp,
     restart,
     restartMode,
   });

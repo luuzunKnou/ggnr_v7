@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { getGnmsClientConfig } from '@/service/sourceVersionService';
+import { getGnmsClientConfig, isRestartCommandConfigured } from '@/service/sourceVersionService';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +10,7 @@ export async function GET() {
     if (!usrId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const cfg = getGnmsClientConfig();
-    const restartCommandConfigured = Boolean(process.env.GGNR_RESTART_COMMAND?.trim());
+    const restartCommandConfigured = isRestartCommandConfigured();
     return NextResponse.json({
       ok: true,
       gnmsBaseUrl: cfg.gnmsBaseUrl,

@@ -1,19 +1,21 @@
-# process.exit 재시작 전용 감시 루프
-# - restartMode=exit 일 때만 이 창에서 npm 재실행
-# - command / none / 그 외는 이 스크립트 관여 대상이 아님 (감시 종료만)
+﻿# process.exit restart watcher (exit mode only)
+# - restartMode=exit: re-run npm in this window
+# - command / none / other: not handled here (watcher exits)
 #
-# 「명령 실행 재시작(GGNR_RESTART_COMMAND)」은 sourceVersionService가
-# 새 창 기동·기존 콘솔 종료를 담당한다. 이 스크립트를 쓰지 않는다.
+# Command-mode restart is handled by sourceVersionService
+# (builds restart-watch / npm from GGNR_PROJECT + GGNR_ENV; new console + close old).
+# Do not use this script for command mode itself - it is what command mode re-launches.
 #
-# npm / 감시 명령은 항상 프로젝트 루트(이 스크립트의 상위 폴더)에서 실행됩니다.
-# 현재 디렉터리와 무관하게 스크립트 경로만으로 루트를 잡습니다.
+# Always runs npm from repo root (parent of scripts/), regardless of cwd.
 #
-# 실행 예 (어느 폴더에서든):
+# Examples:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File D:\ggnr_v7\scripts\restart-watch.ps1 -Project build_yy -Type dev
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\restart-watch.ps1 -Project build_yy -Type demo
 #
-# 루트를 직접 지정할 때:
+# Optional root override:
 #   ...\restart-watch.ps1 -Project build_yy -Type prod -RepoRoot D:\ggnr_v7
+#
+# Logs are English/ASCII only (avoids Windows console encoding issues).
 
 param(
   [Parameter(Mandatory = $true)][string]$Project,
@@ -30,7 +32,7 @@ if (-not $RepoRoot) {
 
 $PackageJson = Join-Path $RepoRoot "package.json"
 if (-not (Test-Path -LiteralPath $PackageJson)) {
-  Write-Host "ERROR: 프로젝트 루트가 아닙니다. package.json 없음: $RepoRoot"
+  Write-Host "ERROR: Not a project root (package.json missing): $RepoRoot"
   exit 1
 }
 
@@ -38,6 +40,7 @@ $RuntimeDir = Join-Path $RepoRoot ".cursor-runtime"
 $SignalPath = Join-Path $RuntimeDir "restart-request.json"
 $LogPath = Join-Path $RuntimeDir "restart-watch.log"
 $NpmCommand = "npm run dev -- $Project $Type"
+$AppPort = if ($env:PORT -and $env:PORT.Trim()) { [int]$env:PORT } else { 3000 }
 $RunCount = 0
 $LastRestartAt = $null
 
@@ -60,10 +63,34 @@ function Write-WatchLog {
     if (-not (Test-Path -LiteralPath $RuntimeDir)) {
       New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
     }
-    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding ascii
   } catch {
-    # 파일 기록 실패해도 화면 로그는 유지
   }
+}
+
+function Test-AppPortListening {
+  param([int]$Port)
+  $hit = netstat -ano 2>$null | Select-String -Pattern (":" + $Port + "\s") | Select-String "LISTENING"
+  return [bool]$hit
+}
+
+function Wait-AppPortFree {
+  param(
+    [int]$Port,
+    [int]$TimeoutSec = 90
+  )
+  Write-WatchLog "Waiting until port $Port is FREE (LISTENING gone)..."
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  while ((Get-Date) -lt $deadline) {
+    if (-not (Test-AppPortListening -Port $Port)) {
+      Write-WatchLog "Port $Port is FREE" "OK"
+      return $true
+    }
+    Write-WatchLog "Port $Port still LISTENING - wait 1s"
+    Start-Sleep -Seconds 1
+  }
+  Write-WatchLog "WARN: port $Port still busy after ${TimeoutSec}s - starting anyway (may bind another port)" "WARN"
+  return $false
 }
 
 function Get-RestartSignal {
@@ -73,7 +100,7 @@ function Get-RestartSignal {
   try {
     return (Get-Content -LiteralPath $SignalPath -Raw -Encoding UTF8 | ConvertFrom-Json)
   } catch {
-    Write-WatchLog "restart-request.json 파싱 실패 — $($_.Exception.Message)" "WARN"
+    Write-WatchLog "Failed to parse restart-request.json - $($_.Exception.Message)" "WARN"
     return $null
   }
 }
@@ -82,7 +109,7 @@ function Enter-RepoRoot {
   Set-Location -LiteralPath $RepoRoot
   $cwd = (Get-Location).Path
   if ($cwd -ne $RepoRoot) {
-    Write-WatchLog "작업 폴더 이동 실패. 기대=$RepoRoot, 현재=$cwd" "ERROR"
+    Write-WatchLog "Failed to cd into repo. expected=$RepoRoot current=$cwd" "ERROR"
     exit 1
   }
 }
@@ -96,13 +123,14 @@ function Write-Banner {
 }
 
 Enter-RepoRoot
-Write-Banner "감시 시작 (process.exit 재시작 전용)"
-Write-WatchLog "프로젝트 루트: $RepoRoot"
-Write-WatchLog "현재 작업 폴더: $((Get-Location).Path)"
-Write-WatchLog "신호 파일: $SignalPath"
-Write-WatchLog "로그 파일: $LogPath"
-Write-WatchLog "실행 명령: $NpmCommand"
-Write-WatchLog "규칙: restartMode=exit 일 때만 이 창에서 재기동합니다."
+Write-Banner "Watch started (process.exit restart only)"
+Write-WatchLog "Repo root: $RepoRoot"
+Write-WatchLog "cwd: $((Get-Location).Path)"
+Write-WatchLog "Signal file: $SignalPath"
+Write-WatchLog "Log file: $LogPath"
+Write-WatchLog "Command: $NpmCommand"
+Write-WatchLog "Expected app port: $AppPort (PORT env or 3000)"
+Write-WatchLog "Rule: only restartMode=exit restarts in this window."
 Write-Host ""
 
 while ($true) {
@@ -112,27 +140,39 @@ while ($true) {
 
   if ($null -ne $LastRestartAt) {
     $gapSec = [math]::Round(($startedAt - $LastRestartAt).TotalSeconds, 1)
-    Write-Banner "기동 #$RunCount (재시작) — 이전 종료 후 ${gapSec}초 경과"
-    Write-WatchLog "재기동 확인: 서버를 다시 시작합니다. (회차=$RunCount)" "OK"
+    Write-Banner "Start #$RunCount (restart) - ${gapSec}s after previous exit"
+    Write-WatchLog "Restart confirmed: starting server again. (run=$RunCount)" "OK"
+    Wait-AppPortFree -Port $AppPort | Out-Null
   } else {
-    Write-Banner "기동 #$RunCount (최초)"
+    Write-Banner "Start #$RunCount (first)"
+    if (Test-AppPortListening -Port $AppPort) {
+      Write-WatchLog "WARN: port $AppPort already LISTENING before start" "WARN"
+    } else {
+      Write-WatchLog "Port $AppPort is free before first start" "OK"
+    }
   }
 
-  Write-WatchLog "cwd=$((Get-Location).Path) → $NpmCommand"
-  Write-WatchLog "npm 프로세스 시작 대기 중... (종료되면 아래 '종료 감지'가 찍힙니다)"
+  Write-WatchLog "cwd=$((Get-Location).Path) -> $NpmCommand"
+  Write-WatchLog "Starting app (expected listen port=$AppPort)"
+  Write-WatchLog "Waiting for npm process... (exit will print Exit detected below)"
 
   npm run dev -- $Project $Type
   $code = $LASTEXITCODE
   $endedAt = Get-Date
   $aliveSec = [math]::Round(($endedAt - $startedAt).TotalSeconds, 1)
 
-  Write-Banner "종료 감지 #$RunCount"
-  Write-WatchLog "exitCode=$code, 가동시간=${aliveSec}초 (시작=$($startedAt.ToString('HH:mm:ss')) ~ 종료=$($endedAt.ToString('HH:mm:ss')))"
+  Write-Banner "Exit detected #$RunCount"
+  Write-WatchLog "exitCode=$code uptime=${aliveSec}s (start=$($startedAt.ToString('HH:mm:ss')) end=$($endedAt.ToString('HH:mm:ss')))"
+  if (Test-AppPortListening -Port $AppPort) {
+    Write-WatchLog "Port $AppPort still LISTENING right after process exit" "WARN"
+  } else {
+    Write-WatchLog "Port $AppPort released after process exit" "OK"
+  }
 
   $signal = Get-RestartSignal
   if ($null -eq $signal) {
-    Write-WatchLog "restart-request.json 없음/읽기 실패 — 재시작 안 함. 감시 종료." "WARN"
-    Write-WatchLog "결과: 껐지만 다시 켜지 않음 (신호 없음)." "WARN"
+    Write-WatchLog "No/invalid restart-request.json - will not restart. Stopping watch." "WARN"
+    Write-WatchLog "Result: stopped, not restarted (no signal)." "WARN"
     break
   }
 
@@ -146,24 +186,24 @@ while ($true) {
   $sigBy = [string]$signal.requestedBy
   $sigSource = [string]$signal.source
 
-  Write-WatchLog "신호 읽음: restartRequested=$requested, restartMode=$mode"
-  if ($sigAt) { Write-WatchLog "신호 at=$sigAt, version=$sigVer, by=$sigBy, source=$sigSource" }
+  Write-WatchLog "Signal: restartRequested=$requested restartMode=$mode"
+  if ($sigAt) { Write-WatchLog "Signal at=$sigAt version=$sigVer by=$sigBy source=$sigSource" }
 
   if ($mode -eq "exit" -and $requested) {
-    Write-WatchLog "판정: process.exit 재시작 → ${DelaySec}초 대기 후 같은 창에서 다시 기동합니다." "OK"
-    Write-WatchLog "대기 시작 (${DelaySec}초)..."
+    Write-WatchLog "Decision: process.exit restart - wait ${DelaySec}s then start again in this window." "OK"
+    Write-WatchLog "Waiting ${DelaySec}s..."
     Start-Sleep -Seconds $DelaySec
     $LastRestartAt = Get-Date
-    Write-WatchLog "대기 종료. 재기동 루프로 진입합니다. (다음 회차=$($RunCount + 1))" "OK"
+    Write-WatchLog "Wait done. Entering restart loop. (next run=$($RunCount + 1))" "OK"
     continue
   }
 
-  Write-WatchLog "판정: exit 재시작 아님 (restartRequested=$requested, restartMode=$mode) — 감시 종료." "WARN"
-  Write-WatchLog "결과: 껐지만 이 스크립트는 다시 켜지 않음. (command/none 등은 각자 방식)" "WARN"
+  Write-WatchLog "Decision: not exit restart (restartRequested=$requested restartMode=$mode) - stop watch." "WARN"
+  Write-WatchLog "Result: stopped; this script will not restart (command/none use other paths)." "WARN"
   break
 }
 
 Write-Host ""
-Write-Banner "감시 종료"
-Write-WatchLog "총 기동 회차=$RunCount. 로그 파일: $LogPath"
+Write-Banner "Watch stopped"
+Write-WatchLog "Total runs=$RunCount. Log file: $LogPath"
 Write-Host ""
