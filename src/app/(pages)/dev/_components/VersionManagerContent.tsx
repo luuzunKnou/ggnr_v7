@@ -131,21 +131,25 @@ export function VersionManagerContent() {
           geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
           geoserverStartDetail: json.geoserver?.startMessage,
           appStopDetail: json.restart?.scheduled ? '포트 해제 후 진행' : undefined,
-          buildDetail: json.restart?.scheduled ? '앱 종료 후 npm run build' : undefined,
+          buildDetail: json.restart?.scheduled
+            ? '앱(Next) 종료 후 기동 런처가 npm run build'
+            : undefined,
           appStartDetail: json.restart?.message,
           restartScheduled: Boolean(json.restart?.scheduled),
         })
       );
       setProgress({
         message: json.restart?.scheduled
-          ? '적용 완료. 앱 종료 → 빌드 → 앱 기동 → GeoServer 기동 순으로 콘솔에서 진행합니다.'
+          ? '적용 완료. 앱(Next) 종료 → 기동 런처가 빌드 → 앱 기동 순으로 콘솔에서 진행합니다.'
           : '최신 소스 적용 완료',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
       if (json.restart?.scheduled) {
-        pushLog('재시작 파이프라인 예약: 앱 종료 → npm run build → 앱 기동 → GeoServer 기동');
+        pushLog(
+          '재시작 파이프라인 예약: 앱(Next) 종료 → 기동 런처가 npm run build → 앱 기동'
+        );
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
@@ -231,8 +235,9 @@ export function VersionManagerContent() {
             GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
           </p>
           <p className="text-xs text-muted-foreground">
-            «적용 후 서버 재시작»이 켜지면 앱 종료 → npm run build → 앱 기동 → GeoServer 기동 순으로
-            진행합니다. GeoServer는 적용 전에 먼저 중지하고, 재시작 시에는 빌드·앱 기동 뒤에 다시 켭니다.
+            «적용 후 서버 재시작»이 켜지면 앱(Next)을 먼저 끄고, 기동 때 남아 있는 Node 런처(또는
+            새 창 스크립트)가 npm run build → 앱 기동을 이어 갑니다. GeoServer는 적용 전에 중지하고,
+            병합·적용이 끝나면 바로 다시 켭니다(앱 재기동과 별도).
           </p>
           <ProfileRadios />
           <div className="space-y-2 text-sm">
@@ -264,7 +269,7 @@ export function VersionManagerContent() {
                   disabled={busy || !restart}
                   onChange={() => setRestartMode('exit')}
                 />
-                process.exit 재시작(프로세스 매니저 필요)
+                process.exit (기동 런처가 빌드)
               </label>
               <label className="flex items-center gap-1">
                 <input
@@ -274,7 +279,7 @@ export function VersionManagerContent() {
                   disabled={busy || !restart}
                   onChange={() => setRestartMode('startB')}
                 />
-                start/b
+                start/b (같은 콘솔·기동 런처가 빌드)
               </label>
               <label className="flex items-center gap-1">
                 <input

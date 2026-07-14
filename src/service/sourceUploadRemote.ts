@@ -11,7 +11,7 @@ export const SOURCE_UPLOAD_REMOTE_BASE =
   process.env.SOURCE_UPLOAD_REMOTE_BASE ?? 'http://192.168.126.1:3000/api/source/upload';
 export const SOURCE_UPLOAD_REMOTE_BEARER = process.env.SOURCE_UPLOAD_REMOTE_BEARER ?? '';
 
-export type RemoteUploadStageId = 'preflight' | 'init' | 'chunk' | 'complete';
+export type RemoteUploadStageId = 'preflight' | 'init' | 'chunk' | 'complete' | 'npmInstall';
 
 export type RemoteStageReport = {
   id: RemoteUploadStageId;

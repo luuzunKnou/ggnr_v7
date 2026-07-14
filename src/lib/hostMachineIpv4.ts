@@ -36,7 +36,7 @@ export function listHostNicIpv4(): HostNicRow[] {
   for (const [adapter, entries] of Object.entries(nets)) {
     for (const net of entries ?? []) {
       const family = net.family;
-      const isV4 = family === 'IPv4' || family === 4;
+      const isV4 = family === 'IPv4' || (family as string | number) === 4;
       if (!isV4 || !net.address) continue;
       rows.push({
         adapter,

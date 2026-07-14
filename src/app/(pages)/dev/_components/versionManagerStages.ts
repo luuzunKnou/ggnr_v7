@@ -33,10 +33,10 @@ const RELAY_STAGE_ORDER: RelayStageId[] = [
   'relay-chunk',
   'geoserver-stop',
   'merge-apply',
+  'geoserver-start',
   'app-stop',
   'build',
   'app-start',
-  'geoserver-start',
 ];
 
 const RELAY_STAGE_LABEL: Record<RelayStageId, string> = {
@@ -46,13 +46,13 @@ const RELAY_STAGE_LABEL: Record<RelayStageId, string> = {
   'relay-chunk': '청크 전송',
   'geoserver-stop': 'GeoServer 중지',
   'merge-apply': '병합·적용',
+  'geoserver-start': 'GeoServer 기동',
   'app-stop': '앱 종료',
   build: 'npm run build',
   'app-start': '앱 재기동',
-  'geoserver-start': 'GeoServer 기동',
 };
 
-/** 서버 complete 요청 중(단일 HTTP): GeoServer 중지·병합·적용까지 활성 */
+/** 서버 complete 요청 중(단일 HTTP): GeoServer 중지·병합·적용·GeoServer 기동까지 */
 const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStageId>> = {
   latest: 'latest',
   download: 'download',
@@ -61,13 +61,13 @@ const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStag
   'relay-complete': 'geoserver-stop',
   'merge-apply': 'merge-apply',
   'geoserver-stop': 'geoserver-stop',
+  'geoserver-start': 'geoserver-start',
   'app-stop': 'app-stop',
   build: 'build',
   'app-start': 'app-start',
-  'geoserver-start': 'geoserver-start',
   geoserver: 'geoserver-stop',
   restart: 'app-stop',
-  done: 'geoserver-start',
+  done: 'app-start',
 };
 
 export function buildInstallBaseStages(): StageItem[] {
@@ -234,6 +234,10 @@ export function buildRelayStagesFromProgress(p: {
       }
       if (id === 'geoserver-stop') detail = p.geoserverStopDetail ?? '중지 완료';
       if (id === 'merge-apply') detail = p.applyDetail ?? p.message;
+      if (id === 'geoserver-start') {
+        detail = p.geoserverStartDetail ?? '기동 완료';
+        state = 'done';
+      }
 
       if (id === 'app-stop' || id === 'build' || id === 'app-start') {
         if (skipPipeline) {
@@ -247,15 +251,6 @@ export function buildRelayStagesFromProgress(p: {
                 ? (p.buildDetail ?? '콘솔에서 npm run build 예약')
                 : (p.appStartDetail ?? '콘솔에서 앱 기동 예약');
           state = 'active';
-        }
-      }
-      if (id === 'geoserver-start') {
-        if (skipPipeline) {
-          detail = p.geoserverStartDetail ?? '기동 완료';
-          state = 'done';
-        } else {
-          detail = p.geoserverStartDetail ?? '빌드·앱 기동 후 콘솔에서 기동 예약';
-          state = 'pending';
         }
       }
 

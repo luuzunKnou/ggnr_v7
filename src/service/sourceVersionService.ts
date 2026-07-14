@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
+import { resolveAppStartCommand, resolveGgnrNpmScript, pickBootForSignalMerge } from '@/lib/ggnrBootCommand';
 import { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 
@@ -18,21 +19,22 @@ function sleep(ms: number): Promise<void> {
 export type RestartMode = 'none' | 'exit' | 'command' | 'startB' | 'launcher';
 
 /**
- * 구동 시 run.ts가 넣는 GGNR_PROJECT / GGNR_ENV로 재시작 명령 조합.
+ * 기동 시 기록된 명령(restart-request.json boot / GGNR_RUN_SCRIPT)을 재사용.
  * .env의 GGNR_RESTART_COMMAND는 사용하지 않음.
  */
 export function resolveRestartCommand(mode: 'command' | 'startB' = 'command'): string {
   const project = process.env.GGNR_PROJECT?.trim() ?? '';
   const type = process.env.GGNR_ENV?.trim() ?? '';
   if (!project || !type) return '';
+  const appCmd = resolveAppStartCommand(project, type);
   if (mode === 'startB') {
-    // start /b: Node 포함 전체 재기동. 평소와 동일 기동 명령.
-    return `npm run dev -- ${project} ${type}`;
+    return appCmd;
   }
   if (process.platform === 'win32') {
-    return `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\restart-watch.ps1 -Project ${project} -Type ${type}`;
+    const npmScript = resolveGgnrNpmScript();
+    return `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\restart-watch.ps1 -Project ${project} -Type ${type} -NpmScript ${npmScript}`;
   }
-  return `npm run dev -- ${project} ${type}`;
+  return appCmd;
 }
 
 export function isRestartCommandConfigured(): boolean {
@@ -42,14 +44,13 @@ export function isRestartCommandConfigured(): boolean {
 }
 
 const RESTART_COMMAND_MISSING_MSG =
-  '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. npm run dev -- <project> <type> 또는 restart-watch로 기동하세요.';
+  '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 또는 restart-watch로 기동하세요.';
 
 const START_B_MISSING_MSG =
-  '구동 프로젝트/타입이 없어 start/b 재시작을 쓸 수 없습니다. npm run dev -- <project> <type> 으로 기동하세요.';
+  '구동 프로젝트/타입이 없어 start/b 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
 
 const LAUNCHER_MISSING_MSG =
-  '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev -- <project> <type> 으로 기동하세요.';
-
+  '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
 /** 새 콘솔을 띄우는 방식(명령 실행)만 true */
 function needsSpawnedRestartCommand(mode: RestartMode): mode is 'command' {
   return mode === 'command';
@@ -69,7 +70,7 @@ export type ApplyLatestSourceOptions = {
 export type GeoServerApplyStep = {
   stopped: boolean;
   started: boolean;
-  /** true면 앱 종료·빌드·앱 기동 뒤에 GeoServer 기동 */
+  /** 레거시: 재시작 파이프라인으로 기동 미룸(현재는 항상 적용 직후 기동) */
   deferredStart?: boolean;
   message: string;
   stopMessage?: string;
@@ -245,29 +246,25 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       runNpmInstallBefore:
         restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false,
       runBuild: restart,
-      startGeoServerAfter: restart,
+      /** 앱 재기동(run.ts/npm)에 GeoServer 기동이 포함됨 — 파이프라인 끝에서 중복 기동하지 않음 */
+      startGeoServerAfter: false,
       source: 'versionManagerClientRelay',
     });
 
-    /** 재시작 시: 앱 종료→빌드→앱 기동 후에 GeoServer 기동(경합 최소화). 재시작 없으면 즉시 기동 */
-    let startResult: { success: boolean; error?: string } = { success: true };
-    if (!restart) {
-      startResult = await startGeoServer();
-      geoStartedOnSuccessPath = true;
-    }
+    /** 적용 직후 GeoServer 기동. 재시작 파이프라인 끝에서는 중복 기동하지 않음(앱 재기동 경로에 포함) */
+    const startResult = await startGeoServer();
+    geoStartedOnSuccessPath = true;
 
     const stopPart = stopResult.success
       ? '중지 성공'
       : `중지 실패(잠금 가능·대기 후 계속): ${stopResult.error ?? 'unknown'}`;
-    const startPart = restart
-      ? '빌드·앱 재기동 후 기동 예정'
-      : startResult.success
-        ? '기동 성공'
-        : `기동 실패: ${startResult.error ?? 'unknown'}`;
+    const startPart = startResult.success
+      ? '기동 성공'
+      : `기동 실패: ${startResult.error ?? 'unknown'}`;
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
-      started: !restart && startResult.success,
-      deferredStart: restart,
+      started: startResult.success,
+      deferredStart: false,
       message: `${stopPart} -> ${startPart}`,
       stopMessage: stopPart,
       startMessage: startPart,
@@ -288,7 +285,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const restartResult = scheduleRestart(restart ? restartMode : 'none', {
       runNpmInstallBefore,
       runBuild: restart,
-      startGeoServerAfter: restart,
+      startGeoServerAfter: false,
     });
 
     return {
@@ -429,7 +426,20 @@ async function copyRecursive(params: {
 
 async function writeRestartSignal(signalFile: string, payload: Record<string, unknown>): Promise<void> {
   await fs.mkdir(path.dirname(signalFile), { recursive: true });
-  await fs.writeFile(signalFile, JSON.stringify(payload, null, 2), 'utf-8');
+  let existing: Record<string, unknown> = {};
+  try {
+    if (fsSync.existsSync(signalFile)) {
+      existing = JSON.parse(fsSync.readFileSync(signalFile, 'utf8')) as Record<string, unknown>;
+    }
+  } catch {
+    existing = {};
+  }
+  const merged = {
+    ...existing,
+    ...payload,
+    ...pickBootForSignalMerge(existing),
+  };
+  await fs.writeFile(signalFile, JSON.stringify(merged, null, 2), 'utf-8');
 }
 
 const NPM_INSTALL_CMD = 'npm install --no-audit --no-fund';
@@ -517,17 +527,24 @@ function buildPostApplyPipelinePsLines(options: {
   }
   if (options.startGeoServerAfter) {
     lines.push(
-      '$geoBat = Join-Path (Get-Location) "geoserver_modules\\scripts\\start-geoserver.bat"',
+      // forward slash: PS Join-Path 이중 백슬래시로 \\ 경로 오류 나는 것 방지
+      "$geoBat = Join-Path (Get-Location) 'geoserver_modules/scripts/start-geoserver.bat'",
       'if (Test-Path -LiteralPath $geoBat) {',
       '  Write-Host "[restart] starting GeoServer: $geoBat"',
-      '  cmd.exe /c "`"$geoBat`""',
-      '  Write-Host "[restart] GeoServer start script exit=$LASTEXITCODE"',
+      // cmd /c ""path"" 는 Windows에서 '\\' 경로 못찾음 팝업을 낼 수 있음
+      '  $geoCode = (Start-Process -FilePath $geoBat -WorkingDirectory (Split-Path -Parent $geoBat) -Wait -PassThru -NoNewWindow).ExitCode',
+      '  Write-Host "[restart] GeoServer start script exit=$geoCode"',
       '} else {',
       '  Write-Host "[restart] WARN: GeoServer start script missing: $geoBat"',
       '}'
     );
   }
   return lines;
+}
+
+/** PowerShell 단일 인용 문자열용 경로 이스케이프 */
+function psSingleQuoted(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 /**
@@ -560,13 +577,17 @@ function spawnDelayedRestartCommand(
       runtimeDir,
       sameConsole ? 'restart-same-console.ps1' : 'restart-launch.ps1'
     );
+    // cmd -File 인자·팝업 이슈 완화 (공백 없는 경로도 / 권장)
+    const launcherPathForCmd = launcherPath.replace(/\\/g, '/');
     const lines: string[] = [
       '$ErrorActionPreference = "Continue"',
+      `Set-Location -LiteralPath ${psSingleQuoted(cwd)}`,
       `$port = ${port}`,
       `$delaySec = ${delaySec}`,
       sameConsole
         ? 'Write-Host "[restart] same-console launcher started"'
         : 'Write-Host "[restart] child console started"',
+      `Write-Host "[restart] cwd=$(Get-Location)"`,
       'Write-Host "[restart] target port=$port (must match previous process)"',
       'Write-Host "[restart] initial delay $delaySec s..."',
       'Start-Sleep -Seconds $delaySec',
@@ -597,9 +618,10 @@ function spawnDelayedRestartCommand(
     console.log(
       `[restart] child will wait for port ${port} free then pipeline(build=${runBuild}, geo=${startGeoServerAfter}) then run${sameConsole ? ' (same console)' : ''}: ${restartCommand}`
     );
+    // sameConsole: start /b "" (빈 제목) → Windows «'\\' 경로를 찾을 수 없음» 팝업 유발
     const startCmd = sameConsole
-      ? `start /b "" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPath}"`
-      : `start "ggnr-restart" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPath}"`;
+      ? `start /b powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPathForCmd}"`
+      : `start "ggnr-restart" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPathForCmd}"`;
     spawn('cmd.exe', ['/c', startCmd], {
       cwd,
       detached: true,
@@ -642,6 +664,10 @@ function spawnDelayedRestartCommand(
   }).unref();
 }
 
+function hasRunSupervisor(): boolean {
+  return process.env.GGNR_RUN_SUPERVISOR === '1';
+}
+
 function scheduleRestart(
   mode: RestartMode,
   options?: {
@@ -679,14 +705,14 @@ function scheduleRestart(
     };
   }
 
-  /** 새 창에서 명령 실행 + 기존 콘솔 종료 */
+  /** 새 창에서 명령 실행 + 기존 콘솔 종료 — 빌드는 새 창 런처가 담당 */
   if (needsSpawnedRestartCommand(mode)) {
     if (!commandRestart) {
       throw new Error(RESTART_COMMAND_MISSING_MSG);
     }
     const exitDelayMs = 2000;
     console.log(
-      `[restart] mode=command port=${port} — spawn child, exit in ${exitDelayMs}ms, pipeline: ${pipelineHint}`
+      `[restart] mode=command port=${port} — spawn child console for pipeline, exit in ${exitDelayMs}ms: ${pipelineHint}`
     );
     spawnDelayedRestartCommand(commandRestart, process.cwd(), safeDelay, {
       runNpmInstallBefore,
@@ -701,18 +727,37 @@ function scheduleRestart(
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `재시작 예약: 앱 종료 후 ${pipelineHint} (${commandRestart})`,
+      message: `재시작 예약: 앱 종료 후 새 창에서 ${pipelineHint} (${commandRestart})`,
     };
   }
 
-  /** start /b: 같은 콘솔에서 앱 종료 후 파이프라인·재기동 */
+  /**
+   * start/b: Next만 종료. npm run build는 살아 있는 기동 런처(run.ts)가 수행.
+   * (예전처럼 Next 종료 직후 외부 PS에만 맡기면 빌드 주체가 사라질 수 있음)
+   */
   if (mode === 'startB') {
-    if (!startBRestart) {
+    if (!isRestartCommandConfigured()) {
       throw new Error(START_B_MISSING_MSG);
     }
     const exitDelayMs = 2000;
+    if (hasRunSupervisor()) {
+      console.log(
+        `[restart] mode=startB port=${port} — Next exit in ${exitDelayMs}ms; Node supervisor runs: ${pipelineHint}`
+      );
+      setTimeout(() => {
+        console.log(
+          `[restart] process.exit(0) — Next releasing port ${port}; Node supervisor continues build`
+        );
+        process.exit(0);
+      }, exitDelayMs).unref();
+      return {
+        scheduled: true,
+        commandConfigured: true,
+        message: `start/b 재시작 예약: 앱(Next) 종료 후 기동 런처가 ${pipelineHint}`,
+      };
+    }
     console.log(
-      `[restart] mode=startB port=${port} — same console start /b, exit in ${exitDelayMs}ms, pipeline: ${pipelineHint}`
+      `[restart] mode=startB port=${port} — no run supervisor; fallback same-console PS, exit in ${exitDelayMs}ms, pipeline: ${pipelineHint}`
     );
     spawnDelayedRestartCommand(startBRestart, process.cwd(), safeDelay, {
       runNpmInstallBefore,
@@ -727,7 +772,7 @@ function scheduleRestart(
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `start/b 재시작 예약: 앱 종료 후 ${pipelineHint} (${startBRestart})`,
+      message: `start/b 재시작 예약(런처 없음·외부 스크립트): 앱 종료 후 ${pipelineHint} (${startBRestart})`,
     };
   }
 
@@ -743,6 +788,24 @@ function scheduleRestart(
       scheduled: true,
       commandConfigured: true,
       message: `Node 런처 재시작 요청: Node 유지, Next 종료 후 ${pipelineHint} (포트 ${port})`,
+    };
+  }
+
+  /** exit: 기동 런처가 있으면 Next 종료 후 빌드. 없으면 restart-watch 등 외부 감시기에 의존 */
+  if (hasRunSupervisor()) {
+    console.log(
+      `[restart] mode=exit port=${port} — Next exit in ${safeDelay}ms; Node supervisor runs: ${pipelineHint}`
+    );
+    setTimeout(() => {
+      console.log(
+        `[restart] process.exit(0) — Next releasing port ${port}; Node supervisor continues build`
+      );
+      process.exit(0);
+    }, safeDelay).unref();
+    return {
+      scheduled: true,
+      commandConfigured: isRestartCommandConfigured(),
+      message: `프로세스 종료 재시작 예약: 앱(Next) 종료 후 기동 런처가 ${pipelineHint}`,
     };
   }
 

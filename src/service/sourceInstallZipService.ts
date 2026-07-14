@@ -128,10 +128,15 @@ async function buildInstallZipFile(params: {
     });
     archive.pipe(output);
     for (const f of files) {
-      archive.file(f.absPath, {
-        name: `${bundleRoot}/${f.relPath}`,
-        store: archiverLevelForPath(f.relPath) === 0,
-      });
+      const level = archiverLevelForPath(f.relPath);
+      // @types/archiver EntryData에 store/zlib이 빠져 있어 런타임 옵션만 전달
+      archive.file(
+        f.absPath,
+        {
+          name: `${bundleRoot}/${f.relPath}`,
+          ...(level === 0 ? { store: true } : { zlib: { level } }),
+        } as never
+      );
     }
     const metaText = [
       `date=${date}`,

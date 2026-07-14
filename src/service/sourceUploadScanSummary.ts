@@ -88,3 +88,22 @@ export function formatScanDetail(summary: SourceScanSummary, currentPath?: strin
   }
   return parts.join(' · ');
 }
+
+/** 단계 호버·로그용 — 실제 제외 경로 목록 (길면 자름) */
+export function formatSkippedPathsTitle(
+  paths: string[] | undefined,
+  options?: { truncated?: boolean; totalSkipped?: number; maxLines?: number }
+): string | undefined {
+  if (!paths?.length) {
+    const n = options?.totalSkipped ?? 0;
+    return n > 0 ? `제외 ${n}건 (경로 목록 없음)` : undefined;
+  }
+  const maxLines = options?.maxLines ?? 40;
+  const head = paths.slice(0, maxLines);
+  const lines = [...head];
+  const remain = Math.max(0, (options?.totalSkipped ?? paths.length) - head.length);
+  if (remain > 0 || options?.truncated) {
+    lines.push(`…외 ${remain > 0 ? remain : '다수'}건`);
+  }
+  return lines.join('\n');
+}

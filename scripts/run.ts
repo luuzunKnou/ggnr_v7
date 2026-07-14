@@ -149,7 +149,7 @@ function readRestartSignal(): RestartSignal | null {
   }
 }
 
-function markLauncherConsumed(signal: RestartSignal): void {
+function markRestartConsumed(signal: RestartSignal): void {
   try {
     fs.mkdirSync(path.dirname(SIGNAL_PATH), { recursive: true });
     fs.writeFileSync(
@@ -158,8 +158,12 @@ function markLauncherConsumed(signal: RestartSignal): void {
       'utf8'
     );
   } catch (e) {
-    console.warn('[run] failed to mark launcher signal consumed:', e instanceof Error ? e.message : e);
+    console.warn('[run] failed to mark restart signal consumed:', e instanceof Error ? e.message : e);
   }
+}
+
+function isSupervisedRestartMode(mode: string | undefined): boolean {
+  return mode === 'launcher' || mode === 'startB' || mode === 'exit';
 }
 
 function runNpmInstallSync(): void {
@@ -181,18 +185,6 @@ function runNpmBuildSync(): void {
     env: process.env,
   });
   console.log('[run] npm run build OK');
-}
-
-async function startGeoServerAfterBuild(): Promise<void> {
-  console.log('[run] starting GeoServer after build...');
-  try {
-    const { startGeoServer } = await import('../src/service/geoserverProcessService');
-    const r = await startGeoServer();
-    if (r.success) console.log('[run] GeoServer start OK');
-    else console.warn('[run] GeoServer start failed:', r.error ?? 'unknown');
-  } catch (e) {
-    console.warn('[run] GeoServer start error:', e instanceof Error ? e.message : e);
-  }
 }
 
 type NextCmd = 'dev' | 'start';
@@ -227,6 +219,19 @@ function spawnNext(cmd: NextCmd): void {
       console.log(`[run] Next exited (code=${code ?? 0}) for relaunch — Node launcher stays up`);
       return;
     }
+    /** start/b·exit: Next가 process.exit 해도 Node(run)는 남아 npm run build → 앱 재기동 */
+    const signal = readRestartSignal();
+    if (
+      signal?.restartRequested === true &&
+      signal.launcherConsumed !== true &&
+      isSupervisedRestartMode(signal.restartMode)
+    ) {
+      console.log(
+        `[run] Next exited (code=${code ?? 0}) with supervised restartMode=${signal.restartMode} — running build pipeline`
+      );
+      void relaunchNextOnly(signal, cmd);
+      return;
+    }
     process.exit(code ?? 0);
   });
 }
@@ -235,12 +240,13 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
   if (relaunchInFlight) return;
   relaunchInFlight = true;
   const port = getAppListenPort();
-  console.log(`[run] launcher: relaunch Next only (Node stays). port=${port}`);
-  markLauncherConsumed(signal);
+  const mode = signal.restartMode ?? 'launcher';
+  console.log(`[run] supervised relaunch (mode=${mode}). Node stays; Next stopped. port=${port}`);
+  markRestartConsumed(signal);
 
   expectNextExitForRelaunch = true;
   if (nextProc && !nextProc.killed) {
-    console.log('[run] launcher: stopping Next child...');
+    console.log('[run] supervised: stopping Next child...');
     try {
       nextProc.kill('SIGTERM');
     } catch {
@@ -285,17 +291,9 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       console.error('[run] npm run build failed:', e instanceof Error ? e.message : e);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
-      // 빌드 실패해도 GeoServer·앱 기동은 시도 (운영 공백 최소화)
-      if (signal.startGeoServerAfter !== false) {
-        await startGeoServerAfterBuild();
-      }
       spawnNext(cmd);
       return;
     }
-  }
-
-  if (signal.startGeoServerAfter !== false) {
-    await startGeoServerAfterBuild();
   }
 
   expectNextExitForRelaunch = false;
@@ -307,7 +305,7 @@ function startLauncherPoll(cmd: NextCmd): void {
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   console.log(
-    `[run] Node launcher watch enabled — mode=launcher: stop Next → build → GeoServer → Next (delay ${safeDelay}ms)`
+    `[run] supervised restart watch — launcher: poll+stop Next; startB/exit: Next exit → build → Next (delay ${safeDelay}ms)`
   );
 
   setInterval(() => {
@@ -316,6 +314,7 @@ function startLauncherPoll(cmd: NextCmd): void {
     if (!signal) return;
     if (signal.launcherConsumed === true) return;
     if (signal.restartRequested !== true) return;
+    /** launcher만 폴링으로 Next를 먼저 죽임. startB/exit는 Next process.exit 후 close에서 처리 */
     if (signal.restartMode !== 'launcher') return;
 
     const atMs = signal.at ? Date.parse(signal.at) : NaN;
@@ -336,7 +335,17 @@ async function main(): Promise<void> {
   }
   process.env.GGNR_PROJECT = PROJECT;
   process.env.GGNR_ENV = TYPE;
-  console.log(`[run] Loaded env: project=${PROJECT}, type=${TYPE}`);
+  process.env.GGNR_RUN_SCRIPT = COMMAND;
+  /** Next 프로세스에 전달: 재시작 시 빌드·재기동을 이 Node가 맡음 */
+  process.env.GGNR_RUN_SUPERVISOR = '1';
+  try {
+    const { writeGgnrBootCommand } = await import('../src/lib/ggnrBootCommand');
+    const boot = writeGgnrBootCommand(COMMAND as 'dev' | 'start', PROJECT, TYPE);
+    console.log(`[run] Boot command recorded: ${boot.command}`);
+  } catch (e) {
+    console.warn('[run] Boot command record skipped:', e instanceof Error ? e.message : e);
+  }
+  console.log(`[run] Loaded env: project=${PROJECT}, type=${TYPE}, script=${COMMAND}`);
 
   // 슈퍼유저(postgres/postgres)로 DB·사용자 없으면 생성
   await ensureDbUser(PROJECT, TYPE);

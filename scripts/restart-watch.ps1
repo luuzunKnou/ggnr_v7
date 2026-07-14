@@ -7,10 +7,12 @@
 # Do not use this script for command mode itself - it is what command mode re-launches.
 #
 # Always runs npm from repo root (parent of scripts/), regardless of cwd.
+# App start command reuse:
+#   -NpmScript / GGNR_RUN_SCRIPT / restart-request.json .boot → else "dev"
 #
 # Examples:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File D:\ggnr_v7\scripts\restart-watch.ps1 -Project build_yy -Type dev
-#   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\restart-watch.ps1 -Project build_yy -Type demo
+#   powershell ...\restart-watch.ps1 -Project build_yy -Type dev
+#   powershell ...\restart-watch.ps1 -Project build_yy -Type prod -NpmScript start
 #
 # Optional root override:
 #   ...\restart-watch.ps1 -Project build_yy -Type prod -RepoRoot D:\ggnr_v7
@@ -21,6 +23,7 @@ param(
   [Parameter(Mandatory = $true)][string]$Project,
   [Parameter(Mandatory = $true)][string]$Type,
   [string]$RepoRoot = "",
+  [string]$NpmScript = "",
   [int]$DelaySec = 2
 )
 
@@ -39,7 +42,34 @@ if (-not (Test-Path -LiteralPath $PackageJson)) {
 $RuntimeDir = Join-Path $RepoRoot ".cursor-runtime"
 $SignalPath = Join-Path $RuntimeDir "restart-request.json"
 $LogPath = Join-Path $RuntimeDir "restart-watch.log"
-$NpmCommand = "npm run dev -- $Project $Type"
+
+# Prefer: -NpmScript → GGNR_RUN_SCRIPT → restart-request.json .boot → "dev"
+if (-not $NpmScript -or -not $NpmScript.Trim()) {
+  if ($env:GGNR_RUN_SCRIPT -and ($env:GGNR_RUN_SCRIPT.Trim() -eq "dev" -or $env:GGNR_RUN_SCRIPT.Trim() -eq "start")) {
+    $NpmScript = $env:GGNR_RUN_SCRIPT.Trim()
+  } elseif (Test-Path -LiteralPath $SignalPath) {
+    try {
+      $bootSignal = Get-Content -LiteralPath $SignalPath -Raw -Encoding utf8 | ConvertFrom-Json
+      $bootObj = $bootSignal.boot
+      if ($bootObj -and ($bootObj.npmScript -eq "dev" -or $bootObj.npmScript -eq "start")) {
+        $NpmScript = [string]$bootObj.npmScript
+      } elseif ($bootSignal.npmScript -eq "dev" -or $bootSignal.npmScript -eq "start") {
+        $NpmScript = [string]$bootSignal.npmScript
+      }
+    } catch {
+    }
+  }
+}
+if (-not $NpmScript -or -not $NpmScript.Trim()) {
+  $NpmScript = "dev"
+}
+$NpmScript = $NpmScript.Trim()
+if ($NpmScript -ne "dev" -and $NpmScript -ne "start") {
+  Write-Host "ERROR: NpmScript must be 'dev' or 'start' (got: $NpmScript)"
+  exit 1
+}
+
+$NpmCommand = "npm run $NpmScript -- $Project $Type"
 $AppPort = if ($env:PORT -and $env:PORT.Trim()) { [int]$env:PORT } else { 3000 }
 $RunCount = 0
 $LastRestartAt = $null
@@ -156,7 +186,7 @@ while ($true) {
   Write-WatchLog "Starting app (expected listen port=$AppPort)"
   Write-WatchLog "Waiting for npm process... (exit will print Exit detected below)"
 
-  npm run dev -- $Project $Type
+  npm run $NpmScript -- $Project $Type
   $code = $LASTEXITCODE
   $endedAt = Get-Date
   $aliveSec = [math]::Round(($endedAt - $startedAt).TotalSeconds, 1)
@@ -220,11 +250,11 @@ while ($true) {
       Write-WatchLog "npm run build OK" "OK"
     }
     if ($startGeo) {
-      $geoBat = Join-Path $RepoRoot "geoserver_modules\scripts\start-geoserver.bat"
+      $geoBat = Join-Path $RepoRoot "geoserver_modules/scripts/start-geoserver.bat"
       if (Test-Path -LiteralPath $geoBat) {
         Write-WatchLog "Starting GeoServer: $geoBat"
-        cmd.exe /c "`"$geoBat`""
-        Write-WatchLog "GeoServer start script exit=$LASTEXITCODE"
+        $geoCode = (Start-Process -FilePath $geoBat -WorkingDirectory (Split-Path -Parent $geoBat) -Wait -PassThru -NoNewWindow).ExitCode
+        Write-WatchLog "GeoServer start script exit=$geoCode"
       } else {
         Write-WatchLog "WARN: GeoServer start script missing: $geoBat" "WARN"
       }

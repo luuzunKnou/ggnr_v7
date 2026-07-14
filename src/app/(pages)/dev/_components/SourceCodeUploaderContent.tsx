@@ -25,7 +25,7 @@ type UploadRow = {
 
 type StageId = 'preflight' | 'scan' | 'dbCompare' | 'zip' | 'init' | 'chunk' | 'complete' | 'npmInstall' | 'finalize';
 type StageState = 'pending' | 'active' | 'done' | 'error';
-type StageItem = { id: StageId; label: string; state: StageState; detail?: string };
+type StageItem = { id: StageId; label: string; state: StageState; detail?: string; title?: string };
 
 type StageReport = {
   id: string;
@@ -49,6 +49,8 @@ type UploadProgressPayload = {
   scanIncluded?: number;
   scanSkipped?: number;
   scanPath?: string;
+  scanSkippedPaths?: string[];
+  scanSkippedTruncated?: boolean;
   zipProcessed?: number;
   zipTotal?: number;
   scanDbDiffCount?: number;
@@ -190,6 +192,22 @@ function stageDetailForProgress(id: StageId, p: UploadProgressPayload): string |
   return undefined;
 }
 
+function scanSkippedTitle(p: UploadProgressPayload): string | undefined {
+  const paths = p.scanSkippedPaths;
+  if (!paths?.length) {
+    const n = p.scanSkipped ?? 0;
+    return n > 0 ? `제외 ${n}건 (경로 수집 중…)` : undefined;
+  }
+  const maxLines = 40;
+  const head = paths.slice(0, maxLines);
+  const lines = [...head];
+  const remain = Math.max(0, (p.scanSkipped ?? paths.length) - head.length);
+  if (remain > 0 || p.scanSkippedTruncated) {
+    lines.push(`…외 ${remain > 0 ? remain : '다수'}건`);
+  }
+  return lines.join('\n');
+}
+
 function buildStagesFromProgress(
   p: UploadProgressPayload,
   preflightDetail?: string,
@@ -205,28 +223,34 @@ function buildStagesFromProgress(
 
   return baseStages.map((base) => {
     const idx = stageOrder.indexOf(base.id);
+    const title = base.id === 'scan' ? scanSkippedTitle(p) : undefined;
 
     if (p.phase === 'error' && base.id === activeStage) {
-      return { ...base, state: 'error' as StageState, detail: p.error ?? p.message };
+      return { ...base, state: 'error' as StageState, detail: p.error ?? p.message, title };
     }
     if (p.phase === 'done') {
       const detail = base.id === 'finalize' ? p.message : stageDetailForProgress(base.id, p);
-      return { ...base, state: 'done' as StageState, detail: detail ?? base.detail };
+      return { ...base, state: 'done' as StageState, detail: detail ?? base.detail, title };
     }
     if (base.id === 'preflight' && idx < activeIdx) {
-      return { ...base, state: 'done' as StageState, detail: preflightDetail ?? base.detail };
+      return { ...base, state: 'done' as StageState, detail: preflightDetail ?? base.detail, title };
     }
     if (idx < activeIdx) {
-      return { ...base, state: 'done' as StageState, detail: stageDetailForProgress(base.id, p) ?? base.detail };
+      return {
+        ...base,
+        state: 'done' as StageState,
+        detail: stageDetailForProgress(base.id, p) ?? base.detail,
+        title,
+      };
     }
     if (idx === activeIdx) {
       const detail =
         base.id === activeStage
           ? p.message || stageDetailForProgress(base.id, p)
           : stageDetailForProgress(base.id, p);
-      return { ...base, state: 'active' as StageState, detail: detail ?? p.message };
+      return { ...base, state: 'active' as StageState, detail: detail ?? p.message, title };
     }
-    return { ...base, state: 'pending' as StageState };
+    return { ...base, state: 'pending' as StageState, title };
   });
 }
 
@@ -257,6 +281,7 @@ export function SourceCodeUploaderContent() {
   const preflightDetailRef = useRef('');
   const lastChunkLoggedRef = useRef(0);
   const lastScanLoggedRef = useRef(0);
+  const lastScanPathsLoggedRef = useRef(-1);
   const lastPhaseLoggedRef = useRef('');
   const liveLogScrollRef = useRef<HTMLDivElement>(null);
   const uploadHistoryRecordedRef = useRef(false);
@@ -370,6 +395,17 @@ export function SourceCodeUploaderContent() {
         lastScanLoggedRef.current = total;
         appendLog(`스캔 포함 ${p.scanIncluded} / 제외 ${p.scanSkipped ?? 0}`);
       }
+      if (p.scanPath === '(스캔 완료)' && p.scanSkippedPaths?.length && lastScanPathsLoggedRef.current !== p.scanSkipped) {
+        lastScanPathsLoggedRef.current = p.scanSkipped ?? 0;
+        const sample = p.scanSkippedPaths.slice(0, 20);
+        appendLog(`제외 경로 예시 (${sample.length}/${p.scanSkipped ?? sample.length}건):`);
+        for (const rel of sample) {
+          appendLog(`  - ${rel}`);
+        }
+        if ((p.scanSkipped ?? 0) > sample.length || p.scanSkippedTruncated) {
+          appendLog(`  …외 ${(p.scanSkipped ?? 0) - sample.length}건 (단계 «제외»에 마우스 올리면 더 보기)`);
+        }
+      }
     } else if (p.phase !== lastPhaseLoggedRef.current && p.phase !== 'idle') {
       lastPhaseLoggedRef.current = p.phase;
       appendLog(p.message);
@@ -392,6 +428,7 @@ export function SourceCodeUploaderContent() {
     stopPoll();
     lastChunkLoggedRef.current = 0;
     lastScanLoggedRef.current = 0;
+    lastScanPathsLoggedRef.current = -1;
     lastPhaseLoggedRef.current = '';
 
     const tick = () => {
@@ -426,11 +463,19 @@ export function SourceCodeUploaderContent() {
     return by;
   }, [rows]);
 
-  const patchStages = (patch: Partial<Record<StageId, Pick<StageItem, 'state' | 'detail'>>>) => {
+  const patchStages = (
+    patch: Partial<Record<StageId, Partial<Pick<StageItem, 'state' | 'detail' | 'title'>>>>
+  ) => {
     setStages((prev) =>
       prev.map((s) => {
-        const p = patch[s.id];
-        return p ? { ...s, state: p.state, detail: p.detail ?? s.detail } : s;
+        const p = patch[s.id as StageId];
+        if (!p) return s;
+        return {
+          ...s,
+          state: p.state ?? s.state,
+          detail: p.detail ?? s.detail,
+          title: p.title ?? s.title,
+        };
       })
     );
   };
@@ -624,6 +669,9 @@ export function SourceCodeUploaderContent() {
       setLastSavedRoot(
         [json.remoteBase, json.zipName].filter(Boolean).join(' / ') || preJson.remoteBase || null
       );
+      const skippedItems = Array.isArray(json.items)
+        ? (json.items as UploadRow[]).filter((x) => x.status === 'skipped')
+        : [];
       setRows(Array.isArray(json.items) ? (json.items as UploadRow[]) : []);
 
       const remoteResult = json.remoteResult as
@@ -636,8 +684,22 @@ export function SourceCodeUploaderContent() {
             )}KB)`
           : undefined;
 
+      const scanSkippedTitle =
+        skippedItems.length > 0
+          ? skippedItems
+              .slice(0, 40)
+              .map((x) => x.file)
+              .concat(skippedItems.length > 40 ? [`…외 ${skippedItems.length - 40}건`] : [])
+              .join('\n')
+          : undefined;
+
+      const scanSummary = json.scanSummary as { included?: number; skipped?: number } | undefined;
       patchStages({
-        scan: { state: 'done' },
+        scan: {
+          state: 'done',
+          detail: `포함 ${scanSummary?.included ?? '?'}, 제외 ${scanSummary?.skipped ?? skippedItems.length}`,
+          title: scanSkippedTitle,
+        },
         dbCompare: { state: 'done' },
         zip: { state: 'done', detail: typeof json.zipName === 'string' ? json.zipName : undefined },
         init: { state: 'done' },
@@ -935,8 +997,8 @@ export function SourceCodeUploaderContent() {
               · {s.label}
             </span>
             <span
-              className={`ml-3 max-w-[60%] truncate ${s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
-              title={s.detail}
+              className={`ml-3 max-w-[60%] truncate ${s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'} ${(s.title ?? s.detail) ? 'cursor-help' : ''}`}
+              title={s.title ?? s.detail}
             >
               {s.detail ?? ''}
             </span>
@@ -968,7 +1030,23 @@ export function SourceCodeUploaderContent() {
             <span className="mr-3">data {stats.data}</span>
             <span className="mr-3 text-green-700 dark:text-green-400">성공 {stats.ok}</span>
             <span className="mr-3 text-red-700 dark:text-red-400">실패 {stats.fail}</span>
-            <span className="text-muted-foreground">스킵 {stats.skipped}</span>
+            <span
+              className={`text-muted-foreground ${stats.skipped > 0 ? 'cursor-help' : ''}`}
+              title={
+                stats.skipped > 0
+                  ? rows
+                      .filter((r) => r.status === 'skipped')
+                      .slice(0, 40)
+                      .map((r) => r.file)
+                      .concat(
+                        stats.skipped > 40 ? [`…외 ${stats.skipped - 40}건`] : []
+                      )
+                      .join('\n') || `제외 ${stats.skipped}건`
+                  : undefined
+              }
+            >
+              스킵 {stats.skipped}
+            </span>
           </div>
 
           {!uploading && progressText !== '대기 중' && (
@@ -1014,7 +1092,11 @@ export function SourceCodeUploaderContent() {
                         {r.status === 'ok'
                           ? '완료'
                           : r.status === 'skipped'
-                            ? '제외'
+                            ? (
+                                <span className="cursor-help" title={r.file}>
+                                  제외
+                                </span>
+                              )
                             : r.status === 'fail'
                               ? '실패'
                               : '대기'}

@@ -5,6 +5,8 @@ export type StageItem = {
   label: string;
   state: StageState;
   detail?: string;
+  /** 호버용 — 없으면 detail 사용 */
+  title?: string;
 };
 
 function stateLabel(state: StageState): string {
@@ -31,8 +33,8 @@ export function ProgressStagesList({ stages }: { stages: StageItem[] }) {
             {stateLabel(s.state)} · {s.label}
           </span>
           <span
-            className={`ml-3 max-w-[60%] truncate ${s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
-            title={s.detail}
+            className={`ml-3 max-w-[60%] truncate ${s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'} ${(s.title ?? s.detail) ? 'cursor-help' : ''}`}
+            title={s.title ?? s.detail}
           >
             {s.detail ?? ''}
           </span>

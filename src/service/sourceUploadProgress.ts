@@ -27,6 +27,9 @@ export type SourceUploadProgress = {
   scanIncluded?: number;
   scanSkipped?: number;
   scanPath?: string;
+  /** 실제 제외된 경로(파일·폴더). 상한 초과 시 truncated */
+  scanSkippedPaths?: string[];
+  scanSkippedTruncated?: boolean;
   scanDbSql?: number;
   scanDbReview?: number;
   scanImages?: number;
@@ -162,10 +165,23 @@ export function setScanProgress(
     images?: number;
     packages?: number;
     schemaDbDiffCount?: number;
+    skippedPaths?: string[];
+    skippedTruncated?: boolean;
   }
 ): void {
-  const { included, skipped, currentPath, dirsVisited, dbSql, dbReview, images, packages, schemaDbDiffCount } =
-    params;
+  const {
+    included,
+    skipped,
+    currentPath,
+    dirsVisited,
+    dbSql,
+    dbReview,
+    images,
+    packages,
+    schemaDbDiffCount,
+    skippedPaths,
+    skippedTruncated,
+  } = params;
   const pulse = Math.min(5, Math.floor((included + skipped) / 200));
   const pct = clampPct(5 + pulse);
   const shortPath = currentPath.length > 60 ? `...${currentPath.slice(-57)}` : currentPath;
@@ -174,6 +190,8 @@ export function setScanProgress(
     scanIncluded: included,
     scanSkipped: skipped,
     scanPath: currentPath,
+    scanSkippedPaths: skippedPaths,
+    scanSkippedTruncated: skippedTruncated,
     scanDbSql: dbSql,
     scanDbReview: dbReview,
     scanImages: images,

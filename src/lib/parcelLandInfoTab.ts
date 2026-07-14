@@ -89,7 +89,12 @@ export function mapKrasToParcelLandInfoTab(
   };
 }
 
-export function hasParcelLandInfoTabData(data: ParcelLandInfoTabData): boolean {
+export function hasParcelLandInfoTabData(data: {
+  characteristics: unknown[];
+  landUses: unknown[];
+  prices: unknown[];
+  possessions: unknown[];
+}): boolean {
   return (
     data.characteristics.length > 0 ||
     data.landUses.length > 0 ||

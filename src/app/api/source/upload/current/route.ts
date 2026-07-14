@@ -209,8 +209,35 @@ export async function POST(req: NextRequest) {
     const items: UploadItem[] = [];
     const included: IncludedFile[] = [];
     const scanSummary = createEmptyScanSummary();
+    const skippedPaths: string[] = [];
+    const SKIPPED_PATHS_CAP = 500;
+    let skippedPathsTruncated = false;
     let dirsVisited = 0;
     let scanTicks = 0;
+
+    const rememberSkipped = (rel: string) => {
+      if (skippedPaths.length < SKIPPED_PATHS_CAP) {
+        skippedPaths.push(rel);
+      } else {
+        skippedPathsTruncated = true;
+      }
+    };
+
+    const pushScanProgress = (currentPath: string) => {
+      setScanProgress(progressId, {
+        included: scanSummary.included,
+        skipped: scanSummary.skipped,
+        currentPath,
+        dirsVisited,
+        dbSql: scanSummary.dbSql,
+        dbReview: scanSummary.dbReview,
+        images: scanSummary.images,
+        packages: scanSummary.packages,
+        schemaDbDiffCount: scanSummary.schemaDbDiffCount,
+        skippedPaths: [...skippedPaths],
+        skippedTruncated: skippedPathsTruncated,
+      });
+    };
 
     async function walk(absDir: string): Promise<void> {
       const relDir = toPosixRelative(absDir, workspaceRoot);
@@ -222,7 +249,13 @@ export async function POST(req: NextRequest) {
         const childRel = toPosixRelative(childAbs, workspaceRoot);
         if (!childRel || childRel.startsWith('..')) continue;
         if (entry.isDirectory()) {
-          if (!shouldSkipSourceDir(childRel, mode, includeNodeModules)) {
+          if (shouldSkipSourceDir(childRel, mode, includeNodeModules)) {
+            const dirMark = `${childRel}/`;
+            const category = classifySourcePath(childRel);
+            items.push({ file: dirMark, category, status: 'skipped' });
+            bumpScanSummary(scanSummary, { relPath: dirMark, included: false, category, mode });
+            rememberSkipped(dirMark);
+          } else {
             await walk(childAbs);
           }
           continue;
@@ -232,6 +265,7 @@ export async function POST(req: NextRequest) {
         if (!shouldUploadSourcePath(childRel, mode, includeNodeModules)) {
           items.push({ file: childRel, category, status: 'skipped' });
           bumpScanSummary(scanSummary, { relPath: childRel, included: false, category, mode });
+          rememberSkipped(childRel);
         } else {
           included.push({ absPath: childAbs, relPath: childRel, category });
           bumpScanSummary(scanSummary, { relPath: childRel, included: true, category, mode });
@@ -239,17 +273,7 @@ export async function POST(req: NextRequest) {
 
         scanTicks += 1;
         if (scanTicks % 80 === 0) {
-          setScanProgress(progressId, {
-            included: scanSummary.included,
-            skipped: scanSummary.skipped,
-            currentPath: childRel,
-            dirsVisited,
-            dbSql: scanSummary.dbSql,
-            dbReview: scanSummary.dbReview,
-            images: scanSummary.images,
-            packages: scanSummary.packages,
-            schemaDbDiffCount: scanSummary.schemaDbDiffCount,
-          });
+          pushScanProgress(childRel);
           await new Promise<void>((r) => setImmediate(r));
         }
       }
@@ -261,17 +285,7 @@ export async function POST(req: NextRequest) {
     const dbCompare = await compareSchemaWithConnectedDb();
     scanSummary.schemaDbDiffCount = dbCompare.diffCount;
 
-    setScanProgress(progressId, {
-      included: scanSummary.included,
-      skipped: scanSummary.skipped,
-      currentPath: '(스캔 완료)',
-      dirsVisited,
-      dbSql: scanSummary.dbSql,
-      dbReview: scanSummary.dbReview,
-      images: scanSummary.images,
-      packages: scanSummary.packages,
-      schemaDbDiffCount: scanSummary.schemaDbDiffCount,
-    });
+    pushScanProgress('(스캔 완료)');
 
     localStages.push({
       id: 'scan',
