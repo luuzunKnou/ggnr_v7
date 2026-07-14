@@ -69,7 +69,11 @@ export type ApplyLatestSourceOptions = {
 export type GeoServerApplyStep = {
   stopped: boolean;
   started: boolean;
+  /** true면 앱 종료·빌드·앱 기동 뒤에 GeoServer 기동 */
+  deferredStart?: boolean;
   message: string;
+  stopMessage?: string;
+  startMessage?: string;
 };
 
 export type ApplyLatestSourceResult = {
@@ -240,22 +244,33 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       includeNodeModules,
       runNpmInstallBefore:
         restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false,
+      runBuild: restart,
+      startGeoServerAfter: restart,
       source: 'versionManagerClientRelay',
     });
 
-    const startResult = await startGeoServer();
-    geoStartedOnSuccessPath = true;
+    /** 재시작 시: 앱 종료→빌드→앱 기동 후에 GeoServer 기동(경합 최소화). 재시작 없으면 즉시 기동 */
+    let startResult: { success: boolean; error?: string } = { success: true };
+    if (!restart) {
+      startResult = await startGeoServer();
+      geoStartedOnSuccessPath = true;
+    }
 
     const stopPart = stopResult.success
       ? '중지 성공'
       : `중지 실패(잠금 가능·대기 후 계속): ${stopResult.error ?? 'unknown'}`;
-    const startPart = startResult.success
-      ? '기동 성공'
-      : `기동 실패: ${startResult.error ?? 'unknown'}`;
+    const startPart = restart
+      ? '빌드·앱 재기동 후 기동 예정'
+      : startResult.success
+        ? '기동 성공'
+        : `기동 실패: ${startResult.error ?? 'unknown'}`;
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
-      started: startResult.success,
+      started: !restart && startResult.success,
+      deferredStart: restart,
       message: `${stopPart} -> ${startPart}`,
+      stopMessage: stopPart,
+      startMessage: startPart,
     };
 
     /** 재시작(process.exit) 전에 이력 INSERT — 클라이언트 후기록은 서버 종료로 실패할 수 있음 */
@@ -267,11 +282,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       ip: clientIp?.trim() || undefined,
     });
 
-    /** 개방망: command / start/b / 런처 재기동 전 npm install */
+    /** 개방망: 재기동 파이프라인에서 npm install. 빌드는 재시작 시 항상 */
     const runNpmInstallBefore =
       restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false;
     const restartResult = scheduleRestart(restart ? restartMode : 'none', {
       runNpmInstallBefore,
+      runBuild: restart,
+      startGeoServerAfter: restart,
     });
 
     return {
@@ -474,6 +491,46 @@ export function getAppListenPort(): number {
 }
 
 /**
+ * 앱 종료(포트 해제) 후 공통 후처리: (선택) npm install → build → GeoServer 기동.
+ * PowerShell 런처용 줄 조각.
+ */
+function buildPostApplyPipelinePsLines(options: {
+  runNpmInstallBefore: boolean;
+  runBuild: boolean;
+  startGeoServerAfter: boolean;
+}): string[] {
+  const lines: string[] = [];
+  if (options.runNpmInstallBefore) {
+    lines.push(
+      'Write-Host "[restart] running npm install --no-audit --no-fund"',
+      'npm install --no-audit --no-fund',
+      'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] npm install FAILED exit=$LASTEXITCODE"; exit $LASTEXITCODE }'
+    );
+  }
+  if (options.runBuild) {
+    lines.push(
+      'Write-Host "[restart] running npm run build (app must be stopped)"',
+      'npm run build',
+      'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] npm run build FAILED exit=$LASTEXITCODE"; exit $LASTEXITCODE }',
+      'Write-Host "[restart] npm run build OK"'
+    );
+  }
+  if (options.startGeoServerAfter) {
+    lines.push(
+      '$geoBat = Join-Path (Get-Location) "geoserver_modules\\scripts\\start-geoserver.bat"',
+      'if (Test-Path -LiteralPath $geoBat) {',
+      '  Write-Host "[restart] starting GeoServer: $geoBat"',
+      '  cmd.exe /c "`"$geoBat`""',
+      '  Write-Host "[restart] GeoServer start script exit=$LASTEXITCODE"',
+      '} else {',
+      '  Write-Host "[restart] WARN: GeoServer start script missing: $geoBat"',
+      '}'
+    );
+  }
+  return lines;
+}
+
+/**
  * 부모 종료 후 포트가 비었는지 확인·로그한 뒤 재시작 명령을 실행하는 런처 스크립트 작성·기동.
  * sameConsole=true: 새 창 없이 기존 콘솔에서 백그라운드 기동 (start /b).
  */
@@ -481,13 +538,20 @@ function spawnDelayedRestartCommand(
   restartCommand: string,
   cwd: string,
   delayMs: number,
-  runNpmInstallBefore: boolean,
-  options?: { sameConsole?: boolean }
+  options: {
+    runNpmInstallBefore?: boolean;
+    runBuild?: boolean;
+    startGeoServerAfter?: boolean;
+    sameConsole?: boolean;
+  } = {}
 ): void {
   const delaySec = Math.max(1, Math.ceil(delayMs / 1000));
   const port = getAppListenPort();
   const runtimeDir = path.join(cwd, '.cursor-runtime');
-  const sameConsole = options?.sameConsole === true;
+  const sameConsole = options.sameConsole === true;
+  const runNpmInstallBefore = options.runNpmInstallBefore === true;
+  const runBuild = options.runBuild === true;
+  const startGeoServerAfter = options.startGeoServerAfter === true;
   fsSync.mkdirSync(runtimeDir, { recursive: true });
 
   if (process.platform === 'win32') {
@@ -522,26 +586,17 @@ function spawnDelayedRestartCommand(
       'if (-not $freed) {',
       '  Write-Host "[restart] WARN: port $port still busy after 90s - starting anyway (may bind another port)"',
       '}',
-    ];
-    if (runNpmInstallBefore) {
-      lines.push(
-        'Write-Host "[restart] running npm install --no-audit --no-fund"',
-        'npm install --no-audit --no-fund',
-        'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] npm install FAILED exit=$LASTEXITCODE"; exit $LASTEXITCODE }'
-      );
-    }
-    lines.push(
+      ...buildPostApplyPipelinePsLines({ runNpmInstallBefore, runBuild, startGeoServerAfter }),
       `Write-Host "[restart] exec: ${safeCmd}"`,
       'Write-Host "[restart] starting app on expected port=$port"',
       safeCmd,
-      'Write-Host "[restart] command finished exit=$LASTEXITCODE"'
-    );
+      'Write-Host "[restart] command finished exit=$LASTEXITCODE"',
+    ];
     fsSync.writeFileSync(launcherPath, lines.join('\r\n') + '\r\n', 'utf8');
     console.log(`[restart] wrote launcher ${launcherPath}`);
     console.log(
-      `[restart] child will wait for port ${port} free then run${sameConsole ? ' (same console)' : ''}: ${restartCommand}`
+      `[restart] child will wait for port ${port} free then pipeline(build=${runBuild}, geo=${startGeoServerAfter}) then run${sameConsole ? ' (same console)' : ''}: ${restartCommand}`
     );
-    // sameConsole: start /b + 빈 title → 새 창 없이 현재 콘솔에서 이어서 실행
     const startCmd = sameConsole
       ? `start /b "" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPath}"`
       : `start "ggnr-restart" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPath}"`;
@@ -556,9 +611,16 @@ function spawnDelayedRestartCommand(
   }
 
   const delaySecFloat = Math.max(0.5, delayMs / 1000);
-  const afterWait = runNpmInstallBefore
-    ? `${NPM_INSTALL_CMD} && ${restartCommand}`
-    : restartCommand;
+  const steps: string[] = [];
+  if (runNpmInstallBefore) steps.push(NPM_INSTALL_CMD);
+  if (runBuild) steps.push('npm run build');
+  if (startGeoServerAfter) {
+    steps.push(
+      'if [ -f geoserver_modules/scripts/start-geoserver.bat ]; then cmd.exe /c geoserver_modules/scripts/start-geoserver.bat || true; fi'
+    );
+  }
+  steps.push(restartCommand);
+  const afterWait = steps.join(' && ');
   const sh = [
     `echo "[restart] child started target port=${port}"`,
     `sleep ${delaySecFloat}`,
@@ -582,7 +644,11 @@ function spawnDelayedRestartCommand(
 
 function scheduleRestart(
   mode: RestartMode,
-  options?: { runNpmInstallBefore?: boolean }
+  options?: {
+    runNpmInstallBefore?: boolean;
+    runBuild?: boolean;
+    startGeoServerAfter?: boolean;
+  }
 ): {
   scheduled: boolean;
   commandConfigured: boolean;
@@ -591,9 +657,19 @@ function scheduleRestart(
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   const runNpmInstallBefore = options?.runNpmInstallBefore === true;
+  const runBuild = options?.runBuild === true;
+  const startGeoServerAfter = options?.startGeoServerAfter === true;
   const port = getAppListenPort();
   const commandRestart = resolveRestartCommand('command');
   const startBRestart = resolveRestartCommand('startB');
+  const pipelineHint = [
+    runNpmInstallBefore ? 'npm install' : null,
+    runBuild ? 'npm run build' : null,
+    startGeoServerAfter ? 'GeoServer 기동' : null,
+    '앱 기동',
+  ]
+    .filter(Boolean)
+    .join(' → ');
 
   if (mode === 'none') {
     return {
@@ -610,63 +686,68 @@ function scheduleRestart(
     }
     const exitDelayMs = 2000;
     console.log(
-      `[restart] mode=command port=${port} — spawn child, exit in ${exitDelayMs}ms, child waits until port free`
+      `[restart] mode=command port=${port} — spawn child, exit in ${exitDelayMs}ms, pipeline: ${pipelineHint}`
     );
-    spawnDelayedRestartCommand(commandRestart, process.cwd(), safeDelay, runNpmInstallBefore);
+    spawnDelayedRestartCommand(commandRestart, process.cwd(), safeDelay, {
+      runNpmInstallBefore,
+      runBuild,
+      startGeoServerAfter,
+    });
     scheduleClosePreviousConsoleWindow(exitDelayMs);
     setTimeout(() => {
       console.log(`[restart] process.exit(0) — releasing port ${port}`);
       process.exit(0);
     }, exitDelayMs).unref();
-    const npmStep = runNpmInstallBefore ? ' → npm install' : '';
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `재시작 예약: 포트 ${port} 해제 후${npmStep} 새 창에서 동일 포트로 실행 (${commandRestart})`,
+      message: `재시작 예약: 앱 종료 후 ${pipelineHint} (${commandRestart})`,
     };
   }
 
-  /** start /b: 같은 콘솔에서 Node 포함 전체 재기동 */
+  /** start /b: 같은 콘솔에서 앱 종료 후 파이프라인·재기동 */
   if (mode === 'startB') {
     if (!startBRestart) {
       throw new Error(START_B_MISSING_MSG);
     }
     const exitDelayMs = 2000;
     console.log(
-      `[restart] mode=startB port=${port} — same console start /b, exit in ${exitDelayMs}ms`
+      `[restart] mode=startB port=${port} — same console start /b, exit in ${exitDelayMs}ms, pipeline: ${pipelineHint}`
     );
-    spawnDelayedRestartCommand(startBRestart, process.cwd(), safeDelay, runNpmInstallBefore, {
+    spawnDelayedRestartCommand(startBRestart, process.cwd(), safeDelay, {
+      runNpmInstallBefore,
+      runBuild,
+      startGeoServerAfter,
       sameConsole: true,
     });
     setTimeout(() => {
       console.log(`[restart] process.exit(0) — releasing port ${port}; start /b relaunch continues`);
       process.exit(0);
     }, exitDelayMs).unref();
-    const npmStep = runNpmInstallBefore ? ' → npm install' : '';
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `start/b 재시작 예약: 포트 ${port} 해제 후${npmStep} (${startBRestart})`,
+      message: `start/b 재시작 예약: 앱 종료 후 ${pipelineHint} (${startBRestart})`,
     };
   }
 
-  /** Node 런처: process.exit 없음. run.ts가 신호를 보고 Next 자식만 재기동 */
+  /** Node 런처: process.exit 없음. run.ts가 신호를 보고 Next 종료→빌드→Geo→Next */
   if (mode === 'launcher') {
     if (!isRestartCommandConfigured()) {
       throw new Error(LAUNCHER_MISSING_MSG);
     }
     console.log(
-      `[restart] mode=launcher port=${port} — signal only; Node parent (run.ts) restarts Next child`
+      `[restart] mode=launcher port=${port} — signal only; pipeline: ${pipelineHint}`
     );
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `Node 런처 재시작 요청: Node 유지, 앱(Next)만 재기동 대기 (포트 ${port})`,
+      message: `Node 런처 재시작 요청: Node 유지, Next 종료 후 ${pipelineHint} (포트 ${port})`,
     };
   }
 
   console.log(
-    `[restart] mode=exit port=${port} — process.exit in ${safeDelay}ms (watcher should reuse same port)`
+    `[restart] mode=exit port=${port} — process.exit in ${safeDelay}ms (watcher pipeline: ${pipelineHint})`
   );
   setTimeout(() => {
     console.log(`[restart] process.exit(0) — releasing port ${port}`);
@@ -675,7 +756,7 @@ function scheduleRestart(
   return {
     scheduled: true,
     commandConfigured: isRestartCommandConfigured(),
-    message: `프로세스 종료 재시작 예약 완료 (포트 ${port}, ${safeDelay}ms 후 process.exit)`,
+    message: `프로세스 종료 재시작 예약: 종료 후 watcher가 ${pipelineHint} (포트 ${port})`,
   };
 }
 

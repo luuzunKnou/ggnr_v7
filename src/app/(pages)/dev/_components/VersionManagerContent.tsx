@@ -125,23 +125,27 @@ export function VersionManagerContent() {
       setStages(
         buildRelayStagesFromProgress({
           phase: 'done',
-          message: json.restart?.scheduled ? '적용 완료 · 재시작 예약' : '적용 완료',
+          message: json.restart?.scheduled ? '적용 완료 · 재시작 파이프라인 예약' : '적용 완료',
           versionDetail: versionDetailRef.current,
           applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
-          geoserverDetail: json.geoserver?.message,
-          restartDetail: json.restart?.message,
+          geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
+          geoserverStartDetail: json.geoserver?.startMessage,
+          appStopDetail: json.restart?.scheduled ? '포트 해제 후 진행' : undefined,
+          buildDetail: json.restart?.scheduled ? '앱 종료 후 npm run build' : undefined,
+          appStartDetail: json.restart?.message,
+          restartScheduled: Boolean(json.restart?.scheduled),
         })
       );
       setProgress({
         message: json.restart?.scheduled
-          ? '최신 소스 적용 완료. 서버 재시작 예약됨 — 재기동 후 이력에서 성공 기록을 확인하세요.'
+          ? '적용 완료. 앱 종료 → 빌드 → 앱 기동 → GeoServer 기동 순으로 콘솔에서 진행합니다.'
           : '최신 소스 적용 완료',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
       if (json.restart?.scheduled) {
-        pushLog('서버 재시작 예약됨. 재기동 후 이력에서 성공 기록을 확인하세요.');
+        pushLog('재시작 파이프라인 예약: 앱 종료 → npm run build → 앱 기동 → GeoServer 기동');
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
@@ -227,7 +231,8 @@ export function VersionManagerContent() {
             GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
           </p>
           <p className="text-xs text-muted-foreground">
-            «적용 후 서버 재시작»은 앱(운영) 재시작만 제어합니다. GeoServer는 적용 시 항상 중지 후 다시 기동합니다.
+            «적용 후 서버 재시작»이 켜지면 앱 종료 → npm run build → 앱 기동 → GeoServer 기동 순으로
+            진행합니다. GeoServer는 적용 전에 먼저 중지하고, 재시작 시에는 빌드·앱 기동 뒤에 다시 켭니다.
           </p>
           <ProfileRadios />
           <div className="space-y-2 text-sm">

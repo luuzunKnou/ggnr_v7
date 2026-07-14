@@ -14,6 +14,11 @@ export type VersionRelayPhase =
   | 'relay-complete'
   | 'merge-apply'
   | 'geoserver'
+  | 'geoserver-stop'
+  | 'app-stop'
+  | 'build'
+  | 'app-start'
+  | 'geoserver-start'
   | 'restart';
 
 export type VersionRelayProgress = {
@@ -37,7 +42,10 @@ export type VersionRelayResult = {
   geoserver?: {
     stopped: boolean;
     started: boolean;
+    deferredStart?: boolean;
     message: string;
+    stopMessage?: string;
+    startMessage?: string;
   };
   restart: {
     requested: boolean;
@@ -467,7 +475,7 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     throwIfAborted(signal);
-    onProgress?.({ phase: 'relay-complete', message: '병합·적용 처리 중...' });
+    onProgress?.({ phase: 'relay-complete', message: 'GeoServer 중지·병합·적용 처리 중...' });
     log('relay complete 요청...');
     const completeRes = await fetchWithTimeout(
       '/api/source/version/relay/complete',

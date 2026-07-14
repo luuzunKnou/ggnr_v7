@@ -190,11 +190,48 @@ while ($true) {
   if ($sigAt) { Write-WatchLog "Signal at=$sigAt version=$sigVer by=$sigBy source=$sigSource" }
 
   if ($mode -eq "exit" -and $requested) {
-    Write-WatchLog "Decision: process.exit restart - wait ${DelaySec}s then start again in this window." "OK"
+    Write-WatchLog "Decision: process.exit restart - wait ${DelaySec}s then pipeline then start again." "OK"
     Write-WatchLog "Waiting ${DelaySec}s..."
     Start-Sleep -Seconds $DelaySec
+    Wait-AppPortFree -Port $AppPort | Out-Null
+
+    $runNpm = $false
+    if ($null -ne $signal.runNpmInstallBefore) { $runNpm = [bool]$signal.runNpmInstallBefore }
+    $runBuild = $true
+    if ($null -ne $signal.runBuild) { $runBuild = [bool]$signal.runBuild }
+    $startGeo = $true
+    if ($null -ne $signal.startGeoServerAfter) { $startGeo = [bool]$signal.startGeoServerAfter }
+
+    if ($runNpm) {
+      Write-WatchLog "Running npm install --no-audit --no-fund"
+      npm install --no-audit --no-fund
+      if ($LASTEXITCODE -ne 0) {
+        Write-WatchLog "npm install FAILED exit=$LASTEXITCODE" "ERROR"
+        exit $LASTEXITCODE
+      }
+    }
+    if ($runBuild) {
+      Write-WatchLog "Running npm run build (app stopped)"
+      npm run build
+      if ($LASTEXITCODE -ne 0) {
+        Write-WatchLog "npm run build FAILED exit=$LASTEXITCODE" "ERROR"
+        exit $LASTEXITCODE
+      }
+      Write-WatchLog "npm run build OK" "OK"
+    }
+    if ($startGeo) {
+      $geoBat = Join-Path $RepoRoot "geoserver_modules\scripts\start-geoserver.bat"
+      if (Test-Path -LiteralPath $geoBat) {
+        Write-WatchLog "Starting GeoServer: $geoBat"
+        cmd.exe /c "`"$geoBat`""
+        Write-WatchLog "GeoServer start script exit=$LASTEXITCODE"
+      } else {
+        Write-WatchLog "WARN: GeoServer start script missing: $geoBat" "WARN"
+      }
+    }
+
     $LastRestartAt = Get-Date
-    Write-WatchLog "Wait done. Entering restart loop. (next run=$($RunCount + 1))" "OK"
+    Write-WatchLog "Pipeline done. Entering restart loop. (next run=$($RunCount + 1))" "OK"
     continue
   }
 

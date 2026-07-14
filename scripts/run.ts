@@ -134,6 +134,8 @@ type RestartSignal = {
   restartRequested?: boolean;
   restartMode?: string;
   runNpmInstallBefore?: boolean;
+  runBuild?: boolean;
+  startGeoServerAfter?: boolean;
   launcherConsumed?: boolean;
 };
 
@@ -168,6 +170,29 @@ function runNpmInstallSync(): void {
     shell: true,
     env: process.env,
   });
+}
+
+function runNpmBuildSync(): void {
+  console.log('[run] npm run build (app stopped)');
+  execFileSync('npm', ['run', 'build'], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    shell: true,
+    env: process.env,
+  });
+  console.log('[run] npm run build OK');
+}
+
+async function startGeoServerAfterBuild(): Promise<void> {
+  console.log('[run] starting GeoServer after build...');
+  try {
+    const { startGeoServer } = await import('../src/service/geoserverProcessService');
+    const r = await startGeoServer();
+    if (r.success) console.log('[run] GeoServer start OK');
+    else console.warn('[run] GeoServer start failed:', r.error ?? 'unknown');
+  } catch (e) {
+    console.warn('[run] GeoServer start error:', e instanceof Error ? e.message : e);
+  }
 }
 
 type NextCmd = 'dev' | 'start';
@@ -253,6 +278,26 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     }
   }
 
+  if (signal.runBuild !== false) {
+    try {
+      runNpmBuildSync();
+    } catch (e) {
+      console.error('[run] npm run build failed:', e instanceof Error ? e.message : e);
+      relaunchInFlight = false;
+      expectNextExitForRelaunch = false;
+      // 빌드 실패해도 GeoServer·앱 기동은 시도 (운영 공백 최소화)
+      if (signal.startGeoServerAfter !== false) {
+        await startGeoServerAfterBuild();
+      }
+      spawnNext(cmd);
+      return;
+    }
+  }
+
+  if (signal.startGeoServerAfter !== false) {
+    await startGeoServerAfterBuild();
+  }
+
   expectNextExitForRelaunch = false;
   relaunchInFlight = false;
   spawnNext(cmd);
@@ -262,7 +307,7 @@ function startLauncherPoll(cmd: NextCmd): void {
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   console.log(
-    `[run] Node launcher watch enabled — mode=launcher signals will restart Next only (delay ${safeDelay}ms)`
+    `[run] Node launcher watch enabled — mode=launcher: stop Next → build → GeoServer → Next (delay ${safeDelay}ms)`
   );
 
   setInterval(() => {

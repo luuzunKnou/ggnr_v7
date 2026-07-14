@@ -8,9 +8,12 @@ export type RelayStageId =
   | 'download'
   | 'relay-init'
   | 'relay-chunk'
+  | 'geoserver-stop'
   | 'merge-apply'
-  | 'geoserver'
-  | 'restart';
+  | 'app-stop'
+  | 'build'
+  | 'app-start'
+  | 'geoserver-start';
 
 const INSTALL_STAGE_ORDER: InstallStageId[] = ['info', 'scan', 'zip', 'download'];
 
@@ -28,9 +31,12 @@ const RELAY_STAGE_ORDER: RelayStageId[] = [
   'download',
   'relay-init',
   'relay-chunk',
+  'geoserver-stop',
   'merge-apply',
-  'geoserver',
-  'restart',
+  'app-stop',
+  'build',
+  'app-start',
+  'geoserver-start',
 ];
 
 const RELAY_STAGE_LABEL: Record<RelayStageId, string> = {
@@ -38,22 +44,30 @@ const RELAY_STAGE_LABEL: Record<RelayStageId, string> = {
   download: 'GNMS ZIP 다운로드',
   'relay-init': '운영 서버 relay 세션 생성',
   'relay-chunk': '청크 전송',
+  'geoserver-stop': 'GeoServer 중지',
   'merge-apply': '병합·적용',
-  geoserver: 'GeoServer 재가동',
-  restart: '앱 재시작',
+  'app-stop': '앱 종료',
+  build: 'npm run build',
+  'app-start': '앱 재기동',
+  'geoserver-start': 'GeoServer 기동',
 };
 
-/** 서버 complete 요청 중(단일 HTTP)에는 병합·적용을 활성으로 표시 */
+/** 서버 complete 요청 중(단일 HTTP): GeoServer 중지·병합·적용까지 활성 */
 const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStageId>> = {
   latest: 'latest',
   download: 'download',
   'relay-init': 'relay-init',
   'relay-chunk': 'relay-chunk',
-  'relay-complete': 'merge-apply',
+  'relay-complete': 'geoserver-stop',
   'merge-apply': 'merge-apply',
-  geoserver: 'geoserver',
-  restart: 'restart',
-  done: 'restart',
+  'geoserver-stop': 'geoserver-stop',
+  'app-stop': 'app-stop',
+  build: 'build',
+  'app-start': 'app-start',
+  'geoserver-start': 'geoserver-start',
+  geoserver: 'geoserver-stop',
+  restart: 'app-stop',
+  done: 'geoserver-start',
 };
 
 export function buildInstallBaseStages(): StageItem[] {
@@ -151,9 +165,14 @@ export function buildRelayStagesFromProgress(p: {
   bytesDone?: number;
   totalBytes?: number;
   versionDetail?: string;
-  geoserverDetail?: string;
-  restartDetail?: string;
   applyDetail?: string;
+  geoserverStopDetail?: string;
+  geoserverStartDetail?: string;
+  appStopDetail?: string;
+  buildDetail?: string;
+  appStartDetail?: string;
+  /** 재시작 예약 시 후속 단계는 콘솔 파이프라인 */
+  restartScheduled?: boolean;
 }): StageItem[] {
   const base = buildRelayBaseStages();
   if (p.phase === 'error') {
@@ -162,22 +181,26 @@ export function buildRelayStagesFromProgress(p: {
       ? 'relay-chunk'
       : text.includes('relay init') || text.includes('relay 세션')
         ? 'relay-init'
-        : text.includes('GeoServer') || text.includes('geoserver')
-          ? 'geoserver'
-          : text.includes('complete') ||
-              text.includes('병합') ||
-              text.includes('적용') ||
-              text.includes('크기 불일치') ||
-              text.includes('EBUSY') ||
-              text.includes('copyfile')
-            ? 'merge-apply'
-            : text.includes('재시작') || text.includes('GGNR_RESTART')
-              ? 'restart'
-              : text.includes('다운로드') || text.includes('download')
-                ? 'download'
-                : text.includes('CORS') || text.includes('시간 초과')
-                  ? 'latest'
-                  : 'latest';
+        : text.includes('build') || text.includes('빌드')
+          ? 'build'
+          : text.includes('GeoServer') || text.includes('geoserver')
+            ? text.includes('기동') || text.includes('시작')
+              ? 'geoserver-start'
+              : 'geoserver-stop'
+            : text.includes('complete') ||
+                text.includes('병합') ||
+                text.includes('적용') ||
+                text.includes('크기 불일치') ||
+                text.includes('EBUSY') ||
+                text.includes('copyfile')
+              ? 'merge-apply'
+              : text.includes('재시작') || text.includes('앱 종료') || text.includes('GGNR_RESTART')
+                ? 'app-stop'
+                : text.includes('다운로드') || text.includes('download')
+                  ? 'download'
+                  : text.includes('CORS') || text.includes('시간 초과')
+                    ? 'latest'
+                    : 'latest';
     const activeIdx = RELAY_STAGE_ORDER.indexOf(failedId);
     return base.map((s, idx) => {
       if (s.id === failedId) {
@@ -189,7 +212,11 @@ export function buildRelayStagesFromProgress(p: {
   }
 
   const activeStage: RelayStageId =
-    p.phase === 'done' ? 'restart' : (PHASE_TO_RELAY_STAGE[p.phase] ?? 'latest');
+    p.phase === 'done'
+      ? p.restartScheduled
+        ? 'app-stop'
+        : 'geoserver-start'
+      : (PHASE_TO_RELAY_STAGE[p.phase] ?? 'latest');
   const activeIdx = RELAY_STAGE_ORDER.indexOf(activeStage);
 
   return base.map((s) => {
@@ -197,15 +224,42 @@ export function buildRelayStagesFromProgress(p: {
     const idx = RELAY_STAGE_ORDER.indexOf(id);
 
     if (p.phase === 'done') {
+      const skipPipeline = !p.restartScheduled;
       let detail: string | undefined;
+      let state: StageState = 'done';
+
       if (id === 'latest') detail = p.versionDetail;
       if (id === 'relay-chunk' && p.totalChunks != null) {
         detail = `${p.totalChunks}/${p.totalChunks}`;
       }
+      if (id === 'geoserver-stop') detail = p.geoserverStopDetail ?? '중지 완료';
       if (id === 'merge-apply') detail = p.applyDetail ?? p.message;
-      if (id === 'geoserver') detail = p.geoserverDetail;
-      if (id === 'restart') detail = p.restartDetail ?? p.message;
-      return { ...s, state: 'done' as StageState, detail: detail ?? s.detail };
+
+      if (id === 'app-stop' || id === 'build' || id === 'app-start') {
+        if (skipPipeline) {
+          detail = '생략 (재시작 안 함)';
+          state = 'done';
+        } else {
+          detail =
+            id === 'app-stop'
+              ? (p.appStopDetail ?? '콘솔에서 진행 예약')
+              : id === 'build'
+                ? (p.buildDetail ?? '콘솔에서 npm run build 예약')
+                : (p.appStartDetail ?? '콘솔에서 앱 기동 예약');
+          state = 'active';
+        }
+      }
+      if (id === 'geoserver-start') {
+        if (skipPipeline) {
+          detail = p.geoserverStartDetail ?? '기동 완료';
+          state = 'done';
+        } else {
+          detail = p.geoserverStartDetail ?? '빌드·앱 기동 후 콘솔에서 기동 예약';
+          state = 'pending';
+        }
+      }
+
+      return { ...s, state, detail: detail ?? s.detail };
     }
 
     if (idx < activeIdx) {
@@ -222,6 +276,7 @@ export function buildRelayStagesFromProgress(p: {
         detail = `${p.chunkIndex}/${p.totalChunks}`;
       }
       if (id === 'latest' && p.versionDetail) detail = p.versionDetail;
+      if (id === 'geoserver-stop') detail = '중지·병합·적용 처리 중...';
       return { ...s, state: 'active' as StageState, detail };
     }
     return s;
