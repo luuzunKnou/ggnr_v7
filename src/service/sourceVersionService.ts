@@ -5,7 +5,7 @@ import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge } from '@/lib/ggnrBootCommand';
-import { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
+import { ensureGeoServerRunning, stopGeoServer } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
@@ -236,9 +236,14 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
 
-    /** 적용 직후 GeoServer 기동. 실패 시에만 재시작 파이프라인에서 한 번 더 시도 */
-    const startResult = await startGeoServer();
-    geoStartedOnSuccessPath = true;
+    /** 적용 직후 Geo: 상태 확인 → 필요 시 stop/start → ready 폴링. 이미 ready면 스킵 */
+    let startResult = await ensureGeoServerRunning({ forceRestart: false });
+    /** 재시작 OFF인데 ensure 실패면 한 번 더 시도(재기동 파이프라인 없음) */
+    if (!restart && !startResult.success) {
+      await sleep(2000);
+      startResult = await ensureGeoServerRunning({ forceRestart: false });
+    }
+    geoStartedOnSuccessPath = startResult.success;
     const retryGeoOnRelaunch = restart && !startResult.success;
 
     await writeRestartSignal(signalFile, {
@@ -263,10 +268,14 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       ? '중지 성공'
       : `중지 실패(잠금 가능·대기 후 계속): ${stopResult.error ?? 'unknown'}`;
     const startPart = startResult.success
-      ? '기동 성공'
+      ? startResult.action === 'already-ready'
+        ? '이미 기동됨(헬스 OK)'
+        : startResult.action === 'restarted'
+          ? '재기동·헬스 OK'
+          : '기동·헬스 OK'
       : retryGeoOnRelaunch
-        ? `기동 실패(재기동 시 재시도): ${startResult.error ?? 'unknown'}`
-        : `기동 실패: ${startResult.error ?? 'unknown'}`;
+        ? `기동/헬스 실패(재기동 시 ensure 재시도): ${startResult.error ?? 'unknown'}`
+        : `기동/헬스 실패: ${startResult.error ?? 'unknown'}`;
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
       started: startResult.success,
@@ -313,9 +322,9 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       },
     };
   } catch (err) {
-    /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 기동 시도 */
+    /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
     if (!geoStartedOnSuccessPath) {
-      await startGeoServer().catch(() => {});
+      await ensureGeoServerRunning({ forceRestart: false }).catch(() => {});
     }
     throw err;
   } finally {
@@ -543,16 +552,9 @@ function buildPostApplyPipelinePsLines(options: {
   }
   if (options.startGeoServerAfter) {
     lines.push(
-      // forward slash: PS Join-Path 이중 백슬래시로 \\ 경로 오류 나는 것 방지
-      "$geoBat = Join-Path (Get-Location) 'geoserver_modules/scripts/start-geoserver.bat'",
-      'if (Test-Path -LiteralPath $geoBat) {',
-      '  Write-Host "[restart] starting GeoServer: $geoBat"',
-      // cmd /c ""path"" 는 Windows에서 '\\' 경로 못찾음 팝업을 낼 수 있음
-      '  $geoCode = (Start-Process -FilePath $geoBat -WorkingDirectory (Split-Path -Parent $geoBat) -Wait -PassThru -NoNewWindow).ExitCode',
-      '  Write-Host "[restart] GeoServer start script exit=$geoCode"',
-      '} else {',
-      '  Write-Host "[restart] WARN: GeoServer start script missing: $geoBat"',
-      '}'
+      'Write-Host "[restart] ensuring GeoServer (npx tsx scripts/ensure-geoserver.ts)"',
+      'npx --yes tsx scripts/ensure-geoserver.ts',
+      'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] WARN: ensure-geoserver exit=$LASTEXITCODE (continuing)" }'
     );
   }
   return lines;
@@ -621,11 +623,15 @@ function spawnDelayedRestartCommand(
       '  Start-Sleep -Seconds 1',
       '}',
       'if (-not $freed) {',
-      '  Write-Host "[restart] WARN: port $port still busy after 90s - starting anyway (may bind another port)"',
+      '  Write-Host "[restart] WARN: port $port still busy after 90s - force-free then continue"',
       '}',
+      'Write-Host "[restart] force-free-port $port (self/parent PID protected)"',
+      'npx --yes tsx scripts/force-free-port.ts $port',
+      'Start-Sleep -Seconds 1',
       ...buildPostApplyPipelinePsLines({ runNpmInstallBefore, runBuild, startGeoServerAfter }),
       `Write-Host "[restart] exec: ${safeCmd}"`,
       'Write-Host "[restart] starting app on expected port=$port"',
+      'npx --yes tsx scripts/force-free-port.ts $port',
       safeCmd,
       'Write-Host "[restart] command finished exit=$LASTEXITCODE"',
     ];
@@ -653,9 +659,7 @@ function spawnDelayedRestartCommand(
   if (runNpmInstallBefore) steps.push(NPM_INSTALL_CMD);
   if (runBuild) steps.push('npm run build');
   if (startGeoServerAfter) {
-    steps.push(
-      'if [ -f geoserver_modules/scripts/start-geoserver.bat ]; then cmd.exe /c geoserver_modules/scripts/start-geoserver.bat || true; fi'
-    );
+    steps.push('npx --yes tsx scripts/ensure-geoserver.ts || true');
   }
   steps.push(restartCommand);
   const afterWait = steps.join(' && ');
@@ -824,7 +828,7 @@ function scheduleRestart(
     return {
       scheduled: true,
       commandConfigured: isRestartCommandConfigured(),
-      message: `프로세스 종료 재시작 예약: 앱(Next) 종료 후 기동 런처가 ${pipelineHint}`,
+      message: `프로세스 종료 재시작 예약: 앱(Next) 종료 후 기동 런처/감시기가 ${pipelineHint}`,
     };
   }
 

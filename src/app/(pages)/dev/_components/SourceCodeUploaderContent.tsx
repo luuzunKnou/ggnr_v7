@@ -25,7 +25,14 @@ type UploadRow = {
 
 type StageId = 'preflight' | 'scan' | 'dbCompare' | 'zip' | 'init' | 'chunk' | 'complete' | 'npmInstall' | 'finalize';
 type StageState = 'pending' | 'active' | 'done' | 'error';
-type StageItem = { id: StageId; label: string; state: StageState; detail?: string; title?: string };
+type StageItem = {
+  id: StageId;
+  label: string;
+  state: StageState;
+  detail?: string;
+  detailExclude?: string;
+  title?: string;
+};
 
 type StageReport = {
   id: string;
@@ -179,7 +186,7 @@ function stageDetailForProgress(id: StageId, p: UploadProgressPayload): string |
     return `ZIP ${p.zipProcessed}/${p.zipTotal} (${p.progressPct}%)`;
   }
   if (id === 'scan' && p.scanIncluded != null) {
-    return `포함 ${p.scanIncluded}, 제외 ${p.scanSkipped ?? 0}`;
+    return `포함 ${p.scanIncluded}`;
   }
   if (id === 'complete' && (p.phase === 'complete' || p.phase === 'npmInstall' || p.phase === 'done')) {
     if (p.phase === 'complete') return p.message;
@@ -208,6 +215,15 @@ function scanSkippedTitle(p: UploadProgressPayload): string | undefined {
   return lines.join('\n');
 }
 
+function scanExcludeFields(p: UploadProgressPayload): Pick<StageItem, 'detailExclude' | 'title'> {
+  if (p.scanIncluded == null) return {};
+  const skipped = p.scanSkipped ?? 0;
+  return {
+    detailExclude: `제외 ${skipped}`,
+    title: skipped > 0 ? scanSkippedTitle(p) : undefined,
+  };
+}
+
 function buildStagesFromProgress(
   p: UploadProgressPayload,
   preflightDetail?: string,
@@ -223,34 +239,49 @@ function buildStagesFromProgress(
 
   return baseStages.map((base) => {
     const idx = stageOrder.indexOf(base.id);
-    const title = base.id === 'scan' ? scanSkippedTitle(p) : undefined;
+    const exclude =
+      base.id === 'scan' && p.scanIncluded != null ? scanExcludeFields(p) : {};
 
     if (p.phase === 'error' && base.id === activeStage) {
-      return { ...base, state: 'error' as StageState, detail: p.error ?? p.message, title };
+      return { ...base, state: 'error' as StageState, detail: p.error ?? p.message };
     }
     if (p.phase === 'done') {
       const detail = base.id === 'finalize' ? p.message : stageDetailForProgress(base.id, p);
-      return { ...base, state: 'done' as StageState, detail: detail ?? base.detail, title };
+      return {
+        ...base,
+        state: 'done' as StageState,
+        detail: detail ?? base.detail,
+        ...exclude,
+      };
     }
     if (base.id === 'preflight' && idx < activeIdx) {
-      return { ...base, state: 'done' as StageState, detail: preflightDetail ?? base.detail, title };
+      return { ...base, state: 'done' as StageState, detail: preflightDetail ?? base.detail };
     }
     if (idx < activeIdx) {
       return {
         ...base,
         state: 'done' as StageState,
         detail: stageDetailForProgress(base.id, p) ?? base.detail,
-        title,
+        ...exclude,
       };
     }
     if (idx === activeIdx) {
+      /** 스캔 중에도 포함/제외 숫자가 있으면 메시지 대신 분리 표시 */
+      if (base.id === 'scan' && p.scanIncluded != null) {
+        return {
+          ...base,
+          state: 'active' as StageState,
+          detail: `포함 ${p.scanIncluded}`,
+          ...exclude,
+        };
+      }
       const detail =
         base.id === activeStage
           ? p.message || stageDetailForProgress(base.id, p)
           : stageDetailForProgress(base.id, p);
-      return { ...base, state: 'active' as StageState, detail: detail ?? p.message, title };
+      return { ...base, state: 'active' as StageState, detail: detail ?? p.message };
     }
-    return { ...base, state: 'pending' as StageState, title };
+    return { ...base, state: 'pending' as StageState };
   });
 }
 
@@ -464,7 +495,7 @@ export function SourceCodeUploaderContent() {
   }, [rows]);
 
   const patchStages = (
-    patch: Partial<Record<StageId, Partial<Pick<StageItem, 'state' | 'detail' | 'title'>>>>
+    patch: Partial<Record<StageId, Partial<Pick<StageItem, 'state' | 'detail' | 'detailExclude' | 'title'>>>>
   ) => {
     setStages((prev) =>
       prev.map((s) => {
@@ -474,7 +505,8 @@ export function SourceCodeUploaderContent() {
           ...s,
           state: p.state ?? s.state,
           detail: p.detail ?? s.detail,
-          title: p.title ?? s.title,
+          detailExclude: p.detailExclude ?? s.detailExclude,
+          title: p.title !== undefined ? p.title : s.title,
         };
       })
     );
@@ -694,11 +726,13 @@ export function SourceCodeUploaderContent() {
           : undefined;
 
       const scanSummary = json.scanSummary as { included?: number; skipped?: number } | undefined;
+      const skipCount = scanSummary?.skipped ?? skippedItems.length;
       patchStages({
         scan: {
           state: 'done',
-          detail: `포함 ${scanSummary?.included ?? '?'}, 제외 ${scanSummary?.skipped ?? skippedItems.length}`,
-          title: scanSkippedTitle,
+          detail: `포함 ${scanSummary?.included ?? '?'}`,
+          detailExclude: `제외 ${skipCount}`,
+          title: skipCount > 0 ? scanSkippedTitle : undefined,
         },
         dbCompare: { state: 'done' },
         zip: { state: 'done', detail: typeof json.zipName === 'string' ? json.zipName : undefined },
@@ -997,10 +1031,23 @@ export function SourceCodeUploaderContent() {
               · {s.label}
             </span>
             <span
-              className={`ml-3 max-w-[60%] truncate ${s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'} ${(s.title ?? s.detail) ? 'cursor-help' : ''}`}
-              title={s.title ?? s.detail}
+              className={`ml-3 flex max-w-[60%] items-center gap-1.5 truncate ${
+                s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'
+              }`}
             >
-              {s.detail ?? ''}
+              {s.detailExclude != null && s.detailExclude !== '' ? (
+                <>
+                  <span className="truncate">{s.detail ?? ''}</span>
+                  <span
+                    className={`truncate ${s.title ? 'cursor-help' : ''}`}
+                    title={s.title || undefined}
+                  >
+                    {s.detailExclude}
+                  </span>
+                </>
+              ) : (
+                <span className="truncate">{s.detail ?? ''}</span>
+              )}
             </span>
           </div>
         ))}

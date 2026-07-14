@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import os from 'node:os';
+import { Readable } from 'node:stream';
 import archiver from 'archiver';
 import {
   classifySourcePath,
@@ -15,10 +16,22 @@ import { archiverLevelForPath } from '@/service/sourceInstallZipCompression';
 import {
   completeInstallZipProgress,
   failInstallZipProgress,
+  getInstallZipProgress,
   setInstallZipPhase,
   setInstallZipScanProgress,
 } from '@/service/sourceInstallZipProgress';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
+
+/**
+ * 설치 ZIP 임시 루트.
+ * path.join(os.tmpdir(), 'ggnr_source_install_download', …) 형태로 두면
+ * Turbopack이 프로젝트 전체 글로브로 추적해 «Overly broad patterns» 경고가 난다.
+ * leaf를 런타임에 이어 붙여 정적 경로 추적을 피한다.
+ */
+function installZipDownloadRoot(): string {
+  const leaf = ['ggnr', 'source', 'install', 'download'].join('_');
+  return `${os.tmpdir()}${path.sep}${leaf}`;
+}
 
 type IncludedFile = {
   absPath: string;
@@ -176,8 +189,8 @@ export async function buildInstallZip(params: {
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
   const bundleRoot = `${date}_${stamp}`;
   const zipName = `source_install_${date}_${stamp}.zip`;
-  const tmpDir = path.join(os.tmpdir(), 'ggnr_source_install_download', stamp);
-  const zipPath = path.join(tmpDir, zipName);
+  const tmpDir = `${installZipDownloadRoot()}${path.sep}${stamp}`;
+  const zipPath = `${tmpDir}${path.sep}${zipName}`;
   await buildInstallZipFile({
     files,
     zipPath,
@@ -205,6 +218,58 @@ export function rememberBuiltInstallZip(progressId: string, zipPath: string): vo
 
 export function resolveBuiltInstallZipPath(progressId: string): string | undefined {
   return builtZipByProgressId.get(progressId);
+}
+
+async function findInstallZipByName(zipName: string): Promise<string | undefined> {
+  const root = installZipDownloadRoot();
+  const stampDirs = await fs.readdir(root).catch(() => [] as string[]);
+  for (const stamp of stampDirs) {
+    const candidate = `${root}${path.sep}${stamp}${path.sep}${zipName}`;
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      /* continue */
+    }
+  }
+  return undefined;
+}
+
+/** 다운로드용 ZIP 절대경로 (메모리 Map → tmp 폴백) */
+export async function resolveInstallZipForDownload(opts: {
+  progressId?: string;
+  zipName?: string;
+}): Promise<string | undefined> {
+  const progressId = opts.progressId?.trim() ?? '';
+  const zipNameParam = opts.zipName?.trim() ?? '';
+  if (progressId) {
+    const fromMem = resolveBuiltInstallZipPath(progressId);
+    if (fromMem) return fromMem;
+    const progress = getInstallZipProgress(progressId);
+    if (progress?.zipName) {
+      const found = await findInstallZipByName(progress.zipName);
+      if (found) return found;
+    }
+  }
+  if (zipNameParam) return findInstallZipByName(zipNameParam);
+  return undefined;
+}
+
+/** 다운로드 스트림 준비 (route에서 fs·path.join 직접 쓰지 않음 — Turbopack 추적 완화) */
+export async function openInstallZipDownloadStream(zipPath: string): Promise<{
+  fileName: string;
+  size: number;
+  webStream: ReadableStream;
+  cleanup: () => void;
+}> {
+  const fileName = path.basename(zipPath);
+  const { size } = await fs.stat(zipPath);
+  const cleanup = scheduleInstallZipCleanup(zipPath);
+  const nodeStream = fsSync.createReadStream(zipPath);
+  nodeStream.on('close', cleanup);
+  nodeStream.on('error', cleanup);
+  const webStream = Readable.toWeb(nodeStream) as ReadableStream;
+  return { fileName, size, webStream, cleanup };
 }
 
 export async function recordInstallZipHistory(params: {

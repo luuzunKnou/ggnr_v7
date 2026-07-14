@@ -1,5 +1,6 @@
 import type { InstallZipPhase } from '@/service/sourceInstallZipProgress';
-import type { VersionRelayPhase } from '@/lib/sourceVersionClientRelay';
+import type { RestartMode, VersionRelayPhase } from '@/lib/sourceVersionClientRelay';
+import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
 import type { StageItem, StageState } from './ProgressStagesList';
 
 export type InstallStageId = 'info' | 'scan' | 'zip' | 'download';
@@ -10,10 +11,19 @@ export type RelayStageId =
   | 'relay-chunk'
   | 'geoserver-stop'
   | 'merge-apply'
+  | 'geoserver-start'
   | 'app-stop'
+  | 'npm-install'
   | 'build'
-  | 'app-start'
-  | 'geoserver-start';
+  | 'app-start';
+
+export type RelayStageOptions = {
+  /** 적용 후 서버 재시작 on/off */
+  restart?: boolean;
+  restartMode?: RestartMode;
+  /** 개방망이면 재시작 파이프라인에 npm install 단계 표시 */
+  packageProfile?: SourcePackageProfile;
+};
 
 const INSTALL_STAGE_ORDER: InstallStageId[] = ['info', 'scan', 'zip', 'download'];
 
@@ -26,7 +36,7 @@ const INSTALL_PHASE_TO_STAGE: Partial<Record<InstallZipPhase, InstallStageId>> =
   done: 'download',
 };
 
-const RELAY_STAGE_ORDER: RelayStageId[] = [
+const RELAY_COMMON_STAGES: RelayStageId[] = [
   'latest',
   'download',
   'relay-init',
@@ -34,12 +44,9 @@ const RELAY_STAGE_ORDER: RelayStageId[] = [
   'geoserver-stop',
   'merge-apply',
   'geoserver-start',
-  'app-stop',
-  'build',
-  'app-start',
 ];
 
-const RELAY_STAGE_LABEL: Record<RelayStageId, string> = {
+const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
   latest: 'GNMS 최신 버전 조회',
   download: 'GNMS ZIP 다운로드',
   'relay-init': '운영 서버 relay 세션 생성',
@@ -48,6 +55,7 @@ const RELAY_STAGE_LABEL: Record<RelayStageId, string> = {
   'merge-apply': '병합·적용',
   'geoserver-start': 'GeoServer 기동',
   'app-stop': '앱 종료',
+  'npm-install': 'npm install',
   build: 'npm run build',
   'app-start': '앱 재기동',
 };
@@ -67,8 +75,58 @@ const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStag
   'app-start': 'app-start',
   geoserver: 'geoserver-stop',
   restart: 'app-stop',
-  done: 'app-start',
+  done: 'geoserver-start',
 };
+
+function effectiveRestartMode(opts?: RelayStageOptions): RestartMode | 'off' {
+  if (!opts?.restart) return 'off';
+  const mode = opts.restartMode ?? 'command';
+  if (mode === 'none') return 'off';
+  return mode;
+}
+
+/** 재시작 방법·패키지 프로필에 따른 단계 목록 */
+export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
+  const mode = effectiveRestartMode(opts);
+  if (mode === 'off') return [...RELAY_COMMON_STAGES];
+
+  const withNpm =
+    opts?.packageProfile === 'open' ? (['npm-install'] as RelayStageId[]) : [];
+
+  // command: 앱 전체 종료 → (선택 npm) → 새 창 빌드 → 새 창 기동
+  // startB / exit: Next 종료 → (선택 npm) → 런처 빌드 → Next 재기동
+  // launcher: Next 종료(런처) → (선택 npm) → 런처 빌드 → Next 재기동
+  return [...RELAY_COMMON_STAGES, 'app-stop', ...withNpm, 'build', 'app-start'];
+}
+
+export function relayStageLabel(id: RelayStageId, opts?: RelayStageOptions): string {
+  const mode = effectiveRestartMode(opts);
+  if (id === 'app-stop') {
+    if (mode === 'command') return '앱 종료';
+    if (mode === 'launcher') return 'Next 종료 (런처)';
+    if (mode === 'startB' || mode === 'exit') return 'Next 종료';
+  }
+  if (id === 'npm-install') return 'npm install (개방망)';
+  if (id === 'build') {
+    if (mode === 'command') return '새 창에서 npm run build';
+    if (mode === 'off') return 'npm run build';
+    return '기동 런처/감시기가 npm run build';
+  }
+  if (id === 'app-start') {
+    if (mode === 'command') return '새 창에서 앱 기동';
+    if (mode === 'launcher' || mode === 'startB' || mode === 'exit') return 'Next 재기동';
+  }
+  return RELAY_STAGE_LABEL_BASE[id];
+}
+
+function firstRestartPipelineStage(order: RelayStageId[]): RelayStageId | null {
+  for (const id of order) {
+    if (id === 'app-stop' || id === 'npm-install' || id === 'build' || id === 'app-start') {
+      return id;
+    }
+  }
+  return null;
+}
 
 export function buildInstallBaseStages(): StageItem[] {
   return [
@@ -148,83 +206,102 @@ export function buildInstallStagesFromProgress(
   });
 }
 
-export function buildRelayBaseStages(): StageItem[] {
-  return RELAY_STAGE_ORDER.map((id) => ({
+export function buildRelayBaseStages(opts?: RelayStageOptions): StageItem[] {
+  return relayStageOrder(opts).map((id) => ({
     id,
-    label: RELAY_STAGE_LABEL[id],
+    label: relayStageLabel(id, opts),
     state: 'pending' as StageState,
   }));
 }
 
-export function buildRelayStagesFromProgress(p: {
-  phase: VersionRelayPhase | 'done' | 'error';
-  message: string;
-  error?: string;
-  chunkIndex?: number;
-  totalChunks?: number;
-  bytesDone?: number;
-  totalBytes?: number;
-  versionDetail?: string;
-  applyDetail?: string;
-  geoserverStopDetail?: string;
-  geoserverStartDetail?: string;
-  appStopDetail?: string;
-  buildDetail?: string;
-  appStartDetail?: string;
-  /** 재시작 예약 시 후속 단계는 콘솔 파이프라인 */
-  restartScheduled?: boolean;
-}): StageItem[] {
-  const base = buildRelayBaseStages();
+export function buildRelayStagesFromProgress(
+  p: {
+    phase: VersionRelayPhase | 'done' | 'error';
+    message: string;
+    error?: string;
+    chunkIndex?: number;
+    totalChunks?: number;
+    bytesDone?: number;
+    totalBytes?: number;
+    versionDetail?: string;
+    applyDetail?: string;
+    geoserverStopDetail?: string;
+    geoserverStartDetail?: string;
+    /** GeoServer ensure 성공 여부 (실패 시 단계 error) */
+    geoserverStartOk?: boolean;
+    appStopDetail?: string;
+    npmInstallDetail?: string;
+    buildDetail?: string;
+    appStartDetail?: string;
+    /** 재시작 예약 시 후속 단계는 콘솔 파이프라인 */
+    restartScheduled?: boolean;
+  },
+  opts?: RelayStageOptions
+): StageItem[] {
+  const order = relayStageOrder(opts);
+  const base = buildRelayBaseStages(opts);
+  const mode = effectiveRestartMode(opts);
+
   if (p.phase === 'error') {
     const text = `${p.error ?? ''} ${p.message}`;
     const failedId: RelayStageId = text.includes('바이트 불일치') || text.includes('청크')
       ? 'relay-chunk'
       : text.includes('relay init') || text.includes('relay 세션')
         ? 'relay-init'
-        : text.includes('build') || text.includes('빌드')
-          ? 'build'
-          : text.includes('GeoServer') || text.includes('geoserver')
-            ? text.includes('기동') || text.includes('시작')
-              ? 'geoserver-start'
-              : 'geoserver-stop'
-            : text.includes('complete') ||
-                text.includes('병합') ||
-                text.includes('적용') ||
-                text.includes('크기 불일치') ||
-                text.includes('EBUSY') ||
-                text.includes('copyfile')
-              ? 'merge-apply'
-              : text.includes('재시작') || text.includes('앱 종료') || text.includes('GGNR_RESTART')
-                ? 'app-stop'
-                : text.includes('다운로드') || text.includes('download')
-                  ? 'download'
-                  : text.includes('CORS') || text.includes('시간 초과')
-                    ? 'latest'
-                    : 'latest';
-    const activeIdx = RELAY_STAGE_ORDER.indexOf(failedId);
+        : text.includes('npm install')
+          ? 'npm-install'
+          : text.includes('build') || text.includes('빌드')
+            ? 'build'
+            : text.includes('GeoServer') || text.includes('geoserver')
+              ? text.includes('기동') || text.includes('시작')
+                ? 'geoserver-start'
+                : 'geoserver-stop'
+              : text.includes('complete') ||
+                  text.includes('병합') ||
+                  text.includes('적용') ||
+                  text.includes('크기 불일치') ||
+                  text.includes('EBUSY') ||
+                  text.includes('copyfile')
+                ? 'merge-apply'
+                : text.includes('재시작') ||
+                    text.includes('앱 종료') ||
+                    text.includes('Next 종료') ||
+                    text.includes('GGNR_RESTART')
+                  ? 'app-stop'
+                  : text.includes('다운로드') || text.includes('download')
+                    ? 'download'
+                    : text.includes('CORS') || text.includes('시간 초과')
+                      ? 'latest'
+                      : 'latest';
+    const activeIdx = order.indexOf(failedId);
+    const safeIdx = activeIdx >= 0 ? activeIdx : 0;
     return base.map((s, idx) => {
-      if (s.id === failedId) {
-        return { ...s, state: 'error' as StageState, detail: p.error ?? p.message };
+      if (activeIdx >= 0 ? s.id === failedId : idx === 0) {
+        return {
+          ...s,
+          state: 'error' as StageState,
+          detail: p.error ?? p.message,
+        };
       }
-      if (idx < activeIdx) return { ...s, state: 'done' as StageState };
+      if (idx < safeIdx) return { ...s, state: 'done' as StageState };
       return s;
     });
   }
 
+  const firstRestart = firstRestartPipelineStage(order);
   const activeStage: RelayStageId =
     p.phase === 'done'
-      ? p.restartScheduled
-        ? 'app-stop'
+      ? p.restartScheduled && firstRestart
+        ? firstRestart
         : 'geoserver-start'
       : (PHASE_TO_RELAY_STAGE[p.phase] ?? 'latest');
-  const activeIdx = RELAY_STAGE_ORDER.indexOf(activeStage);
+  const activeIdx = order.indexOf(activeStage);
 
   return base.map((s) => {
     const id = s.id as RelayStageId;
-    const idx = RELAY_STAGE_ORDER.indexOf(id);
+    const idx = order.indexOf(id);
 
     if (p.phase === 'done') {
-      const skipPipeline = !p.restartScheduled;
       let detail: string | undefined;
       let state: StageState = 'done';
 
@@ -236,22 +313,32 @@ export function buildRelayStagesFromProgress(p: {
       if (id === 'merge-apply') detail = p.applyDetail ?? p.message;
       if (id === 'geoserver-start') {
         detail = p.geoserverStartDetail ?? '기동 완료';
-        state = 'done';
+        state = p.geoserverStartOk === false ? 'error' : 'done';
       }
 
-      if (id === 'app-stop' || id === 'build' || id === 'app-start') {
-        if (skipPipeline) {
-          detail = '생략 (재시작 안 함)';
+      const isRestartStage =
+        id === 'app-stop' || id === 'npm-install' || id === 'build' || id === 'app-start';
+
+      if (isRestartStage) {
+        if (!p.restartScheduled) {
+          // 목록 자체에 없어도 방어
+          detail = '생략';
           state = 'done';
         } else {
-          // 콘솔에서 순차 실행(앱 종료 → build → 앱 기동). HTTP 완료 시점엔 예약만 된 상태.
           detail =
             id === 'app-stop'
-              ? (p.appStopDetail ?? '콘솔에서 진행 예약')
-              : id === 'build'
-                ? (p.buildDetail ?? '콘솔에서 npm run build 예약')
-                : (p.appStartDetail ?? '콘솔에서 앱 기동 예약');
-          state = id === 'app-stop' ? 'active' : 'pending';
+              ? (p.appStopDetail ??
+                  (mode === 'command' ? '콘솔에서 앱 종료 예약' : '콘솔에서 Next 종료 예약'))
+              : id === 'npm-install'
+                ? (p.npmInstallDetail ?? '콘솔에서 npm install 예약')
+                : id === 'build'
+                  ? (p.buildDetail ??
+                      (mode === 'command'
+                        ? '새 창에서 npm run build 예약'
+                        : '기동 런처/감시기가 npm run build 예약'))
+                  : (p.appStartDetail ??
+                      (mode === 'command' ? '새 창에서 앱 기동 예약' : 'Next 재기동 예약'));
+          state = id === firstRestart ? 'active' : 'pending';
         }
       }
 

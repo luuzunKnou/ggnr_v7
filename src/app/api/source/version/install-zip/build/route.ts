@@ -8,6 +8,7 @@ import {
 } from '@/service/sourceInstallZipService';
 import {
   createInstallZipProgressId,
+  getInstallZipProgress,
   initInstallZipProgress,
 } from '@/service/sourceInstallZipProgress';
 import type { SourcePackageProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
@@ -35,7 +36,10 @@ export async function POST(req: NextRequest) {
       typeof body.progressId === 'string' && body.progressId.trim()
         ? body.progressId.trim()
         : createInstallZipProgressId();
-    initInstallZipProgress(progressId);
+    /** UI가 progress POST로 선등록한 경우 덮어쓰지 않음 */
+    if (!getInstallZipProgress(progressId)) {
+      initInstallZipProgress(progressId);
+    }
 
     const result = await buildInstallZip({ profile, progressId });
     await recordInstallZipHistory({

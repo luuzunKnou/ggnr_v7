@@ -126,7 +126,37 @@ async function waitPortFree(port: number, timeoutSec = 90): Promise<void> {
     }
     await sleep(1000);
   }
-  console.warn(`[run] WARN: port ${port} still busy after ${timeoutSec}s — starting Next anyway`);
+  console.warn(`[run] WARN: port ${port} still busy after ${timeoutSec}s — force-free then recheck`);
+  try {
+    const { forceFreePort } = await import('../src/service/geoserverProcessService');
+    const r = forceFreePort(port);
+    if (r.killed.length) console.log(`[run] force-free port ${port}: killed pids=${r.killed.join(',')}`);
+    if (r.errors.length) console.warn(`[run] force-free errors: ${r.errors.join('; ')}`);
+  } catch (e) {
+    console.warn('[run] force-free failed:', e instanceof Error ? e.message : e);
+  }
+  await sleep(1500);
+  if (!isPortListening(port)) {
+    console.log(`[run] port ${port} is FREE after force-free`);
+    return;
+  }
+  console.warn(`[run] WARN: port ${port} STILL busy — Next spawn may hit EADDRINUSE`);
+}
+
+async function ensurePortFreeForNext(port: number): Promise<void> {
+  await waitPortFree(port, 60);
+  if (isPortListening(port)) {
+    try {
+      const { forceFreePort } = await import('../src/service/geoserverProcessService');
+      const r = forceFreePort(port);
+      if (r.killed.length) {
+        console.log(`[run] pre-spawn force-free port ${port}: killed ${r.killed.join(',')}`);
+      }
+      await sleep(1500);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 type RestartSignal = {
@@ -189,14 +219,17 @@ function runNpmBuildSync(): void {
 
 async function ensureGeoServerIfRequested(signal: RestartSignal): Promise<void> {
   if (signal.startGeoServerAfter !== true) return;
-  console.log('[run] GeoServer start retry (apply-time start failed)...');
+  console.log('[run] GeoServer ensure (apply-time start/health failed)...');
   try {
-    const { startGeoServer } = await import('../src/service/geoserverProcessService');
-    const r = await startGeoServer();
-    if (r.success) console.log('[run] GeoServer start retry OK');
-    else console.warn('[run] GeoServer start retry failed:', r.error ?? 'unknown');
+    const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
+    const r = await ensureGeoServerRunning({ forceRestart: false });
+    if (r.success) {
+      console.log(`[run] GeoServer ensure OK (action=${r.action})`);
+    } else {
+      console.warn('[run] GeoServer ensure failed:', r.error ?? 'unknown');
+    }
   } catch (e) {
-    console.warn('[run] GeoServer start retry error:', e instanceof Error ? e.message : e);
+    console.warn('[run] GeoServer ensure error:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -283,7 +316,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     }
   }
 
-  await waitPortFree(port);
+  await ensurePortFreeForNext(port);
 
   if (signal.runNpmInstallBefore === true) {
     try {
@@ -293,6 +326,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
+      await ensurePortFreeForNext(port);
       spawnNext(cmd);
       return;
     }
@@ -306,6 +340,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
+      await ensurePortFreeForNext(port);
       spawnNext(cmd);
       return;
     }
@@ -315,6 +350,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
 
   expectNextExitForRelaunch = false;
   relaunchInFlight = false;
+  await ensurePortFreeForNext(port);
   spawnNext(cmd);
 }
 
@@ -403,19 +439,17 @@ async function main(): Promise<void> {
   let geoOk = await tryGeoServerSetup();
   if (!geoOk) {
     try {
-      const batPath = path.join(process.cwd(), 'geoserver_modules', 'scripts', 'start-geoserver.bat');
-      if (fs.existsSync(batPath)) {
-        console.log('[run] GeoServer 기동 시도...');
-        const isWin = process.platform === 'win32';
-        spawn(isWin ? 'cmd' : 'sh', isWin ? ['/c', batPath] : [batPath], {
-          cwd: process.cwd(),
-          detached: true,
-          stdio: 'ignore',
-          shell: true,
-        }).unref();
-        await new Promise((r) => setTimeout(r, 20000));
+      console.log('[run] GeoServer ensure (헬스 확인 후 필요 시 기동)...');
+      const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
+      const ens = await ensureGeoServerRunning({ forceRestart: false, readyTimeoutMs: 120_000 });
+      if (ens.success) {
+        console.log(`[run] GeoServer ensure OK (action=${ens.action})`);
         geoOk = await tryGeoServerSetup();
-        if (!geoOk) console.warn('[run] GeoServer 기동 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');
+      } else {
+        console.warn('[run] GeoServer ensure failed:', ens.error ?? 'unknown');
+      }
+      if (!geoOk) {
+        console.warn('[run] GeoServer 기동/헬스 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');
       }
     } catch (e) {
       console.warn('[run] GeoServer 기동 스킵:', e instanceof Error ? e.message : e);
@@ -425,6 +459,7 @@ async function main(): Promise<void> {
   console.log('[run] DB setup done.');
   const nextCmd = COMMAND as NextCmd;
   startLauncherPoll(nextCmd);
+  await ensurePortFreeForNext(getAppListenPort());
   spawnNext(nextCmd);
 }
 

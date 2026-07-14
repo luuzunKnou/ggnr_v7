@@ -261,6 +261,17 @@ export function InstallZipDownloadPanel() {
       pushLog(`서버: ${infoDetailRef.current}`);
       setProgress((p) => ({ ...p, message: 'ZIP 생성 준비...', pct: 5 }));
 
+      const regRes = await fetch('/api/source/version/install-zip/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progressId }),
+        signal,
+      });
+      if (!regRes.ok) {
+        const regJson = (await regRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(regJson.error ?? '진행 상태 등록 실패');
+      }
+
       startInstallProgressPoll(progressId);
       setStages((prev) => setStageActive(prev, 'scan'));
 

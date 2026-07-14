@@ -39,12 +39,20 @@ export function VersionManagerContent() {
   const [restartMode, setRestartMode] = useState<RestartMode>('command');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<SideProgress>(emptySideProgress());
-  const [stages, setStages] = useState(() => buildRelayBaseStages());
+  const [stages, setStages] = useState(() =>
+    buildRelayBaseStages({ restart: true, restartMode: 'command', packageProfile: 'closed' })
+  );
   const [relayResult, setRelayResult] = useState<VersionRelayResult | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const stageOpts = {
+    restart,
+    restartMode: restart ? restartMode : ('none' as RestartMode),
+    packageProfile: profile,
+  };
 
   useEffect(() => {
     return () => {
@@ -57,6 +65,13 @@ export function VersionManagerContent() {
     prefetchClientMachineIp();
   }, []);
 
+  /** 대기 중일 때 재시작 방법·프로필 변경 → 단계 목록 즉시 반영 */
+  useEffect(() => {
+    if (busy) return;
+    setStages(buildRelayBaseStages(stageOpts));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stageOpts fields listed
+  }, [busy, restart, restartMode, profile]);
+
   const pushLog = (line: string) => {
     const next = [...logRef.current, `[${new Date().toLocaleTimeString('ko-KR', { hour12: false })}] ${line}`].slice(-60);
     logRef.current = next;
@@ -67,13 +82,18 @@ export function VersionManagerContent() {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
+    const opts = {
+      restart,
+      restartMode: restart ? restartMode : ('none' as RestartMode),
+      packageProfile: profile,
+    };
 
     setBusy(true);
     setRelayResult(null);
     logRef.current = [];
     versionDetailRef.current = '';
     setProgress({ ...emptySideProgress(), message: 'GNMS 최신 버전 조회 중...', pct: 2 });
-    setStages(buildRelayBaseStages());
+    setStages(buildRelayBaseStages(opts));
 
     try {
       const json = await relayLatestSourceFromGnms({
@@ -97,15 +117,18 @@ export function VersionManagerContent() {
           }
           setProgress((prev) => ({ ...prev, message: p.message, pct }));
           setStages(
-            buildRelayStagesFromProgress({
-              phase: p.phase,
-              message: p.message,
-              chunkIndex: p.chunkIndex,
-              totalChunks: p.totalChunks,
-              bytesDone: p.bytesDone,
-              totalBytes: p.totalBytes,
-              versionDetail: versionDetailRef.current || undefined,
-            })
+            buildRelayStagesFromProgress(
+              {
+                phase: p.phase,
+                message: p.message,
+                chunkIndex: p.chunkIndex,
+                totalChunks: p.totalChunks,
+                bytesDone: p.bytesDone,
+                totalBytes: p.totalBytes,
+                versionDetail: versionDetailRef.current || undefined,
+              },
+              opts
+            )
           );
         },
         onLog: (line) => {
@@ -122,30 +145,49 @@ export function VersionManagerContent() {
       });
       setRelayResult(json);
       versionDetailRef.current = `version=${json.version}, file=${json.fileName}`;
+      const doneOpts = {
+        restart: Boolean(json.restart?.scheduled),
+        restartMode: (json.restart?.mode ?? opts.restartMode) as RestartMode,
+        packageProfile: profile,
+      };
       setStages(
-        buildRelayStagesFromProgress({
-          phase: 'done',
-          message: json.restart?.scheduled ? '적용 완료 · 재시작 파이프라인 예약' : '적용 완료',
-          versionDetail: versionDetailRef.current,
-          applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
-          geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
-          geoserverStartDetail: json.geoserver?.startMessage,
-          appStopDetail: json.restart?.scheduled ? '포트 해제 후 진행' : undefined,
-          buildDetail: json.restart?.scheduled
-            ? json.restart?.mode === 'command'
-              ? '앱 종료 후 새 창에서 npm run build'
-              : '앱(Next) 종료 후 기동 런처가 npm run build'
-            : undefined,
-          appStartDetail: json.restart?.message,
-          restartScheduled: Boolean(json.restart?.scheduled),
-        })
+        buildRelayStagesFromProgress(
+          {
+            phase: 'done',
+            message: json.restart?.scheduled ? '적용 완료 · 재시작 파이프라인 예약' : '적용 완료',
+            versionDetail: versionDetailRef.current,
+            applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
+            geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
+            geoserverStartDetail: json.geoserver?.startMessage,
+            appStopDetail: json.restart?.scheduled
+              ? json.restart?.mode === 'command'
+                ? '포트 해제·앱 종료 예약'
+                : '포트 해제·Next 종료 예약'
+              : undefined,
+            npmInstallDetail:
+              json.restart?.scheduled && profile === 'open'
+                ? '개방망: 재기동 전 npm install 예약'
+                : undefined,
+            buildDetail: json.restart?.scheduled
+              ? json.restart?.mode === 'command'
+                ? '새 창에서 npm run build 예약'
+                : '기동 런처/감시기가 npm run build 예약'
+              : undefined,
+            appStartDetail: json.restart?.message,
+            restartScheduled: Boolean(json.restart?.scheduled),
+            geoserverStartOk: !(
+              json.geoserver?.started === false && !json.geoserver?.deferredStart
+            ),
+          },
+          doneOpts
+        )
       );
       const restartHint =
         json.restart?.mode === 'command'
           ? '적용 완료. 앱 종료 → 새 창에서 빌드 → 앱 기동 순으로 진행합니다.'
           : json.restart?.mode === 'launcher'
             ? '적용 완료. Next 종료 → 기동 런처가 빌드 → Next 재기동 순으로 콘솔에서 진행합니다.'
-            : '적용 완료. 앱(Next) 종료 → 기동 런처가 빌드 → 앱 기동 순으로 콘솔에서 진행합니다.';
+            : '적용 완료. 앱(Next) 종료 → 기동 런처/감시기가 빌드 → 앱 기동 순으로 콘솔에서 진행합니다.';
       setProgress({
         message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료',
         pct: 100,
@@ -156,7 +198,7 @@ export function VersionManagerContent() {
         pushLog(
           json.restart?.mode === 'command'
             ? '재시작 파이프라인 예약: 앱 종료 → 새 창에서 npm run build → 앱 기동'
-            : '재시작 파이프라인 예약: 앱(Next) 종료 → 기동 런처가 npm run build → 앱 기동'
+            : '재시작 파이프라인 예약: 앱(Next) 종료 → 기동 런처/감시기가 npm run build → 앱 기동'
         );
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
@@ -180,11 +222,14 @@ export function VersionManagerContent() {
         error: isAbort ? null : msg,
       });
       setStages(
-        buildRelayStagesFromProgress({
-          phase: 'error',
-          message: msg,
-          error: msg,
-        })
+        buildRelayStagesFromProgress(
+          {
+            phase: 'error',
+            message: msg,
+            error: msg,
+          },
+          opts
+        )
       );
       pushLog(isAbort ? msg : `ERROR: ${msg}`);
       if (!isAbort) {
@@ -243,7 +288,7 @@ export function VersionManagerContent() {
             GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
           </p>
           <p className="text-xs text-muted-foreground">
-            «적용 후 서버 재시작»이 켜지면 모드에 따라 새 창 또는 기동 런처(Node)가 npm run build →
+            «적용 후 서버 재시작»이 켜지면 모드에 따라 새 창 또는 기동 런처/감시기가 npm run build →
             앱 기동을 이어 갑니다. GeoServer는 적용 전에 중지하고 병합·적용 직후 다시 켜며, 그때
             실패하면 재기동 파이프라인에서만 한 번 더 시도합니다.
           </p>
@@ -277,7 +322,7 @@ export function VersionManagerContent() {
                   disabled={busy || !restart}
                   onChange={() => setRestartMode('exit')}
                 />
-                process.exit (기동 런처가 빌드)
+                process.exit (기동 런처/감시기가 빌드)
               </label>
               <label className="flex items-center gap-1">
                 <input

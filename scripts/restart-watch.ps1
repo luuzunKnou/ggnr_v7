@@ -104,6 +104,13 @@ function Test-AppPortListening {
   return [bool]$hit
 }
 
+function Invoke-ForceFreePort {
+  param([int]$Port)
+  Write-WatchLog "force-free-port $Port (self/parent PID protected)"
+  npx --yes tsx scripts/force-free-port.ts $Port
+  Start-Sleep -Seconds 1
+}
+
 function Wait-AppPortFree {
   param(
     [int]$Port,
@@ -114,12 +121,14 @@ function Wait-AppPortFree {
   while ((Get-Date) -lt $deadline) {
     if (-not (Test-AppPortListening -Port $Port)) {
       Write-WatchLog "Port $Port is FREE" "OK"
+      Invoke-ForceFreePort -Port $Port
       return $true
     }
     Write-WatchLog "Port $Port still LISTENING - wait 1s"
     Start-Sleep -Seconds 1
   }
-  Write-WatchLog "WARN: port $Port still busy after ${TimeoutSec}s - starting anyway (may bind another port)" "WARN"
+  Write-WatchLog "WARN: port $Port still busy after ${TimeoutSec}s - force-free then continue" "WARN"
+  Invoke-ForceFreePort -Port $Port
   return $false
 }
 
@@ -250,13 +259,10 @@ while ($true) {
       Write-WatchLog "npm run build OK" "OK"
     }
     if ($startGeo) {
-      $geoBat = Join-Path $RepoRoot "geoserver_modules/scripts/start-geoserver.bat"
-      if (Test-Path -LiteralPath $geoBat) {
-        Write-WatchLog "Starting GeoServer (retry): $geoBat"
-        $geoCode = (Start-Process -FilePath $geoBat -WorkingDirectory (Split-Path -Parent $geoBat) -Wait -PassThru -NoNewWindow).ExitCode
-        Write-WatchLog "GeoServer start script exit=$geoCode"
-      } else {
-        Write-WatchLog "WARN: GeoServer start script missing: $geoBat" "WARN"
+      Write-WatchLog "Ensuring GeoServer (npx tsx scripts/ensure-geoserver.ts)"
+      npx --yes tsx scripts/ensure-geoserver.ts
+      if ($LASTEXITCODE -ne 0) {
+        Write-WatchLog "WARN: ensure-geoserver exit=$LASTEXITCODE (continuing)" "WARN"
       }
     }
 
