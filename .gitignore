@@ -86,3 +86,6 @@ next-env.d.ts
 
 # 와이어프레임 PDF 변환 스크립트 임시 빌드 산출물
 /scripts/wireframe/.build/
+
+# ggnr_start.bat(ggnr_v7 서비스 실행용 bat. make_ggnr_starter.bat으로 생성 가능해 제외)
+/ggnr_start.bat

@@ -26,7 +26,8 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   'geoserver_modules/data_dir/gwc/',
 ];
 
-const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts'];
+/** 운영 서버마다 다른 기동 bat·Next 생성 타입 등은 패키지에 넣지 않음 */
+const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts', 'ggnr_start.bat'];
 
 const RUNTIME_PREFIXES = [
   'scripts/',

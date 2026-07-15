@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
-import { applyLatestSourceFromGnms, type RestartMode } from '@/service/sourceVersionService';
+import { applyLatestSourceFromGnms, normalizeRestartMode } from '@/service/sourceVersionService';
 
 export const dynamic = 'force-dynamic';
-
-function toRestartMode(value: unknown): RestartMode {
-  if (value === 'command') return 'command';
-  if (value === 'startB' || value === 'nodeWatch') return 'startB';
-  if (value === 'launcher') return 'launcher';
-  if (value === 'exit') return 'exit';
-  return 'none';
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +12,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const restart = body.restart === true;
-    const restartMode = toRestartMode(body.restartMode);
+    const restartMode = normalizeRestartMode(body.restartMode);
     const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
     const clientIp = pickClientIpFromRequest(req, bodyIp);
 

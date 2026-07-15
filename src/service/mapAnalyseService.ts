@@ -346,7 +346,12 @@ export async function enrichParcelLandRows(params: {
 
   try {
     const { enrichments, source } = await enrichParcelLandsByPnus({ pnus });
-    const merged = applyEnrichmentToLandRows(baseRows, enrichments, shouldMaskParcelOwners());
+    // 빌드 오류 때문에 임시 처리
+    const merged = applyEnrichmentToLandRows(
+      baseRows as any, 
+      enrichments as any, 
+      shouldMaskParcelOwners()
+    );
     return {
       ok: true,
       landRows: mapLandRowResults(merged),

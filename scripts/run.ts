@@ -188,16 +188,23 @@ function markRestartConsumed(signal: RestartSignal): void {
       'utf8'
     );
   } catch (e) {
-    console.warn('[run] failed to mark restart signal consumed:', e instanceof Error ? e.message : e);
+    console.warn('## [버전관리] ## 재시작 신호 소비 표시 실패:', e instanceof Error ? e.message : e);
   }
 }
 
 function isSupervisedRestartMode(mode: string | undefined): boolean {
-  return mode === 'launcher' || mode === 'startB' || mode === 'exit';
+  /** 레거시 command/startB 도 exit 계열로 취급 */
+  return (
+    mode === 'launcher' ||
+    mode === 'exit' ||
+    mode === 'startB' ||
+    mode === 'command' ||
+    mode === 'nodeWatch'
+  );
 }
 
 function runNpmInstallSync(): void {
-  console.log('[run] npm install --no-audit --no-fund (before app relaunch)');
+  console.log('## [버전관리] ## npm install --no-audit --no-fund (재기동 전)');
   execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: process.cwd(),
     stdio: 'inherit',
@@ -207,29 +214,29 @@ function runNpmInstallSync(): void {
 }
 
 function runNpmBuildSync(): void {
-  console.log('[run] npm run build (app stopped)');
+  console.log('## [버전관리] ## npm run build (앱 중지 상태)');
   execFileSync('npm', ['run', 'build'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
     env: process.env,
   });
-  console.log('[run] npm run build OK');
+  console.log('## [버전관리] ## npm run build OK');
 }
 
 async function ensureGeoServerIfRequested(signal: RestartSignal): Promise<void> {
   if (signal.startGeoServerAfter !== true) return;
-  console.log('[run] GeoServer ensure (apply-time start/health failed)...');
+  console.log('## [버전관리] ## GeoServer ensure (적용 시 기동/헬스 실패 후 재시도)...');
   try {
     const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
     const r = await ensureGeoServerRunning({ forceRestart: false });
     if (r.success) {
-      console.log(`[run] GeoServer ensure OK (action=${r.action})`);
+      console.log(`## [버전관리] ## GeoServer ensure OK (action=${r.action})`);
     } else {
-      console.warn('[run] GeoServer ensure failed:', r.error ?? 'unknown');
+      console.warn('## [버전관리] ## GeoServer ensure 실패:', r.error ?? 'unknown');
     }
   } catch (e) {
-    console.warn('[run] GeoServer ensure error:', e instanceof Error ? e.message : e);
+    console.warn('## [버전관리] ## GeoServer ensure 오류:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -262,7 +269,9 @@ function spawnNext(cmd: NextCmd): void {
   proc.on('close', (code) => {
     nextProc = null;
     if (expectNextExitForRelaunch || relaunchInFlight) {
-      console.log(`[run] Next exited (code=${code ?? 0}) for relaunch — Node launcher stays up`);
+      console.log(
+        `## [버전관리] ## Next 종료 (code=${code ?? 0}) — 재기동용, Node 런처 유지`
+      );
       return;
     }
     /** start/b·exit: Next가 process.exit 해도 Node(run)는 남아 npm run build → 앱 재기동 */
@@ -273,7 +282,7 @@ function spawnNext(cmd: NextCmd): void {
       isSupervisedRestartMode(signal.restartMode)
     ) {
       console.log(
-        `[run] Next exited (code=${code ?? 0}) with supervised restartMode=${signal.restartMode} — running build pipeline`
+        `## [버전관리] ## Next 종료 (code=${code ?? 0}) supervised mode=${signal.restartMode} — 빌드 파이프라인 시작`
       );
       void relaunchNextOnly(signal, cmd);
       return;
@@ -287,12 +296,14 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
   relaunchInFlight = true;
   const port = getAppListenPort();
   const mode = signal.restartMode ?? 'launcher';
-  console.log(`[run] supervised relaunch (mode=${mode}). Node stays; Next stopped. port=${port}`);
+  console.log(
+    `## [버전관리] ## supervised 재기동 시작 (mode=${mode}). Node 유지, Next 중지. port=${port}`
+  );
   markRestartConsumed(signal);
 
   expectNextExitForRelaunch = true;
   if (nextProc && !nextProc.killed) {
-    console.log('[run] supervised: stopping Next child...');
+    console.log('## [버전관리] ## Next 자식 프로세스 종료 중...');
     try {
       nextProc.kill('SIGTERM');
     } catch {
@@ -322,7 +333,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     try {
       runNpmInstallSync();
     } catch (e) {
-      console.error('[run] npm install failed:', e instanceof Error ? e.message : e);
+      console.error('## [버전관리] ## npm install 실패:', e instanceof Error ? e.message : e);
       await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
@@ -336,7 +347,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     try {
       runNpmBuildSync();
     } catch (e) {
-      console.error('[run] npm run build failed:', e instanceof Error ? e.message : e);
+      console.error('## [버전관리] ## npm run build 실패:', e instanceof Error ? e.message : e);
       await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
@@ -344,6 +355,8 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       spawnNext(cmd);
       return;
     }
+  } else {
+    console.log('## [버전관리] ## runBuild=false — 사전 빌드 완료분, 후행 빌드 생략');
   }
 
   await ensureGeoServerIfRequested(signal);
@@ -358,7 +371,7 @@ function startLauncherPoll(cmd: NextCmd): void {
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   console.log(
-    `[run] supervised restart watch — launcher: poll+stop Next; startB/exit: Next exit → build → Next (delay ${safeDelay}ms)`
+    `## [버전관리] ## supervised 감시 시작 — launcher: Next 폴링 종료; startB/exit: Next 종료 → 빌드 → Next (delay ${safeDelay}ms)`
   );
 
   setInterval(() => {

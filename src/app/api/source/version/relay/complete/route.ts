@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { completeVersionRelay } from '@/service/sourceVersionRelayService';
+import type { ApplySourceProgressEvent } from '@/service/sourceVersionService';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 1800;
+
+type NdjsonProgressLine = ApplySourceProgressEvent & { type: 'progress' };
+type NdjsonResultLine = { type: 'result'; ok: true } & Record<string, unknown>;
+type NdjsonErrorLine = { type: 'error'; error: string };
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,8 +21,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'uploadId required' }, { status: 400 });
     }
 
-    const result = await completeVersionRelay({ uploadId });
-    return NextResponse.json(result);
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (line: NdjsonProgressLine | NdjsonResultLine | NdjsonErrorLine) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+        };
+        try {
+          const result = await completeVersionRelay({
+            uploadId,
+            onProgress: (event) => {
+              send({ type: 'progress', ...event });
+            },
+          });
+          send({ type: 'result', ...result, ok: true });
+          controller.close();
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'relay complete failed';
+          try {
+            send({ type: 'error', error: message });
+            controller.close();
+          } catch {
+            try {
+              controller.error(err);
+            } catch {
+              /* already closed */
+            }
+          }
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'relay complete failed';
     return NextResponse.json({ error: message }, { status: 500 });

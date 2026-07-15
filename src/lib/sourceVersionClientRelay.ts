@@ -4,7 +4,7 @@ import { resolveClientMachineIp } from '@/lib/clientMachineIp';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 
-export type RestartMode = 'none' | 'exit' | 'command' | 'startB' | 'launcher';
+export type RestartMode = 'none' | 'exit' | 'launcher';
 
 export type VersionRelayPhase =
   | 'latest'
@@ -15,6 +15,7 @@ export type VersionRelayPhase =
   | 'merge-apply'
   | 'geoserver'
   | 'geoserver-stop'
+  | 'npm-install'
   | 'app-stop'
   | 'build'
   | 'app-start'
@@ -90,6 +91,23 @@ export class RelayTimeoutError extends Error {
 
 export function isUserAbortError(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
+}
+
+/** 재시작(process.exit) 직후 브라우저가 받는 연결 끊김 — 실패로 취급하지 않음 */
+export function isRestartDisconnectError(e: unknown): boolean {
+  const raw = e instanceof Error ? e.message : String(e);
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network error') ||
+    lower.includes('load failed') ||
+    lower.includes('cors/네트워크') ||
+    lower.includes('connection') ||
+    lower.includes('econnreset') ||
+    lower.includes('econnrefused') ||
+    lower.includes('fetch failed')
+  );
 }
 
 export function isRelayTimeoutError(e: unknown): boolean {
@@ -215,6 +233,78 @@ function appendUint8Arrays(a: Uint8Array, b: Uint8Array): Uint8Array {
   return out;
 }
 
+/** complete API NDJSON: progress 줄 여러 개 + result/error 한 줄 */
+async function readRelayCompleteNdjson(
+  res: Response,
+  onProgressLine: (event: { phase: VersionRelayPhase; message: string }) => void
+): Promise<VersionRelayResult & { error?: string; ok?: boolean }> {
+  const contentType = res.headers.get('content-type') ?? '';
+
+  /** 구 단일 JSON 응답 호환 */
+  if (contentType.includes('application/json') && !contentType.includes('ndjson')) {
+    return (await res.json().catch(() => ({}))) as VersionRelayResult & {
+      error?: string;
+      ok?: boolean;
+    };
+  }
+
+  if (!res.body) {
+    return (await res.json().catch(() => ({}))) as VersionRelayResult & {
+      error?: string;
+      ok?: boolean;
+    };
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: (VersionRelayResult & { error?: string; ok?: boolean }) | null = null;
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    const type = String(parsed.type ?? '');
+    if (type === 'progress') {
+      const phase = String(parsed.phase ?? '') as VersionRelayPhase;
+      const message = String(parsed.message ?? '');
+      if (phase && message) onProgressLine({ phase, message });
+      return;
+    }
+    if (type === 'error') {
+      result = {
+        ok: false,
+        error: String(parsed.error ?? 'relay complete 실패'),
+      } as VersionRelayResult & { error?: string; ok?: boolean };
+      return;
+    }
+    if (type === 'result') {
+      const { type: _t, ...rest } = parsed;
+      result = rest as VersionRelayResult & { error?: string; ok?: boolean };
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const raw of lines) handleLine(raw);
+  }
+  if (buffer.trim()) handleLine(buffer);
+
+  if (!result) {
+    throw new Error('relay complete 결과(result) 행이 없습니다');
+  }
+  return result;
+}
+
 function parseTotalSize(latest: GnmsLatestPayload, contentLength: string | null): number {
   const fromHeader = contentLength ? Number(contentLength) : NaN;
   if (Number.isFinite(fromHeader) && fromHeader > 0) return fromHeader;
@@ -274,21 +364,9 @@ export async function relayLatestSourceFromGnms(options: {
     cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
     if (!cfgRes.ok) throw new Error(cfg?.error ?? 'GNMS 설정 조회 실패');
 
-    if (restart && restartMode === 'command' && cfg.restartCommandConfigured !== true) {
+    if (restart && restartMode === 'launcher' && cfg.restartCommandConfigured !== true) {
       const msg =
-        '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev|start -- <project> <type> 으로 기동하세요.';
-      log(`ERROR: ${msg}`);
-      throw new Error(msg);
-    }
-    if (
-      restart &&
-      (restartMode === 'startB' || restartMode === 'launcher') &&
-      cfg.restartCommandConfigured !== true
-    ) {
-      const msg =
-        restartMode === 'startB'
-          ? '구동 프로젝트/타입이 없어 start/b 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev|start -- <project> <type> 으로 기동하세요.'
-          : '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev|start -- <project> <type> 으로 기동하세요.';
+        '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. 운영 서버를 npm run dev|start -- <project> <type> 으로 기동하세요.';
       log(`ERROR: ${msg}`);
       throw new Error(msg);
     }
@@ -475,7 +553,7 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     throwIfAborted(signal);
-    onProgress?.({ phase: 'relay-complete', message: 'GeoServer 중지·병합·적용 처리 중...' });
+    onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중...' });
     log('relay complete 요청...');
     const completeRes = await fetchWithTimeout(
       '/api/source/version/relay/complete',
@@ -488,11 +566,18 @@ export async function relayLatestSourceFromGnms(options: {
       signal,
       { label: '병합·적용' }
     );
-    const completeJson = (await completeRes.json().catch(() => ({}))) as VersionRelayResult & {
-      error?: string;
-      ok?: boolean;
-    };
-    if (!completeRes.ok || completeJson.error || completeJson.ok === false) {
+
+    if (!completeRes.ok) {
+      const errJson = (await completeRes.json().catch(() => ({}))) as { error?: string };
+      const msg = errJson.error ?? `relay complete 실패 (HTTP ${completeRes.status})`;
+      log(`ERROR: ${msg}`);
+      throw new Error(msg);
+    }
+
+    const completeJson = await readRelayCompleteNdjson(completeRes, (event) => {
+      onProgress?.(event);
+    });
+    if (completeJson.error || completeJson.ok === false) {
       const msg = completeJson.error ?? 'relay complete 실패';
       log(`ERROR: ${msg}`);
       throw new Error(msg);

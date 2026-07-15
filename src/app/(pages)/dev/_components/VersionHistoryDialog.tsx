@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { DevFloatingPanel } from './DevFloatingPanel';
 import { registerDevVersionHistoryRefresh } from './devVersionHistoryBridge';
@@ -72,6 +73,7 @@ export function VersionHistoryDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [expandedKey, setExpandedKey] = useState<number | null>(null);
   const filterRef = useRef(filter);
   const dateYmdRef = useRef(dateYmd);
 
@@ -104,6 +106,7 @@ export function VersionHistoryDialog({
     if (!open) return;
     setFilter(defaultFilter);
     setDateYmd('');
+    setExpandedKey(null);
     filterRef.current = defaultFilter;
     dateYmdRef.current = '';
     setError(null);
@@ -163,23 +166,58 @@ export function VersionHistoryDialog({
         {!loading && !error && hasSearched && items.length === 0 && (
           <div className="text-muted-foreground">이력이 없습니다.</div>
         )}
-        {items.map((row) => (
-          <div key={row.mvhKey} className="mb-2 border-b pb-2 last:mb-0 last:border-0">
-            <div className="flex flex-wrap gap-2">
-              <span>{formatDt(row.mvhCreateDate)}</span>
-              {showFeatureFilter && (
-                <span className="text-muted-foreground">{historyTypeLabel(row.mvhHistoryType)}</span>
+        {items.map((row) => {
+          const expanded = expandedKey === row.mvhKey;
+          return (
+            <div key={row.mvhKey} className="mb-1 border-b last:mb-0 last:border-0">
+              <button
+                type="button"
+                className="flex w-full flex-wrap items-center gap-3 py-2 text-left hover:bg-muted/40"
+                onClick={() => setExpandedKey(expanded ? null : row.mvhKey)}
+                aria-expanded={expanded}
+              >
+                <span className="shrink-0 tabular-nums">{formatDt(row.mvhCreateDate)}</span>
+                {showFeatureFilter && (
+                  <span className="shrink-0 text-muted-foreground">
+                    {historyTypeLabel(row.mvhHistoryType)}
+                  </span>
+                )}
+                <span
+                  className={
+                    row.mvhStatus === 'success'
+                      ? 'shrink-0 text-green-700 dark:text-green-400'
+                      : 'shrink-0 text-red-600 dark:text-red-400'
+                  }
+                >
+                  {row.mvhStatus === 'success' ? '성공' : '실패'}
+                </span>
+                <span
+                  className="min-w-0 flex-1 truncate text-muted-foreground"
+                  title={row.mvhIp ?? row.mvhClientHost ?? ''}
+                >
+                  {row.mvhIp ?? row.mvhClientHost ?? '-'}
+                </span>
+                <span className="shrink-0 text-muted-foreground" aria-hidden>
+                  {expanded ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </span>
+              </button>
+              {expanded && (
+                <div className="space-y-1 pb-2 pl-1 text-muted-foreground">
+                  {!showFeatureFilter && (
+                    <div>{historyTypeLabel(row.mvhHistoryType)}</div>
+                  )}
+                  <div className="whitespace-pre-wrap break-all text-foreground">
+                    {row.mvhMessage ?? ''}
+                  </div>
+                </div>
               )}
-              <span className={row.mvhStatus === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                {row.mvhStatus === 'success' ? '성공' : '실패'}
-              </span>
             </div>
-            <div className="truncate text-muted-foreground" title={row.mvhIp ?? row.mvhClientHost ?? ''}>
-              {row.mvhIp ?? row.mvhClientHost ?? '-'}
-            </div>
-            <div className="whitespace-pre-wrap break-all">{row.mvhMessage ?? ''}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </DevFloatingPanel>
   );

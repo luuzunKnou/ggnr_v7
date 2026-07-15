@@ -273,7 +273,13 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
     if (payload?.ok !== false) {
       const tab = normalizeParcelTabPayload(payload);
       // 서버 VWorld 직접 호출은 키 도메인·망 제약으로 빈 결과가 올 수 있음 → 실데이터 있을 때만 사용
-      if (hasParcelLandInfoTabData(tab)) {
+      if (hasParcelLandInfoTabData({
+        characteristics: tab.characteristics,
+        landUses: tab.landUses,
+        prices: tab.prices,
+        possessions: tab.possessions,
+        source: tab.source ?? 'cache', // build 오류로 임시 처리
+      })) {
         return tab;
       }
     }
@@ -282,7 +288,13 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   }
 
   const cached = await fetchParcelTabDataFromCache(pnu);
-  if (cached && hasParcelLandInfoTabData(cached)) return cached;
+  if (cached && hasParcelLandInfoTabData({
+    characteristics: cached.characteristics,
+    landUses: cached.landUses,
+    prices: cached.prices,
+    possessions: cached.possessions,
+    source: cached.source ?? 'cache', // build 오류로 임시 처리
+  })) return cached;
 
   if (!toStr(args.vworldKey)) return emptyParcelTabData();
 

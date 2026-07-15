@@ -16,25 +16,33 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export type RestartMode = 'none' | 'exit' | 'command' | 'startB' | 'launcher';
+/** UI·API 공용. 옛 command/startB 는 normalizeRestartMode 에서 exit 로 합침 */
+export type RestartMode = 'none' | 'exit' | 'launcher';
+
+/** 레거시 command·startB·nodeWatch → exit */
+export function normalizeRestartMode(value: unknown): RestartMode {
+  if (value === 'launcher') return 'launcher';
+  if (value === 'none') return 'none';
+  if (
+    value === 'exit' ||
+    value === 'command' ||
+    value === 'startB' ||
+    value === 'nodeWatch'
+  ) {
+    return 'exit';
+  }
+  return 'none';
+}
 
 /**
  * 구동 시 기록된 명령(restart-request.json boot / GGNR_RUN_SCRIPT)을 재사용.
  * .env의 GGNR_RESTART_COMMAND는 사용하지 않음.
  */
-export function resolveRestartCommand(mode: 'command' | 'startB' = 'command'): string {
+export function resolveRestartCommand(): string {
   const project = process.env.GGNR_PROJECT?.trim() ?? '';
   const type = process.env.GGNR_ENV?.trim() ?? '';
   if (!project || !type) return '';
-  const appCmd = resolveAppStartCommand(project, type);
-  if (mode === 'startB') {
-    return appCmd;
-  }
-  /**
-   * 명령 실행(새 창): restart-watch 루프가 아니라 기동 명령 한 번만.
-   * watch를 띄우면 신호 restartMode=command 가 남은 채 exit 재시작을 거절하고 끊긴다.
-   */
-  return appCmd;
+  return resolveAppStartCommand(project, type);
 }
 
 export function isRestartCommandConfigured(): boolean {
@@ -43,21 +51,42 @@ export function isRestartCommandConfigured(): boolean {
   return Boolean(project && type);
 }
 
-const RESTART_COMMAND_MISSING_MSG =
-  '구동 프로젝트/타입이 없어 명령 실행 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
-
-const START_B_MISSING_MSG =
-  '구동 프로젝트/타입이 없어 start/b 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
-
 const LAUNCHER_MISSING_MSG =
   '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
-/** 새 콘솔을 띄우는 방식(명령 실행)만 true */
-function needsSpawnedRestartCommand(mode: RestartMode): mode is 'command' {
-  return mode === 'command';
+
+export function buildApplySuccessHistoryMessage(opts: {
+  ip?: string;
+  mode: RestartMode;
+  command: string;
+  appliedFiles: number;
+  skippedFiles: number;
+  netLabel: string;
+  geoserverMsg: string;
+}): string {
+  const ip = opts.ip?.trim() || '-';
+  const command = opts.command.trim() || '-';
+  return `성공 / ${ip} / mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
-function needsProjectEnvRestart(mode: RestartMode): boolean {
-  return mode === 'command' || mode === 'startB' || mode === 'launcher';
+function runNpmInstallSyncInProcess(): void {
+  console.log('## [버전관리] ## npm install --no-audit --no-fund (사전)');
+  execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    shell: true,
+    env: process.env,
+  });
+}
+
+function runNpmBuildSyncInProcess(): void {
+  console.log('## [버전관리] ## npm run build (사전 빌드)');
+  execFileSync('npm', ['run', 'build'], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    shell: true,
+    env: process.env,
+  });
+  console.log('## [버전관리] ## npm run build OK (사전 빌드)');
 }
 
 export type ApplyLatestSourceOptions = {
@@ -181,6 +210,20 @@ export function getGnmsClientConfig(): GnmsClientConfig {
   };
 }
 
+/** 적용 중 UI 단계 보고 */
+export type ApplySourceProgressPhase =
+  | 'geoserver-stop'
+  | 'merge-apply'
+  | 'geoserver-start'
+  | 'npm-install'
+  | 'build'
+  | 'app-stop';
+
+export type ApplySourceProgressEvent = {
+  phase: ApplySourceProgressPhase;
+  message: string;
+};
+
 export type ApplySourceZipOptions = {
   zipPath: string;
   version: string;
@@ -192,6 +235,8 @@ export type ApplySourceZipOptions = {
   restartMode: RestartMode;
   /** false=개방망(node_modules 제외), true=폐쇄망(포함) */
   includeNodeModules?: boolean;
+  /** 단계별 진행 콜백 (중지·병합·기동 분리) */
+  onProgress?: (event: ApplySourceProgressEvent) => void;
 };
 
 export type ApplySourceZipResult = Omit<
@@ -201,15 +246,22 @@ export type ApplySourceZipResult = Omit<
 
 /** ZIP 파일 경로 기준 워크스페이스 적용 (GNMS fetch 없음) */
 export async function applySourceZipFile(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
-  const { zipPath, version, fileName, requestedBy, clientIp, restart, restartMode, includeNodeModules = true } = options;
+  const {
+    zipPath,
+    version,
+    fileName,
+    requestedBy,
+    clientIp,
+    restart,
+    restartMode: restartModeRaw,
+    includeNodeModules = true,
+    onProgress,
+  } = options;
 
-  if (restart && restartMode === 'command' && !resolveRestartCommand('command')) {
-    throw new Error(RESTART_COMMAND_MISSING_MSG);
-  }
-  if (restart && restartMode === 'startB' && !resolveRestartCommand('startB')) {
-    throw new Error(START_B_MISSING_MSG);
-  }
-  if (restart && restartMode === 'launcher' && !isRestartCommandConfigured()) {
+  const restartMode = normalizeRestartMode(restart ? restartModeRaw : 'none');
+  const doRestart = restartMode !== 'none';
+
+  if (doRestart && restartMode === 'launcher' && !isRestartCommandConfigured()) {
     throw new Error(LAUNCHER_MISSING_MSG);
   }
 
@@ -217,15 +269,26 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   const stat = await fs.stat(zipPath);
   const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
   const extractDir = path.join(tmpBase, 'extracted');
+  const bootCommand = resolveAppStartCommand() || resolveRestartCommand();
 
   let geoStartedOnSuccessPath = false;
 
+  console.log(
+    `## [버전관리] ## 적용 시작 version=${version} file=${fileName} bytes=${stat.size} restart=${doRestart} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
+  );
+
   try {
+    onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
     const stopResult = await stopGeoServer();
+    console.log(
+      `## [버전관리] ## GeoServer 중지 ${stopResult.success ? 'OK' : `실패: ${stopResult.error ?? 'unknown'}`}`
+    );
     await sleep(stopResult.success ? GEOSERVER_STOP_SETTLE_MS : GEOSERVER_STOP_FAIL_SETTLE_MS);
 
+    onProgress?.({ phase: 'merge-apply', message: '소스 병합·적용 중...' });
     await extractZip(zipPath, extractDir);
     const extractedRoot = await pickExtractedRoot(extractDir);
+    console.log(`## [버전관리] ## ZIP 압축 해제 완료`);
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
     const copyResult = await copyRecursive({
@@ -233,36 +296,22 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       dstRoot: workspaceRoot,
       excludePrefixes,
     });
+    console.log(
+      `## [버전관리] ## 파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`
+    );
 
     const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
 
     /** 적용 직후 Geo: 상태 확인 → 필요 시 stop/start → ready 폴링. 이미 ready면 스킵 */
+    onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
     let startResult = await ensureGeoServerRunning({ forceRestart: false });
     /** 재시작 OFF인데 ensure 실패면 한 번 더 시도(재기동 파이프라인 없음) */
-    if (!restart && !startResult.success) {
+    if (!doRestart && !startResult.success) {
       await sleep(2000);
       startResult = await ensureGeoServerRunning({ forceRestart: false });
     }
     geoStartedOnSuccessPath = startResult.success;
-    const retryGeoOnRelaunch = restart && !startResult.success;
-
-    await writeRestartSignal(signalFile, {
-      at: new Date().toISOString(),
-      requestedBy,
-      version,
-      fileName,
-      restartRequested: restart,
-      restartMode,
-      includeNodeModules,
-      runNpmInstallBefore:
-        restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false,
-      runBuild: restart,
-      startGeoServerAfter: retryGeoOnRelaunch,
-      /** 이전 재기동이 남긴 소비 플래그 — 매 적용마다 초기화해야 2회차부터 스킵되지 않음 */
-      launcherConsumed: false,
-      launcherConsumedAt: null,
-      source: 'versionManagerClientRelay',
-    });
+    const retryGeoOnRelaunch = doRestart && !startResult.success;
 
     const stopPart = stopResult.success
       ? '중지 성공'
@@ -285,23 +334,104 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       startMessage: startPart,
     };
 
-    /** 재시작(process.exit) 전에 이력 INSERT — 클라이언트 후기록은 서버 종료로 실패할 수 있음 */
     const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
-    await recordVersionHistory({
-      historyType: 'apply_latest',
-      status: 'success',
-      message: `적용 ${copyResult.appliedFiles}건 / 제외 ${copyResult.skippedFiles}건 / ${netLabel} / GeoServer: ${geoserver.message}`,
-      ip: clientIp?.trim() || undefined,
+    const ipTrim = clientIp?.trim() || undefined;
+    const successMessage = buildApplySuccessHistoryMessage({
+      ip: ipTrim,
+      mode: restartMode,
+      command: bootCommand,
+      appliedFiles: copyResult.appliedFiles,
+      skippedFiles: copyResult.skippedFiles,
+      netLabel,
+      geoserverMsg: geoserver.message,
     });
 
-    /** 개방망: 재기동 파이프라인에서 npm install. 빌드는 재시작 시 항상 */
-    const runNpmInstallBefore =
-      restart && needsProjectEnvRestart(restartMode) && includeNodeModules === false;
-    const restartResult = scheduleRestart(restart ? restartMode : 'none', {
+    /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 종료하지 않음 */
+    if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
+      try {
+        if (!includeNodeModules) {
+          onProgress?.({ phase: 'npm-install', message: 'npm install (개방망) 중...' });
+          runNpmInstallSyncInProcess();
+          onProgress?.({ phase: 'npm-install', message: 'npm install 완료' });
+        }
+        onProgress?.({ phase: 'build', message: '사전 빌드 중...' });
+        runNpmBuildSyncInProcess();
+        onProgress?.({ phase: 'build', message: '사전 빌드 완료' });
+      } catch (buildErr: unknown) {
+        const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
+        await recordVersionHistory({
+          historyType: 'apply_latest',
+          status: 'fail',
+          message: `사전 빌드 실패: ${msg}`,
+          ip: ipTrim,
+        });
+        throw new Error(`사전 빌드 실패: ${msg}`);
+      }
+    }
+
+    /** 사전 빌드 완료분 — 재기동 후행 install/build 없음 */
+    const runNpmInstallBefore = false;
+    const runBuildAfterExit = false;
+
+    await writeRestartSignal(signalFile, {
+      at: new Date().toISOString(),
+      requestedBy,
+      version,
+      fileName,
+      clientIp: ipTrim ?? null,
+      restartRequested: doRestart,
+      restartMode,
+      includeNodeModules,
       runNpmInstallBefore,
-      runBuild: restart,
+      runBuild: runBuildAfterExit,
+      startGeoServerAfter: retryGeoOnRelaunch,
+      historyPending: doRestart,
+      historyPayload: doRestart
+        ? {
+            mode: restartMode,
+            command: bootCommand,
+            appliedFiles: copyResult.appliedFiles,
+            skippedFiles: copyResult.skippedFiles,
+            netLabel,
+            geoserverMsg: geoserver.message,
+            message: successMessage,
+          }
+        : null,
+      /** 이전 재기동이 남긴 소비 플래그 — 매 적용마다 초기화해야 2회차부터 스킵되지 않음 */
+      launcherConsumed: false,
+      launcherConsumedAt: null,
+      source: 'versionManagerClientRelay',
+    });
+
+    /** 재시작 없음: 즉시 INSERT. 재시작 있음: 부팅 시 flush (exit 직전 INSERT 유실 방지) */
+    if (!doRestart) {
+      await recordVersionHistory({
+        historyType: 'apply_latest',
+        status: 'success',
+        message: successMessage,
+        ip: ipTrim,
+      });
+    }
+
+    /** 앱 종료 단계는 응답 flush 전에 완료로 보고 (이후 process.exit·런처 종료) */
+    if (doRestart) {
+      onProgress?.({
+        phase: 'app-stop',
+        message:
+          restartMode === 'exit'
+            ? '앱 종료 단계 완료 · process.exit 예약'
+            : '앱 종료 단계 완료 · 런처가 Next 종료 예정',
+      });
+    }
+
+    const restartResult = scheduleRestart(restartMode, {
+      runNpmInstallBefore,
+      runBuild: runBuildAfterExit,
       startGeoServerAfter: retryGeoOnRelaunch,
     });
+    console.log(
+      `## [버전관리] ## 적용 완료 GeoServer=${geoserver.message} restart=${restartResult.message}`
+    );
 
     return {
       version,
@@ -313,8 +443,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       skippedSamples: copyResult.skippedSamples,
       geoserver,
       restart: {
-        requested: restart,
-        mode: restart ? restartMode : 'none',
+        requested: doRestart,
+        mode: restartMode,
         commandConfigured: restartResult.commandConfigured,
         scheduled: restartResult.scheduled,
         signalFile: normalizeSlashes(path.relative(workspaceRoot, signalFile)),
@@ -322,6 +452,10 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       },
     };
   } catch (err) {
+    console.error(
+      `## [버전관리] ## 적용 실패:`,
+      err instanceof Error ? err.message : err
+    );
     /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
     if (!geoStartedOnSuccessPath) {
       await ensureGeoServerRunning({ forceRestart: false }).catch(() => {});
@@ -465,223 +599,10 @@ async function writeRestartSignal(signalFile: string, payload: Record<string, un
   await fs.writeFile(signalFile, JSON.stringify(merged, null, 2), 'utf-8');
 }
 
-const NPM_INSTALL_CMD = 'npm install --no-audit --no-fund';
-
-/**
- * 조상 프로세스 중 cmd/PowerShell PID.
- * Windows Terminal 자체는 건드리지 않음(셸만 종료하면 해당 탭이 닫힘).
- */
-function tryGetWindowsShellAncestorPid(fromPid: number): number | null {
-  if (process.platform !== 'win32') return null;
-  try {
-    const ps = `
-$cur = ${Math.floor(fromPid)}
-$shells = @('cmd.exe','powershell.exe','pwsh.exe')
-for ($i = 0; $i -lt 24; $i++) {
-  $p = Get-CimInstance Win32_Process -Filter "ProcessId=$cur" -ErrorAction SilentlyContinue
-  if (-not $p) { break }
-  if ($shells -contains $p.Name) { Write-Output $p.ProcessId; exit 0 }
-  if (-not $p.ParentProcessId -or $p.ParentProcessId -eq 0 -or $p.ParentProcessId -eq $cur) { break }
-  $cur = $p.ParentProcessId
-}
-`;
-    const out = execFileSync(
-      'powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-      { encoding: 'utf8', timeout: 8000, windowsHide: true }
-    ).trim();
-    const pid = Number(out.split(/\r?\n/).filter(Boolean).pop());
-    if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) return null;
-    return pid;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 명령 실행 재시작: process.exit 후에도 남는 기존 콘솔 창을 닫음.
- * /T 없이 셸 PID만 종료해, 이미 띄운 새 재시작 창은 유지.
- * 새 창 런처(포트 대기·빌드)가 붙을 시간을 두고 여유 있게 닫는다.
- */
-function scheduleClosePreviousConsoleWindow(exitDelayMs: number): void {
-  if (process.platform !== 'win32') return;
-  const shellPid = tryGetWindowsShellAncestorPid(process.pid);
-  if (shellPid == null) return;
-  // exit 후 +5s: 새 창 PowerShell이 포트 해제·빌드에 붙은 뒤 구 콘솔만 종료
-  const killDelaySec = Math.max(6, Math.ceil((exitDelayMs + 5000) / 1000));
-  console.log(
-    `[restart] scheduled close of previous console pid=${shellPid} in ${killDelaySec}s`
-  );
-  spawn(
-    'cmd.exe',
-    ['/c', `timeout /t ${killDelaySec} /nobreak >nul & taskkill /PID ${shellPid} /F`],
-    { detached: true, stdio: 'ignore', windowsHide: true }
-  ).unref();
-}
-
 /** Next listen port (PORT env or 3000). Same value used by parent and child restart. */
 export function getAppListenPort(): number {
   const n = Number(process.env.PORT ?? 3000);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3000;
-}
-
-/**
- * 앱 종료(포트 해제) 후 공통 후처리: (선택) npm install → build → GeoServer 기동.
- * PowerShell 런처용 줄 조각.
- */
-function buildPostApplyPipelinePsLines(options: {
-  runNpmInstallBefore: boolean;
-  runBuild: boolean;
-  startGeoServerAfter: boolean;
-}): string[] {
-  const lines: string[] = [];
-  if (options.runNpmInstallBefore) {
-    lines.push(
-      'Write-Host "[restart] running npm install --no-audit --no-fund"',
-      'npm install --no-audit --no-fund',
-      'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] npm install FAILED exit=$LASTEXITCODE"; exit $LASTEXITCODE }'
-    );
-  }
-  if (options.runBuild) {
-    lines.push(
-      'Write-Host "[restart] running npm run build (app must be stopped)"',
-      'npm run build',
-      'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] npm run build FAILED exit=$LASTEXITCODE"; exit $LASTEXITCODE }',
-      'Write-Host "[restart] npm run build OK"'
-    );
-  }
-  if (options.startGeoServerAfter) {
-    lines.push(
-      'Write-Host "[restart] ensuring GeoServer (npx tsx scripts/ensure-geoserver.ts)"',
-      'npx --yes tsx scripts/ensure-geoserver.ts',
-      'if ($LASTEXITCODE -ne 0) { Write-Host "[restart] WARN: ensure-geoserver exit=$LASTEXITCODE (continuing)" }'
-    );
-  }
-  return lines;
-}
-
-/** PowerShell 단일 인용 문자열용 경로 이스케이프 */
-function psSingleQuoted(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
-/**
- * 부모 종료 후 포트가 비었는지 확인·로그한 뒤 재시작 명령을 실행하는 런처 스크립트 작성·기동.
- * sameConsole=true: 새 창 없이 기존 콘솔에서 백그라운드 기동 (start /b).
- */
-function spawnDelayedRestartCommand(
-  restartCommand: string,
-  cwd: string,
-  delayMs: number,
-  options: {
-    runNpmInstallBefore?: boolean;
-    runBuild?: boolean;
-    startGeoServerAfter?: boolean;
-    sameConsole?: boolean;
-  } = {}
-): void {
-  const delaySec = Math.max(1, Math.ceil(delayMs / 1000));
-  const port = getAppListenPort();
-  const runtimeDir = path.join(cwd, '.cursor-runtime');
-  const sameConsole = options.sameConsole === true;
-  const runNpmInstallBefore = options.runNpmInstallBefore === true;
-  const runBuild = options.runBuild === true;
-  const startGeoServerAfter = options.startGeoServerAfter === true;
-  fsSync.mkdirSync(runtimeDir, { recursive: true });
-
-  if (process.platform === 'win32') {
-    const safeCmd = restartCommand.replace(/"/g, '');
-    const launcherPath = path.join(
-      runtimeDir,
-      sameConsole ? 'restart-same-console.ps1' : 'restart-launch.ps1'
-    );
-    // cmd -File 인자·팝업 이슈 완화 (공백 없는 경로도 / 권장)
-    const launcherPathForCmd = launcherPath.replace(/\\/g, '/');
-    const lines: string[] = [
-      '$ErrorActionPreference = "Continue"',
-      `Set-Location -LiteralPath ${psSingleQuoted(cwd)}`,
-      `$port = ${port}`,
-      `$delaySec = ${delaySec}`,
-      sameConsole
-        ? 'Write-Host "[restart] same-console launcher started"'
-        : 'Write-Host "[restart] child console started"',
-      `Write-Host "[restart] cwd=$(Get-Location)"`,
-      'Write-Host "[restart] target port=$port (must match previous process)"',
-      'Write-Host "[restart] initial delay $delaySec s..."',
-      'Start-Sleep -Seconds $delaySec',
-      'Write-Host "[restart] waiting until port $port is FREE (LISTENING gone)..."',
-      '$deadline = (Get-Date).AddSeconds(90)',
-      '$freed = $false',
-      'while ((Get-Date) -lt $deadline) {',
-      '  $hit = netstat -ano 2>$null | Select-String -Pattern (":" + $port + "\\s") | Select-String "LISTENING"',
-      '  if (-not $hit) {',
-      '    Write-Host "[restart] port $port is FREE"',
-      '    $freed = $true',
-      '    break',
-      '  }',
-      '  Write-Host "[restart] port $port still LISTENING - wait 1s"',
-      '  Start-Sleep -Seconds 1',
-      '}',
-      'if (-not $freed) {',
-      '  Write-Host "[restart] WARN: port $port still busy after 90s - force-free then continue"',
-      '}',
-      'Write-Host "[restart] force-free-port $port (self/parent PID protected)"',
-      'npx --yes tsx scripts/force-free-port.ts $port',
-      'Start-Sleep -Seconds 1',
-      ...buildPostApplyPipelinePsLines({ runNpmInstallBefore, runBuild, startGeoServerAfter }),
-      `Write-Host "[restart] exec: ${safeCmd}"`,
-      'Write-Host "[restart] starting app on expected port=$port"',
-      'npx --yes tsx scripts/force-free-port.ts $port',
-      safeCmd,
-      'Write-Host "[restart] command finished exit=$LASTEXITCODE"',
-    ];
-    fsSync.writeFileSync(launcherPath, lines.join('\r\n') + '\r\n', 'utf8');
-    console.log(`[restart] wrote launcher ${launcherPath}`);
-    console.log(
-      `[restart] child will wait for port ${port} free then pipeline(build=${runBuild}, geo=${startGeoServerAfter}) then run${sameConsole ? ' (same console)' : ''}: ${restartCommand}`
-    );
-    // sameConsole: start /b "" (빈 제목) → Windows «'\\' 경로를 찾을 수 없음» 팝업 유발
-    const startCmd = sameConsole
-      ? `start /b powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPathForCmd}"`
-      : `start "ggnr-restart" powershell -NoProfile -ExecutionPolicy Bypass -File "${launcherPathForCmd}"`;
-    spawn('cmd.exe', ['/c', startCmd], {
-      cwd,
-      detached: true,
-      stdio: sameConsole ? 'inherit' : 'ignore',
-      env: process.env,
-      windowsHide: !sameConsole,
-    }).unref();
-    return;
-  }
-
-  const delaySecFloat = Math.max(0.5, delayMs / 1000);
-  const steps: string[] = [];
-  if (runNpmInstallBefore) steps.push(NPM_INSTALL_CMD);
-  if (runBuild) steps.push('npm run build');
-  if (startGeoServerAfter) {
-    steps.push('npx --yes tsx scripts/ensure-geoserver.ts || true');
-  }
-  steps.push(restartCommand);
-  const afterWait = steps.join(' && ');
-  const sh = [
-    `echo "[restart] child started target port=${port}"`,
-    `sleep ${delaySecFloat}`,
-    `echo "[restart] waiting for port ${port} free..."`,
-    `for i in $(seq 1 90); do`,
-    `  if ! (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -q ":${port} "; then`,
-    `    echo "[restart] port ${port} is FREE"; break;`,
-    `  fi`,
-    `  echo "[restart] port ${port} still busy — wait 1s"; sleep 1;`,
-    `done`,
-    `echo "[restart] exec: ${afterWait}"`,
-    afterWait,
-  ].join('\n');
-  spawn('sh', ['-c', sh], {
-    cwd,
-    detached: true,
-    stdio: sameConsole ? 'inherit' : 'ignore',
-    env: process.env,
-  }).unref();
 }
 
 function hasRunSupervisor(): boolean {
@@ -709,8 +630,6 @@ function scheduleRestart(
   const runBuild = options?.runBuild === true;
   const startGeoServerAfter = options?.startGeoServerAfter === true;
   const port = getAppListenPort();
-  const commandRestart = resolveRestartCommand('command');
-  const startBRestart = resolveRestartCommand('startB');
   const pipelineHint = [
     runNpmInstallBefore ? 'npm install' : null,
     runBuild ? 'npm run build' : null,
@@ -728,121 +647,41 @@ function scheduleRestart(
     };
   }
 
-  /** 새 창에서 명령 실행 + 기존 콘솔 종료 — 빌드는 새 창 런처가 담당 */
-  if (needsSpawnedRestartCommand(mode)) {
-    if (!commandRestart) {
-      throw new Error(RESTART_COMMAND_MISSING_MSG);
-    }
-    const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
-    console.log(
-      `[restart] mode=command port=${port} — spawn child console for pipeline, exit in ${exitDelayMs}ms: ${pipelineHint}`
-    );
-    spawnDelayedRestartCommand(commandRestart, process.cwd(), safeDelay, {
-      runNpmInstallBefore,
-      runBuild,
-      startGeoServerAfter,
-    });
-    scheduleClosePreviousConsoleWindow(exitDelayMs);
-    setTimeout(() => {
-      console.log(`[restart] process.exit(0) — releasing port ${port}`);
-      process.exit(0);
-    }, exitDelayMs).unref();
-    return {
-      scheduled: true,
-      commandConfigured: true,
-      message: `재시작 예약: 앱 종료 후 새 창에서 ${pipelineHint} (${commandRestart})`,
-    };
-  }
-
-  /**
-   * start/b: Next만 종료. npm run build는 살아 있는 기동 런처(run.ts)가 수행.
-   * (예전처럼 Next 종료 직후 외부 PS에만 맡기면 빌드 주체가 사라질 수 있음)
-   */
-  if (mode === 'startB') {
-    if (!isRestartCommandConfigured()) {
-      throw new Error(START_B_MISSING_MSG);
-    }
-    const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
-    if (hasRunSupervisor()) {
-      console.log(
-        `[restart] mode=startB port=${port} — Next exit in ${exitDelayMs}ms; Node supervisor runs: ${pipelineHint}`
-      );
-      setTimeout(() => {
-        console.log(
-          `[restart] process.exit(0) — Next releasing port ${port}; Node supervisor continues build`
-        );
-        process.exit(0);
-      }, exitDelayMs).unref();
-      return {
-        scheduled: true,
-        commandConfigured: true,
-        message: `start/b 재시작 예약: 앱(Next) 종료 후 기동 런처가 ${pipelineHint}`,
-      };
-    }
-    console.log(
-      `[restart] mode=startB port=${port} — no run supervisor; fallback same-console PS, exit in ${exitDelayMs}ms, pipeline: ${pipelineHint}`
-    );
-    spawnDelayedRestartCommand(startBRestart, process.cwd(), safeDelay, {
-      runNpmInstallBefore,
-      runBuild,
-      startGeoServerAfter,
-      sameConsole: true,
-    });
-    setTimeout(() => {
-      console.log(`[restart] process.exit(0) — releasing port ${port}; start /b relaunch continues`);
-      process.exit(0);
-    }, exitDelayMs).unref();
-    return {
-      scheduled: true,
-      commandConfigured: true,
-      message: `start/b 재시작 예약(런처 없음·외부 스크립트): 앱 종료 후 ${pipelineHint} (${startBRestart})`,
-    };
-  }
-
-  /** Node 런처: process.exit 없음. run.ts가 신호를 보고 Next 종료→빌드→Next */
+  /** Node 런처: process.exit 없음. 사전 빌드 완료 후 run.ts가 Next만 재기동 */
   if (mode === 'launcher') {
     if (!isRestartCommandConfigured()) {
       throw new Error(LAUNCHER_MISSING_MSG);
     }
     console.log(
-      `[restart] mode=launcher port=${port} — signal only; pipeline: ${pipelineHint}`
+      `## [버전관리] ## mode=launcher port=${port} — signal only; pre-build done; Next relaunch (no post-build)`
     );
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `Node 런처 재시작 요청: Node 유지, Next 종료 후 ${pipelineHint} (포트 ${port})`,
+      message: `Node 런처 재시작 요청: 사전 빌드 완료, Next 종료 후 재기동 (포트 ${port})`,
     };
   }
 
-  /** exit: 기동 런처가 있으면 Next 종료 후 빌드. 없으면 restart-watch 등 외부 감시기에 의존 */
-  if (hasRunSupervisor()) {
-    console.log(
-      `[restart] mode=exit port=${port} — Next exit in ${safeDelay}ms; Node supervisor runs: ${pipelineHint}`
-    );
-    setTimeout(() => {
-      console.log(
-        `[restart] process.exit(0) — Next releasing port ${port}; Node supervisor continues build`
-      );
-      process.exit(0);
-    }, safeDelay).unref();
-    return {
-      scheduled: true,
-      commandConfigured: isRestartCommandConfigured(),
-      message: `프로세스 종료 재시작 예약: 앱(Next) 종료 후 기동 런처/감시기가 ${pipelineHint}`,
-    };
-  }
-
+  /**
+   * exit(nssm): 사전 빌드는 적용 경로에서 이미 완료.
+   * process.exit(0) → nssm/외부 감시 또는 run 슈퍼바이저가 재기동.
+   * 후행 빌드는 신호 runBuild=false 로 생략.
+   */
+  const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
+  const exitHint = hasRunSupervisor()
+    ? '사전 빌드 완료 → process.exit → 런처가 Next 재기동'
+    : '사전 빌드 완료 → process.exit → nssm/감시기가 재기동';
   console.log(
-    `[restart] mode=exit port=${port} — process.exit in ${safeDelay}ms (watcher pipeline: ${pipelineHint})`
+    `## [버전관리] ## mode=exit port=${port} — process.exit in ${exitDelayMs}ms (${exitHint})`
   );
   setTimeout(() => {
-    console.log(`[restart] process.exit(0) — releasing port ${port}`);
+    console.log(`## [버전관리] ## process.exit(0) — releasing port ${port} (exit/nssm)`);
     process.exit(0);
-  }, safeDelay).unref();
+  }, exitDelayMs).unref();
   return {
     scheduled: true,
     commandConfigured: isRestartCommandConfigured(),
-    message: `프로세스 종료 재시작 예약: 종료 후 watcher가 ${pipelineHint} (포트 ${port})`,
+    message: `프로세스 종료(nssm) 재시작 예약: ${exitHint} (포트 ${port})`,
   };
 }
 

@@ -13,6 +13,7 @@ import {
 import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
 import {
   isRelayTimeoutError,
+  isRestartDisconnectError,
   isUserAbortError,
   relayLatestSourceFromGnms,
   type RestartMode,
@@ -20,7 +21,12 @@ import {
   type VersionRelayResult,
 } from '@/lib/sourceVersionClientRelay';
 import { prefetchClientMachineIp } from '@/lib/clientMachineIp';
-import { closeDevVersionHistory, notifyDevVersionHistoryRefresh, notifyDevVersionHistoryRefreshRetry, clearDevVersionHistoryRefreshRetry } from './devVersionHistoryBridge';
+import {
+  closeDevVersionHistory,
+  notifyDevVersionHistoryRefresh,
+  notifyDevVersionHistoryRefreshRetry,
+  clearDevVersionHistoryRefreshRetry,
+} from './devVersionHistoryBridge';
 
 type SideProgress = {
   message: string;
@@ -35,12 +41,11 @@ function emptySideProgress(): SideProgress {
 
 export function VersionManagerContent() {
   const [profile, setProfile] = useState<SourcePackageProfile>('closed');
-  const [restart, setRestart] = useState(true);
-  const [restartMode, setRestartMode] = useState<RestartMode>('command');
+  const [restartMode, setRestartMode] = useState<RestartMode>('exit');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<SideProgress>(emptySideProgress());
   const [stages, setStages] = useState(() =>
-    buildRelayBaseStages({ restart: true, restartMode: 'command', packageProfile: 'closed' })
+    buildRelayBaseStages({ restart: true, restartMode: 'exit', packageProfile: 'closed' })
   );
   const [relayResult, setRelayResult] = useState<VersionRelayResult | null>(null);
   const logRef = useRef<string[]>([]);
@@ -48,9 +53,10 @@ export function VersionManagerContent() {
   const abortRef = useRef<AbortController | null>(null);
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  const restart = restartMode !== 'none';
   const stageOpts = {
     restart,
-    restartMode: restart ? restartMode : ('none' as RestartMode),
+    restartMode,
     packageProfile: profile,
   };
 
@@ -70,10 +76,13 @@ export function VersionManagerContent() {
     if (busy) return;
     setStages(buildRelayBaseStages(stageOpts));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stageOpts fields listed
-  }, [busy, restart, restartMode, profile]);
+  }, [busy, restartMode, profile]);
 
   const pushLog = (line: string) => {
-    const next = [...logRef.current, `[${new Date().toLocaleTimeString('ko-KR', { hour12: false })}] ${line}`].slice(-60);
+    const next = [
+      ...logRef.current,
+      `[${new Date().toLocaleTimeString('ko-KR', { hour12: false })}] ${line}`,
+    ].slice(-60);
     logRef.current = next;
     setProgress((p) => ({ ...p, logs: next }));
   };
@@ -84,7 +93,7 @@ export function VersionManagerContent() {
     const signal = abortRef.current.signal;
     const opts = {
       restart,
-      restartMode: restart ? restartMode : ('none' as RestartMode),
+      restartMode,
       packageProfile: profile,
     };
 
@@ -94,6 +103,8 @@ export function VersionManagerContent() {
     versionDetailRef.current = '';
     setProgress({ ...emptySideProgress(), message: 'GNMS 최신 버전 조회 중...', pct: 2 });
     setStages(buildRelayBaseStages(opts));
+    /** 사전 빌드·앱 종료 진행 중 이후 끊김은 재시작으로 간주 */
+    let reachedRestartCommit = false;
 
     try {
       const json = await relayLatestSourceFromGnms({
@@ -102,6 +113,9 @@ export function VersionManagerContent() {
         packageProfile: profile,
         signal,
         onProgress: (p: VersionRelayProgress) => {
+          if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
+            reachedRestartCommit = true;
+          }
           const pct =
             p.totalBytes && p.bytesDone != null
               ? Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
@@ -109,9 +123,19 @@ export function VersionManagerContent() {
                 ? 5
                 : p.phase === 'relay-init'
                   ? 15
-                  : p.phase === 'relay-complete'
-                    ? 95
-                    : null;
+                  : p.phase === 'geoserver-stop' || p.phase === 'relay-complete'
+                    ? 88
+                    : p.phase === 'merge-apply'
+                      ? 93
+                      : p.phase === 'geoserver-start'
+                        ? 97
+                        : p.phase === 'npm-install'
+                          ? 97
+                          : p.phase === 'build'
+                            ? 98
+                            : p.phase === 'app-stop'
+                              ? 99
+                              : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
             versionDetailRef.current = p.message.replace('latest: ', '');
           }
@@ -145,35 +169,37 @@ export function VersionManagerContent() {
       });
       setRelayResult(json);
       versionDetailRef.current = `version=${json.version}, file=${json.fileName}`;
+      const doneMode = (json.restart?.mode ?? opts.restartMode) as RestartMode;
       const doneOpts = {
-        restart: Boolean(json.restart?.scheduled),
-        restartMode: (json.restart?.mode ?? opts.restartMode) as RestartMode,
+        restart: Boolean(json.restart?.scheduled) || doneMode !== 'none',
+        restartMode: doneMode,
         packageProfile: profile,
       };
       setStages(
         buildRelayStagesFromProgress(
           {
             phase: 'done',
-            message: json.restart?.scheduled ? '적용 완료 · 재시작 파이프라인 예약' : '적용 완료',
+            message: json.restart?.scheduled
+              ? '적용 완료 · 재시작 파이프라인 예약'
+              : '적용 완료',
             versionDetail: versionDetailRef.current,
             applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
             geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
             geoserverStartDetail: json.geoserver?.startMessage,
             appStopDetail: json.restart?.scheduled
-              ? json.restart?.mode === 'command'
-                ? '포트 해제·앱 종료 예약'
-                : '포트 해제·Next 종료 예약'
+              ? doneMode === 'exit'
+                ? '앱 종료 단계 완료 · process.exit 예약'
+                : '앱 종료 단계 완료 · 런처가 Next 종료'
               : undefined,
             npmInstallDetail:
               json.restart?.scheduled && profile === 'open'
-                ? '개방망: 재기동 전 npm install 예약'
+                ? '사전 npm install 완료'
                 : undefined,
-            buildDetail: json.restart?.scheduled
-              ? json.restart?.mode === 'command'
-                ? '새 창에서 npm run build 예약'
-                : '기동 런처/감시기가 npm run build 예약'
-              : undefined,
-            appStartDetail: json.restart?.message,
+            buildDetail: json.restart?.scheduled ? '사전 빌드 완료' : undefined,
+            appStartDetail:
+              json.restart?.scheduled && doneMode === 'launcher'
+                ? '콘솔(런처)에서 Next 재기동'
+                : json.restart?.message,
             restartScheduled: Boolean(json.restart?.scheduled),
             geoserverStartOk: !(
               json.geoserver?.started === false && !json.geoserver?.deferredStart
@@ -183,11 +209,11 @@ export function VersionManagerContent() {
         )
       );
       const restartHint =
-        json.restart?.mode === 'command'
-          ? '적용 완료. 앱 종료 → 새 창에서 빌드 → 앱 기동 순으로 진행합니다.'
-          : json.restart?.mode === 'launcher'
-            ? '적용 완료. Next 종료 → 기동 런처가 빌드 → Next 재기동 순으로 콘솔에서 진행합니다.'
-            : '적용 완료. 앱(Next) 종료 → 기동 런처/감시기가 빌드 → 앱 기동 순으로 콘솔에서 진행합니다.';
+        doneMode === 'exit'
+          ? '적용 완료. 사전 빌드·앱 종료 단계까지 완료했습니다. 이후 재기동은 nssm(또는 기동 런처)에서 진행됩니다.'
+          : doneMode === 'launcher'
+            ? '적용 완료. 사전 빌드·앱 종료 단계까지 완료했습니다. Next 재기동은 콘솔(기동 런처)에서 진행됩니다.'
+            : '최신 소스 적용 완료';
       setProgress({
         message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료',
         pct: 100,
@@ -196,9 +222,9 @@ export function VersionManagerContent() {
       });
       if (json.restart?.scheduled) {
         pushLog(
-          json.restart?.mode === 'command'
-            ? '재시작 파이프라인 예약: 앱 종료 → 새 창에서 npm run build → 앱 기동'
-            : '재시작 파이프라인 예약: 앱(Next) 종료 → 기동 런처/감시기가 npm run build → 앱 기동'
+          doneMode === 'exit'
+            ? '재시작 예약: 사전 빌드·앱 종료 완료 → process.exit → nssm/런처 재기동'
+            : '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
         );
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
@@ -210,6 +236,45 @@ export function VersionManagerContent() {
     } catch (e: unknown) {
       const isAbort = isUserAbortError(e);
       const isTimeout = isRelayTimeoutError(e);
+      const isDisconnect = isRestartDisconnectError(e);
+      /** 재시작 예약 후 서버 종료로 끊긴 경우 — 실패 UI 대신 안내 */
+      if (!isAbort && isDisconnect && restart && reachedRestartCommit) {
+        const softOpts = {
+          restart: true,
+          restartMode,
+          packageProfile: profile,
+        };
+        setStages(
+          buildRelayStagesFromProgress(
+            {
+              phase: 'done',
+              message: '적용 완료 · 재시작으로 연결이 끊김',
+              versionDetail: versionDetailRef.current || undefined,
+              buildDetail: '사전 빌드 완료',
+              npmInstallDetail: profile === 'open' ? '사전 npm install 완료' : undefined,
+              appStopDetail: '앱 종료 단계 완료',
+              appStartDetail:
+                restartMode === 'launcher' ? '콘솔(런처)에서 Next 재기동' : undefined,
+              restartScheduled: true,
+              geoserverStartOk: true,
+            },
+            softOpts
+          )
+        );
+        setProgress({
+          message:
+            '적용·사전 빌드까지 완료했습니다. 재시작으로 연결이 끊어졌습니다. 이후는 콘솔·서비스에서 확인하세요.',
+          pct: 100,
+          logs: logRef.current,
+          error: null,
+        });
+        pushLog('재시작으로 연결이 끊김 (정상). 앱 종료 단계까지 완료로 표시');
+        clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
+        historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
+          0, 5_000, 15_000, 30_000, 60_000,
+        ]);
+        return;
+      }
       const msg = isAbort
         ? '사용자가 취소했습니다.'
         : e instanceof Error
@@ -273,7 +338,10 @@ export function VersionManagerContent() {
           <span className="text-muted-foreground">{progress.pct}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress.pct}%` }} />
+          <div
+            className="h-full bg-primary transition-all duration-300"
+            style={{ width: `${progress.pct}%` }}
+          />
         </div>
       </div>
     );
@@ -287,69 +355,36 @@ export function VersionManagerContent() {
           <p className="text-xs text-muted-foreground">
             GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
           </p>
-          <p className="text-xs text-muted-foreground">
-            «적용 후 서버 재시작»이 켜지면 모드에 따라 새 창 또는 기동 런처/감시기가 npm run build →
-            앱 기동을 이어 갑니다. GeoServer는 적용 전에 중지하고 병합·적용 직후 다시 켜며, 그때
-            실패하면 재기동 파이프라인에서만 한 번 더 시도합니다.
-          </p>
           <ProfileRadios />
           <div className="space-y-2 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={restart}
-                disabled={busy}
-                onChange={(e) => setRestart(e.target.checked)}
-              />
-              적용 후 서버 재시작
-            </label>
+            <div className="text-xs text-muted-foreground">재시작 방식</div>
             <div className="flex flex-wrap items-center gap-3 text-xs">
               <label className="flex items-center gap-1">
                 <input
                   type="radio"
                   name="restartMode"
-                  checked={restartMode === 'command'}
-                  disabled={busy || !restart}
-                  onChange={() => setRestartMode('command')}
-                />
-                명령 실행 재시작(새 창에서 빌드·기동)
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
                   checked={restartMode === 'exit'}
-                  disabled={busy || !restart}
+                  disabled={busy}
                   onChange={() => setRestartMode('exit')}
                 />
-                process.exit (기동 런처/감시기가 빌드)
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'startB'}
-                  disabled={busy || !restart}
-                  onChange={() => setRestartMode('startB')}
-                />
-                start/b (같은 콘솔·기동 런처가 빌드)
+                프로세스 종료(nssm)
               </label>
               <label className="flex items-center gap-1">
                 <input
                   type="radio"
                   name="restartMode"
                   checked={restartMode === 'launcher'}
-                  disabled={busy || !restart}
+                  disabled={busy}
                   onChange={() => setRestartMode('launcher')}
                 />
-                Node 런처(앱만 재실행)
+                Node 런처(Node 내 앱 재실행)
               </label>
               <label className="flex items-center gap-1">
                 <input
                   type="radio"
                   name="restartMode"
                   checked={restartMode === 'none'}
-                  disabled={busy || !restart}
+                  disabled={busy}
                   onChange={() => setRestartMode('none')}
                 />
                 재시작 안 함
@@ -358,13 +393,22 @@ export function VersionManagerContent() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" disabled={busy} onClick={() => void runUpdate()} className="gap-1">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
               최신 소스 전체 적용
             </Button>
             <Button type="button" variant="outline" disabled title="준비 중">
               최신소스 일부 적용(준비중)
             </Button>
-            <Button type="button" variant="outline" disabled={!busy} onClick={() => abortRef.current?.abort()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!busy}
+              onClick={() => abortRef.current?.abort()}
+            >
               취소
             </Button>
           </div>

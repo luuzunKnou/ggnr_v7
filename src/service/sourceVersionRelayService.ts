@@ -2,7 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { nanoid } from 'nanoid';
-import { applySourceZipFile, type RestartMode } from '@/service/sourceVersionService';
+import {
+  applySourceZipFile,
+  type ApplySourceProgressEvent,
+  type RestartMode,
+} from '@/service/sourceVersionService';
 
 export const VERSION_RELAY_CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -124,8 +128,11 @@ export async function uploadVersionRelayChunk(params: {
   return { ok: true };
 }
 
-export async function completeVersionRelay(params: { uploadId: string }) {
-  const { uploadId } = params;
+export async function completeVersionRelay(params: {
+  uploadId: string;
+  onProgress?: (event: ApplySourceProgressEvent) => void;
+}) {
+  const { uploadId, onProgress } = params;
   const tempDir = getRelayTempDir(uploadId);
   let meta: RelayMeta;
   try {
@@ -138,6 +145,9 @@ export async function completeVersionRelay(params: { uploadId: string }) {
   if (!safeName || safeName.includes('..')) {
     throw new Error('Invalid fileName');
   }
+
+  /** ZIP 조립은 중지 직전 준비 — 단계 목록 순서는 중지 → 병합·적용 유지 */
+  onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중 (ZIP 조립)...' });
 
   const zipPath = path.join(tempDir, safeName);
   const handle = await fs.open(zipPath, 'w');
@@ -165,6 +175,7 @@ export async function completeVersionRelay(params: { uploadId: string }) {
     restart: meta.restart,
     restartMode: meta.restartMode,
     includeNodeModules: meta.includeNodeModules,
+    onProgress,
   });
 
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});

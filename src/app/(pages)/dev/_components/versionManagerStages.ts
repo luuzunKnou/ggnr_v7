@@ -18,10 +18,10 @@ export type RelayStageId =
   | 'app-start';
 
 export type RelayStageOptions = {
-  /** 적용 후 서버 재시작 on/off */
+  /** 적용 후 서버 재시작 on/off — mode=none 이면 off */
   restart?: boolean;
   restartMode?: RestartMode;
-  /** 개방망이면 재시작 파이프라인에 npm install 단계 표시 */
+  /** 개방망이면 런처 재시작 파이프라인에 npm install 단계 표시 */
   packageProfile?: SourcePackageProfile;
 };
 
@@ -60,7 +60,7 @@ const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
   'app-start': '앱 재기동',
 };
 
-/** 서버 complete 요청 중(단일 HTTP): GeoServer 중지·병합·적용·GeoServer 기동까지 */
+/** 서버 complete NDJSON progress */
 const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStageId>> = {
   latest: 'latest',
   download: 'download',
@@ -70,17 +70,18 @@ const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStag
   'merge-apply': 'merge-apply',
   'geoserver-stop': 'geoserver-stop',
   'geoserver-start': 'geoserver-start',
+  'npm-install': 'npm-install',
   'app-stop': 'app-stop',
   build: 'build',
   'app-start': 'app-start',
-  geoserver: 'geoserver-stop',
+  geoserver: 'geoserver-start',
   restart: 'app-stop',
   done: 'geoserver-start',
 };
 
 function effectiveRestartMode(opts?: RelayStageOptions): RestartMode | 'off' {
   if (!opts?.restart) return 'off';
-  const mode = opts.restartMode ?? 'command';
+  const mode = opts.restartMode ?? 'exit';
   if (mode === 'none') return 'off';
   return mode;
 }
@@ -92,29 +93,22 @@ export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
 
   const withNpm =
     opts?.packageProfile === 'open' ? (['npm-install'] as RelayStageId[]) : [];
-
-  // command: 앱 전체 종료 → (선택 npm) → 새 창 빌드 → 새 창 기동
-  // startB / exit: Next 종료 → (선택 npm) → 런처 빌드 → Next 재기동
-  // launcher: Next 종료(런처) → (선택 npm) → 런처 빌드 → Next 재기동
-  return [...RELAY_COMMON_STAGES, 'app-stop', ...withNpm, 'build', 'app-start'];
+  /** exit·launcher 공통: 사전 install(개방망)·사전 빌드 → 앱 종료. 런처만 재기동 안내 단계 */
+  const restartTail: RelayStageId[] =
+    mode === 'launcher' ? ['app-stop', 'app-start'] : ['app-stop'];
+  return [...RELAY_COMMON_STAGES, ...withNpm, 'build', ...restartTail];
 }
 
 export function relayStageLabel(id: RelayStageId, opts?: RelayStageOptions): string {
   const mode = effectiveRestartMode(opts);
   if (id === 'app-stop') {
-    if (mode === 'command') return '앱 종료';
+    if (mode === 'exit') return '앱 종료(nssm 재기동)';
     if (mode === 'launcher') return 'Next 종료 (런처)';
-    if (mode === 'startB' || mode === 'exit') return 'Next 종료';
   }
-  if (id === 'npm-install') return 'npm install (개방망)';
-  if (id === 'build') {
-    if (mode === 'command') return '새 창에서 npm run build';
-    if (mode === 'off') return 'npm run build';
-    return '기동 런처/감시기가 npm run build';
-  }
+  if (id === 'npm-install') return 'npm install (개방망·사전)';
+  if (id === 'build') return '사전 빌드';
   if (id === 'app-start') {
-    if (mode === 'command') return '새 창에서 앱 기동';
-    if (mode === 'launcher' || mode === 'startB' || mode === 'exit') return 'Next 재기동';
+    if (mode === 'launcher') return 'Next 재기동';
   }
   return RELAY_STAGE_LABEL_BASE[id];
 }
@@ -233,7 +227,7 @@ export function buildRelayStagesFromProgress(
     npmInstallDetail?: string;
     buildDetail?: string;
     appStartDetail?: string;
-    /** 재시작 예약 시 후속 단계는 콘솔 파이프라인 */
+    /** 재시작 예약 시 후속 단계는 콘솔/서비스 파이프라인(실시간 추적 없음) */
     restartScheduled?: boolean;
   },
   opts?: RelayStageOptions
@@ -248,8 +242,10 @@ export function buildRelayStagesFromProgress(
       ? 'relay-chunk'
       : text.includes('relay init') || text.includes('relay 세션')
         ? 'relay-init'
-        : text.includes('npm install')
-          ? 'npm-install'
+        : text.includes('사전 빌드') || text.includes('npm install')
+          ? text.includes('사전 빌드') || text.includes('build') || text.includes('빌드')
+            ? 'build'
+            : 'npm-install'
           : text.includes('build') || text.includes('빌드')
             ? 'build'
             : text.includes('GeoServer') || text.includes('geoserver')
@@ -321,24 +317,27 @@ export function buildRelayStagesFromProgress(
 
       if (isRestartStage) {
         if (!p.restartScheduled) {
-          // 목록 자체에 없어도 방어
           detail = '생략';
           state = 'done';
         } else {
-          detail =
-            id === 'app-stop'
-              ? (p.appStopDetail ??
-                  (mode === 'command' ? '콘솔에서 앱 종료 예약' : '콘솔에서 Next 종료 예약'))
-              : id === 'npm-install'
-                ? (p.npmInstallDetail ?? '콘솔에서 npm install 예약')
-                : id === 'build'
-                  ? (p.buildDetail ??
-                      (mode === 'command'
-                        ? '새 창에서 npm run build 예약'
-                        : '기동 런처/감시기가 npm run build 예약'))
-                  : (p.appStartDetail ??
-                      (mode === 'command' ? '새 창에서 앱 기동 예약' : 'Next 재기동 예약'));
-          state = id === firstRestart ? 'active' : 'pending';
+          /** 사전 install·빌드·앱 종료는 응답 전에 완료. 재기동만 콘솔(추적 불가) */
+          if (id === 'npm-install') {
+            detail = p.npmInstallDetail ?? '사전 npm install 완료';
+            state = 'done';
+          } else if (id === 'build') {
+            detail = p.buildDetail ?? '사전 빌드 완료';
+            state = 'done';
+          } else if (id === 'app-stop') {
+            detail =
+              p.appStopDetail ??
+              (mode === 'exit'
+                ? '앱 종료 단계 완료 · process.exit 예약'
+                : '앱 종료 단계 완료 · 런처가 Next 종료');
+            state = 'done';
+          } else if (id === 'app-start') {
+            detail = p.appStartDetail ?? '콘솔(런처)에서 Next 재기동';
+            state = 'pending';
+          }
         }
       }
 
@@ -359,7 +358,10 @@ export function buildRelayStagesFromProgress(
         detail = `${p.chunkIndex}/${p.totalChunks}`;
       }
       if (id === 'latest' && p.versionDetail) detail = p.versionDetail;
-      if (id === 'geoserver-stop') detail = '중지·병합·적용 처리 중...';
+      if (id === 'geoserver-stop' && !detail) detail = '중지 중...';
+      if (id === 'merge-apply' && !detail) detail = '병합·적용 중...';
+      if (id === 'geoserver-start' && !detail) detail = '기동 중...';
+      if (id === 'build' && !detail) detail = '사전 빌드 중...';
       return { ...s, state: 'active' as StageState, detail };
     }
     return s;

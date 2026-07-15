@@ -12,6 +12,16 @@ export async function register(): Promise<void> {
   if (g.__ggnrIntegrationSchedulersRegistered) return;
   g.__ggnrIntegrationSchedulersRegistered = true;
 
+  try {
+    const { flushPendingVersionHistory } = await import('@/service/flushPendingVersionHistory');
+    await flushPendingVersionHistory();
+  } catch (e) {
+    console.warn(
+      '[instrumentation] pending version history flush skipped:',
+      e instanceof Error ? e.message : e
+    );
+  }
+
   if (process.env.DISABLE_SAFETYDATA_SCHEDULER !== '1') {
     const { startSafetydataScheduler } = await import('@/integrations/safetydataScheduler');
     startSafetydataScheduler();
