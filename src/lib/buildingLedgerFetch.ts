@@ -139,6 +139,84 @@ function getField(row: BuildingLedgerRawRow, ...keys: string[]): string {
   return '';
 }
 
+/** 끝 괄호 법정동 표기 제거 — 예: `영양창수로 53 (영양읍 동부리)` → `영양창수로 53` */
+function stripTrailingParen(raw: string): string {
+  return String(raw ?? '')
+    .replace(/\s*\([^)]*\)\s*$/u, '')
+    .trim();
+}
+
+/** 행정 위치에서 읍·면부터 리·동·가까지 남김 — 예: `영양읍 동부리` 그대로 */
+function pickRiOrDong(loc: string): string {
+  const parts = String(loc ?? '')
+    .split(/\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const start = parts.findIndex((p) => /(읍|면|동|리|가)$/u.test(p));
+  if (start >= 0) {
+    let end = start;
+    for (let i = parts.length - 1; i >= start; i--) {
+      if (/(읍|면|동|리|가)$/u.test(parts[i]!)) {
+        end = i;
+        break;
+      }
+    }
+    return parts.slice(start, end + 1).join(' ');
+  }
+  return parts.join(' ') || String(loc ?? '').trim();
+}
+
+/** 본·부번에 `번지` 접미 (이미 있으면 유지) */
+function withBeonjiSuffix(lot: string): string {
+  const t = String(lot ?? '').trim();
+  if (!t || t === '-') return t || '-';
+  if (/번지$/u.test(t)) return t;
+  if (/^산?\d+(?:-\d+)?$/u.test(t)) return `${t}번지`;
+  return t;
+}
+
+/**
+ * 대지위치 원문 → 읍·면·리·동 + 지번 분리
+ * 예: `경상북도 영양군 영양읍 동부리 128번지` → `{ loc: '영양읍 동부리', lot: '128번지' }`
+ */
+function splitPlatLocAndLot(raw: string): { loc: string; lot: string } {
+  let s = formatAddressStripSidoSigungu(raw) || String(raw ?? '').trim();
+  s = s.replace(/\s+/g, ' ').trim();
+  if (!s || s === '-') return { loc: '-', lot: '-' };
+
+  let loc = s;
+  let lot = '';
+  const withBeonji = s.match(/^(.*?)(?:\s+)?(산?\d+(?:-\d+)?)\s*번지\s*$/u);
+  if (withBeonji && withBeonji[1]?.trim()) {
+    loc = withBeonji[1].trim();
+    lot = withBeonji[2] ?? '';
+  } else {
+    const bare = s.match(/^(.*\S)\s+(산?\d+(?:-\d+)?)\s*$/u);
+    if (bare && bare[1]?.trim()) {
+      loc = bare[1].trim();
+      lot = bare[2] ?? '';
+    }
+  }
+
+  loc = pickRiOrDong(loc) || '-';
+  lot = lot ? withBeonjiSuffix(lot) : '-';
+  return { loc, lot };
+}
+
+function shortenBuildingPlatLoc(raw: string): string {
+  const t = String(raw ?? '').trim();
+  if (!t || t === '-') return t || '-';
+  return splitPlatLocAndLot(t).loc;
+}
+
+function shortenBuildingRoadAddr(raw: string): string {
+  const t = String(raw ?? '').trim();
+  if (!t || t === '-') return t || '-';
+  let s = formatAddressStripSidoSigungu(t) || t;
+  s = stripTrailingParen(s);
+  return s || '-';
+}
+
 function formatJibun(row: BuildingLedgerRawRow): string {
   const mnnmRaw = getField(row, 'mnnm', 'mnnm');
   const slnoRaw = getField(row, 'slno', 'slno');
@@ -146,16 +224,22 @@ function formatJibun(row: BuildingLedgerRawRow): string {
     const mnnm = Number(mnnmRaw);
     const slno = Number(slnoRaw);
     if (Number.isFinite(mnnm)) {
-      return `${mnnm}${Number.isFinite(slno) && slno !== 0 ? `-${slno}` : ''}`;
+      const base = `${mnnm}${Number.isFinite(slno) && slno !== 0 ? `-${slno}` : ''}`;
+      return withBeonjiSuffix(base);
     }
   }
   return '-';
 }
 
 function formatRoadAddr(row: BuildingLedgerRawRow): string {
-  const roadNm = getField(row, 'na_road_cd_nm', 'naRoadCdNm', 'newPlatPlc', 'roadAddr', 'road_addr');
+  // newPlatPlc 등은 전체 도로명주소(괄호 법정동 포함)인 경우가 많음 → 축약만
+  const full = getField(row, 'newPlatPlc', 'roadAddr', 'road_addr');
+  if (full && (/\(|로|길|대로/u.test(full) || full.length > 4)) {
+    const shortened = shortenBuildingRoadAddr(full);
+    if (shortened && shortened !== '-') return shortened;
+  }
+  const roadNm = getField(row, 'na_road_cd_nm', 'naRoadCdNm');
   if (!roadNm) return '-';
-  // 시·군·구명은 붙이지 않음 — 도로명+건물본번만 (시·도 포함 시 아래 normalize에서 제거)
   const parts = [
     roadNm,
     getField(row, 'na_mnnm', 'naMnnm') ? Number(getField(row, 'na_mnnm', 'naMnnm')) : '',
@@ -163,18 +247,12 @@ function formatRoadAddr(row: BuildingLedgerRawRow): string {
       ? `-${Number(getField(row, 'na_slno', 'naSlno'))}`
       : '',
   ].filter(Boolean);
-  return parts.join(' ').trim() || '-';
+  return shortenBuildingRoadAddr(parts.join(' ').trim()) || '-';
 }
 
 function formatUnit(value: string, unit: string): string {
   const v = String(value ?? '').trim();
   return v ? `${v}${unit}` : '-';
-}
-
-function stripAdminOrDash(raw: string): string {
-  const t = String(raw ?? '').trim();
-  if (!t || t === '-') return t || '-';
-  return formatAddressStripSidoSigungu(t) || t;
 }
 
 export function normalizeBuildingLedgerRow(
@@ -186,23 +264,27 @@ export function normalizeBuildingLedgerRow(
     .filter(Boolean)
     .join(' ')
     .trim();
-  const platLocRaw =
-    [getField(row, 'bjdong_cd_nm', 'bjdongCdNm'), getField(row, 'plat_plc', 'platPlc')]
-      .filter(Boolean)
-      .join(' ')
-      .trim() ||
-    [getField(row, 'sigungu_cd_nm', 'sigunguCdNm'), getField(row, 'bjdong_cd_nm', 'bjdongCdNm')]
-      .filter(Boolean)
-      .join(' ')
-      .trim() ||
-    '-';
+
+  const platPlc = getField(row, 'plat_plc', 'platPlc');
+  const bjdong = getField(row, 'bjdong_cd_nm', 'bjdongCdNm');
+  const fromPlat = platPlc ? splitPlatLocAndLot(platPlc) : { loc: '-', lot: '-' };
+
+  let platLoc = fromPlat.loc;
+  let jibun = formatJibun(row);
+  if (isMissingAddressPart(jibun) && !isMissingAddressPart(fromPlat.lot)) {
+    jibun = fromPlat.lot;
+  }
+  if (isMissingAddressPart(platLoc) && bjdong) {
+    platLoc = pickRiOrDong(formatAddressStripSidoSigungu(bjdong) || bjdong) || '-';
+  }
+
   return {
     pnu,
-    addr: stripAdminOrDash(addr),
+    addr: formatAddressStripSidoSigungu(addr) || addr || '-',
     bldNm: bldNm || '-',
-    platLoc: stripAdminOrDash(platLocRaw),
-    jibun: formatJibun(row),
-    roadAddr: stripAdminOrDash(formatRoadAddr(row)),
+    platLoc: isMissingAddressPart(platLoc) ? '-' : platLoc,
+    jibun: isMissingAddressPart(jibun) ? '-' : jibun,
+    roadAddr: formatRoadAddr(row),
     bcRat: formatUnit(getField(row, 'bcrat', 'bcRat'), '%'),
     vlRat: formatUnit(getField(row, 'vlrat', 'vlRat'), '%'),
     jijigu: getField(row, 'jijigu_nm', 'jijiguNm') || '-',
@@ -222,10 +304,16 @@ function fillBuildingLedgerAddressFromParts(
 ): BuildingLedgerDisplayRow {
   if (!parts) return row;
   const platLoc = isMissingAddressPart(row.platLoc)
-    ? formatAddressStripSidoSigungu(parts.platLoc ?? '') || row.platLoc
+    ? shortenBuildingPlatLoc(parts.platLoc ?? '')
     : row.platLoc;
-  const jibun = isMissingAddressPart(row.jibun) ? String(parts.lot ?? '').trim() || row.jibun : row.jibun;
-  return { ...row, platLoc: platLoc || row.platLoc, jibun: jibun || row.jibun };
+  const jibun = isMissingAddressPart(row.jibun)
+    ? withBeonjiSuffix(String(parts.lot ?? '').trim()) || row.jibun
+    : row.jibun;
+  return {
+    ...row,
+    platLoc: isMissingAddressPart(platLoc) ? row.platLoc : platLoc,
+    jibun: isMissingAddressPart(jibun) ? row.jibun : jibun,
+  };
 }
 
 function hasLedgerDisplayData(row: BuildingLedgerDisplayRow): boolean {

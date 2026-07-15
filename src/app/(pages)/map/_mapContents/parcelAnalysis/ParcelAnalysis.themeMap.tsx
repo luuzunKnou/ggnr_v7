@@ -182,6 +182,8 @@ type ThemeMapProps = {
   theme: ParcelThemeMapKind;
   /** 토지현황 보강 결과 — 소유구분/지목 (없으면 도형만 «미상») */
   parcels?: ThemeMapParcelInput[];
+  /** true면 점진 로딩(연계) 진행 중 — 지도 생성을 보류하고 완료 후 1회만 그림 (반짝임 방지) */
+  waitingForParcels?: boolean;
 };
 
 const MAP_HEIGHT_PX = 320;
@@ -209,7 +211,12 @@ function useThemeMapWhenVisible(rootRef: RefObject<HTMLDivElement | null>) {
   return visible;
 }
 
-function ParcelAnalysisThemeMapInner({ wkt5181, theme, parcels = [] }: ThemeMapProps) {
+function ParcelAnalysisThemeMapInner({
+  wkt5181,
+  theme,
+  parcels = [],
+  waitingForParcels = false,
+}: ThemeMapProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mapTargetRef = useRef<HTMLDivElement>(null);
   const visible = useThemeMapWhenVisible(rootRef);
@@ -287,6 +294,8 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme, parcels = [] }: ThemeMapP
 
   useEffect(() => {
     const targetEl = mapTargetRef.current;
+    // 연계 로딩 중에는 그리지 않음 — 완료 후 최종 값으로 1회만 생성
+    if (waitingForParcels) return;
     if (!visible || !targetEl || !wkt5181.trim() || !painted?.ok) return;
 
     let map: OlMap | null = null;
@@ -407,14 +416,16 @@ function ParcelAnalysisThemeMapInner({ wkt5181, theme, parcels = [] }: ThemeMapP
         map = null;
       }
     };
-  }, [visible, wkt5181, theme, painted]);
+  }, [visible, wkt5181, theme, painted, waitingForParcels]);
 
-  const showMapOverlay = !visible || loading || mapRendering;
+  const showMapOverlay = !visible || waitingForParcels || loading || mapRendering;
   const overlayMessage = !visible
     ? '테마 지도 준비 중…'
-    : loading
-      ? '필지 도형을 불러오는 중…'
-      : '지도를 그리는 중…';
+    : waitingForParcels
+      ? '소유·지목 연계 정보를 불러오는 중…'
+      : loading
+        ? '필지 도형을 불러오는 중…'
+        : '지도를 그리는 중…';
 
   return (
     <div ref={rootRef} className="my-2 space-y-2">

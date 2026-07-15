@@ -359,7 +359,7 @@ function mapLandUseStats(
   }));
 }
 
-/** UI 확인용 건축물대장 더미 — true면 표에 3건 삽입. 확인 끝나면 false 유지 */
+/** UI 확인용 건축물대장 더미 — true면 표에 더미 행 삽입. 확인 끝나면 false 유지 */
 const USE_BUILDING_LEDGER_DUMMY = false;
 
 /* true일 때만 사용 (아래 배열은 삭제하지 않고 보관)
@@ -422,13 +422,43 @@ function mapBuildingRows(
     if (!t || t === '-') return t || '-';
     return formatAddressStripSidoSigungu(t) || t;
   };
+  /** 도로명 끝 괄호 법정동 제거 — 예: `영양창수로 53 (영양읍 동부리)` */
+  const stripRoad = (v: unknown) => {
+    const t = strip(v);
+    if (!t || t === '-') return t;
+    return t.replace(/\s*\([^)]*\)\s*$/u, '').trim() || t;
+  };
+  /** 대지위치 — 읍·면부터 리·동까지 (시·도·시·군·구·번지만 제거) */
+  const stripPlat = (v: unknown) => {
+    const t = strip(v);
+    if (!t || t === '-') return t;
+    const parts = t.split(/\s+/).filter(Boolean);
+    const start = parts.findIndex((p) => /(읍|면|동|리|가)$/u.test(p));
+    if (start >= 0) {
+      let end = start;
+      for (let i = parts.length - 1; i >= start; i--) {
+        if (/(읍|면|동|리|가)$/u.test(parts[i]!)) {
+          end = i;
+          break;
+        }
+      }
+      return parts.slice(start, end + 1).join(' ');
+    }
+    return t;
+  };
   return sourceRows.map((r) => ({
     pnu: String(r.pnu ?? '').trim(),
     addr: strip(r.addr),
     bldNm: String(r.bldNm ?? '-'),
-    platLoc: strip(r.platLoc),
-    jibun: String(r.jibun ?? '-'),
-    roadAddr: strip(r.roadAddr),
+    platLoc: stripPlat(r.platLoc),
+    jibun: (() => {
+      const j = String(r.jibun ?? '-').trim() || '-';
+      if (!j || j === '-') return '-';
+      if (/번지$/u.test(j)) return j;
+      if (/^산?\d+(?:-\d+)?$/u.test(j)) return `${j}번지`;
+      return j;
+    })(),
+    roadAddr: stripRoad(r.roadAddr),
     bcRat: String(r.bcRat ?? '-'),
     vlRat: String(r.vlRat ?? '-'),
     jijigu: String(r.jijigu ?? '-'),
@@ -753,20 +783,14 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
     }));
 
     onPatch({
-      ...(needsLand || needsOwner || needsJimok
-        ? {
-            landRows: allLandRows,
-            ...(needsLand
-              ? {
-                  landRowsProgress: {
-                    loaded: allLandRows.length,
-                    total: totalCount,
-                    loading,
-                  },
-                }
-              : {}),
-          }
-        : {}),
+      ...(needsLand || needsOwner || needsJimok ? { landRows: allLandRows } : {}),
+      // 청크 루프가 도는 모든 경우(토지·소유·지목·건축·이용계획) 진행률 갱신 —
+      // 테마 지도·건축물대장이 loading 종료를 감지해 최종 1회 렌더
+      landRowsProgress: {
+        loaded: allLandRows.length,
+        total: totalCount,
+        loading,
+      },
       ...(needsOwner ? { ownerStats: recomputeOwnerStats(forStats) } : {}),
       ...(needsJimok ? { jimokStats: recomputeJimokStats(forStats) } : {}),
       buildingRows: allBuildingRows,

@@ -1375,7 +1375,12 @@ function renderSectionBody(
     return (
       <div className="space-y-2">
         {result.wkt5181 ? (
-          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="owner" parcels={ownerParcels} />
+          <ParcelAnalysisThemeMap
+            wkt5181={result.wkt5181}
+            theme="owner"
+            parcels={ownerParcels}
+            waitingForParcels={result.landRowsProgress?.loading ?? false}
+          />
         ) : null}
         <ResultTable>
           <thead>
@@ -1410,7 +1415,12 @@ function renderSectionBody(
     return (
       <div className="space-y-2">
         {result.wkt5181 ? (
-          <ParcelAnalysisThemeMap wkt5181={result.wkt5181} theme="jimok" parcels={jimokParcels} />
+          <ParcelAnalysisThemeMap
+            wkt5181={result.wkt5181}
+            theme="jimok"
+            parcels={jimokParcels}
+            waitingForParcels={result.landRowsProgress?.loading ?? false}
+          />
         ) : null}
         <ResultTable>
           <thead>
