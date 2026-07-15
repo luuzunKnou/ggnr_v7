@@ -4,7 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
 :: ggnr_start.bat 생성기
-:: - 실행 위치(root) = 이 bat이 있는 폴더
+:: - 실행 위치 root = 이 bat이 있는 폴더
 :: - node PATH = where node 결과의 디렉터리
 :: - 프로젝트명·환경 = 실행 시 입력
 :: =============================================================================
@@ -71,13 +71,7 @@ if exist "%OUT%" (
   )
 )
 
-:: nssm_install_ggnr.bat 과 동일 로그 경로
-set "LOG_OUT=C:\logs\GGNR_V7_stdout.log"
-set "GEO_LOG=%ROOT%\geoserver_modules\data_dir\logs\geoserver.log"
-
 :: %% → 생성된 bat 에 % 한 개로 남김
-:: call npm 은 블로킹이라 그 다음 줄은 종료 후에야 실행됨.
-:: 그래서 npm 기동 직후·병렬로 "파일 생기면 창 열기" 대기 프로세스를 먼저 start 한 뒤 call 한다.
 > "%OUT%" (
 echo @echo off
 echo.
@@ -86,11 +80,10 @@ echo.
 echo :: [인코딩 설정] UTF-8 BOM 인코딩 설정
 echo chcp 65001 ^> nul
 echo.
-echo :: [로그 폴더] 없으면 C:\logs , C:\logs\backup 생성 (로그 파일은 생성하지 않음)
+echo :: [로그 폴더] 없으면 C:\logs , C:\logs\backup 생성. 로그 파일은 생성하지 않음
 echo set "LOG_DIR=C:\logs"
 echo set "LOG_BACKUP=%%LOG_DIR%%\backup"
 echo set "LOG_OUT=%%LOG_DIR%%\GGNR_V7_stdout.log"
-echo set "GEO_LOG=%ROOT%\geoserver_modules\data_dir\logs\geoserver.log"
 echo if not exist "%%LOG_DIR%%" mkdir "%%LOG_DIR%%"
 echo if not exist "%%LOG_BACKUP%%" mkdir "%%LOG_BACKUP%%"
 echo.
@@ -105,10 +98,6 @@ echo :: [프로젝트 설정]
 echo set GGNR_PROJECT=%PROJECT_NAME%
 echo set GGNR_ENV=%ENV_NAME%
 echo.
-echo :: [실시간 로그] npm 기동 후 파일이 있을 때만 Get-Content (없으면 2초마다 재검사)
-echo start "GGNR 로그" cmd /k powershell -NoProfile -Command "while (-not (Test-Path -LiteralPath 'C:\logs\GGNR_V7_stdout.log')) { Start-Sleep -Seconds 2 }; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -LiteralPath 'C:\logs\GGNR_V7_stdout.log' -Encoding UTF8 -Wait -Tail 10"
-echo start "GeoServer 로그" cmd /k powershell -NoProfile -Command "while (-not (Test-Path -LiteralPath '%GEO_LOG%')) { Start-Sleep -Seconds 2 }; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -LiteralPath '%GEO_LOG%' -Encoding UTF8 -Wait -Tail 10"
-echo.
 echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
 echo call npm run start -- %PROJECT_NAME% %ENV_NAME%
 )
@@ -119,8 +108,7 @@ if not exist "%OUT%" (
 )
 
 echo [완료] 생성됨: %OUT%
-echo   로그 CMD는 파일이 생긴 뒤에만 내용을 보여 줍니다(없으면 대기).
-echo   call npm 은 블로킹이라, 창은 npm 과 병렬로 띄운 뒤 파일 검사합니다.
+echo   로그 창은 open_ggnr_logs.bat 을 실행하세요.
 echo   이어서 nssm_install_ggnr.bat 을 관리자 권한으로 실행하면 서비스에 등록됩니다.
 echo.
 exit /b 0

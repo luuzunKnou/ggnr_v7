@@ -69,7 +69,7 @@ export function buildApplySuccessHistoryMessage(opts: {
 }
 
 function runNpmInstallSyncInProcess(): void {
-  console.log('## [버전관리] ## npm install --no-audit --no-fund (사전)');
+  console.log('[SourceCodeUpload] npm install --no-audit --no-fund (사전)');
   execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: process.cwd(),
     stdio: 'inherit',
@@ -79,14 +79,14 @@ function runNpmInstallSyncInProcess(): void {
 }
 
 function runNpmBuildSyncInProcess(): void {
-  console.log('## [버전관리] ## npm run build (사전 빌드)');
+  console.log('[SourceCodeUpload] npm run build (사전 빌드)');
   execFileSync('npm', ['run', 'build'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
     env: process.env,
   });
-  console.log('## [버전관리] ## npm run build OK (사전 빌드)');
+  console.log('[SourceCodeUpload] npm run build OK (사전 빌드)');
 }
 
 export type ApplyLatestSourceOptions = {
@@ -274,21 +274,21 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   let geoStartedOnSuccessPath = false;
 
   console.log(
-    `## [버전관리] ## 적용 시작 version=${version} file=${fileName} bytes=${stat.size} restart=${doRestart} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
+    `[SourceCodeUpload] 적용 시작 version=${version} file=${fileName} bytes=${stat.size} restart=${doRestart} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
   );
 
   try {
     onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
     const stopResult = await stopGeoServer();
     console.log(
-      `## [버전관리] ## GeoServer 중지 ${stopResult.success ? 'OK' : `실패: ${stopResult.error ?? 'unknown'}`}`
+      `[SourceCodeUpload] GeoServer 중지 ${stopResult.success ? 'OK' : `실패: ${stopResult.error ?? 'unknown'}`}`
     );
     await sleep(stopResult.success ? GEOSERVER_STOP_SETTLE_MS : GEOSERVER_STOP_FAIL_SETTLE_MS);
 
     onProgress?.({ phase: 'merge-apply', message: '소스 병합·적용 중...' });
     await extractZip(zipPath, extractDir);
     const extractedRoot = await pickExtractedRoot(extractDir);
-    console.log(`## [버전관리] ## ZIP 압축 해제 완료`);
+    console.log(`[SourceCodeUpload] ZIP 압축 해제 완료`);
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
     const copyResult = await copyRecursive({
@@ -297,7 +297,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       excludePrefixes,
     });
     console.log(
-      `## [버전관리] ## 파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`
+      `[SourceCodeUpload] 파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`
     );
 
     const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
@@ -318,13 +318,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       : `중지 실패(잠금 가능·대기 후 계속): ${stopResult.error ?? 'unknown'}`;
     const startPart = startResult.success
       ? startResult.action === 'already-ready'
-        ? '이미 기동됨(헬스 OK)'
+        ? '이미 기동됨(응답 정상)'
         : startResult.action === 'restarted'
-          ? '재기동·헬스 OK'
-          : '기동·헬스 OK'
+          ? '재기동·응답 정상'
+          : '기동·응답 정상'
       : retryGeoOnRelaunch
-        ? `기동/헬스 실패(재기동 시 ensure 재시도): ${startResult.error ?? 'unknown'}`
-        : `기동/헬스 실패: ${startResult.error ?? 'unknown'}`;
+        ? `기동·응답 확인 실패(재기동 시 ensure 재시도): ${startResult.error ?? 'unknown'}`
+        : `기동·응답 확인 실패: ${startResult.error ?? 'unknown'}`;
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
       started: startResult.success,
@@ -430,7 +430,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       startGeoServerAfter: retryGeoOnRelaunch,
     });
     console.log(
-      `## [버전관리] ## 적용 완료 GeoServer=${geoserver.message} restart=${restartResult.message}`
+      `[SourceCodeUpload] 적용 완료 GeoServer=${geoserver.message} restart=${restartResult.message}`
     );
 
     return {
@@ -453,7 +453,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     };
   } catch (err) {
     console.error(
-      `## [버전관리] ## 적용 실패:`,
+      `[SourceCodeUpload] 적용 실패:`,
       err instanceof Error ? err.message : err
     );
     /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
@@ -653,7 +653,7 @@ function scheduleRestart(
       throw new Error(LAUNCHER_MISSING_MSG);
     }
     console.log(
-      `## [버전관리] ## mode=launcher port=${port} — signal only; pre-build done; Next relaunch (no post-build)`
+      `[SourceCodeUpload] mode=launcher port=${port} — signal only; pre-build done; Next relaunch (no post-build)`
     );
     return {
       scheduled: true,
@@ -672,10 +672,10 @@ function scheduleRestart(
     ? '사전 빌드 완료 → process.exit → 런처가 Next 재기동'
     : '사전 빌드 완료 → process.exit → nssm/감시기가 재기동';
   console.log(
-    `## [버전관리] ## mode=exit port=${port} — process.exit in ${exitDelayMs}ms (${exitHint})`
+    `[SourceCodeUpload] mode=exit port=${port} — process.exit in ${exitDelayMs}ms (${exitHint})`
   );
   setTimeout(() => {
-    console.log(`## [버전관리] ## process.exit(0) — releasing port ${port} (exit/nssm)`);
+    console.log(`[SourceCodeUpload] process.exit(0) — releasing port ${port} (exit/nssm)`);
     process.exit(0);
   }, exitDelayMs).unref();
   return {

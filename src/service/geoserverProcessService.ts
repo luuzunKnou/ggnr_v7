@@ -1,5 +1,5 @@
 /**
- * GeoServer 프로세스 기동·중지·헬스 체크 (Windows bat)
+ * GeoServer 프로세스 기동·중지·응답 확인 (Windows bat)
  */
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -88,7 +88,7 @@ export async function waitGeoServerReady(options?: {
 }
 
 /**
- * GeoServer 실행 (백그라운드로 시작) — bat만. 헬스는 ensureGeoServerRunning 사용.
+ * GeoServer 실행 (백그라운드로 시작) — bat만. 응답 확인은 ensureGeoServerRunning 사용.
  */
 export async function startGeoServer() {
   if (process.platform !== 'win32') {

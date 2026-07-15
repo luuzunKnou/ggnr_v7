@@ -188,7 +188,7 @@ function markRestartConsumed(signal: RestartSignal): void {
       'utf8'
     );
   } catch (e) {
-    console.warn('## [버전관리] ## 재시작 신호 소비 표시 실패:', e instanceof Error ? e.message : e);
+    console.warn('[SourceCodeUpload] 재시작 신호 소비 표시 실패:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -204,7 +204,7 @@ function isSupervisedRestartMode(mode: string | undefined): boolean {
 }
 
 function runNpmInstallSync(): void {
-  console.log('## [버전관리] ## npm install --no-audit --no-fund (재기동 전)');
+  console.log('[SourceCodeUpload] npm install --no-audit --no-fund (재기동 전)');
   execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: process.cwd(),
     stdio: 'inherit',
@@ -214,29 +214,29 @@ function runNpmInstallSync(): void {
 }
 
 function runNpmBuildSync(): void {
-  console.log('## [버전관리] ## npm run build (앱 중지 상태)');
+  console.log('[SourceCodeUpload] npm run build (앱 중지 상태)');
   execFileSync('npm', ['run', 'build'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
     env: process.env,
   });
-  console.log('## [버전관리] ## npm run build OK');
+  console.log('[SourceCodeUpload] npm run build OK');
 }
 
 async function ensureGeoServerIfRequested(signal: RestartSignal): Promise<void> {
   if (signal.startGeoServerAfter !== true) return;
-  console.log('## [버전관리] ## GeoServer ensure (적용 시 기동/헬스 실패 후 재시도)...');
+  console.log('[SourceCodeUpload] GeoServer ensure (적용 시 기동·응답 확인 실패 후 재시도)...');
   try {
     const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
     const r = await ensureGeoServerRunning({ forceRestart: false });
     if (r.success) {
-      console.log(`## [버전관리] ## GeoServer ensure OK (action=${r.action})`);
+      console.log(`[SourceCodeUpload] GeoServer ensure OK (action=${r.action})`);
     } else {
-      console.warn('## [버전관리] ## GeoServer ensure 실패:', r.error ?? 'unknown');
+      console.warn('[SourceCodeUpload] GeoServer ensure 실패:', r.error ?? 'unknown');
     }
   } catch (e) {
-    console.warn('## [버전관리] ## GeoServer ensure 오류:', e instanceof Error ? e.message : e);
+    console.warn('[SourceCodeUpload] GeoServer ensure 오류:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -270,7 +270,7 @@ function spawnNext(cmd: NextCmd): void {
     nextProc = null;
     if (expectNextExitForRelaunch || relaunchInFlight) {
       console.log(
-        `## [버전관리] ## Next 종료 (code=${code ?? 0}) — 재기동용, Node 런처 유지`
+        `[SourceCodeUpload] Next 종료 (code=${code ?? 0}) — 재기동용, Node 런처 유지`
       );
       return;
     }
@@ -282,7 +282,7 @@ function spawnNext(cmd: NextCmd): void {
       isSupervisedRestartMode(signal.restartMode)
     ) {
       console.log(
-        `## [버전관리] ## Next 종료 (code=${code ?? 0}) supervised mode=${signal.restartMode} — 빌드 파이프라인 시작`
+        `[SourceCodeUpload] Next 종료 (code=${code ?? 0}) supervised mode=${signal.restartMode} — 빌드 파이프라인 시작`
       );
       void relaunchNextOnly(signal, cmd);
       return;
@@ -297,13 +297,13 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
   const port = getAppListenPort();
   const mode = signal.restartMode ?? 'launcher';
   console.log(
-    `## [버전관리] ## supervised 재기동 시작 (mode=${mode}). Node 유지, Next 중지. port=${port}`
+    `[SourceCodeUpload] supervised 재기동 시작 (mode=${mode}). Node 유지, Next 중지. port=${port}`
   );
   markRestartConsumed(signal);
 
   expectNextExitForRelaunch = true;
   if (nextProc && !nextProc.killed) {
-    console.log('## [버전관리] ## Next 자식 프로세스 종료 중...');
+    console.log('[SourceCodeUpload] Next 자식 프로세스 종료 중...');
     try {
       nextProc.kill('SIGTERM');
     } catch {
@@ -333,7 +333,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     try {
       runNpmInstallSync();
     } catch (e) {
-      console.error('## [버전관리] ## npm install 실패:', e instanceof Error ? e.message : e);
+      console.error('[SourceCodeUpload] npm install 실패:', e instanceof Error ? e.message : e);
       await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
@@ -347,7 +347,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     try {
       runNpmBuildSync();
     } catch (e) {
-      console.error('## [버전관리] ## npm run build 실패:', e instanceof Error ? e.message : e);
+      console.error('[SourceCodeUpload] npm run build 실패:', e instanceof Error ? e.message : e);
       await ensureGeoServerIfRequested(signal);
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
@@ -356,7 +356,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       return;
     }
   } else {
-    console.log('## [버전관리] ## runBuild=false — 사전 빌드 완료분, 후행 빌드 생략');
+    console.log('[SourceCodeUpload] runBuild=false — 사전 빌드 완료분, 후행 빌드 생략');
   }
 
   await ensureGeoServerIfRequested(signal);
@@ -371,7 +371,7 @@ function startLauncherPoll(cmd: NextCmd): void {
   const delayMs = Number(process.env.GGNR_RESTART_DELAY_MS ?? 2000);
   const safeDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   console.log(
-    `## [버전관리] ## supervised 감시 시작 — launcher: Next 폴링 종료; startB/exit: Next 종료 → 빌드 → Next (delay ${safeDelay}ms)`
+    `[SourceCodeUpload] supervised 감시 시작 — launcher: Next 폴링 종료; startB/exit: Next 종료 → 빌드 → Next (delay ${safeDelay}ms)`
   );
 
   setInterval(() => {
@@ -452,7 +452,7 @@ async function main(): Promise<void> {
   let geoOk = await tryGeoServerSetup();
   if (!geoOk) {
     try {
-      console.log('[run] GeoServer ensure (헬스 확인 후 필요 시 기동)...');
+      console.log('[run] GeoServer ensure (응답 확인 후 필요 시 기동)...');
       const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
       const ens = await ensureGeoServerRunning({ forceRestart: false, readyTimeoutMs: 120_000 });
       if (ens.success) {
@@ -462,7 +462,7 @@ async function main(): Promise<void> {
         console.warn('[run] GeoServer ensure failed:', ens.error ?? 'unknown');
       }
       if (!geoOk) {
-        console.warn('[run] GeoServer 기동/헬스 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');
+        console.warn('[run] GeoServer 기동·응답 확인 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');
       }
     } catch (e) {
       console.warn('[run] GeoServer 기동 스킵:', e instanceof Error ? e.message : e);

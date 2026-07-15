@@ -51,7 +51,7 @@ export async function flushPendingVersionHistory(): Promise<void> {
 
   if (!result.ok) {
     console.warn(
-      '## [버전관리] ## 재기동 후 성공 이력 INSERT 실패:',
+      '[SourceCodeUpload] 재기동 후 성공 이력 INSERT 실패:',
       result.error ?? 'unknown'
     );
     return;
@@ -63,10 +63,10 @@ export async function flushPendingVersionHistory(): Promise<void> {
   next.historyFlushedAt = new Date().toISOString();
   try {
     await fsPromises.writeFile(signalPath, JSON.stringify(next, null, 2), 'utf8');
-    console.log('## [버전관리] ## 재기동 후 성공 이력 INSERT 완료');
+    console.log('[SourceCodeUpload] 재기동 후 성공 이력 INSERT 완료');
   } catch (e) {
     console.warn(
-      '## [버전관리] ## 이력 flush 플래그 해제 실패:',
+      '[SourceCodeUpload] 이력 flush 플래그 해제 실패:',
       e instanceof Error ? e.message : e
     );
   }

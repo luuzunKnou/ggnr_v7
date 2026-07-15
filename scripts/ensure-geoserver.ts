@@ -1,5 +1,5 @@
 /**
- * CLI: GeoServer ensure (헬스 → 필요 시 stop/start → ready)
+ * CLI: GeoServer ensure (응답 확인 → 필요 시 stop/start → ready)
  * 사용: npx tsx scripts/ensure-geoserver.ts
  */
 import { ensureGeoServerRunning } from '../src/service/geoserverProcessService';
