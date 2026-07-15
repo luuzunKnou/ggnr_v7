@@ -10,7 +10,7 @@
               <sld:Mark>
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
-                  <sld:CssParameter name="fill">#FF0000</sld:CssParameter>
+                  <sld:CssParameter name="fill">#673AB7</sld:CssParameter>
                   <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>
@@ -34,7 +34,7 @@
                           </ogc:Function>
                         </ogc:Div>
                       </ogc:Function>
-                      <ogc:Literal>0.5</ogc:Literal>
+                      <ogc:Literal>1.5</ogc:Literal>
                     </ogc:Mul>
                   </ogc:Add>
                 </ogc:Function>

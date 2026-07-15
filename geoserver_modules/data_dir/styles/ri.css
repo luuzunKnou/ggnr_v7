@@ -1,26 +1,7 @@
 * {
-  fill: #4C8FAF;
-  fill-opacity: 0.0;
-  stroke: #4C8FAF;
-  stroke-width: 2;
+  fill: #00BCD4;
+  stroke: #FFFFFF;
+  stroke-width: 1;
+  fill-opacity: 0.3;
   stroke-opacity: 1.0;
-
-  label: [ri_nm];
-  label-anchor: 0.5 0.5;
-  label-geometry: [centroid(geom)];
-
-  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
-  font-size: 16;
-  font-weight: bold;
-  font-fill: #4C8FAF;
-
-  halo-color: #FFFFFF;
-  halo-radius: 2;
-  halo-opacity: 0.9;
-
-  label-conflict-resolution: true;
-  label-group: true;
-  label-max-displacement: 0;
-  label-priority: [area(geom)];
-  label-fit-goodness: 0.1;
 }

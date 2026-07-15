@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.4722294131924</double>
+          <double>36.545040002144376</double>
+          <double>128.85125285594359</double>
+          <double>36.74143276593105</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4301463159353202E7</double>
+          <double>4375879.543562658</double>
+          <double>1.4343655855998976E7</double>
+          <double>4403126.870719633</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_park</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

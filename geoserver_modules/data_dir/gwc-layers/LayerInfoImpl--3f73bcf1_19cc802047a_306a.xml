@@ -9,10 +9,26 @@
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
+      <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4304269704817224E7</double>
+          <double>4364600.893128921</double>
+          <double>1.4347630546197334E7</double>
+          <double>4392966.8968738755</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
+      <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.49744104005148</double>
+          <double>36.46359951911106</double>
+          <double>128.88695810549183</double>
+          <double>36.668260451669475</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>landown_sports</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

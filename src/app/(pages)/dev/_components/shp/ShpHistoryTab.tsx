@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { RefreshCw, ChevronDown, ChevronRight, Check, X, RotateCcw, Search, Loader2 } from 'lucide-react';
 import { SyncDetailModal } from './SyncDetailModal';
 
@@ -46,6 +46,20 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
 
   const [syncModal, setSyncModal] = useState<{ dhKey: number; tableName: string; shpPath?: string | null } | null>(null);
   const [syncLoading, setSyncLoading] = useState<number | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = window.setTimeout(() => setToastMsg(null), 1000);
+    return () => window.clearTimeout(t);
+  }, [toastMsg]);
+
+  const copyContents = useCallback((text: string) => {
+    if (!text) return;
+    void copyTextToClipboard(text).then((ok) => {
+      if (ok) setToastMsg('복사됨');
+    });
+  }, []);
 
   const PAGE_SIZE = 20;
 
@@ -156,7 +170,7 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
         </Button>
       </div>
 
-      <section className="flex-1 min-h-0 overflow-auto border rounded">
+      <section className="min-h-0 max-h-[32rem] overflow-auto border rounded">
         {loading ? (
           <div className="flex items-center justify-center h-full text-xs text-muted-foreground">로딩 중…</div>
         ) : error ? (
@@ -205,20 +219,21 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
                             ) : details.length === 0 ? (
                               <div className="py-4 text-center text-xs text-muted-foreground">상세 이력이 없습니다.</div>
                             ) : (
-                              <table className="w-full text-xs">
+                              <div className="overflow-x-auto">
+                              <table className="w-full table-fixed text-xs">
                                 <thead>
                                   <tr className="text-left text-muted-foreground bg-muted/30">
                                     <th className="py-1 px-2 w-14 text-center">결과</th>
-                                    <th className="py-1 px-2 w-24">레이어 그룹</th>
-                                    <th className="py-1 px-2">레이어 한글명</th>
-                                    <th className="py-1 px-2">레이어 영문명</th>
-                                    <th className="py-1 px-2 w-16">구분</th>
-                                    <th className="py-1 px-2 w-14 text-right" title="처리 전 DB 행 수">이전</th>
-                                    <th className="py-1 px-2 w-14 text-right" title="처리 후 DB 행 수">현재</th>
-                                    <th className="py-1 px-2 w-14 text-right text-emerald-700 dark:text-emerald-400" title="SHP 기준 추가 행">추가</th>
-                                    <th className="py-1 px-2 w-14 text-right text-orange-600" title="속성 충돌(변경 필요)">변경</th>
-                                    <th className="py-1 px-2 w-14 text-right text-red-500" title="삭제 대상">삭제</th>
-                                    <th className="py-1 px-2">업데이트 내용</th>
+                                    <th className="py-1 px-2 w-30">레이어 그룹</th>
+                                    <th className="py-1 px-2 w-35">레이어 한글명</th>
+                                    <th className="py-1 px-2 w-40">레이어 영문명</th>
+                                    <th className="py-1 px-2 w-22 whitespace-nowrap">구분</th>
+                                    <th className="py-1 px-2 w-18 text-right" title="처리 전 DB 행 수">이전</th>
+                                    <th className="py-1 px-2 w-18 text-right" title="처리 후 DB 행 수">현재</th>
+                                    <th className="py-1 px-2 w-18 text-right text-emerald-700 dark:text-emerald-400" title="SHP 기준 추가 행">추가</th>
+                                    <th className="py-1 px-2 w-18 text-right text-orange-600" title="속성 충돌(변경 필요)">변경</th>
+                                    <th className="py-1 px-2 w-18 text-right text-red-500" title="삭제 대상">삭제</th>
+                                    <th className="py-1 px-2 px-4">업데이트 내용</th>
                                     <th className="py-1 px-2 w-24 text-center">액션</th>
                                   </tr>
                                 </thead>
@@ -235,16 +250,27 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
                                       <td className="py-1 px-2 text-center">
                                         <ResultBadge result={d.dhResult} />
                                       </td>
-                                      <td className="py-1 px-2 truncate max-w-[6rem]" title={d.dhGroup ?? ''}>{d.dhGroup ?? '—'}</td>
-                                      <td className="py-1 px-2 truncate max-w-[8rem]" title={d.dhKorName ?? ''}>{d.dhKorName ?? '—'}</td>
-                                      <td className="py-1 px-2 font-mono truncate max-w-[8rem]" title={d.dhName ?? ''}>{d.dhName ?? '—'}</td>
-                                      <td className="py-1 px-2">{d.dhType ?? '—'}</td>
+                                      <td className="py-1 px-2 truncate" title={d.dhGroup ?? ''}>{d.dhGroup ?? '—'}</td>
+                                      <td className="py-1 px-2 truncate" title={d.dhKorName ?? ''}>{d.dhKorName ?? '—'}</td>
+                                      <td className="py-1 px-2 font-mono truncate" title={d.dhName ?? ''}>{d.dhName ?? '—'}</td>
+                                      <td className="py-1 px-2 truncate" title={d.dhType ?? ''}>{d.dhType ?? '—'}</td>
                                       <td className="py-1 px-2 text-right tabular-nums">{d.dhOldData ?? '—'}</td>
                                       <td className="py-1 px-2 text-right tabular-nums">{d.dhNewData ?? '—'}</td>
                                       <td className="py-1 px-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{d.dhAppendCount ?? '—'}</td>
                                       <td className="py-1 px-2 text-right tabular-nums text-orange-600">{d.dhConflictCount ?? '—'}</td>
                                       <td className="py-1 px-2 text-right tabular-nums text-red-500">{d.dhRemoveCount ?? '—'}</td>
-                                      <td className="py-1 px-2 truncate max-w-[10rem]" title={d.dhContents ?? ''}>{d.dhContents ?? '—'}</td>
+                                      <td className="py-1 px-4 truncate">
+                                        {d.dhContents ? (
+                                          <button
+                                            type="button"
+                                            className="w-full truncate text-left hover:underline hover:cursor-pointer"
+                                            title={d.dhContents}
+                                            onClick={(e) => { e.stopPropagation(); copyContents(d.dhContents ?? ''); }}
+                                          >
+                                            {d.dhContents}
+                                          </button>
+                                        ) : '—'}
+                                      </td>
                                       <td className="py-1 px-2 text-center">
                                         {showSyncBtn(d) && (
                                           <button
@@ -264,6 +290,7 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
                                   ))}
                                 </tbody>
                               </table>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -294,6 +321,17 @@ export function ShpHistoryTab({ embedded = false }: { embedded?: boolean } = {})
           onRollbackDone={() => { if (expandedKey) fetchDetails(expandedKey); }}
         />
       )}
+
+      {toastMsg ? (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          <div
+            className="pointer-events-auto inline-block text-white px-4 py-2 text-sm"
+            style={{ backgroundColor: '#5191e4', borderRadius: '3px', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)' }}
+          >
+            {toastMsg}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

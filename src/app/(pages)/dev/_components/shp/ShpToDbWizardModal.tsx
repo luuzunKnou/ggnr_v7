@@ -121,6 +121,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
   const [postProgress, setPostProgress] = useState<{ current: number; total: number } | null>(null);
   const [finished, setFinished] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const [showOriginalSummaryStyle, setShowOriginalSummaryStyle] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const processStartedRef = useRef(false);
 
@@ -575,6 +576,19 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
               SHP to DB — {folderName}
             </DialogTitle>
           </DialogHeader>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowOriginalSummaryStyle((prev) => !prev)}
+              className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition shadow-sm ${
+                showOriginalSummaryStyle
+                  ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-300'
+                  : 'border-border/80 bg-white text-slate-700 hover:bg-slate-100 dark:border-border/70 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              {showOriginalSummaryStyle ? '변경 스타일' : '기존 스타일'}
+            </button>
+          </div>
 
           <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden py-1">
             {processingError && (
@@ -665,7 +679,12 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
                           {log.syncData ? (
                             <button
                               type="button"
-                              className="text-[10px] text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-0.5"
+                              className={cn(
+                                'truncate',
+                                showOriginalSummaryStyle
+                                  ? 'flex items-center gap-0.5 text-[10px] text-orange-600 hover:underline dark:text-orange-400'
+                                  : 'inline-flex max-w-full items-center gap-1 text-xs font-normal text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300'
+                              )}
                               onClick={() => {
                                 setSyncModalTable({
                                   tableName: log.syncData!.tableName,
@@ -675,9 +694,21 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
                                 setSyncModalOpen(true);
                               }}
                             >
-                              <AlertTriangle className="w-3 h-3" />
-                              충돌 {log.syncData.conflictCount} / 삭제 {log.syncData.removeCount} / 신규{' '}
-                              {log.syncData.appendCount}
+                              {showOriginalSummaryStyle ? (
+                                <>
+                                  <AlertTriangle className="h-3 w-3 shrink-0 text-orange-500" />
+                                  충돌 {log.syncData.conflictCount} / 삭제 {log.syncData.removeCount} / 신규 {log.syncData.appendCount}
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                  <span className="whitespace-nowrap">충돌 {log.syncData.conflictCount}</span>
+                                  <span className="text-amber-600/70 dark:text-amber-400/70">·</span>
+                                  <span className="whitespace-nowrap font-medium text-amber-700 dark:text-amber-300">삭제 {log.syncData.removeCount}</span>
+                                  <span className="text-amber-600/70 dark:text-amber-400/70">·</span>
+                                  <span className="whitespace-nowrap font-medium text-amber-700 dark:text-amber-300">신규 {log.syncData.appendCount}</span>
+                                </>
+                              )}
                             </button>
                           ) : (
                             <span className="text-red-500" title={log.error ?? ''}>

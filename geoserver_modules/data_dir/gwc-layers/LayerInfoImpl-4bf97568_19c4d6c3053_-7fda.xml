@@ -9,17 +9,6 @@
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.4383296954133</double>
-          <double>36.40812128213308</double>
-          <double>128.99124460575845</double>
-          <double>36.80832619024499</double>
-        </coords>
-      </extent>
-    </gridSubset>
-    <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
@@ -27,6 +16,17 @@
           <double>4356924.524014045</double>
           <double>1.4359239666303625E7</double>
           <double>4412423.499037206</double>
+        </coords>
+      </extent>
+    </gridSubset>
+    <gridSubset>
+      <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.4383296954133</double>
+          <double>36.40812128213308</double>
+          <double>128.99124460575845</double>
+          <double>36.80832619024499</double>
         </coords>
       </extent>
     </gridSubset>

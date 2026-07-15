@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.47648240852968</double>
+          <double>36.538232150516244</double>
+          <double>128.79880909216527</double>
+          <double>36.604298542531055</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4301936600628493E7</double>
+          <double>4374936.2730086995</double>
+          <double>1.4337817842919892E7</double>
+          <double>4384093.697847103</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>swl_manh_ps_old</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

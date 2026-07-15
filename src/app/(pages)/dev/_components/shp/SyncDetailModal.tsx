@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
-import { X, RotateCcw, Check, Loader2, Plus, AlertTriangle, Trash2, ShieldCheck, Play } from 'lucide-react';
+import { X, RotateCcw, Check, Loader2, Plus, AlertTriangle, Trash2, ShieldCheck, Play, RefreshCw } from 'lucide-react';
 import { GeoJsonMiniMap } from './GeoJsonMiniMap';
 import {
   SHP_SYNC_DETAIL_MODAL_ATTR,
@@ -36,7 +36,7 @@ type Props = {
   onRollbackDone?: () => void;
 };
 
-type TabId = 'all' | 'pending' | 'conflict' | 'kept' | 'append' | 'remove';
+type TabId = 'all' | 'pending' | 'update' | 'kept' | 'append' | 'remove';
 
 function opCategory(row: SyncLogRow): string {
   if (!row.sl_operation) {
@@ -49,13 +49,32 @@ function opCategory(row: SyncLogRow): string {
 }
 
 const OP_LABEL: Record<string, { label: string; color: string; icon: typeof AlertTriangle; badge?: string }> = {
-  new: { label: '신규', color: 'text-emerald-600', icon: Plus },
+  new: { label: '신규', color: 'text-emerald-600', icon: Plus, badge: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
   conflict: { label: '충돌', color: 'text-amber-700', icon: AlertTriangle, badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' },
   delete: { label: '삭제', color: 'text-rose-600', icon: Trash2, badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' },
-  append: { label: '신규', color: 'text-green-600', icon: Plus },
+  append: { label: '신규', color: 'text-green-600', icon: Plus, badge: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' },
   kept: { label: '기존유지', color: 'text-blue-600', icon: ShieldCheck },
   remove: { label: '삭제', color: 'text-red-600', icon: Trash2, badge: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
 };
+
+function getOpLabelInfo(operation: string, isPending: boolean) {
+  if (operation === 'conflict' && !isPending) {
+    return { label: '업데이트', color: 'text-orange-600', icon: RefreshCw };
+  }
+  return OP_LABEL[operation] ?? OP_LABEL['conflict'];
+}
+
+function parseGeomType(g: unknown): string | null {
+  let obj: Record<string, unknown> | null = null;
+  if (g == null) return null;
+  if (typeof g === 'string') {
+    try { obj = JSON.parse(g) as Record<string, unknown>; } catch { return null; }
+  } else if (typeof g === 'object') {
+    obj = g as Record<string, unknown>;
+  }
+  const t = obj?.type;
+  return typeof t === 'string' ? t.toUpperCase() : null;
+}
 
 type FlatRow = {
   slKey: number;
@@ -85,11 +104,23 @@ function buildFlatRows(rows: SyncLogRow[], titleField: string | null = null): Fl
       const changed = Object.keys(old).filter(
         (k) => k !== 'ogc_fid' && k !== 'geom' && JSON.stringify(old[k]) !== JSON.stringify(nw[k]),
       );
-      if (changed.length === 0) {
+      const entries: { field: string; oldVal: unknown; newVal: unknown }[] = changed.map((f) => ({
+        field: f, oldVal: old[f], newVal: nw[f],
+      }));
+      if (JSON.stringify(old.geom) !== JSON.stringify(nw.geom)) {
+        const oldGeomType = parseGeomType(old.geom);
+        const newGeomType = parseGeomType(nw.geom);
+        if (oldGeomType && newGeomType && oldGeomType !== newGeomType) {
+          entries.push({ field: 'geom', oldVal: oldGeomType, newVal: newGeomType });
+        } else {
+          entries.push({ field: 'geom', oldVal: '좌표 변경', newVal: '좌표 변경' });
+        }
+      }
+      if (entries.length === 0) {
         result.push({ ...base, field: '—', oldVal: '—', newVal: '—', isFirst: true, rowSpan: 1 });
       } else {
-        changed.forEach((f, i) => {
-          result.push({ ...base, field: f, oldVal: old[f], newVal: nw[f], isFirst: i === 0, rowSpan: i === 0 ? changed.length : 0 });
+        entries.forEach((entry, i) => {
+          result.push({ ...base, field: entry.field, oldVal: entry.oldVal, newVal: entry.newVal, isFirst: i === 0, rowSpan: i === 0 ? entries.length : 0 });
         });
       }
     } else if (op === 'append' || op === 'new') {
@@ -113,6 +144,13 @@ function buildFlatRows(rows: SyncLogRow[], titleField: string | null = null): Fl
   return result;
 }
 
+function syncRowOrder(row: SyncLogRow) {
+  if (!row.sl_operation) return 0; // pending
+  const op = opCategory(row);
+  if (op === 'kept') return 2; // kept last
+  return 1; // processed (check-marked) next
+}
+
 export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClose, onRollbackDone }: Props) {
   const [rows, setRows] = useState<SyncLogRow[]>([]);
   const [titleField, setTitleField] = useState<string | null>(null);
@@ -130,7 +168,6 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
     try {
       const p: Record<string, unknown> = { tableName };
       if (dhKey) p.dhKey = dhKey;
-      if (pendingOnly) p.pendingOnly = true;
       const res = await call('', 'POST', {
         service: 'shpUploadService',
         action: 'getSyncLogs',
@@ -194,12 +231,12 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
     const stillPending = freshRows.filter((r) => !r.sl_operation).length;
     if (stillPending > 0) return;
     const appended = freshRows.filter((r) => r.sl_operation === 'append' && !r.sl_rolled_back).length;
-    const conflicted = freshRows.filter((r) => r.sl_operation === 'conflict' && !r.sl_rolled_back).length;
+    const updated = freshRows.filter((r) => r.sl_operation === 'conflict' && !r.sl_rolled_back).length;
     const removed = freshRows.filter((r) => r.sl_operation === 'remove' && !r.sl_rolled_back).length;
     const kept = freshRows.filter((r) => r.sl_operation === 'kept').length;
     const parts = [
       appended > 0 ? `신규 ${appended}` : '',
-      conflicted > 0 ? `충돌 ${conflicted}` : '',
+      updated > 0 ? `업데이트 ${updated}` : '',
       removed > 0 ? `삭제 ${removed}` : '',
       kept > 0 ? `유지 ${kept}` : '',
     ].filter(Boolean).join(', ');
@@ -213,32 +250,49 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
   }, [dhKey]);
 
   const filtered = useMemo(() => {
-    if (activeTab === 'all') return rows;
-    if (activeTab === 'pending') return pendingRows;
-    return rows.filter((r) => {
+    let source = activeTab === 'all' ? rows : activeTab === 'pending' ? pendingRows : rows.filter((r) => {
       const cat = opCategory(r);
-      if (activeTab === 'conflict') return cat === 'conflict';
+      if (activeTab === 'update') return r.sl_operation === 'conflict';
       if (activeTab === 'kept') return cat === 'kept';
       if (activeTab === 'append') return cat === 'append' || cat === 'new';
       if (activeTab === 'remove') return cat === 'remove' || cat === 'delete';
       return false;
     });
+    return source
+      .map((row, idx) => ({ row, idx }))
+      .sort((a, b) => {
+        if (activeTab === 'update') {
+          const ra = a.row.sl_rolled_back ? 0 : 1;
+          const rb = b.row.sl_rolled_back ? 0 : 1;
+          if (ra !== rb) return ra - rb;
+          return a.idx - b.idx;
+        }
+        const oa = syncRowOrder(a.row);
+        const ob = syncRowOrder(b.row);
+        if (oa !== ob) return oa - ob;
+        return a.idx - b.idx;
+      })
+      .map((item) => item.row);
   }, [rows, activeTab, pendingRows]);
 
   const flatRows = useMemo(() => buildFlatRows(filtered, titleField), [filtered, titleField]);
 
   const counts = useMemo(() => {
-    let pending = 0, conflict = 0, kept = 0, append = 0, remove = 0, rolledBack = 0;
+    let pending = 0, updated = 0, kept = 0, append = 0, remove = 0, rolledBack = 0;
     for (const r of rows) {
       const cat = opCategory(r);
       if (!r.sl_operation) { pending++; continue; }
-      if (r.sl_rolled_back) { rolledBack++; continue; }
-      if (cat === 'conflict') conflict++;
+      if (r.sl_rolled_back) {
+        rolledBack++;
+        if (cat === 'conflict') updated++;
+        continue;
+      }
+      if (cat === 'conflict') updated++;
       else if (cat === 'kept') kept++;
       else if (cat === 'append') append++;
       else if (cat === 'remove') remove++;
     }
-    return { all: rows.length, pending, conflict, kept, append, remove, rolledBack };
+    return { all: rows.length, pending, updated, kept, append, remove, rolledBack };
   }, [rows]);
 
   const afterAction = useCallback(async () => {
@@ -399,7 +453,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
   const tabs: { id: TabId; label: string }[] = [
     { id: 'all', label: `전체 (${counts.all})` },
     { id: 'pending', label: `미결 (${counts.pending})` },
-    { id: 'conflict', label: `충돌 (${counts.conflict})` },
+    { id: 'update', label: `업데이트 (${counts.updated})` },
     { id: 'kept', label: `유지 (${counts.kept})` },
     { id: 'append', label: `신규 (${counts.append})` },
     { id: 'remove', label: `삭제 (${counts.remove})` },
@@ -425,7 +479,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
             <p className="text-xs text-muted-foreground mt-0.5">
               전체 {counts.all}건
               {counts.pending > 0 && <> · 미결 <span className="text-amber-600 font-semibold">{counts.pending}</span>건</>}
-              {counts.conflict > 0 && <> · 충돌 <span className="text-orange-600">{counts.conflict}</span></>}
+              {counts.updated > 0 && <> · 업데이트 <span className="text-orange-600">{counts.updated}</span></>}
               {counts.kept > 0 && <> · 유지 <span className="text-blue-600">{counts.kept}</span></>}
               {counts.append > 0 && <> · 신규 <span className="text-green-600">{counts.append}</span></>}
               {counts.remove > 0 && <> · 삭제 <span className="text-red-500">{counts.remove}</span></>}
@@ -503,14 +557,14 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
                   <th className="py-1.5 px-2 w-20 text-center border-b">구분</th>
                   <th className="py-1.5 px-2 w-28 text-center border-b">액션</th>
                   <th className="py-1.5 px-2 w-[50px] border-b">Key</th>
-                  <th className="py-1.5 px-2 w-[100px] border-b">Title</th>
+                  <th className="py-1.5 px-2 w-[100px] border-b">제목</th>
                   <th className="py-1.5 px-2 w-32 border-b">변경 필드</th>
                   <th className="py-1.5 px-2 border-b">값</th>
                 </tr>
               </thead>
               <tbody>
                 {flatRows.map((fr, idx) => {
-                  const opInfo = OP_LABEL[fr.operation] ?? OP_LABEL['conflict'];
+                  const opInfo = getOpLabelInfo(fr.operation, fr.isPending);
                   const Icon = opInfo?.icon ?? AlertTriangle;
                   const isBusy = busyKey === fr.slKey;
 
@@ -532,10 +586,10 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
                               <span className="text-[10px] text-muted-foreground">롤백됨</span>
                             ) : fr.isPending ? (
                               <span className="text-[10px] text-amber-600 font-semibold">미결</span>
-                            ) : fr.operation === 'kept' ? (
-                              <span className="text-[10px] text-blue-500">유지</span>
-                            ) : (
+                            ) : fr.operation !== 'kept' ? (
                               <Check className="w-3.5 h-3.5 text-green-600 mx-auto" />
+                            ) : (
+                              <span className="text-[10px] text-blue-500">유지</span>
                             )}
                           </td>
                           <td className="py-1.5 px-2 text-center align-top" rowSpan={fr.rowSpan}>
@@ -668,9 +722,9 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
       {/* 상세 정보 모달 */}
       {detailLog && (() => {
         const op = opCategory(detailLog);
-        const opInfo = OP_LABEL[op] ?? OP_LABEL['conflict'];
-        const Icon = opInfo?.icon ?? AlertTriangle;
         const isPending = !detailLog.sl_operation;
+        const opInfo = getOpLabelInfo(op, isPending);
+        const Icon = opInfo?.icon ?? AlertTriangle;
         const oldData = detailLog.sl_old_data ?? {};
         const newData = detailLog.sl_new_data ?? {};
         const allKeys = [...new Set([...Object.keys(oldData), ...Object.keys(newData)])].filter((k) => k !== 'ogc_fid' && k !== 'geom');
@@ -681,6 +735,13 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
         };
         const oldGeom = parseGeom(oldData.geom);
         const newGeom = parseGeom(newData.geom);
+        const oldGeomType = parseGeomType(oldData.geom);
+        const newGeomType = parseGeomType(newData.geom);
+        const geomChanged = JSON.stringify(oldData.geom) !== JSON.stringify(newData.geom);
+        const bothGeomPresent = !!oldGeomType && !!newGeomType;
+        const geomTypeChanged = geomChanged && bothGeomPresent && oldGeomType !== newGeomType;
+        const oldGeomDisplay = oldGeomType ? (bothGeomPresent && geomChanged && !geomTypeChanged ? '좌표 변경' : oldGeomType) : null;
+        const newGeomDisplay = newGeomType ? (bothGeomPresent && geomChanged && !geomTypeChanged ? '좌표 변경' : newGeomType) : null;
         const titleVal = titleField ? String(oldData[titleField] ?? newData[titleField] ?? '') : '';
         const isBusyDetail = busyKey === detailLog.sl_key;
         return (
@@ -721,7 +782,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
                   </div>
                   {titleField && (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Title</span>
+                      <span className="text-xs text-muted-foreground">제목</span>
                       <span className="text-xs">{titleVal || '—'}</span>
                     </div>
                   )}
@@ -746,7 +807,15 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
                               </tr>
                             );
                           })}
-                          {allKeys.length === 0 && (
+                          {(oldGeomType || newGeomType) && (
+                            <tr className="border-b last:border-b-0">
+                              <td className="py-1 px-2 font-mono text-muted-foreground bg-muted/30 w-32">geom</td>
+                              <td className={cn('py-1 px-2 truncate max-w-[200px]', geomChanged && 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 font-medium')}>
+                                {oldGeomDisplay ?? '—'}
+                              </td>
+                            </tr>
+                          )}
+                          {allKeys.length === 0 && !oldGeomType && !newGeomType && (
                             <tr><td className="py-2 px-2 text-muted-foreground">—</td></tr>
                           )}
                         </tbody>
@@ -772,7 +841,15 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, pendingOnly, onClos
                               </tr>
                             );
                           })}
-                          {allKeys.length === 0 && (
+                          {(oldGeomType || newGeomType) && (
+                            <tr className="border-b last:border-b-0">
+                              <td className="py-1 px-2 font-mono text-muted-foreground bg-muted/30 w-32">geom</td>
+                              <td className={cn('py-1 px-2 truncate max-w-[200px]', geomChanged && 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 font-medium')}>
+                                {newGeomDisplay ?? '—'}
+                              </td>
+                            </tr>
+                          )}
+                          {allKeys.length === 0 && !oldGeomType && !newGeomType && (
                             <tr><td className="py-2 px-2 text-muted-foreground">—</td></tr>
                           )}
                         </tbody>

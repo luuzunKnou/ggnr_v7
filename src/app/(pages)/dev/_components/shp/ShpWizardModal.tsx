@@ -12,12 +12,17 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { useChunkedUpload, folderUploadOverallPercent } from '../useChunkedUpload';
-import { Check, Loader2, X, ChevronLeft, ChevronRight, Minus, AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Check, Loader2, X, ChevronLeft, ChevronRight, Minus, AlertTriangle, Download } from 'lucide-react';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { parseShpFolderName } from './parseShpFolderMeta';
 import { type FolderPickFile } from './pickShpFolderFiles';
 import { SyncDetailModal } from './SyncDetailModal';
 import { isShpSyncDetailModalTarget } from './shpModalLayers';
+import { ShpCrsCandidateModal, type ShpCrsCandidate } from './ShpCrsCandidateModal';
+import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared';
+import * as XLSX from 'xlsx';
+
+type EpsgSource = 'prj' | 'folder' | 'candidate' | 'manual' | null;
 
 type LayerRow = {
   name: string;
@@ -25,7 +30,10 @@ type LayerRow = {
   modified?: string;
   schemaStatus?: 'pending' | 'checking' | 'new' | 'ok' | 'mismatch' | 'error';
   schemaDetail?: string;
+  epsg?: number | null;
+  epsgSource?: EpsgSource;
 };
+
 
 type ShpStatusRow = {
   sourceFile: string;
@@ -80,6 +88,9 @@ type ReportRow = {
   style: boolean;
   define: boolean;
   rowCount: number | null;
+  oldRowCount: number | null;
+  group: string;
+  korName: string;
   syncAppend: number;
   syncUpdated: number;
   syncKept: number;
@@ -110,6 +121,92 @@ function buildSyncSummary(append: number, updated: number, kept: number, removed
   if (kept > 0) parts.push(`DB유지 ${kept}`);
   if (removed > 0) parts.push(`삭제 ${removed}`);
   return parts.length > 0 ? parts.join(' · ') : '변경 없음';
+}
+
+function epsgSummaryText(layers: LayerRow[]): string {
+  const withEpsg = layers.filter((l): l is LayerRow & { epsg: number } => l.epsg != null);
+  if (withEpsg.length === 0) return '-';
+  const uniq = Array.from(new Set(withEpsg.map((l) => l.epsg)));
+  if (uniq.length === 1) return `EPSG:${uniq[0]}`;
+  return `혼재 (${uniq.map((e) => `EPSG:${e}`).join(', ')})`;
+}
+
+function parseGeomTypeForReport(g: unknown): string | null {
+  let obj: Record<string, unknown> | null = null;
+  if (g == null) return null;
+  if (typeof g === 'string') {
+    try { obj = JSON.parse(g) as Record<string, unknown>; } catch { return null; }
+  } else if (typeof g === 'object') {
+    obj = g as Record<string, unknown>;
+  }
+  const t = obj?.type;
+  return typeof t === 'string' ? t.toUpperCase() : null;
+}
+
+function stringifyRowSummary(data: Record<string, unknown> | null): string {
+  if (!data) return '-';
+  const parts = Object.entries(data)
+    .filter(([k]) => k !== 'ogc_fid' && k !== 'geom')
+    .map(([k, v]) => `${k}=${v == null ? '' : String(v)}`);
+  return parts.length > 0 ? parts.join(', ') : '-';
+}
+
+type SyncDiffRow = { op: string; keyField: string; keyValue: string; field: string; oldVal: string; newVal: string };
+
+function buildSyncDiffRowsForReport(log: Record<string, unknown>): SyncDiffRow[] {
+  const op = String(log.sl_operation ?? '');
+  const keyField = String(log.sl_key_field ?? '');
+  const keyValue = String(log.sl_key_value ?? '');
+  const old = (log.sl_old_data as Record<string, unknown> | null) ?? null;
+  const nw = (log.sl_new_data as Record<string, unknown> | null) ?? null;
+
+  if (op === 'append') {
+    return [{ op: '추가', keyField, keyValue, field: '(신규 행)', oldVal: '-', newVal: stringifyRowSummary(nw) }];
+  }
+  if (op === 'remove') {
+    return [{ op: '삭제', keyField, keyValue, field: '(삭제 행)', oldVal: stringifyRowSummary(old), newVal: '-' }];
+  }
+
+  const opLabel = op === 'kept' ? 'DB유지' : '변경반영';
+  const oldData = old ?? {};
+  const newData = nw ?? {};
+  const changed = Object.keys(oldData).filter(
+    (k) => k !== 'ogc_fid' && k !== 'geom' && JSON.stringify(oldData[k]) !== JSON.stringify(newData[k])
+  );
+  const rows: SyncDiffRow[] = changed.map((f) => ({
+    op: opLabel,
+    keyField,
+    keyValue,
+    field: f,
+    oldVal: oldData[f] == null ? '' : String(oldData[f]),
+    newVal: newData[f] == null ? '' : String(newData[f]),
+  }));
+  if (JSON.stringify(oldData.geom) !== JSON.stringify(newData.geom)) {
+    const oldGeomType = parseGeomTypeForReport(oldData.geom);
+    const newGeomType = parseGeomTypeForReport(newData.geom);
+    if (oldGeomType && newGeomType && oldGeomType !== newGeomType) {
+      rows.push({ op: opLabel, keyField, keyValue, field: 'geom', oldVal: oldGeomType, newVal: newGeomType });
+    } else {
+      rows.push({ op: opLabel, keyField, keyValue, field: 'geom', oldVal: '좌표 변경', newVal: '좌표 변경' });
+    }
+  }
+  if (rows.length === 0) {
+    rows.push({ op: opLabel, keyField, keyValue, field: '-', oldVal: '-', newVal: '-' });
+  }
+  return rows;
+}
+
+function sanitizeSheetName(name: string, used: Set<string>): string {
+  const base = name.replace(/[\\/*?:[\]]/g, '_').slice(0, 31) || 'Sheet';
+  let candidate = base;
+  let i = 1;
+  while (used.has(candidate)) {
+    const suffix = `_${i}`;
+    candidate = base.slice(0, 31 - suffix.length) + suffix;
+    i++;
+  }
+  used.add(candidate);
+  return candidate;
 }
 
 function syncLogAppliedInSession(log: Record<string, unknown>, sessionStartedAt: number): boolean {
@@ -231,12 +328,23 @@ export function ShpWizardModal({
   const step1NextClickRef = useRef(0);
   const step3NextClickRef = useRef(0);
   const sessionStartedAtRef = useRef(Date.now());
+  const oldRowCountsRef = useRef<Record<string, number>>({});
+  const syncLogsByTableRef = useRef<Record<string, Array<Record<string, unknown>>>>({});
   const { upload, reset, state: uploadState } = useChunkedUpload();
 
   const [step, setStep] = useState(1);
   const [source, setSource] = useState<Source | null>(null);
   const [workName, setWorkName] = useState('');
-  const [epsg, setEpsg] = useState('');
+  const [folderEpsg, setFolderEpsg] = useState<string | null>(null);
+  type CrsDetectionResult = { candidates: ShpCrsCandidate[]; reference5181?: ShpCrsCandidate };
+  const [crsCandidatesByFile, setCrsCandidatesByFile] = useState<Record<string, CrsDetectionResult>>({});
+  const [crsModalOpen, setCrsModalOpen] = useState(false);
+  const [crsModalTarget, setCrsModalTarget] = useState<string | null>(null);
+  const [crsModalCurrentEpsg, setCrsModalCurrentEpsg] = useState<number | null>(null);
+  const [crsCandidates, setCrsCandidates] = useState<ShpCrsCandidate[]>([]);
+  const [crsReference5181, setCrsReference5181] = useState<ShpCrsCandidate | undefined>(undefined);
+  const [crsCandidateGeojson, setCrsCandidateGeojson] = useState<Record<string, unknown> | null>(null);
+  const crsDetectStartedRef = useRef(false);
   const [layers, setLayers] = useState<LayerRow[]>([]);
   const [layersLoading, setLayersLoading] = useState(false);
   const [layersError, setLayersError] = useState<string | null>(null);
@@ -246,6 +354,13 @@ export function ShpWizardModal({
   const [uploadFileName, setUploadFileName] = useState('');
   const [schemaChecking, setSchemaChecking] = useState(false);
   const [stepBusy, setStepBusy] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = window.setTimeout(() => setToastMsg(null), 1000);
+    return () => window.clearTimeout(t);
+  }, [toastMsg]);
 
   const [readyPath, setReadyPath] = useState<string | null>(null);
   const [statusRows, setStatusRows] = useState<ShpStatusRow[]>([]);
@@ -258,6 +373,7 @@ export function ShpWizardModal({
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportLoaded, setReportLoaded] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   const folderInputId = 'shp-wizard-folder-input';
 
@@ -274,7 +390,15 @@ export function ShpWizardModal({
     const name = meta.workName ?? '';
     workNameRef.current = name;
     setWorkName(name);
-    setEpsg(meta.epsg ?? '');
+    setFolderEpsg(meta.epsg ?? null);
+    setCrsCandidatesByFile({});
+    setCrsModalOpen(false);
+    setCrsModalTarget(null);
+    setCrsModalCurrentEpsg(null);
+    setCrsCandidates([]);
+    setCrsReference5181(undefined);
+    setCrsCandidateGeojson(null);
+    crsDetectStartedRef.current = false;
     return name;
   }, []);
 
@@ -283,7 +407,15 @@ export function ShpWizardModal({
     setSource(null);
     setWorkName('');
     workNameRef.current = '';
-    setEpsg('');
+    setFolderEpsg(null);
+    setCrsCandidatesByFile({});
+    setCrsModalOpen(false);
+    setCrsModalTarget(null);
+    setCrsModalCurrentEpsg(null);
+    setCrsCandidates([]);
+    setCrsReference5181(undefined);
+    setCrsCandidateGeojson(null);
+    crsDetectStartedRef.current = false;
     setLayers([]);
     setLayersLoading(false);
     setLayersError(null);
@@ -306,6 +438,8 @@ export function ShpWizardModal({
     setReportRows([]);
     setReportLoading(false);
     setReportLoaded(false);
+    oldRowCountsRef.current = {};
+    syncLogsByTableRef.current = {};
     reset();
   }, [reset]);
 
@@ -389,10 +523,17 @@ export function ShpWizardModal({
           });
           continue;
         }
+        if (!(row.pathOrResult in oldRowCountsRef.current)) {
+          oldRowCountsRef.current[row.pathOrResult] = await fetchTableRowCount(tableName);
+        }
+        const layerRow = layers.find((l) => l.name.toLowerCase() === row.sourceFile.toLowerCase());
         const res = await call('', 'POST', {
           service: 'shpUploadService',
           action: 'compareShpWithTable',
-          params: { pathOrResult: row.pathOrResult },
+          params: {
+            pathOrResult: row.pathOrResult,
+            sourceSrsOverride: layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined,
+          },
         });
         const d = res?.data ?? res;
         const resolvedTableName =
@@ -429,19 +570,18 @@ export function ShpWizardModal({
     } finally {
       setConsistencyChecking(false);
     }
-  }, [statusRows]);
-
-  const handleSyncModalDone = useCallback(() => {
-    setSyncModalOpen(false);
-    setSyncModalTarget(null);
-    consistencyStartedRef.current = false;
-    setConsistencyDone(false);
-    void runConsistencyCheck();
-  }, [runConsistencyCheck]);
+  }, [statusRows, layers]);
 
   const openSyncReview = useCallback((row: ConsistencyRow) => {
     setSyncModalTarget({ tableName: row.tableName, shpPath: row.pathOrResult });
     setSyncModalOpen(true);
+  }, []);
+
+  const copyRemark = useCallback((text: string, key: string) => {
+    if (!text) return;
+    void copyTextToClipboard(text).then((ok) => {
+      if (ok) setToastMsg('복사됨');
+    });
   }, []);
 
   const loadReport = useCallback(async () => {
@@ -454,6 +594,26 @@ export function ShpWizardModal({
     setLayersError(null);
     const sessionStartedAt = sessionStartedAtRef.current;
     try {
+      const defineMap = new Map<string, { group: string; korName: string }>();
+      try {
+        const defineRes = await call('', 'POST', {
+          service: 'devTestService',
+          action: 'getDefineLayerTables',
+          params: {},
+        });
+        const dd = defineRes?.data ?? defineRes;
+        if (dd?.success && Array.isArray(dd.tables)) {
+          for (const t of dd.tables as Array<Record<string, unknown>>) {
+            const name = String(t.define_table_name ?? '').trim();
+            if (!name) continue;
+            defineMap.set(name.toLowerCase(), {
+              group: String(t.define_table_group ?? '').trim(),
+              korName: String(t.define_table_kor_name ?? '').trim(),
+            });
+          }
+        }
+      } catch { /* ignore */ }
+
       const rows: ReportRow[] = [];
       for (const status of statusRows) {
         const tableName = tableNameFromShpPath(status.pathOrResult, status.sourceFile);
@@ -474,8 +634,9 @@ export function ShpWizardModal({
           });
           const syncData = syncRes?.data ?? syncRes;
           const logs: Array<Record<string, unknown>> = syncData?.success ? (syncData.rows ?? []) : [];
-          for (const log of logs) {
-            if (!syncLogAppliedInSession(log, sessionStartedAt)) continue;
+          const appliedLogs = logs.filter((log) => syncLogAppliedInSession(log, sessionStartedAt));
+          syncLogsByTableRef.current[tableName] = appliedLogs;
+          for (const log of appliedLogs) {
             const op = String(log.sl_operation ?? '');
             if (op === 'append') syncAppend++;
             else if (op === 'conflict') syncUpdated++;
@@ -485,6 +646,8 @@ export function ShpWizardModal({
         }
 
         const rowCount = componentsOk ? await fetchTableRowCount(tableName) : null;
+        const oldRowCount = oldRowCountsRef.current[status.pathOrResult] ?? (isNewLayer ? 0 : null);
+        const defineMeta = defineMap.get(tableName.toLowerCase());
         const syncSummary = isNewLayer
           ? '신규 레이어 import'
           : buildSyncSummary(syncAppend, syncUpdated, syncKept, syncRemoved);
@@ -502,6 +665,9 @@ export function ShpWizardModal({
           style: status.style,
           define: status.define,
           rowCount,
+          oldRowCount,
+          group: defineMeta?.group ?? '',
+          korName: defineMeta?.korName ?? '',
           syncAppend,
           syncUpdated,
           syncKept,
@@ -593,10 +759,17 @@ export function ShpWizardModal({
     setComponentSetupRunning(true);
     try {
       const shpPaths = statusRows.map((r) => r.pathOrResult);
+      const sourceSrsByPath: Record<string, string> = {};
+      for (const r of statusRows) {
+        const layerRow = layers.find((l) => l.name.toLowerCase() === r.sourceFile.toLowerCase());
+        if (layerRow?.epsg != null) sourceSrsByPath[r.pathOrResult.replace(/\\/g, '/')] = `EPSG:${layerRow.epsg}`;
+      }
       const res = await call('', 'POST', {
         service: 'shpUploadService',
         action: 'processShpBatch',
-        params: shpPaths.length > 0 ? { relativePath: readyPath, shpPaths } : { relativePath: readyPath },
+        params: shpPaths.length > 0
+          ? { relativePath: readyPath, shpPaths, sourceSrsByPath }
+          : { relativePath: readyPath, sourceSrsByPath },
       });
       const d = res?.data ?? res;
       const batchResults: Array<{
@@ -629,7 +802,7 @@ export function ShpWizardModal({
     } finally {
       setComponentSetupRunning(false);
     }
-  }, [readyPath, fetchStatusList, statusRows]);
+  }, [readyPath, fetchStatusList, statusRows, layers]);
 
   const loadServerFolder = useCallback(
     async (relPath: string, folderName: string) => {
@@ -681,6 +854,129 @@ export function ShpWizardModal({
     void loadServerFolder(serverFolderSelection.relativePath, serverFolderSelection.folderName);
     onClearServerFolderSelection?.();
   }, [open, serverFolderSelection, loadServerFolder, onClearServerFolderSelection]);
+
+  const fileNameOfPath = (pathOrResult: string) => pathOrResult.split(/[\\/]/).pop() ?? pathOrResult;
+
+  const setLayerEpsg = useCallback((fileName: string, epsg: number | null, epsgSource: EpsgSource) => {
+    setLayers((prev) => prev.map((l) => (l.name === fileName ? { ...l, epsg, epsgSource } : l)));
+  }, []);
+
+  const handleManualEpsgChange = useCallback((fileName: string, value: string) => {
+    const digits = value.replace(/[^\d]/g, '');
+    const num = digits ? parseInt(digits, 10) : null;
+    setLayerEpsg(fileName, num != null && Number.isFinite(num) ? num : null, digits ? 'manual' : null);
+  }, [setLayerEpsg]);
+
+  // 좌표계 자동 탐지: 파일마다 개별로 .prj(1순위) → 폴더명(2순위) → 경계 겹침 추정(3순위, 일치율 1순위 후보로 자동 입력).
+  // 3순위로 채워진 값은 추정치이므로 행의 "확인" 버튼으로 지도에서 검증 후 확정할 수 있다.
+  // schemaChecking(2단계 스키마 검증)도 GDAL(conda run ogrinfo/ogr2ogr)을 호출하므로, 동시에 돌리면
+  // Windows의 conda run 임시파일 충돌이 나서 둘 다 멈춘다. 스키마 검증이 끝난 뒤에만 시작한다.
+  useEffect(() => {
+    if (!readyPath || layers.length === 0 || schemaChecking || crsDetectStartedRef.current) return;
+    crsDetectStartedRef.current = true;
+    let cancelled = false;
+
+    void (async () => {
+      for (const layer of layers) {
+        const pathOrResult = `${readyPath.replace(/\/$/, '')}/${layer.name}`;
+        try {
+          const res = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'getShpPrjEpsg',
+            params: { pathOrResult },
+          });
+          if (cancelled) return;
+          const d = res?.data ?? res;
+          if (d?.success && d.epsg != null) {
+            setLayerEpsg(layer.name, Number(d.epsg), 'prj');
+            continue;
+          }
+          if (folderEpsg) {
+            setLayerEpsg(layer.name, Number(folderEpsg), 'folder');
+            continue;
+          }
+        } catch {
+          if (cancelled) return;
+          if (folderEpsg) {
+            setLayerEpsg(layer.name, Number(folderEpsg), 'folder');
+            continue;
+          }
+        }
+
+        // 3순위: 후보 탐지만 먼저 실행(지도 미리보기는 확인 버튼 클릭 시에만 불러옴), 일치율 1순위로 자동 입력
+        // conda run(Windows GDAL 실행 방식)이 임시 파일을 공유해서 동시 호출 시 충돌하므로 순차 실행
+        try {
+          const candRes = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'detectShpCrsCandidates',
+            params: { pathOrResult },
+          });
+          if (cancelled) return;
+          const cd = candRes?.data ?? candRes;
+          const candidates: ShpCrsCandidate[] = cd?.success && Array.isArray(cd.candidates) ? cd.candidates : [];
+          const reference5181: ShpCrsCandidate | undefined = cd?.reference5181;
+          setCrsCandidatesByFile((prev) => ({ ...prev, [pathOrResult]: { candidates, reference5181 } }));
+          if (candidates.length > 0) {
+            setLayerEpsg(layer.name, candidates[0].epsg, 'candidate');
+          } else {
+            setLayersError((prev) => prev ?? `좌표계 자동 탐지 (${layer.name}): 대한민국 경계와 겹치는 후보를 찾지 못했습니다. 직접 입력해주세요.`);
+          }
+        } catch (e: unknown) {
+          if (cancelled) return;
+          setLayersError((prev) => prev ?? `좌표계 자동 탐지 중 오류 (${layer.name}): ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [readyPath, layers.length, folderEpsg, schemaChecking, setLayerEpsg]);
+
+  // 행의 "확인" 버튼: 캐시된 후보(없으면 재조회) + 미리보기 도형을 불러와 모달로 확인
+  const openCrsModalForFile = useCallback(async (pathOrResult: string, currentEpsg: number | null) => {
+    setCrsModalTarget(pathOrResult);
+    setCrsModalCurrentEpsg(currentEpsg);
+    try {
+      let result = crsCandidatesByFile[pathOrResult];
+      if (!result) {
+        const candRes = await call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'detectShpCrsCandidates',
+          params: { pathOrResult },
+        });
+        const cd = candRes?.data ?? candRes;
+        result = {
+          candidates: cd?.success && Array.isArray(cd.candidates) ? cd.candidates : [],
+          reference5181: cd?.reference5181,
+        };
+        setCrsCandidatesByFile((prev) => ({ ...prev, [pathOrResult]: result }));
+      }
+      const geoRes = await call('', 'POST', {
+        service: 'shpUploadService',
+        action: 'getShpRawGeojson',
+        params: { pathOrResult },
+      });
+      const gd = geoRes?.data ?? geoRes;
+      const geojson = gd?.success && gd.geojson ? (gd.geojson as Record<string, unknown>) : null;
+      if (!geojson) {
+        setLayersError(`좌표계 확인 (${fileNameOfPath(pathOrResult)}): 미리보기 도형 변환 실패 - ${gd?.error ?? '알 수 없는 오류'}`);
+      }
+      setCrsCandidates(result.candidates);
+      setCrsReference5181(result.reference5181);
+      setCrsCandidateGeojson(geojson);
+      setCrsModalOpen(true);
+    } catch (e: unknown) {
+      setLayersError(`좌표계 확인 중 오류 (${fileNameOfPath(pathOrResult)}): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [crsCandidatesByFile]);
+
+  const handleCrsConfirm = useCallback((epsg: number) => {
+    if (crsModalTarget) setLayerEpsg(fileNameOfPath(crsModalTarget), epsg, 'candidate');
+    setCrsModalOpen(false);
+  }, [crsModalTarget, setLayerEpsg]);
+
+  const handleCrsCancel = useCallback(() => {
+    setCrsModalOpen(false);
+  }, []);
 
   const applyLocalFolderFiles = useCallback(
     (files: FolderPickFile[]) => {
@@ -894,6 +1190,7 @@ export function ShpWizardModal({
   const allSchemaOk =
     schemaValidationDone &&
     layers.every((l) => l.schemaStatus === 'ok' || l.schemaStatus === 'new');
+  const crsDetectionDone = layers.length > 0 && layers.every((l) => l.epsg != null);
   const step1BasicReady =
     !!source &&
     layers.length > 0 &&
@@ -901,7 +1198,8 @@ export function ShpWizardModal({
     !uploading &&
     !stepBusy &&
     !schemaChecking &&
-    schemaValidationDone;
+    schemaValidationDone &&
+    crsDetectionDone;
   const allComponentsReady =
     statusRows.length > 0 && statusRows.every((r) => r.table && r.layer && r.style && r.define);
   const needComponentSetup = statusRows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
@@ -915,8 +1213,57 @@ export function ShpWizardModal({
     !hasConsistencyErrors;
   const step3BasicReady = consistencyDone && !consistencyChecking && !syncModalOpen;
 
-  const handleComplete = () => {
-    if (step !== 4 || !reportLoaded || reportLoading) return;
+  const saveHistory = useCallback(async () => {
+    if (reportRows.length === 0) return;
+    try {
+      const successCount = reportRows.filter((r) => r.result === '성공').length;
+      const failCount = reportRows.length - successCount;
+      const contents = workNameRef.current || '';
+
+      const histRes = await call('', 'POST', {
+        service: 'layerHistoryService',
+        action: 'createLayerHistory',
+        params: {
+          contents: contents.length > 500 ? contents.slice(0, 497) + '…' : contents,
+          successCount,
+          failCount,
+        },
+      });
+      const hd = histRes?.data ?? histRes;
+      if (hd?.lhKey) {
+        const details = reportRows.map((r) => ({
+          group: r.group || undefined,
+          name: r.tableName,
+          korName: r.korName || undefined,
+          type: r.layerType === '신규' ? '신규' : (r.syncAppend || r.syncUpdated || r.syncKept || r.syncRemoved) ? '정합성 검증' : '기존',
+          oldData: r.oldRowCount ?? 0,
+          newData: r.rowCount ?? 0,
+          appendCount: r.syncAppend,
+          conflictCount: r.syncUpdated,
+          removeCount: r.syncRemoved,
+          contents: r.result === '성공' ? (r.syncSummary || '업데이트 완료') : (r.remark || '실패'),
+          result: r.result,
+          shpPath: r.pathOrResult,
+        }));
+        await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'createLayerDetailHistoryBatch',
+          params: { lhKey: hd.lhKey, details },
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [reportRows]);
+
+  const handleComplete = async () => {
+    if (step !== 4 || !reportLoaded || reportLoading || completing) return;
+    setCompleting(true);
+    try {
+      await saveHistory();
+    } finally {
+      setCompleting(false);
+    }
     resetForm();
     onOpenChange(false);
     onSuccess?.();
@@ -943,6 +1290,71 @@ export function ShpWizardModal({
     { append: 0, updated: 0, kept: 0, removed: 0 }
   );
 
+  const handleDownloadReport = useCallback(() => {
+    if (reportRows.length === 0) return;
+    const now = new Date();
+    const savedAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    const aoa: (string | number)[][] = [
+      ['SHP 폴더 업로드 결과'],
+      ['작업명', workName || '-'],
+      ['좌표계', epsgSummaryText(layers)],
+      ['경로', readyPath ?? '-'],
+      ['저장 일시', savedAt],
+      ['레이어 개수', reportRows.length, '성공', reportSuccessCount, '실패', reportFailCount],
+      ['추가', reportSyncTotals.append, '변경반영', reportSyncTotals.updated, 'DB유지', reportSyncTotals.kept, '삭제', reportSyncTotals.removed],
+      [],
+      ['레이어', '구분', '좌표계', 'Table', 'Layer', 'Style', 'Define', 'DB행', '정합성 처리', '결과', '비고'],
+      ...reportRows.map((r) => {
+        const layerRow = layers.find((l) => l.name.replace(/\.shp$/i, '') === r.sourceFile.replace(/\.shp$/i, ''));
+        return [
+          r.sourceFile.replace(/\.shp$/i, ''),
+          r.layerType,
+          layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : '-',
+          r.table ? '완료' : '누락',
+          r.layer ? '완료' : '누락',
+          r.style ? '완료' : '누락',
+          r.define ? '완료' : '누락',
+          r.rowCount ?? '',
+          r.syncSummary,
+          r.result,
+          r.remark || '',
+        ];
+      }),
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [
+      { wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 24 }, { wch: 24 }, { wch: 8 }, { wch: 24 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '요약');
+
+    const usedSheetNames = new Set<string>(['요약']);
+    const opOrder: Record<string, number> = { '추가': 0, '변경반영': 1, 'DB유지': 2, '삭제': 3 };
+    for (const r of reportRows) {
+      const logs = syncLogsByTableRef.current[r.tableName] ?? [];
+      if (logs.length === 0) continue;
+      const diffRows = logs.flatMap((log) => buildSyncDiffRowsForReport(log));
+      if (diffRows.length === 0) continue;
+      diffRows.sort(
+        (a, b) => (opOrder[a.op] ?? 9) - (opOrder[b.op] ?? 9) || a.keyValue.localeCompare(b.keyValue)
+      );
+      const layerAoa: (string | number)[][] = [
+        ['구분', 'Key필드', 'Key값', '변경 필드', '변경 전', '변경 후'],
+        ...diffRows.map((d) => [d.op, d.keyField, d.keyValue, d.field, d.oldVal, d.newVal]),
+      ];
+      const layerWs = XLSX.utils.aoa_to_sheet(layerAoa);
+      layerWs['!cols'] = [{ wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 30 }, { wch: 30 }];
+      const sheetName = sanitizeSheetName(r.sourceFile.replace(/\.shp$/i, ''), usedSheetNames);
+      XLSX.utils.book_append_sheet(wb, layerWs, sheetName);
+    }
+
+    const safeName = (workName || 'shp_upload_result').replace(/[\\/:*?"<>|]/g, '_');
+    XLSX.writeFile(wb, `${safeName}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.xlsx`);
+  }, [reportRows, workName, layers, readyPath, reportSuccessCount, reportFailCount, reportSyncTotals]);
+
   return (
     <>
       <Dialog open={wizardOpen} onOpenChange={handleConfigureOpenChange} modal={!syncModalOpen}>
@@ -962,14 +1374,18 @@ export function ShpWizardModal({
               SHP 폴더 업로드 — {STEP_LABELS[step] ?? step} ({step}/{TOTAL_STEPS})
             </DialogTitle>
           </DialogHeader>
+          {/* Changed-style is default; toggle removed */}
 
-          <div className="min-h-0 flex-1 overflow-y-auto py-2">
+          <div className="min-h-0 flex-1 overflow-y-auto py-2 flex flex-col">
             {step === 1 && (
               <div className="space-y-3">
                 <div className="space-y-2 rounded-md border border-gray-200 bg-muted/30 p-3">
                   <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                     폴더 선택
+                    {!uploading && readyPath && source?.type === 'local' && (
+                      <span className="ml-2 text-xs font-normal text-green-600 dark:text-green-400">업로드 완료</span>
+                    )}
                   </p>
                   <div className="flex flex-wrap items-center gap-3">
                     <input
@@ -1025,15 +1441,12 @@ export function ShpWizardModal({
                       </div>
                     </div>
                   )}
-                  {!uploading && readyPath && source?.type === 'local' && (
-                    <p className="text-xs text-green-600 dark:text-green-400">업로드 완료</p>
-                  )}
                 </div>
 
                 <div className="space-y-3 rounded-md border border-gray-200 bg-muted/30 p-3">
                   <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-                    작업명 · 좌표계
+                    작업명 · 현황
                   </p>
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex flex-col gap-1">
@@ -1046,23 +1459,34 @@ export function ShpWizardModal({
                         disabled={!source || isBusy}
                       />
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">좌표계 (EPSG)</span>
-                      <Input
-                        value={epsg}
-                        onChange={(e) => setEpsg(e.target.value.replace(/[^\d]/g, ''))}
-                        className="h-8 w-36 font-mono text-sm"
-                        placeholder="5181"
-                        disabled={!source || isBusy}
-                      />
+                    <div className="flex flex-col px-4">
+                      <span className="text-xs text-muted-foreground">좌표계 탐지 진행 현황</span>
+                      <div className="flex h-8 items-center gap-1.5 px-2">
+                        {layers.length === 0 ? (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        ) : (
+                          <>
+                            {!crsDetectionDone ? (
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+                            )}
+                            <span
+                              className={cn(
+                                'text-sm font-medium',
+                                crsDetectionDone ? 'text-green-600 dark:text-green-400' : 'text-foreground'
+                              )}
+                            >
+                              {layers.filter((l) => l.epsg != null).length}/{layers.length}개 완료
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    {epsg.trim() ? (
-                      <span className="pb-2 text-xs text-muted-foreground">EPSG:{epsg.trim()}</span>
-                    ) : null}
                   </div>
                 </div>
 
-                <div className="flex min-h-[200px] flex-col gap-2 rounded-md border border-gray-200 bg-muted/30 p-3">
+                <div className="flex min-h-[340px] flex-1 flex-col gap-2 rounded-md border border-gray-200 bg-muted/30 p-3">
                   <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                     레이어 목록
@@ -1090,8 +1514,9 @@ export function ShpWizardModal({
                           <tr className="text-left text-muted-foreground">
                             <th className="w-10 px-2 py-1.5">#</th>
                             <th className="px-2 py-1.5">레이어 (SHP)</th>
+                            <th className="w-42 px-2 py-1.5 text-center">좌표계(EPSG)</th>
                             <th className="w-20 px-2 py-1.5 text-center">정합성 검증</th>
-                            <th className="min-w-[10rem] px-2 py-1.5">비고</th>
+                            <th className="min-w-[9rem] px-2 py-1.5">비고</th>
                             <th className="w-24 px-2 py-1.5 text-right">크기</th>
                             {source.type === 'server' ? (
                               <th className="w-44 px-2 py-1.5">수정일</th>
@@ -1105,19 +1530,56 @@ export function ShpWizardModal({
                               <td className="max-w-[16rem] truncate px-2 py-1" title={row.name}>
                                 {row.name.replace(/\.shp$/i, '')}
                               </td>
+                              <td className="px-2 py-1 text-center">
+                                <div className="flex items-center gap-1">
+                                  <select
+                                    value={row.epsg != null ? `EPSG:${row.epsg}` : ''}
+                                    onChange={(e) => handleManualEpsgChange(row.name, e.target.value)}
+                                    className="h-6 rounded border border-input bg-background px-1 font-mono text-[12px]"
+                                    disabled={isBusy}
+                                  >
+                                    <option value="" disabled hidden>좌표계 탐색중…</option>
+                                    {COORDINATE_SYSTEM_OPTIONS.map((o) => (
+                                      <option key={o.code} value={o.code}>
+                                        {o.shortLabel}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {readyPath ? (
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => void openCrsModalForFile(`${readyPath.replace(/\/$/, '')}/${row.name}`, row.epsg ?? null)}
+                                      className="text-[11px] text-blue-600 hover:underline disabled:pointer-events-none disabled:opacity-40 dark:text-blue-400"
+                                    >
+                                      확인
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
                               <td className="px-2 py-1">
                                 <SchemaIconCell status={row.schemaStatus} />
                               </td>
                               <td
                                 className={cn(
-                                  'max-w-[18rem] truncate px-2 py-1',
+                                  'max-w-[18rem] px-2 py-1',
                                   schemaRemark(row.schemaStatus, row.schemaDetail)
                                     ? 'text-red-600 dark:text-red-400'
                                     : 'text-muted-foreground'
                                 )}
                                 title={schemaRemark(row.schemaStatus, row.schemaDetail)}
                               >
-                                {schemaRemark(row.schemaStatus, row.schemaDetail) || '—'}
+                                {schemaRemark(row.schemaStatus, row.schemaDetail) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => copyRemark(schemaRemark(row.schemaStatus, row.schemaDetail), `layers-${i}`)}
+                                    className="w-full text-left truncate hover:underline hover:cursor-pointer"
+                                  >
+                                    {schemaRemark(row.schemaStatus, row.schemaDetail)}
+                                  </button>
+                                ) : (
+                                  '—'
+                                )}
                               </td>
                               <td className="whitespace-nowrap px-2 py-1 text-right">
                                 {row.size != null ? formatSize(row.size) : '—'}
@@ -1162,15 +1624,15 @@ export function ShpWizardModal({
                   </div>
                 </div>
 
-                <div className="min-h-[280px] overflow-auto rounded-md border border-border/60">
+                <div className="min-h-[470px] flex-1 overflow-auto rounded-md border border-border/60">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-10 bg-muted">
                       <tr className="text-center text-muted-foreground">
                         <th className="px-2 py-1.5 text-left">파일</th>
-                        <th className="w-16 px-2 py-1.5">Table</th>
-                        <th className="w-16 px-2 py-1.5">Layer</th>
-                        <th className="w-16 px-2 py-1.5">Style</th>
-                        <th className="w-16 px-2 py-1.5">Define</th>
+                        <th className="w-16 px-2 py-1.5 text-center">Table</th>
+                        <th className="w-16 px-2 py-1.5 text-center">Layer</th>
+                        <th className="w-16 px-2 py-1.5 text-center">Style</th>
+                        <th className="w-16 px-2 py-1.5 text-center">Define</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1200,7 +1662,7 @@ export function ShpWizardModal({
             )}
 
             {step === 3 && (
-              <div className="space-y-3">
+              <div className="space-y-3 flex h-full flex-col">
                 <div className="space-y-2 rounded-md border border-gray-200 bg-muted/30 p-3">
                   <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
@@ -1237,16 +1699,16 @@ export function ShpWizardModal({
                   </div>
                 </div>
 
-                <div className="min-h-[280px] overflow-auto rounded-md border border-border/60">
+                <div className="min-h-[280px] flex-1 overflow-auto rounded-md border border-border/60">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-10 bg-muted">
-                      <tr className="text-center text-muted-foreground">
+                      <tr className="text-muted-foreground">
                         <th className="px-2 py-1.5 text-left">파일</th>
-                        <th className="w-16 px-2 py-1.5">구분</th>
-                        <th className="w-12 px-2 py-1.5">추가</th>
-                        <th className="w-12 px-2 py-1.5">변경</th>
-                        <th className="w-12 px-2 py-1.5">삭제</th>
-                        <th className="w-12 px-2 py-1.5">동일</th>
+                        <th className="w-16 px-2 py-1.5 text-center">구분</th>
+                        <th className="w-12 px-2 py-1.5 text-right">추가</th>
+                        <th className="w-12 px-2 py-1.5 text-right">변경</th>
+                        <th className="w-12 px-2 py-1.5 text-right">삭제</th>
+                        <th className="w-12 px-2 py-1.5 text-right">동일</th>
                         <th className="min-w-[8rem] px-2 py-1.5 text-left">비고</th>
                       </tr>
                     </thead>
@@ -1259,45 +1721,58 @@ export function ShpWizardModal({
                           </td>
                         </tr>
                       ) : (
-                        consistencyRows.map((row) => (
+                        consistencyRows.map((row, idx) => (
                         <tr key={row.pathOrResult} className="border-t hover:bg-muted/40">
                           <td className="max-w-[14rem] truncate px-2 py-1" title={row.sourceFile}>
                             {row.sourceFile}
                           </td>
-                          <td className="px-2 py-1 text-muted-foreground">
+                          <td className="px-2 py-1 text-center text-muted-foreground">
                             {row.isNew ? '신규' : '기존'}
                           </td>
-                          <td className="px-2 py-1 tabular-nums text-emerald-700 dark:text-emerald-400">
+                          <td className="px-2 py-1 tabular-nums text-right text-emerald-700 dark:text-emerald-400">
                             {row.isNew ? '—' : row.appendCount}
                           </td>
-                          <td className="px-2 py-1 tabular-nums text-orange-600">
+                          <td className="px-2 py-1 tabular-nums text-right text-orange-600">
                             {row.isNew ? '—' : row.conflictCount}
                           </td>
-                          <td className="px-2 py-1 tabular-nums text-red-500">
+                          <td className="px-2 py-1 tabular-nums text-right text-red-500">
                             {row.isNew ? '—' : row.removeCount}
                           </td>
-                          <td className="px-2 py-1 tabular-nums text-muted-foreground">
+                          <td className="px-2 py-1 tabular-nums text-right text-muted-foreground">
                             {row.isNew ? '—' : row.unchangedCount}
                           </td>
                           <td className="max-w-[14rem] px-2 py-1">
-                            {row.error ? (
-                              <span className="truncate text-red-600 dark:text-red-400" title={row.error}>
-                                {row.error}
-                              </span>
-                            ) : consistencyNeedsReview(row) ? (
-                              <button
-                                type="button"
-                                className="inline-flex max-w-full items-center gap-0.5 truncate text-[10px] text-orange-600 hover:underline dark:text-orange-400"
-                                onClick={() => openSyncReview(row)}
-                              >
-                                <AlertTriangle className="h-3 w-3 shrink-0" />
-                                충돌 {row.conflictCount} / 삭제 {row.removeCount} / 신규 {row.appendCount}
-                              </button>
-                            ) : row.isNew ? (
-                              <span className="text-muted-foreground">—</span>
-                            ) : (
-                              <span className="text-green-600 dark:text-green-400">변경 없음</span>
-                            )}
+                            <div className="min-h-[1.5rem] flex items-center">
+                              {row.error ? (
+                                <button
+                                  type="button"
+                                  onClick={() => copyRemark(row.error, `cons-${idx}`)}
+                                  title={row.error}
+                                  className="w-full text-left truncate text-red-600 dark:text-red-400 hover:underline hover:cursor-pointer"
+                                >
+                                  {row.error}
+                                </button>
+                              ) : consistencyNeedsReview(row) ? (
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    'truncate inline-flex h-6 items-center group cursor-pointer max-w-full items-center gap-1 truncate text-xs font-normal text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-slate-100'
+                                  )}
+                                  onClick={() => openSyncReview(row)}
+                                >
+                                  <>
+                                    <AlertTriangle className="h-[14px] w-[14px] shrink-0 text-orange-600 dark:text-orange-300" />
+                                    <span className="ml-0.5 whitespace-nowrap text-orange-600 dark:text-orange-300 group-hover:underline">
+                                      충돌 {row.conflictCount} · 삭제 {row.removeCount} · 신규 {row.appendCount}
+                                    </span>
+                                  </>
+                                </button>
+                              ) : row.isNew ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span className="text-green-600 dark:text-green-400">변경 없음</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                         ))
@@ -1310,52 +1785,67 @@ export function ShpWizardModal({
 
             {step === 4 && (
               <div className="space-y-3">
-                <div className="space-y-2 rounded-md border border-gray-200 bg-muted/30 p-3">
-                  <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
-                    <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-                    업로드 · 정합성 검증 결과
-                  </p>
-                  <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                    <p>
-                      <span className="text-foreground/70">작업명</span> {workName || '—'}
+                <div className="flex items-end justify-between gap-3 rounded-md border border-gray-200 bg-muted/30 p-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
+                      <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
+                      업로드 · 정합성 검증 결과
                     </p>
-                    <p>
-                      <span className="text-foreground/70">좌표계</span> {epsg ? `EPSG:${epsg}` : '—'}
-                    </p>
-                    <p className="sm:col-span-2">
-                      <span className="text-foreground/70">경로</span> {readyPath ?? '—'}
-                    </p>
-                  </div>
-                  {reportLoading ? (
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      결과를 집계하는 중…
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                      <span>
-                        레이어 <strong>{reportRows.length}</strong>개
-                      </span>
-                      <span className="text-green-600 dark:text-green-400">
-                        성공 <strong>{reportSuccessCount}</strong>
-                      </span>
-                      {reportFailCount > 0 ? (
-                        <span className="text-red-600 dark:text-red-400">
-                          실패 <strong>{reportFailCount}</strong>
-                        </span>
-                      ) : null}
-                      <span>
-                        정합성 — 추가 <strong className="text-emerald-700 dark:text-emerald-400">{reportSyncTotals.append}</strong>
-                        · 변경반영{' '}
-                        <strong className="text-orange-600">{reportSyncTotals.updated}</strong>
-                        · DB유지 <strong className="text-blue-600">{reportSyncTotals.kept}</strong>
-                        · 삭제 <strong className="text-red-500">{reportSyncTotals.removed}</strong>
-                      </span>
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground pl-2">
+                      <p className="flex items-center gap-2">
+                        <span className="text-foreground/70">작업명</span>
+                        <span className="min-w-0 truncate">{workName || '—'}</span>
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <span className="text-foreground/70">좌표계</span>
+                        <span className="min-w-0">{epsgSummaryText(layers)}</span>
+                      </p>
+                      <p className="w-full">
+                        <span className="text-foreground/70">경로</span> <span className="break-all">{readyPath ?? '—'}</span>
+                      </p>
                     </div>
-                  )}
+                    {reportLoading ? (
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        결과를 집계하는 중…
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                        <span>
+                          레이어 <strong>{reportRows.length}</strong>개
+                        </span>
+                        <span className="text-green-600 dark:text-green-400">
+                          성공 <strong>{reportSuccessCount}</strong>
+                        </span>
+                        {reportFailCount > 0 ? (
+                          <span className="text-red-600 dark:text-red-400">
+                            실패 <strong>{reportFailCount}</strong>
+                          </span>
+                        ) : null}
+                        <span>
+                          정합성 — 추가 <strong className="text-emerald-700 dark:text-emerald-400">{reportSyncTotals.append}</strong>
+                          {' '} · 변경반영{' '}
+                          <strong className="text-orange-600">{reportSyncTotals.updated}</strong>
+                          {' '} · DB유지 <strong className="text-blue-600">{reportSyncTotals.kept}</strong>
+                          {' '} · 삭제 <strong className="text-red-500">{reportSyncTotals.removed}</strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 shrink-0 text-xs hover:cursor-pointer"
+                    onClick={handleDownloadReport}
+                    disabled={reportLoading || reportRows.length === 0}
+                  >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    결과 다운로드
+                  </Button>
                 </div>
 
-                <div className="min-h-[320px] overflow-auto rounded-md border border-border/60">
+                <div className="min-h-[450px] overflow-auto rounded-md border border-border/60">
                   {reportLoading ? (
                     <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1370,24 +1860,24 @@ export function ShpWizardModal({
                       <thead className="sticky top-0 z-10 bg-muted">
                         <tr className="text-center text-muted-foreground">
                           <th className="px-2 py-1.5 text-left">레이어</th>
-                          <th className="w-12 px-2 py-1.5">구분</th>
-                          <th className="w-12 px-2 py-1.5">Table</th>
-                          <th className="w-12 px-2 py-1.5">Layer</th>
-                          <th className="w-12 px-2 py-1.5">Style</th>
-                          <th className="w-12 px-2 py-1.5">Define</th>
-                          <th className="w-14 px-2 py-1.5">DB행</th>
+                          <th className="w-12 px-2 py-1.5 text-center">구분</th>
+                          <th className="w-12 px-2 py-1.5 text-center">Table</th>
+                          <th className="w-12 px-2 py-1.5 text-center">Layer</th>
+                          <th className="w-12 px-2 py-1.5 text-center">Style</th>
+                          <th className="w-12 px-2 py-1.5 text-center">Define</th>
+                          <th className="w-14 px-2 py-1.5 text-right">DB행</th>
                           <th className="min-w-[10rem] px-2 py-1.5 text-left">정합성 처리</th>
-                          <th className="w-14 px-2 py-1.5">결과</th>
+                          <th className="w-14 px-2 py-1.5 text-center">결과</th>
                           <th className="min-w-[8rem] px-2 py-1.5 text-left">비고</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {reportRows.map((row) => (
+                        {reportRows.map((row, ridx) => (
                           <tr key={row.pathOrResult} className="border-t hover:bg-muted/40">
                             <td className="max-w-[12rem] truncate px-2 py-1" title={row.sourceFile}>
                               {row.sourceFile.replace(/\.shp$/i, '')}
                             </td>
-                            <td className="px-2 py-1 text-muted-foreground">{row.layerType}</td>
+                            <td className="px-2 py-1 text-center text-muted-foreground">{row.layerType}</td>
                             <td className="px-2 py-1">
                               <StatusCell ok={row.table} />
                             </td>
@@ -1400,21 +1890,31 @@ export function ShpWizardModal({
                             <td className="px-2 py-1">
                               <StatusCell ok={row.define} />
                             </td>
-                            <td className="px-2 py-1 tabular-nums text-muted-foreground">
+                            <td className="px-2 py-1 tabular-nums text-right text-muted-foreground">
                               {row.rowCount ?? '—'}
                             </td>
                             <td className="max-w-[14rem] truncate px-2 py-1" title={row.syncSummary}>
                               {row.syncSummary}
                             </td>
-                            <td className="px-2 py-1">
+                            <td className="px-2 py-1 text-center">
                               {row.result === '성공' ? (
-                                <span className="font-medium text-green-600 dark:text-green-400">성공</span>
+                                <span className="font-normal text-green-600 dark:text-green-400">성공</span>
                               ) : (
-                                <span className="font-medium text-red-600 dark:text-red-400">실패</span>
+                                <span className="font-normal text-red-600 dark:text-red-400">실패</span>
                               )}
                             </td>
                             <td className="max-w-[10rem] truncate px-2 py-1 text-muted-foreground" title={row.remark}>
-                              {row.remark || '—'}
+                              {row.remark ? (
+                                <button
+                                  type="button"
+                                  onClick={() => copyRemark(row.remark, `report-${ridx}`)}
+                                  className="w-full text-left truncate hover:underline hover:cursor-pointer"
+                                >
+                                  {row.remark}
+                                </button>
+                              ) : (
+                                '—'
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1429,6 +1929,17 @@ export function ShpWizardModal({
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">{layersError}</p>
             )}
           </div>
+
+          {toastMsg ? (
+            <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+              <div
+                className="pointer-events-auto inline-block text-white px-4 py-2 text-sm"
+                style={{ backgroundColor: '#5191e4', borderRadius: '3px', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)' }}
+              >
+                {toastMsg}
+              </div>
+            </div>
+          ) : null}
 
           <DialogFooter className="shrink-0 gap-2 sm:gap-2 sm:justify-end">
             <Button
@@ -1515,10 +2026,10 @@ export function ShpWizardModal({
               <Button
                 type="button"
                 className={WIZARD_FOOTER_BTN_CLASS}
-                onClick={handleComplete}
-                disabled={!reportLoaded || reportLoading}
+                onClick={() => void handleComplete()}
+                disabled={!reportLoaded || reportLoading || completing}
               >
-                완료
+                {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : '완료'}
               </Button>
             )}
           </DialogFooter>
@@ -1534,10 +2045,23 @@ export function ShpWizardModal({
           onClose={() => {
             setSyncModalOpen(false);
             setSyncModalTarget(null);
+            consistencyStartedRef.current = false;
+            setConsistencyDone(false);
+            void runConsistencyCheck();
           }}
-          onRollbackDone={handleSyncModalDone}
         />
       )}
+
+      <ShpCrsCandidateModal
+        open={crsModalOpen}
+        fileName={crsModalTarget ? fileNameOfPath(crsModalTarget) : null}
+        candidates={crsCandidates}
+        reference5181={crsReference5181}
+        currentEpsg={crsModalCurrentEpsg}
+        geojson={crsCandidateGeojson}
+        onConfirm={handleCrsConfirm}
+        onCancel={handleCrsCancel}
+      />
     </>
   );
 }
