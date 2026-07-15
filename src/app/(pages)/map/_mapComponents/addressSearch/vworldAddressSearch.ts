@@ -354,6 +354,62 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
   return null;
 }
 
+function normalizeAddrKey(value: string): string {
+  return String(value ?? '')
+    .replace(/\s+/g, '')
+    .replace(/번지/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * 역지오코딩에 도로명이 없을 때 — 지번 문자열로 검색 API를 쳐 road 필드를 보강.
+ * (getAddress ROAD=NOT_FOUND 여도 search(parcel) 응답의 address.road 에 값이 있는 경우가 많음)
+ */
+export async function findRoadAddressByJibun(
+  jibun: string,
+  options?: { apiKey?: string; lon?: number; lat?: number }
+): Promise<string | null> {
+  const query = String(jibun ?? '').trim();
+  if (!query) return null;
+  const apiKey = options?.apiKey;
+  const items = await searchAddress(query, {
+    apiKey,
+    type: 'address',
+    category: 'parcel',
+    maxResults: 8,
+  });
+  const withRoad = items.filter((it) => String(it.roadAddress ?? '').trim());
+  if (!withRoad.length) return null;
+
+  const qKey = normalizeAddrKey(query);
+  const exact = withRoad.find((it) => normalizeAddrKey(it.jibunAddress ?? '') === qKey);
+  if (exact?.roadAddress) return exact.roadAddress.trim();
+
+  const lon = options?.lon;
+  const lat = options?.lat;
+  if (lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)) {
+    let best = withRoad[0];
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const it of withRoad) {
+      const dx = it.point.x - lon;
+      const dy = it.point.y - lat;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        best = it;
+      }
+    }
+    return best.roadAddress?.trim() || null;
+  }
+
+  const partial = withRoad.find((it) => {
+    const p = normalizeAddrKey(it.jibunAddress ?? '');
+    return p.includes(qKey) || qKey.includes(p);
+  });
+  return (partial ?? withRoad[0]).roadAddress?.trim() || null;
+}
+
 /**
  * 좌표(WGS84 경도·위도)로 주소 조회 (역지오코딩)
  * VWorld Address API 2.0 getAddress 사용. CORS 회피를 위해 JSONP로 호출.

@@ -40,7 +40,7 @@ import {
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useFeatureIdentify } from './hooks/useFeatureIdentify';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
-import { getAddressFromCoord } from './addressSearch/vworldAddressSearch';
+import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
 import { collectOpenScanLayerTableNames } from '@/lib/mapServiceOpened';
 import {
@@ -675,26 +675,38 @@ export default function OpenLayersMap({
         setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null));
         return;
       }
-      getAddressFromCoord(lon, lat, { apiKey }).then(async (result) => {
-        let roadText = result?.road?.trim() || '';
-        if (!roadText) {
-          const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
-          roadText = roadOnly?.road?.trim() || roadOnly?.jibun?.trim() || '';
-        }
-        setAddressInfoDetail((prev) =>
-          prev
-            ? {
-                ...prev,
-                loading: false,
-                pnu: prev.pnu ?? (result?.pnu?.trim() || null),
-                // 브이월드 법정동 전체 주소를 지적 짧은 지번보다 우선
-                jibun: result?.jibun?.trim() || prev.jibun || null,
-                road: roadText || prev.road || null,
-                buildingName: result?.buildingName?.trim() || prev.buildingName || null,
-              }
-            : null
-        );
-      });
+      getAddressFromCoord(lon, lat, { apiKey })
+        .then(async (result) => {
+          let roadText = result?.road?.trim() || '';
+          if (!roadText) {
+            const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
+            roadText = roadOnly?.road?.trim() || '';
+          }
+          // 역지오코딩 ROAD=NOT_FOUND 인 경우 — 지번으로 검색 API에서 road 보강
+          if (!roadText) {
+            const jibunHint = result?.jibun?.trim() || '';
+            if (jibunHint) {
+              roadText =
+                (await findRoadAddressByJibun(jibunHint, { apiKey, lon, lat }))?.trim() || '';
+            }
+          }
+          setAddressInfoDetail((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  loading: false,
+                  pnu: prev.pnu ?? (result?.pnu?.trim() || null),
+                  // 브이월드 법정동 전체 주소를 지적 짧은 지번보다 우선
+                  jibun: result?.jibun?.trim() || prev.jibun || null,
+                  road: roadText || prev.road || null,
+                  buildingName: result?.buildingName?.trim() || prev.buildingName || null,
+                }
+              : null
+          );
+        })
+        .catch(() => {
+          setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
+        });
     },
     [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );

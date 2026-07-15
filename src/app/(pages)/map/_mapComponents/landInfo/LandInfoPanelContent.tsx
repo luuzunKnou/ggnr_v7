@@ -26,6 +26,7 @@ import {
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 import type { ParcelLandRowSource } from '@/lib/parcelLandDisplay';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
 
 type TabId = 'parcel' | 'buildingLedger' | 'buildingPermit';
 type ModalKind = 'price' | null;
@@ -251,6 +252,8 @@ export function LandInfoPanelContent({
 
   const [resolvedPnu, setResolvedPnu] = useState<string | null>(pnuFromContext ?? null);
   const [resolvedParcelJibun, setResolvedParcelJibun] = useState<string | null>(null);
+  /** 우클릭 prop 도로명이 비었을 때 패널이 키로 재조회한 값 */
+  const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
   const [dataPortalKey, setDataPortalKey] = useState('');
 
@@ -414,11 +417,52 @@ export function LandInfoPanelContent({
     [parcelData, jibun, resolvedParcelJibun]
   );
 
+  // 우클릭 context에 도로명이 없으면 — 역지오코딩 재시도 후, 지번 검색으로 road 보강
+  useEffect(() => {
+    const fromProp = String(road ?? '').trim();
+    if (fromProp) {
+      setResolvedRoad(null);
+      return;
+    }
+    if (!vworldKey || !wgs84) return;
+    setResolvedRoad(null);
+    let alive = true;
+    const [lon, lat] = wgs84;
+    (async () => {
+      try {
+        const result = await getAddressFromCoord(lon, lat, { apiKey: vworldKey });
+        let roadText = result?.road?.trim() || '';
+        if (!roadText) {
+          const roadOnly = await getAddressFromCoord(lon, lat, { apiKey: vworldKey, type: 'ROAD' });
+          roadText = roadOnly?.road?.trim() || '';
+        }
+        if (!roadText) {
+          const jibunHint =
+            result?.jibun?.trim() ||
+            String(jibun ?? '').trim() ||
+            String(resolvedParcelJibun ?? '').trim() ||
+            displayJibunAddress;
+          if (jibunHint && jibunHint !== '-') {
+            roadText =
+              (await findRoadAddressByJibun(jibunHint, { apiKey: vworldKey, lon, lat }))?.trim() ||
+              '';
+          }
+        }
+        if (alive) setResolvedRoad(roadText || null);
+      } catch {
+        if (alive) setResolvedRoad(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [road, vworldKey, wgs84, jibun, resolvedParcelJibun, displayJibunAddress]);
+
   const displayRoadAddress = useMemo(() => {
-    const raw = String(road ?? '').trim();
+    const raw = String(road ?? resolvedRoad ?? '').trim();
     if (!raw) return '-';
     return formatAddressStripSidoSigungu(raw) || raw;
-  }, [road]);
+  }, [road, resolvedRoad]);
 
   const modalRows = useMemo(() => {
     if (modalKind !== 'price') return [];
@@ -444,17 +488,16 @@ export function LandInfoPanelContent({
         );
       }
       if (parcelError) return <p className="text-xs text-rose-600">{parcelError}</p>;
+      const hasNoLinkageRows =
+        parcelData.characteristics.length === 0 &&
+        parcelData.possessions.length === 0 &&
+        parcelData.prices.length === 0;
       return (
-        <div className="space-y-3">
-          <p className="text-[11px] text-slate-600">
-            {parcelData.source ? (
-              <ParcelLandLinkageSourceText source={parcelData.source} />
-            ) : parcelData.characteristics.length === 0 &&
-              parcelData.possessions.length === 0 &&
-              parcelData.prices.length === 0 ? (
-              <span className="text-slate-500">연계 데이터 없음</span>
-            ) : null}
-          </p>
+        <div className="space-y-2">
+          {!parcelData.source && hasNoLinkageRows ? (
+            <p className="text-[11px] text-slate-500">연계 데이터 없음</p>
+          ) : null}
+          {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
           <LandLinkageLegendText source={parcelData.source} />
           <section className="border border-slate-200 rounded">
             <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지기본정보</h4>
