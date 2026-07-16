@@ -1,3 +1,8 @@
+import {
+  normalizeHistoryMemo,
+  uploadHistoryOptions,
+} from '@/lib/versionHistoryMessage';
+
 export type UploadHistoryStageId =
   | 'preflight'
   | 'scan'
@@ -165,18 +170,34 @@ export function buildUploadHistoryPrefix(includeNodeModules?: boolean): string {
   return `node_modules ${includeNodeModules ? '포함' : '미포함'} — `;
 }
 
-/** 이력 한 줄: «선택 라디오[, 변경 사항 메모] - 성공|실패 : 메시지» */
+function stripStatusPrefix(body: string): string {
+  const trimmed = body.trim();
+  if (trimmed.startsWith('성공 - ')) return trimmed.slice('성공 - '.length).trim();
+  if (trimmed.startsWith('실패 - ')) return trimmed.slice('실패 - '.length).trim();
+  return trimmed;
+}
+
+/** 업로드 이력 본문·옵션·메모 (성공/실패는 status 컬럼) */
+export function buildSourceUploadHistoryFields(
+  includeNodeModules: boolean,
+  body: string,
+  changeNote?: string
+): { option: string[]; memo: string | null; message: string } {
+  return {
+    option: uploadHistoryOptions(includeNodeModules),
+    memo: normalizeHistoryMemo(changeNote),
+    message: stripStatusPrefix(body),
+  };
+}
+
+/** 본문만 (옵션·메모는 buildSourceUploadHistoryFields 사용) */
 export function formatSourceUploadHistoryMessage(
   includeNodeModules: boolean,
-  status: 'success' | 'fail',
+  _status: 'success' | 'fail',
   body: string,
   changeNote?: string
 ): string {
-  const radio = includeNodeModules ? 'node_modules 포함' : 'node_modules 미포함';
-  const memo = changeNote?.trim() ?? '';
-  const head = memo ? `${radio}, ${memo}` : radio;
-  const result = status === 'success' ? '성공' : '실패';
-  return `${head} - ${result} : ${body}`;
+  return buildSourceUploadHistoryFields(includeNodeModules, body, changeNote).message;
 }
 
 export function buildSourceUploadSuccessBody(
@@ -185,12 +206,10 @@ export function buildSourceUploadSuccessBody(
   fail: number,
   extra?: string
 ): string {
-  const summary = `성공 ${ok} / 제외 ${skipped} / 실패 ${fail}`;
-  return extra ? `성공 - 최종 집계 (${summary}, ${extra})` : `성공 - 최종 집계 (${summary})`;
+  const summary = `최종 집계 (성공 ${ok} / 제외 ${skipped} / 실패 ${fail})`;
+  return extra ? `${summary}, ${extra}` : summary;
 }
 
 export function buildSourceUploadFailBody(reason: string): string {
-  const trimmed = reason.trim();
-  if (trimmed.startsWith('실패 - ')) return trimmed;
-  return `실패 - ${trimmed}`;
+  return stripStatusPrefix(reason.trim());
 }

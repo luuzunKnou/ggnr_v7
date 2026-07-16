@@ -13,6 +13,8 @@ type HistoryItem = {
   mvhHistoryType: string;
   mvhStatus: string;
   mvhMessage: string | null;
+  mvhOption: string[] | null;
+  mvhMemo: string | null;
   mvhIp: string | null;
   mvhClientHost: string | null;
   mvhCreateDate: string | null;
@@ -210,8 +212,21 @@ export function VersionHistoryDialog({
                   {!showFeatureFilter && (
                     <div>{historyTypeLabel(row.mvhHistoryType)}</div>
                   )}
+                  <div className="break-all text-foreground">
+                    <span className="text-muted-foreground">선택: </span>
+                    {Array.isArray(row.mvhOption) && row.mvhOption.length > 0
+                      ? row.mvhOption.join(', ')
+                      : '-'}
+                  </div>
+                  {row.mvhHistoryType === 'source_upload' && (
+                    <div className="break-all text-foreground">
+                      <span className="text-muted-foreground">메모: </span>
+                      {row.mvhMemo?.trim() ? row.mvhMemo.trim() : '-'}
+                    </div>
+                  )}
                   <div className="whitespace-pre-wrap break-all text-foreground">
-                    {row.mvhMessage ?? ''}
+                    <span className="text-muted-foreground">본문: </span>
+                    {(row.mvhMessage ?? '').trim() ? row.mvhMessage : '-'}
                   </div>
                 </div>
               )}

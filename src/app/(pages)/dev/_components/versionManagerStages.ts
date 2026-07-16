@@ -138,6 +138,9 @@ export function buildInstallStagesFromProgress(
     message: string;
     error?: string;
     fileCount?: number;
+    scanSkipped?: number;
+    scanSkippedPaths?: string[];
+    scanSkippedTruncated?: boolean;
     zipName?: string;
     zipSize?: number;
   },
@@ -162,20 +165,22 @@ export function buildInstallStagesFromProgress(
 
   const activeStage = INSTALL_PHASE_TO_STAGE[p.phase] ?? 'scan';
   const activeIdx = INSTALL_STAGE_ORDER.indexOf(activeStage);
+  const scanExclude = installScanExcludeFields(p);
 
   return base.map((s) => {
     const id = s.id as InstallStageId;
     const idx = INSTALL_STAGE_ORDER.indexOf(id);
+    const exclude = id === 'scan' ? scanExclude : {};
 
     if (p.phase === 'done') {
       let detail: string | undefined;
       if (id === 'info') detail = infoDetail;
-      if (id === 'scan' && p.fileCount != null) detail = `${p.fileCount}건`;
+      if (id === 'scan' && p.fileCount != null) detail = `포함 ${p.fileCount}`;
       if (id === 'zip' && p.zipName) {
         detail = p.zipSize != null ? `${p.zipName} (${formatBytes(p.zipSize)})` : p.zipName;
       }
       if (id === 'download') detail = p.message;
-      return { ...s, state: 'done' as StageState, detail: detail ?? s.detail };
+      return { ...s, state: 'done' as StageState, detail: detail ?? s.detail, ...exclude };
     }
 
     if (id === 'info' && infoDetail && idx <= activeIdx) {
@@ -187,18 +192,52 @@ export function buildInstallStagesFromProgress(
     }
     if (idx < activeIdx) {
       let detail: string | undefined;
-      if (id === 'scan' && p.fileCount != null) detail = `${p.fileCount}건`;
+      if (id === 'scan' && p.fileCount != null) detail = `포함 ${p.fileCount}`;
       if (id === 'zip' && p.zipName) detail = p.zipName;
-      return { ...s, state: 'done' as StageState, detail: detail ?? s.detail };
+      return { ...s, state: 'done' as StageState, detail: detail ?? s.detail, ...exclude };
     }
     if (idx === activeIdx) {
       let detail = p.message;
-      if (id === 'scan' && p.fileCount != null) detail = `${p.fileCount}건 · ${p.message}`;
+      if (id === 'scan' && p.fileCount != null) detail = `포함 ${p.fileCount}`;
       if (id === 'zip' && p.zipName) detail = p.zipName;
-      return { ...s, state: 'active' as StageState, detail };
+      return { ...s, state: 'active' as StageState, detail, ...exclude };
     }
     return s;
   });
+}
+
+function installScanExcludeFields(p: {
+  fileCount?: number;
+  scanSkipped?: number;
+  scanSkippedPaths?: string[];
+  scanSkippedTruncated?: boolean;
+}): Pick<StageItem, 'detailExclude' | 'title'> {
+  if (p.fileCount == null) return {};
+  const skipped = p.scanSkipped ?? 0;
+  return {
+    detailExclude: `제외 ${skipped}`,
+    title: skipped > 0 ? installScanSkippedTitle(p) : undefined,
+  };
+}
+
+function installScanSkippedTitle(p: {
+  scanSkipped?: number;
+  scanSkippedPaths?: string[];
+  scanSkippedTruncated?: boolean;
+}): string | undefined {
+  const paths = p.scanSkippedPaths;
+  if (!paths?.length) {
+    const n = p.scanSkipped ?? 0;
+    return n > 0 ? `제외 ${n}건 (경로 수집 중…)` : undefined;
+  }
+  const maxLines = 40;
+  const head = paths.slice(0, maxLines);
+  const lines = [...head];
+  const remain = Math.max(0, (p.scanSkipped ?? paths.length) - head.length);
+  if (remain > 0 || p.scanSkippedTruncated) {
+    lines.push(`…외 ${remain > 0 ? remain : '다수'}건`);
+  }
+  return lines.join('\n');
 }
 
 export function buildRelayBaseStages(opts?: RelayStageOptions): StageItem[] {
@@ -375,11 +414,20 @@ export function buildRelayStagesFromProgress(
 
 export function patchStages(
   stages: StageItem[],
-  patch: Partial<Record<string, Pick<StageItem, 'state' | 'detail'>>>
+  patch: Partial<
+    Record<string, Pick<StageItem, 'state' | 'detail' | 'detailExclude' | 'title'>>
+  >
 ): StageItem[] {
   return stages.map((s) => {
     const p = patch[s.id];
-    return p ? { ...s, state: p.state, detail: p.detail ?? s.detail } : s;
+    if (!p) return s;
+    return {
+      ...s,
+      state: p.state ?? s.state,
+      detail: p.detail ?? s.detail,
+      detailExclude: p.detailExclude ?? s.detailExclude,
+      title: p.title ?? s.title,
+    };
   });
 }
 

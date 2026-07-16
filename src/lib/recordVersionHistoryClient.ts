@@ -7,6 +7,8 @@ export async function recordVersionHistoryClient(params: {
   historyType: ClientVersionHistoryType;
   status: 'success' | 'fail';
   message?: string;
+  option?: string[];
+  memo?: string;
 }): Promise<void> {
   try {
     const clientIp = await resolveClientMachineIp();

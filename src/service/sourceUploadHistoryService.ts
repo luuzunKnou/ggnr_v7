@@ -1,7 +1,7 @@
 import {
   buildSourceUploadFailBody,
+  buildSourceUploadHistoryFields,
   buildSourceUploadSuccessBody,
-  formatSourceUploadHistoryMessage,
 } from '@/lib/sourceUploadHistoryMessage';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 import { SOURCE_UPLOAD_REMOTE_BASE } from '@/service/sourceUploadRemote';
@@ -16,16 +16,17 @@ export async function recordUploadFlowHistory(params: {
   ip?: string;
   clientHost?: string;
 }): Promise<boolean> {
-  const message = formatSourceUploadHistoryMessage(
+  const fields = buildSourceUploadHistoryFields(
     params.includeNodeModules === true,
-    params.status,
     params.body,
     params.changeNote
   );
   const result = await recordVersionHistory({
     historyType: 'source_upload',
     status: params.status,
-    message,
+    message: fields.message,
+    option: fields.option,
+    memo: fields.memo,
     ip: params.ip,
     clientHost: params.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
   });

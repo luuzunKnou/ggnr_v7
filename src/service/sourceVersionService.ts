@@ -5,6 +5,7 @@ import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge } from '@/lib/ggnrBootCommand';
+import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
 import { ensureGeoServerRunning, stopGeoServerAndVerify } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 
@@ -53,7 +54,6 @@ const LAUNCHER_MISSING_MSG =
   '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
 
 export function buildApplySuccessHistoryMessage(opts: {
-  ip?: string;
   mode: RestartMode;
   command: string;
   appliedFiles: number;
@@ -61,9 +61,8 @@ export function buildApplySuccessHistoryMessage(opts: {
   netLabel: string;
   geoserverMsg: string;
 }): string {
-  const ip = opts.ip?.trim() || '-';
   const command = opts.command.trim() || '-';
-  return `성공 / ${ip} / mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
+  return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
 function runNpmInstallSyncInProcess(): void {
@@ -386,8 +385,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
     const ipTrim = clientIp?.trim() || undefined;
+    const historyOption = applyLatestHistoryOptions(includeNodeModules, restartMode);
     const successMessage = buildApplySuccessHistoryMessage({
-      ip: ipTrim,
       mode: restartMode,
       command: bootCommand,
       appliedFiles: copyResult.appliedFiles,
@@ -413,6 +412,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
           historyType: 'apply_latest',
           status: 'fail',
           message: `사전 빌드 실패: ${msg}`,
+          option: historyOption,
           ip: ipTrim,
         });
         throw new Error(`사전 빌드 실패: ${msg}`);
@@ -445,6 +445,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
             netLabel,
             geoserverMsg: geoserver.message,
             message: successMessage,
+            option: historyOption,
           }
         : null,
       /** 이전 재기동이 남긴 소비 플래그 — 매 적용마다 초기화해야 2회차부터 스킵되지 않음 */
@@ -459,6 +460,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         historyType: 'apply_latest',
         status: 'success',
         message: successMessage,
+        option: historyOption,
         ip: ipTrim,
       });
     }

@@ -3,7 +3,7 @@ import { includeNodeModulesFromProfile } from '@/app/(pages)/dev/_components/sou
 import { resolveClientMachineIp } from '@/lib/clientMachineIp';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
-
+import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
 export type RestartMode = 'none' | 'exit' | 'launcher';
 
 export type VersionRelayPhase =
@@ -374,6 +374,96 @@ function withJobIdQuery(downloadUrl: string, jobId: string): string {
   return u.toString();
 }
 
+function isDownloadJobEndedError(status: number, apiMsg: string): boolean {
+  if (status !== 404) return false;
+  const lower = apiMsg.toLowerCase();
+  return (
+    lower.includes('not found') ||
+    lower.includes('already ended') ||
+    lower.includes('job not found')
+  );
+}
+
+function formatDownloadApiError(status: number, apiMsg: string): string {
+  if (isDownloadJobEndedError(status, apiMsg)) {
+    return '다운로드 job이 만료되었습니다. 다시 적용해 주세요.';
+  }
+  return `GNMS download API 오류 (${status})${apiMsg ? `: ${apiMsg}` : ''}`;
+}
+
+type LatestDownloadOk = {
+  version: string;
+  fileName: string;
+  jobId: string;
+  latestJson: GnmsLatestPayload;
+  downloadRes: Response;
+};
+
+/** GET /latest → GET download(?jobId=). 호출부에서 job ended 404 시 재시도 */
+async function fetchGnmsLatestAndDownload(options: {
+  cfg: GnmsConfigResponse;
+  signal?: AbortSignal;
+  log: (line: string) => void;
+}): Promise<LatestDownloadOk> {
+  const { cfg, signal, log } = options;
+  throwIfAborted(signal);
+  let latestRes: Response;
+  try {
+    latestRes = await fetchWithTimeout(
+      cfg.latestUrl,
+      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+      60_000,
+      signal,
+      { label: 'GNMS latest 조회', classifyNetwork: true }
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
+      log(`ERROR: ${err.message}`);
+    }
+    throw err;
+  }
+  const latestJson = (await latestRes.json().catch(() => ({}))) as GnmsLatestPayload;
+  if (!latestRes.ok) {
+    const apiMsg = await readJsonError(latestRes, '');
+    const msg = `GNMS latest API 오류 (${latestRes.status})${apiMsg ? `: ${apiMsg}` : ''}`;
+    log(`ERROR: ${msg}`);
+    throw new Error(msg);
+  }
+
+  const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
+  const fileName = String(latestJson.fileName ?? '').trim() || `source_latest_${Date.now()}.zip`;
+  const jobId = String(latestJson.jobId ?? '').trim();
+  if (!jobId) {
+    log('WARNING: latest 응답에 jobId 없음 — 취소 시 GNMS 통지 불가');
+  }
+
+  const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || cfg.downloadUrlFallback;
+  let downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
+  if (jobId) {
+    downloadUrl = withJobIdQuery(downloadUrl, jobId);
+  }
+  log(`latest: version=${version}, file=${fileName}${jobId ? `, jobId=${jobId}` : ''}`);
+
+  throwIfAborted(signal);
+  let downloadRes: Response;
+  try {
+    downloadRes = await fetchWithTimeout(
+      downloadUrl,
+      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+      0,
+      signal,
+      { label: 'GNMS ZIP 다운로드', classifyNetwork: true }
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
+      log(`ERROR: ${err.message}`);
+    }
+    throw err;
+  }
+
+  return { version, fileName, jobId, latestJson, downloadRes };
+}
+
 /** 사용자 취소 시 GNMS에 통지 (AbortSignal 없이 keepalive) */
 async function notifyGnmsDownloadCancel(options: {
   cancelUrl: string;
@@ -453,73 +543,35 @@ export async function relayLatestSourceFromGnms(options: {
 
     throwIfAborted(signal);
     onProgress?.({ phase: 'latest', message: 'GNMS 최신 버전 조회 중...' });
-    let latestRes: Response;
-    try {
-      latestRes = await fetchWithTimeout(
-        cfg.latestUrl,
-        { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
-        60_000,
-        signal,
-        { label: 'GNMS latest 조회', classifyNetwork: true }
-      );
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
-        log(`ERROR: ${err.message}`);
+    let bundle = await fetchGnmsLatestAndDownload({ cfg, signal, log });
+    if (!bundle.downloadRes.ok) {
+      const firstApiMsg = await readJsonError(bundle.downloadRes, '');
+      if (isDownloadJobEndedError(bundle.downloadRes.status, firstApiMsg)) {
+        log('WARNING: download job 만료 — latest 재조회 후 재시도');
+        onProgress?.({ phase: 'latest', message: 'GNMS 최신 버전 재조회 중...' });
+        bundle = await fetchGnmsLatestAndDownload({ cfg, signal, log });
+        if (!bundle.downloadRes.ok) {
+          const apiMsg = await readJsonError(bundle.downloadRes, '');
+          const msg = formatDownloadApiError(bundle.downloadRes.status, apiMsg);
+          log(`ERROR: ${msg}`);
+          throw new Error(msg);
+        }
+      } else {
+        const msg = formatDownloadApiError(bundle.downloadRes.status, firstApiMsg);
+        log(`ERROR: ${msg}`);
+        throw new Error(msg);
       }
-      throw err;
     }
-    const latestJson = (await latestRes.json().catch(() => ({}))) as GnmsLatestPayload;
-    if (!latestRes.ok) {
-      const apiMsg = await readJsonError(latestRes, '');
-      const msg = `GNMS latest API 오류 (${latestRes.status})${apiMsg ? `: ${apiMsg}` : ''}`;
-      log(`ERROR: ${msg}`);
-      throw new Error(msg);
-    }
-
-    const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
-    const fileName = String(latestJson.fileName ?? '').trim() || `source_latest_${Date.now()}.zip`;
-    const jobId = String(latestJson.jobId ?? '').trim();
-    gnmsVersion = version;
-    gnmsFileName = fileName;
-    if (jobId) {
-      gnmsJobId = jobId;
-    } else {
-      log('WARNING: latest 응답에 jobId 없음 — 취소 시 GNMS 통지 불가');
-    }
-
-    const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || cfg.downloadUrlFallback;
-    let downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
-    if (jobId) {
-      downloadUrl = withJobIdQuery(downloadUrl, jobId);
-    }
-    log(`latest: version=${version}, file=${fileName}${jobId ? `, jobId=${jobId}` : ''}`);
-
-    throwIfAborted(signal);
-    onProgress?.({ phase: 'download', message: 'GNMS ZIP 다운로드 시작...' });
-    let downloadRes: Response;
-    try {
-      downloadRes = await fetchWithTimeout(
-        downloadUrl,
-        { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
-        0,
-        signal,
-        { label: 'GNMS ZIP 다운로드', classifyNetwork: true }
-      );
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
-        log(`ERROR: ${err.message}`);
-      }
-      throw err;
-    }
-    if (!downloadRes.ok) {
-      const apiMsg = await readJsonError(downloadRes, '');
-      const msg = `GNMS download API 오류 (${downloadRes.status})${apiMsg ? `: ${apiMsg}` : ''}`;
-      log(`ERROR: ${msg}`);
-      throw new Error(msg);
-    }
-    if (!downloadRes.body) {
+    if (!bundle.downloadRes.body) {
       throw new Error('GNMS 다운로드 body 없음');
     }
+
+    const { version, fileName, jobId, latestJson, downloadRes } = bundle;
+    gnmsVersion = version;
+    gnmsFileName = fileName;
+    gnmsJobId = jobId || null;
+
+    onProgress?.({ phase: 'download', message: 'GNMS ZIP 다운로드 시작...' });
 
     const totalSize = parseTotalSize(latestJson, downloadRes.headers.get('content-length'));
     if (totalSize <= 0) {
@@ -706,12 +758,16 @@ export async function relayLatestSourceFromGnms(options: {
       await cleanupRelaySession(activeUploadId, log);
       activeUploadId = null;
     }
-    if (!isUserAbortError(e)) {
+    /** 재시작 정상 끊김·적용 완료 후는 UI와 같이 실패 이력 생략 (성공은 서버 flush) */
+    const skipFailHistory =
+      relayCompleted || (restart && isRestartDisconnectError(e));
+    if (!isUserAbortError(e) && !skipFailHistory) {
       const msg = e instanceof Error ? e.message : String(e);
       await recordVersionHistoryClient({
         historyType: 'apply_latest',
         status: 'fail',
         message: msg,
+        option: applyLatestHistoryOptions(includeNodeModules, restartMode),
       }).catch(() => {});
     }
     throw e;

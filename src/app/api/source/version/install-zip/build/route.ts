@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
       zipName: result.zipName,
       zipSize: result.zipSize,
       fileCount: result.fileCount,
+      skippedCount: result.skippedCount,
       downloadUrl: `/api/source/version/install-zip/download?progressId=${encodeURIComponent(progressId)}`,
     });
   } catch (err: unknown) {

@@ -55,6 +55,7 @@ export function VersionManagerContent() {
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
+  const busyRef = useRef(false);
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const restart = restartMode !== 'none';
@@ -92,7 +93,8 @@ export function VersionManagerContent() {
   };
 
   const runUpdate = async () => {
-    abortRef.current?.abort();
+    if (busyRef.current) return;
+    busyRef.current = true;
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
     const opts = {
@@ -322,6 +324,7 @@ export function VersionManagerContent() {
       }
     } finally {
       abortRef.current = null;
+      busyRef.current = false;
       setBusy(false);
     }
   };

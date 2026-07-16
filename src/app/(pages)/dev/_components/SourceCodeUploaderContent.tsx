@@ -7,8 +7,8 @@ import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMac
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
   buildSourceUploadFailBody,
+  buildSourceUploadHistoryFields,
   buildSourceUploadSuccessBody,
-  formatSourceUploadHistoryMessage,
 } from '@/lib/sourceUploadHistoryMessage';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { InstallZipDownloadPanel } from './InstallZipDownloadPanel';
@@ -300,6 +300,7 @@ export function SourceCodeUploaderContent() {
   const [changeNote, setChangeNote] = useState('');
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [progressPhase, setProgressPhase] = useState<string>('idle');
   const [lastSavedRoot, setLastSavedRoot] = useState<string | null>(null);
   const [progressPct, setProgressPct] = useState(0);
   const [progressText, setProgressText] = useState('대기 중');
@@ -359,6 +360,18 @@ export function SourceCodeUploaderContent() {
     return formatEtaSeconds(remain);
   })();
 
+  const cancelBlockedByPhase =
+    progressPhase === 'complete' || progressPhase === 'npmInstall';
+  const cancelBlockedByStage = stages.some(
+    (s) => (s.id === 'complete' || s.id === 'npmInstall') && s.state === 'active'
+  );
+  const cancelBlocked = uploading && (cancelBlockedByPhase || cancelBlockedByStage);
+  const cancelBlockedTitle = cancelBlockedByPhase
+    ? progressPhase === 'npmInstall'
+      ? 'npm install 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.'
+      : '원격 병합/압축 해제 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.'
+    : '원격 병합/압축 해제(또는 npm install) 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.';
+
   useLayoutEffect(() => {
     const el = liveLogScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -384,9 +397,8 @@ export function SourceCodeUploaderContent() {
     if (uploadHistoryRecordedRef.current) return;
     uploadHistoryRecordedRef.current = true;
 
-    const message = formatSourceUploadHistoryMessage(
+    const fields = buildSourceUploadHistoryFields(
       includeNodeModulesRef.current,
-      params.status,
       params.body,
       changeNoteRef.current
     );
@@ -394,7 +406,9 @@ export function SourceCodeUploaderContent() {
     await recordVersionHistoryClient({
       historyType: 'source_upload',
       status: params.status,
-      message,
+      message: fields.message,
+      option: fields.option,
+      memo: fields.memo ?? undefined,
     });
     notifyDevVersionHistoryRefresh();
   };
@@ -410,6 +424,7 @@ export function SourceCodeUploaderContent() {
     if (p.remoteUploadId?.trim()) {
       remoteUploadIdRef.current = p.remoteUploadId.trim();
     }
+    setProgressPhase(p.phase || 'idle');
     setProgressPct(p.progressPct);
     setProgressText(p.message);
     if (p.scanIncluded != null || p.zipSize != null) {
@@ -551,6 +566,7 @@ export function SourceCodeUploaderContent() {
     setUploadMeta({});
     startedAtRef.current = Date.now();
     setUploading(true);
+    setProgressPhase('idle');
     setProgressPct(2);
     setStages(buildBaseStages(includeNodeModules));
     setDbConfirm(null);
@@ -827,6 +843,7 @@ export function SourceCodeUploaderContent() {
     } finally {
       stopPoll();
       setUploading(false);
+      setProgressPhase('idle');
       abortControllerRef.current = null;
     }
   };
@@ -968,8 +985,10 @@ export function SourceCodeUploaderContent() {
           <Button
             type="button"
             variant="outline"
-            disabled={!uploading}
+            disabled={!uploading || cancelBlocked}
+            title={cancelBlocked ? cancelBlockedTitle : undefined}
             onClick={() => {
+              if (cancelBlocked) return;
               const uploadId = remoteUploadIdRef.current;
               const progressId = progressIdRef.current;
               if (uploadId || progressId) {

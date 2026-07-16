@@ -17,9 +17,11 @@ import {
   completeInstallZipProgress,
   failInstallZipProgress,
   getInstallZipProgress,
+  patchInstallZipProgress,
   setInstallZipPhase,
   setInstallZipScanProgress,
 } from '@/service/sourceInstallZipProgress';
+import { installZipHistoryOptions } from '@/lib/versionHistoryMessage';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 
 /**
@@ -75,11 +77,40 @@ export async function getInstallZipInfo(profile: SourcePackageProfile): Promise<
 async function scanInstallFiles(params: {
   profile: SourcePackageProfile;
   progressId?: string;
-}): Promise<IncludedFile[]> {
+}): Promise<{
+  included: IncludedFile[];
+  skipped: number;
+  skippedPaths: string[];
+  skippedTruncated: boolean;
+}> {
   const includeNodeModules = includeNodeModulesFromProfile(params.profile);
   const mode: SourceUploadMode = 'install';
   const workspaceRoot = process.cwd();
   const included: IncludedFile[] = [];
+  const skippedPaths: string[] = [];
+  const SKIPPED_PATHS_CAP = 500;
+  let skipped = 0;
+  let skippedTruncated = false;
+  let scanTicks = 0;
+
+  const rememberSkipped = (rel: string) => {
+    skipped += 1;
+    if (skippedPaths.length < SKIPPED_PATHS_CAP) {
+      skippedPaths.push(rel);
+    } else {
+      skippedTruncated = true;
+    }
+  };
+
+  const pushScanProgress = () => {
+    if (!params.progressId) return;
+    setInstallZipScanProgress(params.progressId, {
+      fileCount: included.length,
+      skipped,
+      skippedPaths: [...skippedPaths],
+      skippedTruncated,
+    });
+  };
 
   async function walk(absDir: string): Promise<void> {
     const relDir = toPosixRelative(absDir, workspaceRoot);
@@ -90,24 +121,34 @@ async function scanInstallFiles(params: {
       const childRel = toPosixRelative(childAbs, workspaceRoot);
       if (!childRel || childRel.startsWith('..')) continue;
       if (entry.isDirectory()) {
-        if (!shouldSkipSourceDir(childRel, mode, includeNodeModules)) await walk(childAbs);
+        if (shouldSkipSourceDir(childRel, mode, includeNodeModules)) {
+          rememberSkipped(`${childRel}/`);
+        } else {
+          await walk(childAbs);
+        }
         continue;
       }
       if (!entry.isFile()) continue;
-      if (!shouldUploadSourcePath(childRel, mode, includeNodeModules)) continue;
-      included.push({
-        absPath: childAbs,
-        relPath: childRel,
-        category: classifySourcePath(childRel),
-      });
-      if (params.progressId && included.length % 200 === 0) {
-        setInstallZipScanProgress(params.progressId, { fileCount: included.length });
+      if (!shouldUploadSourcePath(childRel, mode, includeNodeModules)) {
+        rememberSkipped(childRel);
+      } else {
+        included.push({
+          absPath: childAbs,
+          relPath: childRel,
+          category: classifySourcePath(childRel),
+        });
+      }
+      scanTicks += 1;
+      if (params.progressId && scanTicks % 80 === 0) {
+        pushScanProgress();
+        await new Promise<void>((r) => setImmediate(r));
       }
     }
   }
 
   await walk(workspaceRoot);
-  return included;
+  pushScanProgress();
+  return { included, skipped, skippedPaths, skippedTruncated };
 }
 
 async function buildInstallZipFile(params: {
@@ -170,6 +211,7 @@ export type BuildInstallZipResult = {
   zipName: string;
   zipSize: number;
   fileCount: number;
+  skippedCount: number;
   bundleRoot: string;
 };
 
@@ -180,11 +222,23 @@ export async function buildInstallZip(params: {
   const { profile, progressId } = params;
   const date = todayYmd();
   if (progressId) setInstallZipPhase(progressId, 'scan', '설치 ZIP 스캔 중...');
-  const files = await scanInstallFiles({ profile, progressId });
+  const scan = await scanInstallFiles({ profile, progressId });
+  const files = scan.included;
   if (files.length === 0) throw new Error('설치 ZIP 대상 파일이 없습니다.');
   if (progressId) {
-    setInstallZipScanProgress(progressId, { fileCount: files.length, message: `스캔 완료 ${files.length}건` });
-    setInstallZipPhase(progressId, 'zip', `ZIP 생성 중 (${files.length}건)...`, { fileCount: files.length });
+    setInstallZipScanProgress(progressId, {
+      fileCount: files.length,
+      skipped: scan.skipped,
+      skippedPaths: scan.skippedPaths,
+      skippedTruncated: scan.skippedTruncated,
+      message: `스캔 완료 포함 ${files.length} / 제외 ${scan.skipped}`,
+    });
+    setInstallZipPhase(progressId, 'zip', `ZIP 생성 중 (${files.length}건)...`, {
+      fileCount: files.length,
+      scanSkipped: scan.skipped,
+      scanSkippedPaths: scan.skippedPaths,
+      scanSkippedTruncated: scan.skippedTruncated,
+    });
   }
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
   const bundleRoot = `${date}_${stamp}`;
@@ -205,8 +259,21 @@ export async function buildInstallZip(params: {
   if (progressId) {
     rememberBuiltInstallZip(progressId, zipPath);
     completeInstallZipProgress(progressId, 'ZIP 생성 완료', zipName, zipSize);
+    patchInstallZipProgress(progressId, {
+      fileCount: files.length,
+      scanSkipped: scan.skipped,
+      scanSkippedPaths: scan.skippedPaths,
+      scanSkippedTruncated: scan.skippedTruncated,
+    });
   }
-  return { zipPath, zipName, zipSize, fileCount: files.length, bundleRoot };
+  return {
+    zipPath,
+    zipName,
+    zipSize,
+    fileCount: files.length,
+    skippedCount: scan.skipped,
+    bundleRoot,
+  };
 }
 
 /** progressId → zipPath (다운로드 연결용, 프로세스 메모리) */
@@ -282,7 +349,8 @@ export async function recordInstallZipHistory(params: {
   await recordVersionHistory({
     historyType: 'install_zip',
     status: params.ok ? 'success' : 'fail',
-    message: `${params.profile === 'closed' ? '폐쇄망' : '개방망'} — ${params.message}`,
+    message: params.message.trim(),
+    option: installZipHistoryOptions(params.profile),
     ip: params.ip,
     clientHost: params.clientHost,
   });

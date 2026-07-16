@@ -14,6 +14,9 @@ export type InstallZipProgress = {
   message: string;
   error?: string;
   fileCount?: number;
+  scanSkipped?: number;
+  scanSkippedPaths?: string[];
+  scanSkippedTruncated?: boolean;
   zipName?: string;
   zipSize?: number;
   updatedAt: number;
@@ -92,14 +95,26 @@ export function setInstallZipPhase(
 
 export function setInstallZipScanProgress(
   progressId: string,
-  params: { fileCount: number; message?: string }
+  params: {
+    fileCount: number;
+    skipped?: number;
+    skippedPaths?: string[];
+    skippedTruncated?: boolean;
+    message?: string;
+  }
 ): void {
+  const skipped = params.skipped ?? 0;
   const pct = clampPct(10 + Math.min(15, Math.floor(params.fileCount / 500)));
   patchInstallZipProgress(progressId, {
     phase: 'scan',
     fileCount: params.fileCount,
+    scanSkipped: skipped,
+    scanSkippedPaths: params.skippedPaths,
+    scanSkippedTruncated: params.skippedTruncated,
     progressPct: pct,
-    message: params.message ?? `스캔 ${params.fileCount}건`,
+    message:
+      params.message ??
+      `스캔 포함 ${params.fileCount} / 제외 ${skipped}`,
     done: false,
   });
 }

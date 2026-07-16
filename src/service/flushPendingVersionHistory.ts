@@ -5,6 +5,10 @@
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import { ggnrRestartSignalPath } from '@/lib/ggnrBootCommand';
+import {
+  applyLatestHistoryOptions,
+  type RestartModeForHistory,
+} from '@/lib/versionHistoryMessage';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 
 type HistoryPayload = {
@@ -15,6 +19,7 @@ type HistoryPayload = {
   netLabel?: string;
   geoserverMsg?: string;
   message?: string;
+  option?: string[];
 };
 
 export async function flushPendingVersionHistory(): Promise<void> {
@@ -40,12 +45,18 @@ export async function flushPendingVersionHistory(): Promise<void> {
   const message =
     typeof payload.message === 'string' && payload.message.trim()
       ? payload.message.trim()
-      : buildFallbackMessage(clientIp, payload);
+      : buildFallbackMessage(payload);
+
+  const option =
+    Array.isArray(payload.option) && payload.option.length > 0
+      ? payload.option.map((x) => String(x))
+      : resolveOptionFromSignal(raw, payload);
 
   const result = await recordVersionHistory({
     historyType: 'apply_latest',
     status: 'success',
     message,
+    option,
     ip: clientIp,
   });
 
@@ -72,13 +83,23 @@ export async function flushPendingVersionHistory(): Promise<void> {
   }
 }
 
-function buildFallbackMessage(ip: string | undefined, payload: HistoryPayload): string {
-  const ipPart = ip?.trim() || '-';
+function resolveOptionFromSignal(
+  raw: Record<string, unknown>,
+  payload: HistoryPayload
+): string[] {
+  const includeNodeModules = raw.includeNodeModules === true;
+  const modeRaw = String(payload.mode ?? raw.restartMode ?? 'none');
+  const mode: RestartModeForHistory =
+    modeRaw === 'exit' || modeRaw === 'launcher' || modeRaw === 'none' ? modeRaw : 'none';
+  return applyLatestHistoryOptions(includeNodeModules, mode);
+}
+
+function buildFallbackMessage(payload: HistoryPayload): string {
   const mode = payload.mode?.trim() || '-';
   const command = payload.command?.trim() || '-';
   const applied = payload.appliedFiles ?? 0;
   const skipped = payload.skippedFiles ?? 0;
   const net = payload.netLabel?.trim() || '-';
   const geo = payload.geoserverMsg?.trim() || '-';
-  return `성공 / ${ipPart} / mode=${mode} / command=${command} / 적용 ${applied}건 / 제외 ${skipped}건 / ${net} / GeoServer: ${geo}`;
+  return `mode=${mode} / command=${command} / 적용 ${applied}건 / 제외 ${skipped}건 / ${net} / GeoServer: ${geo}`;
 }

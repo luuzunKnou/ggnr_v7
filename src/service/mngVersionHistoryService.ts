@@ -4,6 +4,7 @@
 import { pool } from '@/database/db';
 import { db } from '@/database/db';
 import { mvh } from '@/database/schema/mng_version_history';
+import { coerceHistoryOptions, normalizeHistoryMemo, normalizeHistoryOptions } from '@/lib/versionHistoryMessage';
 import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 
 export type VersionHistoryType = 'source_upload' | 'install_zip' | 'apply_latest';
@@ -19,6 +20,8 @@ export type VersionHistoryRow = {
   mvhHistoryType: string;
   mvhStatus: string;
   mvhMessage: string | null;
+  mvhOption: string[] | null;
+  mvhMemo: string | null;
   mvhIp: string | null;
   mvhClientHost: string | null;
   mvhCreateDate: Date | string | null;
@@ -26,6 +29,10 @@ export type VersionHistoryRow = {
 
 let tableEnsured = false;
 
+/**
+ * 테이블이 없을 때만 생성. 기존 테이블 ALTER는 하지 않음 (DB는 운영자가 적용).
+ * DROP 후 재실행 시 이 CREATE로 새 컬럼 포함 재생성.
+ */
 async function ensureVersionHistoryTable(): Promise<void> {
   if (tableEnsured) return;
   await pool.query(`
@@ -34,6 +41,8 @@ async function ensureVersionHistoryTable(): Promise<void> {
       "mvh_history_type" varchar(40) NOT NULL,
       "mvh_status" varchar(20) NOT NULL,
       "mvh_message" text,
+      "mvh_option" jsonb,
+      "mvh_memo" text,
       "mvh_ip" varchar(64),
       "mvh_client_host" varchar(500),
       "mvh_create_date" timestamp
@@ -61,6 +70,8 @@ export async function recordVersionHistory(params: {
   historyType: VersionHistoryType;
   status: 'success' | 'fail';
   message?: string;
+  option?: string[] | null;
+  memo?: string | null;
   ip?: string;
   clientHost?: string;
 }): Promise<{ ok: boolean; mvhKey?: number; error?: string }> {
@@ -71,7 +82,9 @@ export async function recordVersionHistory(params: {
       .values({
         mvhHistoryType: params.historyType,
         mvhStatus: params.status,
-        mvhMessage: params.message ?? null,
+        mvhMessage: params.message?.trim() ? params.message.trim() : null,
+        mvhOption: normalizeHistoryOptions(params.option ?? null),
+        mvhMemo: normalizeHistoryMemo(params.memo ?? null),
         mvhIp: params.ip ?? null,
         mvhClientHost: params.clientHost ?? null,
         mvhCreateDate: new Date(),
@@ -135,6 +148,8 @@ export async function listVersionHistory(params: {
         mvhHistoryType: r.mvhHistoryType,
         mvhStatus: r.mvhStatus,
         mvhMessage: r.mvhMessage,
+        mvhOption: coerceHistoryOptions(r.mvhOption),
+        mvhMemo: r.mvhMemo,
         mvhIp: r.mvhIp,
         mvhClientHost: r.mvhClientHost,
         mvhCreateDate: r.mvhCreateDate,

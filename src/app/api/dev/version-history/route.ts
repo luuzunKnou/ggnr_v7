@@ -54,6 +54,10 @@ export async function POST(req: NextRequest) {
     const historyType = String(body.historyType ?? '').trim() as VersionHistoryType;
     const status = body.status === 'success' ? 'success' : 'fail';
     const message = typeof body.message === 'string' ? body.message.trim() : '';
+    const memo = typeof body.memo === 'string' ? body.memo.trim() : '';
+    const option = Array.isArray(body.option)
+      ? body.option.map((x) => String(x)).filter((s) => s.trim())
+      : undefined;
     const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
     const ip = pickClientIpFromRequest(req, bodyIp);
 
@@ -65,6 +69,8 @@ export async function POST(req: NextRequest) {
       historyType,
       status,
       message: message || undefined,
+      option,
+      memo: memo || undefined,
       ip,
     });
     if (!result.ok) {

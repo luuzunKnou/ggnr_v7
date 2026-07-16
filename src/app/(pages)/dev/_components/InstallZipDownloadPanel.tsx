@@ -153,6 +153,7 @@ export function InstallZipDownloadPanel() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPhaseRef = useRef('');
   const lastLogMessageRef = useRef('');
+  const lastSkipLoggedRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef(0);
   const [installMeta, setInstallMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
@@ -195,6 +196,19 @@ export function InstallZipDownloadPanel() {
     if (p.phase !== lastPhaseRef.current && p.phase !== 'idle') {
       lastPhaseRef.current = p.phase;
     }
+    if (
+      p.scanSkippedPaths?.length &&
+      p.message.includes('스캔 완료') &&
+      lastSkipLoggedRef.current !== (p.scanSkipped ?? 0)
+    ) {
+      lastSkipLoggedRef.current = p.scanSkipped ?? 0;
+      const sample = p.scanSkippedPaths.slice(0, 20);
+      pushLog(`제외 경로 예시 (${sample.length}/${p.scanSkipped ?? sample.length}건):`);
+      for (const path of sample) pushLog(`  ${path}`);
+      if ((p.scanSkipped ?? 0) > sample.length || p.scanSkippedTruncated) {
+        pushLog(`  …외 ${(p.scanSkipped ?? 0) - sample.length}건 (단계 «제외»에 마우스 올리면 더 보기)`);
+      }
+    }
     const msg = p.message?.trim();
     if (!msg || msg === lastLogMessageRef.current) return;
     lastLogMessageRef.current = msg;
@@ -231,6 +245,7 @@ export function InstallZipDownloadPanel() {
     setInstallMeta({});
     lastPhaseRef.current = '';
     lastLogMessageRef.current = '';
+    lastSkipLoggedRef.current = null;
     setProgress({ ...emptySideProgress(), message: '서버 정보 확인 중...', pct: 2 });
     setStages(buildInstallBaseStages());
     setStages((prev) => setStageActive(prev, 'info'));
@@ -292,6 +307,7 @@ export function InstallZipDownloadPanel() {
         progressId?: string;
         zipSize?: number;
         fileCount?: number;
+        skippedCount?: number;
       };
 
       stopPoll();
@@ -310,14 +326,21 @@ export function InstallZipDownloadPanel() {
         throw new Error(buildJson.error ?? 'ZIP 생성 실패');
       }
 
-      pushLog(`ZIP 생성 완료: ${buildJson.zipName ?? ''} (${buildJson.fileCount ?? '?'}건)`);
+      const skipCount = buildJson.skippedCount ?? 0;
+      pushLog(
+        `ZIP 생성 완료: ${buildJson.zipName ?? ''} (포함 ${buildJson.fileCount ?? '?'} / 제외 ${skipCount})`
+      );
       setInstallMeta({
         fileCount: buildJson.fileCount,
         zipSize: buildJson.zipSize,
       });
       setStages((prev) =>
         patchStages(setStageActive(prev, 'download'), {
-          scan: { state: 'done', detail: `${buildJson.fileCount ?? '?'}건` },
+          scan: {
+            state: 'done',
+            detail: buildJson.fileCount != null ? `포함 ${buildJson.fileCount}` : undefined,
+            detailExclude: `제외 ${skipCount}`,
+          },
           zip: {
             state: 'done',
             detail:
