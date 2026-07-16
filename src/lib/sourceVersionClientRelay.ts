@@ -562,11 +562,11 @@ export async function relayLatestSourceFromGnms(options: {
         throw new Error(msg);
       }
     }
-    if (!bundle.downloadRes.body) {
+    const { version, fileName, jobId, latestJson, downloadRes } = bundle;
+    const downloadBody = downloadRes.body;
+    if (!downloadBody) {
       throw new Error('GNMS 다운로드 body 없음');
     }
-
-    const { version, fileName, jobId, latestJson, downloadRes } = bundle;
     gnmsVersion = version;
     gnmsFileName = fileName;
     gnmsJobId = jobId || null;
@@ -612,7 +612,7 @@ export async function relayLatestSourceFromGnms(options: {
     activeUploadId = uploadId;
     log(`relay init: uploadId=${uploadId}, chunks=${expectedChunks}, chunkSize=${chunkSize}`);
 
-    const reader = downloadRes.body.getReader();
+    const reader = downloadBody.getReader();
     let pending: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
     let chunkIndex = 0;
     let bytesDone = 0;
