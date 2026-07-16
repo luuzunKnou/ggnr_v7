@@ -16,6 +16,7 @@ export async function GET() {
       gnmsBaseUrl: cfg.gnmsBaseUrl,
       latestUrl: cfg.latestUrl,
       downloadUrlFallback: cfg.downloadUrlFallback,
+      cancelUrl: cfg.cancelUrl,
       bearer: cfg.bearer,
       restartCommandConfigured,
     });

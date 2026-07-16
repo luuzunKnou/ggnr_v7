@@ -29,6 +29,11 @@ export type VersionRelayProgress = {
   totalBytes?: number;
   chunkIndex?: number;
   totalChunks?: number;
+  /** 서버 [SourceCodeUpload] 로그 → UI 실시간 로그 */
+  logLine?: string;
+  appliedFiles?: number;
+  skippedFiles?: number;
+  totalFiles?: number;
 };
 
 export type VersionRelayResult = {
@@ -62,6 +67,8 @@ type GnmsConfigResponse = {
   gnmsBaseUrl: string;
   latestUrl: string;
   downloadUrlFallback: string;
+  /** GNMS 다운로드 취소 통지 (기본 …/cancel) */
+  cancelUrl?: string;
   bearer: string;
   /** 운영 서버에 구동 프로젝트/타입이 있어 명령 실행 재시작 가능 여부 */
   restartCommandConfigured?: boolean;
@@ -69,6 +76,7 @@ type GnmsConfigResponse = {
 };
 
 type GnmsLatestPayload = {
+  jobId?: string;
   version?: string;
   fileName?: string;
   downloadUrl?: string;
@@ -236,7 +244,14 @@ function appendUint8Arrays(a: Uint8Array, b: Uint8Array): Uint8Array {
 /** complete API NDJSON: progress 줄 여러 개 + result/error 한 줄 */
 async function readRelayCompleteNdjson(
   res: Response,
-  onProgressLine: (event: { phase: VersionRelayPhase; message: string }) => void
+  onProgressLine: (event: {
+    phase: VersionRelayPhase;
+    message: string;
+    logLine?: string;
+    appliedFiles?: number;
+    skippedFiles?: number;
+    totalFiles?: number;
+  }) => void
 ): Promise<VersionRelayResult & { error?: string; ok?: boolean }> {
   const contentType = res.headers.get('content-type') ?? '';
 
@@ -273,7 +288,18 @@ async function readRelayCompleteNdjson(
     if (type === 'progress') {
       const phase = String(parsed.phase ?? '') as VersionRelayPhase;
       const message = String(parsed.message ?? '');
-      if (phase && message) onProgressLine({ phase, message });
+      const logLine =
+        typeof parsed.logLine === 'string' && parsed.logLine.trim()
+          ? parsed.logLine.trim()
+          : undefined;
+      const appliedFiles =
+        typeof parsed.appliedFiles === 'number' ? parsed.appliedFiles : undefined;
+      const skippedFiles =
+        typeof parsed.skippedFiles === 'number' ? parsed.skippedFiles : undefined;
+      const totalFiles = typeof parsed.totalFiles === 'number' ? parsed.totalFiles : undefined;
+      if (phase && message) {
+        onProgressLine({ phase, message, logLine, appliedFiles, skippedFiles, totalFiles });
+      }
       return;
     }
     if (type === 'error') {
@@ -341,6 +367,54 @@ async function cleanupRelaySession(uploadId: string, log: (line: string) => void
   }
 }
 
+/** download URL에 jobId 쿼리 부착 (이미 있으면 덮어씀) */
+function withJobIdQuery(downloadUrl: string, jobId: string): string {
+  const u = new URL(downloadUrl);
+  u.searchParams.set('jobId', jobId);
+  return u.toString();
+}
+
+/** 사용자 취소 시 GNMS에 통지 (AbortSignal 없이 keepalive) */
+async function notifyGnmsDownloadCancel(options: {
+  cancelUrl: string;
+  bearer: string;
+  jobId: string;
+  version?: string;
+  fileName?: string;
+  log: (line: string) => void;
+}): Promise<void> {
+  const { cancelUrl, bearer, jobId, version, fileName, log } = options;
+  try {
+    const body: Record<string, string> = {
+      jobId,
+      reason: 'user_abort',
+    };
+    if (version) body.version = version;
+    if (fileName) body.fileName = fileName;
+
+    const res = await fetch(cancelUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...gnmsHeaders(bearer),
+      },
+      body: JSON.stringify(body),
+      keepalive: true,
+    });
+    const json = (await res.json().catch(() => ({}))) as { status?: string; error?: string };
+    if (res.ok) {
+      log(`GNMS 취소 통지: ${json.status ?? 'ok'} (jobId=${jobId})`);
+      return;
+    }
+    log(
+      `WARNING: GNMS 취소 통지 실패 — HTTP ${res.status}${json.error ? `: ${json.error}` : json.status ? `: ${json.status}` : ''}`
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`WARNING: GNMS 취소 통지 요청 실패 — ${msg}`);
+  }
+}
+
 export async function relayLatestSourceFromGnms(options: {
   restart: boolean;
   restartMode: RestartMode;
@@ -356,6 +430,10 @@ export async function relayLatestSourceFromGnms(options: {
   /** init 이후 세션 — 성공 complete(서버가 삭제) 제외하고 취소·실패 시 정리 */
   let activeUploadId: string | null = null;
   let relayCompleted = false;
+  /** GNMS latest jobId — 사용자 취소 시 POST /cancel */
+  let gnmsJobId: string | null = null;
+  let gnmsVersion: string | undefined;
+  let gnmsFileName: string | undefined;
 
   try {
     throwIfAborted(signal);
@@ -400,9 +478,21 @@ export async function relayLatestSourceFromGnms(options: {
 
     const version = String(latestJson.version ?? '').trim() || new Date().toISOString();
     const fileName = String(latestJson.fileName ?? '').trim() || `source_latest_${Date.now()}.zip`;
+    const jobId = String(latestJson.jobId ?? '').trim();
+    gnmsVersion = version;
+    gnmsFileName = fileName;
+    if (jobId) {
+      gnmsJobId = jobId;
+    } else {
+      log('WARNING: latest 응답에 jobId 없음 — 취소 시 GNMS 통지 불가');
+    }
+
     const downloadUrlRaw = String(latestJson.downloadUrl ?? '').trim() || cfg.downloadUrlFallback;
-    const downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
-    log(`latest: version=${version}, file=${fileName}`);
+    let downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
+    if (jobId) {
+      downloadUrl = withJobIdQuery(downloadUrl, jobId);
+    }
+    log(`latest: version=${version}, file=${fileName}${jobId ? `, jobId=${jobId}` : ''}`);
 
     throwIfAborted(signal);
     onProgress?.({ phase: 'download', message: 'GNMS ZIP 다운로드 시작...' });
@@ -575,6 +665,7 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     const completeJson = await readRelayCompleteNdjson(completeRes, (event) => {
+      if (event.logLine) log(event.logLine);
       onProgress?.(event);
     });
     if (completeJson.error || completeJson.ok === false) {
@@ -586,7 +677,7 @@ export async function relayLatestSourceFromGnms(options: {
     relayCompleted = true;
     activeUploadId = null;
     log(
-      `적용 완료: ${completeJson.appliedFiles}건, GeoServer: ${completeJson.geoserver?.message ?? '-'}, 재시작: ${completeJson.restart?.message ?? '-'}`
+      `적용 완료: ${completeJson.appliedFiles}건 / GeoServer ${completeJson.geoserver?.stopMessage ?? completeJson.geoserver?.message ?? '-'} / 재시작 ${completeJson.restart?.message ?? '-'}`
     );
 
     // 성공 이력은 운영 서버가 재시작 전에 INSERT함. 클라이언트 후기록은 생략.
@@ -598,6 +689,19 @@ export async function relayLatestSourceFromGnms(options: {
       downloadUrl,
     };
   } catch (e: unknown) {
+    if (isUserAbortError(e) && gnmsJobId && cfg) {
+      const cancelUrl =
+        (cfg.cancelUrl && cfg.cancelUrl.trim()) ||
+        resolveGnmsApiUrl(cfg.gnmsBaseUrl, '/cancel');
+      await notifyGnmsDownloadCancel({
+        cancelUrl,
+        bearer: cfg.bearer,
+        jobId: gnmsJobId,
+        version: gnmsVersion,
+        fileName: gnmsFileName,
+        log,
+      });
+    }
     if (activeUploadId && !relayCompleted) {
       await cleanupRelaySession(activeUploadId, log);
       activeUploadId = null;

@@ -38,6 +38,8 @@ export type SourceUploadProgress = {
   zipProcessed?: number;
   zipTotal?: number;
   includeNodeModules?: boolean;
+  /** GNMS init 응답 uploadId — 취소 통보용 */
+  remoteUploadId?: string;
   updatedAt: number;
   done: boolean;
 };

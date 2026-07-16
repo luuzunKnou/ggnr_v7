@@ -5,12 +5,10 @@ import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge } from '@/lib/ggnrBootCommand';
-import { ensureGeoServerRunning, stopGeoServer } from '@/service/geoserverProcessService';
+import { ensureGeoServerRunning, stopGeoServerAndVerify } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
-/** 중지 실패 시에도 DLL 잠금 완화를 위해 동일 대기 */
-const GEOSERVER_STOP_FAIL_SETTLE_MS = 2000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -69,24 +67,25 @@ export function buildApplySuccessHistoryMessage(opts: {
 }
 
 function runNpmInstallSyncInProcess(): void {
-  console.log('[SourceCodeUpload] npm install --no-audit --no-fund (사전)');
+  console.log('[SourceCodeUpload] npm install 시작 (사전·개방망)');
   execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
     env: process.env,
   });
+  console.log('[SourceCodeUpload] npm install 완료');
 }
 
 function runNpmBuildSyncInProcess(): void {
-  console.log('[SourceCodeUpload] npm run build (사전 빌드)');
+  console.log('[SourceCodeUpload] 사전 빌드 시작');
   execFileSync('npm', ['run', 'build'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
     env: process.env,
   });
-  console.log('[SourceCodeUpload] npm run build OK (사전 빌드)');
+  console.log('[SourceCodeUpload] 사전 빌드 완료');
 }
 
 export type ApplyLatestSourceOptions = {
@@ -99,7 +98,7 @@ export type ApplyLatestSourceOptions = {
 export type GeoServerApplyStep = {
   stopped: boolean;
   started: boolean;
-  /** 레거시: 재시작 파이프라인으로 기동 미룸(현재는 항상 적용 직후 기동) */
+  /** 재시작 시 기동을 run.ts에 맡김(적용 경로 기동 생략) */
   deferredStart?: boolean;
   message: string;
   stopMessage?: string;
@@ -187,6 +186,7 @@ export type GnmsClientConfig = {
   gnmsBaseUrl: string;
   latestUrl: string;
   downloadUrlFallback: string;
+  cancelUrl: string;
   bearer: string;
 };
 
@@ -198,6 +198,7 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     'http://192.168.126.1:3000/api/source/version';
   const latestPath = process.env.GNMS_SOURCE_LATEST_PATH?.trim() ?? '/latest';
   const downloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
+  const cancelPath = process.env.GNMS_SOURCE_CANCEL_PATH?.trim() ?? '/cancel';
   const bearer =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BEARER?.trim() ||
     process.env.GNMS_SOURCE_BEARER?.trim() ||
@@ -206,6 +207,7 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     gnmsBaseUrl,
     latestUrl: resolveGnmsApiUrl(gnmsBaseUrl, latestPath),
     downloadUrlFallback: resolveGnmsApiUrl(gnmsBaseUrl, downloadPath),
+    cancelUrl: resolveGnmsApiUrl(gnmsBaseUrl, cancelPath),
     bearer,
   };
 }
@@ -222,6 +224,12 @@ export type ApplySourceProgressPhase =
 export type ApplySourceProgressEvent = {
   phase: ApplySourceProgressPhase;
   message: string;
+  /** UI 실시간 로그에 남길 한 줄 (서버 [SourceCodeUpload] 와 동기) */
+  logLine?: string;
+  /** 병합 복사 진행 */
+  appliedFiles?: number;
+  skippedFiles?: number;
+  totalFiles?: number;
 };
 
 export type ApplySourceZipOptions = {
@@ -273,65 +281,107 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
   let geoStartedOnSuccessPath = false;
 
-  console.log(
-    `[SourceCodeUpload] 적용 시작 version=${version} file=${fileName} bytes=${stat.size} restart=${doRestart} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
+  const emit = (
+    phase: ApplySourceProgressPhase,
+    message: string,
+    extra?: Partial<ApplySourceProgressEvent>
+  ) => {
+    const logLine = extra?.logLine ?? `[SourceCodeUpload] ${message}`;
+    console.log(logLine);
+    onProgress?.({ phase, message, logLine, ...extra });
+  };
+
+  emit(
+    'geoserver-stop',
+    `적용 시작 version=${version} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
   );
 
   try {
     onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
-    const stopResult = await stopGeoServer();
-    console.log(
-      `[SourceCodeUpload] GeoServer 중지 ${stopResult.success ? 'OK' : `실패: ${stopResult.error ?? 'unknown'}`}`
-    );
-    await sleep(stopResult.success ? GEOSERVER_STOP_SETTLE_MS : GEOSERVER_STOP_FAIL_SETTLE_MS);
+    const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
+    emit('geoserver-stop', `GeoServer ${stopResult.message}`);
 
     onProgress?.({ phase: 'merge-apply', message: '소스 병합·적용 중...' });
+    emit('merge-apply', 'ZIP 압축 해제 시작');
     await extractZip(zipPath, extractDir);
     const extractedRoot = await pickExtractedRoot(extractDir);
-    console.log(`[SourceCodeUpload] ZIP 압축 해제 완료`);
+    emit('merge-apply', 'ZIP 압축 해제 완료');
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
+    emit('merge-apply', '병합 대상 파일 수 집계 중...');
+    const { totalFiles, skippedFiles: preSkipped } = await countCopyTargets(
+      extractedRoot,
+      excludePrefixes
+    );
+    emit('merge-apply', `병합 대상 ${totalFiles}건 (제외 예정 ${preSkipped}건)`, {
+      totalFiles,
+      skippedFiles: preSkipped,
+      appliedFiles: 0,
+    });
+
     const copyResult = await copyRecursive({
       srcRoot: extractedRoot,
       dstRoot: workspaceRoot,
       excludePrefixes,
+      totalFiles,
+      onProgress: (p) => {
+        const pct =
+          p.totalFiles > 0 ? Math.min(100, Math.round((p.appliedFiles / p.totalFiles) * 100)) : 0;
+        const msg = `병합 진행 ${p.appliedFiles}/${p.totalFiles} (${pct}%) · 제외 ${p.skippedFiles}`;
+        emit('merge-apply', msg, {
+          appliedFiles: p.appliedFiles,
+          skippedFiles: p.skippedFiles,
+          totalFiles: p.totalFiles,
+        });
+      },
     });
-    console.log(
-      `[SourceCodeUpload] 파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`
+    emit(
+      'merge-apply',
+      `파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`,
+      {
+        appliedFiles: copyResult.appliedFiles,
+        skippedFiles: copyResult.skippedFiles,
+        totalFiles,
+      }
     );
 
     const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
 
-    /** 적용 직후 Geo: 상태 확인 → 필요 시 stop/start → ready 폴링. 이미 ready면 스킵 */
-    onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
-    let startResult = await ensureGeoServerRunning({ forceRestart: false });
-    /** 재시작 OFF인데 ensure 실패면 한 번 더 시도(재기동 파이프라인 없음) */
-    if (!doRestart && !startResult.success) {
-      await sleep(2000);
-      startResult = await ensureGeoServerRunning({ forceRestart: false });
-    }
-    geoStartedOnSuccessPath = startResult.success;
-    const retryGeoOnRelaunch = doRestart && !startResult.success;
+    const stopMessage = stopResult.message;
+    let startMessage: string | undefined;
+    let started = false;
+    /** 재시작 시 기동은 run.ts(콜드/런처 재기동)에 맡김 */
+    const skipStartForRestart = doRestart;
 
-    const stopPart = stopResult.success
-      ? '중지 성공'
-      : `중지 실패(잠금 가능·대기 후 계속): ${stopResult.error ?? 'unknown'}`;
-    const startPart = startResult.success
-      ? startResult.action === 'already-ready'
-        ? '이미 기동됨(응답 정상)'
-        : startResult.action === 'restarted'
-          ? '재기동·응답 정상'
-          : '기동·응답 정상'
-      : retryGeoOnRelaunch
-        ? `기동·응답 확인 실패(재기동 시 ensure 재시도): ${startResult.error ?? 'unknown'}`
-        : `기동·응답 확인 실패: ${startResult.error ?? 'unknown'}`;
+    if (!skipStartForRestart) {
+      onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
+      let startResult = await ensureGeoServerRunning({ forceRestart: false });
+      if (!startResult.success) {
+        await sleep(2000);
+        startResult = await ensureGeoServerRunning({ forceRestart: false });
+      }
+      geoStartedOnSuccessPath = startResult.success;
+      started = startResult.success;
+      startMessage = startResult.success
+        ? startResult.action === 'already-ready'
+          ? '기동 OK(이미 응답)'
+          : startResult.action === 'restarted'
+            ? '기동 OK(재기동·응답)'
+            : '기동 OK(응답)'
+        : `기동 실패: ${startResult.error ?? 'unknown'}`;
+      emit('geoserver-start', `GeoServer ${startMessage}`);
+    } else {
+      startMessage = '기동 생략(재기동 시 run에서 처리)';
+      emit('merge-apply', `GeoServer ${startMessage}`);
+    }
+
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
-      started: startResult.success,
-      deferredStart: retryGeoOnRelaunch,
-      message: `${stopPart} -> ${startPart}`,
-      stopMessage: stopPart,
-      startMessage: startPart,
+      started,
+      deferredStart: skipStartForRestart,
+      message: skipStartForRestart ? stopMessage : `${stopMessage} / ${startMessage}`,
+      stopMessage,
+      startMessage,
     };
 
     const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
@@ -343,20 +393,20 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       appliedFiles: copyResult.appliedFiles,
       skippedFiles: copyResult.skippedFiles,
       netLabel,
-      geoserverMsg: geoserver.message,
+      geoserverMsg: `${stopMessage}; ${startMessage}`,
     });
 
     /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 종료하지 않음 */
     if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
       try {
         if (!includeNodeModules) {
-          onProgress?.({ phase: 'npm-install', message: 'npm install (개방망) 중...' });
+          emit('npm-install', 'npm install (개방망) 시작');
           runNpmInstallSyncInProcess();
-          onProgress?.({ phase: 'npm-install', message: 'npm install 완료' });
+          emit('npm-install', 'npm install 완료');
         }
-        onProgress?.({ phase: 'build', message: '사전 빌드 중...' });
+        emit('build', '사전 빌드 시작');
         runNpmBuildSyncInProcess();
-        onProgress?.({ phase: 'build', message: '사전 빌드 완료' });
+        emit('build', '사전 빌드 완료');
       } catch (buildErr: unknown) {
         const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
         await recordVersionHistory({
@@ -369,7 +419,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       }
     }
 
-    /** 사전 빌드 완료분 — 재기동 후행 install/build 없음 */
+    /** 사전 빌드 완료분 — 재기동 후행 install/build 없음. 기동은 run.ts */
     const runNpmInstallBefore = false;
     const runBuildAfterExit = false;
 
@@ -384,7 +434,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       includeNodeModules,
       runNpmInstallBefore,
       runBuild: runBuildAfterExit,
-      startGeoServerAfter: retryGeoOnRelaunch,
+      startGeoServerAfter: false,
       historyPending: doRestart,
       historyPayload: doRestart
         ? {
@@ -415,23 +465,16 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     /** 앱 종료 단계는 응답 flush 전에 완료로 보고 (이후 process.exit·런처 종료) */
     if (doRestart) {
-      onProgress?.({
-        phase: 'app-stop',
-        message:
-          restartMode === 'exit'
-            ? '앱 종료 단계 완료 · process.exit 예약'
-            : '앱 종료 단계 완료 · 런처가 Next 종료 예정',
-      });
+      emit(
+        'app-stop',
+        restartMode === 'exit'
+          ? '앱 종료 단계 완료 · process.exit 예약'
+          : '앱 종료 단계 완료 · 런처가 Next 종료 예정'
+      );
     }
 
-    const restartResult = scheduleRestart(restartMode, {
-      runNpmInstallBefore,
-      runBuild: runBuildAfterExit,
-      startGeoServerAfter: retryGeoOnRelaunch,
-    });
-    console.log(
-      `[SourceCodeUpload] 적용 완료 GeoServer=${geoserver.message} restart=${restartResult.message}`
-    );
+    const restartResult = scheduleRestart(restartMode);
+    emit('app-stop', `적용 완료 restart=${restartResult.message}`);
 
     return {
       version,
@@ -534,15 +577,57 @@ async function copyFileWithRetry(srcPath: string, dstPath: string, relPath: stri
   );
 }
 
+async function countCopyTargets(
+  srcRoot: string,
+  excludePrefixes: string[]
+): Promise<{ totalFiles: number; skippedFiles: number }> {
+  let totalFiles = 0;
+  let skippedFiles = 0;
+  async function walk(relDir: string): Promise<void> {
+    const absDir = relDir ? path.join(srcRoot, relDir) : srcRoot;
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = normalizeSlashes(relDir ? `${relDir}/${entry.name}` : entry.name);
+      if (shouldSkipRelPath(relPath, excludePrefixes)) {
+        skippedFiles += 1;
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(relPath);
+        continue;
+      }
+      if (entry.isFile()) totalFiles += 1;
+    }
+  }
+  await walk('');
+  return { totalFiles, skippedFiles };
+}
+
 async function copyRecursive(params: {
   srcRoot: string;
   dstRoot: string;
   excludePrefixes: string[];
+  totalFiles?: number;
+  onProgress?: (p: {
+    appliedFiles: number;
+    skippedFiles: number;
+    totalFiles: number;
+  }) => void;
 }): Promise<{ appliedFiles: number; skippedFiles: number; skippedSamples: string[] }> {
-  const { srcRoot, dstRoot, excludePrefixes } = params;
+  const { srcRoot, dstRoot, excludePrefixes, onProgress } = params;
   let appliedFiles = 0;
   let skippedFiles = 0;
   const skippedSamples: string[] = [];
+  const totalFiles = params.totalFiles ?? 0;
+  const REPORT_EVERY = 50;
+  let lastReported = 0;
+
+  const report = (force = false) => {
+    if (!onProgress) return;
+    if (!force && appliedFiles - lastReported < REPORT_EVERY && appliedFiles !== totalFiles) return;
+    lastReported = appliedFiles;
+    onProgress({ appliedFiles, skippedFiles, totalFiles });
+  };
 
   async function walk(relDir: string): Promise<void> {
     const absDir = relDir ? path.join(srcRoot, relDir) : srcRoot;
@@ -566,10 +651,12 @@ async function copyRecursive(params: {
       await fs.mkdir(path.dirname(dstPath), { recursive: true });
       await copyFileWithRetry(srcPath, dstPath, relPath);
       appliedFiles += 1;
+      report(false);
     }
   }
 
   await walk('');
+  report(true);
   return { appliedFiles, skippedFiles, skippedSamples };
 }
 
@@ -609,14 +696,7 @@ function hasRunSupervisor(): boolean {
   return process.env.GGNR_RUN_SUPERVISOR === '1';
 }
 
-function scheduleRestart(
-  mode: RestartMode,
-  options?: {
-    runNpmInstallBefore?: boolean;
-    runBuild?: boolean;
-    startGeoServerAfter?: boolean;
-  }
-): {
+function scheduleRestart(mode: RestartMode): {
   scheduled: boolean;
   commandConfigured: boolean;
   message: string;
@@ -626,18 +706,7 @@ function scheduleRestart(
   const MIN_EXIT_DELAY_MS = 2000;
   const rawDelay = Number.isFinite(delayMs) && delayMs >= 500 ? delayMs : 2000;
   const safeDelay = Math.max(MIN_EXIT_DELAY_MS, rawDelay);
-  const runNpmInstallBefore = options?.runNpmInstallBefore === true;
-  const runBuild = options?.runBuild === true;
-  const startGeoServerAfter = options?.startGeoServerAfter === true;
   const port = getAppListenPort();
-  const pipelineHint = [
-    runNpmInstallBefore ? 'npm install' : null,
-    runBuild ? 'npm run build' : null,
-    startGeoServerAfter ? 'GeoServer 기동(재시도)' : null,
-    '앱 기동',
-  ]
-    .filter(Boolean)
-    .join(' → ');
 
   if (mode === 'none') {
     return {
@@ -652,30 +721,26 @@ function scheduleRestart(
     if (!isRestartCommandConfigured()) {
       throw new Error(LAUNCHER_MISSING_MSG);
     }
-    console.log(
-      `[SourceCodeUpload] mode=launcher port=${port} — signal only; pre-build done; Next relaunch (no post-build)`
-    );
+    console.log(`[SourceCodeUpload] exit 예약 없음 mode=launcher port=${port}`);
     return {
       scheduled: true,
       commandConfigured: true,
-      message: `Node 런처 재시작 요청: 사전 빌드 완료, Next 종료 후 재기동 (포트 ${port})`,
+      message: `Node 런처 재시작 요청: Next 종료 후 재기동 (포트 ${port})`,
     };
   }
 
   /**
    * exit(nssm): 사전 빌드는 적용 경로에서 이미 완료.
    * process.exit(0) → nssm/외부 감시 또는 run 슈퍼바이저가 재기동.
-   * 후행 빌드는 신호 runBuild=false 로 생략.
+   * GeoServer 기동은 run.ts 콜드 기동에 맡김.
    */
   const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
   const exitHint = hasRunSupervisor()
-    ? '사전 빌드 완료 → process.exit → 런처가 Next 재기동'
-    : '사전 빌드 완료 → process.exit → nssm/감시기가 재기동';
-  console.log(
-    `[SourceCodeUpload] mode=exit port=${port} — process.exit in ${exitDelayMs}ms (${exitHint})`
-  );
+    ? 'process.exit → 런처가 Next 재기동'
+    : 'process.exit → nssm/감시기가 재기동';
+  console.log(`[SourceCodeUpload] exit port=${port} delay=${exitDelayMs}ms`);
   setTimeout(() => {
-    console.log(`[SourceCodeUpload] process.exit(0) — releasing port ${port} (exit/nssm)`);
+    console.log(`[SourceCodeUpload] process.exit(0)`);
     process.exit(0);
   }, exitDelayMs).unref();
   return {

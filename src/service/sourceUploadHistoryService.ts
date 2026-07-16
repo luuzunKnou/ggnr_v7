@@ -10,6 +10,7 @@ export { buildSourceUploadFailBody, buildSourceUploadSuccessBody };
 
 export async function recordUploadFlowHistory(params: {
   includeNodeModules?: boolean;
+  changeNote?: string;
   status: 'success' | 'fail';
   body: string;
   ip?: string;
@@ -18,7 +19,8 @@ export async function recordUploadFlowHistory(params: {
   const message = formatSourceUploadHistoryMessage(
     params.includeNodeModules === true,
     params.status,
-    params.body
+    params.body,
+    params.changeNote
   );
   const result = await recordVersionHistory({
     historyType: 'source_upload',

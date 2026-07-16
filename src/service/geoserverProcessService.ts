@@ -182,6 +182,76 @@ export async function stopGeoServer() {
   });
 }
 
+export type StopGeoServerVerifiedResult = {
+  /** 응답(web/)이 없어야 true — bat 성공만으로는 true가 아님 */
+  success: boolean;
+  message: string;
+  health?: GeoServerHealth;
+  batOk?: boolean;
+  batError?: string;
+};
+
+function formatResponseRemainDetail(health: GeoServerHealth): string {
+  if (health.detail) return health.detail;
+  if (health.httpStatus != null) return `HTTP ${health.httpStatus}`;
+  return health.status;
+}
+
+/**
+ * stop bat 실행 후 web/ 응답이 사라졌는지 확인.
+ * 이미 꺼진 상태(응답 없음)면 bat 실패여도 성공.
+ * bat 성공이어도 응답이 남으면 한 번 더 stop 후 대기, 그래도 남으면 실패.
+ */
+export async function stopGeoServerAndVerify(options?: {
+  settleMs?: number;
+  downTimeoutMs?: number;
+  intervalMs?: number;
+}): Promise<StopGeoServerVerifiedResult> {
+  const settleMs = options?.settleMs ?? 2500;
+  const downTimeoutMs = options?.downTimeoutMs ?? 30_000;
+  const intervalMs = options?.intervalMs ?? 1500;
+
+  let bat = await stopGeoServer();
+  await sleep(settleMs);
+
+  let health = await checkGeoServerHealth();
+  if (!health.ready) {
+    return {
+      success: true,
+      message: '중지 OK(응답 없음)',
+      health,
+      batOk: bat.success,
+      batError: bat.error,
+    };
+  }
+
+  bat = await stopGeoServer();
+  await sleep(settleMs);
+
+  const deadline = Date.now() + downTimeoutMs;
+  while (Date.now() < deadline) {
+    health = await checkGeoServerHealth();
+    if (!health.ready) {
+      return {
+        success: true,
+        message: '중지 OK(응답 없음)',
+        health,
+        batOk: bat.success,
+        batError: bat.error,
+      };
+    }
+    await sleep(intervalMs);
+  }
+
+  return {
+    success: false,
+    message: `중지 실패(응답 유지: ${formatResponseRemainDetail(health)})`,
+    health,
+    batOk: bat.success,
+    batError: bat.error,
+  };
+}
+
 export type EnsureGeoServerResult = {
   success: boolean;
   action: 'already-ready' | 'started' | 'restarted' | 'failed';
@@ -254,7 +324,7 @@ export async function ensureGeoServerRunning(options?: {
   return {
     success: false,
     action: 'failed',
-    error: `기동 후에도 ready 아님 (${health.status}${health.detail ? `: ${health.detail}` : ''})`,
+    error: `기동 후에도 응답 없음 (${health.status}${health.detail ? `: ${health.detail}` : ''})`,
     health,
   };
 }

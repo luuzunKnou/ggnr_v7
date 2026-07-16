@@ -3,6 +3,7 @@ import dns from 'node:dns/promises';
 import { Agent } from 'undici';
 import {
   failUploadProgress,
+  patchUploadProgress,
   setChunkProgress,
   setUploadProgressPhase,
 } from '@/service/sourceUploadProgress';
@@ -132,6 +133,63 @@ export function buildRemoteAuthHeaders(json = true): Record<string, string> {
     headers.Authorization = `Bearer ${SOURCE_UPLOAD_REMOTE_BEARER}`;
   }
   return headers;
+}
+
+export type CancelRemoteSourceUploadResult = {
+  ok: boolean;
+  status: number;
+  gnmsStatus?: string;
+  error?: string;
+};
+
+/** GNMS 소스 업로드 세션 취소 통보 (브라우저 AbortSignal에 묶지 말 것) */
+export async function cancelRemoteSourceUpload(params: {
+  uploadId: string;
+  reason?: string;
+}): Promise<CancelRemoteSourceUploadResult> {
+  const uploadId = params.uploadId.trim();
+  if (!uploadId) {
+    return { ok: false, status: 400, error: 'uploadId 필요' };
+  }
+  const url = `${getRemoteUploadBase()}/cancel`;
+  const body = {
+    uploadId,
+    reason: params.reason?.trim() || 'user_abort',
+  };
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: buildRemoteAuthHeaders(true),
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      error?: string;
+    };
+    logStage('remote-cancel', {
+      url,
+      uploadId,
+      httpStatus: res.status,
+      response: json,
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        gnmsStatus: json.status,
+        error: json.error ?? `HTTP ${res.status}`,
+      };
+    }
+    return {
+      ok: true,
+      status: res.status,
+      gnmsStatus: json.status ?? 'cancelled',
+    };
+  } catch (err: unknown) {
+    const message = formatFetchCause(err);
+    logStage('remote-cancel', { url, uploadId, error: message });
+    return { ok: false, status: 0, error: message };
+  }
 }
 
 function formatFetchCause(err: unknown): string {
@@ -487,11 +545,13 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   });
 
   if (progressId) {
+    patchUploadProgress(progressId, { remoteUploadId: uploadId });
     setUploadProgressPhase(progressId, 'chunk', `청크 0/${expectedChunks} — 전송 시작`, {
       sentChunks: 0,
       expectedChunks,
       zipName,
       zipSize: totalSize,
+      remoteUploadId: uploadId,
     });
   }
 

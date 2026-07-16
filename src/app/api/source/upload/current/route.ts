@@ -15,6 +15,7 @@ import {
 import {
   RemoteUploadError,
   SOURCE_UPLOAD_REMOTE_BASE,
+  cancelRemoteSourceUpload,
   uploadZipByChunks,
   type RemoteStageReport,
 } from '@/service/sourceUploadRemote';
@@ -175,6 +176,7 @@ export async function POST(req: NextRequest) {
   let progressId = '';
   let clientIp: string | undefined;
   let includeNodeModules = false;
+  let changeNote = '';
 
   try {
     const usrId = await getSessionUsrId();
@@ -189,7 +191,7 @@ export async function POST(req: NextRequest) {
     const mode: SourceUploadMode = modeRaw === 'install' ? 'install' : 'update';
     const dateRaw = typeof body.date === 'string' ? body.date.trim() : '';
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : todayYmd();
-    const changeNote = typeof body.changeNote === 'string' ? body.changeNote.trim() : '';
+    changeNote = typeof body.changeNote === 'string' ? body.changeNote.trim() : '';
     const skipPreflight = body.skipPreflight === true;
     const confirmDbMismatch = body.confirmDbMismatch === true;
     includeNodeModules = body.includeNodeModules === true;
@@ -200,6 +202,17 @@ export async function POST(req: NextRequest) {
     if (!getUploadProgress(progressId)) {
       initUploadProgress(progressId);
     }
+
+    let abortCancelSent = false;
+    const notifyGnmsCancelOnAbort = () => {
+      if (abortCancelSent || !progressId) return;
+      const remoteId = getUploadProgress(progressId)?.remoteUploadId?.trim();
+      if (!remoteId) return;
+      abortCancelSent = true;
+      void cancelRemoteSourceUpload({ uploadId: remoteId, reason: 'user_abort' });
+    };
+    req.signal.addEventListener('abort', notifyGnmsCancelOnAbort);
+
     setUploadProgressPhase(progressId, 'scan', '소스 스캔/필터링 시작...', {
       progressPct: 5,
       includeNodeModules,
@@ -303,6 +316,7 @@ export async function POST(req: NextRequest) {
       failUploadProgress(progressId, 'dbCompare', 'DB 스키마 불일치 — 사용자 확인 필요');
       const historyRecorded = await recordUploadFlowHistory({
         includeNodeModules,
+        changeNote,
         status: 'fail',
         body: buildSourceUploadFailBody(`DB 스키마 불일치 (${dbCompare.diffCount}건)`),
         ip: clientIp,
@@ -331,6 +345,7 @@ export async function POST(req: NextRequest) {
       failUploadProgress(progressId, 'scan', '업로드 대상 파일이 없습니다.');
       const historyRecorded = await recordUploadFlowHistory({
         includeNodeModules,
+        changeNote,
         status: 'fail',
         body: buildSourceUploadFailBody('업로드 대상 파일이 없습니다.'),
         ip: clientIp,
@@ -373,6 +388,7 @@ export async function POST(req: NextRequest) {
       failUploadProgress(progressId, 'zip', message);
       const historyRecorded = await recordUploadFlowHistory({
         includeNodeModules,
+        changeNote,
         status: 'fail',
         body: buildSourceUploadFailBody(message),
         ip: clientIp,
@@ -437,6 +453,7 @@ export async function POST(req: NextRequest) {
     const failCount = items.filter((x) => x.status === 'fail').length;
     const historyRecorded = await recordUploadFlowHistory({
       includeNodeModules,
+      changeNote,
       status: 'success',
       body: buildSourceUploadSuccessBody(okCount, skippedCount, failCount, npmInstallNote(includeNodeModules, npmInstall)),
       ip: clientIp,
@@ -474,6 +491,7 @@ export async function POST(req: NextRequest) {
       }
       const historyRecorded = await recordUploadFlowHistory({
         includeNodeModules,
+        changeNote,
         status: 'fail',
         body: buildSourceUploadFailBody(err.message),
         ip: clientIp,
@@ -497,6 +515,7 @@ export async function POST(req: NextRequest) {
     if (progressId) failUploadProgress(progressId, 'unknown', message);
     const historyRecorded = await recordUploadFlowHistory({
       includeNodeModules,
+      changeNote,
       status: 'fail',
       body: buildSourceUploadFailBody(message),
       ip: clientIp,

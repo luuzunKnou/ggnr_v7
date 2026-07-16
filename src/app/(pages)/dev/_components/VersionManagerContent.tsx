@@ -27,6 +27,10 @@ import {
   notifyDevVersionHistoryRefreshRetry,
   clearDevVersionHistoryRefreshRetry,
 } from './devVersionHistoryBridge';
+import {
+  hardReloadKeepSessionAfterDelay,
+  waitServerThenHardReload,
+} from '@/lib/hardReloadKeepSession';
 
 type SideProgress = {
   message: string;
@@ -116,26 +120,32 @@ export function VersionManagerContent() {
           if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
             reachedRestartCommit = true;
           }
+          const mergePct =
+            p.phase === 'merge-apply' && p.totalFiles != null && p.totalFiles > 0 && p.appliedFiles != null
+              ? 88 + Math.min(5, Math.round((p.appliedFiles / p.totalFiles) * 5))
+              : null;
           const pct =
-            p.totalBytes && p.bytesDone != null
-              ? Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
-              : p.phase === 'latest'
-                ? 5
-                : p.phase === 'relay-init'
-                  ? 15
-                  : p.phase === 'geoserver-stop' || p.phase === 'relay-complete'
-                    ? 88
-                    : p.phase === 'merge-apply'
-                      ? 93
-                      : p.phase === 'geoserver-start'
-                        ? 97
-                        : p.phase === 'npm-install'
+            mergePct != null
+              ? mergePct
+              : p.totalBytes && p.bytesDone != null
+                ? Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
+                : p.phase === 'latest'
+                  ? 5
+                  : p.phase === 'relay-init'
+                    ? 15
+                    : p.phase === 'geoserver-stop' || p.phase === 'relay-complete'
+                      ? 88
+                      : p.phase === 'merge-apply'
+                        ? 93
+                        : p.phase === 'geoserver-start'
                           ? 97
-                          : p.phase === 'build'
-                            ? 98
-                            : p.phase === 'app-stop'
-                              ? 99
-                              : null;
+                          : p.phase === 'npm-install'
+                            ? 97
+                            : p.phase === 'build'
+                              ? 98
+                              : p.phase === 'app-stop'
+                                ? 99
+                                : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
             versionDetailRef.current = p.message.replace('latest: ', '');
           }
@@ -150,6 +160,12 @@ export function VersionManagerContent() {
                 bytesDone: p.bytesDone,
                 totalBytes: p.totalBytes,
                 versionDetail: versionDetailRef.current || undefined,
+                applyDetail:
+                  p.phase === 'merge-apply' && p.appliedFiles != null
+                    ? p.totalFiles != null && p.totalFiles > 0
+                      ? `병합 ${p.appliedFiles}/${p.totalFiles}`
+                      : `병합 ${p.appliedFiles}건`
+                    : undefined,
               },
               opts
             )
@@ -210,12 +226,12 @@ export function VersionManagerContent() {
       );
       const restartHint =
         doneMode === 'exit'
-          ? '적용 완료. 사전 빌드·앱 종료 단계까지 완료했습니다. 이후 재기동은 nssm(또는 기동 런처)에서 진행됩니다.'
+          ? '적용 완료. 서버 재기동 대기 후 화면을 새로고침합니다…'
           : doneMode === 'launcher'
-            ? '적용 완료. 사전 빌드·앱 종료 단계까지 완료했습니다. Next 재기동은 콘솔(기동 런처)에서 진행됩니다.'
-            : '최신 소스 적용 완료';
+            ? '적용 완료. Next 재기동 대기 후 화면을 새로고침합니다…'
+            : '최신 소스 적용 완료. 화면을 새로고침합니다…';
       setProgress({
-        message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료',
+        message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료. 화면을 새로고침합니다…',
         pct: 100,
         logs: logRef.current,
         error: null,
@@ -226,12 +242,16 @@ export function VersionManagerContent() {
             ? '재시작 예약: 사전 빌드·앱 종료 완료 → process.exit → nssm/런처 재기동'
             : '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
         );
+        pushLog('서버 재기동 대기 후 화면 새로고침…');
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
         ]);
+        void waitServerThenHardReload();
       } else {
         notifyDevVersionHistoryRefresh();
+        pushLog('화면 새로고침(세션 유지)…');
+        void hardReloadKeepSessionAfterDelay(1000);
       }
     } catch (e: unknown) {
       const isAbort = isUserAbortError(e);
@@ -262,17 +282,17 @@ export function VersionManagerContent() {
           )
         );
         setProgress({
-          message:
-            '적용·사전 빌드까지 완료했습니다. 재시작으로 연결이 끊어졌습니다. 이후는 콘솔·서비스에서 확인하세요.',
+          message: '적용·사전 빌드까지 완료했습니다. 서버 재기동 대기 후 화면을 새로고침합니다…',
           pct: 100,
           logs: logRef.current,
           error: null,
         });
-        pushLog('재시작으로 연결이 끊김 (정상). 앱 종료 단계까지 완료로 표시');
+        pushLog('재시작으로 연결이 끊김 (정상). 서버 대기 후 화면 새로고침…');
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
         ]);
+        void waitServerThenHardReload();
         return;
       }
       const msg = isAbort
@@ -421,7 +441,10 @@ export function VersionManagerContent() {
               <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
               <div>적용: {relayResult.appliedFiles}건</div>
               <div>제외: {relayResult.skippedFiles}건</div>
-              <div>GeoServer: {relayResult.geoserver?.message ?? '-'}</div>
+              <div>GeoServer 중지: {relayResult.geoserver?.stopMessage ?? relayResult.geoserver?.message ?? '-'}</div>
+              {relayResult.geoserver?.startMessage ? (
+                <div>GeoServer 기동: {relayResult.geoserver.startMessage}</div>
+              ) : null}
               <div>재시작: {relayResult.restart?.message}</div>
             </div>
           )}

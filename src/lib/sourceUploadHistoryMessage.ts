@@ -165,15 +165,18 @@ export function buildUploadHistoryPrefix(includeNodeModules?: boolean): string {
   return `node_modules ${includeNodeModules ? '포함' : '미포함'} — `;
 }
 
-/** 이력 한 줄: «선택 라디오 - 성공|실패 : 메시지» */
+/** 이력 한 줄: «선택 라디오[, 변경 사항 메모] - 성공|실패 : 메시지» */
 export function formatSourceUploadHistoryMessage(
   includeNodeModules: boolean,
   status: 'success' | 'fail',
-  body: string
+  body: string,
+  changeNote?: string
 ): string {
   const radio = includeNodeModules ? 'node_modules 포함' : 'node_modules 미포함';
+  const memo = changeNote?.trim() ?? '';
+  const head = memo ? `${radio}, ${memo}` : radio;
   const result = status === 'success' ? '성공' : '실패';
-  return `${radio} - ${result} : ${body}`;
+  return `${head} - ${result} : ${body}`;
 }
 
 export function buildSourceUploadSuccessBody(

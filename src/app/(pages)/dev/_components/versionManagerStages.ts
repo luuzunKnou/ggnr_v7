@@ -43,7 +43,6 @@ const RELAY_COMMON_STAGES: RelayStageId[] = [
   'relay-chunk',
   'geoserver-stop',
   'merge-apply',
-  'geoserver-start',
 ];
 
 const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
@@ -89,7 +88,9 @@ function effectiveRestartMode(opts?: RelayStageOptions): RestartMode | 'off' {
 /** 재시작 방법·패키지 프로필에 따른 단계 목록 */
 export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
   const mode = effectiveRestartMode(opts);
-  if (mode === 'off') return [...RELAY_COMMON_STAGES];
+  /** 재시작 있음: GeoServer 기동은 run.ts — UI 단계 제외 */
+  const withGeoStart: RelayStageId[] = mode === 'off' ? ['geoserver-start'] : [];
+  if (mode === 'off') return [...RELAY_COMMON_STAGES, ...withGeoStart];
 
   const withNpm =
     opts?.packageProfile === 'open' ? (['npm-install'] as RelayStageId[]) : [];
@@ -289,7 +290,9 @@ export function buildRelayStagesFromProgress(
     p.phase === 'done'
       ? p.restartScheduled && firstRestart
         ? firstRestart
-        : 'geoserver-start'
+        : order.includes('geoserver-start')
+          ? 'geoserver-start'
+          : (order[order.length - 1] ?? 'merge-apply')
       : (PHASE_TO_RELAY_STAGE[p.phase] ?? 'latest');
   const activeIdx = order.indexOf(activeStage);
 
@@ -359,7 +362,9 @@ export function buildRelayStagesFromProgress(
       }
       if (id === 'latest' && p.versionDetail) detail = p.versionDetail;
       if (id === 'geoserver-stop' && !detail) detail = '중지 중...';
-      if (id === 'merge-apply' && !detail) detail = '병합·적용 중...';
+      if (id === 'merge-apply') {
+        detail = p.applyDetail ?? detail ?? '병합·적용 중...';
+      }
       if (id === 'geoserver-start' && !detail) detail = '기동 중...';
       if (id === 'build' && !detail) detail = '사전 빌드 중...';
       return { ...s, state: 'active' as StageState, detail };

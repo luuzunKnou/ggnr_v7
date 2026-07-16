@@ -224,19 +224,18 @@ function runNpmBuildSync(): void {
   console.log('[SourceCodeUpload] npm run build OK');
 }
 
-async function ensureGeoServerIfRequested(signal: RestartSignal): Promise<void> {
-  if (signal.startGeoServerAfter !== true) return;
-  console.log('[SourceCodeUpload] GeoServer ensure (적용 시 기동·응답 확인 실패 후 재시도)...');
+async function ensureGeoServerOnRelaunch(): Promise<void> {
+  console.log('[SourceCodeUpload] GeoServer 기동·응답 확인...');
   try {
     const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
     const r = await ensureGeoServerRunning({ forceRestart: false });
     if (r.success) {
-      console.log(`[SourceCodeUpload] GeoServer ensure OK (action=${r.action})`);
+      console.log(`[SourceCodeUpload] GeoServer 기동 OK (action=${r.action})`);
     } else {
-      console.warn('[SourceCodeUpload] GeoServer ensure 실패:', r.error ?? 'unknown');
+      console.warn('[SourceCodeUpload] GeoServer 기동 실패:', r.error ?? 'unknown');
     }
   } catch (e) {
-    console.warn('[SourceCodeUpload] GeoServer ensure 오류:', e instanceof Error ? e.message : e);
+    console.warn('[SourceCodeUpload] GeoServer 기동 오류:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -334,7 +333,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       runNpmInstallSync();
     } catch (e) {
       console.error('[SourceCodeUpload] npm install 실패:', e instanceof Error ? e.message : e);
-      await ensureGeoServerIfRequested(signal);
+      await ensureGeoServerOnRelaunch();
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
       await ensurePortFreeForNext(port);
@@ -348,7 +347,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       runNpmBuildSync();
     } catch (e) {
       console.error('[SourceCodeUpload] npm run build 실패:', e instanceof Error ? e.message : e);
-      await ensureGeoServerIfRequested(signal);
+      await ensureGeoServerOnRelaunch();
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
       await ensurePortFreeForNext(port);
@@ -359,7 +358,7 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
     console.log('[SourceCodeUpload] runBuild=false — 사전 빌드 완료분, 후행 빌드 생략');
   }
 
-  await ensureGeoServerIfRequested(signal);
+  await ensureGeoServerOnRelaunch();
 
   expectNextExitForRelaunch = false;
   relaunchInFlight = false;
@@ -456,10 +455,10 @@ async function main(): Promise<void> {
       const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
       const ens = await ensureGeoServerRunning({ forceRestart: false, readyTimeoutMs: 120_000 });
       if (ens.success) {
-        console.log(`[run] GeoServer ensure OK (action=${ens.action})`);
+        console.log(`[run] GeoServer 기동 OK (action=${ens.action})`);
         geoOk = await tryGeoServerSetup();
       } else {
-        console.warn('[run] GeoServer ensure failed:', ens.error ?? 'unknown');
+        console.warn('[run] GeoServer 기동 실패:', ens.error ?? 'unknown');
       }
       if (!geoOk) {
         console.warn('[run] GeoServer 기동·응답 확인 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');

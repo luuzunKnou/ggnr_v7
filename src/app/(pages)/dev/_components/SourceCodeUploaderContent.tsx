@@ -61,6 +61,7 @@ type UploadProgressPayload = {
   zipProcessed?: number;
   zipTotal?: number;
   scanDbDiffCount?: number;
+  remoteUploadId?: string;
   done: boolean;
 };
 
@@ -308,6 +309,8 @@ export function SourceCodeUploaderContent() {
   const [uploadMeta, setUploadMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
   const [etaTick, setEtaTick] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const remoteUploadIdRef = useRef<string | null>(null);
+  const progressIdRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const preflightDetailRef = useRef('');
   const lastChunkLoggedRef = useRef(0);
@@ -319,6 +322,7 @@ export function SourceCodeUploaderContent() {
   const startedAtRef = useRef(0);
   const stagesRef = useRef(stages);
   const includeNodeModulesRef = useRef(includeNodeModules);
+  const changeNoteRef = useRef(changeNote);
 
   useEffect(() => {
     stagesRef.current = stages;
@@ -327,6 +331,10 @@ export function SourceCodeUploaderContent() {
   useEffect(() => {
     includeNodeModulesRef.current = includeNodeModules;
   }, [includeNodeModules]);
+
+  useEffect(() => {
+    changeNoteRef.current = changeNote;
+  }, [changeNote]);
 
   useEffect(() => {
     if (!uploading) return;
@@ -379,7 +387,8 @@ export function SourceCodeUploaderContent() {
     const message = formatSourceUploadHistoryMessage(
       includeNodeModulesRef.current,
       params.status,
-      params.body
+      params.body,
+      changeNoteRef.current
     );
 
     await recordVersionHistoryClient({
@@ -398,6 +407,9 @@ export function SourceCodeUploaderContent() {
   };
 
   const applyProgressSnapshot = (p: UploadProgressPayload) => {
+    if (p.remoteUploadId?.trim()) {
+      remoteUploadIdRef.current = p.remoteUploadId.trim();
+    }
     setProgressPct(p.progressPct);
     setProgressText(p.message);
     if (p.scanIncluded != null || p.zipSize != null) {
@@ -545,6 +557,8 @@ export function SourceCodeUploaderContent() {
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
     const progressId = createProgressId();
+    progressIdRef.current = progressId;
+    remoteUploadIdRef.current = null;
     uploadHistoryRecordedRef.current = false;
 
     try {
@@ -956,6 +970,20 @@ export function SourceCodeUploaderContent() {
             variant="outline"
             disabled={!uploading}
             onClick={() => {
+              const uploadId = remoteUploadIdRef.current;
+              const progressId = progressIdRef.current;
+              if (uploadId || progressId) {
+                void fetch('/api/source/upload/cancel', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    uploadId: uploadId || undefined,
+                    progressId: progressId || undefined,
+                    reason: 'user_abort',
+                  }),
+                  keepalive: true,
+                }).catch(() => {});
+              }
               abortControllerRef.current?.abort();
             }}
           >
