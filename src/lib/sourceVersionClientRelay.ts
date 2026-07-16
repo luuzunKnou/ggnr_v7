@@ -396,6 +396,7 @@ type LatestDownloadOk = {
   fileName: string;
   jobId: string;
   latestJson: GnmsLatestPayload;
+  downloadUrl: string;
   downloadRes: Response;
 };
 
@@ -461,7 +462,7 @@ async function fetchGnmsLatestAndDownload(options: {
     throw err;
   }
 
-  return { version, fileName, jobId, latestJson, downloadRes };
+  return { version, fileName, jobId, latestJson, downloadUrl, downloadRes };
 }
 
 /** 사용자 취소 시 GNMS에 통지 (AbortSignal 없이 keepalive) */
@@ -562,7 +563,7 @@ export async function relayLatestSourceFromGnms(options: {
         throw new Error(msg);
       }
     }
-    const { version, fileName, jobId, latestJson, downloadRes } = bundle;
+    const { version, fileName, jobId, latestJson, downloadUrl, downloadRes } = bundle;
     const downloadBody = downloadRes.body;
     if (!downloadBody) {
       throw new Error('GNMS 다운로드 body 없음');

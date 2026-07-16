@@ -390,7 +390,7 @@ export function VersionManagerContent() {
                   disabled={busy}
                   onChange={() => setRestartMode('exit')}
                 />
-                프로세스 종료(nssm)
+                프로세스 종료(서비스 재실행)
               </label>
               <label className="flex items-center gap-1">
                 <input
