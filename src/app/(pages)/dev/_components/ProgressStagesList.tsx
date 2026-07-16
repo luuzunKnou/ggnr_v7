@@ -37,41 +37,58 @@ function StageDetail({
   isError?: boolean;
 }) {
   const tone = isError ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
+  const detailTitle =
+    title ||
+    [detail, detailExclude].filter((x) => x != null && String(x).trim() !== '').join(' · ') ||
+    undefined;
+
   if (detailExclude != null && detailExclude !== '') {
     return (
-      <span className={`ml-3 flex max-w-[60%] items-center gap-1.5 truncate ${tone}`}>
-        <span className="truncate">{detail ?? ''}</span>
-        <span
-          className={`truncate ${title ? 'cursor-help' : ''}`}
-          title={title || undefined}
-        >
+      <span
+        className={`ml-2 flex min-w-0 max-w-[55%] shrink items-center gap-1.5 ${tone}`}
+        title={detailTitle}
+      >
+        <span className="min-w-0 truncate whitespace-nowrap">{detail ?? ''}</span>
+        <span className={`min-w-0 truncate whitespace-nowrap ${title ? 'cursor-help' : ''}`}>
           {detailExclude}
         </span>
       </span>
     );
   }
   return (
-    <span className={`ml-3 max-w-[60%] truncate ${tone}`}>{detail ?? ''}</span>
+    <span
+      className={`ml-2 min-w-0 max-w-[55%] shrink truncate whitespace-nowrap ${tone}`}
+      title={detail?.trim() ? detail : undefined}
+    >
+      {detail ?? ''}
+    </span>
   );
 }
 
+/** 단계 목록 — 행은 한 줄 말줄임, 목록은 세로 스크롤 */
 export function ProgressStagesList({ stages }: { stages: StageItem[] }) {
   if (stages.length === 0) return null;
   return (
-    <div className="rounded border px-3 py-2 text-xs">
-      {stages.map((s) => (
-        <div key={s.id} className="mb-1 flex items-center justify-between last:mb-0">
-          <span className={stateClass(s.state)}>
-            {stateLabel(s.state)} · {s.label}
-          </span>
-          <StageDetail
-            detail={s.detail}
-            detailExclude={s.detailExclude}
-            title={s.title}
-            isError={s.state === 'error'}
-          />
-        </div>
-      ))}
+    <div className="max-h-48 min-h-0 overflow-y-auto rounded border px-3 py-2 text-xs">
+      {stages.map((s) => {
+        const left = `${stateLabel(s.state)} · ${s.label}`;
+        return (
+          <div key={s.id} className="mb-1 flex min-w-0 items-center justify-between gap-2 last:mb-0">
+            <span
+              className={`min-w-0 shrink truncate whitespace-nowrap ${stateClass(s.state)}`}
+              title={left}
+            >
+              {left}
+            </span>
+            <StageDetail
+              detail={s.detail}
+              detailExclude={s.detailExclude}
+              title={s.title}
+              isError={s.state === 'error'}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

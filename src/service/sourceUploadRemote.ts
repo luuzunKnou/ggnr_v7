@@ -275,6 +275,38 @@ async function fetchWithTimeout(
   }
 }
 
+const PREFLIGHT_PROBE_TIMEOUT_MS = 15_000;
+const PREFLIGHT_TIMEOUT_USER_MSG = '예상 시간 초과(15초). 다시 시도해주세요.';
+
+/** preflight reach/init 전용 — 15초 초과와 일반 연결 실패 구분 */
+function preflightProbeErrorMessage(err: unknown): string {
+  const raw = formatFetchCause(err);
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('시간 초과') ||
+    lower.includes('timeout') ||
+    lower.includes('aborterror') ||
+    /요청 시간 초과\s*\(15000\s*ms\)/.test(raw)
+  ) {
+    return PREFLIGHT_TIMEOUT_USER_MSG;
+  }
+  return `서버 연결 실패: ${raw}`;
+}
+
+function preflightInitErrorMessage(err: unknown): string {
+  const raw = formatFetchCause(err);
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('시간 초과') ||
+    lower.includes('timeout') ||
+    lower.includes('aborterror') ||
+    /요청 시간 초과\s*\(15000\s*ms\)/.test(raw)
+  ) {
+    return PREFLIGHT_TIMEOUT_USER_MSG;
+  }
+  return `init API 호출 실패: ${raw}`;
+}
+
 function preflightResult(
   target: PreflightTarget,
   ok: boolean,
@@ -326,7 +358,11 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
   checks.push({ id: 'target', ok: true, message: target.targetLabel });
 
   try {
-    const reachRes = await fetchWithTimeout(target.targetOrigin, { method: 'GET' }, 15_000);
+    const reachRes = await fetchWithTimeout(
+      target.targetOrigin,
+      { method: 'GET' },
+      PREFLIGHT_PROBE_TIMEOUT_MS
+    );
     const ok = reachRes.status < 500;
     checks.push({
       id: 'reach',
@@ -339,7 +375,7 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
     checks.push({
       id: 'reach',
       ok: false,
-      message: `서버 연결 실패: ${formatFetchCause(err)}`,
+      message: preflightProbeErrorMessage(err),
     });
     return preflightResult(target, false, checks);
   }
@@ -353,7 +389,7 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
         headers: buildRemoteAuthHeaders(),
         body: JSON.stringify(INIT_PROBE_BODY),
       },
-      15_000
+      PREFLIGHT_PROBE_TIMEOUT_MS
     );
     const { json: initJson, text: initText } = await readResponseJson(initRes);
     const initMsg = initJson.error ?? initJson.message ?? (initText ? initText.slice(0, 200) : '');
@@ -377,7 +413,7 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
     checks.push({
       id: 'init-api',
       ok: false,
-      message: `init API 호출 실패: ${formatFetchCause(err)}`,
+      message: preflightInitErrorMessage(err),
     });
     return preflightResult(target, false, checks);
   }

@@ -12,6 +12,7 @@ import {
 } from '@/lib/sourceUploadHistoryMessage';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { InstallZipDownloadPanel } from './InstallZipDownloadPanel';
+import { ProgressStagesList } from './ProgressStagesList';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 
 type MainTab = 'install_download' | 'source_upload';
@@ -1054,51 +1055,7 @@ export function SourceCodeUploaderContent() {
         </div>
       )}
 
-      <div className="rounded border px-3 py-2 text-xs">
-        {stages.map((s) => (
-          <div key={s.id} className="mb-1 flex items-center justify-between last:mb-0">
-            <span
-              className={
-                s.state === 'done'
-                  ? 'text-green-700 dark:text-green-400'
-                  : s.state === 'error'
-                    ? 'text-red-700 dark:text-red-400'
-                    : s.state === 'active'
-                      ? 'text-blue-700 dark:text-blue-400'
-                      : 'text-muted-foreground'
-              }
-            >
-              {s.state === 'done'
-                ? '완료'
-                : s.state === 'error'
-                  ? '실패'
-                  : s.state === 'active'
-                    ? '진행'
-                    : '대기'}{' '}
-              · {s.label}
-            </span>
-            <span
-              className={`ml-3 flex max-w-[60%] items-center gap-1.5 truncate ${
-                s.state === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'
-              }`}
-            >
-              {s.detailExclude != null && s.detailExclude !== '' ? (
-                <>
-                  <span className="truncate">{s.detail ?? ''}</span>
-                  <span
-                    className={`truncate ${s.title ? 'cursor-help' : ''}`}
-                    title={s.title || undefined}
-                  >
-                    {s.detailExclude}
-                  </span>
-                </>
-              ) : (
-                <span className="truncate">{s.detail ?? ''}</span>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
+      <ProgressStagesList stages={stages} />
 
       <div className="flex min-h-0 flex-1 gap-2">
         <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden rounded border bg-muted/10">
