@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge } from '@/lib/ggnrBootCommand';
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
@@ -65,25 +65,31 @@ export function buildApplySuccessHistoryMessage(opts: {
   return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
-function runNpmInstallSyncInProcess(): void {
-  console.log('[SourceCodeUpload] npm install 시작 (사전·개방망)');
-  execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
-    cwd: process.cwd(),
-    stdio: 'inherit',
-    shell: true,
-    env: process.env,
+function spawnInheritAsync(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      stdio: 'inherit',
+      shell: true,
+      env: process.env,
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if ((code ?? 1) === 0) resolve();
+      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+    });
   });
+}
+
+async function runNpmInstallAsyncInProcess(): Promise<void> {
+  console.log('[SourceCodeUpload] npm install 시작 (사전·개방망)');
+  await spawnInheritAsync('npm', ['install', '--no-audit', '--no-fund']);
   console.log('[SourceCodeUpload] npm install 완료');
 }
 
-function runNpmBuildSyncInProcess(): void {
+async function runNpmBuildAsyncInProcess(): Promise<void> {
   console.log('[SourceCodeUpload] 사전 빌드 시작');
-  execFileSync('npm', ['run', 'build'], {
-    cwd: process.cwd(),
-    stdio: 'inherit',
-    shell: true,
-    env: process.env,
-  });
+  await spawnInheritAsync('npm', ['run', 'build']);
   console.log('[SourceCodeUpload] 사전 빌드 완료');
 }
 
@@ -243,7 +249,7 @@ export type ApplySourceZipOptions = {
   /** false=개방망(node_modules 제외), true=폐쇄망(포함) */
   includeNodeModules?: boolean;
   /** 단계별 진행 콜백 (중지·병합·기동 분리) */
-  onProgress?: (event: ApplySourceProgressEvent) => void;
+  onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
 };
 
 export type ApplySourceZipResult = Omit<
@@ -280,39 +286,39 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
   let geoStartedOnSuccessPath = false;
 
-  const emit = (
+  const emit = async (
     phase: ApplySourceProgressPhase,
     message: string,
     extra?: Partial<ApplySourceProgressEvent>
   ) => {
     const logLine = extra?.logLine ?? `[SourceCodeUpload] ${message}`;
     console.log(logLine);
-    onProgress?.({ phase, message, logLine, ...extra });
+    await onProgress?.({ phase, message, logLine, ...extra });
   };
 
-  emit(
+  await emit(
     'geoserver-stop',
     `적용 시작 version=${version} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
   );
 
   try {
-    onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
+    await onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
     const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
-    emit('geoserver-stop', `GeoServer ${stopResult.message}`);
+    await emit('geoserver-stop', `GeoServer ${stopResult.message}`);
 
-    onProgress?.({ phase: 'merge-apply', message: '소스 병합·적용 중...' });
-    emit('merge-apply', 'ZIP 압축 해제 시작');
+    await onProgress?.({ phase: 'merge-apply', message: '소스 병합·적용 중...' });
+    await emit('merge-apply', 'ZIP 압축 해제 시작');
     await extractZip(zipPath, extractDir);
     const extractedRoot = await pickExtractedRoot(extractDir);
-    emit('merge-apply', 'ZIP 압축 해제 완료');
+    await emit('merge-apply', 'ZIP 압축 해제 완료');
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
-    emit('merge-apply', '병합 대상 파일 수 집계 중...');
+    await emit('merge-apply', '병합 대상 파일 수 집계 중...');
     const { totalFiles, skippedFiles: preSkipped } = await countCopyTargets(
       extractedRoot,
       excludePrefixes
     );
-    emit('merge-apply', `병합 대상 ${totalFiles}건 (제외 예정 ${preSkipped}건)`, {
+    await emit('merge-apply', `병합 대상 ${totalFiles}건 (제외 예정 ${preSkipped}건)`, {
       totalFiles,
       skippedFiles: preSkipped,
       appliedFiles: 0,
@@ -327,14 +333,14 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         const pct =
           p.totalFiles > 0 ? Math.min(100, Math.round((p.appliedFiles / p.totalFiles) * 100)) : 0;
         const msg = `병합 진행 ${p.appliedFiles}/${p.totalFiles} (${pct}%) · 제외 ${p.skippedFiles}`;
-        emit('merge-apply', msg, {
+        void emit('merge-apply', msg, {
           appliedFiles: p.appliedFiles,
           skippedFiles: p.skippedFiles,
           totalFiles: p.totalFiles,
         });
       },
     });
-    emit(
+    await emit(
       'merge-apply',
       `파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`,
       {
@@ -353,7 +359,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const skipStartForRestart = doRestart;
 
     if (!skipStartForRestart) {
-      onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
+      await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
       let startResult = await ensureGeoServerRunning({ forceRestart: false });
       if (!startResult.success) {
         await sleep(2000);
@@ -368,10 +374,10 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
             ? '기동 OK(재기동·응답)'
             : '기동 OK(응답)'
         : `기동 실패: ${startResult.error ?? 'unknown'}`;
-      emit('geoserver-start', `GeoServer ${startMessage}`);
+      await emit('geoserver-start', `GeoServer ${startMessage}`);
     } else {
       startMessage = '기동 생략(재기동 시 run에서 처리)';
-      emit('merge-apply', `GeoServer ${startMessage}`);
+      await emit('merge-apply', `GeoServer ${startMessage}`);
     }
 
     const geoserver: GeoServerApplyStep = {
@@ -399,13 +405,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
       try {
         if (!includeNodeModules) {
-          emit('npm-install', 'npm install (개방망) 시작');
-          runNpmInstallSyncInProcess();
-          emit('npm-install', 'npm install 완료');
+          await emit('npm-install', 'npm install (개방망) 시작');
+          await runNpmInstallAsyncInProcess();
+          await emit('npm-install', 'npm install 완료');
         }
-        emit('build', '사전 빌드 시작');
-        runNpmBuildSyncInProcess();
-        emit('build', '사전 빌드 완료');
+        await emit('build', '사전 빌드 시작');
+        await runNpmBuildAsyncInProcess();
+        await emit('build', '사전 빌드 완료');
       } catch (buildErr: unknown) {
         const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
         await recordVersionHistory({
@@ -467,7 +473,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     /** 앱 종료 단계는 응답 flush 전에 완료로 보고 (이후 process.exit·런처 종료) */
     if (doRestart) {
-      emit(
+      await emit(
         'app-stop',
         restartMode === 'exit'
           ? '앱 종료 단계 완료 · process.exit 예약'
@@ -476,7 +482,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     }
 
     const restartResult = scheduleRestart(restartMode);
-    emit('app-stop', `적용 완료 restart=${restartResult.message}`);
+    await emit('app-stop', `적용 완료 restart=${restartResult.message}`);
 
     return {
       version,

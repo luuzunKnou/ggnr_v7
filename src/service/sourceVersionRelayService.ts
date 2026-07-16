@@ -130,7 +130,7 @@ export async function uploadVersionRelayChunk(params: {
 
 export async function completeVersionRelay(params: {
   uploadId: string;
-  onProgress?: (event: ApplySourceProgressEvent) => void;
+  onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
 }) {
   const { uploadId, onProgress } = params;
   const tempDir = getRelayTempDir(uploadId);
@@ -147,7 +147,7 @@ export async function completeVersionRelay(params: {
   }
 
   /** ZIP 조립은 중지 직전 준비 — 단계 목록 순서는 중지 → 병합·적용 유지 */
-  onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중 (ZIP 조립)...' });
+  await onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중 (ZIP 조립)...' });
 
   const zipPath = path.join(tempDir, safeName);
   const handle = await fs.open(zipPath, 'w');

@@ -13,7 +13,7 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'exlFileUploader', label: 'Excel File Uploader' },
   { id: 'dataFileUploader', label: '첨부파일 관리' },
   { id: 'sourceCodeUploader', label: '소스코드 관리' },
-  { id: 'versionManager', label: '버전관리' },
+  { id: 'versionManager', label: '최신 소스 적용' },
   { id: 'layerManager', label: '레이어 관리' },
   { id: 'systemVar', label: '시스템 변수' },
   { id: 'dbManager', label: 'DB Manager' },

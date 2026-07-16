@@ -22,24 +22,26 @@ export async function POST(req: NextRequest) {
     }
 
     const encoder = new TextEncoder();
+    const yieldEventLoop = () => new Promise<void>((r) => setImmediate(r));
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const send = (line: NdjsonProgressLine | NdjsonResultLine | NdjsonErrorLine) => {
+        const send = async (line: NdjsonProgressLine | NdjsonResultLine | NdjsonErrorLine) => {
           controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+          await yieldEventLoop();
         };
         try {
           const result = await completeVersionRelay({
             uploadId,
-            onProgress: (event) => {
-              send({ type: 'progress', ...event });
+            onProgress: async (event) => {
+              await send({ type: 'progress', ...event });
             },
           });
-          send({ type: 'result', ...result, ok: true });
+          await send({ type: 'result', ...result, ok: true });
           controller.close();
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'relay complete failed';
           try {
-            send({ type: 'error', error: message });
+            await send({ type: 'error', error: message });
             controller.close();
           } catch {
             try {
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
       headers: {
         'Content-Type': 'application/x-ndjson; charset=utf-8',
         'Cache-Control': 'no-store',
+        'X-Accel-Buffering': 'no',
       },
     });
   } catch (err: unknown) {
