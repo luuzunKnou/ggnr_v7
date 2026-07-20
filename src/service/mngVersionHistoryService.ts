@@ -5,7 +5,7 @@ import { pool } from '@/database/db';
 import { db } from '@/database/db';
 import { mvh } from '@/database/schema/mng_version_history';
 import { coerceHistoryOptions, normalizeHistoryMemo, normalizeHistoryOptions } from '@/lib/versionHistoryMessage';
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, lt, or, sql } from 'drizzle-orm';
 
 export type VersionHistoryType = 'source_upload' | 'install_zip' | 'apply_latest';
 
@@ -108,6 +108,8 @@ function parseYmdRange(dateYmd: string): { start: Date; end: Date } | null {
 export async function listVersionHistory(params: {
   filter: VersionHistoryFilter;
   dateYmd?: string;
+  /** 통합검색 키워드 (날짜·기능구분·성공실패·IP·선택·메모·본문) */
+  q?: string;
   limit?: number;
 }): Promise<{ success: boolean; data: VersionHistoryRow[]; error?: string }> {
   const limit = Math.min(200, Math.max(1, params.limit ?? 50));
@@ -131,6 +133,32 @@ export async function listVersionHistory(params: {
         conditions.push(gte(mvh.mvhCreateDate, range.start));
         conditions.push(lt(mvh.mvhCreateDate, range.end));
       }
+    }
+
+    const q = params.q?.trim();
+    if (q) {
+      const pattern = `%${q}%`;
+      conditions.push(
+        or(
+          ilike(mvh.mvhMessage, pattern),
+          ilike(mvh.mvhMemo, pattern),
+          ilike(mvh.mvhIp, pattern),
+          ilike(mvh.mvhClientHost, pattern),
+          ilike(mvh.mvhStatus, pattern),
+          ilike(mvh.mvhHistoryType, pattern),
+          sql`CAST(${mvh.mvhOption} AS text) ILIKE ${pattern}`,
+          sql`(CASE WHEN ${mvh.mvhStatus} = 'success' THEN '성공' ELSE '실패' END) ILIKE ${pattern}`,
+          sql`(CASE
+            WHEN ${mvh.mvhHistoryType} = 'source_upload' THEN '소스코드 업로드'
+            WHEN ${mvh.mvhHistoryType} = 'install_zip' THEN '설치파일 다운로드'
+            WHEN ${mvh.mvhHistoryType} = 'apply_latest' THEN '최신 소스 적용'
+            ELSE ${mvh.mvhHistoryType}
+          END) ILIKE ${pattern}`,
+          sql`to_char(${mvh.mvhCreateDate} AT TIME ZONE 'Asia/Seoul', 'YYYY.MM.DD HH24:MI:SS') ILIKE ${pattern}`,
+          sql`to_char(${mvh.mvhCreateDate} AT TIME ZONE 'Asia/Seoul', 'YYYY.MM.DD') ILIKE ${pattern}`,
+          sql`to_char(${mvh.mvhCreateDate} AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') ILIKE ${pattern}`
+        )!
+      );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

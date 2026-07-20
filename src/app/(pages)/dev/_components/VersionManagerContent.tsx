@@ -12,10 +12,12 @@ import {
 } from './versionManagerStages';
 import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
 import {
+  fetchGnmsVersionList,
   isRelayTimeoutError,
   isRestartDisconnectError,
   isUserAbortError,
   relayLatestSourceFromGnms,
+  type GnmsVersionListEntry,
   type RestartMode,
   type VersionRelayProgress,
   type VersionRelayResult,
@@ -43,6 +45,17 @@ function emptySideProgress(): SideProgress {
   return { message: '대기 중', pct: null, logs: [], error: null };
 }
 
+function versionOptionLabel(entry: GnmsVersionListEntry): string {
+  const note = (entry.changeNote ?? '').trim() || entry.folder;
+  const base = `${entry.date} | ${note}`;
+  return entry.isLatest ? `${base} (최신)` : base;
+}
+
+function pickDefaultFolder(entries: GnmsVersionListEntry[]): string {
+  const latest = entries.find((e) => e.isLatest);
+  return (latest ?? entries[0])?.folder ?? '';
+}
+
 export function VersionManagerContent() {
   const [profile, setProfile] = useState<SourcePackageProfile>('closed');
   const [restartMode, setRestartMode] = useState<RestartMode>('exit');
@@ -52,6 +65,10 @@ export function VersionManagerContent() {
     buildRelayBaseStages({ restart: true, restartMode: 'exit', packageProfile: 'closed' })
   );
   const [relayResult, setRelayResult] = useState<VersionRelayResult | null>(null);
+  const [versionEntries, setVersionEntries] = useState<GnmsVersionListEntry[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState('');
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
@@ -64,6 +81,8 @@ export function VersionManagerContent() {
     restartMode,
     packageProfile: profile,
   };
+  const selectedEntry = versionEntries.find((e) => e.folder === selectedFolder) ?? null;
+  const canApply = !listLoading && !listError && Boolean(selectedFolder) && versionEntries.length > 0;
 
   useEffect(() => {
     return () => {
@@ -74,6 +93,31 @@ export function VersionManagerContent() {
   }, []);
   useEffect(() => {
     prefetchClientMachineIp();
+  }, []);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    setListLoading(true);
+    setListError(null);
+    void (async () => {
+      try {
+        const { entries } = await fetchGnmsVersionList({ signal: ac.signal });
+        if (ac.signal.aborted) return;
+        setVersionEntries(entries);
+        setSelectedFolder(pickDefaultFolder(entries));
+        if (entries.length === 0) {
+          setListError('적용 가능한 버전이 없습니다.');
+        }
+      } catch (e: unknown) {
+        if (ac.signal.aborted || isUserAbortError(e)) return;
+        setVersionEntries([]);
+        setSelectedFolder('');
+        setListError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!ac.signal.aborted) setListLoading(false);
+      }
+    })();
+    return () => ac.abort();
   }, []);
 
   /** 대기 중일 때 재시작 방법·프로필 변경 → 단계 목록 즉시 반영 */
@@ -94,6 +138,10 @@ export function VersionManagerContent() {
 
   const runUpdate = async () => {
     if (busyRef.current) return;
+    if (!selectedEntry) {
+      setProgress((p) => ({ ...p, error: '버전을 선택하세요.' }));
+      return;
+    }
     busyRef.current = true;
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
@@ -107,7 +155,11 @@ export function VersionManagerContent() {
     setRelayResult(null);
     logRef.current = [];
     versionDetailRef.current = '';
-    setProgress({ ...emptySideProgress(), message: 'GNMS 최신 버전 조회 중...', pct: 2 });
+    setProgress({
+      ...emptySideProgress(),
+      message: selectedEntry.isLatest ? 'GNMS 최신 버전 조회 중...' : 'GNMS 선택 버전 준비 중...',
+      pct: 2,
+    });
     setStages(buildRelayBaseStages(opts));
     /** 사전 빌드·앱 종료 진행 중 이후 끊김은 재시작으로 간주 */
     let reachedRestartCommit = false;
@@ -117,6 +169,8 @@ export function VersionManagerContent() {
         restart,
         restartMode,
         packageProfile: profile,
+        folder: selectedEntry.folder,
+        isLatest: selectedEntry.isLatest,
         signal,
         onProgress: (p: VersionRelayProgress) => {
           if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
@@ -149,7 +203,7 @@ export function VersionManagerContent() {
                                 ? 99
                                 : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
-            versionDetailRef.current = p.message.replace('latest: ', '');
+            versionDetailRef.current = p.message.replace(/^latest:\s*/i, '');
           }
           setProgress((prev) => ({ ...prev, message: p.message, pct }));
           setStages(
@@ -175,8 +229,8 @@ export function VersionManagerContent() {
         },
         onLog: (line) => {
           pushLog(line);
-          if (line.startsWith('latest:')) {
-            versionDetailRef.current = line.replace('latest: ', '');
+          if (line.startsWith('latest:') || line.startsWith('ready:')) {
+            versionDetailRef.current = line.replace(/^(latest|ready):\s*/i, '');
             setStages((prev) =>
               patchStages(prev, {
                 latest: { state: 'done', detail: versionDetailRef.current },
@@ -376,8 +430,29 @@ export function VersionManagerContent() {
         <div className="shrink-0 space-y-2">
           <div className="text-sm font-medium">최신 소스 적용</div>
           <p className="text-xs text-muted-foreground">
-            GNMS 최신 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다.
+            GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 폐쇄망/개방망을
+            선택하세요.
           </p>
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">적용 버전</div>
+            <select
+              className="h-8 w-full max-w-xl rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-60"
+              value={selectedFolder}
+              disabled={busy || listLoading || versionEntries.length === 0}
+              onChange={(e) => setSelectedFolder(e.target.value)}
+            >
+              {listLoading && <option value="">목록 불러오는 중...</option>}
+              {!listLoading && versionEntries.length === 0 && (
+                <option value="">버전 없음</option>
+              )}
+              {versionEntries.map((entry) => (
+                <option key={entry.folder} value={entry.folder}>
+                  {versionOptionLabel(entry)}
+                </option>
+              ))}
+            </select>
+            {listError && <p className="text-xs text-red-600">{listError}</p>}
+          </div>
           <ProfileRadios />
           <div className="space-y-2 text-sm">
             <div className="text-xs text-muted-foreground">재시작 방식</div>
@@ -415,7 +490,12 @@ export function VersionManagerContent() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" disabled={busy} onClick={() => void runUpdate()} className="gap-1">
+            <Button
+              type="button"
+              disabled={busy || !canApply}
+              onClick={() => void runUpdate()}
+              className="gap-1"
+            >
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (

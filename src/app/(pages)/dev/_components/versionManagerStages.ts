@@ -46,7 +46,7 @@ const RELAY_COMMON_STAGES: RelayStageId[] = [
 ];
 
 const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
-  latest: 'GNMS 최신 버전 조회',
+  latest: 'GNMS 버전 조회',
   download: 'GNMS ZIP 다운로드',
   'relay-init': '운영 서버 relay 세션 생성',
   'relay-chunk': '청크 전송',

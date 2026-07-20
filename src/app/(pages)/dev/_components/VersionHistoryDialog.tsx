@@ -71,6 +71,7 @@ export function VersionHistoryDialog({
 }: VersionHistoryDialogProps) {
   const [filter, setFilter] = useState<HistoryFilter>(defaultFilter);
   const [dateYmd, setDateYmd] = useState('');
+  const [q, setQ] = useState('');
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,9 +79,11 @@ export function VersionHistoryDialog({
   const [expandedKey, setExpandedKey] = useState<number | null>(null);
   const filterRef = useRef(filter);
   const dateYmdRef = useRef(dateYmd);
+  const qRef = useRef(q);
 
   filterRef.current = filter;
   dateYmdRef.current = dateYmd;
+  qRef.current = q;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +95,7 @@ export function VersionHistoryDialog({
         limit: '50',
       });
       if (dateYmdRef.current.trim()) qs.set('date', dateYmdRef.current.trim());
+      if (qRef.current.trim()) qs.set('q', qRef.current.trim());
       const res = await fetch(`/api/dev/version-history?${qs.toString()}`, { cache: 'no-store' });
       const json = (await res.json()) as { items?: HistoryItem[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? '조회 실패');
@@ -108,9 +112,11 @@ export function VersionHistoryDialog({
     if (!open) return;
     setFilter(defaultFilter);
     setDateYmd('');
+    setQ('');
     setExpandedKey(null);
     filterRef.current = defaultFilter;
     dateYmdRef.current = '';
+    qRef.current = '';
     setError(null);
     void load();
   }, [open, defaultFilter, load]);
@@ -123,11 +129,18 @@ export function VersionHistoryDialog({
   }, [load, open]);
 
   return (
-    <DevFloatingPanel open={open} onClose={onClose} title="이력" minHeight="500px" maxHeight="500px">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
+    <DevFloatingPanel
+      open={open}
+      onClose={onClose}
+      title="이력"
+      width="45rem"
+      minHeight="500px"
+      maxHeight="500px"
+    >
+      <div className="flex shrink-0 flex-nowrap items-center gap-2 border-b px-4 py-2 text-xs">
         {showFeatureFilter && (
           <select
-            className={filterControlClass}
+            className={`${filterControlClass} shrink-0`}
             value={
               filter === 'source_upload_only'
                 ? 'source_upload'
@@ -151,12 +164,51 @@ export function VersionHistoryDialog({
         )}
         <input
           type="date"
-          className={filterControlClass}
+          className={`${filterControlClass} shrink-0`}
           value={dateYmd}
           onChange={(e) => setDateYmd(e.target.value)}
         />
-        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void load()}>
+        <input
+          type="text"
+          className={`${filterControlClass} min-w-0 flex-1`}
+          placeholder="통합검색"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void load();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          disabled={loading}
+          onClick={() => void load()}
+        >
           검색
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          disabled={loading}
+          onClick={() => {
+            setFilter(defaultFilter);
+            setDateYmd('');
+            setQ('');
+            setExpandedKey(null);
+            filterRef.current = defaultFilter;
+            dateYmdRef.current = '';
+            qRef.current = '';
+            void load();
+          }}
+        >
+          초기화
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-4 py-2 text-xs">

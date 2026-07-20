@@ -66,6 +66,7 @@ export type VersionRelayResult = {
 type GnmsConfigResponse = {
   gnmsBaseUrl: string;
   latestUrl: string;
+  listUrl?: string;
   downloadUrlFallback: string;
   /** GNMS 다운로드 취소 통지 (기본 …/cancel) */
   cancelUrl?: string;
@@ -85,8 +86,21 @@ type GnmsLatestPayload = {
   totalSize?: number;
 };
 
+/** GNMS GET /list 항목 */
+export type GnmsVersionListEntry = {
+  folder: string;
+  date: string;
+  changeNote: string | null;
+  createdAt: string;
+  isLatest: boolean;
+  hasCachedZip: boolean;
+  sizeBytes: number | null;
+};
+
 const CHUNK_FETCH_TIMEOUT_MS = 120_000;
 const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
+/** prepare(install·ZIP) — GNMS maxDuration 1800초에 맞춤 */
+const PREPARE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** fetchWithTimeout 시간 초과 — AbortError(사용자 취소)와 구분 */
 export class RelayTimeoutError extends Error {
@@ -400,6 +414,211 @@ type LatestDownloadOk = {
   downloadRes: Response;
 };
 
+function preparePhaseMessage(phase: string, message: string): string {
+  const fallback = message.trim() || phase;
+  switch (phase) {
+    case 'check-zip':
+      return message.trim() || 'ZIP 확인 중...';
+    case 'check-modules':
+      return message.trim() || 'node_modules 확인 중...';
+    case 'npm-install':
+      return message.trim() || 'npm install 중...';
+    case 'zip':
+      return message.trim() || 'ZIP 생성 중...';
+    case 'ready':
+      return message.trim() || '다운로드 준비 완료';
+    default:
+      return fallback;
+  }
+}
+
+/** GNMS GET /list — 버전 select용 */
+export async function fetchGnmsVersionList(options?: {
+  signal?: AbortSignal;
+}): Promise<{ listUrl: string; entries: GnmsVersionListEntry[] }> {
+  const { signal } = options ?? {};
+  const cfgRes = await fetch('/api/source/version/gnms-config', { cache: 'no-store', signal });
+  const cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
+  if (!cfgRes.ok) throw new Error(cfg.error ?? 'GNMS 설정 조회 실패');
+
+  const listUrl =
+    String(cfg.listUrl ?? '').trim() || resolveGnmsApiUrl(cfg.gnmsBaseUrl, '/list');
+
+  let listRes: Response;
+  try {
+    listRes = await fetchWithTimeout(
+      listUrl,
+      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+      60_000,
+      signal,
+      { label: 'GNMS 버전 목록', classifyNetwork: true }
+    );
+  } catch (err: unknown) {
+    throw err;
+  }
+
+  const listJson = (await listRes.json().catch(() => ({}))) as {
+    ok?: boolean;
+    entries?: GnmsVersionListEntry[];
+    error?: string;
+  };
+  if (!listRes.ok) {
+    throw new Error(
+      `GNMS 버전 목록 오류 (${listRes.status})${listJson.error ? `: ${listJson.error}` : ''}`
+    );
+  }
+  const entries = Array.isArray(listJson.entries) ? listJson.entries : [];
+  return { listUrl, entries };
+}
+
+/** 비-latest: GET /{folder}/prepare NDJSON → ready → ZIP download */
+async function fetchGnmsFolderPrepareAndDownload(options: {
+  cfg: GnmsConfigResponse;
+  folder: string;
+  includeNodeModules: boolean;
+  signal?: AbortSignal;
+  log: (line: string) => void;
+  onProgress?: (p: VersionRelayProgress) => void;
+}): Promise<LatestDownloadOk> {
+  const { cfg, folder, includeNodeModules, signal, log, onProgress } = options;
+  const folderId = folder.trim();
+  if (!folderId) throw new Error('버전 폴더가 없습니다');
+
+  throwIfAborted(signal);
+  const preparePath = `/${encodeURIComponent(folderId)}/prepare`;
+  const prepareUrl = new URL(resolveGnmsApiUrl(cfg.gnmsBaseUrl, preparePath));
+  prepareUrl.searchParams.set('includeNodeModules', includeNodeModules ? '1' : '0');
+
+  onProgress?.({ phase: 'latest', message: 'GNMS 버전 준비 중...' });
+  log(`prepare: folder=${folderId}, includeNodeModules=${includeNodeModules ? 1 : 0}`);
+
+  let prepareRes: Response;
+  try {
+    prepareRes = await fetchWithTimeout(
+      prepareUrl.toString(),
+      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+      PREPARE_FETCH_TIMEOUT_MS,
+      signal,
+      { label: 'GNMS 버전 prepare', classifyNetwork: true }
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
+      log(`ERROR: ${err.message}`);
+    }
+    throw err;
+  }
+
+  if (!prepareRes.ok) {
+    const apiMsg = await readJsonError(prepareRes, '');
+    const msg = `GNMS prepare API 오류 (${prepareRes.status})${apiMsg ? `: ${apiMsg}` : ''}`;
+    log(`ERROR: ${msg}`);
+    throw new Error(msg);
+  }
+
+  type ReadyPayload = {
+    phase: string;
+    message?: string;
+    jobId?: string;
+    downloadUrl?: string;
+    sizeBytes?: number;
+    fileName?: string;
+    version?: string;
+    error?: string;
+  };
+
+  let ready: ReadyPayload | null = null;
+
+  const handlePrepareLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let parsed: ReadyPayload;
+    try {
+      parsed = JSON.parse(trimmed) as ReadyPayload;
+    } catch {
+      return;
+    }
+    const phase = String(parsed.phase ?? '');
+    if (!phase) return;
+
+    if (phase === 'error') {
+      const msg = String(parsed.message ?? parsed.error ?? 'prepare 실패');
+      throw new Error(msg);
+    }
+
+    const msg = preparePhaseMessage(phase, String(parsed.message ?? ''));
+    onProgress?.({ phase: 'latest', message: msg });
+    log(`prepare ${phase}: ${msg}`);
+
+    if (phase === 'ready') {
+      ready = parsed;
+    }
+  };
+
+  if (!prepareRes.body) {
+    const text = await prepareRes.text();
+    for (const line of text.split('\n')) handlePrepareLine(line);
+  } else {
+    const reader = prepareRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      throwIfAborted(signal);
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const raw of lines) handlePrepareLine(raw);
+    }
+    if (buffer.trim()) handlePrepareLine(buffer);
+  }
+
+  if (!ready) {
+    throw new Error('prepare 결과(ready)가 없습니다');
+  }
+
+  const jobId = String(ready.jobId ?? '').trim();
+  if (!jobId) throw new Error('prepare ready에 jobId 없음');
+
+  const version = String(ready.version ?? '').trim() || folderId;
+  const fileName =
+    String(ready.fileName ?? '').trim() || `source_${folderId}.zip`;
+  const downloadUrlRaw =
+    String(ready.downloadUrl ?? '').trim() ||
+    `/download/${encodeURIComponent(folderId)}`;
+  let downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
+  downloadUrl = withJobIdQuery(downloadUrl, jobId);
+
+  const latestJson: GnmsLatestPayload = {
+    jobId,
+    version,
+    fileName,
+    downloadUrl,
+    sizeBytes: typeof ready.sizeBytes === 'number' ? ready.sizeBytes : undefined,
+  };
+
+  log(`ready: version=${version}, file=${fileName}, jobId=${jobId}`);
+
+  throwIfAborted(signal);
+  let downloadRes: Response;
+  try {
+    downloadRes = await fetchWithTimeout(
+      downloadUrl,
+      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+      0,
+      signal,
+      { label: 'GNMS ZIP 다운로드', classifyNetwork: true }
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith('[CORS/네트워크]')) {
+      log(`ERROR: ${err.message}`);
+    }
+    throw err;
+  }
+
+  return { version, fileName, jobId, latestJson, downloadUrl, downloadRes };
+}
+
 /** GET /latest → GET download(?jobId=). 호출부에서 job ended 404 시 재시도 */
 async function fetchGnmsLatestAndDownload(options: {
   cfg: GnmsConfigResponse;
@@ -465,6 +684,25 @@ async function fetchGnmsLatestAndDownload(options: {
   return { version, fileName, jobId, latestJson, downloadUrl, downloadRes };
 }
 
+async function fetchGnmsSourceBundle(options: {
+  cfg: GnmsConfigResponse;
+  isLatest: boolean;
+  folder: string;
+  includeNodeModules: boolean;
+  signal?: AbortSignal;
+  log: (line: string) => void;
+  onProgress?: (p: VersionRelayProgress) => void;
+}): Promise<LatestDownloadOk> {
+  if (options.isLatest) {
+    return fetchGnmsLatestAndDownload({
+      cfg: options.cfg,
+      signal: options.signal,
+      log: options.log,
+    });
+  }
+  return fetchGnmsFolderPrepareAndDownload(options);
+}
+
 /** 사용자 취소 시 GNMS에 통지 (AbortSignal 없이 keepalive) */
 async function notifyGnmsDownloadCancel(options: {
   cancelUrl: string;
@@ -510,11 +748,24 @@ export async function relayLatestSourceFromGnms(options: {
   restart: boolean;
   restartMode: RestartMode;
   packageProfile?: SourcePackageProfile;
+  /** 선택 버전 폴더 ID (목록 folder) */
+  folder: string;
+  /** true면 /latest 경로, false면 prepare + /download/{folder} */
+  isLatest: boolean;
   signal?: AbortSignal;
   onProgress?: (p: VersionRelayProgress) => void;
   onLog?: (line: string) => void;
 }): Promise<VersionRelayResult> {
-  const { restart, restartMode, packageProfile = 'closed', signal, onProgress, onLog } = options;
+  const {
+    restart,
+    restartMode,
+    packageProfile = 'closed',
+    folder,
+    isLatest,
+    signal,
+    onProgress,
+    onLog,
+  } = options;
   const includeNodeModules = includeNodeModulesFromProfile(packageProfile);
   const log = (line: string) => onLog?.(line);
   let cfg: GnmsConfigResponse | undefined;
@@ -541,16 +792,39 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     log(`GNMS: ${cfg.gnmsBaseUrl}`);
+    log(`선택 버전: ${folder}${isLatest ? ' (latest)' : ''}`);
 
     throwIfAborted(signal);
-    onProgress?.({ phase: 'latest', message: 'GNMS 최신 버전 조회 중...' });
-    let bundle = await fetchGnmsLatestAndDownload({ cfg, signal, log });
+    onProgress?.({
+      phase: 'latest',
+      message: isLatest ? 'GNMS 최신 버전 조회 중...' : 'GNMS 선택 버전 준비 중...',
+    });
+
+    const fetchBundle = () =>
+      fetchGnmsSourceBundle({
+        cfg: cfg!,
+        isLatest,
+        folder,
+        includeNodeModules,
+        signal,
+        log,
+        onProgress,
+      });
+
+    let bundle = await fetchBundle();
     if (!bundle.downloadRes.ok) {
       const firstApiMsg = await readJsonError(bundle.downloadRes, '');
       if (isDownloadJobEndedError(bundle.downloadRes.status, firstApiMsg)) {
-        log('WARNING: download job 만료 — latest 재조회 후 재시도');
-        onProgress?.({ phase: 'latest', message: 'GNMS 최신 버전 재조회 중...' });
-        bundle = await fetchGnmsLatestAndDownload({ cfg, signal, log });
+        log(
+          isLatest
+            ? 'WARNING: download job 만료 — latest 재조회 후 재시도'
+            : 'WARNING: download job 만료 — prepare 재실행 후 재시도'
+        );
+        onProgress?.({
+          phase: 'latest',
+          message: isLatest ? 'GNMS 최신 버전 재조회 중...' : 'GNMS 선택 버전 재준비 중...',
+        });
+        bundle = await fetchBundle();
         if (!bundle.downloadRes.ok) {
           const apiMsg = await readJsonError(bundle.downloadRes, '');
           const msg = formatDownloadApiError(bundle.downloadRes.status, apiMsg);
@@ -576,7 +850,7 @@ export async function relayLatestSourceFromGnms(options: {
 
     const totalSize = parseTotalSize(latestJson, downloadRes.headers.get('content-length'));
     if (totalSize <= 0) {
-      throw new Error('ZIP 크기를 알 수 없습니다 (Content-Length 또는 latest.size 필요)');
+      throw new Error('ZIP 크기를 알 수 없습니다 (Content-Length 또는 sizeBytes 필요)');
     }
 
     throwIfAborted(signal);
@@ -764,10 +1038,11 @@ export async function relayLatestSourceFromGnms(options: {
       relayCompleted || (restart && isRestartDisconnectError(e));
     if (!isUserAbortError(e) && !skipFailHistory) {
       const msg = e instanceof Error ? e.message : String(e);
+      const versionPrefix = gnmsVersion?.trim() ? `version=${gnmsVersion.trim()} / ` : '';
       await recordVersionHistoryClient({
         historyType: 'apply_latest',
         status: 'fail',
-        message: msg,
+        message: `${versionPrefix}${msg}`,
         option: applyLatestHistoryOptions(includeNodeModules, restartMode),
       }).catch(() => {});
     }

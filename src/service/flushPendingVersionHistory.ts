@@ -14,6 +14,7 @@ import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 type HistoryPayload = {
   mode?: string;
   command?: string;
+  version?: string;
   appliedFiles?: number;
   skippedFiles?: number;
   netLabel?: string;
@@ -95,11 +96,12 @@ function resolveOptionFromSignal(
 }
 
 function buildFallbackMessage(payload: HistoryPayload): string {
+  const version = payload.version?.trim() || '-';
   const mode = payload.mode?.trim() || '-';
   const command = payload.command?.trim() || '-';
   const applied = payload.appliedFiles ?? 0;
   const skipped = payload.skippedFiles ?? 0;
   const net = payload.netLabel?.trim() || '-';
   const geo = payload.geoserverMsg?.trim() || '-';
-  return `mode=${mode} / command=${command} / 적용 ${applied}건 / 제외 ${skipped}건 / ${net} / GeoServer: ${geo}`;
+  return `version=${version} / mode=${mode} / command=${command} / 적용 ${applied}건 / 제외 ${skipped}건 / ${net} / GeoServer: ${geo}`;
 }

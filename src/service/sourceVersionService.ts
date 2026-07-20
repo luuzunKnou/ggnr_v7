@@ -54,6 +54,7 @@ const LAUNCHER_MISSING_MSG =
   '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
 
 export function buildApplySuccessHistoryMessage(opts: {
+  version: string;
   mode: RestartMode;
   command: string;
   appliedFiles: number;
@@ -61,8 +62,9 @@ export function buildApplySuccessHistoryMessage(opts: {
   netLabel: string;
   geoserverMsg: string;
 }): string {
+  const version = opts.version.trim() || '-';
   const command = opts.command.trim() || '-';
-  return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
+  return `version=${version} / mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
 function spawnInheritAsync(command: string, args: string[]): Promise<void> {
@@ -190,6 +192,7 @@ function shouldSkipRelPath(relPath: string, excludePrefixes: string[]): boolean 
 export type GnmsClientConfig = {
   gnmsBaseUrl: string;
   latestUrl: string;
+  listUrl: string;
   downloadUrlFallback: string;
   cancelUrl: string;
   bearer: string;
@@ -202,6 +205,7 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     process.env.GNMS_SOURCE_BASE_URL?.trim() ||
     'http://192.168.126.1:3000/api/source/version';
   const latestPath = process.env.GNMS_SOURCE_LATEST_PATH?.trim() ?? '/latest';
+  const listPath = process.env.GNMS_SOURCE_LIST_PATH?.trim() ?? '/list';
   const downloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
   const cancelPath = process.env.GNMS_SOURCE_CANCEL_PATH?.trim() ?? '/cancel';
   const bearer =
@@ -211,6 +215,7 @@ export function getGnmsClientConfig(): GnmsClientConfig {
   return {
     gnmsBaseUrl,
     latestUrl: resolveGnmsApiUrl(gnmsBaseUrl, latestPath),
+    listUrl: resolveGnmsApiUrl(gnmsBaseUrl, listPath),
     downloadUrlFallback: resolveGnmsApiUrl(gnmsBaseUrl, downloadPath),
     cancelUrl: resolveGnmsApiUrl(gnmsBaseUrl, cancelPath),
     bearer,
@@ -393,6 +398,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const ipTrim = clientIp?.trim() || undefined;
     const historyOption = applyLatestHistoryOptions(includeNodeModules, restartMode);
     const successMessage = buildApplySuccessHistoryMessage({
+      version,
       mode: restartMode,
       command: bootCommand,
       appliedFiles: copyResult.appliedFiles,
@@ -417,7 +423,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         await recordVersionHistory({
           historyType: 'apply_latest',
           status: 'fail',
-          message: `사전 빌드 실패: ${msg}`,
+          message: `사전 빌드 실패 (version=${version}): ${msg}`,
           option: historyOption,
           ip: ipTrim,
         });
@@ -446,6 +452,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         ? {
             mode: restartMode,
             command: bootCommand,
+            version,
             appliedFiles: copyResult.appliedFiles,
             skippedFiles: copyResult.skippedFiles,
             netLabel,

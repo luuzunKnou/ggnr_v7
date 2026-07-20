@@ -15,6 +15,7 @@ export async function GET() {
       ok: true,
       gnmsBaseUrl: cfg.gnmsBaseUrl,
       latestUrl: cfg.latestUrl,
+      listUrl: cfg.listUrl,
       downloadUrlFallback: cfg.downloadUrlFallback,
       cancelUrl: cfg.cancelUrl,
       bearer: cfg.bearer,

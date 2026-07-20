@@ -27,12 +27,14 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const filter = parseFilter(sp.get('filter') ?? 'version_all');
     const dateYmd = sp.get('date')?.trim() ?? '';
+    const q = sp.get('q')?.trim() ?? '';
     const limitRaw = Number(sp.get('limit'));
     const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
 
     const result = await listVersionHistory({
       filter,
       dateYmd: dateYmd || undefined,
+      q: q || undefined,
       limit,
     });
     if (!result.success) {
