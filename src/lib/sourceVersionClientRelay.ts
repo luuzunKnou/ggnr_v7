@@ -432,30 +432,28 @@ function preparePhaseMessage(phase: string, message: string): string {
   }
 }
 
-/** GNMS GET /list — 버전 select용 */
-export async function fetchGnmsVersionList(options?: {
-  signal?: AbortSignal;
-}): Promise<{ listUrl: string; entries: GnmsVersionListEntry[] }> {
-  const { signal } = options ?? {};
-  const cfgRes = await fetch('/api/source/version/gnms-config', { cache: 'no-store', signal });
+/** GNMS GET /list — 버전 select용 (동시 호출 시 진행 중 Promise 공유) */
+let versionListInflight: Promise<{ listUrl: string; entries: GnmsVersionListEntry[] }> | null =
+  null;
+
+async function fetchGnmsVersionListOnce(): Promise<{
+  listUrl: string;
+  entries: GnmsVersionListEntry[];
+}> {
+  const cfgRes = await fetch('/api/source/version/gnms-config', { cache: 'no-store' });
   const cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
   if (!cfgRes.ok) throw new Error(cfg.error ?? 'GNMS 설정 조회 실패');
 
   const listUrl =
     String(cfg.listUrl ?? '').trim() || resolveGnmsApiUrl(cfg.gnmsBaseUrl, '/list');
 
-  let listRes: Response;
-  try {
-    listRes = await fetchWithTimeout(
-      listUrl,
-      { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
-      60_000,
-      signal,
-      { label: 'GNMS 버전 목록', classifyNetwork: true }
-    );
-  } catch (err: unknown) {
-    throw err;
-  }
+  const listRes = await fetchWithTimeout(
+    listUrl,
+    { method: 'GET', headers: gnmsHeaders(cfg.bearer), cache: 'no-store' },
+    60_000,
+    undefined,
+    { label: 'GNMS 버전 목록', classifyNetwork: true }
+  );
 
   const listJson = (await listRes.json().catch(() => ({}))) as {
     ok?: boolean;
@@ -469,6 +467,43 @@ export async function fetchGnmsVersionList(options?: {
   }
   const entries = Array.isArray(listJson.entries) ? listJson.entries : [];
   return { listUrl, entries };
+}
+
+export async function fetchGnmsVersionList(options?: {
+  signal?: AbortSignal;
+}): Promise<{ listUrl: string; entries: GnmsVersionListEntry[] }> {
+  const { signal } = options ?? {};
+  throwIfAborted(signal);
+
+  if (!versionListInflight) {
+    versionListInflight = fetchGnmsVersionListOnce().finally(() => {
+      versionListInflight = null;
+    });
+  }
+
+  const inflight = versionListInflight;
+  if (!signal) return inflight;
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    inflight.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        if (signal.aborted) {
+          reject(new DOMException('The operation was aborted', 'AbortError'));
+          return;
+        }
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      }
+    );
+  });
 }
 
 /** 비-latest: GET /{folder}/prepare NDJSON → ready → ZIP download */
@@ -577,14 +612,15 @@ async function fetchGnmsFolderPrepareAndDownload(options: {
     throw new Error('prepare 결과(ready)가 없습니다');
   }
 
-  const jobId = String(ready.jobId ?? '').trim();
+  const readyPayload: ReadyPayload = ready;
+  const jobId = String(readyPayload.jobId ?? '').trim();
   if (!jobId) throw new Error('prepare ready에 jobId 없음');
 
-  const version = String(ready.version ?? '').trim() || folderId;
+  const version = String(readyPayload.version ?? '').trim() || folderId;
   const fileName =
-    String(ready.fileName ?? '').trim() || `source_${folderId}.zip`;
+    String(readyPayload.fileName ?? '').trim() || `source_${folderId}.zip`;
   const downloadUrlRaw =
-    String(ready.downloadUrl ?? '').trim() ||
+    String(readyPayload.downloadUrl ?? '').trim() ||
     `/download/${encodeURIComponent(folderId)}`;
   let downloadUrl = resolveGnmsApiUrl(cfg.gnmsBaseUrl, downloadUrlRaw);
   downloadUrl = withJobIdQuery(downloadUrl, jobId);
@@ -594,7 +630,10 @@ async function fetchGnmsFolderPrepareAndDownload(options: {
     version,
     fileName,
     downloadUrl,
-    sizeBytes: typeof ready.sizeBytes === 'number' ? ready.sizeBytes : undefined,
+    sizeBytes:
+      typeof readyPayload.sizeBytes === 'number'
+        ? readyPayload.sizeBytes
+        : undefined,
   };
 
   log(`ready: version=${version}, file=${fileName}, jobId=${jobId}`);

@@ -133,34 +133,52 @@ async function copyIntoWorkspace(srcRoot: string, dstRoot: string): Promise<numb
 
 export type NpmInstallProgressCallback = (line: string) => void;
 
-export async function runNpmInstallAtRoot(
+function spawnNpmWithLines(
+  args: string[],
   workspaceRoot: string,
-  onLine?: NpmInstallProgressCallback
+  onLine: ((line: string) => void) | undefined,
+  labels: { ok: string; fail: string }
 ): Promise<{ ok: boolean; message: string }> {
   return new Promise((resolve) => {
-    const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], {
+    const child = spawn('npm', args, {
       cwd: workspaceRoot,
-      shell: false,
+      shell: true,
+      windowsHide: true,
       env: process.env,
     });
     let stderr = '';
-    child.stdout?.on('data', (buf: Buffer) => {
-      const text = buf.toString('utf-8').trim();
-      if (text) onLine?.(text);
-    });
+    const emitLines = (buf: Buffer) => {
+      const text = buf.toString('utf-8');
+      for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trimEnd();
+        if (trimmed) onLine?.(trimmed);
+      }
+    };
+    child.stdout?.on('data', emitLines);
     child.stderr?.on('data', (buf: Buffer) => {
-      const text = buf.toString('utf-8').trim();
-      stderr += text;
-      if (text) onLine?.(text);
+      emitLines(buf);
+      stderr += buf.toString('utf-8');
     });
     child.on('error', (err) => {
       resolve({ ok: false, message: err.message });
     });
     child.on('close', (code) => {
-      if ((code ?? 1) === 0) resolve({ ok: true, message: 'npm install 완료' });
-      else resolve({ ok: false, message: stderr || `npm install 실패 (code=${code})` });
+      if ((code ?? 1) === 0) resolve({ ok: true, message: labels.ok });
+      else resolve({ ok: false, message: stderr.trim() || `${labels.fail} (code=${code})` });
     });
   });
+}
+
+export async function runNpmInstallAtRoot(
+  workspaceRoot: string,
+  onLine?: NpmInstallProgressCallback
+): Promise<{ ok: boolean; message: string }> {
+  return spawnNpmWithLines(
+    ['install', '--no-audit', '--no-fund'],
+    workspaceRoot,
+    onLine,
+    { ok: 'npm install 완료', fail: 'npm install 실패' }
+  );
 }
 
 export type CompleteSourceBundleResult = {

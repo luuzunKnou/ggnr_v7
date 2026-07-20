@@ -96,28 +96,31 @@ export function VersionManagerContent() {
   }, []);
 
   useEffect(() => {
-    const ac = new AbortController();
+    let cancelled = false;
     setListLoading(true);
     setListError(null);
     void (async () => {
       try {
-        const { entries } = await fetchGnmsVersionList({ signal: ac.signal });
-        if (ac.signal.aborted) return;
+        /** Strict Mode remount 시 abort 하지 않음 — 진행 중 목록 조회는 공유 */
+        const { entries } = await fetchGnmsVersionList();
+        if (cancelled) return;
         setVersionEntries(entries);
         setSelectedFolder(pickDefaultFolder(entries));
         if (entries.length === 0) {
           setListError('적용 가능한 버전이 없습니다.');
         }
       } catch (e: unknown) {
-        if (ac.signal.aborted || isUserAbortError(e)) return;
+        if (cancelled || isUserAbortError(e)) return;
         setVersionEntries([]);
         setSelectedFolder('');
         setListError(e instanceof Error ? e.message : String(e));
       } finally {
-        if (!ac.signal.aborted) setListLoading(false);
+        if (!cancelled) setListLoading(false);
       }
     })();
-    return () => ac.abort();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /** 대기 중일 때 재시작 방법·프로필 변경 → 단계 목록 즉시 반영 */

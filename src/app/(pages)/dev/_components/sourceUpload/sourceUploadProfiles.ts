@@ -128,6 +128,66 @@ export function shouldSkipSourceDir(
   return hasAnyPrefix(dir, ALWAYS_EXCLUDE_PREFIXES) || hasAnyPrefix(dir, MODE_EXCLUDE_PREFIXES[mode]);
 }
 
+/**
+ * 최신 소스 적용 — 잔여 정리·롤백 삭제 금지 경로.
+ * 소스 업로드·설치 ZIP 제외 + 데이터/대용량 + 적용 시 병합 제외와 합집합.
+ */
+const APPLY_EXTRA_PROTECT_PREFIXES = [
+  '3dtiles_las/',
+  'tiles_tif/',
+  'tiles_jpg/',
+  '3dtiles_b3dm/',
+  '3dtiles_pnts/',
+  '3dtiles_obj/',
+  '3dtiles_tiff/',
+  'file_data/',
+  'shp_data/',
+  'excel_data/',
+  'source_upload/',
+  'geoserver_modules/data_dir/',
+  'geoserver_modules/java/',
+  'geoserver_modules/geoserver/',
+  'pg_map_modules/',
+  '.cursor-runtime/',
+];
+
+/** 잔여 정리 walk 루트 (패키지 관리 대상) */
+export const APPLY_ORPHAN_WALK_ROOTS = [
+  'src/',
+  'scripts/',
+  'public/',
+  'geoserver_modules/scripts/',
+] as const;
+
+export function isProtectedApplyResidualPath(
+  relativePath: string,
+  includeNodeModules = true
+): boolean {
+  const p = normalizeRelPath(relativePath);
+  if (!p) return true;
+  if (ALWAYS_EXCLUDE_EXACT.includes(p)) return true;
+  if (p.endsWith('.log')) return true;
+  if (hasAnyPrefix(p, ALWAYS_EXCLUDE_PREFIXES)) return true;
+  if (hasAnyPrefix(p, DATA_PREFIXES)) return true;
+  if (hasAnyPrefix(p, APPLY_EXTRA_PROTECT_PREFIXES)) return true;
+  if (p === '.cursor-runtime' || p.startsWith('.cursor-runtime/')) return true;
+  if (isExcludedSourcePath(p, 'install', includeNodeModules)) return true;
+  return false;
+}
+
+/** 잔여 정리 후보인지 (보호·데이터 제외, managed 루트 또는 루트 단일 파일) */
+export function isManagedApplyOrphanCandidate(
+  relativePath: string,
+  includeNodeModules = true
+): boolean {
+  const p = normalizeRelPath(relativePath);
+  if (!p || isProtectedApplyResidualPath(p, includeNodeModules)) return false;
+  if (APPLY_ORPHAN_WALK_ROOTS.some((root) => p.startsWith(root))) return true;
+  /** 워크스페이스 루트 파일만 (하위에서 보호되지 않은 임의 폴더 전체 walk 방지) */
+  if (!p.includes('/')) return true;
+  return false;
+}
+
 export function packageProfileFromInclude(includeNodeModules: boolean): SourcePackageProfile {
   return includeNodeModules ? 'closed' : 'open';
 }

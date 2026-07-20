@@ -51,7 +51,7 @@ const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
   'relay-init': '운영 서버 relay 세션 생성',
   'relay-chunk': '청크 전송',
   'geoserver-stop': 'GeoServer 중지',
-  'merge-apply': '병합·적용',
+  'merge-apply': '병합·적용(백업·정리)',
   'geoserver-start': 'GeoServer 기동',
   'app-stop': '앱 종료',
   'npm-install': 'npm install',
@@ -293,6 +293,8 @@ export function buildRelayStagesFromProgress(
                 ? 'geoserver-start'
                 : 'geoserver-stop'
               : text.includes('complete') ||
+                  text.includes('롤백') ||
+                  text.includes('잔여') ||
                   text.includes('병합') ||
                   text.includes('적용') ||
                   text.includes('크기 불일치') ||

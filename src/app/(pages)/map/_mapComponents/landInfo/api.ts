@@ -229,7 +229,7 @@ export type ParcelTabData = {
   landUses: JsonObject[];
   prices: JsonObject[];
   possessions: JsonObject[];
-  source?: 'kras' | 'cache' | 'vworld' | 'mixed';
+  source: 'kras' | 'cache' | 'vworld' | 'mixed';
 };
 
 function emptyParcelTabData(): ParcelTabData {
@@ -242,19 +242,27 @@ function emptyParcelTabData(): ParcelTabData {
   };
 }
 
-function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): ParcelTabData {
+type ParcelTabPayloadLike = Omit<ParcelTabData, 'source'> & {
+  source?: ParcelTabData['source'];
+  ok?: boolean;
+  error?: string;
+};
+
+function normalizeParcelTabPayload(payload: ParcelTabPayloadLike): ParcelTabData {
+  const source =
+    payload.source === 'kras' ||
+    payload.source === 'cache' ||
+    payload.source === 'vworld' ||
+    payload.source === 'mixed'
+      ? payload.source
+      : 'cache';
+
   return {
     characteristics: Array.isArray(payload.characteristics) ? payload.characteristics : [],
     landUses: Array.isArray(payload.landUses) ? payload.landUses : [],
     prices: Array.isArray(payload.prices) ? payload.prices : [],
     possessions: Array.isArray(payload.possessions) ? payload.possessions : [],
-    source:
-      payload.source === 'kras' ||
-      payload.source === 'cache' ||
-      payload.source === 'vworld' ||
-      payload.source === 'mixed'
-        ? payload.source
-        : undefined,
+    source,
   };
 }
 
@@ -269,17 +277,11 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
       action: 'fetchParcelLandInfoTab',
       params: { pnu },
     });
-    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
+    const payload = (res?.data ?? res) as ParcelTabPayloadLike;
     if (payload?.ok !== false) {
       const tab = normalizeParcelTabPayload(payload);
       // 서버 VWorld 직접 호출은 키 도메인·망 제약으로 빈 결과가 올 수 있음 → 실데이터 있을 때만 사용
-      if (hasParcelLandInfoTabData({
-        characteristics: tab.characteristics,
-        landUses: tab.landUses,
-        prices: tab.prices,
-        possessions: tab.possessions,
-        source: tab.source ?? 'cache', // build 오류로 임시 처리
-      })) {
+      if (hasParcelLandInfoTabData(tab)) {
         return tab;
       }
     }
@@ -288,13 +290,7 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   }
 
   const cached = await fetchParcelTabDataFromCache(pnu);
-  if (cached && hasParcelLandInfoTabData({
-    characteristics: cached.characteristics,
-    landUses: cached.landUses,
-    prices: cached.prices,
-    possessions: cached.possessions,
-    source: cached.source ?? 'cache', // build 오류로 임시 처리
-  })) return cached;
+  if (cached && hasParcelLandInfoTabData(cached)) return cached;
 
   if (!toStr(args.vworldKey)) return emptyParcelTabData();
 

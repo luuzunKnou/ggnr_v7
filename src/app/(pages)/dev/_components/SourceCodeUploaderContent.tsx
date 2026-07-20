@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Hammer, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
@@ -301,6 +301,7 @@ export function SourceCodeUploaderContent() {
   const [changeNote, setChangeNote] = useState('');
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [buildChecking, setBuildChecking] = useState(false);
   const [progressPhase, setProgressPhase] = useState<string>('idle');
   const [lastSavedRoot, setLastSavedRoot] = useState<string | null>(null);
   const [progressPct, setProgressPct] = useState(0);
@@ -311,6 +312,7 @@ export function SourceCodeUploaderContent() {
   const [uploadMeta, setUploadMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
   const [etaTick, setEtaTick] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const buildAbortRef = useRef<AbortController | null>(null);
   const remoteUploadIdRef = useRef<string | null>(null);
   const progressIdRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -386,9 +388,18 @@ export function SourceCodeUploaderContent() {
     };
   }, []);
 
-  const appendLog = (line: string) => {
+  const formatLogLine = (line: string) => {
     const ts = new Date().toLocaleTimeString('ko-KR', { hour12: false });
-    setLiveLogs((prev) => [...prev.slice(-49), `[${ts}] ${line}`]);
+    return `[${ts}] ${line}`;
+  };
+
+  /** 새 빌드 확인·업로드 시작 시 로그 패널 초기화 (React 배치로 clear+append가 섞이지 않게) */
+  const beginLiveLogSession = (firstLine: string) => {
+    setLiveLogs([formatLogLine(firstLine)]);
+  };
+
+  const appendLog = (line: string) => {
+    setLiveLogs((prev) => [...prev.slice(-49), formatLogLine(line)]);
   };
 
   const recordFinalUploadHistoryClient = async (params: {
@@ -560,11 +571,79 @@ export function SourceCodeUploaderContent() {
     return merged;
   };
 
+  const runBuildCheck = async () => {
+    buildAbortRef.current?.abort();
+    buildAbortRef.current = new AbortController();
+    const signal = buildAbortRef.current.signal;
+    setBuildChecking(true);
+    beginLiveLogSession('빌드 확인 시작 (demo env · NODE_ENV=production · 임시 복사본)...');
+    try {
+      const res = await fetch('/api/source/upload/build-check', {
+        method: 'POST',
+        signal,
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(json.error ?? `빌드 확인 실패 (${res.status})`);
+      }
+      if (!res.body) {
+        throw new Error('응답 본문이 없습니다.');
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const handleNdjsonLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        let parsed: { type?: string; line?: string; ok?: boolean; message?: string; error?: string };
+        try {
+          parsed = JSON.parse(trimmed) as typeof parsed;
+        } catch {
+          return;
+        }
+        if (parsed.type === 'log' && parsed.line) {
+          appendLog(parsed.line);
+        } else if (parsed.type === 'done') {
+          appendLog(parsed.ok ? '빌드 성공' : `빌드 실패: ${parsed.message ?? ''}`);
+        } else if (parsed.type === 'error') {
+          appendLog(`오류: ${parsed.error ?? 'unknown'}`);
+        }
+      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          handleNdjsonLine(line);
+        }
+      }
+      if (buffer.trim()) {
+        handleNdjsonLine(buffer);
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        appendLog('빌드 확인이 취소되었습니다.');
+      } else {
+        appendLog(`오류: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    } finally {
+      setBuildChecking(false);
+      buildAbortRef.current = null;
+    }
+  };
+
   const runUploadCurrentWorkspace = async (confirmDbMismatch = false) => {
-    setRows([]);
-    setLiveLogs([]);
-    setChunkProgress(null);
-    setUploadMeta({});
+    if (!confirmDbMismatch) {
+      setRows([]);
+      setChunkProgress(null);
+      setUploadMeta({});
+      beginLiveLogSession('preflight 시작');
+    } else {
+      appendLog('DB 불일치 확인 후 업로드 계속');
+    }
     startedAtRef.current = Date.now();
     setUploading(true);
     setProgressPhase('idle');
@@ -580,7 +659,6 @@ export function SourceCodeUploaderContent() {
 
     try {
       setStageActive('preflight');
-      appendLog('preflight 시작');
       const preRes = await fetch('/api/source/upload/preflight', { signal, cache: 'no-store' });
       const preJson = (await preRes.json()) as {
         ok?: boolean;
@@ -895,7 +973,7 @@ export function SourceCodeUploaderContent() {
               ? 'border-primary font-medium text-foreground'
               : 'border-transparent text-muted-foreground'
           }`}
-          disabled={uploading}
+          disabled={uploading || buildChecking}
           onClick={() => setMainTab('install_download')}
         >
           설치파일 다운로드
@@ -919,11 +997,14 @@ export function SourceCodeUploaderContent() {
         <>
       <div className="rounded border p-3">
         <p className="mb-2 text-xs text-muted-foreground">
-            설치: core/runtime/data 업로드. 미포함 시 원격 npm install 실행.
+            - 빌드 검사: 현재 소스 임시 복사본에서 npm run build해 빌드 가능한 상태인지 검사
+        </p>
+        <p className="mb-2 text-xs text-muted-foreground">
+            - 현재 코드 자동 업로드: GNMS로 현재 소스 업로드
         </p>
         <div className="mb-2 flex items-center gap-3 text-sm">
           <label className="flex items-center gap-1">
-            <input type="radio" checked={mode === 'install'} onChange={() => setMode('install')} disabled={uploading} />
+            <input type="radio" checked={mode === 'install'} onChange={() => setMode('install')} disabled={uploading || buildChecking} />
             설치
           </label>
           <label className="flex items-center gap-1 opacity-50">
@@ -943,7 +1024,7 @@ export function SourceCodeUploaderContent() {
               type="radio"
               checked={includeNodeModules}
               onChange={() => setIncludeNodeModules(true)}
-              disabled={uploading}
+              disabled={uploading || buildChecking}
             />
             node_modules 포함
           </label>
@@ -952,7 +1033,7 @@ export function SourceCodeUploaderContent() {
               type="radio"
               checked={!includeNodeModules}
               onChange={() => setIncludeNodeModules(false)}
-              disabled={uploading}
+              disabled={uploading || buildChecking}
             />
             node_modules 미포함
           </label>
@@ -963,20 +1044,31 @@ export function SourceCodeUploaderContent() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            disabled={uploading}
+            disabled={uploading || buildChecking}
           />
           <input
             className="h-9 rounded border px-2 text-sm md:col-span-2"
             placeholder="변경 사항 메모 (선택)"
             value={changeNote}
             onChange={(e) => setChangeNote(e.target.value)}
-            disabled={uploading}
+            disabled={uploading || buildChecking}
           />
         </div>
         <div className="mt-3 flex items-center gap-2">
           <Button
+              type="button"
+              variant="outline"
+              disabled={uploading || buildChecking}
+              title="빌드 확인 (demo env · NODE_ENV=production · 임시 복사본 · 원본 무영향)"
+              onClick={() => void runBuildCheck()}
+              className="gap-1"
+            >
+              {buildChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hammer className="h-4 w-4" />}
+              빌드 검사
+          </Button>
+          <Button
             type="button"
-            disabled={uploading}
+            disabled={uploading || buildChecking}
             onClick={() => void runUploadCurrentWorkspace(false)}
             className="gap-1"
           >

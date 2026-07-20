@@ -8,6 +8,11 @@ import { resolveAppStartCommand, pickBootForSignalMerge } from '@/lib/ggnrBootCo
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
 import { ensureGeoServerRunning, stopGeoServerAndVerify } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
+import {
+  APPLY_ORPHAN_WALK_ROOTS,
+  isManagedApplyOrphanCandidate,
+  isProtectedApplyResidualPath,
+} from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
 
@@ -189,6 +194,217 @@ function shouldSkipRelPath(relPath: string, excludePrefixes: string[]): boolean 
   return excludePrefixes.some((prefix) => posixRel === prefix.slice(0, -1) || posixRel.startsWith(prefix));
 }
 
+type ApplyRollbackSnapshot = {
+  root: string;
+  filesDir: string;
+  backedUp: string[];
+  created: string[];
+  nextDir: string | null;
+  nodeModulesDir: string | null;
+};
+
+async function listMergeRelFiles(
+  srcRoot: string,
+  excludePrefixes: string[]
+): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(relDir: string): Promise<void> {
+    const absDir = relDir ? path.join(srcRoot, relDir) : srcRoot;
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = normalizeSlashes(relDir ? `${relDir}/${entry.name}` : entry.name);
+      if (shouldSkipRelPath(relPath, excludePrefixes)) continue;
+      if (entry.isDirectory()) {
+        await walk(relPath);
+        continue;
+      }
+      if (entry.isFile()) out.push(relPath);
+    }
+  }
+  await walk('');
+  return out;
+}
+
+async function copyDirRecursive(src: string, dst: string): Promise<void> {
+  await fs.mkdir(dst, { recursive: true });
+  await fs.cp(src, dst, { recursive: true, force: true });
+}
+
+async function createSourceRollbackSnapshot(params: {
+  workspaceRoot: string;
+  mergeRelPaths: string[];
+  includeNodeModules: boolean;
+}): Promise<ApplyRollbackSnapshot> {
+  const { workspaceRoot, mergeRelPaths, includeNodeModules } = params;
+  const root = path.join(os.tmpdir(), 'ggnr_source_rollback', `${Date.now()}`);
+  const filesDir = path.join(root, 'files');
+  await fs.mkdir(filesDir, { recursive: true });
+
+  const backedUp: string[] = [];
+  const created: string[] = [];
+
+  for (const rel of mergeRelPaths) {
+    if (isProtectedApplyResidualPath(rel, includeNodeModules)) continue;
+    const abs = path.join(workspaceRoot, rel);
+    if (fsSync.existsSync(abs) && fsSync.statSync(abs).isFile()) {
+      const dest = path.join(filesDir, rel);
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.copyFile(abs, dest);
+      backedUp.push(rel);
+    } else {
+      created.push(rel);
+    }
+  }
+
+  let nextDir: string | null = null;
+  const nextAbs = path.join(workspaceRoot, '.next');
+  if (fsSync.existsSync(nextAbs)) {
+    nextDir = path.join(root, 'next');
+    await copyDirRecursive(nextAbs, nextDir);
+  }
+
+  return {
+    root,
+    filesDir,
+    backedUp,
+    created,
+    nextDir,
+    nodeModulesDir: null,
+  };
+}
+
+async function snapshotNodeModulesInto(
+  snapshot: ApplyRollbackSnapshot,
+  workspaceRoot: string
+): Promise<void> {
+  const nmAbs = path.join(workspaceRoot, 'node_modules');
+  if (!fsSync.existsSync(nmAbs)) return;
+  const dest = path.join(snapshot.root, 'node_modules');
+  await copyDirRecursive(nmAbs, dest);
+  snapshot.nodeModulesDir = dest;
+}
+
+async function restoreApplyRollbackSnapshot(params: {
+  snapshot: ApplyRollbackSnapshot;
+  workspaceRoot: string;
+  includeNodeModules: boolean;
+}): Promise<{ ok: boolean; detail: string }> {
+  const { snapshot, workspaceRoot, includeNodeModules } = params;
+  const errors: string[] = [];
+
+  for (const rel of snapshot.backedUp) {
+    try {
+      const src = path.join(snapshot.filesDir, rel);
+      const dst = path.join(workspaceRoot, rel);
+      await fs.mkdir(path.dirname(dst), { recursive: true });
+      await fs.copyFile(src, dst);
+    } catch (e) {
+      errors.push(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  for (const rel of snapshot.created) {
+    if (isProtectedApplyResidualPath(rel, includeNodeModules)) continue;
+    try {
+      const abs = path.join(workspaceRoot, rel);
+      if (fsSync.existsSync(abs)) await fs.rm(abs, { force: true });
+    } catch (e) {
+      errors.push(`삭제 ${rel}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  const nextAbs = path.join(workspaceRoot, '.next');
+  try {
+    if (snapshot.nextDir && fsSync.existsSync(snapshot.nextDir)) {
+      await fs.rm(nextAbs, { recursive: true, force: true }).catch(() => {});
+      await copyDirRecursive(snapshot.nextDir, nextAbs);
+    }
+  } catch (e) {
+    errors.push(`.next: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  if (snapshot.nodeModulesDir && fsSync.existsSync(snapshot.nodeModulesDir)) {
+    try {
+      const nmAbs = path.join(workspaceRoot, 'node_modules');
+      await fs.rm(nmAbs, { recursive: true, force: true }).catch(() => {});
+      await copyDirRecursive(snapshot.nodeModulesDir, nmAbs);
+    } catch (e) {
+      errors.push(`node_modules: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  if (errors.length === 0) {
+    return { ok: true, detail: '롤백 완료' };
+  }
+  return {
+    ok: false,
+    detail: `롤백 실패(${errors.length}건): ${errors.slice(0, 3).join('; ')}`,
+  };
+}
+
+async function removeApplyRollbackSnapshot(snapshot: ApplyRollbackSnapshot | null): Promise<void> {
+  if (!snapshot) return;
+  await fs.rm(snapshot.root, { recursive: true, force: true }).catch(() => {});
+}
+
+async function cleanupOrphanManagedFiles(params: {
+  workspaceRoot: string;
+  mergeRelSet: Set<string>;
+  includeNodeModules: boolean;
+  onLog?: (msg: string) => void;
+}): Promise<number> {
+  const { workspaceRoot, mergeRelSet, includeNodeModules, onLog } = params;
+  let removed = 0;
+
+  async function walk(relDir: string): Promise<void> {
+    const absDir = relDir ? path.join(workspaceRoot, relDir) : workspaceRoot;
+    if (!fsSync.existsSync(absDir)) return;
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = normalizeSlashes(relDir ? `${relDir}/${entry.name}` : entry.name);
+      if (isProtectedApplyResidualPath(relPath, includeNodeModules)) continue;
+      if (entry.isDirectory()) {
+        const asPrefix = relPath.endsWith('/') ? relPath : `${relPath}/`;
+        if (isProtectedApplyResidualPath(asPrefix, includeNodeModules)) continue;
+        await walk(relPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!isManagedApplyOrphanCandidate(relPath, includeNodeModules)) continue;
+      if (mergeRelSet.has(relPath)) continue;
+      try {
+        await fs.rm(path.join(workspaceRoot, relPath), { force: true });
+        removed += 1;
+      } catch {
+        /* skip locked */
+      }
+    }
+  }
+
+  for (const root of APPLY_ORPHAN_WALK_ROOTS) {
+    const dir = root.replace(/\/$/, '');
+    await walk(dir);
+  }
+
+  /** 루트 단일 파일 */
+  const rootEntries = await fs.readdir(workspaceRoot, { withFileTypes: true });
+  for (const entry of rootEntries) {
+    if (!entry.isFile()) continue;
+    const relPath = normalizeSlashes(entry.name);
+    if (!isManagedApplyOrphanCandidate(relPath, includeNodeModules)) continue;
+    if (mergeRelSet.has(relPath)) continue;
+    try {
+      await fs.rm(path.join(workspaceRoot, relPath), { force: true });
+      removed += 1;
+    } catch {
+      /* skip */
+    }
+  }
+
+  onLog?.(`잔여 소스 정리 ${removed}건`);
+  return removed;
+}
+
 export type GnmsClientConfig = {
   gnmsBaseUrl: string;
   latestUrl: string;
@@ -290,6 +506,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   const bootCommand = resolveAppStartCommand() || resolveRestartCommand();
 
   let geoStartedOnSuccessPath = false;
+  let rollback: ApplyRollbackSnapshot | null = null;
+  let mergeRelPaths: string[] = [];
 
   const emit = async (
     phase: ApplySourceProgressPhase,
@@ -299,6 +517,19 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const logLine = extra?.logLine ?? `[SourceCodeUpload] ${message}`;
     console.log(logLine);
     await onProgress?.({ phase, message, logLine, ...extra });
+  };
+
+  const runRollback = async (reason: string): Promise<string> => {
+    if (!rollback) return `${reason} (롤백 스냅샷 없음)`;
+    await emit('merge-apply', '적용 실패 — 직전 소스로 롤백 중...');
+    const result = await restoreApplyRollbackSnapshot({
+      snapshot: rollback,
+      workspaceRoot,
+      includeNodeModules,
+    });
+    await removeApplyRollbackSnapshot(rollback);
+    rollback = null;
+    return `${reason} / ${result.detail}`;
   };
 
   await emit(
@@ -319,6 +550,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
     await emit('merge-apply', '병합 대상 파일 수 집계 중...');
+    mergeRelPaths = await listMergeRelFiles(extractedRoot, excludePrefixes);
     const { totalFiles, skippedFiles: preSkipped } = await countCopyTargets(
       extractedRoot,
       excludePrefixes
@@ -328,6 +560,17 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       skippedFiles: preSkipped,
       appliedFiles: 0,
     });
+
+    await emit('merge-apply', '적용 직전 소스 백업 중...');
+    rollback = await createSourceRollbackSnapshot({
+      workspaceRoot,
+      mergeRelPaths,
+      includeNodeModules,
+    });
+    await emit(
+      'merge-apply',
+      `백업 완료 (파일 ${rollback.backedUp.length}건, 신규 ${rollback.created.length}건, .next ${rollback.nextDir ? '포함' : '없음'})`
+    );
 
     const copyResult = await copyRecursive({
       srcRoot: extractedRoot,
@@ -407,10 +650,12 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       geoserverMsg: `${stopMessage}; ${startMessage}`,
     });
 
-    /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 종료하지 않음 */
+    /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 롤백 후 종료하지 않음 */
     if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
       try {
-        if (!includeNodeModules) {
+        if (!includeNodeModules && rollback) {
+          await emit('npm-install', 'node_modules 백업 중...');
+          await snapshotNodeModulesInto(rollback, workspaceRoot);
           await emit('npm-install', 'npm install (개방망) 시작');
           await runNpmInstallAsyncInProcess();
           await emit('npm-install', 'npm install 완료');
@@ -420,14 +665,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         await emit('build', '사전 빌드 완료');
       } catch (buildErr: unknown) {
         const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
-        await recordVersionHistory({
-          historyType: 'apply_latest',
-          status: 'fail',
-          message: `사전 빌드 실패 (version=${version}): ${msg}`,
-          option: historyOption,
-          ip: ipTrim,
-        });
-        throw new Error(`사전 빌드 실패: ${msg}`);
+        throw new Error(`사전 빌드 실패 (version=${version}): ${msg}`);
       }
     }
 
@@ -478,6 +716,26 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       });
     }
 
+    /** 성공 확정 후 잔여 정리 — 실패해도 롤백하지 않음(적용 직전 파일 보존 위해) */
+    try {
+      await emit('merge-apply', '잔여 소스 정리 중...');
+      const orphanRemoved = await cleanupOrphanManagedFiles({
+        workspaceRoot,
+        mergeRelSet: new Set(mergeRelPaths),
+        includeNodeModules,
+        onLog: (m) => {
+          void emit('merge-apply', m);
+        },
+      });
+      await emit('merge-apply', `잔여 소스 정리 완료 (${orphanRemoved}건)`);
+    } catch (orphanErr: unknown) {
+      const om = orphanErr instanceof Error ? orphanErr.message : String(orphanErr);
+      await emit('merge-apply', `잔여 소스 정리 경고: ${om}`);
+    }
+
+    await removeApplyRollbackSnapshot(rollback);
+    rollback = null;
+
     /** 앱 종료 단계는 응답 flush 전에 완료로 보고 (이후 process.exit·런처 종료) */
     if (doRestart) {
       await emit(
@@ -510,16 +768,37 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       },
     };
   } catch (err) {
-    console.error(
-      `[SourceCodeUpload] 적용 실패:`,
-      err instanceof Error ? err.message : err
-    );
+    const raw = err instanceof Error ? err.message : String(err);
+    console.error(`[SourceCodeUpload] 적용 실패:`, raw);
+
+    let failMessage = raw;
+    if (rollback) {
+      try {
+        failMessage = await runRollback(raw);
+      } catch (rollbackErr: unknown) {
+        failMessage = `${raw} / 롤백 실패: ${
+          rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+        }`;
+        await removeApplyRollbackSnapshot(rollback).catch(() => {});
+        rollback = null;
+      }
+      console.error(`[SourceCodeUpload] ${failMessage}`);
+      await recordVersionHistory({
+        historyType: 'apply_latest',
+        status: 'fail',
+        message: failMessage,
+        option: applyLatestHistoryOptions(includeNodeModules, restartMode),
+        ip: clientIp?.trim() || undefined,
+      }).catch(() => {});
+    }
+
     /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
     if (!geoStartedOnSuccessPath) {
       await ensureGeoServerRunning({ forceRestart: false }).catch(() => {});
     }
-    throw err;
+    throw new Error(failMessage);
   } finally {
+    await removeApplyRollbackSnapshot(rollback);
     await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
   }
 }
