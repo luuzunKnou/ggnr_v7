@@ -383,6 +383,8 @@ export function VersionManagerContent() {
     }
   };
 
+  const sectionClass = 'space-y-1';
+
   const ProfileRadios = () => (
     <div className="flex flex-wrap items-center gap-3 text-xs">
       <label className="flex items-center gap-1">
@@ -430,66 +432,71 @@ export function VersionManagerContent() {
         <div className="shrink-0 space-y-2">
           <div className="text-sm font-medium">최신 소스 적용</div>
           <p className="text-xs text-muted-foreground">
-            GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 폐쇄망/개방망을
+            GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 서버 상태를
             선택하세요.
           </p>
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">적용 버전</div>
-            <select
-              className="h-8 w-full max-w-xl rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-60"
-              value={selectedFolder}
-              disabled={busy || listLoading || versionEntries.length === 0}
-              onChange={(e) => setSelectedFolder(e.target.value)}
-            >
-              {listLoading && <option value="">목록 불러오는 중...</option>}
-              {!listLoading && versionEntries.length === 0 && (
-                <option value="">버전 없음</option>
-              )}
-              {versionEntries.map((entry) => (
-                <option key={entry.folder} value={entry.folder}>
-                  {versionOptionLabel(entry)}
-                </option>
-              ))}
-            </select>
-            {listError && <p className="text-xs text-red-600">{listError}</p>}
-          </div>
-          <ProfileRadios />
-          <div className="space-y-2 text-sm">
-            <div className="text-xs text-muted-foreground">재시작 방식</div>
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'exit'}
-                  disabled={busy}
-                  onChange={() => setRestartMode('exit')}
-                />
-                서비스 재실행(프로세스 종료)
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'launcher'}
-                  disabled={busy}
-                  onChange={() => setRestartMode('launcher')}
-                />
-                Node 런처(Node 내 앱 재실행)
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="restartMode"
-                  checked={restartMode === 'none'}
-                  disabled={busy}
-                  onChange={() => setRestartMode('none')}
-                />
-                재시작 안 함
-              </label>
+          <div className="space-y-2">
+            <div className={sectionClass}>
+              <div className="text-xs text-muted-foreground">적용 버전</div>
+              <select
+                className="h-8 w-full max-w-xl rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-60"
+                value={selectedFolder}
+                disabled={busy || listLoading || versionEntries.length === 0}
+                onChange={(e) => setSelectedFolder(e.target.value)}
+              >
+                {listLoading && <option value="">목록 불러오는 중...</option>}
+                {!listLoading && versionEntries.length === 0 && (
+                  <option value="">버전 없음</option>
+                )}
+                {versionEntries.map((entry) => (
+                  <option key={entry.folder} value={entry.folder}>
+                    {versionOptionLabel(entry)}
+                  </option>
+                ))}
+              </select>
+              {listError && <p className="text-xs text-red-600">{listError}</p>}
+            </div>
+            <div className={sectionClass}>
+              <div className="text-xs text-muted-foreground">서버 상태</div>
+              <ProfileRadios />
+            </div>
+            <div className={sectionClass}>
+              <div className="text-xs text-muted-foreground">재시작 방식</div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="restartMode"
+                    checked={restartMode === 'exit'}
+                    disabled={busy}
+                    onChange={() => setRestartMode('exit')}
+                  />
+                  서비스 재실행(프로세스 종료)
+                </label>
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="restartMode"
+                    checked={restartMode === 'launcher'}
+                    disabled={busy}
+                    onChange={() => setRestartMode('launcher')}
+                  />
+                  Node 런처(Node 내 앱 재실행)
+                </label>
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="restartMode"
+                    checked={restartMode === 'none'}
+                    disabled={busy}
+                    onChange={() => setRestartMode('none')}
+                  />
+                  재시작 안 함
+                </label>
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <Button
               type="button"
               disabled={busy || !canApply}
