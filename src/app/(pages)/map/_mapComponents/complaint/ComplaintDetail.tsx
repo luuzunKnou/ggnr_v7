@@ -9,12 +9,20 @@ import type { CompUI, CompdUI } from './types';
 import type { ComplaintFormValues } from './complaint-info';
 import { call } from '@/lib/api';
 
-export default function ComplaintDetail() {
+type Props = {
+  onListRefresh?: () => void;
+};
+
+export default function ComplaintDetail({ onListRefresh }: Props) {
   const mapContext = useMapContext();
   const complaintDetail = mapContext?.complaintDetail ?? null;
   const setComplaintDetail = mapContext?.setComplaintDetail;
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const bumpList = useCallback(() => {
+    onListRefresh?.();
+  }, [onListRefresh]);
 
   const handleAddHistory = useCallback(
     async (data: {
@@ -47,9 +55,10 @@ export default function ComplaintDetail() {
       });
       if (res?.success && res?.data) {
         setComplaintDetail(res.data as typeof complaintDetail);
+        bumpList();
       }
     },
-    [complaintDetail, setComplaintDetail]
+    [complaintDetail, setComplaintDetail, bumpList]
   );
 
   const handleEditHistory = useCallback(
@@ -86,9 +95,10 @@ export default function ComplaintDetail() {
       });
       if (res?.success && res?.data) {
         setComplaintDetail(res.data as typeof complaintDetail);
+        bumpList();
       }
     },
-    [complaintDetail, setComplaintDetail]
+    [complaintDetail, setComplaintDetail, bumpList]
   );
 
   const handleDeleteHistory = useCallback(
@@ -107,10 +117,11 @@ export default function ComplaintDetail() {
         });
         if (getRes?.success && getRes?.data) {
           setComplaintDetail(getRes.data as typeof complaintDetail);
+          bumpList();
         }
       }
     },
-    [complaintDetail, setComplaintDetail]
+    [complaintDetail, setComplaintDetail, bumpList]
   );
 
   const handleSave = useCallback(
@@ -140,12 +151,13 @@ export default function ComplaintDetail() {
         });
         if (res?.success && res?.data) {
           setComplaintDetail(res.data as typeof complaintDetail);
+          bumpList();
         }
       } finally {
         setSaving(false);
       }
     },
-    [complaintDetail, setComplaintDetail]
+    [complaintDetail, setComplaintDetail, bumpList]
   );
 
   const handleDelete = useCallback(async () => {
@@ -160,11 +172,12 @@ export default function ComplaintDetail() {
       });
       if (res?.success && res?.data?.deleted) {
         setComplaintDetail(null);
+        bumpList();
       }
     } finally {
       setDeleting(false);
     }
-  }, [complaintDetail, setComplaintDetail]);
+  }, [complaintDetail, setComplaintDetail, bumpList]);
 
   if (complaintDetail === null || !setComplaintDetail) return null;
 
@@ -199,8 +212,9 @@ export default function ComplaintDetail() {
           <span className="text-xs font-medium text-slate-600">민원 #{complaintDetail.compKey}</span>
           <button
             type="button"
+            title="닫기"
             onClick={handleClose}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             aria-label="닫기"
           >
             <X className="h-3.5 w-3.5" />
@@ -212,7 +226,6 @@ export default function ComplaintDetail() {
         <ComplaintDetailPanel
           complaint={compAsUI}
           histories={compdListAsUI}
-          files={[]}
           onAddHistory={handleAddHistory}
           onEditHistory={handleEditHistory}
           onDeleteHistory={handleDeleteHistory}

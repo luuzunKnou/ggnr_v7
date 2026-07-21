@@ -122,25 +122,27 @@ function BackgroundMapGroupSection({
   const hasSelectedItem = group.options.some((opt) => opt.id === selectedValue);
 
   return (
-    <div className="border-b border-slate-100 last:border-b-0">
+    <div className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
       {/* 그룹 헤더 */}
       <button
         type="button"
+        title={group.title}
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'flex items-center justify-between w-full px-3 py-2 text-[13px] font-medium transition-colors',
-          'bg-slate-100 hover:bg-slate-200',
-          hasSelectedItem && 'text-blue-600'
+          'flex cursor-pointer items-center justify-between w-full px-3 py-2 text-[13px] font-medium transition-colors',
+          'bg-slate-100 text-foreground hover:bg-slate-200',
+          'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15 dark:hover:text-white',
+          hasSelectedItem && 'text-blue-600 dark:text-white'
         )}
       >
         <div className="flex items-center gap-2">
-          <div className="w-1 h-4 bg-blue-500 rounded-full" />
+          <div className="w-1 h-4 bg-blue-500 rounded-full dark:bg-blue-400" />
           <span>{group.title}</span>
         </div>
         {isExpanded ? (
-          <ChevronUp className="w-4 h-4 text-slate-400" />
+          <ChevronUp className="w-4 h-4 text-slate-400 dark:text-white/50" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-slate-400" />
+          <ChevronDown className="w-4 h-4 text-slate-400 dark:text-white/50" />
         )}
       </button>
 
@@ -152,8 +154,8 @@ function BackgroundMapGroupSection({
               key={option.id}
               className={cn(
                 'flex items-center px-3 py-1.5 transition-colors',
-                'hover:bg-slate-50',
-                selectedValue === option.id && 'bg-blue-50'
+                'hover:bg-slate-50 dark:hover:bg-white/10',
+                selectedValue === option.id && 'bg-blue-50 dark:bg-white/20'
               )}
             >
               <label className="flex items-center gap-2 flex-1 cursor-pointer min-w-0">
@@ -163,14 +165,14 @@ function BackgroundMapGroupSection({
                   value={option.id}
                   checked={selectedValue === option.id}
                   onChange={() => onValueChange(option.id)}
-                  className="w-4 h-4 shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  className="w-4 h-4 shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:text-blue-400 dark:border-white/30"
                 />
                 <span
                   className={cn(
                     'text-xs truncate',
                     selectedValue === option.id
-                      ? 'text-blue-600 font-medium'
-                      : 'text-slate-700'
+                      ? 'text-blue-600 font-medium dark:text-white'
+                      : 'text-slate-700 dark:text-white/90'
                   )}
                 >
                   {option.label}
@@ -210,6 +212,7 @@ export function BackgroundMapSelector({
     <div
       className={cn(
         'w-56 bg-white shadow-xl overflow-hidden flex flex-col rounded-[5px] opacity-90',
+        'dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm dark:border dark:border-white/10',
         className
       )}
     >
