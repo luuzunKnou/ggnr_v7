@@ -24,7 +24,8 @@ import {
   ParcelLinkageValueText,
   buildingPermitLinkageSource,
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
-import type { ParcelLandRowSource } from '@/lib/parcelLandDisplay';
+// 2026-07-21 이수빈: 빌드 오류로 임시 처리
+import type { ParcelLandRowSource } from '@/lib/parcelLandNormalize';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
 

@@ -159,7 +159,8 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
       action: 'fetchParcelLandInfoTab',
       params: { pnu },
     });
-    const payload = (res?.data ?? res) as ParcelTabPayloadLike;
+    // 2026-07-21 이수빈: 빌드 오류로 임시 처리
+    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
     if (payload?.ok !== false) {
       const tab = normalizeParcelTabPayload(payload);
       if (hasParcelLandInfoTabData(tab)) return tab;
