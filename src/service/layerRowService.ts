@@ -734,6 +734,35 @@ async function loadAdminNamesByPnuCodes(
   return { emdNames, riNames };
 }
 
+/** PNU → 대지위치(읍·면·동·리) + 지번(본·부번). 건축물대장 주소 폴백용 */
+export async function resolvePlatLocAndLotByPnus(
+  pnus: string[]
+): Promise<Map<string, { platLoc: string; jibunLot: string }>> {
+  const out = new Map<string, { platLoc: string; jibunLot: string }>();
+  const unique = [...new Set(pnus.map((p) => String(p ?? '').trim()).filter((p) => /^\d{19}$/.test(p)))];
+  if (!unique.length) return out;
+
+  const emdCds: string[] = [];
+  const liCds: string[] = [];
+  for (const pnu of unique) {
+    const { emdCd, liCd } = pnuAdminCodes(pnu);
+    if (emdCd) emdCds.push(emdCd);
+    if (liCd) liCds.push(liCd);
+  }
+  const { emdNames, riNames } = await loadAdminNamesByPnuCodes(emdCds, liCds);
+
+  for (const pnu of unique) {
+    const { emdCd, liCd } = pnuAdminCodes(pnu);
+    const platLoc = [emdNames.get(emdCd) ?? '', riNames.get(liCd) ?? '']
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(' ');
+    const jibunLot = formatLotFromPnuDigits(pnuDigitsOnly(pnu));
+    out.set(pnu, { platLoc, jibunLot });
+  }
+  return out;
+}
+
 async function enrichJijukRowsWithAdminNames(rows: JijukParcelGeomRow[]): Promise<JijukParcelGeomRow[]> {
   if (rows.length === 0) return rows;
   try {

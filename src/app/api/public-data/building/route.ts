@@ -53,9 +53,18 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(upstreamUrl, { method: 'GET', cache: 'no-store' });
     const text = await res.text();
+    const lower = text.toLowerCase();
+    const quotaHit =
+      res.status === 429 ||
+      lower.includes('quota') ||
+      (lower.includes('트래픽') && lower.includes('초과'));
+    if (quotaHit) {
+      console.warn('[building-proxy] 공공데이터포털 호출 한도(쿼터) 초과', { kind, status: res.status });
+    }
     console.log('[building-proxy:res]', {
       kind,
       status: res.status,
+      quotaExceeded: quotaHit,
       bodySnippet: text.slice(0, 300),
     });
     return new NextResponse(text, {

@@ -11,9 +11,22 @@ import {
   fetchParcelIdentityAtPoint,
   fetchParcelTabData,
   fetchPermitRows,
+  type BuildingLedgerLandInfoRow,
   type BuildingLedgerRow,
   type BuildingPermitSource,
+  type ParcelTabData,
 } from './api';
+import {
+  BuildingLinkageLegend,
+  BuildingPermitLinkageLegend,
+  LandLinkageLegendText,
+  ParcelLandLinkageSourceText,
+  ParcelLinkageValueText,
+  buildingPermitLinkageSource,
+} from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
+import type { ParcelLandRowSource } from '@/lib/parcelLandDisplay';
+import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
 
 type TabId = 'parcel' | 'buildingLedger' | 'buildingPermit';
 type ModalKind = 'price' | null;
@@ -45,6 +58,48 @@ function getField(row: Record<string, unknown> | undefined, keys: string[], fall
     if (val != null && String(val).trim() !== '') return String(val).trim();
   }
   return fallback;
+}
+
+/** 법정동 전체 주소 여부 (시·도 + 읍·면·동·리) */
+function isLikelyFullParcelAddress(value: string): boolean {
+  const t = value.trim();
+  if (t.length < 8) return false;
+  return /(도|특별|광역|자치)/u.test(t) && /(읍|면|동|리)/u.test(t);
+}
+
+/** 브이월드·탭 행 → 「법정동명 + 본번-부번」 전체 지번 */
+function composeFullJibunFromRow(row: Record<string, unknown> | undefined): string {
+  if (!row) return '';
+  const ld = String(row.ldCodeNm ?? '').trim();
+  const lot = String(row.mnnmSlno ?? '').trim();
+  if (ld && lot) return `${ld} ${lot}`;
+  if (ld) return ld;
+  const jibun = String(row.jibun ?? '').trim();
+  return isLikelyFullParcelAddress(jibun) ? jibun : '';
+}
+
+function pickDisplayJibunAddress(args: {
+  parcelData: ParcelTabData;
+  propJibun: string | null | undefined;
+  resolvedJibun: string | null;
+}): string {
+  const fromTab =
+    composeFullJibunFromRow(args.parcelData.characteristics[0]) ||
+    composeFullJibunFromRow(args.parcelData.possessions[0]) ||
+    composeFullJibunFromRow(args.parcelData.prices[0]) ||
+    composeFullJibunFromRow(args.parcelData.landUses[0]);
+  const raw = (() => {
+    if (fromTab) return fromTab;
+    const prop = String(args.propJibun ?? '').trim();
+    const resolved = String(args.resolvedJibun ?? '').trim();
+    if (isLikelyFullParcelAddress(prop)) return prop;
+    if (isLikelyFullParcelAddress(resolved)) return resolved;
+    if (prop.length >= resolved.length && prop) return prop;
+    return resolved || prop || '';
+  })();
+  if (!raw) return '-';
+  // 시·도·시·군·구 제거 → 읍·면·동·리·번지
+  return formatAddressStripSidoSigungu(raw) || raw;
 }
 
 const EUM_LAND_DET_URL = 'https://www.eum.go.kr/web/ar/lu/luLandDet.jsp';
@@ -117,7 +172,25 @@ function openLandEum(pnu: string) {
   form.submit();
 }
 
-function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+function DataTable({
+  headers,
+  rows,
+  linkageSource,
+  linkageSources,
+  linkageCol,
+  plainColumnIndexes,
+}: {
+  headers: string[];
+  rows: string[][];
+  linkageSource?: ParcelLandRowSource;
+  linkageSources?: Array<ParcelLandRowSource | undefined>;
+  /** true면 마지막 열을 «연계» 출처 텍스트로 렌더 */
+  linkageCol?: boolean;
+  /** 연계 색 미적용 열(0부터, 예: 대지위치·지번·도로명) */
+  plainColumnIndexes?: number[];
+}) {
+  const plainSet = new Set(plainColumnIndexes ?? []);
+  const dataColCount = linkageCol ? headers.length - 1 : headers.length;
   return (
     <div className="overflow-auto border border-slate-200 rounded">
       <table className="w-full table-auto text-[12px]">
@@ -134,18 +207,30 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
-            <tr key={`${idx}-${row.join('|')}`} className="odd:bg-white even:bg-slate-50/50">
-              {row.map((cell, cidx) => (
-                <td
-                  key={`${idx}-${cidx}`}
-                  className="px-2 py-1 border-b border-r last:border-r-0 border-slate-100 text-slate-700 whitespace-normal break-words align-top"
-                >
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row, idx) => {
+            const rowSource = linkageSources?.[idx] ?? linkageSource;
+            const dataCells = linkageCol ? row.slice(0, dataColCount) : row;
+            return (
+              <tr key={`${idx}-${row.join('|')}`} className="odd:bg-white even:bg-slate-50/50">
+                {dataCells.map((cell, cidx) => (
+                  <td
+                    key={`${idx}-${cidx}`}
+                    className="px-2 py-1 border-b border-r last:border-r-0 border-slate-100 text-slate-700 whitespace-normal break-words align-top"
+                  >
+                    <ParcelLinkageValueText
+                      value={cell}
+                      source={plainSet.has(cidx) ? undefined : rowSource}
+                    />
+                  </td>
+                ))}
+                {linkageCol ? (
+                  <td className="px-2 py-1 border-b border-slate-100 text-slate-700 whitespace-normal break-words align-top">
+                    <ParcelLandLinkageSourceText source={rowSource} prefix={false} />
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -167,19 +252,22 @@ export function LandInfoPanelContent({
 
   const [resolvedPnu, setResolvedPnu] = useState<string | null>(pnuFromContext ?? null);
   const [resolvedParcelJibun, setResolvedParcelJibun] = useState<string | null>(null);
+  /** 우클릭 prop 도로명이 비었을 때 패널이 키로 재조회한 값 */
+  const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
   const [dataPortalKey, setDataPortalKey] = useState('');
 
   const [parcelError, setParcelError] = useState<string | null>(null);
   const [parcelFetching, setParcelFetching] = useState(false);
-  const [parcelData, setParcelData] = useState<{
-    characteristics: Record<string, unknown>[];
-    landUses: Record<string, unknown>[];
-    prices: Record<string, unknown>[];
-    possessions: Record<string, unknown>[];
-  }>({ characteristics: [], landUses: [], prices: [], possessions: [] });
+  const [parcelData, setParcelData] = useState<ParcelTabData>({
+    characteristics: [],
+    landUses: [],
+    prices: [],
+    possessions: [],
+  });
 
-  const [buildingRows, setBuildingRows] = useState<BuildingLedgerRow[]>([]);
+  const [buildingRows, setBuildingRows] = useState<BuildingLedgerLandInfoRow[]>([]);
+  const [buildingLedgerNotice, setBuildingLedgerNotice] = useState<string | null>(null);
   /** true only while 요청 진행 중 — 빈 결과([])와 구분 */
   const [buildingLedgerFetching, setBuildingLedgerFetching] = useState(false);
 
@@ -211,11 +299,10 @@ export function LandInfoPanelContent({
   }, []);
 
   useEffect(() => {
-    if (pnuFromContext) return;
     let alive = true;
     fetchParcelIdentityAtPoint(coordinate, viewProjection).then((id) => {
       if (!alive) return;
-      setResolvedPnu(id.pnu);
+      if (!pnuFromContext) setResolvedPnu(id.pnu);
       setResolvedParcelJibun(id.jibunFromParcel);
     });
     return () => {
@@ -252,22 +339,27 @@ export function LandInfoPanelContent({
       setBuildingLedgerFetching(false);
       return;
     }
-    if (!effectivePnu || !dataPortalKey) return;
+    if (!effectivePnu) return;
     setBuildingLedgerFetching(true);
-  }, [activeTab, effectivePnu, dataPortalKey]);
+  }, [activeTab, effectivePnu]);
 
   useEffect(() => {
     if (activeTab !== 'buildingLedger') return;
-    if (!effectivePnu || !dataPortalKey) return;
+    if (!effectivePnu) return;
     let alive = true;
-    fetchBuildingLedgerRows({ pnu: effectivePnu, dataPortalKey })
-      .then((rows) => {
+    fetchBuildingLedgerRows({
+      pnu: effectivePnu,
+      jibun: resolvedParcelJibun ?? undefined,
+    })
+      .then((res) => {
         if (!alive) return;
-        setBuildingRows(rows);
+        setBuildingRows(res.rows);
+        setBuildingLedgerNotice(res.notice ?? null);
       })
       .catch(() => {
         if (!alive) return;
         setBuildingRows([]);
+        setBuildingLedgerNotice(null);
       })
       .finally(() => {
         if (alive) setBuildingLedgerFetching(false);
@@ -276,7 +368,7 @@ export function LandInfoPanelContent({
       alive = false;
       setBuildingLedgerFetching(false);
     };
-  }, [activeTab, effectivePnu, dataPortalKey]);
+  }, [activeTab, effectivePnu, resolvedParcelJibun]);
 
   useLayoutEffect(() => {
     if (activeTab !== 'buildingPermit') {
@@ -315,6 +407,63 @@ export function LandInfoPanelContent({
   const latestPrice = parcelData.prices[0];
   const latestPossession = parcelData.possessions[0];
 
+  const displayJibunAddress = useMemo(
+    () =>
+      pickDisplayJibunAddress({
+        parcelData,
+        propJibun: jibun,
+        resolvedJibun: resolvedParcelJibun,
+      }),
+    [parcelData, jibun, resolvedParcelJibun]
+  );
+
+  // 우클릭 context에 도로명이 없으면 — 역지오코딩 재시도 후, 지번 검색으로 road 보강
+  useEffect(() => {
+    const fromProp = String(road ?? '').trim();
+    if (fromProp) {
+      setResolvedRoad(null);
+      return;
+    }
+    if (!vworldKey || !wgs84) return;
+    setResolvedRoad(null);
+    let alive = true;
+    const [lon, lat] = wgs84;
+    (async () => {
+      try {
+        const result = await getAddressFromCoord(lon, lat, { apiKey: vworldKey });
+        let roadText = result?.road?.trim() || '';
+        if (!roadText) {
+          const roadOnly = await getAddressFromCoord(lon, lat, { apiKey: vworldKey, type: 'ROAD' });
+          roadText = roadOnly?.road?.trim() || '';
+        }
+        if (!roadText) {
+          const jibunHint =
+            result?.jibun?.trim() ||
+            String(jibun ?? '').trim() ||
+            String(resolvedParcelJibun ?? '').trim() ||
+            displayJibunAddress;
+          if (jibunHint && jibunHint !== '-') {
+            roadText =
+              (await findRoadAddressByJibun(jibunHint, { apiKey: vworldKey, lon, lat }))?.trim() ||
+              '';
+          }
+        }
+        if (alive) setResolvedRoad(roadText || null);
+      } catch {
+        if (alive) setResolvedRoad(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [road, vworldKey, wgs84, jibun, resolvedParcelJibun, displayJibunAddress]);
+
+  const displayRoadAddress = useMemo(() => {
+    const raw = String(road ?? resolvedRoad ?? '').trim();
+    if (!raw) return '-';
+    return formatAddressStripSidoSigungu(raw) || raw;
+  }, [road, resolvedRoad]);
+
   const modalRows = useMemo(() => {
     if (modalKind !== 'price') return [];
     return parcelData.prices.map((row) => [
@@ -322,7 +471,7 @@ export function LandInfoPanelContent({
       toText(row.pblntfDe),
       toText(row.stdrYear),
       toText(row.stdrMt),
-      toText(row.jibun),
+      toText(composeFullJibunFromRow(row) || row.jibun || row.mnnmSlno),
       toText(row.registDt),
     ]);
   }, [modalKind, parcelData]);
@@ -339,29 +488,44 @@ export function LandInfoPanelContent({
         );
       }
       if (parcelError) return <p className="text-xs text-rose-600">{parcelError}</p>;
+      const hasNoLinkageRows =
+        parcelData.characteristics.length === 0 &&
+        parcelData.possessions.length === 0 &&
+        parcelData.prices.length === 0;
       return (
-        <div className="space-y-3">
+        <div className="space-y-2">
+          {!parcelData.source && hasNoLinkageRows ? (
+            <p className="text-[11px] text-slate-500">연계 데이터 없음</p>
+          ) : null}
+          {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
+          <LandLinkageLegendText source={parcelData.source} />
           <section className="border border-slate-200 rounded">
             <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지기본정보</h4>
             <div className="grid grid-cols-[85px_1fr_85px_1fr] text-[12px]">
-              <Cell k="지목" v={getField(latestChar, ['lndcgrCodeNm', 'jimok'])} />
-              <Cell k="면적" v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`} />
-              <Cell k="용도지역" v={getField(latestChar, ['prposArea1Nm', 'prposAreaDstrcCodeNm'])} />
-              <Cell k="이동사유" v={getField(latestChar, ['lndMoveResnNm', 'landMoveReason'])} />
-              <Cell k="이동일자" v={getField(latestChar, ['lndMoveDe', 'landMoveDate'])} />
-              <CellButton k="공시지가" v={`${toNumText(getField(latestPrice, ['pblntfPclnd'], '0'))}원/㎡`} button="조회" onClick={() => setModalKind('price')} />
+              <LinkageCell k="지목" v={getField(latestChar, ['lndcgrCodeNm', 'jimok'])} source={parcelData.source} />
+              <LinkageCell k="면적" v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`} source={parcelData.source} />
+              <LinkageCell k="용도지역" v={getField(latestChar, ['prposArea1Nm', 'prposAreaDstrcCodeNm'])} source={parcelData.source} />
+              <LinkageCell k="이동사유" v={getField(latestChar, ['lndMoveResnNm', 'landMoveReason'])} source={parcelData.source} />
+              <LinkageCell k="이동일자" v={getField(latestChar, ['lndMoveDe', 'landMoveDate'])} source={parcelData.source} />
+              <LinkageCellButton
+                k="공시지가"
+                v={`${toNumText(getField(latestPrice, ['pblntfPclnd'], '0'))}원/㎡`}
+                button="조회"
+                source={parcelData.source}
+                onClick={() => setModalKind('price')}
+              />
             </div>
           </section>
 
           <section className="border border-slate-200 rounded">
             <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지소유내역</h4>
             <div className="grid grid-cols-[85px_1fr_85px_1fr] text-[12px]">
-              <Cell k="소유구분" v={getField(latestPossession, ['posesnSeCodeNm'])} />
-              <Cell k="공유인수" v={getField(latestPossession, ['cnrsPsnCo', 'shareCnt'])} />
-              <Cell k="소유자명" v={getField(latestPossession, ['ownerNm', 'ownerName'])} />
-              <Cell k="주소" v={getField(latestPossession, ['ownerAddr', 'address'])} />
-              <Cell k="변동원인" v={getField(latestPossession, ['ownshipChgCauseCodeNm'])} />
-              <Cell k="변동일자" v={getField(latestPossession, ['ownshipChgDe'])} />
+              <LinkageCell k="소유구분" v={getField(latestPossession, ['posesnSeCodeNm'])} source={parcelData.source} />
+              <LinkageCell k="공유인수" v={getField(latestPossession, ['cnrsPsnCo', 'shareCnt'])} source={parcelData.source} />
+              <LinkageCell k="소유자명" v={getField(latestPossession, ['ownerNm', 'ownerName'])} source={parcelData.source} />
+              <LinkageCell k="주소" v={getField(latestPossession, ['ownerAddr', 'address'])} source={parcelData.source} />
+              <LinkageCell k="변동원인" v={getField(latestPossession, ['ownshipChgCauseCodeNm'])} source={parcelData.source} />
+              <LinkageCell k="변동일자" v={getField(latestPossession, ['ownshipChgDe'])} source={parcelData.source} />
             </div>
           </section>
 
@@ -369,6 +533,7 @@ export function LandInfoPanelContent({
             <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지이용계획</h4>
             <DataTable
               headers={['용도지역지구', '저촉여부', '비고']}
+              linkageSource={parcelData.source}
               rows={(parcelData.landUses.length ? parcelData.landUses : [{}]).map((row) => [
                 toText(row.prposAreaDstrcCodeNm),
                 toText(row.cnflcAtNm),
@@ -381,30 +546,66 @@ export function LandInfoPanelContent({
     }
     if (activeTab === 'buildingLedger') {
       if (buildingLedgerFetching) return <p className="text-xs text-slate-500">건축물대장 조회 중...</p>;
-      if (!buildingRows.length) return <p className="text-xs text-slate-500">조회 결과가 없습니다.</p>;
+      if (!buildingRows.length) {
+        return (
+          <div className="space-y-2">
+            {buildingLedgerNotice ? (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                {buildingLedgerNotice}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">조회 결과가 없습니다.</p>
+            )}
+          </div>
+        );
+      }
       return (
-        <DataTable
-          headers={['주용도', '허가일', '착공일', '사용승인일', '대장종류', '연면적(㎡)']}
-          rows={buildingRows.map((row) => [
-            toText(row.mainPurpsCdNm),
-            toText(row.pmsDay),
-            toText(row.stcnsDay),
-            toText(row.useAprDay),
-            toText(row.regstrKindCdNm),
-            toText(row.totArea),
-          ])}
-        />
+        <div className="space-y-2">
+          {buildingLedgerNotice ? (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              {buildingLedgerNotice}
+            </p>
+          ) : null}
+          <BuildingLinkageLegend sources={buildingRows.map((r) => r.source)} />
+          <DataTable
+            headers={['명칭', '대지위치', '지번', '도로명', '건폐율', '용적률', '대지면적', '연면적']}
+            plainColumnIndexes={[1, 2, 3]}
+            linkageSources={buildingRows.map((r) => r.source)}
+            rows={buildingRows.map((row) => [
+              toText(row.bldNm),
+              toText(
+                (() => {
+                  const t = String(row.platLoc ?? '').trim();
+                  if (!t || t === '-') return t || '-';
+                  return formatAddressStripSidoSigungu(t) || t;
+                })()
+              ),
+              toText(row.jibun),
+              toText(
+                (() => {
+                  const t = String(row.roadAddr ?? '').trim();
+                  if (!t || t === '-') return t || '-';
+                  return formatAddressStripSidoSigungu(t) || t;
+                })()
+              ),
+              toText(row.bcRat),
+              toText(row.vlRat),
+              toText(row.platArea),
+              toText(row.totArea),
+            ])}
+          />
+        </div>
       );
     }
     if (permitFetching) return <p className="text-xs text-slate-500">건축인허가 조회 중...</p>;
     if (!permitRows.length) return <p className="text-xs text-slate-500">건축/주택 인허가 데이터가 없습니다.</p>;
+    const permitLinkage = buildingPermitLinkageSource(permitSource);
     return (
       <div className="space-y-2">
-        <p className="text-[11px] text-slate-500">
-          표시 데이터: {permitSource === 'arch' ? '건축 인허가' : permitSource === 'housing' ? '주택 인허가' : '-'}
-        </p>
+        <BuildingPermitLinkageLegend source={permitSource} />
         <DataTable
           headers={['용도명', '허가일', '착공일', '사용승인(검사)일', '연면적(㎡)', '세대수']}
+          linkageSource={permitLinkage}
           rows={permitRows.map((row) => [
             toText(row.mainPurpsCdNm || row.purpsCdNm),
             toText(row.archPmsDay || row.apprvDay),
@@ -419,6 +620,7 @@ export function LandInfoPanelContent({
   }, [
     activeTab,
     buildingLedgerFetching,
+    buildingLedgerNotice,
     buildingRows,
     dataPortalKey,
     effectivePnu,
@@ -427,6 +629,7 @@ export function LandInfoPanelContent({
     latestPrice,
     loading,
     parcelData,
+    parcelData.source,
     parcelError,
     permitFetching,
     permitRows,
@@ -441,13 +644,13 @@ export function LandInfoPanelContent({
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800">
               지번
             </span>
-            <span>{loading ? '조회 중...' : resolvedParcelJibun ?? jibun ?? '-'}</span>
+            <span>{loading ? '조회 중...' : displayJibunAddress}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700">
               도로명
             </span>
-            <span>{loading ? '조회 중...' : road ?? '-'}</span>
+            <span>{loading ? '조회 중...' : displayRoadAddress}</span>
           </div>
           {buildingName ? <div>건물명: {buildingName}</div> : null}
         </div>
@@ -548,7 +751,7 @@ export function LandInfoPanelContent({
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
             <p className="text-xs text-slate-500 mb-2 shrink-0">총 {modalRows.length}건</p>
-            <DataTable headers={[...PRICE_MODAL_HEADERS]} rows={modalRows} />
+            <DataTable headers={[...PRICE_MODAL_HEADERS]} rows={modalRows} linkageSource={parcelData.source} />
           </div>
         </DialogContent>
       </Dialog>
@@ -557,21 +760,35 @@ export function LandInfoPanelContent({
   );
 }
 
-function Cell({ k, v }: { k: string; v: string }) {
+function LinkageCell({ k, v, source }: { k: string; v: string; source?: ParcelLandRowSource }) {
   return (
     <>
       <div className="px-2 py-1 bg-slate-50 border-b border-r border-slate-200 font-medium">{k}</div>
-      <div className="px-2 py-1 border-b border-slate-200">{v}</div>
+      <div className="px-2 py-1 border-b border-slate-200">
+        <ParcelLinkageValueText value={v} source={source} />
+      </div>
     </>
   );
 }
 
-function CellButton({ k, v, button, onClick }: { k: string; v: string; button: string; onClick: () => void }) {
+function LinkageCellButton({
+  k,
+  v,
+  button,
+  source,
+  onClick,
+}: {
+  k: string;
+  v: string;
+  button: string;
+  source?: ParcelLandRowSource;
+  onClick: () => void;
+}) {
   return (
     <>
       <div className="px-2 py-1 bg-slate-50 border-b border-r border-slate-200 font-medium">{k}</div>
       <div className="px-2 py-1 border-b border-slate-200 flex items-start justify-between gap-2">
-        <span className="whitespace-normal break-words">{v}</span>
+        <ParcelLinkageValueText value={v} source={source} className="whitespace-normal break-words" />
         <button type="button" className="shrink-0 text-[11px] px-2 py-0.5 border rounded border-slate-300 hover:bg-slate-50" onClick={onClick}>
           {button}
         </button>
