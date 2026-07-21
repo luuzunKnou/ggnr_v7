@@ -717,7 +717,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
       {
         sentChunks,
         expectedChunks,
-        progressPct: 90,
+        progressPct: 72,
       }
     );
   }

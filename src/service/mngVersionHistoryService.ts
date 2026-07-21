@@ -5,6 +5,8 @@ import { pool } from '@/database/db';
 import { db } from '@/database/db';
 import { mvh } from '@/database/schema/mng_version_history';
 import { coerceHistoryOptions, normalizeHistoryMemo, normalizeHistoryOptions } from '@/lib/versionHistoryMessage';
+import { APPLIED_VERSION_DEV_LABEL } from '@/lib/gnmsVersionLabel';
+import { isDevRunType } from '@/lib/ggnrBootCommand';
 import { and, desc, eq, gte, ilike, isNotNull, lt, or, sql } from 'drizzle-orm';
 
 export type VersionHistoryType = 'source_upload' | 'install_zip' | 'apply_latest';
@@ -131,6 +133,10 @@ export async function getLatestAppliedVersion(): Promise<{
       .orderBy(desc(mvh.mvhKey))
       .limit(1);
     const version = normalizeVersion(rows[0]?.mvhVer ?? null);
+    /** 구동 type=dev 이면 DB 값과 무관하게 «개발 버전입니다.» 표시 */
+    if (isDevRunType()) {
+      return { ok: true, version: APPLIED_VERSION_DEV_LABEL };
+    }
     return { ok: true, version };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

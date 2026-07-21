@@ -32,7 +32,7 @@ import {
 
 const INSTALL_MANUAL_URL =
   process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
-  'https://app.notion.com/p/daeguk/v7-2f2f538d1f598020a2a1dca9fb051e7b?source=copy_link';
+  'https://app.notion.com/p/daeguk/v7_-3a4f538d1f5980ceb743e8e410fb194d?source=copy_link';
 
 const HISTORY_OPTION_GNMS_LATEST = 'GNMS 최신';
 

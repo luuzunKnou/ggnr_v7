@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { APPLIED_VERSION_DEV_LABEL } from '@/lib/gnmsVersionLabel';
 
 export type GgnrNpmScript = 'dev' | 'start';
 
@@ -137,4 +138,22 @@ export function resolveAppStartCommand(project?: string, type?: string): string 
     return boot.command;
   }
   return `npm run ${script} -- ${p} ${t}`;
+}
+
+/** GGNR_ENV → boot.type (명령 인자 type, npmScript 아님) */
+export function resolveGgnrRunType(): string {
+  const fromEnv = process.env.GGNR_ENV?.trim() ?? '';
+  if (fromEnv) return fromEnv;
+  return readGgnrBootCommand()?.type?.trim() ?? '';
+}
+
+export function isDevRunType(type?: string | null): boolean {
+  const t = (type ?? resolveGgnrRunType()).trim().toLowerCase();
+  return t === 'dev';
+}
+
+/** 이력·조회용 적용 버전 문자열 */
+export function resolveAppliedVersionLabel(gnmsVersion?: string | null): string {
+  if (isDevRunType()) return APPLIED_VERSION_DEV_LABEL;
+  return (gnmsVersion ?? '').trim();
 }

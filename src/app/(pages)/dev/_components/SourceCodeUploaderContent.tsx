@@ -17,7 +17,10 @@ import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload
 import {
   estimateBuildCheckRemainingSeconds,
   estimateRemainingSeconds,
+  estimateUploadCompleteRemainingSeconds,
+  estimateUploadTotalSeconds,
   formatEtaMinutes,
+  uploadCompletePhasePct,
   type BuildCheckEtaPhase,
 } from '@/lib/sourceProgressEta';
 
@@ -71,26 +74,6 @@ type UploadProgressPayload = {
   remoteUploadId?: string;
   done: boolean;
 };
-
-function estimateUploadTotalSeconds(
-  fileCount: number | undefined,
-  zipSizeBytes: number | undefined,
-  includeNodeModules: boolean
-): number {
-  const files = fileCount && fileCount > 0 ? fileCount : 0;
-  if (files <= 0 && (zipSizeBytes == null || zipSizeBytes <= 0)) return 0;
-  const closed = includeNodeModules;
-  const scanSec = Math.max(2, files * 0.004);
-  const estZipBytes = zipSizeBytes ?? files * (closed ? 100_000 : 6_000);
-  const zipSec = Math.max(
-    3,
-    files * (closed ? 0.018 : 0.01) + (estZipBytes / (1024 * 1024)) * (closed ? 1.8 : 0.9)
-  );
-  const transferSec = Math.max(3, (estZipBytes / (1024 * 1024)) * (closed ? 1.2 : 0.8));
-  const remoteSec = Math.max(5, (estZipBytes / (1024 * 1024)) * 0.5);
-  const npmSec = closed ? 0 : 90;
-  return scanSec + zipSec + transferSec + remoteSec + npmSec;
-}
 
 function buildBaseStages(includeNodeModules: boolean): StageItem[] {
   const stages: StageItem[] = [
@@ -312,6 +295,8 @@ export function SourceCodeUploaderContent() {
   const liveLogScrollRef = useRef<HTMLDivElement>(null);
   const uploadHistoryRecordedRef = useRef(false);
   const startedAtRef = useRef(0);
+  const completeStartedAtRef = useRef(0);
+  const progressPhaseRef = useRef('idle');
   const stagesRef = useRef(stages);
   const includeNodeModulesRef = useRef(includeNodeModules);
   const changeNoteRef = useRef(changeNote);
@@ -330,13 +315,33 @@ export function SourceCodeUploaderContent() {
 
   useEffect(() => {
     if (!uploading && !buildChecking) return;
-    const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
+    const id = setInterval(() => {
+      setEtaTick((t) => t + 1);
+      if (progressPhaseRef.current === 'complete' && completeStartedAtRef.current > 0) {
+        setProgressPct(
+          uploadCompletePhasePct(
+            completeStartedAtRef.current,
+            uploadMeta.zipSize,
+            includeNodeModulesRef.current
+          )
+        );
+      }
+    }, 1000);
     return () => clearInterval(id);
-  }, [uploading, buildChecking]);
+  }, [uploading, buildChecking, uploadMeta.zipSize]);
 
   const etaLabel = (() => {
     void etaTick;
     if (!uploading || startedAtRef.current <= 0) return null;
+    if (progressPhase === 'complete' && completeStartedAtRef.current > 0) {
+      const remain = estimateUploadCompleteRemainingSeconds(
+        uploadMeta.zipSize,
+        includeNodeModules,
+        completeStartedAtRef.current,
+        !includeNodeModules
+      );
+      return formatEtaMinutes(remain);
+    }
     const total = estimateUploadTotalSeconds(
       uploadMeta.fileCount,
       uploadMeta.zipSize,
@@ -438,7 +443,22 @@ export function SourceCodeUploaderContent() {
       remoteUploadIdRef.current = p.remoteUploadId.trim();
     }
     setProgressPhase(p.phase || 'idle');
-    setProgressPct(p.progressPct);
+    progressPhaseRef.current = p.phase || 'idle';
+    if (p.phase === 'complete') {
+      if (completeStartedAtRef.current <= 0) {
+        completeStartedAtRef.current = Date.now();
+      }
+      const zipSize = p.zipSize ?? uploadMeta.zipSize;
+      setProgressPct(
+        uploadCompletePhasePct(
+          completeStartedAtRef.current,
+          zipSize,
+          includeNodeModulesRef.current
+        )
+      );
+    } else {
+      setProgressPct(p.progressPct);
+    }
     setProgressText(p.message);
     if (p.scanIncluded != null || p.zipSize != null) {
       setUploadMeta((prev) => ({
@@ -679,6 +699,7 @@ export function SourceCodeUploaderContent() {
       appendLog('DB 불일치 확인 후 업로드 계속');
     }
     startedAtRef.current = Date.now();
+    completeStartedAtRef.current = 0;
     setUploading(true);
     setProgressPhase('idle');
     setProgressPct(2);

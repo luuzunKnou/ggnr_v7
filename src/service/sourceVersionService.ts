@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
-import { resolveAppStartCommand, pickBootForSignalMerge } from '@/lib/ggnrBootCommand';
+import { resolveAppStartCommand, pickBootForSignalMerge, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
 import { ensureGeoServerRunning, stopGeoServerAndVerify } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
@@ -452,6 +452,9 @@ export type ApplySourceProgressPhase =
   | 'build'
   | 'app-stop';
 
+/** 병합·적용 내부 단계 — ETA·진행률용 (ZIP 해제·백업은 복사 건수에 안 잡힘) */
+export type MergeApplyStep = 'extract' | 'count' | 'backup' | 'copy' | 'cleanup';
+
 export type ApplySourceProgressEvent = {
   phase: ApplySourceProgressPhase;
   message: string;
@@ -461,6 +464,8 @@ export type ApplySourceProgressEvent = {
   appliedFiles?: number;
   skippedFiles?: number;
   totalFiles?: number;
+  /** merge-apply 내부 단계 */
+  mergeStep?: MergeApplyStep;
 };
 
 export type ApplySourceZipOptions = {
@@ -547,26 +552,31 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
     await emit('geoserver-stop', `GeoServer ${stopResult.message}`);
 
-    await onProgress?.({ phase: 'merge-apply', message: '소스 병합·적용 중...' });
-    await emit('merge-apply', 'ZIP 압축 해제 시작');
+    await onProgress?.({
+      phase: 'merge-apply',
+      message: '소스 병합·적용 중...',
+      mergeStep: 'extract',
+    });
+    await emit('merge-apply', 'ZIP 압축 해제 시작', { mergeStep: 'extract' });
     await extractZip(zipPath, extractDir);
     const extractedRoot = await pickExtractedRoot(extractDir);
-    await emit('merge-apply', 'ZIP 압축 해제 완료');
+    await emit('merge-apply', 'ZIP 압축 해제 완료', { mergeStep: 'extract' });
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
-    await emit('merge-apply', '병합 대상 파일 수 집계 중...');
+    await emit('merge-apply', '병합 대상 파일 수 집계 중...', { mergeStep: 'count' });
     mergeRelPaths = await listMergeRelFiles(extractedRoot, excludePrefixes);
     const { totalFiles, skippedFiles: preSkipped } = await countCopyTargets(
       extractedRoot,
       excludePrefixes
     );
     await emit('merge-apply', `병합 대상 ${totalFiles}건 (제외 예정 ${preSkipped}건)`, {
+      mergeStep: 'count',
       totalFiles,
       skippedFiles: preSkipped,
       appliedFiles: 0,
     });
 
-    await emit('merge-apply', '적용 직전 소스 백업 중...');
+    await emit('merge-apply', '적용 직전 소스 백업 중...', { mergeStep: 'backup' });
     rollback = await createSourceRollbackSnapshot({
       workspaceRoot,
       mergeRelPaths,
@@ -580,7 +590,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         : '없음';
     await emit(
       'merge-apply',
-      `백업 완료 (파일 ${rollback.backedUp.length}건, 신규 ${rollback.created.length}건, .next ${nextLabel})`
+      `백업 완료 (파일 ${rollback.backedUp.length}건, 신규 ${rollback.created.length}건, .next ${nextLabel})`,
+      { mergeStep: 'backup' }
     );
 
     const copyResult = await copyRecursive({
@@ -593,6 +604,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
           p.totalFiles > 0 ? Math.min(100, Math.round((p.appliedFiles / p.totalFiles) * 100)) : 0;
         const msg = `병합 진행 ${p.appliedFiles}/${p.totalFiles} (${pct}%) · 제외 ${p.skippedFiles}`;
         void emit('merge-apply', msg, {
+          mergeStep: 'copy',
           appliedFiles: p.appliedFiles,
           skippedFiles: p.skippedFiles,
           totalFiles: p.totalFiles,
@@ -603,6 +615,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       'merge-apply',
       `파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`,
       {
+        mergeStep: 'copy',
         appliedFiles: copyResult.appliedFiles,
         skippedFiles: copyResult.skippedFiles,
         totalFiles,
@@ -644,6 +657,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
     const ipTrim = clientIp?.trim() || undefined;
     const historyOption = applyLatestHistoryOptions(includeNodeModules, restartMode);
+    const historyVersion = resolveAppliedVersionLabel(version);
     const successMessage = buildApplySuccessHistoryMessage({
       version,
       mode: restartMode,
@@ -695,7 +709,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         ? {
             mode: restartMode,
             command: bootCommand,
-            version,
+            version: historyVersion,
             appliedFiles: copyResult.appliedFiles,
             skippedFiles: copyResult.skippedFiles,
             netLabel,
@@ -717,23 +731,25 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         status: 'success',
         message: successMessage,
         option: historyOption,
-        version,
+        version: historyVersion,
         ip: ipTrim,
       });
     }
 
     /** 성공 확정 후 잔여 정리 — 실패해도 롤백하지 않음(적용 직전 파일 보존 위해) */
     try {
-      await emit('merge-apply', '잔여 소스 정리 중...');
+      await emit('merge-apply', '잔여 소스 정리 중...', { mergeStep: 'cleanup' });
       const orphanRemoved = await cleanupOrphanManagedFiles({
         workspaceRoot,
         mergeRelSet: new Set(mergeRelPaths),
         includeNodeModules,
         onLog: (m) => {
-          void emit('merge-apply', m);
+          void emit('merge-apply', m, { mergeStep: 'cleanup' });
         },
       });
-      await emit('merge-apply', `잔여 소스 정리 완료 (${orphanRemoved}건)`);
+      await emit('merge-apply', `잔여 소스 정리 완료 (${orphanRemoved}건)`, {
+        mergeStep: 'cleanup',
+      });
     } catch (orphanErr: unknown) {
       const om = orphanErr instanceof Error ? orphanErr.message : String(orphanErr);
       await emit('merge-apply', `잔여 소스 정리 경고: ${om}`);

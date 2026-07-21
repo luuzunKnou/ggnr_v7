@@ -70,7 +70,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
   {
     id: "versionControl",
-    label: "버전관리",
+    label: "버전관리 변동 확인 테스트",
     icon: GitBranch,
     menuIds: ["sourceCodeUploader", "versionManager"],
   },
