@@ -592,22 +592,49 @@ export async function getLayerTableList() {
   }
 }
 
-/** layer 스키마 특정 테이블의 행 수 조회 */
+/** layer / public_layer 스키마에서 테이블 행 수 조회 (정의 스키마 우선) */
 export async function getLayerTableRowCount(params: {
   tableName: string;
 }): Promise<{ success: boolean; count: number; error?: string }> {
   const name = params?.tableName?.trim();
   if (!name) return { success: false, count: 0, error: 'tableName이 필요합니다.' };
-  const safeName = name.replace(/[^a-zA-Z0-9_]/g, '');
+
+  let preferred: 'layer' | 'public_layer' = 'layer';
   try {
-    const result = await db.execute(
-      sql.raw(`SELECT count(*)::int AS cnt FROM layer."${safeName}"`)
-    );
-    const cnt = (result.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
-    return { success: true, count: cnt };
-  } catch {
-    return { success: true, count: 0 };
+    const defineRes = await getDefineLayerTables();
+    if (defineRes.success && Array.isArray(defineRes.tables)) {
+      const row = defineRes.tables.find(
+        (r) =>
+          String((r as Record<string, unknown>).define_table_name ?? '').trim().toLowerCase() ===
+          name.toLowerCase()
+      );
+      if (row && String((row as Record<string, unknown>).define_table_schema ?? '').trim() === 'public_layer') {
+        preferred = 'public_layer';
+      }
+    }
+  } catch { /* ignore */ }
+
+  const { resolveLayerPhysicalRelName } = await import('./standardService');
+  const trySchemas: Array<'layer' | 'public_layer'> =
+    preferred === 'layer' ? ['layer', 'public_layer'] : ['public_layer', 'layer'];
+
+  for (const schema of trySchemas) {
+    const physical = await resolveLayerPhysicalRelName(schema, name);
+    if (!physical) continue;
+    const safeSchema = schema.replace(/"/g, '');
+    const safeTable = physical.replace(/"/g, '');
+    try {
+      const result = await db.execute(
+        sql.raw(`SELECT count(*)::int AS cnt FROM "${safeSchema}"."${safeTable}"`)
+      );
+      const cnt = (result.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
+      return { success: true, count: cnt };
+    } catch {
+      /* 다음 스키마 시도 */
+    }
   }
+
+  return { success: false, count: 0, error: `테이블을 찾을 수 없습니다: ${name}` };
 }
 
 /** layer / public_layer 스키마 테이블별 지오메트리 타입 */
@@ -1138,9 +1165,15 @@ export async function updateGeoServerStyle(params: {
       contentType: 'application/vnd.geoserver.geocss+css',
     });
     if (!putRes.ok) {
-      const text = await putRes.text();
-      return { success: false, error: `스타일 수정 실패: ${putRes.status} ${text}` };
+      const text = (await putRes.text()).replace(/\s+/g, ' ').trim().slice(0, 500);
+      return {
+        success: false,
+        error: text
+          ? `스타일 수정 실패: ${putRes.status} ${text}`
+          : `스타일 수정 실패: ${putRes.status}`,
+      };
     }
+    writeCssStyleToDataDir(name, cssBody);
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1326,26 +1359,38 @@ export async function getGeoServerLayersWithStyleInfo(params: {
 
   try {
     const defineRes = await getDefineLayerTables();
-    if (!defineRes.success || !defineRes.tables?.length) {
-      return { success: true, layers: [] as GeoServerLayerWithStyle[] };
-    }
+    const defineTables = defineRes.success && defineRes.tables?.length ? defineRes.tables : [];
 
     const dbTableRes = await getLayerTableList();
     const dbLayerTableSetLc = new Set<string>(
       (dbTableRes.tables ?? [])
-        .filter((t) => t.schema === 'layer')
+        .filter((t) => t.schema === 'layer' || t.schema === 'public_layer')
         .map((t) => String(t.table).toLowerCase())
     );
 
     const cssStyleNamesFromDir = getCssStyleNamesFromDataDir();
     const geoServerStyleNames = await getGeoServerStyleNameSet(baseUrl);
 
+    // tables.json에 정의가 없어도 DB/GeoServer에 실제로 존재하는 테이블은 스타일 상태를 조회해야 함
+    // (그렇지 않으면 스타일 편집 모달이 기존 스타일을 못 찾고 신규 추가 폼으로 빠짐)
+    const defineRowByNameLc = new Map<string, Record<string, unknown>>();
+    for (const row of defineTables) {
+      const name = String((row as Record<string, unknown>).define_table_name ?? '').trim();
+      if (name) defineRowByNameLc.set(name.toLowerCase(), row as Record<string, unknown>);
+    }
+    const allNamesLc = new Set<string>(defineRowByNameLc.keys());
+    for (const t of dbTableRes.tables ?? []) {
+      if (t.schema === 'layer' || t.schema === 'public_layer') {
+        allNamesLc.add(String(t.table).toLowerCase());
+      }
+    }
+
     // 레이어별 REST 조회를 병렬로 수행하고, 개별 실패가 전체 스캔을 무효화하지 않도록 행마다 catch 처리
     const results = await Promise.all(
-      defineRes.tables.map(async (row): Promise<GeoServerLayerWithStyle | null> => {
-        const layerName = String(row.define_table_name ?? '').trim();
+      Array.from(allNamesLc).map(async (geoLayerKey): Promise<GeoServerLayerWithStyle | null> => {
+        const row = defineRowByNameLc.get(geoLayerKey) ?? {};
+        const layerName = String(row.define_table_name ?? geoLayerKey).trim();
         if (!layerName) return null;
-        const geoLayerKey = layerName.toLowerCase();
 
         const parentLayer = String(row.define_table_parents_layer ?? '').trim();
         const divQ = String(row.define_table_div_query ?? '').trim();
@@ -2588,10 +2633,22 @@ export type LayerSetupIssueType =
   | 'geoserver_style'
   | 'define_layer'
   | 'define_field'
-  | 'define_code';
+  | 'define_code'
+  | 'temp_sync_table'
+  | 'schema_mismatch';
+
+/** SHP 업로드 비교/조회용 임시 테이블(_sync_*, _sync_shpread_*) */
+function isShpSyncTempTableName(tableName: string): boolean {
+  return tableName.startsWith('_sync_');
+}
+
+function normalizeLayerSchema(value: unknown): 'layer' | 'public_layer' {
+  return String(value ?? '').trim() === 'public_layer' ? 'public_layer' : 'layer';
+}
 
 export type LayerSetupIssueRow = {
   rowKey: string;
+  /** DB에 실제로 있는 스키마 */
   schema: 'layer' | 'public_layer';
   tableName: string;
   korName: string;
@@ -2601,6 +2658,14 @@ export type LayerSetupIssueRow = {
   issues: LayerSetupIssueType[];
   missingFields: string[];
   missingCodeFields: string[];
+  /** 레이어 설정(Layer)의 정의 스키마. schema_mismatch 시 이동/잔여 판정 기준 */
+  defineSchema?: 'layer' | 'public_layer';
+  /**
+   * schema_mismatch 처리:
+   * - move: 정의 스키마로 ALTER SET SCHEMA
+   * - drop: 정의 스키마에 정상본이 있어 잘못된 스키마 잔여만 DROP
+   */
+  schemaMismatchAction?: 'move' | 'drop';
 };
 
 function readDefineFieldsFile(tableName: string): Record<string, unknown>[] {
@@ -2681,11 +2746,15 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
 
     const defineTables = defineRes.success && defineRes.tables?.length ? defineRes.tables : [];
     const defineByKey = new Map<string, Record<string, unknown>>();
+    const defineByName = new Map<string, Record<string, unknown>>();
     for (const t of defineTables) {
       const name = String((t as Record<string, unknown>).define_table_name ?? '').trim();
       if (!name) continue;
-      const schema = String((t as Record<string, unknown>).define_table_schema ?? 'layer').trim() || 'layer';
+      const schema = normalizeLayerSchema((t as Record<string, unknown>).define_table_schema);
       defineByKey.set(`${schema}:${name.toLowerCase()}`, t as Record<string, unknown>);
+      if (!defineByName.has(name.toLowerCase())) {
+        defineByName.set(name.toLowerCase(), t as Record<string, unknown>);
+      }
     }
 
     const styleInfoMap: Record<string, { published: boolean; hasCssStyle: boolean }> = {};
@@ -2706,6 +2775,15 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
       ...((geomPublicRes as { types?: Record<string, string> }).types ?? {}),
     };
 
+    const dbTableKeys = new Set<string>();
+    for (const t of listRes.tables ?? []) {
+      if (t.schema !== 'layer' && t.schema !== 'public_layer') continue;
+      const name = String(t.table ?? '').trim();
+      if (!name) continue;
+      const sch = t.schema === 'public_layer' ? 'public_layer' : 'layer';
+      dbTableKeys.add(`${sch}:${name.toLowerCase()}`);
+    }
+
     const layers: LayerSetupIssueRow[] = [];
 
     for (const t of listRes.tables ?? []) {
@@ -2715,12 +2793,70 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
       if (!tableName) continue;
 
       const defineKey = `${schema}:${tableName.toLowerCase()}`;
-      const define = defineByKey.get(defineKey);
+
+      // SHP 비교 잔여 임시 테이블 — 정의/GeoServer 이슈로 취급하지 않고 삭제 대상으로만 노출
+      if (isShpSyncTempTableName(tableName)) {
+        layers.push({
+          rowKey: defineKey,
+          schema,
+          tableName,
+          korName: '',
+          group: '',
+          shpType: '',
+          source: '',
+          issues: ['temp_sync_table'],
+          missingFields: [],
+          missingCodeFields: [],
+        });
+        continue;
+      }
+
+      const defineExact = defineByKey.get(defineKey);
+      const defineByTableName = defineByName.get(tableName.toLowerCase());
+      let define = defineExact;
+      let defineSchema: 'layer' | 'public_layer' | undefined = defineExact
+        ? schema
+        : undefined;
+      let schemaMismatchAction: 'move' | 'drop' | undefined;
       const issues: LayerSetupIssueType[] = [];
       const missingFields: string[] = [];
       const missingCodeFields: string[] = [];
 
-      if (!define) {
+      if (!defineExact && defineByTableName) {
+        const targetSchema = normalizeLayerSchema(defineByTableName.define_table_schema);
+        if (targetSchema !== schema) {
+          issues.push('schema_mismatch');
+          define = defineByTableName;
+          defineSchema = targetSchema;
+          // 정의 스키마에 정상본이 있으면 이동 불가 → 잘못된 스키마 잔여 DROP
+          schemaMismatchAction = dbTableKeys.has(`${targetSchema}:${tableName.toLowerCase()}`)
+            ? 'drop'
+            : 'move';
+          if (schemaMismatchAction === 'drop') {
+            const shpType =
+              String(define?.define_table_shp_type ?? '').trim() ||
+              String(geomTypes[tableName] ?? geomTypes[tableName.toLowerCase()] ?? '').trim();
+            layers.push({
+              rowKey: defineKey,
+              schema,
+              tableName,
+              korName: String(define?.define_table_kor_name ?? '').trim(),
+              group: String(define?.define_table_group ?? '').trim(),
+              shpType,
+              source: String(define?.define_table_source ?? '').trim(),
+              issues: ['schema_mismatch'],
+              missingFields: [],
+              missingCodeFields: [],
+              defineSchema,
+              schemaMismatchAction: 'drop',
+            });
+            continue;
+          }
+        } else {
+          define = defineByTableName;
+          defineSchema = targetSchema;
+        }
+      } else if (!defineExact) {
         issues.push('define_layer');
       }
 
@@ -2779,6 +2915,8 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
         issues,
         missingFields,
         missingCodeFields,
+        defineSchema,
+        schemaMismatchAction,
       });
     }
 
@@ -2835,7 +2973,8 @@ export async function syncDefineCodesFromDb(params: {
 }
 
 /**
- * 레이어 설정 오류 자동 수정 (define → code → geoserver layer → style 순)
+ * 레이어 설정 오류 자동 수정
+ * (임시테이블 삭제 → 스키마 이동 → define → code → geoserver layer → style 순)
  */
 export async function fixLayerSetupIssues(params: {
   tableName: string;
@@ -2845,17 +2984,120 @@ export async function fixLayerSetupIssues(params: {
   url?: string;
   geometryType?: string;
   group?: string;
+  /** schema_mismatch 이동 대상. 없으면 tables.json에서 조회 */
+  defineSchema?: 'layer' | 'public_layer';
+  /** schema_mismatch: move | drop. 없으면 대상 존재 여부로 판정 */
+  schemaMismatchAction?: 'move' | 'drop';
 }) {
   const tableName = String(params.tableName ?? '').trim();
-  const schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
+  let schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
 
   const issueSet = new Set(params.issues ?? []);
   const fixed: string[] = [];
   const errors: string[] = [];
+  const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
   try {
+    // SHP 업로드 잔여 임시 테이블은 DROP만 수행 (정의·GeoServer 생성 금지)
+    if (issueSet.has('temp_sync_table') || isShpSyncTempTableName(tableName)) {
+      try {
+        const { db } = await import('@/database/db');
+        const { sql } = await import('drizzle-orm');
+        await db.execute(sql.raw(`DROP TABLE IF EXISTS ${schema}."${tableName}"`));
+        fixed.push('temp_sync_table');
+        return { success: true, fixed, errors };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { success: false, fixed, errors: [msg], error: msg };
+      }
+    }
+
+    // 레이어 설정 스키마와 DB 스키마가 다르면: 정의 스키마로 이동, 또는 잔여 DROP
+    if (issueSet.has('schema_mismatch')) {
+      let targetSchema =
+        params.defineSchema === 'public_layer' || params.defineSchema === 'layer'
+          ? params.defineSchema
+          : undefined;
+      if (!targetSchema) {
+        const defineRes = await getDefineLayerTables();
+        const row = defineRes.success
+          ? defineRes.tables?.find(
+              (r) =>
+                String((r as Record<string, unknown>).define_table_name ?? '')
+                  .trim()
+                  .toLowerCase() === tableName.toLowerCase()
+            )
+          : undefined;
+        targetSchema = row
+          ? normalizeLayerSchema((row as Record<string, unknown>).define_table_schema)
+          : undefined;
+      }
+      if (!targetSchema || targetSchema === schema) {
+        errors.push('정의 스키마를 확인할 수 없거나 이미 동일합니다.');
+      } else {
+        try {
+          const { db } = await import('@/database/db');
+          const { sql } = await import('drizzle-orm');
+          const existsRes = await db.execute(
+            sql.raw(
+              `SELECT 1 FROM information_schema.tables
+               WHERE table_schema = '${targetSchema}' AND table_name = '${tableName.replace(/'/g, "''")}'
+               LIMIT 1`
+            )
+          );
+          const targetExists = (existsRes.rows?.length ?? 0) > 0;
+          const action: 'move' | 'drop' =
+            params.schemaMismatchAction === 'move' || params.schemaMismatchAction === 'drop'
+              ? params.schemaMismatchAction
+              : targetExists
+                ? 'drop'
+                : 'move';
+
+          if (action === 'drop') {
+            // 정의 스키마에 정상본이 있을 때만 잘못된 스키마 잔여 삭제
+            if (!targetExists) {
+              errors.push(
+                `정의 스키마(${targetSchema})에 '${tableName}'이(가) 없어 잔여를 삭제할 수 없습니다.`
+              );
+            } else {
+              await db.execute(
+                sql.raw(`DROP TABLE IF EXISTS ${schema}.${quoteIdent(tableName)}`)
+              );
+              fixed.push('schema_mismatch');
+              return { success: true, fixed, errors };
+            }
+          } else if (targetExists) {
+            errors.push(
+              `대상 스키마(${targetSchema})에 '${tableName}'이(가) 이미 있어 이동할 수 없습니다.`
+            );
+          } else {
+            await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS ${targetSchema}`));
+            await db.execute(
+              sql.raw(
+                `ALTER TABLE ${schema}.${quoteIdent(tableName)} SET SCHEMA ${targetSchema}`
+              )
+            );
+            fixed.push('schema_mismatch');
+            schema = targetSchema;
+          }
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          errors.push(`스키마 불일치 수정 실패: ${msg}`);
+        }
+      }
+      // 스키마 처리 실패 시 이후 단계는 잘못된 스키마로 동작할 수 있어 중단
+      if (errors.length > 0) {
+        return {
+          success: false,
+          fixed,
+          errors,
+          error: errors.join(' | '),
+        };
+      }
+    }
+
     if (issueSet.has('define_layer') || issueSet.has('define_field')) {
       const { createDefineTableAndFieldsByTableName } = await import('./shpUploadService');
       const geom =

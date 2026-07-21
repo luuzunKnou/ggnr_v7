@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/app/shadcnComponents/ui/dialog"
 import { call } from "@/lib/api"
-import { Check, Loader2, X } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 type HistoryRow = {
   dhKey: number
@@ -36,6 +36,11 @@ type LayerManagerRowHistoryDialogProps = {
   onClose: () => void
 }
 
+function formatCount(n: number | null | undefined): string {
+  if (n == null) return "—"
+  return n.toLocaleString("ko-KR")
+}
+
 function formatDate(raw: string | null | undefined): string {
   if (!raw) return "—"
   const isoDate = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
@@ -51,14 +56,57 @@ function formatDate(raw: string | null | undefined): string {
   return `${yy}.${mm}.${dd}`
 }
 
-function ResultIcon({ result }: { result: string | null }) {
-  if (result === "성공") {
-    return <Check className="w-3.5 h-3.5 text-green-600 mx-auto" aria-label="성공" />
+function HistoryTable({ rows }: { rows: HistoryRow[] }) {
+  const lineColor = (result: string | null) => {
+    if (result === "성공") return "before:bg-green-500"
+    if (result === "실패") return "before:bg-red-400"
+    return "before:bg-border"
   }
-  if (result === "실패") {
-    return <X className="w-3.5 h-3.5 text-red-400 mx-auto" aria-label="실패" />
-  }
-  return <span className="text-muted-foreground mx-auto block text-center">—</span>
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border rounded-md">
+      <table className="w-full text-xs table-fixed">
+        <colgroup>
+          <col style={{ width: 76 }} />
+          <col style={{ width: 84 }} />
+          <col style={{ width: 165 }} />
+          <col style={{ width: "calc(100% - 325px)" }} />
+        </colgroup>
+        <thead className="sticky top-0 bg-background z-10 border-b">
+          <tr className="text-left text-foreground">
+            <th className="py-2 pl-4 pr-3 font-medium">일시</th>
+            <th className="py-2 px-3 font-medium">유형</th>
+            <th className="py-2 px-3 font-medium text-right">건수</th>
+            <th className="py-2 px-3 font-medium">내용</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.dhKey} className="border-b last:border-b-0 hover:bg-muted/30">
+              <td
+                className={`relative py-2 pl-4 pr-3 whitespace-nowrap text-muted-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] ${lineColor(r.dhResult)}`}
+              >
+                {formatDate(r.lhCreateDate)}
+              </td>
+              <td className="py-2 px-3 truncate" title={r.dhType ?? ""}>
+                {r.dhType ?? "—"}
+              </td>
+              <td className="py-2 px-3 text-right whitespace-normal break-words overflow-hidden tabular-nums">
+                {r.dhOldData != null || r.dhNewData != null
+                  ? `${formatCount(r.dhOldData)} → ${formatCount(r.dhNewData)}`
+                  : "—"}
+              </td>
+              <td
+                className="py-2 px-3 text-muted-foreground break-words whitespace-normal"
+                title={r.dhContents ?? r.lhContents ?? ""}
+              >
+                {r.dhContents ?? r.lhContents ?? "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 export function LayerManagerRowHistoryDialog({
@@ -123,50 +171,7 @@ export function LayerManagerRowHistoryDialog({
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">수정 이력이 없습니다.</p>
         ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border rounded-md">
-            <table className="w-full text-xs table-fixed">
-              <colgroup>
-                <col style={{ width: 72 }} />
-                <col style={{ width: 76 }} />
-                <col style={{ width: 52 }} />
-                <col style={{ width: 88 }} />
-                <col style={{ width: "calc(100% - 388px)" }} />
-              </colgroup>
-              <thead className="sticky top-0 bg-muted z-10">
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1.5 px-2">일시</th>
-                  <th className="py-1.5 px-2">유형</th>
-                  <th className="py-1.5 px-2 text-center">결과</th>
-                  <th className="py-1.5 px-2 text-right">건수</th>
-                  <th className="py-1.5 px-2">내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.dhKey} className="border-t hover:bg-muted/30">
-                    <td className="py-1 px-2 whitespace-nowrap">{formatDate(r.lhCreateDate)}</td>
-                    <td className="py-1 px-2 truncate" title={r.dhType ?? ""}>
-                      {r.dhType ?? "—"}
-                    </td>
-                    <td className="py-1 px-2">
-                      <ResultIcon result={r.dhResult} />
-                    </td>
-                    <td className="py-1 px-2 text-right whitespace-nowrap">
-                      {r.dhOldData != null || r.dhNewData != null
-                        ? `${r.dhOldData ?? "—"} → ${r.dhNewData ?? "—"}`
-                        : "—"}
-                    </td>
-                    <td
-                      className="py-1 px-2 text-muted-foreground break-words whitespace-normal"
-                      title={r.dhContents ?? r.lhContents ?? ""}
-                    >
-                      {r.dhContents ?? r.lhContents ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <HistoryTable rows={rows} />
         )}
       </DialogContent>
     </Dialog>
