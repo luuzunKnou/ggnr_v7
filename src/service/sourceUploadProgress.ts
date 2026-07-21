@@ -136,15 +136,16 @@ function phasePct(
       return 22;
     case 'chunk':
       if (sent != null && expected != null && expected > 0) {
-        return clampPct(22 + (sent / expected) * 68);
+        /** 최대 ~70% — 병합/압축 해제 구간(72~88) 여유 */
+        return clampPct(22 + (sent / expected) * 48);
       }
       return 25;
     case 'complete':
-      return 90;
+      return 72;
     case 'npmInstall':
-      return 96;
+      return 92;
     case 'finalize':
-      return 98;
+      return 96;
     case 'done':
       return 100;
     case 'error':

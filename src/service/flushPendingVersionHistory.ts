@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
-import { ggnrRestartSignalPath } from '@/lib/ggnrBootCommand';
+import { ggnrRestartSignalPath, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
 import {
   applyLatestHistoryOptions,
   type RestartModeForHistory,
@@ -89,7 +89,9 @@ export async function flushPendingVersionHistory(): Promise<void> {
     status: 'success',
     message,
     option,
-    version: typeof payload.version === 'string' ? payload.version.trim() : undefined,
+    version: resolveAppliedVersionLabel(
+      typeof payload.version === 'string' ? payload.version.trim() : undefined
+    ),
     ip: clientIp,
   });
 

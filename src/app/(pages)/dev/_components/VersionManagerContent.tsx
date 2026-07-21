@@ -25,10 +25,12 @@ import {
 import { prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import {
   estimateRemainingByBytes,
-  estimateRemainingByCount,
   estimateRemainingSeconds,
+  estimateMergeApplyRemainingSeconds,
   estimateVersionApplyTotalSeconds,
   formatEtaMinutes,
+  mergeApplyStepPct,
+  type MergeApplyEtaStep,
 } from '@/lib/sourceProgressEta';
 import {
   closeDevVersionHistory,
@@ -83,7 +85,9 @@ export function VersionManagerContent() {
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const startedAtRef = useRef(0);
   const mergeCountRef = useRef<{ applied: number; total: number } | null>(null);
-  const mergeStartedAtRef = useRef(0);
+  const mergeStepRef = useRef<MergeApplyEtaStep | null>(null);
+  const mergeStepStartedAtRef = useRef(0);
+  const mergeCopyStartedAtRef = useRef(0);
   const byteProgressRef = useRef<{ done: number; total: number } | null>(null);
   const byteStartedAtRef = useRef(0);
   const [etaTick, setEtaTick] = useState(0);
@@ -197,7 +201,9 @@ export function VersionManagerContent() {
     versionDetailRef.current = '';
     startedAtRef.current = Date.now();
     mergeCountRef.current = null;
-    mergeStartedAtRef.current = 0;
+    mergeStepRef.current = null;
+    mergeStepStartedAtRef.current = 0;
+    mergeCopyStartedAtRef.current = 0;
     byteProgressRef.current = null;
     byteStartedAtRef.current = 0;
     setProgress({
@@ -223,19 +229,30 @@ export function VersionManagerContent() {
           if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
             reachedRestartCommit = true;
           }
-          if (
-            p.phase === 'merge-apply' &&
-            p.totalFiles != null &&
-            p.totalFiles > 0 &&
-            p.appliedFiles != null
-          ) {
-            if (mergeStartedAtRef.current <= 0 && p.appliedFiles > 0) {
-              mergeStartedAtRef.current = Date.now();
+          if (p.phase === 'merge-apply') {
+            const step: MergeApplyEtaStep =
+              p.mergeStep ??
+              (p.appliedFiles != null && p.appliedFiles > 0
+                ? 'copy'
+                : mergeStepRef.current ?? 'extract');
+            if (mergeStepRef.current !== step) {
+              mergeStepRef.current = step;
+              mergeStepStartedAtRef.current = Date.now();
+              if (step === 'copy' && mergeCopyStartedAtRef.current <= 0) {
+                mergeCopyStartedAtRef.current = Date.now();
+              }
             }
-            mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
-          } else if (p.phase !== 'merge-apply') {
+            if (p.totalFiles != null && p.totalFiles > 0 && p.appliedFiles != null) {
+              mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
+              if (p.appliedFiles > 0 && mergeCopyStartedAtRef.current <= 0) {
+                mergeCopyStartedAtRef.current = Date.now();
+              }
+            }
+          } else {
             mergeCountRef.current = null;
-            mergeStartedAtRef.current = 0;
+            mergeStepRef.current = null;
+            mergeStepStartedAtRef.current = 0;
+            mergeCopyStartedAtRef.current = 0;
           }
           if (p.phase === 'merge-apply' || p.phase === 'geoserver-stop' || p.phase === 'relay-complete') {
             byteProgressRef.current = null;
@@ -246,9 +263,14 @@ export function VersionManagerContent() {
             }
             byteProgressRef.current = { done: p.bytesDone, total: p.totalBytes };
           }
+          const merge = mergeCountRef.current;
           const mergePct =
-            p.phase === 'merge-apply' && p.totalFiles != null && p.totalFiles > 0 && p.appliedFiles != null
-              ? 55 + Math.min(35, Math.round((p.appliedFiles / p.totalFiles) * 35))
+            p.phase === 'merge-apply'
+              ? mergeApplyStepPct(
+                  mergeStepRef.current,
+                  merge?.applied ?? 0,
+                  merge?.total ?? 0
+                )
               : null;
           const pct =
             mergePct != null
@@ -261,17 +283,15 @@ export function VersionManagerContent() {
                     ? 8
                     : p.phase === 'geoserver-stop' || p.phase === 'relay-complete'
                       ? 55
-                      : p.phase === 'merge-apply'
-                        ? 70
-                        : p.phase === 'geoserver-start'
-                          ? 92
-                          : p.phase === 'npm-install'
-                            ? 94
-                            : p.phase === 'build'
-                              ? 97
-                              : p.phase === 'app-stop'
-                                ? 99
-                                : null;
+                      : p.phase === 'geoserver-start'
+                        ? 92
+                        : p.phase === 'npm-install'
+                          ? 94
+                          : p.phase === 'build'
+                            ? 97
+                            : p.phase === 'app-stop'
+                              ? 99
+                              : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
             versionDetailRef.current = p.message.replace(/^latest:\s*/i, '');
           }
@@ -390,10 +410,7 @@ export function VersionManagerContent() {
           },
         });
       } else {
-        const applied =
-          versionLabel.trim() ||
-          (typeof json.version === 'string' ? json.version.trim() : '');
-        if (applied) setAppliedVersion(applied);
+        await refreshAppliedVersion();
         notifyDevVersionHistoryRefresh();
         pushLog('화면 새로고침(세션 유지)…');
         void hardReloadKeepSessionAfterDelay(1000);
@@ -516,10 +533,17 @@ export function VersionManagerContent() {
   const etaLabel = (() => {
     void etaTick;
     if (!busy || startedAtRef.current <= 0) return null;
-    const merge = mergeCountRef.current;
-    if (merge && merge.total > 0 && merge.applied > 0 && mergeStartedAtRef.current > 0) {
-      const remain = estimateRemainingByCount(merge.applied, merge.total, mergeStartedAtRef.current);
-      if (remain != null) return formatEtaMinutes(remain);
+    if (mergeStepRef.current) {
+      const merge = mergeCountRef.current;
+      const remain = estimateMergeApplyRemainingSeconds({
+        packageProfile: profile,
+        mergeStep: mergeStepRef.current,
+        applied: merge?.applied ?? 0,
+        total: merge?.total ?? 0,
+        stepStartedAtMs: mergeStepStartedAtRef.current,
+        copyStartedAtMs: mergeCopyStartedAtRef.current,
+      });
+      return formatEtaMinutes(remain);
     }
     const bytes = byteProgressRef.current;
     if (bytes && bytes.total > 0 && bytes.done > 0 && byteStartedAtRef.current > 0) {
@@ -558,7 +582,8 @@ export function VersionManagerContent() {
   return (
     <div className="flex h-full min-h-0 flex-col p-2">
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded border p-3">
-        <div className="min-h-0 max-h-[55%] shrink space-y-2 overflow-y-auto">
+        {/* select·옵션·버튼은 고정 / 단계 목록만 ProgressStagesList 내부 스크롤 */}
+        <div className="shrink-0 space-y-2">
           <div className="text-sm font-medium">최신 소스 적용</div>
           <p className="text-xs text-muted-foreground">
             GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 서버 상태를
@@ -659,6 +684,8 @@ export function VersionManagerContent() {
           <ProgressBar />
           <p className="text-xs text-muted-foreground">{progress.message}</p>
           {progress.error && <p className="text-xs text-red-600">{progress.error}</p>}
+        </div>
+        <div className="min-h-0 shrink space-y-2">
           <ProgressStagesList stages={stages} />
           {relayResult && (
             <div className="rounded border bg-muted/10 p-2 text-xs">

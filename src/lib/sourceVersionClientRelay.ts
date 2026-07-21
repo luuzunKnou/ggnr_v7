@@ -34,6 +34,8 @@ export type VersionRelayProgress = {
   appliedFiles?: number;
   skippedFiles?: number;
   totalFiles?: number;
+  /** 병합·적용 내부: ZIP 해제·집계·백업·복사·정리 */
+  mergeStep?: 'extract' | 'count' | 'backup' | 'copy' | 'cleanup';
 };
 
 export type VersionRelayResult = {
@@ -265,6 +267,7 @@ async function readRelayCompleteNdjson(
     appliedFiles?: number;
     skippedFiles?: number;
     totalFiles?: number;
+    mergeStep?: VersionRelayProgress['mergeStep'];
   }) => void
 ): Promise<VersionRelayResult & { error?: string; ok?: boolean }> {
   const contentType = res.headers.get('content-type') ?? '';
@@ -311,8 +314,17 @@ async function readRelayCompleteNdjson(
       const skippedFiles =
         typeof parsed.skippedFiles === 'number' ? parsed.skippedFiles : undefined;
       const totalFiles = typeof parsed.totalFiles === 'number' ? parsed.totalFiles : undefined;
+      const mergeStepRaw = String(parsed.mergeStep ?? '');
+      const mergeStep =
+        mergeStepRaw === 'extract' ||
+        mergeStepRaw === 'count' ||
+        mergeStepRaw === 'backup' ||
+        mergeStepRaw === 'copy' ||
+        mergeStepRaw === 'cleanup'
+          ? (mergeStepRaw as VersionRelayProgress['mergeStep'])
+          : undefined;
       if (phase && message) {
-        onProgressLine({ phase, message, logLine, appliedFiles, skippedFiles, totalFiles });
+        onProgressLine({ phase, message, logLine, appliedFiles, skippedFiles, totalFiles, mergeStep });
       }
       return;
     }
