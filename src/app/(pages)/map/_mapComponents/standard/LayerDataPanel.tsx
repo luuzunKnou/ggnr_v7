@@ -40,6 +40,7 @@ import {
   createDataQueryBulkListHighlightStyle,
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -355,7 +356,7 @@ export function LayerDataPanel({
       properties: { listHighlightLayer: true },
     });
     layer.set('listHighlightLayer', true);
-    map.getLayers().push(layer);
+    insertLayerBelowServiceLayer(map, layer);
     highlightLayerRef.current = layer;
 
     const selSource = new VectorSource();
@@ -366,7 +367,7 @@ export function LayerDataPanel({
       style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
     });
     selectionLayer.set('listSelectionLayer', true);
-    map.getLayers().push(selectionLayer);
+    insertLayerBelowServiceLayer(map, selectionLayer);
     selectionLayerRef.current = selectionLayer;
 
     return () => {
