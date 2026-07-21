@@ -247,3 +247,11 @@
   filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(152deg) brightness(95%) contrast(91%);
   cursor: pointer;
 }
+
+/* a, button 기본 마우스 포인트 설정 */
+a, button {
+  cursor: pointer;
+  &:disabled {
+    cursor: not-allowed;
+  }
+}

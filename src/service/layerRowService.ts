@@ -105,16 +105,17 @@ export function getEditableFieldDefinitions(params: {
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       const readOnly = isTrueFlag(raw.define_field_read_only);
       if (!showDetail) return null;
-      return {
+      const meta: DefineFieldMeta = {
         field,
         label: String(raw.define_field_kor_name ?? field).trim() || field,
         type: String(raw.define_field_type ?? 'text').trim().toLowerCase(),
         readOnly,
         showDetail,
         idx: parseInt(String(raw.define_field_idx ?? '999999'), 10) || 999999,
-      } satisfies DefineFieldMeta;
+      };
+      return meta;
     })
-    .filter((x): x is DefineFieldMeta => x != null)
+    .filter((x): x is DefineFieldMeta => x !== null)
     .sort((a, b) => (a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field)));
 }
 

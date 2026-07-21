@@ -12,6 +12,7 @@ export * from './layer_detail_history';
 export * from './layer_history';
 export * from './log_kais';
 export * from './log_safetydata';
+export * from './mng_version_history';
 export * from './notice';
 export * from './perm';
 export * from './road_use_ledger';

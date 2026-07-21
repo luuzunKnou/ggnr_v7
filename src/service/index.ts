@@ -38,10 +38,13 @@ import * as seumPermitService from './seumService';
 import * as memoService from './memoService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
+import * as mngVersionHistoryService from './mngVersionHistoryService';
+import * as geoserverProcessService from './geoserverProcessService';
 
 export {
   configService,
   devTestService,
+  geoserverProcessService,
   dbManagerService,
   sysService,
   serService,
@@ -76,4 +79,5 @@ export {
   memoService,
   noticeService,
   boardService,
+  mngVersionHistoryService,
 };

@@ -1746,7 +1746,7 @@ export function ShpWizardModal({
                               {row.error ? (
                                 <button
                                   type="button"
-                                  onClick={() => copyRemark(row.error, `cons-${idx}`)}
+                                  onClick={() => copyRemark(row.error ?? "", `cons-${idx}`)}
                                   title={row.error}
                                   className="w-full text-left truncate text-red-600 dark:text-red-400 hover:underline hover:cursor-pointer"
                                 >

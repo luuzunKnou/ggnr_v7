@@ -1,8 +1,15 @@
 <GeoServerTileLayer>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfd.xml
+  <id>LayerInfoImpl--2e22e67e:19d9ed3743d:-7dfd</id>
+  <enabled>true</enabled>
+  <inMemoryCached>true</inMemoryCached>
+  <name>ggnr:a9990001</name>
+========
   <id>LayerInfoImpl--2e22e67e:19d9ed3743d:-7dfa</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:a9990003</name>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfa.xml
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +19,17 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfd.xml
+          <double>128.98751658788154</double>
+          <double>36.50038668034962</double>
+          <double>129.30016481728143</double>
+          <double>36.880499505513576</double>
+========
           <double>128.98470843034033</double>
           <double>36.50038126742549</double>
           <double>129.30045009667845</double>
           <double>36.88061192200029</double>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfa.xml
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +37,17 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfd.xml
+          <double>1.4358824665251903E7</double>
+          <double>4369694.058948302</double>
+          <double>1.4393628506946115E7</double>
+          <double>4422463.023183388</double>
+========
           <double>1.4358512062584346E7</double>
           <double>4369693.309353473</double>
           <double>1.4393660264103325E7</double>
           <double>4422478.668048906</double>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfa.xml
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +63,11 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfd.xml
+      <defaultStyle>a9990001</defaultStyle>
+========
       <defaultStyle>a9990003</defaultStyle>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--2e22e67e_19d9ed3743d_-7dfa.xml
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

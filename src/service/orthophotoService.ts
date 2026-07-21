@@ -19,6 +19,7 @@ import {
   listDirectory,
   type ListDirectoryResult,
 } from './fileManagerService';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 

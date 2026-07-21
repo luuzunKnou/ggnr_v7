@@ -71,11 +71,13 @@ function MapControlButton({
         }
       }}
       className={cn(
-        "flex flex-col items-center justify-center gap-1 shrink-0 box-border p-0 transition-colors",
+        "flex flex-col items-center justify-center gap-1 shrink-0 box-border p-0 transition-colors cursor-pointer",
         "hover:bg-slate-100 hover:text-blue-600",
-        isActive && "bg-slate-100 text-blue-600"
+        "dark:text-white/90 dark:hover:bg-white/10 dark:hover:text-white",
+        isActive && "bg-slate-100 text-blue-600 dark:bg-white/20 dark:text-white"
       )}
       style={{ width: 45, height: 45 }}
+      title={item.label}
     >
       <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
       <span className="leading-tight text-center whitespace-nowrap overflow-hidden truncate" style={{ maxWidth: 45, fontSize: '9px' }}>
@@ -99,7 +101,7 @@ export function MapControlPanel({
       {groups.map((group, groupIndex) => (
         <React.Fragment key={group.id}>
           <div
-            className="flex flex-col bg-white/95 backdrop-blur-sm rounded-[5px] shadow-lg border border-slate-200 overflow-hidden shrink-0"
+            className="flex flex-col bg-white/95 text-foreground backdrop-blur-sm rounded-[5px] shadow-lg border border-slate-200 overflow-hidden shrink-0 dark:bg-black/55 dark:text-white/90 dark:border-white/10"
             style={{ width: 45, minWidth: 45, maxWidth: 45 }}
           >
             {group.items.map((item) => {

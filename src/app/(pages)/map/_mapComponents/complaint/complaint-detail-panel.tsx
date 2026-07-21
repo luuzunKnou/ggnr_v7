@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { CompUI, CompdUI, CompFileUI } from './types';
+import type { CompUI, CompdUI } from './types';
 import { ComplaintInfo, type ComplaintFormValues } from './complaint-info';
 import { HistoryList } from './history-list';
 import { FileList } from './file-list';
@@ -23,7 +23,6 @@ interface ComplaintDetailPanelProps {
   mode?: 'add' | 'edit';
   complaint: CompUI;
   histories: CompdUI[];
-  files: CompFileUI[];
   onAddHistory?: (data: {
     compdDate: string;
     compdCu: string;
@@ -32,14 +31,17 @@ interface ComplaintDetailPanelProps {
     compdState: string;
     compdContent: string;
   }) => Promise<void>;
-  onEditHistory?: (compdKey: number, data: {
-    compdDate: string;
-    compdCu: string;
-    compdCt: string;
-    compdCg: string;
-    compdState: string;
-    compdContent: string;
-  }) => Promise<void>;
+  onEditHistory?: (
+    compdKey: number,
+    data: {
+      compdDate: string;
+      compdCu: string;
+      compdCt: string;
+      compdCg: string;
+      compdState: string;
+      compdContent: string;
+    }
+  ) => Promise<void>;
   onDeleteHistory?: (compdKey: number) => Promise<void>;
   onSave?: (values: ComplaintFormValues) => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
@@ -52,7 +54,6 @@ export function ComplaintDetailPanel({
   mode = 'edit',
   complaint,
   histories,
-  files,
   onAddHistory,
   onEditHistory,
   onDeleteHistory,
@@ -79,13 +80,14 @@ export function ComplaintDetailPanel({
       </div>
 
       {!isAdd && (
-      <div className="flex-1 min-h-0 flex flex-col px-4 pb-4">
-        <div className="flex border-b border-border shrink-0 overflow-x-auto">
+        <div className="flex-1 min-h-0 flex flex-col px-4 pb-4">
+          <div className="flex border-b border-border shrink-0 overflow-x-auto">
             <button
               type="button"
+              title="이력관리"
               onClick={() => setActiveTab('history')}
               className={cn(
-                'flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
+                'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
                 activeTab === 'history'
                   ? 'border-b-2 border-primary text-primary bg-primary/5'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -96,9 +98,10 @@ export function ComplaintDetailPanel({
             </button>
             <button
               type="button"
+              title="첨부파일"
               onClick={() => setActiveTab('files')}
               className={cn(
-                'flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
+                'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
                 activeTab === 'files'
                   ? 'border-b-2 border-primary text-primary bg-primary/5'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -109,9 +112,10 @@ export function ComplaintDetailPanel({
             </button>
             <button
               type="button"
+              title="필지정보"
               onClick={() => setActiveTab('parcel')}
               className={cn(
-                'flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
+                'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
                 activeTab === 'parcel'
                   ? 'border-b-2 border-primary text-primary bg-primary/5'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -122,9 +126,10 @@ export function ComplaintDetailPanel({
             </button>
             <button
               type="button"
+              title="건축물대장"
               onClick={() => setActiveTab('building')}
               className={cn(
-                'flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
+                'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
                 activeTab === 'building'
                   ? 'border-b-2 border-primary text-primary bg-primary/5'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -135,9 +140,10 @@ export function ComplaintDetailPanel({
             </button>
             <button
               type="button"
+              title="수용가정보"
               onClick={() => setActiveTab('consumer')}
               className={cn(
-                'flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
+                'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
                 activeTab === 'consumer'
                   ? 'border-b-2 border-primary text-primary bg-primary/5'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -148,9 +154,10 @@ export function ComplaintDetailPanel({
             </button>
             <button
               type="button"
+              title="검침정보"
               onClick={() => setActiveTab('metering')}
               className={cn(
-                'flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
+                'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
                 activeTab === 'metering'
                   ? 'border-b-2 border-primary text-primary bg-primary/5'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -159,31 +166,31 @@ export function ComplaintDetailPanel({
               <Gauge className="h-3.5 w-3.5 shrink-0" />
               검침정보
             </button>
-        </div>
+          </div>
 
-        <div className="flex-1 min-h-0 mt-3 overflow-hidden flex flex-col">
-          {activeTab === 'history' && (
-            <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
-              <HistoryList
-                histories={histories}
-                compKey={complaint.compKey}
-                onAddHistory={onAddHistory!}
-                onEditHistory={onEditHistory}
-                onDeleteHistory={onDeleteHistory}
-              />
-            </div>
-          )}
-          {activeTab === 'files' && (
-            <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
-              <FileList files={files} />
-            </div>
-          )}
-          {activeTab === 'parcel' && <TabPlaceholder title="필지정보" />}
-          {activeTab === 'building' && <TabPlaceholder title="건축물대장" />}
-          {activeTab === 'consumer' && <TabPlaceholder title="수용가정보" />}
-          {activeTab === 'metering' && <TabPlaceholder title="검침정보" />}
+          <div className="flex-1 min-h-0 mt-3 overflow-hidden flex flex-col">
+            {activeTab === 'history' && (
+              <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+                <HistoryList
+                  histories={histories}
+                  compKey={complaint.compKey}
+                  onAddHistory={onAddHistory!}
+                  onEditHistory={onEditHistory}
+                  onDeleteHistory={onDeleteHistory}
+                />
+              </div>
+            )}
+            {activeTab === 'files' && (
+              <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+                <FileList compKey={complaint.compKey} />
+              </div>
+            )}
+            {activeTab === 'parcel' && <TabPlaceholder title="필지정보" />}
+            {activeTab === 'building' && <TabPlaceholder title="건축물대장" />}
+            {activeTab === 'consumer' && <TabPlaceholder title="수용가정보" />}
+            {activeTab === 'metering' && <TabPlaceholder title="검침정보" />}
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
