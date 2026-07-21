@@ -59,6 +59,7 @@ const LAUNCHER_MISSING_MSG =
   '구동 프로젝트/타입이 없어 Node 런처 재시작을 쓸 수 없습니다. npm run dev|start -- <project> <type> 으로 기동하세요.';
 
 export function buildApplySuccessHistoryMessage(opts: {
+  /** 이력 버전 컬럼용. 본문에는 넣지 않음 */
   version: string;
   mode: RestartMode;
   command: string;
@@ -67,9 +68,9 @@ export function buildApplySuccessHistoryMessage(opts: {
   netLabel: string;
   geoserverMsg: string;
 }): string {
-  const version = opts.version.trim() || '-';
+  void opts.version;
   const command = opts.command.trim() || '-';
-  return `version=${version} / mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
+  return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
 function spawnInheritAsync(command: string, args: string[]): Promise<void> {

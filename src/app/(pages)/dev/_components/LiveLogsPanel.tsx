@@ -11,7 +11,7 @@ export function LiveLogsPanel({ logs }: { logs: string[] }) {
   }, [logs]);
 
   return (
-    <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
+    <div className="mt-0 flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded border bg-muted/10">
       <div className="shrink-0 border-b px-3 py-1.5 font-sans text-xs font-medium text-muted-foreground">
         실시간 로그
       </div>

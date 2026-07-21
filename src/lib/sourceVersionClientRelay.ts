@@ -1140,11 +1140,10 @@ export async function relayLatestSourceFromGnms(options: {
       const msg = e instanceof Error ? e.message : String(e);
       const failVer =
         historyVersionLabel || folder.trim() || gnmsVersion?.trim() || '';
-      const versionPrefix = failVer ? `version=${failVer} / ` : '';
       await recordVersionHistoryClient({
         historyType: 'apply_latest',
         status: 'fail',
-        message: `${versionPrefix}${msg}`,
+        message: msg,
         option: applyLatestHistoryOptions(includeNodeModules, restartMode),
         version: failVer || undefined,
       }).catch(() => {});

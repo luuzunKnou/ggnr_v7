@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>20260714_1629_소스코드 관리 및 버전관리.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="%EA%B2%B0%EA%B3%BC%EB%B3%B4%EA%B3%A0%EC%84%9C">결과보고서</h1>
+<p>2026-07-21 | 200BingSu | docs/reports/20260714_1629_소스코드 관리 및 버전관리.md</p>
+<h2 id="%EB%AA%A9%EC%A0%81">목적</h2>
+<p><strong>소스코드 관리 및 버전관리</strong>
+개발자가 &lt;&lt;소스코드 관리&gt;&gt; 내 '설치파일 다운로드'를 통해 설치 파일을 받고 해당 파일을 대상 서버에 설치할 수 있고, '소스코드 업로드'를 통해 현재 코드를 GNMS에 업로드할 수 있다.
+업로드 전 '빌드 검사'으로 현재 코드의 npm run build 통과 여부를 임시 복사본에서 검사할 수 있다.
+사용자가 &lt;&lt;최신 소스 적용&gt;&gt;에서 적용 버전 및 폐쇄망/개방망 여부와 재시작 방식(프로세스 종료/Node 런처/재시작 안함)을 선택해 '최신 소스 전체 적용'을 통해 자동으로 소스를 최신화할 수 있도록 구현한다.
+위 과정은 이력 목록에 남기고 추후 검색, 조회할 수 있도록 구현한다.</p>
+<p><strong>Window 서비스 등록 따른 로그 백업 스케줄러</strong>
+Window 서비스 등록시 로그를 보여주는 cmd 창을 바로 볼 수 없고, Window 서비스의 로그 경로를 설정해야 해당 로그에 대한 실시간 로그를 볼 수 있다.
+서비스 등록후 해당 로그에 대한 스케줄러 작업을 통해 날짜별 로그를 확인할 수 있도록 구현한다.</p>
+<h2 id="%EC%9A%94%EC%95%BD">요약</h2>
+<p><strong>소스코드 관리 및 버전관리</strong>
+개발자는 «소스코드 관리»에서 설치파일 다운로드(GNMS 최신 또는 현재 서버·폐쇄망/개방망)·현재 코드 업로드로 GNMS에 소스를 올린다.
+업로드 전 «빌드 검사»로 임시 복사본에서 빌드 가능 여부를 보며, 같은 화면에서 한 번도 검사를 끝내지 않은 채 자동 업로드하면 확인을 묻는다. 업로드·설치 ZIP·빌드 검사·최신 소스 적용 중에는 예상 소요 시간(약 n분)을 안내한다.
+사용자는 «최신 소스 적용»에서 적용 버전·폐쇄망/개방망·재시작 방식을 고른 뒤 전체 적용으로 운영에 반영한다. «최신소스 일부 적용(준비중)»은 비활성이다.
+적용 버전은 GNMS 목록을 받아 기본은 최신이고, 과거 버전은 준비 후 받아 중계한다. 적용 시 GeoServer를 중지한 뒤 병합하고, 재시작 여부와 관계없이 병합 후 GeoServer를 다시 기동한다(재기동 시 런처에서 한 번 더 확인). 개방망·재시작이면 사전 패키지 설치·사전 빌드 후 종료한다. 재시작으로 연결이 끊기면 실패가 아니라 안내로 보고, 서버가 안정되고 적용 성공 이력이 반영된 뒤에 화면을 새로고침한다. 적용 중에도 실시간 로그 칸이 보이도록 위쪽(단계)과 아래(로그) 높이를 나눈다. ZIP에 있는 파일만 덮어쓰며 기동용 bat은 패키지에서 빼 둔다.
+«이력»은 메뉴마다 다르다. «소스코드 관리»는 기능 구분을 고를 수 있고, «최신 소스 적용»은 해당 이력만 본다. 성공 이력의 «버전»에는 날짜·변경 메모만 두고, 본문에는 버전 문구를 넣지 않으며 망·재시작은 «선택»에 둔다. 날짜·기능·성공여부·IP·선택·메모·본문을 통합 검색하고, 검색·초기화로 조회하며 펼쳐 상세를 본다.</p>
+<p><strong>Window 서비스 등록 따른 로그 백업 스케줄러</strong>
+매일 0시에 현재 로그 파일을 'backup' 폴더에 복사한 뒤 '해당날짜_원본이름.log'로 이름을 변경하고 로그파일은 초기화시킨다.</p>
+<p><strong>폐쇄망 VM 생성</strong>
+기존 개방망 VM을 복사한 뒤, DNS 서버 값을 지우고 네트워크 통신 차단한 뒤 내부 네트워크 통신만 허용하도록 설정한다.</p>
+<h2 id="%ED%8C%8C%EC%9D%BC%EC%88%98%EC%A0%95">파일수정</h2>
+<p>수정 | src/lib/consoleMenuAccess/menus/dev.ts
+<code>DEV_CONSOLE_MENUS</code> — «소스코드 관리»·«최신 소스 적용» 메뉴 추가</p>
+<p>수정 | src/app/(pages)/dev/page.tsx
+개발자 화면 — 소스코드 관리·최신 소스 적용 패널·이력 모달 연동</p>
+<p>추가 | src/app/(pages)/dev/_components/SourceCodeUploaderContent.tsx
+<code>SourceCodeUploaderContent</code> — 설치파일 다운로드·소스코드 업로드 화면. 폐쇄망/개방망·단계·이력 연동
+<code>runBuildCheck</code> / <code>beginLiveLogSession</code> — «빌드 검사» NDJSON 수신·실시간 로그. 업로드·빌드 검사 시작마다 로그 초기화
+<code>buildCheckCompletedOnceRef</code> / <code>buildCheckSkipConfirmOpen</code> — 페이지에서 검사 미완료 시 자동 업로드 확인 모달
+<code>etaLabel</code> / <code>buildCheckEtaLabel</code> — 업로드·빌드 검사 예상 소요 시간(약 n분)</p>
+<p>추가 | src/lib/sourceProgressEta.ts
+<code>formatEtaMinutes</code> 등 — 소스 업로드·설치 ZIP·버전 적용·빌드 검사 공통 예상 시간</p>
+<p>추가 | src/service/sourceBuildCheckService.ts
+<code>runIsolatedBuildCheck</code> — <code>.cursor-runtime/build-check</code> 임시 복사본에서 npm install·npm run build. 원본 무영향
+<code>resolveBuildCheckEnv</code> — NODE_ENV=production·GGNR_ENV=demo·프로젝트 [demo]·runtime env 병합</p>
+<p>추가 | src/app/api/source/upload/build-check/route.ts
+POST NDJSON — 빌드 검사 로그 스트리밍·완료/오류 응답</p>
+<p>수정 | src/service/sourceUploadBundleService.ts
+<code>spawnNpmWithLines</code> — npm spawn shell:true (Windows EINVAL 회피). 빌드 검사 로직은 build-check 서비스로 분리</p>
+<p>추가 | src/app/(pages)/dev/_components/InstallZipDownloadPanel.tsx
+<code>InstallZipDownloadPanel</code> — GNMS 최신·현재 서버 ZIP 다운로드·진행 단계·이력·예상 시간</p>
+<p>추가 | src/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles.ts
+<code>ALWAYS_EXCLUDE_EXACT</code> — 업로드·설치 ZIP에서 기동용 bat 등 제외
+폐쇄망/개방망 프로필 — node_modules 포함 여부</p>
+<p>추가 | src/service/sourceUploadBundleService.ts
+스캔·압축·청크 업로드·원격 병합 등 소스 업로드 본처리</p>
+<p>추가 | src/service/sourceUploadHistoryService.ts
+소스 업로드·설치파일 다운로드 이력 기록 연동</p>
+<p>추가 | src/app/api/source/upload/
+업로드 API — 사전확인·초기화·청크·완료·취소·DB 비교·npm install 등</p>
+<p>추가 | src/app/(pages)/dev/_components/VersionManagerContent.tsx
+<code>VersionManagerContent</code> — 적용 버전 선택(기본 최신)·폐쇄망/개방망·재시작 방식·전체 적용·취소
+<code>runUpdate</code> — GNMS 중계 적용·단계·이력 갱신. 재시작 시 서버 안정·이력 반영 후 새로고침
+레이아웃 — 적용 중에도 실시간 로그 영역 최소 높이 유지</p>
+<p>추가 | src/lib/sourceVersionClientRelay.ts
+<code>fetchGnmsVersionList</code> — GNMS 버전 목록 조회
+<code>relayLatestSourceFromGnms</code> — 최신이면 latest 경로, 아니면 준비 스트림 후 해당 버전 ZIP 중계
+<code>RestartMode</code> — 재시작 안 함·프로세스 종료·Node 런처</p>
+<p>추가 | src/service/sourceVersionService.ts
+<code>getGnmsClientConfig</code> — GNMS 주소·목록·latest·다운로드·취소 URL
+<code>applySourceZipFile</code> / <code>scheduleRestart</code> — ZIP 반영·GeoServer 중지·병합 후 기동·사전 설치·사전 빌드·재시작·이력 보류
+<code>buildApplySuccessHistoryMessage</code> — 성공 이력 본문(mode·command·건수 등). 버전 문구는 본문에 넣지 않음</p>
+<p>추가 | src/service/sourceVersionRelayService.ts
+브라우저→운영 서버 ZIP 중계(init·chunk·complete·abort)</p>
+<p>추가 | src/app/api/source/version/
+버전 적용 API — gnms-config·relay·install-zip·update-latest·apply-ready 등</p>
+<p>수정 | src/app/api/source/version/gnms-config/route.ts
+설정 응답 — 버전 목록 URL 포함</p>
+<p>추가 | src/app/api/source/version/apply-ready/route.ts
+GET — 재기동 후 이력 반영 여부(ready). 새로고침 대기용</p>
+<p>추가 | src/lib/hardReloadKeepSession.ts
+<code>waitApplyRestartThenHardReload</code> — health 연속 확인·이력 ready·여유 대기 후 세션 유지 새로고침</p>
+<p>추가 | src/app/(pages)/dev/_components/VersionHistoryDialog.tsx
+<code>VersionHistoryDialog</code> — 이력 모달. 기능 구분·날짜·통합검색·검색·초기화·펼침 상세(선택·버전·메모·본문)</p>
+<p>추가 | src/service/mngVersionHistoryService.ts
+<code>recordVersionHistory</code> / <code>listVersionHistory</code> — 공통 이력 저장·조회(통합검색 포함)</p>
+<p>추가 | src/app/api/dev/version-history/route.ts
+이력 API — 조회·기록·통합검색 키워드</p>
+<p>추가 | src/service/flushPendingVersionHistory.ts
+<code>flushPendingVersionHistory</code> — 재기동 후 보류된 적용 성공 이력 반영
+<code>getApplyRestartReadyState</code> — 이력 보류/반영 완료 여부</p>
+<p>추가 | src/instrumentation.ts
+<code>register</code> — 부팅 시 보류 이력 반영 호출</p>
+<p>추가 | scripts/run.ts
+<code>main</code> / <code>spawnNext</code> — 재시작 신호 감시·Next 종료 후 재기동
+<code>relaunchNextOnly</code> / <code>ensureGeoServerOnRelaunch</code> — Next만 종료 후(필요 시 설치·빌드)·GeoServer 확인·재기동</p>
+<p>추가 | src/app/(pages)/dev/_components/versionManagerStages.ts
+적용·설치 단계 목록 — 사전 설치·사전 빌드·앱 종료 순</p>
+<p>추가 | src/app/(pages)/dev/_components/devVersionHistoryBridge.ts
+이력 모달 닫기·목록 새로고침 브리지</p>
+<p>수정 | src/service/index.ts
+barrel — 소스 업로드·버전·이력 서비스 등록</p>
+<p>수정 | src/service/geoserverProcessService.ts
+<code>ensureGeoServerRunning</code> — 단계 로그(onLog)·적용·재기동 시 기동 확인</p>
+<p>추가 | src/lib/gnmsVersionLabel.ts
+<code>versionOptionBase</code> — 이력·선택용 «날짜 | 변경메모»</p>
+<h2 id="%ED%85%8C%EC%9D%B4%EB%B8%94-%EC%88%98%EC%A0%95">테이블 수정</h2>
+<p>추가 | src/database/schema/mng_version_history.ts
+<code>mng_version_history</code> — 소스코드 관리·최신 소스 적용 공통 이력 테이블
+<code>mvh_history_type</code> — 기능 구분(소스코드 업로드·설치파일 다운로드·최신 소스 적용)
+<code>mvh_status</code> — 성공/실패
+<code>mvh_message</code> — 본문(mode·command·건수·망·GeoServer 등. 버전 문구는 넣지 않음)
+<code>mvh_option</code> — 선택(폐쇄망/개방망·재시작 방식 등)
+<code>mvh_ver</code> — 버전(날짜 | 변경 메모). 옵션·본문과 분리
+<code>mvh_memo</code> — 메모(소스코드 업로드 변경 메모)
+<code>mvh_ip</code> / <code>mvh_client_host</code> — IP·접속 주소
+<code>mvh_create_date</code> — 생성 일시</p>
+<div style="page-break-after: always;"></div>
+<h2 id="%ED%85%8C%EC%8A%A4%ED%8A%B8">테스트</h2>
+<p><strong>소스코드 관리 &gt; 설치파일 다운로드</strong></p>
+<ol>
+<li>«소스코드 관리» «설치파일 다운로드»에서 GNMS 최신 또는 현재 서버를 고를 수 있어야 한다.</li>
+<li>현재 서버일 때 폐쇄망 또는 개방망을 선택하면 ZIP이 받아지고 단계·이력이 남아야 한다.</li>
+<li>진행 중 예상 소요 시간(약 n분)이 보여야 한다.</li>
+<li>«이력»에서 설치파일 다운로드 성공·날짜·IP·선택을 조회할 수 있어야 한다.</li>
+</ol>
+<p><strong>소스코드 관리 &gt; 소스코드 업로드</strong></p>
+<ol>
+<li>«소스코드 업로드» 기본은 설치·node_modules 미포함이어야 하고, «업데이트 (준비 중)»는 비활성이어야 한다.</li>
+<li>이 화면에서 빌드 검사를 한 번도 끝내지 않은 채 «현재 코드 자동 업로드»를 누르면 확인이 나와야 하고, «중단»이면 업로드가 시작되지 않아야 한다.</li>
+<li>빌드 검사를 취소 없이 한 번이라도 끝낸 뒤에는 확인 없이 업로드가 시작되어야 한다.</li>
+<li>«현재 코드 자동 업로드» 시 연결 확인 → 스캔 → 압축·전송 → 원격 반영 순으로 단계가 진행되고 예상 시간이 보여야 한다.</li>
+<li>스키마와 DB가 다르면 확인이 뜨고, «중단»하면 업로드가 이어지지 않아야 하며, «계속 진행»하면 업로드가 이어져야 한다.</li>
+<li>node_modules 미포함이면 ZIP에서 빠지고 원격 설치 단계가 있어야 하며, 포함이면 설치 단계를 건너뛰어야 한다.</li>
+<li>업로드가 끝나면 GNMS에 최신으로 등록되고 «이력»에 소스코드 업로드 성공이 남아야 한다.</li>
+<li>업로드·설치 ZIP에 기동용 bat이 포함되지 않아야 한다.</li>
+</ol>
+<p><strong>소스코드 관리 &gt; 빌드 검사</strong></p>
+<ol>
+<li>«소스코드 업로드»에서 «빌드 검사»·«현재 코드 자동 업로드» 클릭 시 실시간 로그가 이전 내용 없이 새로 시작되어야 한다.</li>
+<li>«빌드 검사»을 누르면 로그에 demo·production·임시 복사 안내가 보이고 예상 시간이 안내되어야 한다.</li>
+<li>임시 폴더에서 패키지 설치·빌드가 진행되고, 출력이 실시간 로그에 쌓여야 한다.</li>
+<li>빌드 성공·실패 요약이 로그 마지막에 나와야 한다.</li>
+<li>빌드 검사 중 «빌드 검사»·«현재 코드 자동 업로드»가 비활성이어야 하고, 버전 이력에는 기록되지 않아야 한다.</li>
+<li>기동 프로젝트 없이 실행하면 명확한 오류가 나와야 한다.</li>
+</ol>
+<p><strong>최신 소스 적용</strong></p>
+<ol>
+<li>«최신 소스 적용» 진입 시 적용 버전 목록이 보이고, 기본 선택은 «(최신)»이어야 한다.</li>
+<li>«최신소스 일부 적용(준비중)»은 비활성이어야 한다.</li>
+<li>최신 버전·폐쇄망/개방망·재시작 방식을 고른 뒤 «최신 소스 전체 적용»하면 ZIP 중계·운영 반영이 되고 PC에 ZIP이 남지 않아야 한다.</li>
+<li>과거 버전을 고른 뒤 적용하면 준비 후 해당 버전 ZIP으로 반영되어야 한다.</li>
+<li>과거 버전·개방망 적용 시 준비 단계가 로그·안내에 나타나야 한다.</li>
+<li>적용 중에도 단계 목록과 함께 실시간 로그 칸이 보여야 한다.</li>
+<li>병합 후 GeoServer 기동 단계가 보이고, 적용 후 GeoServer Manager에서 연결되어야 한다.</li>
+<li>「재시작 안 함」이면 적용 직후 이력에 성공이 남고, 「프로세스 종료」·「Node 런처」이면 재기동·이력 반영 후 성공 이력이 남아야 한다.</li>
+<li>성공 이력 «버전»에는 날짜·변경 메모만 있고, 본문에는 버전 문구가 없어야 하며 «선택»에만 망·재시작이 있어야 한다.</li>
+<li>「Node 런처」인데 운영에 프로젝트/타입이 없으면 적용이 막히고 안내가 나와야 한다.</li>
+<li>재시작이 있는 적용에서 사전 빌드(개방망이면 사전 설치도)와 앱 종료 단계가 완료로 보여야 한다.</li>
+<li>재시작으로 연결이 끊겨도 빨간 실패가 아니라 안내로 처리되고, «재기동 대기(새로고침하지 마세요)»·«이력 반영 대기» 후 화면이 새로고침되어야 한다.</li>
+<li>적용 중 «취소»하면 사용자 취소 안내가 나오고, GNMS·중계 정리가 되어야 한다.</li>
+</ol>
+<p><strong>이력 관리</strong></p>
+<ol>
+<li>«이력»에서 «소스코드 관리»는 기능 구분을 고를 수 있고, «최신 소스 적용»은 기능 구분 없이 해당 이력만 보여야 한다.</li>
+<li>«이력»에서 통합검색·검색·초기화로 날짜·기능·성공여부·IP·선택·메모·버전·본문을 찾을 수 있어야 한다.</li>
+<li>«이력» 접힌 행은 날짜·성공/실패·IP(소스코드 쪽은 기능명 포함)만 보이고, 펼치면 선택·버전·메모·본문이 보여야 한다.</li>
+<li>적용 보류 없이 처음 기동만 한 경우 최신 소스 적용 성공 이력이 새로 생기지 않아야 한다.</li>
+</ol>
+<h2 id="%ED%94%84%EB%A1%AC%ED%94%84%ED%8A%B8">프롬프트</h2>
+<p>docs/brief/20260630_2232_소스코드자동배포.md
+docs/plan/20260707_1700_소스코드자동배포.md</p>
+<hr>
+<div style="page-break-after: always;"></div>
+<h2 id="%EC%86%8C%EC%8A%A4%EC%BD%94%EB%93%9C-%EA%B4%80%EB%A6%AC-%EC%A0%9C%EC%99%B8-%ED%8C%8C%EC%9D%BC">소스코드 관리 제외 파일</h2>
+<p>GNMS 「소스코드 업로드」·「설치파일 다운로드」 공통 패키징 기준이다. (<code>ggnr_start.bat</code>도 둘 다 제외.)</p>
+<h3 id="%EA%B3%B5%ED%86%B5-%EC%A0%9C%EC%99%B8-%ED%8F%B4%EB%8D%94%EA%B2%BD%EB%A1%9C">공통 제외 (폴더·경로)</h3>
+<ol>
+<li><code>.cursor/</code> — 편집기·Agent 작업용 설정. 운영에 필요 없음</li>
+<li><code>.vscode/</code> — VS Code 개인/팀 설정. 운영에 필요 없음</li>
+<li><code>.next/</code> — 빌드 산출물. 받는 쪽에서 다시 빌드하므로 올리지 않음</li>
+<li><code>.git/</code> — Git 저장소 메타. 배포 패키지에 불필요</li>
+<li><code>.yarn/</code> — Yarn 캐시. 용량만 키움</li>
+<li><code>coverage/</code> — 테스트 커버리지 결과. 운영 불필요</li>
+<li><code>out/</code> — 내보내기·빌드 산출 폴더. 운영 불필요</li>
+<li><code>build/</code> — 빌드 산출 폴더. 운영 불필요</li>
+<li><code>.cad-preview-work/</code> — CAD 미리보기 임시 작업. 운영 불필요</li>
+<li><code>python/env/</code> — Python 가상환경. 환경마다 다시 구성</li>
+<li><code>geoserver_modules/data_dir/logs/</code> — GeoServer 로그. 서버별 이력</li>
+<li><code>geoserver_modules/data_dir/gwc/</code> — GeoServer 타일 캐시. 용량 크고 서버에서 재생성</li>
+</ol>
+<h3 id="%ED%95%AD%EC%83%81-%EC%A0%9C%EC%99%B8-%ED%8C%8C%EC%9D%BC%ED%8C%A8%ED%84%B4">항상 제외 (파일·패턴)</h3>
+<ol>
+<li><code>next-env.d.ts</code> — Next가 로컬에서 다시 만드는 타입 보조 파일</li>
+<li><code>ggnr_start.bat</code> — 운영 서버 서비스 기동용. 프로젝트명·환경·node 경로가 서버마다 달라 업로드·설치 ZIP에 넣으면 덮어쓸 위험이 있어 제외. 현장에서는 <code>00_make_ggnr_starter.bat</code>으로 생성</li>
+<li><code>*.log</code> — 로그 파일. 서버·날짜별로 다름</li>
+<li>경로에 <code>/.cache/</code> 포함 — 도구 캐시</li>
+<li>경로에 <code>/.tmp/</code> 포함 — 임시 파일</li>
+</ol>
+<h3 id="%EA%B0%9C%EB%B0%A9%EB%A7%9D-%ED%8C%A8%ED%82%A4%EC%A7%80%EC%9D%BC-%EB%95%8C-%EC%B6%94%EA%B0%80-%EC%A0%9C%EC%99%B8">개방망 패키지일 때 추가 제외</h3>
+<ol>
+<li><code>node_modules/</code> — 받는 쪽에서 <code>npm install</code> 하므로 패키지에 넣지 않음 (폐쇄망은 포함)</li>
+</ol>
+<h2 id="%EB%AA%A8%EB%93%9C-%EC%9A%94%EC%95%BD">모드 요약</h2>
+<ol>
+<li><strong>프로세스 종료(nssm)</strong>
+적용(GeoServer 중지→병합→GeoServer 기동) → <strong>사전 빌드(서버 가동 중)</strong> → <code>process.exit(0)</code> → nssm(또는 기동 런처)이 다시 올림 → 부팅 시 성공 이력 → 클라이언트는 서버 안정·이력 반영 후 새로고침.</li>
+<li><strong>Node 런처</strong>
+적용(동일하게 GeoServer 기동 포함) → 신호 기록 → <code>scripts/run.ts</code>가 Next 종료 → (개방망이면 install) → 빌드 → GeoServer 확인 → Next 재기동 → 부팅 시 성공 이력 → 클라이언트는 이력 반영 후 새로고침.</li>
+<li><strong>재시작 안 함</strong>
+소스 반영·GeoServer 기동 후 적용 직후 성공 이력·짧은 대기 후 새로고침.</li>
+</ol>
+<h2 id="gnms-%EC%88%98%EC%A0%95">GNMS 수정</h2>
+<h3 id="%EC%B7%A8%EC%86%8C-%EB%8F%99%EC%9E%91-%EC%B6%94%EA%B0%80">취소 동작 추가</h3>
+<ul>
+<li>ggnr에서 취소했을 때, 현재 작업 중지 및 파일 정리 추가</li>
+</ul>
+<h3 id="%EB%8F%99%EC%9E%91-%EC%9A%94%EC%95%BD">동작 요약</h3>
+<p><strong>폐쇄망</strong> (<code>includeNodeModules=1</code>)</p>
+<ol>
+<li>캐시 ZIP 있으면 → install/압축 생략 → <code>ready</code></li>
+<li>없으면 → modules 없으면 설치 → ZIP 생성(모듈 포함) → <code>ready</code></li>
+<li>다운로드 <strong>성공 종료 후</strong> GNMS가 디스크의 <code>node_modules</code>만 지우고 <strong>ZIP은 유지</strong>(다음 적용 가속)</li>
+</ol>
+<p><strong>개방망</strong> (<code>includeNodeModules=0</code>)</p>
+<ol>
+<li>install 없음, 모듈 제외 임시 ZIP 생성 → <code>ready</code></li>
+<li>다운로드 종료 후 임시 ZIP 삭제</li>
+</ol>
+<div style="page-break-after: always;"></div>
+<h3 id="gnms-%EC%A0%80%EC%9E%A5-%EA%B5%AC%EC%A1%B0-%EB%82%B4%EB%A0%A4%EB%B0%9B%EA%B8%B0-%EA%B4%80%EC%A0%90">GNMS 저장 구조 (내려받기 관점)</h3>
+<p>기본 루트: <code>C:\ggnr_v7_src</code></p>
+<table>
+<thead>
+<tr>
+<th>경로·파일</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.json</code></td>
+<td>버전 폴더 목록(폴더명·날짜·변경 메모·등록 시각). 목록 API·릴리스 화면이 읽음</td>
+</tr>
+<tr>
+<td><code>{버전폴더}/</code></td>
+<td>업로드 원본·<code>meta.json</code></td>
+</tr>
+<tr>
+<td><code>latest/</code></td>
+<td>발행본 ZIP·메타·<code>extracted</code></td>
+</tr>
+<tr>
+<td><code>bundles/</code> · <code>history/</code></td>
+<td>발행·이력 보조</td>
+</tr>
+<tr>
+<td><code>.upload-work/</code></td>
+<td>업로드 임시(청크·병합). <strong>내려받기와 무관</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3 id="%EB%B2%84%EC%A0%84-%EB%AA%A9%EB%A1%9D-%EC%A0%9C%EA%B3%B5">버전 목록 제공</h3>
+<ul>
+<li><code>index.json</code> 읽어서 api 통해 버전 목록 제공.</li>
+<li>아래: index.json 일부</li>
+</ul>
+<pre class="hljs"><code><div>{
+  &quot;entries&quot;: [
+    {
+      &quot;folder&quot;: &quot;2026-07-20_20260720041930&quot;,
+      &quot;date&quot;: &quot;2026-07-20&quot;,
+      &quot;changeNote&quot;: &quot;최신 소스 적용 UI 변경&quot;,
+      &quot;createdAt&quot;: &quot;2026-07-20T04:22:21.444Z&quot;
+    },
+    {
+      &quot;folder&quot;: &quot;2026-07-16_20260716081821&quot;,
+      &quot;date&quot;: &quot;2026-07-16&quot;,
+      &quot;changeNote&quot;: &quot;단계 반영 수정&quot;,
+      &quot;createdAt&quot;: &quot;2026-07-16T08:19:06.820Z&quot;
+    }
+  ]
+}
+
+</div></code></pre>
+<h2 id="%ED%8F%90%EC%87%84%EB%A7%9D-vm-%EC%84%B8%ED%8C%85">폐쇄망 VM 세팅</h2>
+<ol>
+<li>기존 개방망 VM을 복사하고 고정 IP를 변경한다.</li>
+<li>네트워크 폐쇄 및 내부 네트워크 허용</li>
+</ol>
+<pre class="hljs"><code><div>netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound
+netsh advfirewall firewall add rule name=&quot;Allow_Internal_192.168&quot; dir=out action=allow localip=any remoteip=192.168.0.0/16
+</div></code></pre>
+<ol start="3">
+<li>차단 확인</li>
+</ol>
+<ul>
+<li>구글 서버</li>
+</ul>
+<pre class="hljs"><code><div>ping 8.8.8.8
+
+Ping 8.8.8.8 32바이트 데이터 사용:
+일반 오류.
+일반 오류.
+일반 오류.
+일반 오류.
+</div></code></pre>
+<ul>
+<li>네이버 연결</li>
+</ul>
+<pre class="hljs"><code><div>nslookup naver.com
+*** 기본 서버를 사용할 수 없습니다.
+서버:    UnKnown
+Address:  127.0.0.1
+</div></code></pre>
+<ul>
+<li>브라우저 통한 인터넷 연결 X</li>
+</ul>
+<h2 id="nssm-%ED%86%B5%ED%95%B4-%EC%84%9C%EB%B9%84%EC%8A%A4-%EB%93%B1%EB%A1%9D">NSSM 통해 서비스 등록</h2>
+<p>NSSM으로 현재 프로젝트(ggnr_v7)를 Windows 서비스로 등록한다.</p>
+<p>관련 파일(프로젝트 root):</p>
+<ul>
+<li><code>00_make_ggnr_starter.bat</code> — <code>ggnr_start.bat</code> 생성 + (선택) 기동 검사·nssm 등록·로그 창</li>
+<li><code>smoke_ggnr_start.ps1</code> — 기동 검사(포트 3000, 최대 180초). 진행은 <code>[smoke]</code> 로그로 표시. 종료 시 Next·GeoServer(8080) 정리</li>
+<li><code>nssm_install_ggnr.bat</code> — 서비스 등록·시작(이미 있으면 삭제 후 재등록 Y/N)</li>
+<li><code>open_ggnr_logs.bat</code> — GGNR·GeoServer 로그 실시간 보기(끊기면 재접속)</li>
+</ul>
+<h3 id="1-%EA%B6%8C%EC%9E%A5-00makeggnrstarterbat-%ED%95%9C-%EB%B2%88%EC%97%90-%EA%B4%80%EB%A6%AC%EC%9E%90-cmd">1. 권장: 00_make_ggnr_starter.bat 한 번에 (관리자 CMD)</h3>
+<p>관리자 CMD에서 프로젝트 root의 <code>00_make_ggnr_starter.bat</code>을 실행한다.</p>
+<ol>
+<li><code>where node</code>로 node 경로 확인</li>
+<li>root에 <code>node_modules</code>가 없으면 고지 후 «npm install 을 실행할까요? (Y/N)» — Y면 설치, N이면 건너뛰고 계속(기동·검사가 실패할 수 있음)</li>
+<li>프로젝트명(<code>GGNR_PROJECT</code>)·환경(<code>GGNR_ENV</code>) 입력</li>
+<li><code>ggnr_start.bat</code> 생성(이미 있으면 덮어쓰기 Y/N — N이면 기존 파일 유지)</li>
+<li>«기동 검사 후 nssm 등록·로그 열기를 진행할까요? (Y/N)»
+<ul>
+<li><strong>N</strong> — 생성만 하고 종료. 이후 수동으로 <code>nssm_install_ggnr.bat</code> → <code>open_ggnr_logs.bat</code></li>
+<li><strong>Y</strong> — 아래 순서로 진행 (관리자 권한 필요)
+<ol>
+<li><code>smoke_ggnr_start.ps1</code>로 <code>ggnr_start.bat</code> 기동 검사
+<ul>
+<li>포트 3000이 비어 있어야 함(이미 서비스·dev가 떠 있으면 실패)</li>
+<li>약 5초마다 <code>[smoke]</code> 진행 로그 출력</li>
+<li>기동 확인 후 테스트용 Next 프로세스 트리 종료, GeoServer는 <code>stop-geoserver.bat</code>·포트 8080 정리까지 수행</li>
+<li>실패 시 nssm 등록 중단</li>
+</ul>
+</li>
+<li><code>nssm_install_ggnr.bat</code> 호출 — 서비스 등록·시작
+<ul>
+<li><code>GGNR_V7</code>이 이미 있으면 «삭제 후 재등록할까요? (Y/N)» — N이면 기존 서비스 유지·등록 생략 후 다음 단계로</li>
+</ul>
+</li>
+<li><code>open_ggnr_logs.bat</code> 호출 — 로그 창 2개</li>
+</ol>
+</li>
+</ul>
+</li>
+</ol>
+<p>생성되는 <code>ggnr_start.bat</code> 요지:</p>
+<ul>
+<li><code>C:\logs</code> · <code>C:\logs\backup</code> 폴더 확보</li>
+<li>PATH에 node 디렉터리 추가</li>
+<li><code>GGNR_PROJECT</code> / <code>GGNR_ENV</code> 설정 후 <code>npm run start -- &lt;프로젝트&gt; &lt;환경&gt;</code></li>
+</ul>
+<h3 id="2-%EC%84%9C%EB%B9%84%EC%8A%A4-%EB%93%B1%EB%A1%9D%EB%A7%8C-%EB%94%B0%EB%A1%9C-nssminstallggnrbat">2. 서비스 등록만 따로 (nssm_install_ggnr.bat)</h3>
+<p>이미 <code>ggnr_start.bat</code>이 있을 때 <strong>관리자 CMD</strong>에서 <code>nssm_install_ggnr.bat</code>만 실행해도 된다.</p>
+<ul>
+<li>프로젝트 경로 = bat이 있는 root (<code>ggnr_start.bat</code>과 동일 폴더)</li>
+<li>앱 = <code>root\ggnr_start.bat</code></li>
+<li>로그 = <code>C:\logs\GGNR_V7_stdout.log</code> / <code>C:\logs\GGNR_V7_stderr.log</code></li>
+<li><code>nssm.exe</code>는 <code>C:\nssm\win64\nssm.exe</code> 우선 (없으면 PATH / <code>C:\nssm\nssm.exe</code>)</li>
+<li>기존 <code>GGNR_V7</code> 서비스가 있으면 고지 후 Y일 때만 중지·제거 후 재등록(N이면 기존 유지)</li>
+<li>로그 회전: <code>AppRotateFiles=1</code>, <code>AppRotateBytes=10485760</code>(약 10MB), <code>AppRotateOnline=1</code><br>
+(크기 초과 시 같은 폴더에 <code>.타임스탬프</code> 파일로 rename 후 활성 로그 재생성)</li>
+<li>일자별 백업은 운영(<code>npm run start</code>) 기동 시 Node 스케줄러가 매일 0시에 <code>C:\logs\backup\yyyyMMdd_*</code>로 복사 후 원본 truncate</li>
+</ul>
+<p><strong>수동 등록 예 (관리자 cmd)</strong></p>
+<pre class="hljs"><code><div>nssm install GGNR_V7 C:\htdocs\ggnr_v7\ggnr_start.bat
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppDirectory C:\htdocs\ggnr_v7
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppExit Default Restart
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppRestartDelay <span class="hljs-number">3000</span>
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppStdout C:\logs\GGNR_V7_stdout.log
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppStderr C:\logs\GGNR_V7_stderr.log
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppStdoutCreationDisposition <span class="hljs-number">4</span>
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppStderrCreationDisposition <span class="hljs-number">4</span>
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppRotateFiles <span class="hljs-number">1</span>
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppRotateBytes <span class="hljs-number">10485760</span>
+nssm <span class="hljs-built_in">set</span> GGNR_V7 AppRotateOnline <span class="hljs-number">1</span>
+nssm <span class="hljs-built_in">start</span> GGNR_V7
+</div></code></pre>
+<p><strong>실시간 로그</strong></p>
+<ol>
+<li><code>open_ggnr_logs.bat</code> 실행 — 활성 파일 <code>C:\logs\GGNR_V7_stdout.log</code>를 <code>-Wait</code>로 보며, 회전·truncate로 연결이 끊기면 재접속</li>
+<li>수동 cmd</li>
+</ol>
+<pre class="hljs"><code><div>powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content C:\logs\GGNR_V7_stdout.log -Encoding UTF8 -Wait -Tail <span class="hljs-number">10</span>"
+</div></code></pre>
+<p>과거 조각은 <code>C:\logs\GGNR_V7_stdout.log.*</code>(NSSM 회전본) 또는 <code>C:\logs\backup\</code>을 직접 연다.</p>
+<p><strong>서비스 삭제</strong></p>
+<pre class="hljs"><code><div>nssm remove GGNR_V7
+</div></code></pre>
+
+</body>
+</html>

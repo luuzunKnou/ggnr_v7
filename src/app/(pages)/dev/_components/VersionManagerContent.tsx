@@ -38,7 +38,7 @@ import {
 } from './devVersionHistoryBridge';
 import {
   hardReloadKeepSessionAfterDelay,
-  waitServerThenHardReload,
+  waitApplyRestartThenHardReload,
 } from '@/lib/hardReloadKeepSession';
 import {
   resolveAppliedDisplay,
@@ -352,9 +352,9 @@ export function VersionManagerContent() {
       );
       const restartHint =
         doneMode === 'exit'
-          ? '적용 완료. 서버 재기동 대기 후 화면을 새로고침합니다…'
+          ? '적용 완료. 서버 재기동 대기 중… (새로고침하지 마세요)'
           : doneMode === 'launcher'
-            ? '적용 완료. Next 재기동 대기 후 화면을 새로고침합니다…'
+            ? '적용 완료. Next 재기동 대기 중… (새로고침하지 마세요)'
             : '최신 소스 적용 완료. 화면을 새로고침합니다…';
       setProgress({
         message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료. 화면을 새로고침합니다…',
@@ -368,12 +368,27 @@ export function VersionManagerContent() {
             ? '재시작 예약: 사전 빌드·앱 종료 완료 → process.exit → nssm/런처 재기동'
             : '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
         );
-        pushLog('서버 재기동 대기 후 화면 새로고침…');
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
         ]);
-        void waitServerThenHardReload();
+        void waitApplyRestartThenHardReload({
+          onPhase: (phase) => {
+            if (phase === 'server') {
+              const msg = '서버 재기동 대기 중… (새로고침하지 마세요)';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            } else if (phase === 'history') {
+              const msg = '적용 이력 반영 대기 중…';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            } else {
+              const msg = '이력 반영 완료. 화면 새로고침…';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            }
+          },
+        });
       } else {
         const applied =
           versionLabel.trim() ||
@@ -412,17 +427,33 @@ export function VersionManagerContent() {
           )
         );
         setProgress({
-          message: '적용·사전 빌드까지 완료했습니다. 서버 재기동 대기 후 화면을 새로고침합니다…',
+          message: '적용·사전 빌드까지 완료했습니다. 서버 재기동 대기 중… (새로고침하지 마세요)',
           pct: 100,
           logs: logRef.current,
           error: null,
         });
-        pushLog('재시작으로 연결이 끊김 (정상). 서버 대기 후 화면 새로고침…');
+        pushLog('재시작으로 연결이 끊김 (정상). 서버 재기동 대기 중… (새로고침하지 마세요)');
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
         ]);
-        void waitServerThenHardReload();
+        void waitApplyRestartThenHardReload({
+          onPhase: (phase) => {
+            if (phase === 'server') {
+              const msg = '서버 재기동 대기 중… (새로고침하지 마세요)';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            } else if (phase === 'history') {
+              const msg = '적용 이력 반영 대기 중…';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            } else {
+              const msg = '이력 반영 완료. 화면 새로고침…';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            }
+          },
+        });
         return;
       }
       const msg = isAbort
@@ -526,8 +557,8 @@ export function VersionManagerContent() {
 
   return (
     <div className="flex h-full min-h-0 flex-col p-2">
-      <div className="flex min-h-0 flex-1 flex-col rounded border p-3">
-        <div className="shrink-0 space-y-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded border p-3">
+        <div className="min-h-0 max-h-[55%] shrink space-y-2 overflow-y-auto">
           <div className="text-sm font-medium">최신 소스 적용</div>
           <p className="text-xs text-muted-foreground">
             GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 서버 상태를
@@ -642,7 +673,9 @@ export function VersionManagerContent() {
             </div>
           )}
         </div>
-        <LiveLogsPanel logs={progress.logs} />
+        <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
+          <LiveLogsPanel logs={progress.logs} />
+        </div>
       </div>
     </div>
   );

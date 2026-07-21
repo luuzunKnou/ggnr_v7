@@ -23,6 +23,37 @@ type HistoryPayload = {
   option?: string[];
 };
 
+export type ApplyRestartReadyState = {
+  ready: boolean;
+  historyPending: boolean;
+  historyFlushed: boolean;
+};
+
+/** 클라이언트 새로고침 전: 보류 이력이 없거나 flush 완료면 ready */
+export function getApplyRestartReadyState(cwd = process.cwd()): ApplyRestartReadyState {
+  const signalPath = ggnrRestartSignalPath(cwd);
+  if (!fs.existsSync(signalPath)) {
+    return { ready: true, historyPending: false, historyFlushed: false };
+  }
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(fs.readFileSync(signalPath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return { ready: true, historyPending: false, historyFlushed: false };
+  }
+
+  const historyPending = raw.historyPending === true;
+  const historyFlushed =
+    typeof raw.historyFlushedAt === 'string' && raw.historyFlushedAt.trim().length > 0;
+
+  if (historyFlushed || !historyPending) {
+    return { ready: true, historyPending, historyFlushed };
+  }
+
+  return { ready: false, historyPending: true, historyFlushed: false };
+}
+
 export async function flushPendingVersionHistory(): Promise<void> {
   const signalPath = ggnrRestartSignalPath();
   if (!fs.existsSync(signalPath)) return;
@@ -97,12 +128,11 @@ function resolveOptionFromSignal(
 }
 
 function buildFallbackMessage(payload: HistoryPayload): string {
-  const version = payload.version?.trim() || '-';
   const mode = payload.mode?.trim() || '-';
   const command = payload.command?.trim() || '-';
   const applied = payload.appliedFiles ?? 0;
   const skipped = payload.skippedFiles ?? 0;
   const net = payload.netLabel?.trim() || '-';
   const geo = payload.geoserverMsg?.trim() || '-';
-  return `version=${version} / mode=${mode} / command=${command} / 적용 ${applied}건 / 제외 ${skipped}건 / ${net} / GeoServer: ${geo}`;
+  return `mode=${mode} / command=${command} / 적용 ${applied}건 / 제외 ${skipped}건 / ${net} / GeoServer: ${geo}`;
 }
