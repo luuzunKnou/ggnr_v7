@@ -98,18 +98,6 @@ export function buildParcelAnalysisFacilityCatalogFromDbTables(
     .filter((group) => group.layers.length > 0);
 }
 
-/** @deprecated DB 목록 없이 tables.json 전체 그룹 — 테스트·폴백용 */
-export function buildParcelAnalysisFacilityCatalog(_enabledSystemsRaw?: string): ParcelAnalysisFacilityGroupDef[] {
-  const tables = readDefineLayerTables();
-  const allNames = new Set(
-    tables
-      .filter((r) => (r.define_table_schema || 'layer').toLowerCase() === 'layer')
-      .map((r) => String(r.define_table_name ?? '').trim().toLowerCase())
-      .filter(Boolean)
-  );
-  return buildParcelAnalysisFacilityCatalogFromDbTables(allNames);
-}
-
 const tableIndex = new Map<
   string,
   {

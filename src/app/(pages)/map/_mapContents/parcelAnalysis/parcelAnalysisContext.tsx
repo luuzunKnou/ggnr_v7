@@ -26,7 +26,7 @@ import {
   buildParcelAnalysisResult,
   runParcelAnalysisProgressiveLoad,
   type AnalyzeExtendedResponse,
-  type MockParcelAnalysisResult,
+  type ParcelAnalysisResult,
 } from './parcelAnalysis.result';
 import { useParcelAnalysisBoundaryCatalog } from './ParcelAnalysis.boundary';
 import {
@@ -119,7 +119,7 @@ type ParcelAnalysisContextValue = {
   analyzing: boolean;
   cancelAnalyze: () => void;
   enriching: boolean;
-  result: MockParcelAnalysisResult | null;
+  result: ParcelAnalysisResult | null;
   analyzeError: string | null;
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
@@ -208,7 +208,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     syncEmdFromCache: syncBoundaryEmdFromCache,
   } = useParcelAnalysisBoundaryCatalog(isOpen);
   const [enriching, setEnriching] = useState(false);
-  const [result, setResult] = useState<MockParcelAnalysisResult | null>(null);
+  const [result, setResult] = useState<ParcelAnalysisResult | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [panelEngaged, setPanelEngaged] = useState(false);
   const [applyingArea, setApplyingArea] = useState(false);
@@ -521,6 +521,8 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     const totalAreaSqm = Number(baseData.totalAreaSqm ?? 0) || 0;
     const needsLandRowPages =
       selectedIds.has('parcel:land') ||
+      selectedIds.has('parcel:owner') ||
+      selectedIds.has('parcel:jimok') ||
       selectedIds.has('building:ledger') ||
       selectedIds.has('parcel:landUse');
     let current: AnalyzeExtendedResponse = {

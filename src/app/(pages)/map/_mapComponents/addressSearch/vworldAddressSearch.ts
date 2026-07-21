@@ -242,12 +242,21 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
     return undefined;
   })();
 
+  let jibun: string | undefined;
+  let roadAddr: string | undefined;
+  let pnu = pnuFromObj;
+  let buildingName: string | undefined;
+
   // 1) 배열 형식: [{ type: 'parcel'|'road', text: '...' }, ...]
   if (Array.isArray(result)) {
-    const parcelItem = result.find((r: { type?: string }) => r?.type === 'parcel') as
-      | Record<string, unknown>
-      | undefined;
-    const roadItem = result.find((r: { type?: string }) => r?.type === 'road');
+    const parcelItem = result.find((r: { type?: string }) => {
+      const t = String(r?.type ?? '').toLowerCase();
+      return t === 'parcel' || t === 'parcels';
+    }) as Record<string, unknown> | undefined;
+    const roadItem = result.find((r: { type?: string }) => {
+      const t = String(r?.type ?? '').toLowerCase();
+      return t === 'road' || t === 'roads';
+    }) as Record<string, unknown> | undefined;
     const pnuFromArrayItem = (() => {
       if (!parcelItem) return undefined;
       const direct = parcelItem.pnu;
@@ -265,72 +274,140 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
       if (pnuFromLc) return pnuFromLc;
       return undefined;
     })();
-    const jibun = (parcelItem as { text?: string })?.text;
-    const road = (roadItem as { text?: string })?.text;
-    if (jibun || road || pnuFromArrayItem || pnuFromObj)
-      return { pnu: pnuFromArrayItem ?? pnuFromObj, jibun, road };
+    const parcelText = (parcelItem as { text?: string } | undefined)?.text;
+    const roadText = (roadItem as { text?: string } | undefined)?.text;
+    if (typeof parcelText === 'string' && parcelText.trim()) jibun = parcelText.trim();
+    if (typeof roadText === 'string' && roadText.trim()) roadAddr = roadText.trim();
+    if (pnuFromArrayItem) pnu = pnuFromArrayItem;
+    if (jibun || roadAddr || pnu) {
+      return { pnu, jibun, road: roadAddr };
+    }
     return null;
   }
 
-  // 2) 단일 주소 필드 (문서상 result.ADDR 또는 result.addr)
-  const singleAddr = (obj.ADDR as string) ?? (obj.addr as string);
-  if (typeof singleAddr === 'string' && singleAddr.trim()) {
-    return { pnu: pnuFromObj, jibun: singleAddr.trim() };
-  }
-
-  // 3) result.parcel / result.road 문자열 (일부 버전)
+  // 2) result.parcel / result.road 문자열 (일부 버전)
   const parcelStr = obj.parcel as string | undefined;
   const roadStr = obj.road as string | undefined;
-  if (typeof parcelStr === 'string' || typeof roadStr === 'string') {
-    return {
-      pnu: pnuFromObj,
-      jibun: typeof parcelStr === 'string' ? parcelStr.trim() || undefined : undefined,
-      road: typeof roadStr === 'string' ? roadStr.trim() || undefined : undefined,
-    };
-  }
+  if (typeof parcelStr === 'string' && parcelStr.trim()) jibun = parcelStr.trim();
+  if (typeof roadStr === 'string' && roadStr.trim()) roadAddr = roadStr.trim();
 
-  // 4) land / road / structure 하위 객체
+  // 3) land / road / structure 하위 객체 — addr만 있어도 road는 별도 채움 (조기 return 금지)
   const land = obj.land as Record<string, unknown> | undefined;
   const road = obj.road as Record<string, unknown> | undefined;
   const structure = obj.structure as Record<string, unknown> | undefined;
 
-  let jibun: string | undefined;
-  if (land?.parcel && typeof land.parcel === 'string') {
-    jibun = land.parcel;
-  } else if (land?.addr && typeof land.addr === 'string') {
-    jibun = land.addr;
-  } else if (structure?.addr && typeof structure.addr === 'string') {
-    jibun = structure.addr;
-  } else if (structure?.level2 || structure?.level4) {
-    const parts = [structure?.level2, structure?.level4, structure?.level5].filter(Boolean) as string[];
-    if (parts.length) jibun = parts.join(' ');
+  if (!jibun) {
+    if (land?.parcel && typeof land.parcel === 'string') {
+      jibun = land.parcel;
+    } else if (land?.addr && typeof land.addr === 'string') {
+      jibun = land.addr;
+    } else if (structure?.addr && typeof structure.addr === 'string') {
+      jibun = structure.addr;
+    } else if (structure?.level2 || structure?.level4) {
+      const parts = [structure?.level2, structure?.level4, structure?.level5].filter(Boolean) as string[];
+      if (parts.length) jibun = parts.join(' ');
+    }
   }
 
-  let roadAddr: string | undefined;
-  if (road?.addr && typeof road.addr === 'string') {
-    roadAddr = road.addr;
-  } else if (road?.name && typeof road.name === 'string') {
-    const num1 = road.number1 != null ? String(road.number1) : '';
-    const num2 = road.number2 != null ? String(road.number2) : '';
-    roadAddr = [road.name, num1, num2].filter(Boolean).join(' ');
+  if (!roadAddr) {
+    if (road?.addr && typeof road.addr === 'string') {
+      roadAddr = road.addr;
+    } else if (road?.name && typeof road.name === 'string') {
+      const num1 = road.number1 != null ? String(road.number1) : '';
+      const num2 = road.number2 != null ? String(road.number2) : '';
+      roadAddr = [road.name, num1, num2].filter(Boolean).join(' ');
+    }
   }
 
-  const buildingName =
+  // 4) 단일 ADDR — 도로명이 없을 때만 지번 폴백 (도로명 파싱을 가리지 않음)
+  if (!jibun) {
+    const singleAddr = (obj.ADDR as string) ?? (obj.addr as string);
+    if (typeof singleAddr === 'string' && singleAddr.trim()) {
+      jibun = singleAddr.trim();
+    }
+  }
+
+  // 5) result.text 단독 (ROAD/PARCEL 단건 응답)
+  if (!jibun && !roadAddr) {
+    const text = (obj.text as string) ?? (obj.TEXT as string);
+    if (typeof text === 'string' && text.trim()) {
+      jibun = text.trim();
+    }
+  }
+
+  const bld =
     (road?.bldnm as string) ?? (land?.bldnm as string) ?? (obj.bldnm as string);
-  const hasBuilding = typeof buildingName === 'string' && buildingName.trim();
+  if (typeof bld === 'string' && bld.trim()) buildingName = bld.trim();
+
   const pnuFromStructure = buildPnuFromLevel4Lc(
     structure?.level4LC,
     jibun ?? (structure?.level5 as string | undefined)
   );
 
-  if (jibun || roadAddr || hasBuilding)
+  if (jibun || roadAddr || buildingName)
     return {
-      pnu: pnuFromObj ?? pnuFromStructure,
+      pnu: pnu ?? pnuFromStructure,
       jibun,
       road: roadAddr,
-      buildingName: hasBuilding ? buildingName.trim() : undefined,
+      buildingName,
     };
   return null;
+}
+
+function normalizeAddrKey(value: string): string {
+  return String(value ?? '')
+    .replace(/\s+/g, '')
+    .replace(/번지/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * 역지오코딩에 도로명이 없을 때 — 지번 문자열로 검색 API를 쳐 road 필드를 보강.
+ * (getAddress ROAD=NOT_FOUND 여도 search(parcel) 응답의 address.road 에 값이 있는 경우가 많음)
+ */
+export async function findRoadAddressByJibun(
+  jibun: string,
+  options?: { apiKey?: string; lon?: number; lat?: number }
+): Promise<string | null> {
+  const query = String(jibun ?? '').trim();
+  if (!query) return null;
+  const apiKey = options?.apiKey;
+  const items = await searchAddress(query, {
+    apiKey,
+    type: 'address',
+    category: 'parcel',
+    maxResults: 8,
+  });
+  const withRoad = items.filter((it) => String(it.roadAddress ?? '').trim());
+  if (!withRoad.length) return null;
+
+  const qKey = normalizeAddrKey(query);
+  const exact = withRoad.find((it) => normalizeAddrKey(it.jibunAddress ?? '') === qKey);
+  if (exact?.roadAddress) return exact.roadAddress.trim();
+
+  const lon = options?.lon;
+  const lat = options?.lat;
+  if (lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)) {
+    let best = withRoad[0];
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const it of withRoad) {
+      const dx = it.point.x - lon;
+      const dy = it.point.y - lat;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        best = it;
+      }
+    }
+    return best.roadAddress?.trim() || null;
+  }
+
+  const partial = withRoad.find((it) => {
+    const p = normalizeAddrKey(it.jibunAddress ?? '');
+    return p.includes(qKey) || qKey.includes(p);
+  });
+  return (partial ?? withRoad[0]).roadAddress?.trim() || null;
 }
 
 /**
@@ -340,7 +417,7 @@ function parseAddressResult(result: unknown): GetAddressFromCoordResult | null {
 export function getAddressFromCoord(
   lon: number,
   lat: number,
-  options?: { apiKey?: string }
+  options?: { apiKey?: string; type?: 'BOTH' | 'ROAD' | 'PARCEL' }
 ): Promise<GetAddressFromCoordResult | null> {
   const apiKey =
     options?.apiKey ??
@@ -357,7 +434,7 @@ export function getAddressFromCoord(
     request: 'getAddress',
     point,
     crs: 'epsg:4326',
-    type: 'BOTH',
+    type: options?.type ?? 'BOTH',
     format: 'json',
     simple: 'false',
     key: apiKey,

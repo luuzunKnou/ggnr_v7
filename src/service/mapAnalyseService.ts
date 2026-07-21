@@ -21,15 +21,10 @@ import {
 import {
   enrichParcelLandsByPnus,
   fetchLandUseZonesByPnus as fetchLandUseZonesByPnusLinkage,
-  shouldMaskParcelOwners,
 } from '@/service/landLinkageService';
 import { toParcelAnalyzeUserError } from '@/lib/parcelAnalyzeUserError';
 import {
-  PARCEL_THEME_MAP_FULL_COLOR_LIMIT,
-  PARCEL_THEME_MAP_OTHER_CATEGORY,
   PARCEL_THEME_MAP_SIMPLIFY_TOLERANCE_M,
-  PARCEL_THEME_MAP_TOP_CATEGORY_COUNT,
-  type ParcelThemeMapCategory,
   type ParcelThemeMapFeature,
   type ParcelThemeMapKind,
   type ParcelThemeMapPayload,
@@ -83,10 +78,9 @@ function buildHitCteSql(wkt: string): string {
         j.pnu::text AS pnu,
         j.jibun::text AS jibun,
         ST_Area(${jijukGeom}) AS area_sqm,
-        NULLIF(TRIM(a.jimok), '') AS jimok,
-        NULLIF(TRIM(a.ownship_se), '') AS ownship_se
+        NULL::text AS jimok,
+        NULL::text AS ownship_se
       FROM ${JIJUK_SCHEMA}.jijuk j
-      LEFT JOIN ${JIJUK_SCHEMA}.jijuk_land_attr a ON a.pnu = j.pnu
       WHERE ${hitWhere}
     )`;
 }
@@ -108,6 +102,7 @@ export type AnalyzeLandRowResult = {
   ownerType?: string;
   publicPrice?: number | null;
   source?: string;
+  linkageFailed?: boolean;
 };
 
 export type AnalyzeParcelsResult = {
@@ -162,6 +157,7 @@ function mapLandRowResults(
     ownerType?: string;
     publicPrice?: number | null;
     source?: string;
+    linkageFailed?: boolean;
   }>
 ): AnalyzeLandRowResult[] {
   return rows.map((r) => ({
@@ -173,6 +169,7 @@ function mapLandRowResults(
     ownerType: r.ownerType,
     publicPrice: r.publicPrice ?? null,
     source: r.source,
+    linkageFailed: r.linkageFailed,
   }));
 }
 
@@ -315,14 +312,14 @@ export async function listAnalyzeLandRows(params: {
   }
 }
 
-/** 토지이용계획 — 행망(KRAS000025) 우선, 실패 시 캐시·브이월드 (landLinkageService) */
+/** 토지이용계획 — 서버는 행망(KRAS000025). 브이월드는 클라 점진 로딩 */
 export async function fetchLandUseZonesByPnus(params: {
   pnus?: string[];
 }): Promise<FetchLandUseZonesResult> {
   return fetchLandUseZonesByPnusLinkage(params);
 }
 
-/** 토지현황 표시 행만 연계 보강 — 통계는 analyzeParcels DB 결과 유지 */
+/** 토지현황 표시 행만 연계 보강 — 소유·지목 통계는 점진 로딩에서 재집계 */
 export async function enrichParcelLandRows(params: {
   landRows?: AnalyzeLandRowResult[];
 }): Promise<EnrichParcelLandRowsResult> {
@@ -335,9 +332,10 @@ export async function enrichParcelLandRows(params: {
     jibun: String(r.jibun ?? '').trim(),
     jimok: String(r.jimok ?? '미상'),
     areaSqm: toInt(r.areaSqm),
-    ownerType: String(r.ownerType ?? '').trim() || '미상',
+    ownerType: String(r.ownerType ?? '').trim(),
     ownerName: r.ownerName,
     publicPrice: r.publicPrice ?? null,
+    source: r.source as AnalyzeLandRow['source'],
   }));
 
   const pnus = baseRows.map((r) => r.pnu).filter((p) => /^\d{19}$/.test(p));
@@ -345,7 +343,7 @@ export async function enrichParcelLandRows(params: {
 
   try {
     const { enrichments, source } = await enrichParcelLandsByPnus({ pnus });
-    const merged = applyEnrichmentToLandRows(baseRows, enrichments, shouldMaskParcelOwners());
+    const merged = applyEnrichmentToLandRows(baseRows, enrichments);
     return {
       ok: true,
       landRows: mapLandRowResults(merged),
@@ -379,6 +377,8 @@ export type BuildingLedgerResult = {
   ok: boolean;
   rows: BuildingLedgerDisplayRow[];
   error?: string;
+  notice?: string;
+  portalQuotaExceeded?: boolean;
 };
 
 /** 시설목록 동적 카탈로그 (4-E) — 데이터조회와 동일하게 DB layer 테이블 기준 그룹 */
@@ -553,13 +553,6 @@ export async function fetchBuildingLedgersForParcels(params: {
   return fetchBuildingLedgersByPnus(params);
 }
 
-function themeCategoryExpr(theme: ParcelThemeMapKind): string {
-  if (theme === 'owner') {
-    return `COALESCE(NULLIF(TRIM(ownship_se), ''), '미상')`;
-  }
-  return `COALESCE(NULLIF(TRIM(jimok), ''), '미상')`;
-}
-
 function parseGeoJsonGeometry(value: unknown): GeoJSON.Geometry | null {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -577,8 +570,8 @@ function parseGeoJsonGeometry(value: unknown): GeoJSON.Geometry | null {
 }
 
 /**
- * 소유·지목 테마 지도용 필지 도형(GeoJSON).
- * 필지 > 500이면 면적 상위 5구분만 고유 색, 나머지 구분은 회색(그 외)으로 반환.
+ * 소유·지목 테마 지도용 필지 도형(PNU 단위 GeoJSON).
+ * 색 구분(범주)은 클라이언트 보강 결과로 칠한다.
  */
 export async function listAnalyzeThemeMapFeatures(params: {
   wkt5181?: string;
@@ -590,77 +583,26 @@ export async function listAnalyzeThemeMapFeatures(params: {
   if (!wkt) return { ...empty, error: '분석 영역(WKT)이 필요합니다.' };
   if (!theme) return { ...empty, error: '테마 종류(owner|jimok)가 필요합니다.' };
 
-  const catExpr = themeCategoryExpr(theme);
-  const fullLimit = PARCEL_THEME_MAP_FULL_COLOR_LIMIT;
-  const topN = PARCEL_THEME_MAP_TOP_CATEGORY_COUNT;
   const simplify = PARCEL_THEME_MAP_SIMPLIFY_TOLERANCE_M;
 
   const queryStr = `${buildHitCteSql(wkt)},
-    hit_cat AS (
-      SELECT pnu, area_sqm, ${catExpr} AS category
-      FROM hit
-    ),
-    parcel_total AS (
-      SELECT COUNT(*)::int AS cnt FROM hit_cat
-    ),
-    ranked AS (
-      SELECT category,
-             COUNT(*)::int AS count,
-             COALESCE(SUM(area_sqm), 0)::float8 AS area_sqm,
-             ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(area_sqm), 0) DESC) AS rn
-      FROM hit_cat
-      GROUP BY category
-    ),
-    allowed AS (
-      SELECT category
-      FROM ranked r, parcel_total t
-      WHERE t.cnt <= ${fullLimit} OR r.rn <= ${topN}
-    ),
-    cat_rows AS (
-      SELECT r.category,
-             r.count,
-             r.area_sqm,
-             (a.category IS NOT NULL) AS on_map
-      FROM ranked r
-      LEFT JOIN allowed a ON a.category = r.category
-      ORDER BY r.area_sqm DESC
-    ),
     parcel_geoms AS (
-      SELECT h.category,
-             ST_SimplifyPreserveTopology(
-               ST_SetSRID(j.geom, ${JIJUK_GEOM_SRID}),
-               ${simplify}
-             ) AS geom
-      FROM hit_cat h
+      SELECT
+        h.pnu::text AS pnu,
+        ST_AsGeoJSON(
+          ST_SimplifyPreserveTopology(
+            ST_SetSRID(j.geom, ${JIJUK_GEOM_SRID}),
+            ${simplify}
+          )
+        ) AS geom_json
+      FROM hit h
       INNER JOIN ${JIJUK_SCHEMA}.jijuk j ON j.pnu = h.pnu
       WHERE j.geom IS NOT NULL
-    ),
-    feat_rows AS (
-      SELECT pg.category,
-             ST_AsGeoJSON(ST_Collect(pg.geom)) AS geom_json
-      FROM parcel_geoms pg
-      INNER JOIN allowed a ON a.category = pg.category
-      GROUP BY pg.category
-      UNION ALL
-      SELECT '${esc(PARCEL_THEME_MAP_OTHER_CATEGORY)}' AS category,
-             ST_AsGeoJSON(ST_Collect(pg.geom)) AS geom_json
-      FROM parcel_geoms pg
-      WHERE NOT EXISTS (
-        SELECT 1 FROM allowed a WHERE a.category = pg.category
-      )
-      HAVING COUNT(*) > 0
     )
     SELECT
-      (SELECT cnt FROM parcel_total) AS parcel_count,
-      (SELECT cnt > ${fullLimit} FROM parcel_total) AS map_category_limit_applied,
-      (SELECT json_agg(c) FROM (
-        SELECT category AS label, count, area_sqm, on_map
-        FROM cat_rows
-        ORDER BY area_sqm DESC
-      ) c) AS categories,
+      (SELECT COUNT(*)::int FROM hit) AS parcel_count,
       (SELECT json_agg(f) FROM (
-        SELECT category, geom_json
-        FROM feat_rows
+        SELECT pnu, geom_json FROM parcel_geoms
       ) f) AS features`;
 
   try {
@@ -685,22 +627,15 @@ export async function listAnalyzeThemeMapFeatures(params: {
 
     if (!row) return { ...empty, ok: true, theme, parcelCount: 0, mapCategoryLimitApplied: false };
 
-    const categoriesRaw = normalizeStatRows(row.categories);
     const featuresRaw = normalizeStatRows(row.features);
-
-    const categories: ParcelThemeMapCategory[] = categoriesRaw.map((r) => ({
-      label: String(r.label ?? '미상'),
-      count: toInt(r.count),
-      areaSqm: toInt(r.area_sqm),
-      onMap: r.on_map === true || r.on_map === 'true' || r.on_map === 1,
-    }));
-
     const features: ParcelThemeMapFeature[] = [];
     for (const r of featuresRaw) {
       const geometry = parseGeoJsonGeometry(r.geom_json);
       if (!geometry) continue;
+      const pnu = String(r.pnu ?? '').trim();
       features.push({
-        category: String(r.category ?? '미상'),
+        pnu: pnu || undefined,
+        category: '미상',
         geometry,
       });
     }
@@ -709,8 +644,8 @@ export async function listAnalyzeThemeMapFeatures(params: {
       ok: true,
       theme,
       parcelCount: toInt(row.parcel_count),
-      mapCategoryLimitApplied: row.map_category_limit_applied === true,
-      categories,
+      mapCategoryLimitApplied: false,
+      categories: [],
       features,
     };
   } catch (e: unknown) {
