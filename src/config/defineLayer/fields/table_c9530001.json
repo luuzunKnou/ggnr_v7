@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -225,7 +225,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DIRECTION",
+    "define_field_name": "direction",
     "define_field_kor_name": "방향",
     "define_field_type": "text",
     "define_field_idx": 10,
@@ -250,7 +250,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "EQP_KIND",
+    "define_field_name": "eqp_kind",
     "define_field_kor_name": "충격흡수시설 종류",
     "define_field_type": "text",
     "define_field_idx": 11,
@@ -275,7 +275,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "GRADE",
+    "define_field_name": "grade",
     "define_field_kor_name": "충격흡수시설 등급",
     "define_field_type": "text",
     "define_field_idx": 12,
