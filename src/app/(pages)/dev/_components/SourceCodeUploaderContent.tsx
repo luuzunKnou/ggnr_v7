@@ -297,6 +297,7 @@ export function SourceCodeUploaderContent() {
     summary: string;
     progressId: string;
   } | null>(null);
+  const [buildCheckSkipConfirmOpen, setBuildCheckSkipConfirmOpen] = useState(false);
   const [date, setDate] = useState(todayYmd());
   const [changeNote, setChangeNote] = useState('');
   const [rows, setRows] = useState<UploadRow[]>([]);
@@ -313,6 +314,8 @@ export function SourceCodeUploaderContent() {
   const [etaTick, setEtaTick] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const buildAbortRef = useRef<AbortController | null>(null);
+  /** 이 페이지에서 취소 없이 빌드 검사가 1회라도 완료되면 true */
+  const buildCheckCompletedOnceRef = useRef(false);
   const remoteUploadIdRef = useRef<string | null>(null);
   const progressIdRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -617,6 +620,7 @@ export function SourceCodeUploaderContent() {
           if (parsed.cancelled) {
             appendLog('빌드 확인이 취소되었습니다.');
           } else {
+            buildCheckCompletedOnceRef.current = true;
             appendLog(parsed.ok ? '빌드 성공' : `빌드 실패: ${parsed.message ?? ''}`);
           }
         } else if (parsed.type === 'error') {
@@ -966,6 +970,7 @@ export function SourceCodeUploaderContent() {
               <Button
                 type="button"
                 variant="outline"
+                title="중단"
                 onClick={() => {
                   setDbConfirm(null);
                   appendLog('업로드 중단 — DB 스키마 불일치');
@@ -976,9 +981,41 @@ export function SourceCodeUploaderContent() {
               </Button>
               <Button
                 type="button"
+                title="계속 진행"
                 onClick={() => {
                   setDbConfirm(null);
                   void runUploadCurrentWorkspace(true);
+                }}
+              >
+                계속 진행
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {buildCheckSkipConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded border bg-background p-4 shadow-lg">
+            <div className="mb-2 text-sm font-medium">빌드 검사를 하지 않았습니다.</div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              빌드 검사 없이 현재 코드를 바로 업로드하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                title="중단"
+                onClick={() => setBuildCheckSkipConfirmOpen(false)}
+              >
+                중단
+              </Button>
+              <Button
+                type="button"
+                title="계속 진행"
+                onClick={() => {
+                  setBuildCheckSkipConfirmOpen(false);
+                  void runUploadCurrentWorkspace(false);
                 }}
               >
                 계속 진행
@@ -1092,7 +1129,14 @@ export function SourceCodeUploaderContent() {
           <Button
             type="button"
             disabled={uploading || buildChecking}
-            onClick={() => void runUploadCurrentWorkspace(false)}
+            title="현재 코드 자동 업로드"
+            onClick={() => {
+              if (!buildCheckCompletedOnceRef.current) {
+                setBuildCheckSkipConfirmOpen(true);
+                return;
+              }
+              void runUploadCurrentWorkspace(false);
+            }}
             className="gap-1"
           >
             <Upload className="h-4 w-4" />
