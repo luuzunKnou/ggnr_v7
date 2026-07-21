@@ -24,6 +24,11 @@ import {
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
+import {
+  estimateRemainingByBytes,
+  estimateRemainingSeconds,
+  formatEtaMinutes,
+} from '@/lib/sourceProgressEta';
 
 const INSTALL_MANUAL_URL =
   process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
@@ -68,30 +73,6 @@ function estimateInstallZipTotalSeconds(
   const dlBytes = zipSizeBytes ?? estZipBytes * (closed ? 0.28 : 0.4);
   const downloadSec = Math.max(2, (dlBytes / (1024 * 1024)) * 0.7);
   return scanSec + zipSec + downloadSec;
-}
-
-function estimateRemainingSeconds(totalSec: number, pct: number | null, startedAtMs: number): number {
-  if (totalSec <= 0) return 0;
-  if (pct != null && pct > 2 && pct < 100) {
-    const elapsed = (Date.now() - startedAtMs) / 1000;
-    const projected = elapsed / (pct / 100);
-    return Math.max(1, projected - elapsed);
-  }
-  if (pct != null && pct >= 0) {
-    return Math.max(1, totalSec * (1 - pct / 100));
-  }
-  return totalSec;
-}
-
-function formatEtaSeconds(sec: number): string {
-  if (!Number.isFinite(sec) || sec <= 0) return '1분 미만';
-  const s = Math.ceil(sec);
-  if (s < 60) return `약 ${s}초`;
-  const m = Math.ceil(s / 60);
-  if (m < 60) return `약 ${m}분`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return rm > 0 ? `약 ${h}시간 ${rm}분` : `약 ${h}시간`;
 }
 
 function buildGnmsInstallBaseStages(): StageItem[] {
@@ -241,6 +222,8 @@ export function InstallZipDownloadPanel() {
   const lastSkipLoggedRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef(0);
+  const downloadBytesRef = useRef<{ done: number; total: number } | null>(null);
+  const downloadStartedAtRef = useRef(0);
   const [installMeta, setInstallMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
   const [etaTick, setEtaTick] = useState(0);
 
@@ -363,6 +346,12 @@ export function InstallZipDownloadPanel() {
         downloadRes,
         fileName,
         (received, total) => {
+          if (total && total > 0) {
+            if (downloadStartedAtRef.current <= 0 && received > 0) {
+              downloadStartedAtRef.current = Date.now();
+            }
+            downloadBytesRef.current = { done: received, total };
+          }
           const pct =
             total && total > 0 ? Math.min(99, 10 + Math.round((received / total) * 89)) : 50;
           const msg = total
@@ -632,6 +621,9 @@ export function InstallZipDownloadPanel() {
     setBusy(true);
     logRef.current = [];
     lastLogMessageRef.current = '';
+    startedAtRef.current = Date.now();
+    downloadBytesRef.current = null;
+    downloadStartedAtRef.current = 0;
 
     try {
       if (sourceMode === 'gnms') {
@@ -644,17 +636,30 @@ export function InstallZipDownloadPanel() {
     } finally {
       abortRef.current = null;
       setBusy(false);
+      downloadBytesRef.current = null;
+      downloadStartedAtRef.current = 0;
     }
   };
 
   const etaLabel = (() => {
     void etaTick;
-    if (!busy || sourceMode !== 'local') return null;
+    if (!busy || startedAtRef.current <= 0) return null;
+    if (sourceMode === 'gnms') {
+      const bytes = downloadBytesRef.current;
+      if (bytes && bytes.total > 0 && bytes.done > 0 && downloadStartedAtRef.current > 0) {
+        const remain = estimateRemainingByBytes(bytes.done, bytes.total, downloadStartedAtRef.current);
+        if (remain != null) return formatEtaMinutes(remain);
+      }
+      if (progress.pct != null && progress.pct > 2) {
+        return formatEtaMinutes(estimateRemainingSeconds(180, progress.pct, startedAtRef.current));
+      }
+      return '산출 중...';
+    }
     const fc = installMeta.fileCount;
     if (fc == null || fc <= 0) return '산출 중...';
     const total = estimateInstallZipTotalSeconds(fc, installMeta.zipSize, profile);
     const remain = estimateRemainingSeconds(total, progress.pct, startedAtRef.current);
-    return formatEtaSeconds(remain);
+    return formatEtaMinutes(remain);
   })();
 
   return (

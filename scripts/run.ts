@@ -226,13 +226,26 @@ function runNpmBuildSync(): void {
 
 async function ensureGeoServerOnRelaunch(): Promise<void> {
   console.log('[SourceCodeUpload] GeoServer 기동·응답 확인...');
+  const onLog = (message: string) => {
+    console.log(`[SourceCodeUpload] GeoServer: ${message}`);
+  };
   try {
     const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
-    const r = await ensureGeoServerRunning({ forceRestart: false });
+    let r = await ensureGeoServerRunning({ forceRestart: false, onLog });
+    if (!r.success) {
+      console.warn(
+        '[SourceCodeUpload] GeoServer 1차 기동 실패, forceRestart 재시도:',
+        r.error ?? 'unknown'
+      );
+      r = await ensureGeoServerRunning({ forceRestart: true, onLog });
+    }
     if (r.success) {
       console.log(`[SourceCodeUpload] GeoServer 기동 OK (action=${r.action})`);
     } else {
-      console.warn('[SourceCodeUpload] GeoServer 기동 실패:', r.error ?? 'unknown');
+      console.warn(
+        '[SourceCodeUpload] GeoServer 기동 실패(Next는 계속 기동):',
+        r.error ?? 'unknown'
+      );
     }
   } catch (e) {
     console.warn('[SourceCodeUpload] GeoServer 기동 오류:', e instanceof Error ? e.message : e);

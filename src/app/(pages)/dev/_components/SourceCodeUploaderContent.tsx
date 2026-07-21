@@ -14,6 +14,12 @@ import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVer
 import { InstallZipDownloadPanel } from './InstallZipDownloadPanel';
 import { ProgressStagesList } from './ProgressStagesList';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
+import {
+  estimateBuildCheckRemainingSeconds,
+  estimateRemainingSeconds,
+  formatEtaMinutes,
+  type BuildCheckEtaPhase,
+} from '@/lib/sourceProgressEta';
 
 type MainTab = 'install_download' | 'source_upload';
 
@@ -84,30 +90,6 @@ function estimateUploadTotalSeconds(
   const remoteSec = Math.max(5, (estZipBytes / (1024 * 1024)) * 0.5);
   const npmSec = closed ? 0 : 90;
   return scanSec + zipSec + transferSec + remoteSec + npmSec;
-}
-
-function estimateRemainingSeconds(totalSec: number, pct: number, startedAtMs: number): number {
-  if (totalSec <= 0) return 0;
-  if (pct > 2 && pct < 100) {
-    const elapsed = (Date.now() - startedAtMs) / 1000;
-    const projected = elapsed / (pct / 100);
-    return Math.max(1, projected - elapsed);
-  }
-  if (pct >= 0) {
-    return Math.max(1, totalSec * (1 - pct / 100));
-  }
-  return totalSec;
-}
-
-function formatEtaSeconds(sec: number): string {
-  if (!Number.isFinite(sec) || sec <= 0) return '1분 미만';
-  const s = Math.ceil(sec);
-  if (s < 60) return `약 ${s}초`;
-  const m = Math.ceil(s / 60);
-  if (m < 60) return `약 ${m}분`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return rm > 0 ? `약 ${h}시간 ${rm}분` : `약 ${h}시간`;
 }
 
 function buildBaseStages(includeNodeModules: boolean): StageItem[] {
@@ -316,6 +298,9 @@ export function SourceCodeUploaderContent() {
   const buildAbortRef = useRef<AbortController | null>(null);
   /** 이 페이지에서 취소 없이 빌드 검사가 1회라도 완료되면 true */
   const buildCheckCompletedOnceRef = useRef(false);
+  const buildCheckStartedAtRef = useRef(0);
+  const buildCheckPhaseRef = useRef<BuildCheckEtaPhase>('copy');
+  const buildCheckPhaseStartedAtRef = useRef(0);
   const remoteUploadIdRef = useRef<string | null>(null);
   const progressIdRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -344,10 +329,10 @@ export function SourceCodeUploaderContent() {
   }, [changeNote]);
 
   useEffect(() => {
-    if (!uploading) return;
+    if (!uploading && !buildChecking) return;
     const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, [uploading]);
+  }, [uploading, buildChecking]);
 
   const etaLabel = (() => {
     void etaTick;
@@ -357,13 +342,24 @@ export function SourceCodeUploaderContent() {
       uploadMeta.zipSize,
       includeNodeModules
     );
-    if (total <= 0 && progressPct < 3) return null;
+    if (total <= 0 && progressPct < 3) return '산출 중...';
     const remain = estimateRemainingSeconds(
       total > 0 ? total : Math.max(30, (Date.now() - startedAtRef.current) / 1000 / Math.max(progressPct / 100, 0.03)),
       progressPct,
       startedAtRef.current
     );
-    return formatEtaSeconds(remain);
+    return formatEtaMinutes(remain);
+  })();
+
+  const buildCheckEtaLabel = (() => {
+    void etaTick;
+    if (!buildChecking || buildCheckStartedAtRef.current <= 0) return null;
+    const remain = estimateBuildCheckRemainingSeconds(
+      buildCheckPhaseRef.current,
+      buildCheckStartedAtRef.current,
+      buildCheckPhaseStartedAtRef.current || buildCheckStartedAtRef.current
+    );
+    return formatEtaMinutes(remain);
   })();
 
   const cancelBlockedByPhase =
@@ -580,8 +576,16 @@ export function SourceCodeUploaderContent() {
     buildAbortRef.current?.abort();
     buildAbortRef.current = new AbortController();
     const signal = buildAbortRef.current.signal;
+    buildCheckStartedAtRef.current = Date.now();
+    buildCheckPhaseRef.current = 'copy';
+    buildCheckPhaseStartedAtRef.current = Date.now();
     setBuildChecking(true);
     beginLiveLogSession('빌드 확인 시작 (demo env · NODE_ENV=production · 임시 복사본)...');
+    const notePhase = (next: BuildCheckEtaPhase) => {
+      if (buildCheckPhaseRef.current === next) return;
+      buildCheckPhaseRef.current = next;
+      buildCheckPhaseStartedAtRef.current = Date.now();
+    };
     try {
       const res = await fetch('/api/source/upload/build-check', {
         method: 'POST',
@@ -615,7 +619,11 @@ export function SourceCodeUploaderContent() {
           return;
         }
         if (parsed.type === 'log' && parsed.line) {
-          appendLog(parsed.line);
+          const logLine = parsed.line;
+          appendLog(logLine);
+          if (/npm run build/i.test(logLine)) notePhase('build');
+          else if (/npm install/i.test(logLine)) notePhase('install');
+          else if (/임시 복사|임시 워크스페이스/i.test(logLine)) notePhase('copy');
         } else if (parsed.type === 'done') {
           if (parsed.cancelled) {
             appendLog('빌드 확인이 취소되었습니다.');
@@ -657,6 +665,7 @@ export function SourceCodeUploaderContent() {
     } finally {
       setBuildChecking(false);
       buildAbortRef.current = null;
+      buildCheckStartedAtRef.current = 0;
     }
   };
 
@@ -1187,6 +1196,11 @@ export function SourceCodeUploaderContent() {
           </Button>
           {lastSavedRoot && <span className="truncate text-xs text-muted-foreground">전송 대상: {lastSavedRoot}</span>}
         </div>
+        {buildChecking && buildCheckEtaLabel ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            빌드 검사 중 (예상 소요 시간: {buildCheckEtaLabel})
+          </p>
+        ) : null}
       </div>
 
       {uploading && (

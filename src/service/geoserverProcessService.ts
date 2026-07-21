@@ -271,33 +271,48 @@ export async function ensureGeoServerRunning(options?: {
   readyTimeoutMs?: number;
   /** starting 상태에서 stop 전 대기 (기본 90s) */
   startingWaitMs?: number;
+  /** 단계 로그 (run.ts 등) */
+  onLog?: (message: string) => void;
 }): Promise<EnsureGeoServerResult> {
   const forceRestart = options?.forceRestart === true;
   const settleMs = options?.settleMsAfterStop ?? 2500;
   const readyTimeoutMs = options?.readyTimeoutMs ?? 120_000;
   const startingWaitMs = options?.startingWaitMs ?? 90_000;
+  const log = options?.onLog ?? (() => {});
 
   if (!forceRestart) {
+    log('상태 확인 중...');
     let health = await checkGeoServerHealth();
+    log(`상태: ${health.status}${health.httpStatus != null ? ` (HTTP ${health.httpStatus})` : ''}`);
     if (health.ready) {
+      log('이미 응답 중 — 기동 생략');
       return { success: true, action: 'already-ready', health };
     }
     if (health.status === 'starting') {
+      log(`starting 대기 (최대 ${Math.round(startingWaitMs / 1000)}초)...`);
       health = await waitGeoServerReady({ timeoutMs: startingWaitMs });
       if (health.ready) {
+        log('대기 후 응답 확인 — 기동 생략');
         return { success: true, action: 'already-ready', health };
       }
-      // 대기 후에도 ready 아니면 stop/start로 회복 시도
+      log('starting 대기 후에도 미응답 — stop/start 시도');
     }
+  } else {
+    log('강제 재기동 (forceRestart)');
   }
 
+  log('stop bat 실행...');
   const stopResult = await stopGeoServer();
+  log(stopResult.success ? 'stop OK' : `stop 경고: ${stopResult.error ?? 'unknown'}`);
   await sleep(settleMs);
 
+  log('start bat 실행...');
   const startResult = await startGeoServer();
   if (!startResult.success) {
+    log(`start bat 실패 — 응답 대기(30초): ${startResult.error ?? 'unknown'}`);
     const afterFail = await waitGeoServerReady({ timeoutMs: 30_000 });
     if (afterFail.ready) {
+      log('bat 실패 후에도 응답 확인됨');
       return {
         success: true,
         action: forceRestart ? 'restarted' : 'started',
@@ -312,8 +327,10 @@ export async function ensureGeoServerRunning(options?: {
     };
   }
 
+  log(`응답 대기 (최대 ${Math.round(readyTimeoutMs / 1000)}초)...`);
   const health = await waitGeoServerReady({ timeoutMs: readyTimeoutMs });
   if (health.ready) {
+    log('응답 확인 OK');
     return {
       success: true,
       action: forceRestart || stopResult.success ? 'restarted' : 'started',
@@ -321,6 +338,7 @@ export async function ensureGeoServerRunning(options?: {
     };
   }
 
+  log(`응답 없음: ${health.status}${health.detail ? ` (${health.detail})` : ''}`);
   return {
     success: false,
     action: 'failed',

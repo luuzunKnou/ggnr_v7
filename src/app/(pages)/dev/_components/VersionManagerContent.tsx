@@ -24,6 +24,13 @@ import {
 } from '@/lib/sourceVersionClientRelay';
 import { prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import {
+  estimateRemainingByBytes,
+  estimateRemainingByCount,
+  estimateRemainingSeconds,
+  estimateVersionApplyTotalSeconds,
+  formatEtaMinutes,
+} from '@/lib/sourceProgressEta';
+import {
   closeDevVersionHistory,
   notifyDevVersionHistoryRefresh,
   notifyDevVersionHistoryRefreshRetry,
@@ -74,6 +81,12 @@ export function VersionManagerContent() {
   const abortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const startedAtRef = useRef(0);
+  const mergeCountRef = useRef<{ applied: number; total: number } | null>(null);
+  const mergeStartedAtRef = useRef(0);
+  const byteProgressRef = useRef<{ done: number; total: number } | null>(null);
+  const byteStartedAtRef = useRef(0);
+  const [etaTick, setEtaTick] = useState(0);
 
   const restart = restartMode !== 'none';
   const stageOpts = {
@@ -95,6 +108,12 @@ export function VersionManagerContent() {
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
+
+  useEffect(() => {
+    if (!busy) return;
+    const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
 
   const refreshAppliedVersion = async () => {
     try {
@@ -176,6 +195,11 @@ export function VersionManagerContent() {
     setRelayResult(null);
     logRef.current = [];
     versionDetailRef.current = '';
+    startedAtRef.current = Date.now();
+    mergeCountRef.current = null;
+    mergeStartedAtRef.current = 0;
+    byteProgressRef.current = null;
+    byteStartedAtRef.current = 0;
     setProgress({
       ...emptySideProgress(),
       message: selectedEntry.isLatest ? 'GNMS 최신 버전 조회 중...' : 'GNMS 선택 버전 준비 중...',
@@ -199,29 +223,52 @@ export function VersionManagerContent() {
           if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
             reachedRestartCommit = true;
           }
+          if (
+            p.phase === 'merge-apply' &&
+            p.totalFiles != null &&
+            p.totalFiles > 0 &&
+            p.appliedFiles != null
+          ) {
+            if (mergeStartedAtRef.current <= 0 && p.appliedFiles > 0) {
+              mergeStartedAtRef.current = Date.now();
+            }
+            mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
+          } else if (p.phase !== 'merge-apply') {
+            mergeCountRef.current = null;
+            mergeStartedAtRef.current = 0;
+          }
+          if (p.phase === 'merge-apply' || p.phase === 'geoserver-stop' || p.phase === 'relay-complete') {
+            byteProgressRef.current = null;
+            byteStartedAtRef.current = 0;
+          } else if (p.totalBytes != null && p.totalBytes > 0 && p.bytesDone != null) {
+            if (byteStartedAtRef.current <= 0 && p.bytesDone > 0) {
+              byteStartedAtRef.current = Date.now();
+            }
+            byteProgressRef.current = { done: p.bytesDone, total: p.totalBytes };
+          }
           const mergePct =
             p.phase === 'merge-apply' && p.totalFiles != null && p.totalFiles > 0 && p.appliedFiles != null
-              ? 88 + Math.min(5, Math.round((p.appliedFiles / p.totalFiles) * 5))
+              ? 55 + Math.min(35, Math.round((p.appliedFiles / p.totalFiles) * 35))
               : null;
           const pct =
             mergePct != null
               ? mergePct
               : p.totalBytes && p.bytesDone != null
-                ? Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
+                ? Math.min(54, Math.round((p.bytesDone / p.totalBytes) * 54))
                 : p.phase === 'latest'
                   ? 5
                   : p.phase === 'relay-init'
-                    ? 15
+                    ? 8
                     : p.phase === 'geoserver-stop' || p.phase === 'relay-complete'
-                      ? 88
+                      ? 55
                       : p.phase === 'merge-apply'
-                        ? 93
+                        ? 70
                         : p.phase === 'geoserver-start'
-                          ? 97
+                          ? 92
                           : p.phase === 'npm-install'
-                            ? 97
+                            ? 94
                             : p.phase === 'build'
-                              ? 98
+                              ? 97
                               : p.phase === 'app-stop'
                                 ? 99
                                 : null;
@@ -435,13 +482,37 @@ export function VersionManagerContent() {
     </div>
   );
 
+  const etaLabel = (() => {
+    void etaTick;
+    if (!busy || startedAtRef.current <= 0) return null;
+    const merge = mergeCountRef.current;
+    if (merge && merge.total > 0 && merge.applied > 0 && mergeStartedAtRef.current > 0) {
+      const remain = estimateRemainingByCount(merge.applied, merge.total, mergeStartedAtRef.current);
+      if (remain != null) return formatEtaMinutes(remain);
+    }
+    const bytes = byteProgressRef.current;
+    if (bytes && bytes.total > 0 && bytes.done > 0 && byteStartedAtRef.current > 0) {
+      const remain = estimateRemainingByBytes(bytes.done, bytes.total, byteStartedAtRef.current);
+      if (remain != null) return formatEtaMinutes(remain);
+    }
+    const total = estimateVersionApplyTotalSeconds(profile, restart);
+    const remain = estimateRemainingSeconds(total, progress.pct, startedAtRef.current);
+    if (remain <= 0) return '산출 중...';
+    return formatEtaMinutes(remain);
+  })();
+
   const ProgressBar = () => {
     if (!busy || progress.pct == null) return null;
     return (
       <div className="mt-2 rounded border bg-muted/20 px-3 py-2">
         <div className="mb-1 flex items-center justify-between gap-2 text-xs">
           <span>진행 중</span>
-          <span className="text-muted-foreground">{progress.pct}%</span>
+          <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
+            {etaLabel ? (
+              <span className="truncate">(예상 소요 시간: {etaLabel})</span>
+            ) : null}
+            <span className="shrink-0">{progress.pct}%</span>
+          </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-muted">
           <div

@@ -613,36 +613,29 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const stopMessage = stopResult.message;
     let startMessage: string | undefined;
     let started = false;
-    /** 재시작 시 기동은 run.ts(콜드/런처 재기동)에 맡김 */
-    const skipStartForRestart = doRestart;
-
-    if (!skipStartForRestart) {
-      await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
-      let startResult = await ensureGeoServerRunning({ forceRestart: false });
-      if (!startResult.success) {
-        await sleep(2000);
-        startResult = await ensureGeoServerRunning({ forceRestart: false });
-      }
-      geoStartedOnSuccessPath = startResult.success;
-      started = startResult.success;
-      startMessage = startResult.success
-        ? startResult.action === 'already-ready'
-          ? '기동 OK(이미 응답)'
-          : startResult.action === 'restarted'
-            ? '기동 OK(재기동·응답)'
-            : '기동 OK(응답)'
-        : `기동 실패: ${startResult.error ?? 'unknown'}`;
-      await emit('geoserver-start', `GeoServer ${startMessage}`);
-    } else {
-      startMessage = '기동 생략(재기동 시 run에서 처리)';
-      await emit('merge-apply', `GeoServer ${startMessage}`);
+    /** 병합 후 재시작 여부와 관계없이 기동. run.ts ensure는 이중 안전망 */
+    await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
+    let startResult = await ensureGeoServerRunning({ forceRestart: false });
+    if (!startResult.success) {
+      await sleep(2000);
+      startResult = await ensureGeoServerRunning({ forceRestart: true });
     }
+    geoStartedOnSuccessPath = startResult.success;
+    started = startResult.success;
+    startMessage = startResult.success
+      ? startResult.action === 'already-ready'
+        ? '기동 OK(이미 응답)'
+        : startResult.action === 'restarted'
+          ? '기동 OK(재기동·응답)'
+          : '기동 OK(응답)'
+      : `기동 실패: ${startResult.error ?? 'unknown'}`;
+    await emit('geoserver-start', `GeoServer ${startMessage}`);
 
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
       started,
-      deferredStart: skipStartForRestart,
-      message: skipStartForRestart ? stopMessage : `${stopMessage} / ${startMessage}`,
+      deferredStart: false,
+      message: `${stopMessage} / ${startMessage}`,
       stopMessage,
       startMessage,
     };
@@ -679,7 +672,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       }
     }
 
-    /** 사전 빌드 완료분 — 재기동 후행 install/build 없음. 기동은 run.ts */
+    /** 사전 빌드 완료분 — 재기동 후행 install/build 없음. GeoServer는 위에서 기동·run.ts ensure */
     const runNpmInstallBefore = false;
     const runBuildAfterExit = false;
 
@@ -694,7 +687,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       includeNodeModules,
       runNpmInstallBefore,
       runBuild: runBuildAfterExit,
-      startGeoServerAfter: false,
+      /** 재기동 시 run.ts ensure 이중 확인(적용 경로에서 이미 기동해도 OK) */
+      startGeoServerAfter: doRestart,
       historyPending: doRestart,
       historyPayload: doRestart
         ? {
@@ -1038,7 +1032,7 @@ function scheduleRestart(mode: RestartMode): {
   /**
    * exit(nssm): 사전 빌드는 적용 경로에서 이미 완료.
    * process.exit(0) → nssm/외부 감시 또는 run 슈퍼바이저가 재기동.
-   * GeoServer 기동은 run.ts 콜드 기동에 맡김.
+   * GeoServer는 적용 경로에서 기동·run.ts ensure로 재확인.
    */
   const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
   const exitHint = hasRunSupervisor()
