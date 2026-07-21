@@ -7,7 +7,13 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
-import { DEV_MENU_GROUPS, DEV_SUBMENUS, getDevMenuDescription, renderDevMenuContent } from "./_components/devConsolePanels"
+import {
+  DEV_AUTO_COLLAPSE_MENU_IDS,
+  DEV_MENU_GROUPS,
+  DEV_SUBMENUS,
+  getDevMenuDescription,
+  renderDevMenuContent,
+} from "./_components/devConsolePanels"
 import { LayerManagerUploadButtons } from "./_components/layerManager/LayerManagerUploadButtons"
 import { call } from "@/lib/api"
 import { signOut } from "next-auth/react"
@@ -176,6 +182,7 @@ export default function DevPage() {
       }
       onLogout={handleLogout}
       consoleArea="dev"
+      autoCollapseMenuIds={DEV_AUTO_COLLAPSE_MENU_IDS}
     />
   )
 }

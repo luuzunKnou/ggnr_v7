@@ -76,6 +76,9 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
 ]
 
+/** 이 메뉴로 진입 시 사이드바를 자동으로 접음. 필요에 따라 메뉴 id를 추가/삭제하세요. */
+export const DEV_AUTO_COLLAPSE_MENU_IDS: readonly DevConsoleMenuId[] = ["layerManager"]
+
 export type DevSubmenuId = DevConsoleMenuId
 
 function devMenuLabel(menuId: string): string {
