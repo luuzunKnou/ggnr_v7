@@ -38,7 +38,7 @@ export function isDataPortalQuotaMessage(status: number, text: string): boolean 
 }
 
 export const BUILDING_LEDGER_PORTAL_QUOTA_NOTICE =
-  '공공데이터포털 호출 한도(쿼터)를 초과해 건축물대장을 가져오지 못했습니다. 한도 회복 후 다시 조회하세요.';
+  '공공데이터포털 호출이 제한되어 전부 가져오지 못했습니다. 잠시 후 다시 조회해 주세요';
 
 
 function toRowStrings(raw: Record<string, unknown>): BuildingLedgerRawRow {

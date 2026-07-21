@@ -225,6 +225,14 @@ function ParcelAnalysisThemeMapInner({
   const [error, setError] = useState<string | null>(null);
   const [geomPayload, setGeomPayload] = useState<ParcelThemeMapPayload | null>(null);
 
+  // 스크롤로 부모만 리렌더되어 parcels 참조가 바뀌어도, 내용이 같으면 지도 재생성을 막는다.
+  const parcelsKey = parcels
+    .map(
+      (p) =>
+        `${String(p.pnu).trim()}\0${String(p.category ?? '').trim()}\0${Number(p.areaSqm) || 0}`
+    )
+    .join('\n');
+
   const painted = useMemo(() => {
     if (!geomPayload?.ok || !geomPayload.features?.length) return null;
     const { categories, onMapLabels, mapCategoryLimitApplied } = buildThemeCategoriesFromParcels(
@@ -253,7 +261,9 @@ function ParcelAnalysisThemeMapInner({
           : [{ label: '미상', count: features.length, areaSqm: 0, onMap: true }],
       features,
     };
-  }, [geomPayload, parcels, theme]);
+    // parcelsKey로 내용 동일 여부를 판단 (참조 변경만으로 지도 재생성·로딩 오버레이가 뜨지 않게)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- parcels는 parcelsKey로 대표
+  }, [geomPayload, parcelsKey, theme]);
 
   useEffect(() => {
     if (!visible || !wkt5181.trim()) return;

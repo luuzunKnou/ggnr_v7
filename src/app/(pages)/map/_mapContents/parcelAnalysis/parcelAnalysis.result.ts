@@ -648,7 +648,7 @@ async function fetchBuildingChunk(
   const notice = data?.notice
     ? data.notice
     : data?.portalQuotaExceeded
-      ? '공공데이터포털 호출 한도(쿼터)를 초과해 건축물대장을 가져오지 못했습니다.'
+      ? '공공데이터포털 호출이 제한되어 전부 가져오지 못했습니다. 잠시 후 다시 조회해 주세요'
       : undefined;
   if (notice && typeof console !== 'undefined') {
     console.warn('[필지분석·건축물대장]', notice);
