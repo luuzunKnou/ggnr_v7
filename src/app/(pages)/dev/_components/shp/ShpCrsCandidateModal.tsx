@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnComponents/ui/dialog';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { ShpCrsPreviewMap } from './ShpCrsPreviewMap';
+import { cn } from '@/lib/utils';
+
+/** 이 미만이면 후보의 일치율을 신뢰하기 어렵다고 보고 경고를 띄운다 */
+const LOW_RATIO_THRESHOLD = 0.3;
+/** 1·2순위 일치율 차이가 이 미만이면 자동 판별이 애매하다고 보고 경고를 띄운다 */
+const AMBIGUOUS_GAP_THRESHOLD = 0.05;
 
 export type ShpCrsCandidate = {
   epsg: number;
@@ -58,12 +65,31 @@ export function ShpCrsCandidateModal({ open, fileName, candidates, reference5181
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fileName]);
 
+  const bestRatio = cards[0]?.overlapRatio;
+  const secondRatio = cards[1]?.overlapRatio;
+  const allZero = cards.length > 0 && cards.every((c) => c.overlapRatio === 0);
+  const isLowConfidence = !allZero && bestRatio != null && bestRatio < LOW_RATIO_THRESHOLD;
+  const isAmbiguous = secondRatio != null && bestRatio != null && Math.abs(bestRatio - secondRatio) < AMBIGUOUS_GAP_THRESHOLD;
+  const warningMessage = allZero
+    ? '모든 후보의 경계 일치율이 0%입니다. 자동 추정을 신뢰하기 어려우니 지도에서 실제 위치를 직접 확인해주세요.'
+    : isAmbiguous
+      ? '1순위와 2순위의 일치율 차이가 크지 않아 자동 판별이 어렵습니다. 지도에서 실제 위치와 맞는 좌표계를 선택해주세요.'
+      : isLowConfidence
+        ? `일치율이 낮아(${(bestRatio! * 100).toFixed(1)}%) 자동 추정을 신뢰하기 어렵습니다. 지도에서 실제 위치와 맞는 좌표계인지 확인해주세요.`
+        : null;
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <DialogContent className="flex max-h-[88vh] w-[1100px] max-w-[96vw] flex-col gap-0 overflow-hidden">
+      <DialogContent className="flex max-h-[88vh] w-[1300px] max-w-[96vw] flex-col gap-0 overflow-hidden">
         <DialogHeader className="mb-[10px] shrink-0">
           <DialogTitle>좌표계 추정 결과{fileName ? ` - ${fileName}` : ''}</DialogTitle>
         </DialogHeader>
+        {warningMessage && (
+          <div className="mb-2 flex shrink-0 items-start gap-2 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{warningMessage}</span>
+          </div>
+        )}
         <div className="min-h-0 overflow-y-auto pr-1 mb-3">
           {!cards.length ? (
             <p className="text-xs text-muted-foreground">대한민국 경계와 겹치는 좌표계 후보를 찾지 못했습니다.</p>
@@ -84,7 +110,17 @@ export function ShpCrsCandidateModal({ open, fileName, candidates, reference5181
                       >
                         {isSelected ? '●' : '○'} {c.sourceCrs}
                       </button>
-                      <span className="text-[11px] text-muted-foreground">일치율 {(c.overlapRatio * 100).toFixed(1)}%</span>
+                      <span
+                        className={cn(
+                          'text-[12px]',
+                          c.overlapRatio < LOW_RATIO_THRESHOLD
+                            ? 'font-normal text-red-600 dark:text-red-400'
+                            : 'font-medium'
+                        )}
+                        style={c.overlapRatio < LOW_RATIO_THRESHOLD ? undefined : { color: '#1A1A1A' }}
+                      >
+                        일치율 {(c.overlapRatio * 100).toFixed(1)}%
+                      </span>
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                       EMD 교차: {c.intersectsEmd ? '있음' : '없음'}
@@ -102,7 +138,7 @@ export function ShpCrsCandidateModal({ open, fileName, candidates, reference5181
           )}
         </div>
         <div className="flex flex-col gap-2 border-t pt-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground whitespace-nowrap">
             {currentEpsg != null ? (
               <>지도에서 빨간 도형이 실제 위치에 맞게 놓였는지 확인하고, 필요하면 다른 좌표계를 선택해주세요.</>
             ) : (

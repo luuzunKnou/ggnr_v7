@@ -5,6 +5,7 @@
 import { db } from '@/database/db';
 import { lh } from '@/database/schema/layer_history';
 import { dh } from '@/database/schema/layer_detail_history';
+import { archiveShpForLayerHistory, removeShpHistoryArchive } from '@/lib/shpHistoryArchive';
 import { sql } from 'drizzle-orm';
 import { desc, eq } from 'drizzle-orm';
 
@@ -174,18 +175,24 @@ export async function createLayerHistory(params: {
   }
 }
 
-/** 상세 이력 결과 업데이트 (대기→성공, 롤백 등) */
+/** 상세 이력 결과 업데이트 (대기→성공, 롤백 등. eager-create된 placeholder row 마무리에도 사용) */
 export async function updateDetailResult(params: {
   dhKey: number;
   result: string;
   contents?: string;
   newData?: number;
+  type?: string;
+  group?: string;
+  korName?: string;
 }): Promise<{ success: boolean; error?: string }> {
   if (!params?.dhKey) return { success: false, error: 'dhKey가 필요합니다.' };
   try {
     const updates: Record<string, unknown> = { dhResult: params.result };
     if (params.contents !== undefined) updates.dhContents = params.contents;
     if (params.newData !== undefined) updates.dhNewData = params.newData;
+    if (params.type !== undefined) updates.dhType = params.type;
+    if (params.group !== undefined) updates.dhGroup = params.group;
+    if (params.korName !== undefined) updates.dhKorName = params.korName;
     await db.update(dh).set(updates).where(eq(dh.dhKey, params.dhKey));
     return { success: true };
   } catch (e: unknown) {
@@ -193,7 +200,88 @@ export async function updateDetailResult(params: {
   }
 }
 
-/** 상세 이력 여러 건 일괄 INSERT */
+/** 상세 이력 이전/현재/추가/변경/삭제 건수 갱신 (과거 기록 백필 + 처리 완료 시 최종 반영 용도로 공용 사용) */
+export async function updateDetailCounts(params: {
+  dhKey: number;
+  oldData?: number;
+  newData?: number;
+  appendCount?: number;
+  conflictCount?: number;
+  removeCount?: number;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!params?.dhKey) return { success: false, error: 'dhKey가 필요합니다.' };
+  try {
+    const updates: Record<string, unknown> = {};
+    if (params.oldData !== undefined) updates.dhOldData = params.oldData;
+    if (params.newData !== undefined) updates.dhNewData = params.newData;
+    if (params.appendCount !== undefined) updates.dhAppendCount = params.appendCount;
+    if (params.conflictCount !== undefined) updates.dhConflictCount = params.conflictCount;
+    if (params.removeCount !== undefined) updates.dhRemoveCount = params.removeCount;
+    if (Object.keys(updates).length === 0) return { success: true };
+    await db.update(dh).set(updates).where(eq(dh.dhKey, params.dhKey));
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 배치 이력(lh) 결과 업데이트 (eager-create된 placeholder row를 처리 완료 후 마무리할 때 사용) */
+export async function updateLayerHistory(params: {
+  lhKey: number;
+  contents?: string;
+  successCount?: number;
+  failCount?: number;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!params?.lhKey) return { success: false, error: 'lhKey가 필요합니다.' };
+  try {
+    const updates: Record<string, unknown> = {};
+    if (params.contents !== undefined) updates.lhContents = params.contents;
+    if (params.successCount !== undefined) updates.lhSuccessCount = params.successCount;
+    if (params.failCount !== undefined) updates.lhFailCount = params.failCount;
+    if (Object.keys(updates).length === 0) return { success: true };
+    await db.update(lh).set(updates).where(eq(lh.lhKey, params.lhKey));
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 상세 이력 1건 즉시 생성 (placeholder) → dhKey 반환. 처리 시작 전 실제 dhKey를 확보해 sync_log와 연결하기 위한 용도.
+ * shpPath가 있으면 GGNR_DATA_DIR/shp_history/{dhKey}/ 로 복사 후 그 경로를 저장한다. */
+export async function createLayerDetailHistoryDraft(params: {
+  lhKey: number;
+  group?: string;
+  name: string;
+  korName?: string;
+  type: string;
+  shpPath?: string;
+}): Promise<{ success: boolean; dhKey?: number; error?: string }> {
+  if (!params?.lhKey || !params?.name) return { success: false, error: 'lhKey와 name이 필요합니다.' };
+  try {
+    const sourcePath = params.shpPath?.trim() || null;
+    const rows = await db.insert(dh).values({
+      dhLhKey: params.lhKey,
+      dhGroup: params.group ?? null,
+      dhName: params.name,
+      dhKorName: params.korName ?? null,
+      dhType: params.type,
+      dhResult: '진행중',
+      dhShpPath: sourcePath,
+    }).returning({ dhKey: dh.dhKey });
+    const dhKey = rows[0]?.dhKey;
+    if (dhKey != null && sourcePath) {
+      const archived = await archiveShpForLayerHistory({ dhKey, sourceRelativePath: sourcePath });
+      if (archived && archived !== sourcePath) {
+        await db.update(dh).set({ dhShpPath: archived }).where(eq(dh.dhKey, dhKey));
+      }
+    }
+    return { success: true, dhKey };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 상세 이력 여러 건 일괄 INSERT. shpPath가 있으면 건별 shp_history 스냅샷 경로로 저장. */
 export async function createLayerDetailHistoryBatch(params: {
   lhKey: number;
   details: Array<{
@@ -226,12 +314,118 @@ export async function createLayerDetailHistoryBatch(params: {
       dhRemoveCount: d.removeCount ?? null,
       dhContents: d.contents ?? null,
       dhResult: d.result,
-      dhShpPath: d.shpPath ?? null,
+      dhShpPath: d.shpPath?.trim() || null,
     }));
-    await db.insert(dh).values(values);
+    const inserted = await db.insert(dh).values(values).returning({
+      dhKey: dh.dhKey,
+      dhShpPath: dh.dhShpPath,
+    });
+    for (const row of inserted) {
+      const sourcePath = row.dhShpPath?.trim();
+      if (!sourcePath || row.dhKey == null) continue;
+      const archived = await archiveShpForLayerHistory({
+        dhKey: row.dhKey,
+        sourceRelativePath: sourcePath,
+      });
+      if (archived && archived !== sourcePath) {
+        await db.update(dh).set({ dhShpPath: archived }).where(eq(dh.dhKey, row.dhKey));
+      }
+    }
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
+  }
+}
+
+/**
+ * 위저드 작업 취소(닫기).
+ * - 이번 lh에 묶인 반영 건을 먼저 롤백한 뒤, 관련 sync_log·상세·배치 이력 삭제
+ * - 업로드 shp_data SHP는 유지. shp_history/{dhKey} 스냅샷만 삭제
+ */
+export async function abortIncompleteLayerHistory(params: {
+  lhKey: number;
+}): Promise<{ success: boolean; error?: string; code?: 'not_found' | 'rollback_failed'; rolledBackCount?: number }> {
+  const lhKey = Math.floor(Number(params?.lhKey));
+  if (!Number.isFinite(lhKey) || lhKey <= 0) {
+    return { success: false, error: 'lhKey가 필요합니다.' };
+  }
+  try {
+    const lhRows = await db.select({ lhKey: lh.lhKey }).from(lh).where(eq(lh.lhKey, lhKey)).limit(1);
+    // 이미 없거나 다른 경로에서 정리된 경우 — 닫기 허용
+    if (lhRows.length === 0) {
+      return { success: true, code: 'not_found' };
+    }
+
+    const detailRows = await db
+      .select({ dhKey: dh.dhKey, dhName: dh.dhName })
+      .from(dh)
+      .where(eq(dh.dhLhKey, lhKey));
+
+    const dhKeys = detailRows.map((r) => r.dhKey).filter((k) => Number.isFinite(k) && k > 0);
+    let rolledBackCount = 0;
+
+    if (dhKeys.length > 0) {
+      const appliedRes = await db.execute(sql`
+        SELECT sl_key AS "slKey"
+        FROM sync_log
+        WHERE sl_dh_key IN (${sql.join(dhKeys.map((k) => sql`${k}`), sql`, `)})
+          AND sl_operation IS NOT NULL
+          AND sl_rolled_back = false
+        ORDER BY sl_key DESC
+      `);
+      const slKeys = (appliedRes.rows as Array<{ slKey: number }>)
+        .map((r) => Math.floor(Number(r.slKey)))
+        .filter((k) => Number.isFinite(k) && k > 0);
+
+      if (slKeys.length > 0) {
+        const { rollbackSyncRows } = await import('./shpUploadService');
+        const rb = await rollbackSyncRows({ slKeys });
+        if (!rb.success) {
+          return {
+            success: false,
+            error: rb.error ?? '반영 데이터 롤백에 실패했습니다. 이력을 삭제하지 않았습니다.',
+            code: 'rollback_failed',
+            rolledBackCount: rb.rolledBackCount ?? 0,
+          };
+        }
+        rolledBackCount = rb.rolledBackCount ?? 0;
+      }
+
+      // 상세 키에 묶인 로그 삭제 — FK(sl_dh_key → dh). 롤백·유지 건 포함
+      await db.execute(sql`
+        DELETE FROM sync_log
+        WHERE sl_dh_key IN (${sql.join(dhKeys.map((k) => sql`${k}`), sql`, `)})
+      `);
+    }
+
+    const tableNames = [
+      ...new Set(
+        detailRows
+          .map((r) => String(r.dhName ?? '').trim())
+          .filter((n) => n.length > 0)
+      ),
+    ];
+    // 비교 직후 미결은 sl_dh_key가 NULL인 경우가 많음 → 이번 작업 테이블 범위의 미결만 삭제
+    if (tableNames.length > 0) {
+      await db.execute(sql`
+        DELETE FROM sync_log
+        WHERE sl_operation IS NULL
+          AND sl_superseded_at IS NULL
+          AND LOWER(sl_table_name) IN (${sql.join(
+            tableNames.map((n) => sql`${n.toLowerCase()}`),
+            sql`, `
+          )})
+      `);
+    }
+
+    await db.delete(dh).where(eq(dh.dhLhKey, lhKey));
+    await db.delete(lh).where(eq(lh.lhKey, lhKey));
+    for (const k of dhKeys) {
+      await removeShpHistoryArchive(k);
+    }
+    return { success: true, rolledBackCount };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
