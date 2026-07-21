@@ -5,7 +5,7 @@ import { pool } from '@/database/db';
 import { db } from '@/database/db';
 import { mvh } from '@/database/schema/mng_version_history';
 import { coerceHistoryOptions, normalizeHistoryMemo, normalizeHistoryOptions } from '@/lib/versionHistoryMessage';
-import { and, desc, eq, gte, ilike, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, isNotNull, lt, or, sql } from 'drizzle-orm';
 
 export type VersionHistoryType = 'source_upload' | 'install_zip' | 'apply_latest';
 
@@ -22,6 +22,7 @@ export type VersionHistoryRow = {
   mvhMessage: string | null;
   mvhOption: string[] | null;
   mvhMemo: string | null;
+  mvhVer: string | null;
   mvhIp: string | null;
   mvhClientHost: string | null;
   mvhCreateDate: Date | string | null;
@@ -29,9 +30,13 @@ export type VersionHistoryRow = {
 
 let tableEnsured = false;
 
+function normalizeVersion(version?: string | null): string | null {
+  const t = version?.trim() ?? '';
+  return t ? t.slice(0, 200) : null;
+}
+
 /**
- * 테이블이 없을 때만 생성. 기존 테이블 ALTER는 하지 않음 (DB는 운영자가 적용).
- * DROP 후 재실행 시 이 CREATE로 새 컬럼 포함 재생성.
+ * 테이블이 없을 때 생성. 기존 테이블은 mvh_ver 컬럼만 IF NOT EXISTS 보강.
  */
 async function ensureVersionHistoryTable(): Promise<void> {
   if (tableEnsured) return;
@@ -43,10 +48,15 @@ async function ensureVersionHistoryTable(): Promise<void> {
       "mvh_message" text,
       "mvh_option" jsonb,
       "mvh_memo" text,
+      "mvh_ver" varchar(200),
       "mvh_ip" varchar(64),
       "mvh_client_host" varchar(500),
       "mvh_create_date" timestamp
     );
+  `);
+  await pool.query(`
+    ALTER TABLE "mng_version_history"
+    ADD COLUMN IF NOT EXISTS "mvh_ver" varchar(200);
   `);
   tableEnsured = true;
 }
@@ -72,6 +82,7 @@ export async function recordVersionHistory(params: {
   message?: string;
   option?: string[] | null;
   memo?: string | null;
+  version?: string | null;
   ip?: string;
   clientHost?: string;
 }): Promise<{ ok: boolean; mvhKey?: number; error?: string }> {
@@ -85,6 +96,7 @@ export async function recordVersionHistory(params: {
         mvhMessage: params.message?.trim() ? params.message.trim() : null,
         mvhOption: normalizeHistoryOptions(params.option ?? null),
         mvhMemo: normalizeHistoryMemo(params.memo ?? null),
+        mvhVer: normalizeVersion(params.version),
         mvhIp: params.ip ?? null,
         mvhClientHost: params.clientHost ?? null,
         mvhCreateDate: new Date(),
@@ -94,6 +106,35 @@ export async function recordVersionHistory(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
+  }
+}
+
+/** 이 서버에 마지막으로 성공 적용된 버전 (apply_latest + success + mvh_ver) */
+export async function getLatestAppliedVersion(): Promise<{
+  ok: boolean;
+  version: string | null;
+  error?: string;
+}> {
+  try {
+    await ensureVersionHistoryTable();
+    const rows = await db
+      .select({ mvhVer: mvh.mvhVer })
+      .from(mvh)
+      .where(
+        and(
+          eq(mvh.mvhHistoryType, 'apply_latest'),
+          eq(mvh.mvhStatus, 'success'),
+          isNotNull(mvh.mvhVer),
+          sql`TRIM(${mvh.mvhVer}) <> ''`
+        )
+      )
+      .orderBy(desc(mvh.mvhKey))
+      .limit(1);
+    const version = normalizeVersion(rows[0]?.mvhVer ?? null);
+    return { ok: true, version };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, version: null, error: msg };
   }
 }
 
@@ -108,7 +149,7 @@ function parseYmdRange(dateYmd: string): { start: Date; end: Date } | null {
 export async function listVersionHistory(params: {
   filter: VersionHistoryFilter;
   dateYmd?: string;
-  /** 통합검색 키워드 (날짜·기능구분·성공실패·IP·선택·메모·본문) */
+  /** 통합검색 키워드 (날짜·기능구분·성공실패·IP·선택·메모·본문·버전) */
   q?: string;
   limit?: number;
 }): Promise<{ success: boolean; data: VersionHistoryRow[]; error?: string }> {
@@ -142,6 +183,7 @@ export async function listVersionHistory(params: {
         or(
           ilike(mvh.mvhMessage, pattern),
           ilike(mvh.mvhMemo, pattern),
+          ilike(mvh.mvhVer, pattern),
           ilike(mvh.mvhIp, pattern),
           ilike(mvh.mvhClientHost, pattern),
           ilike(mvh.mvhStatus, pattern),
@@ -178,6 +220,7 @@ export async function listVersionHistory(params: {
         mvhMessage: r.mvhMessage,
         mvhOption: coerceHistoryOptions(r.mvhOption),
         mvhMemo: r.mvhMemo,
+        mvhVer: r.mvhVer,
         mvhIp: r.mvhIp,
         mvhClientHost: r.mvhClientHost,
         mvhCreateDate: r.mvhCreateDate,

@@ -234,8 +234,10 @@ async function createSourceRollbackSnapshot(params: {
   workspaceRoot: string;
   mergeRelPaths: string[];
   includeNodeModules: boolean;
+  /** false면 .next 통째 복사 생략 (재시작·사전 빌드 경로) */
+  includeNext?: boolean;
 }): Promise<ApplyRollbackSnapshot> {
-  const { workspaceRoot, mergeRelPaths, includeNodeModules } = params;
+  const { workspaceRoot, mergeRelPaths, includeNodeModules, includeNext = true } = params;
   const root = path.join(os.tmpdir(), 'ggnr_source_rollback', `${Date.now()}`);
   const filesDir = path.join(root, 'files');
   await fs.mkdir(filesDir, { recursive: true });
@@ -257,10 +259,12 @@ async function createSourceRollbackSnapshot(params: {
   }
 
   let nextDir: string | null = null;
-  const nextAbs = path.join(workspaceRoot, '.next');
-  if (fsSync.existsSync(nextAbs)) {
-    nextDir = path.join(root, 'next');
-    await copyDirRecursive(nextAbs, nextDir);
+  if (includeNext) {
+    const nextAbs = path.join(workspaceRoot, '.next');
+    if (fsSync.existsSync(nextAbs)) {
+      nextDir = path.join(root, 'next');
+      await copyDirRecursive(nextAbs, nextDir);
+    }
   }
 
   return {
@@ -566,10 +570,16 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       workspaceRoot,
       mergeRelPaths,
       includeNodeModules,
+      includeNext: !doRestart,
     });
+    const nextLabel = doRestart
+      ? '생략(재시작·빌드)'
+      : rollback.nextDir
+        ? '포함'
+        : '없음';
     await emit(
       'merge-apply',
-      `백업 완료 (파일 ${rollback.backedUp.length}건, 신규 ${rollback.created.length}건, .next ${rollback.nextDir ? '포함' : '없음'})`
+      `백업 완료 (파일 ${rollback.backedUp.length}건, 신규 ${rollback.created.length}건, .next ${nextLabel})`
     );
 
     const copyResult = await copyRecursive({
@@ -712,6 +722,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         status: 'success',
         message: successMessage,
         option: historyOption,
+        version,
         ip: ipTrim,
       });
     }
@@ -788,6 +799,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         status: 'fail',
         message: failMessage,
         option: applyLatestHistoryOptions(includeNodeModules, restartMode),
+        version,
         ip: clientIp?.trim() || undefined,
       }).catch(() => {});
     }

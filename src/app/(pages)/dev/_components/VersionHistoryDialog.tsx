@@ -15,6 +15,7 @@ type HistoryItem = {
   mvhMessage: string | null;
   mvhOption: string[] | null;
   mvhMemo: string | null;
+  mvhVer: string | null;
   mvhIp: string | null;
   mvhClientHost: string | null;
   mvhCreateDate: string | null;
@@ -269,6 +270,10 @@ export function VersionHistoryDialog({
                     {Array.isArray(row.mvhOption) && row.mvhOption.length > 0
                       ? row.mvhOption.join(', ')
                       : '-'}
+                  </div>
+                  <div className="break-all text-foreground">
+                    <span className="text-muted-foreground">버전: </span>
+                    {row.mvhVer?.trim() ? row.mvhVer.trim() : '-'}
                   </div>
                   {row.mvhHistoryType === 'source_upload' && (
                     <div className="break-all text-foreground">

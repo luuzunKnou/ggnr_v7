@@ -177,6 +177,7 @@ export async function POST(req: NextRequest) {
   let clientIp: string | undefined;
   let includeNodeModules = false;
   let changeNote = '';
+  let bundleRootForHistory = '';
 
   try {
     const usrId = await getSessionUsrId();
@@ -362,6 +363,7 @@ export async function POST(req: NextRequest) {
 
     const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
     const bundleRoot = `${date}_${stamp}`;
+    bundleRootForHistory = bundleRoot;
     const zipName = `source_${mode}_${date}_${stamp}.zip`;
     const tmpDir = path.join(os.tmpdir(), 'ggnr_source_upload');
     const zipPath = path.join(tmpDir, zipName);
@@ -391,6 +393,7 @@ export async function POST(req: NextRequest) {
         changeNote,
         status: 'fail',
         body: buildSourceUploadFailBody(message),
+        version: bundleRootForHistory || undefined,
         ip: clientIp,
       });
       return uploadErrorResponse({
@@ -456,6 +459,7 @@ export async function POST(req: NextRequest) {
       changeNote,
       status: 'success',
       body: buildSourceUploadSuccessBody(okCount, skippedCount, failCount, npmInstallNote(includeNodeModules, npmInstall)),
+      version: bundleRoot,
       ip: clientIp,
     });
 
@@ -494,6 +498,7 @@ export async function POST(req: NextRequest) {
         changeNote,
         status: 'fail',
         body: buildSourceUploadFailBody(err.message),
+        version: bundleRootForHistory || undefined,
         ip: clientIp,
       });
       return uploadErrorResponse({
@@ -518,6 +523,7 @@ export async function POST(req: NextRequest) {
       changeNote,
       status: 'fail',
       body: buildSourceUploadFailBody(message),
+      version: bundleRootForHistory || undefined,
       ip: clientIp,
     });
     return uploadErrorResponse({

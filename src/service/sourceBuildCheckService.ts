@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { getProjectEnvVars } from '../../scripts/load-project-env';
 
 const BUILD_CHECK_GGNR_ENV = 'demo';
@@ -43,10 +43,49 @@ const SKIP_DIR_PREFIXES = [
 
 export type BuildCheckProgressCallback = (line: string) => void;
 
+export type BuildCheckResult = {
+  ok: boolean;
+  message: string;
+  cancelled?: boolean;
+};
+
 let buildCheckInflight = false;
 
 export function isBuildCheckInflight(): boolean {
   return buildCheckInflight;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const err = new Error('The operation was aborted');
+    err.name = 'AbortError';
+    throw err;
+  }
+}
+
+function isAbortError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'AbortError';
+}
+
+function killProcessTree(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid == null) return;
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function toPosixRel(absPath: string, root: string): string {
@@ -103,14 +142,17 @@ export function resolveBuildCheckEnv(sourceRoot: string): NodeJS.ProcessEnv {
 async function copyWorkspaceForBuildCheck(
   sourceRoot: string,
   destRoot: string,
-  onLine?: BuildCheckProgressCallback
+  onLine?: BuildCheckProgressCallback,
+  signal?: AbortSignal
 ): Promise<number> {
   let copied = 0;
 
   async function walk(relDir: string): Promise<void> {
+    throwIfAborted(signal);
     const srcAbs = relDir ? path.join(sourceRoot, relDir) : sourceRoot;
     const entries = await fs.readdir(srcAbs, { withFileTypes: true });
     for (const entry of entries) {
+      throwIfAborted(signal);
       const childRel = toPosixRel(path.join(srcAbs, entry.name), sourceRoot);
       if (!childRel || childRel.startsWith('..')) continue;
       if (entry.isDirectory()) {
@@ -132,6 +174,7 @@ async function copyWorkspaceForBuildCheck(
 
   await fs.mkdir(destRoot, { recursive: true });
   await walk('');
+  throwIfAborted(signal);
   for (const must of ['package.json', 'package-lock.json']) {
     const src = path.join(sourceRoot, must);
     if (!fsSync.existsSync(src)) {
@@ -147,9 +190,15 @@ function spawnNpmWithLines(
   workspaceRoot: string,
   env: NodeJS.ProcessEnv,
   onLine: BuildCheckProgressCallback | undefined,
-  labels: { ok: string; fail: string }
-): Promise<{ ok: boolean; message: string }> {
+  labels: { ok: string; fail: string },
+  signal?: AbortSignal
+): Promise<BuildCheckResult> {
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ ok: false, message: '사용자가 취소했습니다.', cancelled: true });
+      return;
+    }
+
     const child = spawn('npm', args, {
       cwd: workspaceRoot,
       shell: true,
@@ -157,6 +206,22 @@ function spawnNpmWithLines(
       env,
     });
     let stderr = '';
+    let settled = false;
+
+    const finish = (result: BuildCheckResult) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve(result);
+    };
+
+    const onAbort = () => {
+      killProcessTree(child);
+      finish({ ok: false, message: '사용자가 취소했습니다.', cancelled: true });
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+
     const emitLines = (buf: Buffer) => {
       const text = buf.toString('utf-8');
       for (const line of text.split(/\r?\n/)) {
@@ -170,11 +235,19 @@ function spawnNpmWithLines(
       stderr += buf.toString('utf-8');
     });
     child.on('error', (err) => {
-      resolve({ ok: false, message: err.message });
+      if (signal?.aborted) {
+        finish({ ok: false, message: '사용자가 취소했습니다.', cancelled: true });
+        return;
+      }
+      finish({ ok: false, message: err.message });
     });
     child.on('close', (code) => {
-      if ((code ?? 1) === 0) resolve({ ok: true, message: labels.ok });
-      else resolve({ ok: false, message: stderr.trim() || `${labels.fail} (code=${code})` });
+      if (signal?.aborted) {
+        finish({ ok: false, message: '사용자가 취소했습니다.', cancelled: true });
+        return;
+      }
+      if ((code ?? 1) === 0) finish({ ok: true, message: labels.ok });
+      else finish({ ok: false, message: stderr.trim() || `${labels.fail} (code=${code})` });
     });
   });
 }
@@ -189,11 +262,13 @@ function buildCheckTempRoot(sourceRoot: string): string {
  */
 export async function runIsolatedBuildCheck(
   sourceRoot: string,
-  onLine?: BuildCheckProgressCallback
-): Promise<{ ok: boolean; message: string }> {
+  onLine?: BuildCheckProgressCallback,
+  signal?: AbortSignal
+): Promise<BuildCheckResult> {
   if (buildCheckInflight) {
     return { ok: false, message: '빌드 확인이 이미 진행 중입니다.' };
   }
+  throwIfAborted(signal);
   buildCheckInflight = true;
   const tempRoot = buildCheckTempRoot(sourceRoot);
   try {
@@ -203,7 +278,8 @@ export async function runIsolatedBuildCheck(
       `빌드 env: project=${project} GGNR_ENV=${BUILD_CHECK_GGNR_ENV} NODE_ENV=production`
     );
     onLine?.('임시 워크스페이스 준비 중 (원본 소스 무영향)...');
-    const copied = await copyWorkspaceForBuildCheck(sourceRoot, tempRoot, onLine);
+    const copied = await copyWorkspaceForBuildCheck(sourceRoot, tempRoot, onLine, signal);
+    throwIfAborted(signal);
     onLine?.(`소스 복사 완료 (${copied}건)`);
     onLine?.('npm install (캐시 재사용) 시작...');
     const installResult = await spawnNpmWithLines(
@@ -211,16 +287,23 @@ export async function runIsolatedBuildCheck(
       tempRoot,
       buildEnv,
       onLine,
-      { ok: 'npm install 완료', fail: 'npm install 실패' }
+      { ok: 'npm install 완료', fail: 'npm install 실패' },
+      signal
     );
     if (!installResult.ok) {
       return installResult;
     }
+    throwIfAborted(signal);
     onLine?.('npm run build 시작...');
     return await spawnNpmWithLines(['run', 'build'], tempRoot, buildEnv, onLine, {
       ok: '빌드 성공',
       fail: 'npm run build 실패',
-    });
+    }, signal);
+  } catch (e: unknown) {
+    if (isAbortError(e) || signal?.aborted) {
+      return { ok: false, message: '사용자가 취소했습니다.', cancelled: true };
+    }
+    throw e;
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
     onLine?.('임시 워크스페이스 정리 완료');

@@ -1,36 +1,12 @@
-/** 브라우저에서 응답 본문을 스트림으로 읽어 파일 저장 (재압축·전체 버퍼 없이 pipe 우선) */
-export async function streamDownloadFile(
-  url: string,
+/** 이미 fetch된 Response body를 읽어 브라우저 기본 다운로드(다운로드 폴더)로 저장 */
+export async function streamDownloadResponse(
+  res: Response,
   fileName: string,
   onProgress?: (received: number, total: number | null) => void,
   signal?: AbortSignal
 ): Promise<void> {
   if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 
-  let writable: FileSystemWritableFileStream | null = null;
-
-  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-    try {
-      const handle = await (
-        window as Window & {
-          showSaveFilePicker: (options: {
-            suggestedName: string;
-            types?: { description: string; accept: Record<string, string[]> }[];
-          }) => Promise<FileSystemFileHandle>;
-        }
-      ).showSaveFilePicker({
-        suggestedName: fileName,
-        types: [{ description: 'ZIP', accept: { 'application/zip': ['.zip'] } }],
-      });
-      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
-      writable = await handle.createWritable();
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') throw e;
-      writable = null;
-    }
-  }
-
-  const res = await fetch(url, { method: 'GET', cache: 'no-store', signal });
   const contentType = res.headers.get('content-type') ?? '';
   if (!res.ok || contentType.includes('application/json')) {
     const json = (await res.json().catch(() => ({}))) as { error?: string };
@@ -41,31 +17,9 @@ export async function streamDownloadFile(
   const totalHeader = res.headers.get('content-length');
   const total = totalHeader && Number.isFinite(Number(totalHeader)) ? Number(totalHeader) : null;
   const reader = res.body.getReader();
+  const chunks: BlobPart[] = [];
   let received = 0;
 
-  if (writable) {
-    try {
-      while (true) {
-        if (signal?.aborted) {
-          await reader.cancel();
-          await writable.abort().catch(() => {});
-          throw new DOMException('The operation was aborted', 'AbortError');
-        }
-        const { done, value } = await reader.read();
-        if (done) break;
-        await writable.write(value);
-        received += value.length;
-        onProgress?.(received, total);
-      }
-      await writable.close();
-      return;
-    } catch (e) {
-      await writable.abort().catch(() => {});
-      throw e;
-    }
-  }
-
-  const chunks: BlobPart[] = [];
   while (true) {
     if (signal?.aborted) {
       await reader.cancel();
@@ -83,8 +37,21 @@ export async function streamDownloadFile(
   const a = document.createElement('a');
   a.href = href;
   a.download = fileName;
+  a.title = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(href);
+}
+
+/** URL 응답 본문을 읽어 브라우저 기본 다운로드로 저장 */
+export async function streamDownloadFile(
+  url: string,
+  fileName: string,
+  onProgress?: (received: number, total: number | null) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
+  const res = await fetch(url, { method: 'GET', cache: 'no-store', signal });
+  await streamDownloadResponse(res, fileName, onProgress, signal);
 }

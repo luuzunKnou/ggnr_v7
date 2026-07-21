@@ -405,7 +405,7 @@ function formatDownloadApiError(status: number, apiMsg: string): string {
   return `GNMS download API 오류 (${status})${apiMsg ? `: ${apiMsg}` : ''}`;
 }
 
-type LatestDownloadOk = {
+export type LatestDownloadOk = {
   version: string;
   fileName: string;
   jobId: string;
@@ -413,6 +413,8 @@ type LatestDownloadOk = {
   downloadUrl: string;
   downloadRes: Response;
 };
+
+export type GnmsClientConfigForDownload = GnmsConfigResponse;
 
 function preparePhaseMessage(phase: string, message: string): string {
   const fallback = message.trim() || phase;
@@ -659,7 +661,7 @@ async function fetchGnmsFolderPrepareAndDownload(options: {
 }
 
 /** GET /latest → GET download(?jobId=). 호출부에서 job ended 404 시 재시도 */
-async function fetchGnmsLatestAndDownload(options: {
+export async function fetchGnmsLatestAndDownload(options: {
   cfg: GnmsConfigResponse;
   signal?: AbortSignal;
   log: (line: string) => void;
@@ -721,6 +723,59 @@ async function fetchGnmsLatestAndDownload(options: {
   }
 
   return { version, fileName, jobId, latestJson, downloadUrl, downloadRes };
+}
+
+/**
+ * 설치파일 다운로드용 — GNMS 설정 + latest ZIP Response (job 만료 시 1회 재시도).
+ * relay/적용 없이 브라우저 저장만 할 때 사용.
+ */
+export async function fetchGnmsLatestZipForBrowserSave(options: {
+  signal?: AbortSignal;
+  log: (line: string) => void;
+}): Promise<{ cfg: GnmsConfigResponse; bundle: LatestDownloadOk }> {
+  const { signal, log } = options;
+  throwIfAborted(signal);
+  const cfgRes = await fetch('/api/source/version/gnms-config', { cache: 'no-store', signal });
+  const cfg = (await cfgRes.json().catch(() => ({}))) as GnmsConfigResponse;
+  if (!cfgRes.ok) throw new Error(cfg.error ?? 'GNMS 설정 조회 실패');
+  log(`GNMS: ${cfg.gnmsBaseUrl}`);
+
+  let bundle = await fetchGnmsLatestAndDownload({ cfg, signal, log });
+  if (!bundle.downloadRes.ok) {
+    const firstApiMsg = await readJsonError(bundle.downloadRes, '');
+    if (isDownloadJobEndedError(bundle.downloadRes.status, firstApiMsg)) {
+      log('WARNING: download job 만료 — latest 재조회 후 재시도');
+      bundle = await fetchGnmsLatestAndDownload({ cfg, signal, log });
+      if (!bundle.downloadRes.ok) {
+        const apiMsg = await readJsonError(bundle.downloadRes, '');
+        throw new Error(formatDownloadApiError(bundle.downloadRes.status, apiMsg));
+      }
+    } else {
+      throw new Error(formatDownloadApiError(bundle.downloadRes.status, firstApiMsg));
+    }
+  }
+  return { cfg, bundle };
+}
+
+/** 사용자 취소 시 GNMS 다운로드 job 통지 */
+export async function notifyGnmsLatestDownloadCancel(options: {
+  cfg: GnmsConfigResponse;
+  jobId: string;
+  version?: string;
+  fileName?: string;
+  log: (line: string) => void;
+}): Promise<void> {
+  const cancelUrl =
+    (options.cfg.cancelUrl && options.cfg.cancelUrl.trim()) ||
+    resolveGnmsApiUrl(options.cfg.gnmsBaseUrl, '/cancel');
+  await notifyGnmsDownloadCancel({
+    cancelUrl,
+    bearer: options.cfg.bearer,
+    jobId: options.jobId,
+    version: options.version,
+    fileName: options.fileName,
+    log: options.log,
+  });
 }
 
 async function fetchGnmsSourceBundle(options: {
@@ -789,6 +844,8 @@ export async function relayLatestSourceFromGnms(options: {
   packageProfile?: SourcePackageProfile;
   /** 선택 버전 폴더 ID (목록 folder) */
   folder: string;
+  /** 이력·UI용 — select option 본문 (`날짜 | 변경메모`) */
+  versionLabel?: string;
   /** true면 /latest 경로, false면 prepare + /download/{folder} */
   isLatest: boolean;
   signal?: AbortSignal;
@@ -800,6 +857,7 @@ export async function relayLatestSourceFromGnms(options: {
     restartMode,
     packageProfile = 'closed',
     folder,
+    versionLabel,
     isLatest,
     signal,
     onProgress,
@@ -815,6 +873,8 @@ export async function relayLatestSourceFromGnms(options: {
   let gnmsJobId: string | null = null;
   let gnmsVersion: string | undefined;
   let gnmsFileName: string | undefined;
+  /** 이력 mvh_ver — option 본문 우선 */
+  const historyVersionLabel = versionLabel?.trim() || '';
 
   try {
     throwIfAborted(signal);
@@ -904,7 +964,8 @@ export async function relayLatestSourceFromGnms(options: {
       body: JSON.stringify({
         fileName,
         totalSize,
-        version,
+        /** 이력·UI — select option 본문 우선 */
+        version: historyVersionLabel || folder.trim() || version,
         restart,
         restartMode,
         includeNodeModules,
@@ -1077,12 +1138,15 @@ export async function relayLatestSourceFromGnms(options: {
       relayCompleted || (restart && isRestartDisconnectError(e));
     if (!isUserAbortError(e) && !skipFailHistory) {
       const msg = e instanceof Error ? e.message : String(e);
-      const versionPrefix = gnmsVersion?.trim() ? `version=${gnmsVersion.trim()} / ` : '';
+      const failVer =
+        historyVersionLabel || folder.trim() || gnmsVersion?.trim() || '';
+      const versionPrefix = failVer ? `version=${failVer} / ` : '';
       await recordVersionHistoryClient({
         historyType: 'apply_latest',
         status: 'fail',
         message: `${versionPrefix}${msg}`,
         option: applyLatestHistoryOptions(includeNodeModules, restartMode),
+        version: failVer || undefined,
       }).catch(() => {});
     }
     throw e;

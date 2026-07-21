@@ -9,6 +9,8 @@ export async function recordVersionHistoryClient(params: {
   message?: string;
   option?: string[];
   memo?: string;
+  /** GNMS folder / version */
+  version?: string;
 }): Promise<void> {
   try {
     const clientIp = await resolveClientMachineIp();

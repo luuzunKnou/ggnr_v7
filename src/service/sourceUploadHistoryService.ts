@@ -13,6 +13,8 @@ export async function recordUploadFlowHistory(params: {
   changeNote?: string;
   status: 'success' | 'fail';
   body: string;
+  /** GNMS folder (= bundleRoot) */
+  version?: string;
   ip?: string;
   clientHost?: string;
 }): Promise<boolean> {
@@ -27,6 +29,7 @@ export async function recordUploadFlowHistory(params: {
     message: fields.message,
     option: fields.option,
     memo: fields.memo,
+    version: params.version,
     ip: params.ip,
     clientHost: params.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
   });

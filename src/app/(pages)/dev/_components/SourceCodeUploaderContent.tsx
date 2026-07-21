@@ -405,6 +405,7 @@ export function SourceCodeUploaderContent() {
   const recordFinalUploadHistoryClient = async (params: {
     status: 'success' | 'fail';
     body: string;
+    version?: string;
   }) => {
     if (uploadHistoryRecordedRef.current) return;
     uploadHistoryRecordedRef.current = true;
@@ -421,6 +422,7 @@ export function SourceCodeUploaderContent() {
       message: fields.message,
       option: fields.option,
       memo: fields.memo ?? undefined,
+      version: params.version,
     });
     notifyDevVersionHistoryRefresh();
   };
@@ -596,7 +598,14 @@ export function SourceCodeUploaderContent() {
       const handleNdjsonLine = (line: string) => {
         const trimmed = line.trim();
         if (!trimmed) return;
-        let parsed: { type?: string; line?: string; ok?: boolean; message?: string; error?: string };
+        let parsed: {
+          type?: string;
+          line?: string;
+          ok?: boolean;
+          message?: string;
+          error?: string;
+          cancelled?: boolean;
+        };
         try {
           parsed = JSON.parse(trimmed) as typeof parsed;
         } catch {
@@ -605,12 +614,24 @@ export function SourceCodeUploaderContent() {
         if (parsed.type === 'log' && parsed.line) {
           appendLog(parsed.line);
         } else if (parsed.type === 'done') {
-          appendLog(parsed.ok ? '빌드 성공' : `빌드 실패: ${parsed.message ?? ''}`);
+          if (parsed.cancelled) {
+            appendLog('빌드 확인이 취소되었습니다.');
+          } else {
+            appendLog(parsed.ok ? '빌드 성공' : `빌드 실패: ${parsed.message ?? ''}`);
+          }
         } else if (parsed.type === 'error') {
           appendLog(`오류: ${parsed.error ?? 'unknown'}`);
         }
       };
       while (true) {
+        if (signal.aborted) {
+          try {
+            await reader.cancel();
+          } catch {
+            /* ignore */
+          }
+          break;
+        }
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -802,6 +823,7 @@ export function SourceCodeUploaderContent() {
           await recordFinalUploadHistoryClient({
             status: 'fail',
             body: buildSourceUploadFailBody(errText),
+            version: typeof json.bundleRoot === 'string' ? json.bundleRoot : undefined,
           });
         }
         throw new Error(`${stageMsg}${errText}${chunkMsg}${chunkIdx}`);
@@ -869,6 +891,7 @@ export function SourceCodeUploaderContent() {
             Number(json.fail ?? 0),
             includeNodeModules ? 'npm install 생략' : 'npm install 완료'
           ),
+          version: typeof json.bundleRoot === 'string' ? json.bundleRoot : undefined,
         });
       }
 
@@ -1078,9 +1101,25 @@ export function SourceCodeUploaderContent() {
           <Button
             type="button"
             variant="outline"
-            disabled={!uploading || cancelBlocked}
-            title={cancelBlocked ? cancelBlockedTitle : undefined}
+            disabled={
+              buildChecking
+                ? false
+                : !uploading || cancelBlocked
+            }
+            title={
+              buildChecking
+                ? '빌드 검사 취소'
+                : cancelBlocked
+                  ? cancelBlockedTitle
+                  : uploading
+                    ? '업로드 취소'
+                    : '취소'
+            }
             onClick={() => {
+              if (buildChecking) {
+                buildAbortRef.current?.abort();
+                return;
+              }
               if (cancelBlocked) return;
               const uploadId = remoteUploadIdRef.current;
               const progressId = progressIdRef.current;
@@ -1098,6 +1137,7 @@ export function SourceCodeUploaderContent() {
               }
               abortControllerRef.current?.abort();
             }}
+            className="cursor-pointer"
           >
             취소
           </Button>

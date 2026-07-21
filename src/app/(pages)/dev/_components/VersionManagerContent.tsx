@@ -33,6 +33,11 @@ import {
   hardReloadKeepSessionAfterDelay,
   waitServerThenHardReload,
 } from '@/lib/hardReloadKeepSession';
+import {
+  resolveAppliedDisplay,
+  versionOptionBase,
+  versionOptionLabel,
+} from '@/lib/gnmsVersionLabel';
 
 type SideProgress = {
   message: string;
@@ -43,12 +48,6 @@ type SideProgress = {
 
 function emptySideProgress(): SideProgress {
   return { message: '대기 중', pct: null, logs: [], error: null };
-}
-
-function versionOptionLabel(entry: GnmsVersionListEntry): string {
-  const note = (entry.changeNote ?? '').trim() || entry.folder;
-  const base = `${entry.date} | ${note}`;
-  return entry.isLatest ? `${base} (최신)` : base;
 }
 
 function pickDefaultFolder(entries: GnmsVersionListEntry[]): string {
@@ -69,6 +68,7 @@ export function VersionManagerContent() {
   const [selectedFolder, setSelectedFolder] = useState('');
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [appliedVersion, setAppliedVersion] = useState<string | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
@@ -83,6 +83,7 @@ export function VersionManagerContent() {
   };
   const selectedEntry = versionEntries.find((e) => e.folder === selectedFolder) ?? null;
   const canApply = !listLoading && !listError && Boolean(selectedFolder) && versionEntries.length > 0;
+  const appliedDisplay = resolveAppliedDisplay(appliedVersion, versionEntries) || '기록 없음';
 
   useEffect(() => {
     return () => {
@@ -93,6 +94,22 @@ export function VersionManagerContent() {
   }, []);
   useEffect(() => {
     prefetchClientMachineIp();
+  }, []);
+
+  const refreshAppliedVersion = async () => {
+    try {
+      const res = await fetch('/api/dev/version-history/applied', { cache: 'no-store' });
+      if (!res.ok) return;
+      const json = (await res.json()) as { version?: string | null };
+      const v = typeof json.version === 'string' ? json.version.trim() : '';
+      setAppliedVersion(v || null);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    void refreshAppliedVersion();
   }, []);
 
   useEffect(() => {
@@ -109,6 +126,7 @@ export function VersionManagerContent() {
         if (entries.length === 0) {
           setListError('적용 가능한 버전이 없습니다.');
         }
+        await refreshAppliedVersion();
       } catch (e: unknown) {
         if (cancelled || isUserAbortError(e)) return;
         setVersionEntries([]);
@@ -168,11 +186,13 @@ export function VersionManagerContent() {
     let reachedRestartCommit = false;
 
     try {
+      const versionLabel = versionOptionBase(selectedEntry);
       const json = await relayLatestSourceFromGnms({
         restart,
         restartMode,
         packageProfile: profile,
         folder: selectedEntry.folder,
+        versionLabel,
         isLatest: selectedEntry.isLatest,
         signal,
         onProgress: (p: VersionRelayProgress) => {
@@ -308,6 +328,10 @@ export function VersionManagerContent() {
         ]);
         void waitServerThenHardReload();
       } else {
+        const applied =
+          versionLabel.trim() ||
+          (typeof json.version === 'string' ? json.version.trim() : '');
+        if (applied) setAppliedVersion(applied);
         notifyDevVersionHistoryRefresh();
         pushLog('화면 새로고침(세션 유지)…');
         void hardReloadKeepSessionAfterDelay(1000);
@@ -440,7 +464,12 @@ export function VersionManagerContent() {
           </p>
           <div className="space-y-2">
             <div className={sectionClass}>
-              <div className="text-xs text-muted-foreground">적용 버전</div>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <div className="text-xs text-muted-foreground">적용 버전</div>
+                <div className="text-xs text-foreground">
+                  현재: {appliedDisplay}
+                </div>
+              </div>
               <select
                 className="h-8 w-full max-w-xl rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-60"
                 value={selectedFolder}
@@ -453,7 +482,7 @@ export function VersionManagerContent() {
                 )}
                 {versionEntries.map((entry) => (
                   <option key={entry.folder} value={entry.folder}>
-                    {versionOptionLabel(entry)}
+                    {versionOptionLabel(entry, appliedVersion)}
                   </option>
                 ))}
               </select>

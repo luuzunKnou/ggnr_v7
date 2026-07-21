@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     const status = body.status === 'success' ? 'success' : 'fail';
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     const memo = typeof body.memo === 'string' ? body.memo.trim() : '';
+    const version = typeof body.version === 'string' ? body.version.trim() : '';
     const option = Array.isArray(body.option)
       ? body.option.map((x) => String(x)).filter((s) => s.trim())
       : undefined;
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
       message: message || undefined,
       option,
       memo: memo || undefined,
+      version: version || undefined,
       ip,
     });
     if (!result.ok) {

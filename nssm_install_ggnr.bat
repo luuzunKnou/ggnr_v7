@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
 :: nssm에 GGNR_V7 서비스 자동 등록 (관리자 권한으로 실행)
@@ -8,6 +8,7 @@ setlocal EnableExtensions
 :: - 앱 = root\ggnr_start.bat
 :: - 로그 = C:\logs\GGNR_V7_stdout.log / GGNR_V7_stderr.log
 :: - C:\logs · C:\logs\backup 폴더만 생성 (자동 분류/이동 없음)
+:: - 기존 서비스가 있으면 Y/N 후 삭제·재등록 (N이면 등록 중단)
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
@@ -63,9 +64,15 @@ echo [nssm-install] nssm     = %NSSM%
 :: log / log\backup 폴더만 생성
 call :EnsureLogFolders
 
-:: 기존 서비스면 중지 후 제거(재등록)
+:: 기존 서비스면 Y/N 후 중지·제거(재등록)
 "%NSSM%" status %SERVICE_NAME% >nul 2>&1
 if not errorlevel 1 (
+  echo [nssm-install] 서비스 %SERVICE_NAME% 가 이미 등록되어 있습니다.
+  set /p "DO_REREG=삭제 후 재등록할까요? (Y/N): "
+  if /i not "!DO_REREG!"=="Y" (
+    echo [중단] 기존 서비스를 유지합니다. 재등록하지 않았습니다.
+    exit /b 0
+  )
   echo [nssm-install] 기존 서비스 중지/제거...
   "%NSSM%" stop %SERVICE_NAME% confirm >nul 2>&1
   "%NSSM%" remove %SERVICE_NAME% confirm >nul 2>&1

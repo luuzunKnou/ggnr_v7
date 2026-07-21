@@ -13,6 +13,8 @@ export const mvh = pgTable('mng_version_history', {
   mvhOption: jsonb('mvh_option').$type<string[]>(),
   /** 소스코드 업로드 변경 메모 */
   mvhMemo: text('mvh_memo'),
+  /** 업로드·적용 버전 (GNMS folder / version) */
+  mvhVer: varchar('mvh_ver', { length: 200 }),
   mvhIp: varchar('mvh_ip', { length: 64 }),
   /** 접속 주소·호스트 요약 */
   mvhClientHost: varchar('mvh_client_host', { length: 500 }),
@@ -28,6 +30,7 @@ export const mvhColumnComments: Record<string, string> = {
   mvh_message: '본문',
   mvh_option: '선택 옵션',
   mvh_memo: '메모',
+  mvh_ver: '버전',
   mvh_ip: 'IP',
   mvh_client_host: '접속 주소',
   mvh_create_date: '생성 일시',

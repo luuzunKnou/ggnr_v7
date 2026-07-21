@@ -58,6 +58,7 @@ export async function flushPendingVersionHistory(): Promise<void> {
     status: 'success',
     message,
     option,
+    version: typeof payload.version === 'string' ? payload.version.trim() : undefined,
     ip: clientIp,
   });
 
