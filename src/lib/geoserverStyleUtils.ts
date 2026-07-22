@@ -43,8 +43,54 @@ const DEFAULT_PROPS: StyleProps = {
   strokeWidth: 1,
   opacity: 0.3,
   labelField: '',
-  size: 8,
+  size: 14,
 };
+
+/** 라벨 필드 지정 시 자동으로 넣는 글자·후광 기본값 (항공지도 가독성) */
+const LABEL_STYLE_DEFAULTS = {
+  fontSize: 14,
+  fontFill: '#FFFFFF',
+  haloRadius: 2,
+  haloColor: '#222222',
+  fontWeight: 'bold',
+  fontFamily: '"Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif"',
+} as const;
+
+/**
+ * 라벨 공통 스타일 + 도형별 배치.
+ * SLD LabelPlacement 대응:
+ * - POINT: PointPlacement anchor(0.5,1) + displacement(0,-10)
+ * - LINE: LinePlacement perpendicularOffset 5
+ * - POLYGON: PointPlacement anchor(0.5,1) + displacement(0,0) + goodnessOfFit 0
+ */
+function pushLabelStyleLines(
+  lines: string[],
+  geometryType: GeometryType,
+  label: string,
+  fontSize: number
+): void {
+  lines.push(`  label: [${label}];`);
+  lines.push(`  font-size: ${fontSize};`);
+  lines.push(`  font-fill: ${LABEL_STYLE_DEFAULTS.fontFill};`);
+  lines.push(`  font-weight: ${LABEL_STYLE_DEFAULTS.fontWeight};`);
+  lines.push(`  font-family: ${LABEL_STYLE_DEFAULTS.fontFamily};`);
+  lines.push(`  halo-radius: ${LABEL_STYLE_DEFAULTS.haloRadius};`);
+  lines.push(`  halo-color: ${LABEL_STYLE_DEFAULTS.haloColor};`);
+
+  if (geometryType === 'POINT') {
+    lines.push('  label-anchor: 0.5 1.0;');
+    lines.push('  label-offset: 0 -10;');
+  } else if (geometryType === 'LINE') {
+    lines.push('  label-follow-line: true;');
+    lines.push('  label-offset: 5;');
+  } else {
+    // POLYGON
+    lines.push('  label-geometry: [centroid(geom)];');
+    lines.push('  label-anchor: 0.5 1.0;');
+    lines.push('  label-offset: 0 0;');
+    lines.push('  label-fit-goodness: 0;');
+  }
+}
 
 /**
  * 첫 "* {" 시작 위치부터 중괄호 깊이를 세어 매칭되는 닫는 "}"까지의 범위를 찾는다.
@@ -68,15 +114,62 @@ function findOuterStarBlockRange(cssText: string): { braceStart: number; braceEn
   return null;
 }
 
+/**
+ * `fromIndex` 이후에서 다음 맨손 `* { ... }` 블록 범위를 찾는다.
+ * `*:nth-symbol` / `[@z] *` 처럼 *와 { 사이에 다른 토큰이 있으면 건너뛴다.
+ */
+function findNextBareStarBlockRange(
+  cssText: string,
+  fromIndex: number
+): { starIdx: number; braceStart: number; braceEnd: number } | null {
+  let searchFrom = fromIndex;
+  while (searchFrom < cssText.length) {
+    const rel = cssText.slice(searchFrom).search(/\*\s*\{/);
+    if (rel === -1) return null;
+    const starIdx = searchFrom + rel;
+    const braceStart = cssText.indexOf('{', starIdx);
+    if (braceStart === -1) return null;
+    // `*` 와 `{` 사이는 공백만 허용 (맨손 * 규칙)
+    const between = cssText.slice(starIdx + 1, braceStart);
+    if (!/^\s*$/.test(between)) {
+      searchFrom = braceStart + 1;
+      continue;
+    }
+    let depth = 0;
+    for (let i = braceStart; i < cssText.length; i++) {
+      if (cssText[i] === '{') depth++;
+      else if (cssText[i] === '}') {
+        depth--;
+        if (depth === 0) return { starIdx, braceStart, braceEnd: i };
+      }
+    }
+    return null;
+  }
+  return null;
+}
+
 function extractOuterStarBlock(cssText: string): string {
   const range = findOuterStarBlockRange(cssText);
   if (!range) return '';
   return cssText.slice(range.braceStart + 1, range.braceEnd);
 }
 
+/** 블록 본문이 라벨 전용인지 (도형 mark/fill/stroke 없이 label만) */
+function isLabelOnlyBlock(blockBody: string): boolean {
+  const hasLabel = /(?:^|[^\w-])label\s*:/i.test(blockBody);
+  if (!hasLabel) return false;
+  // font-fill / stroke-opacity 등과 구분 — 속성명 경계에 하이픈이 있으면 제외
+  const hasMark =
+    /(?:^|[^\w-])mark\s*:/i.test(blockBody) || /(?:^|[^\w-])mark-size\b/i.test(blockBody);
+  const hasFill = /(?:^|[^\w-])fill\s*:/i.test(blockBody);
+  const hasStroke = /(?:^|[^\w-])stroke\s*:/i.test(blockBody);
+  return !hasMark && !hasFill && !hasStroke;
+}
+
 /**
  * Extract the first * { ... } block and parse key: value; into StyleProps.
  * Infers geometry type from presence of mark/fill/stroke.
+ * 라벨은 뒤쪽 전용 규칙에 있을 수 있으므로 CSS 전체에서 조회한다.
  */
 export function parseSimpleStyleFromCss(cssText: string): {
   styleProps: StyleProps;
@@ -86,21 +179,26 @@ export function parseSimpleStyleFromCss(cssText: string): {
 
   const block = extractOuterStarBlock(cssText);
 
-  const parseOne = (key: string, value: string) => {
+  const parseOne = (key: string, value: string, target: StyleProps) => {
     const v = value.trim();
-    if (key === 'fill') styleProps.fillColor = v;
+    if (key === 'fill') target.fillColor = v;
     else if (key === 'stroke') {
       // LINE 스타일은 "#FFFFFF, 실제색상" 형태(흰 테두리+메인색)로 저장되므로 마지막 값만 취함
       const parts = v.split(',').map((p) => p.trim()).filter(Boolean);
-      styleProps.strokeColor = parts.length > 1 ? parts[parts.length - 1] : v;
+      target.strokeColor = parts.length > 1 ? parts[parts.length - 1] : v;
     }
-    else if (key === 'stroke-width') styleProps.strokeWidth = parseFloat(v) || 1;
+    else if (key === 'stroke-width') target.strokeWidth = parseFloat(v) || 1;
     // "투명도" 입력은 fill-opacity만 반영 (stroke-opacity는 폴리곤에서 항상 1.0으로 고정되는 별개 값)
-    else if (key === 'fill-opacity') styleProps.opacity = parseFloat(v);
-    else if (key === 'font-size' || key === 'mark-size') styleProps.size = parseFloat(v) || 8;
+    else if (key === 'fill-opacity') target.opacity = parseFloat(v);
+    else if (key === 'font-size') target.size = parseFloat(v) || LABEL_STYLE_DEFAULTS.fontSize;
+    else if (key === 'mark-size') {
+      // mark-size 표현식은 무시하고, 단순 숫자일 때만 size로 반영
+      const n = parseFloat(v);
+      if (!Number.isNaN(n) && !/[\[\]]/.test(v)) target.size = n;
+    }
     else if (key === 'label') {
       const m = v.match(/\[\s*([^\]]+)\s*\]/);
-      if (m) styleProps.labelField = m[1].trim();
+      if (m) target.labelField = m[1].trim();
     }
   };
 
@@ -111,7 +209,15 @@ export function parseSimpleStyleFromCss(cssText: string): {
   while ((match = propRe.exec(block))) {
     const key = match[1].trim().toLowerCase();
     const value = match[2].trim();
-    parseOne(key, value);
+    parseOne(key, value, styleProps);
+  }
+
+  // 라벨·글자크기는 CSS 전체(뒤쪽 라벨 전용 규칙 포함)에서 보강
+  const allPropRe = /([a-zA-Z-]+)\s*:\s*([^;{}]+);/g;
+  while ((match = allPropRe.exec(cssText))) {
+    const key = match[1].trim().toLowerCase();
+    if (key !== 'label' && key !== 'font-size') continue;
+    parseOne(key, match[2].trim(), styleProps);
   }
 
   const hasMark = /\bmark\s*:/i.test(block) || /\bmark-size\b/i.test(block);
@@ -131,7 +237,8 @@ export function parseSimpleStyleFromCss(cssText: string): {
 }
 
 /**
- * Build a single * { } CSS block from geometry type and style props.
+ * Build CSS from geometry type and style props.
+ * 라벨이 있으면 도형 규칙 뒤에 라벨 전용 * 규칙을 두어 라벨이 위에 그려지게 한다.
  */
 export function buildCssFromSimpleStyle(
   geometryType: GeometryType,
@@ -142,77 +249,85 @@ export function buildCssFromSimpleStyle(
   const sw = styleProps.strokeWidth ?? DEFAULT_PROPS.strokeWidth;
   const op = styleProps.opacity ?? DEFAULT_PROPS.opacity;
   const label = styleProps.labelField?.trim();
-  const size = styleProps.size ?? DEFAULT_PROPS.size ?? 8;
+  const fontSize = styleProps.size ?? DEFAULT_PROPS.size ?? LABEL_STYLE_DEFAULTS.fontSize;
 
-  const lines: string[] = [];
+  const geomLines: string[] = [];
 
   if (geometryType === 'POINT') {
     const symbolUrl = styleProps.symbolUrl?.trim();
     if (symbolUrl) {
       // Point - 심볼이 있을 때
       const mime = symbolUrl.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
-      lines.push(`  mark: url("${symbolUrl}");`);
-      lines.push(`  mark-mime: "${mime}";`);
-      lines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];`);
+      geomLines.push(`  mark: url("${symbolUrl}");`);
+      geomLines.push(`  mark-mime: "${mime}";`);
+      geomLines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];`);
     } else {
       // Point - 심볼이 없을 때
-      lines.push(`  mark: symbol(circle);`);
-      lines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];`);
-      lines.push(`  :mark {`);
-      lines.push(`    fill: ${f};`);
-      lines.push(`    stroke: ${s};`);
-      lines.push(`    stroke-width: ${sw};`);
-      lines.push(`    stroke-opacity: 0.5;`);
-      lines.push(`    fill-opacity: 0.5;`);
-      lines.push(`  }`);
-    }
-    if (label) {
-      lines.push(`  label: [${label}];`);
-      lines.push(`  font-size: ${size};`);
-      lines.push('  font-fill: #000000;');
-      lines.push('  halo-radius: 1;');
-      lines.push('  halo-color: #FFFFFF;');
+      geomLines.push(`  mark: symbol(circle);`);
+      geomLines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];`);
+      geomLines.push(`  :mark {`);
+      geomLines.push(`    fill: ${f};`);
+      geomLines.push(`    stroke: ${s};`);
+      geomLines.push(`    stroke-width: ${sw};`);
+      geomLines.push(`    stroke-opacity: 0.5;`);
+      geomLines.push(`    fill-opacity: 0.5;`);
+      geomLines.push(`  };`);
     }
   } else if (geometryType === 'LINE') {
     // Line: 테두리 흰색(3px) + 메인 색(2px)
-    lines.push(`  stroke: #FFFFFF, ${s};`);
-    lines.push(`  stroke-width: 3, 2;`);
-    lines.push(`  stroke-opacity: 0.4, 0.5;`);
-    if (label) {
-      lines.push(`  label: [${label}];`);
-      lines.push(`  font-size: ${size};`);
-      lines.push('  font-fill: #000000;');
-      lines.push('  halo-radius: 1;');
-      lines.push('  halo-color: #FFFFFF;');
-    }
+    geomLines.push(`  stroke: #FFFFFF, ${s};`);
+    geomLines.push(`  stroke-width: 3, 2;`);
+    geomLines.push(`  stroke-opacity: 0.4, 0.5;`);
   } else {
     // POLYGON — 테두리는 항상 불투명, 면만 fill-opacity로 조절
-    lines.push(`  fill: ${f};`);
-    lines.push(`  stroke: ${s};`);
-    lines.push(`  stroke-width: ${sw};`);
-    lines.push(`  fill-opacity: ${op};`);
-    lines.push(`  stroke-opacity: 1.0;`);
-    if (label) {
-      lines.push(`  label: [${label}];`);
-      lines.push(`  font-size: ${size};`);
-      lines.push('  font-fill: #000000;');
-      lines.push('  halo-radius: 1;');
-      lines.push('  halo-color: #FFFFFF;');
-    }
+    geomLines.push(`  fill: ${f};`);
+    geomLines.push(`  stroke: ${s};`);
+    geomLines.push(`  stroke-width: ${sw};`);
+    geomLines.push(`  fill-opacity: ${op};`);
+    geomLines.push(`  stroke-opacity: 1.0;`);
   }
 
-  return `* {\n${lines.join('\n')}\n}`;
+  const geomBlock = `* {\n${geomLines.join('\n')}\n  z-index: 0;\n}`;
+  if (!label) return geomBlock;
+
+  const labelLines: string[] = [];
+  pushLabelStyleLines(labelLines, geometryType, label, fontSize);
+  // z-index가 높을수록 나중에 그려짐 → 모든 도형을 그린 뒤 라벨을 올려 도형 위에 표시
+  labelLines.push('  z-index: 1;');
+  const labelBlock = `* {\n${labelLines.join('\n')}\n}`;
+  return `${geomBlock}\n\n${labelBlock}`;
 }
 
 /**
- * Replace the first * { ... } block in cssText with newStarBlock; keep the rest.
+ * 첫 * { ... } 도형 블록을 newStarBlock으로 교체.
+ * newStarBlock에 라벨 전용 규칙이 포함될 수 있으므로,
+ * 바로 뒤에 있던 기존 라벨 전용 * 규칙은 제거해 중복을 막는다.
  */
 export function replaceDefaultRuleInCss(cssText: string, newStarBlock: string): string {
-  const range = findOuterStarBlockRange(cssText);
+  const range = findNextBareStarBlockRange(cssText, 0) ?? (() => {
+    const r = findOuterStarBlockRange(cssText);
+    if (!r) return null;
+    const starIdx = cssText.lastIndexOf('*', r.braceStart);
+    return { starIdx: starIdx === -1 ? r.braceStart : starIdx, braceStart: r.braceStart, braceEnd: r.braceEnd };
+  })();
+
   if (!range) return newStarBlock + (cssText.trim() ? '\n\n' + cssText : '');
-  const starIdx = cssText.lastIndexOf('*', range.braceStart);
-  const idx = starIdx === -1 ? range.braceStart : starIdx;
-  const end = range.braceEnd + 1;
+
+  const idx = range.starIdx;
+  let end = range.braceEnd + 1;
+
+  // 바로 다음 맨손 * 블록이 라벨 전용이면 함께 제거 (이전 저장분 정리)
+  const next = findNextBareStarBlockRange(cssText, end);
+  if (next) {
+    const between = cssText.slice(end, next.starIdx);
+    if (/^\s*$/.test(between)) {
+      const nextBody = cssText.slice(next.braceStart + 1, next.braceEnd);
+      if (isLabelOnlyBlock(nextBody)) {
+        end = next.braceEnd + 1;
+      }
+    }
+  }
+
   const before = cssText.slice(0, idx);
   const after = cssText.slice(end).trim();
   return (before + newStarBlock + (after ? '\n\n' + after : '')).trim();

@@ -87,9 +87,6 @@ next-env.d.ts
 # PaddleOCR inference models (docs/ocr-paddle-setup.md)
 /python/models/paddleocr/
 
-# 와이어프레임 PDF 변환 스크립트 임시 빌드 산출물
-/scripts/wireframe/.build/
-
 # 필지분석 — 개인 개발메모 (팀 공식 문서: docs/plan, docs/reports)
 /docs/parcelAnalysis/필지분석-개발메모.md
 

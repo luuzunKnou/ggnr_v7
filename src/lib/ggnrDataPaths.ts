@@ -7,6 +7,8 @@ export const GGNR_DATA_PATHS = {
   fileData: 'file_data',
   excelData: 'excel_data',
   shpData: 'shp_data',
+  /** SHP 동기화 이력별 스냅샷 (상세 지도 복원용) */
+  shpHistory: 'shp_history',
   integrations: 'integrations',
   sourceUpload: 'source_upload',
   /** 정사영상 GeoTIFF 원본 (업로드·변환 입력) */
@@ -33,6 +35,7 @@ export const GGNR_DATA_PATHS = {
 export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.fileData,
   GGNR_DATA_PATHS.shpData,
+  GGNR_DATA_PATHS.shpHistory,
   GGNR_DATA_PATHS.excelData,
   GGNR_DATA_PATHS.tilesTif,
   GGNR_DATA_PATHS.tilesJpg,

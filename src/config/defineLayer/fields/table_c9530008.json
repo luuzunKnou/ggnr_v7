@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -275,7 +275,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MET",
+    "define_field_name": "met",
     "define_field_kor_name": "통로박스 재질",
     "define_field_type": "text",
     "define_field_idx": 12,
@@ -300,7 +300,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "PURPOSE",
+    "define_field_name": "purpose",
     "define_field_kor_name": "설치목적",
     "define_field_type": "text",
     "define_field_idx": 13,
@@ -325,7 +325,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "PUMP",
+    "define_field_name": "pump",
     "define_field_kor_name": "배수시설",
     "define_field_type": "text",
     "define_field_idx": 14,

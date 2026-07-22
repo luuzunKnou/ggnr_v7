@@ -123,7 +123,7 @@ export function LayerManagerContent() {
           className="absolute inset-0 flex flex-col"
           style={{ display: activeTab === "historyShp" ? "flex" : "none" }}
         >
-          <ShpHistoryTab embedded />
+          <ShpHistoryTab embedded active={activeTab === "historyShp"} />
         </div>
         <div
           className="absolute inset-0 flex flex-col"

@@ -23,4 +23,6 @@ export type LayerDefineEmbedProps = {
   embedded?: boolean
   fixedTableKey?: string | null
   fixedSchema?: string | null
+  /** true면 키(define_field_is_key) 컬럼만 편집 가능하고 나머지는 읽기전용으로 표시 */
+  keyFieldOnly?: boolean
 }

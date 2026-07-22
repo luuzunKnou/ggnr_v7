@@ -1,10 +1,23 @@
 import type { FeatureLike } from "ol/Feature";
+import type { Map as OLMap } from "ol";
+import type BaseLayer from "ol/layer/Base";
 import { Fill, Icon, Stroke, Style, Circle as CircleStyle } from "ol/style";
 import type { StyleFunction } from "ol/style/Style";
 
 /**
+ * 데이터조회 하이라이트 벡터를 서비스 WMS(`serviceLayer`) 바로 아래에 넣는다.
+ * WMS(도형+라벨)가 위에 있어 라벨은 가리지 않고, 반투명 면 아래로 강조색이 비친다.
+ */
+export function insertLayerBelowServiceLayer(map: OLMap, layer: BaseLayer): void {
+  const collection = map.getLayers();
+  const idx = collection.getArray().findIndex((l) => l.get("serviceLayer") === true);
+  if (idx >= 0) collection.insertAt(idx, layer);
+  else collection.push(layer);
+}
+
+/**
  * 데이터조회(LayerDataPanel) — 목록 조회 결과 전체 도형 오버레이.
- * 연한 빨강 채움/선 + 흰 외곽선.
+ * 연한 빨강 채움/선 + 흰 외곽선. (기존과 동일)
  */
 export function createDataQueryBulkListHighlightStyle(): StyleFunction {
   return (feature: FeatureLike) => {
@@ -38,7 +51,7 @@ const RADAR_RADIUS = 52;
 
 /**
  * 데이터조회(LayerDataPanel) — 선택 행 1건 강조(펄스 + 포인트 레이더).
- * `getPulsePhase()`는 requestAnimationFrame 루프에서 소량씩 증가 (LayerDataPanel 과 동일).
+ * 서비스 WMS 아래 + 기존 흰 글로우에 가까운 약한 빨강 채움/이중 선.
  */
 export function createDataQuerySelectionRowHighlightStyle(
   getPulsePhase: () => number
@@ -82,11 +95,19 @@ export function createDataQuerySelectionRowHighlightStyle(
       geomType === "Polygon" ||
       geomType === "MultiPolygon";
     if (isLineOrPolygon) {
-      const whiteGlow = 0.6 + 0.4 * Math.sin(phase);
-      return new Style({
-        stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteGlow})`, width: 6 }),
-        fill: new Fill({ color: "rgba(255, 255, 255, 0.08)" }),
-      });
+      const t = Math.sin(phase);
+      const whiteOp = 0.6 + 0.35 * t;
+      const redOp = 0.5 + 0.3 * t;
+      const fillOp = 0.12 + 0.1 * t;
+      return [
+        new Style({
+          stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteOp})`, width: 7 + t }),
+          fill: new Fill({ color: `rgba(220, 38, 38, ${fillOp})` }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: `rgba(220, 38, 38, ${redOp})`, width: 4 + 0.8 * t }),
+        }),
+      ];
     }
     const strokeOpacity = 0.5 + 0.4 * Math.sin(phase);
     return new Style({

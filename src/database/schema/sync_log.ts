@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, timestamp, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, boolean, jsonb, index } from 'drizzle-orm/pg-core';
 import { dh } from './layer_detail_history';
 
 export const sl = pgTable('sync_log', {
@@ -14,7 +14,11 @@ export const sl = pgTable('sync_log', {
   slRolledBack: boolean('sl_rolled_back').default(false),
   slRolledBackAt: timestamp('sl_rolled_back_at'),
   slCreatedAt: timestamp('sl_created_at').defaultNow(),
-});
+  slSupersededAt: timestamp('sl_superseded_at'),
+}, (t) => [
+  index('sync_log_table_key_idx').on(t.slTableName, t.slKeyValue),
+  index('sync_log_table_op_idx').on(t.slTableName, t.slOperation, t.slSupersededAt),
+]);
 
 export const slTableComment = '동기화 변경 로그';
 
@@ -31,6 +35,7 @@ export const slColumnComments: Record<string, string> = {
   sl_rolled_back: '롤백 여부',
   sl_rolled_back_at: '롤백 일시',
   sl_created_at: '생성 일시',
+  sl_superseded_at: '대체됨(재비교로 무효화된) 일시',
 };
 
 export type Sl = typeof sl.$inferSelect;

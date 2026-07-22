@@ -158,7 +158,8 @@ function OkIcon({ ok, loading }: { ok: boolean; loading?: boolean }) {
 }
 
 function rowHasInfraError(tableName: string, styleInfoMap: Record<string, StyleInfo>): boolean {
-  const info = tableName ? styleInfoMap[tableName] : undefined
+  // GeoServer·정의명 대소문자와 DB 테이블명이 달라도 동일 키로 조회 (오류수정 탭과 동일)
+  const info = tableName ? styleInfoMap[tableName.toLowerCase()] : undefined
   const published = info?.published ?? false
   const hasCssStyle = info?.hasCssStyle ?? false
   return !published || !hasCssStyle
@@ -300,7 +301,7 @@ export function LayerManagerListTab() {
         const map: Record<string, StyleInfo> = {}
         for (const layer of data.layers) {
           if (layer.name) {
-            map[String(layer.name)] = {
+            map[String(layer.name).toLowerCase()] = {
               published: layer.published ?? false,
               hasCssStyle: layer.hasCssStyle ?? false,
               styleName: layer.styleName,
@@ -517,7 +518,7 @@ export function LayerManagerListTab() {
 
   return (
     <div className="flex flex-col gap-3 p-2 min-h-0 h-full">
-      <div className="flex items-center gap-3 flex-wrap shrink-0">
+      <div className="flex items-center gap-3 flex-nowrap shrink-0 overflow-x-auto">
         <Input
           placeholder="그룹명·테이블명·한글명 검색"
           value={searchQuery}
@@ -576,13 +577,14 @@ export function LayerManagerListTab() {
           <div className="w-full">
             {displayedRows.map((row) => {
               const tableName = row.define_table_name
-              const styleInfo = tableName ? styleInfoMap[tableName] : undefined
+              const styleKey = tableName.toLowerCase()
+              const styleInfo = tableName ? styleInfoMap[styleKey] : undefined
               const published = styleInfo?.published ?? false
               const hasCssStyle = styleInfo?.hasCssStyle ?? false
               const styleName = styleInfo?.styleName
               const canShowLegend = hasCssStyle || published
-              const updatedAt = updateDateMap[tableName.toLowerCase()] ?? null
-              const excelMeta = excelMetaMap[tableName.toLowerCase()]
+              const updatedAt = updateDateMap[styleKey] ?? null
+              const excelMeta = excelMetaMap[styleKey]
               const isExcelSource = row.define_table_source.toLowerCase() === "excel"
               const actionBusy = downloadingShp !== null || downloadingExcel !== null
 
@@ -730,6 +732,7 @@ export function LayerManagerListTab() {
                               strokeColor={(fallbackState as StyleProps & { geometryType: GeometryType }).strokeColor}
                               opacity={(fallbackState as StyleProps & { geometryType: GeometryType }).opacity}
                               showFrame={false}
+                              size="sm"
                             />
                           )}
                           {showLoading && <span className="text-xs text-muted-foreground">…</span>}
