@@ -1033,6 +1033,28 @@ export default function OpenLayersMap({
     activeControls.includes('official-land-price')
   );
 
+  /** 패널 등에서 지도 컨트롤 ON/OFF (예: 점사용료 이력 → 공시지가, 점용(프) → 지적도) */
+  useEffect(() => {
+    const onSet = (e: Event) => {
+      const detail = (e as CustomEvent<{ id?: string; active?: boolean }>).detail;
+      const id = detail?.id?.trim();
+      if (!id) return;
+      const active = detail.active === true;
+      if (active && id === 'cadastral') {
+        setVisibleCadastralLayerNames((prev) =>
+          prev != null && prev.size > 0 ? prev : new Set(CADASTRAL_LAYERS.map((l) => l.tableName))
+        );
+      }
+      setActiveControls((prev) => {
+        const has = prev.includes(id);
+        if (active) return has ? prev : [...prev, id];
+        return has ? prev.filter((item) => item !== id) : prev;
+      });
+    };
+    window.addEventListener('ggnr-map-control-set', onSet);
+    return () => window.removeEventListener('ggnr-map-control-set', onSet);
+  }, []);
+
   const handleItemRightClick = (id: string) => {
     if (id === 'land-category') {
       setOpenSubPanel((prev) => (prev === 'land-category' ? null : 'land-category'));

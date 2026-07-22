@@ -15,16 +15,16 @@ export function useLayerParcelNavigation(wmsLayerId?: string) {
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
 
-      let ext = getParcelExtent3857(item);
-      if (!ext) {
+      let target = item;
+      if (!getParcelExtent3857(item)) {
         const [resolved] = await resolveParcelGeoms([item]);
-        ext = getParcelExtent3857(resolved ?? item);
+        if (resolved) target = resolved;
       }
-      if (!ext) return;
+      if (!getParcelExtent3857(target)) return;
 
       setMovingParcelIdx(idx);
       try {
-        fitMapToLayerRowParcel(map, item, {
+        fitMapToLayerRowParcel(map, target, {
           wmsLayerId,
           setVisibleLayerNames: mapContext?.setVisibleLayerNames,
           applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,

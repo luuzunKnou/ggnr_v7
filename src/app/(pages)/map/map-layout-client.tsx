@@ -47,7 +47,18 @@ import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPu
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+import {
+  UseLedgerProtoListPanel,
+  UseLedgerProtoDetailPanel,
+  UseLedgerProtoLinkedPanel,
+} from "./_mapContents/prototypes/UseLedgerProtoPanels"
 import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
+import { UseFeeProtoListPanel, UseFeeProtoDetailPanel } from "./_mapContents/prototypes/UseFeeProtoPanels"
+import {
+  UserAccountProtoPanel,
+} from "./_mapContents/prototypes/UserAccountProtoPanel"
+import { PROTO_FEES, PROTO_LEDGERS, type ProtoLedgerRow } from "./_mapContents/prototypes/dummyData"
+import { flyToProtoLedger } from "./_mapContents/prototypes/protoMapNavigation"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
 import {
   clearServiceMenuLayerState,
@@ -174,6 +185,22 @@ const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
 const BUILD_PUBLIC_LAND_OPENED_KEY = "buildPublicLand"
 const RIVER_USE_LEDGER_OPENED_KEY = "riverUseLedger"
+/** 프로토타입(더미) — 사이드바 «점용(프)» / «사용료(프)» */
+const USE_LEDGER_PROTO_OPENED_KEY = "useLedgerProto"
+const USE_FEE_PROTO_OPENED_KEY = "useFeeProto"
+/** 프로토 목록 폭 = 하천점용과 동일 */
+const USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH = 466
+const USE_LEDGER_PROTO_PANEL_MIN_WIDTH = 466
+const USE_LEDGER_PROTO_PANEL_MAX_WIDTH = 960
+/** 프로토 상세·속성 패널은 최소 폭 기본 */
+const USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH = 340
+const USE_LEDGER_PROTO_DETAIL_MIN_WIDTH = 340
+const USE_LEDGER_PROTO_DETAIL_MAX_WIDTH = 480
+const USE_FEE_PROTO_DETAIL_DEFAULT_WIDTH = 332
+const USE_FEE_PROTO_DETAIL_MIN_WIDTH = 332
+const USE_FEE_PROTO_PANEL_DEFAULT_WIDTH = 561
+const USE_FEE_PROTO_PANEL_MIN_WIDTH = 480
+const USE_FEE_PROTO_PANEL_MAX_WIDTH = 960
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -253,6 +280,8 @@ function MapLayoutContent({
   const buildPublicLandOpen = openedWindows.includes(BUILD_PUBLIC_LAND_OPENED_KEY)
   const roadUseLedgerOpen = openedWindows.includes(ROAD_USE_LEDGER_OPENED_KEY)
   const riverUseLedgerOpen = openedWindows.includes(RIVER_USE_LEDGER_OPENED_KEY)
+  const useLedgerProtoOpen = openedWindows.includes(USE_LEDGER_PROTO_OPENED_KEY)
+  const useFeeProtoOpen = openedWindows.includes(USE_FEE_PROTO_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -261,6 +290,41 @@ function MapLayoutContent({
   const roadUseLedgerDetailOpen = roadUseLedgerOpen && Boolean(roadUseLedgerDetailId)
   const [riverUseLedgerDetailId, setRiverUseLedgerDetailId] = useState<string | null>(null)
   const [riverUseLedgerListRefreshKey, setRiverUseLedgerListRefreshKey] = useState(0)
+  const [useLedgerProtoDetailId, setUseLedgerProtoDetailId] = useState<string | null>(null)
+  const [useLedgerProtoFeeId, setUseLedgerProtoFeeId] = useState<string | null>(null)
+  const [useLedgerProtoRows, setUseLedgerProtoRows] = useState<ProtoLedgerRow[]>(() => [...PROTO_LEDGERS])
+  const useLedgerProtoDetailOpen = useLedgerProtoOpen && Boolean(useLedgerProtoDetailId)
+  const useLedgerProtoFeeDetailOpen = useLedgerProtoOpen && Boolean(useLedgerProtoFeeId)
+  const flyToProtoLedgerById = useCallback(
+    (ledgerId: string | null | undefined) => {
+      if (!ledgerId) return
+      const ledger =
+        useLedgerProtoRows.find((r) => r.id === ledgerId) ??
+        PROTO_LEDGERS.find((r) => r.id === ledgerId)
+      flyToProtoLedger(
+        mapInstanceRef?.current,
+        ledger,
+        applyMapViewPaddingRef?.current
+      )
+    },
+    [useLedgerProtoRows, mapInstanceRef, applyMapViewPaddingRef]
+  )
+  const flyToFeeLinkedLedger = useCallback(
+    (feeId: string) => {
+      const fee = PROTO_FEES.find((f) => f.id === feeId)
+      if (!fee?.ledgerId) return
+      flyToProtoLedgerById(fee.ledgerId)
+    },
+    [flyToProtoLedgerById]
+  )
+  const [useFeeProtoDetailId, setUseFeeProtoDetailId] = useState<string | null>(null)
+  const useFeeProtoDetailOpen = useFeeProtoOpen && Boolean(useFeeProtoDetailId)
+  const [useFeeProtoLedgerId, setUseFeeProtoLedgerId] = useState<string | null>(null)
+  const useFeeProtoLedgerOpen = useFeeProtoOpen && Boolean(useFeeProtoLedgerId)
+  const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
+  const [protoUserAccountExpand, setProtoUserAccountExpand] = useState<'notif' | 'photo' | null>(
+    null
+  )
   const riverUseLedgerDetailOpen = riverUseLedgerOpen && Boolean(riverUseLedgerDetailId)
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
@@ -334,6 +398,12 @@ function MapLayoutContent({
   const [roadUseLedgerDetailWidth, setRoadUseLedgerDetailWidth] = useState(ROAD_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [useLedgerProtoPanelWidth, setUseLedgerProtoPanelWidth] = useState(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
+  const [useLedgerProtoDetailWidth, setUseLedgerProtoDetailWidth] = useState(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
+  const [useLedgerProtoFeeWidth, setUseLedgerProtoFeeWidth] = useState(USE_FEE_PROTO_DETAIL_DEFAULT_WIDTH)
+  const [useFeeProtoPanelWidth, setUseFeeProtoPanelWidth] = useState(USE_FEE_PROTO_PANEL_DEFAULT_WIDTH)
+  const [useFeeProtoDetailWidth, setUseFeeProtoDetailWidth] = useState(USE_FEE_PROTO_DETAIL_DEFAULT_WIDTH)
+  const [useFeeProtoLedgerWidth, setUseFeeProtoLedgerWidth] = useState(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -366,7 +436,13 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
-    (roadCctvOpen ? roadCctvPanelWidth : 0)
+    (roadCctvOpen ? roadCctvPanelWidth : 0) +
+    (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
+    (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
+    (useLedgerProtoFeeDetailOpen ? useLedgerProtoFeeWidth : 0) +
+    (useFeeProtoOpen ? useFeeProtoPanelWidth : 0) +
+    (useFeeProtoDetailOpen ? useFeeProtoDetailWidth : 0) +
+    (useFeeProtoLedgerOpen ? useFeeProtoLedgerWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -417,6 +493,18 @@ function MapLayoutContent({
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
   const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const useLedgerProtoPanelLeftPx =
+    roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
+  const useLedgerProtoDetailLeftPx =
+    useLedgerProtoPanelLeftPx + (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0)
+  const useLedgerProtoFeeLeftPx =
+    useLedgerProtoDetailLeftPx + (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0)
+  const useFeeProtoPanelLeftPx =
+    useLedgerProtoFeeLeftPx + (useLedgerProtoFeeDetailOpen ? useLedgerProtoFeeWidth : 0)
+  const useFeeProtoDetailLeftPx =
+    useFeeProtoPanelLeftPx + (useFeeProtoOpen ? useFeeProtoPanelWidth : 0)
+  const useFeeProtoLedgerLeftPx =
+    useFeeProtoDetailLeftPx + (useFeeProtoDetailOpen ? useFeeProtoDetailWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함 */
@@ -600,6 +688,20 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseUseLedgerProto = () => {
+    setUseLedgerProtoDetailId(null)
+    setUseLedgerProtoFeeId(null)
+    const next = openedWindows.filter((w) => w !== USE_LEDGER_PROTO_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseUseFeeProto = () => {
+    setUseFeeProtoDetailId(null)
+    setUseFeeProtoLedgerId(null)
+    const next = openedWindows.filter((w) => w !== USE_FEE_PROTO_OPENED_KEY)
+    setOpened(next)
+  }
+
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
@@ -607,6 +709,80 @@ function MapLayoutContent({
   useEffect(() => {
     if (!riverUseLedgerOpen) setRiverUseLedgerDetailId(null)
   }, [riverUseLedgerOpen])
+
+  useEffect(() => {
+    if (!useLedgerProtoOpen) {
+      setUseLedgerProtoDetailId(null)
+      setUseLedgerProtoFeeId(null)
+    }
+  }, [useLedgerProtoOpen])
+
+  useEffect(() => {
+    if (useLedgerProtoOpen) {
+      setUseLedgerProtoPanelWidth(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
+    }
+  }, [useLedgerProtoOpen])
+
+  useEffect(() => {
+    if (useLedgerProtoDetailOpen) {
+      setUseLedgerProtoDetailWidth(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [useLedgerProtoDetailOpen])
+
+  useEffect(() => {
+    if (useLedgerProtoFeeDetailOpen) {
+      setUseLedgerProtoFeeWidth(USE_FEE_PROTO_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [useLedgerProtoFeeDetailOpen])
+
+  useEffect(() => {
+    if (!useLedgerProtoFeeDetailOpen || !useLedgerProtoFeeId) return
+    const feeId = useLedgerProtoFeeId
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        applyMapViewPaddingRef?.current?.()
+        mapInstanceRef?.current?.updateSize()
+        requestAnimationFrame(() => flyToFeeLinkedLedger(feeId))
+      })
+    })
+  }, [
+    useLedgerProtoFeeDetailOpen,
+    useLedgerProtoFeeId,
+    useLedgerProtoFeeWidth,
+    flyToFeeLinkedLedger,
+    applyMapViewPaddingRef,
+    mapInstanceRef,
+  ])
+
+  useEffect(() => {
+    if (!useFeeProtoOpen) {
+      setUseFeeProtoDetailId(null)
+      setUseFeeProtoLedgerId(null)
+    }
+  }, [useFeeProtoOpen])
+
+  useEffect(() => {
+    if (useFeeProtoDetailOpen) {
+      setUseFeeProtoDetailWidth(USE_FEE_PROTO_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [useFeeProtoDetailOpen])
+
+  useEffect(() => {
+    const onToggle = () => {
+      setProtoUserAccountExpand(null)
+      setProtoUserAccountOpen((v) => !v)
+    }
+    const onOpenNotif = () => {
+      setProtoUserAccountExpand('notif')
+      setProtoUserAccountOpen(true)
+    }
+    window.addEventListener('ggnr-proto-user-account-toggle', onToggle)
+    window.addEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    return () => {
+      window.removeEventListener('ggnr-proto-user-account-toggle', onToggle)
+      window.removeEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    }
+  }, [])
 
   useEffect(() => {
     if (!memoManagementOpen) setMemoDetailId(null)
@@ -702,7 +878,7 @@ function MapLayoutContent({
   return (
     <SearchBarOffsetContext.Provider value={searchBarOffset}>
       <div className="relative w-full h-screen overflow-hidden bg-slate-100">
-        {mapContext?.layerRowGeomEdit && (
+        {mapContext?.layerRowGeomDrawing && (
           <div
             className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-red-500"
             aria-hidden
@@ -1194,6 +1370,165 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {useLedgerProtoOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useLedgerProtoPanelWidth}
+                minWidth={USE_LEDGER_PROTO_PANEL_MIN_WIDTH}
+                maxWidth={USE_LEDGER_PROTO_PANEL_MAX_WIDTH}
+                leftOffsetPx={useLedgerProtoPanelLeftPx}
+                onWidthChange={setUseLedgerProtoPanelWidth}
+              >
+                <UseLedgerProtoListPanel
+                  onClose={handleCloseUseLedgerProto}
+                  selectedId={useLedgerProtoDetailId}
+                  ledgers={useLedgerProtoRows}
+                  onSelectId={(id) => {
+                    setUseLedgerProtoDetailId((prev) => (prev === id ? null : id))
+                    setUseLedgerProtoFeeId(null)
+                  }}
+                  onAdd={() => {
+                    setUseLedgerProtoDetailId(LAYER_ROW_NEW_ID)
+                    setUseLedgerProtoFeeId(null)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useLedgerProtoOpen && useLedgerProtoDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useLedgerProtoDetailWidth}
+                minWidth={USE_LEDGER_PROTO_DETAIL_MIN_WIDTH}
+                maxWidth={USE_LEDGER_PROTO_DETAIL_MAX_WIDTH}
+                leftOffsetPx={useLedgerProtoDetailLeftPx}
+                onWidthChange={setUseLedgerProtoDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <UseLedgerProtoDetailPanel
+                  detailId={useLedgerProtoDetailId}
+                  ledgers={useLedgerProtoRows}
+                  onClose={() => {
+                    setUseLedgerProtoDetailId(null)
+                    setUseLedgerProtoFeeId(null)
+                  }}
+                  selectedFeeId={useLedgerProtoFeeId}
+                  onSelectFee={(fee) => {
+                    setUseLedgerProtoFeeId((prev) => (prev === fee.id ? null : fee.id))
+                  }}
+                  onCreated={(row) => {
+                    setUseLedgerProtoRows((prev) => [row, ...prev])
+                    setUseLedgerProtoDetailId(row.id)
+                    setUseLedgerProtoFeeId(null)
+                  }}
+                  onUpdated={(row) => {
+                    setUseLedgerProtoRows((prev) => prev.map((r) => (r.id === row.id ? row : r)))
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useLedgerProtoOpen && useLedgerProtoFeeId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useLedgerProtoFeeWidth}
+                minWidth={USE_FEE_PROTO_DETAIL_MIN_WIDTH}
+                maxWidth={USE_LEDGER_PROTO_DETAIL_MAX_WIDTH}
+                leftOffsetPx={useLedgerProtoFeeLeftPx}
+                onWidthChange={setUseLedgerProtoFeeWidth}
+                contentClassName="overflow-hidden"
+              >
+                <UseFeeProtoDetailPanel
+                  detailId={useLedgerProtoFeeId}
+                  selectedLedgerId={useLedgerProtoDetailId}
+                  onSelectLedger={(ledgerId) => {
+                    setUseLedgerProtoDetailId(ledgerId)
+                    flyToProtoLedgerById(ledgerId)
+                  }}
+                  onClose={() => setUseLedgerProtoFeeId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useFeeProtoOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeeProtoPanelWidth}
+                minWidth={USE_FEE_PROTO_PANEL_MIN_WIDTH}
+                maxWidth={USE_FEE_PROTO_PANEL_MAX_WIDTH}
+                leftOffsetPx={useFeeProtoPanelLeftPx}
+                onWidthChange={setUseFeeProtoPanelWidth}
+              >
+                <UseFeeProtoListPanel
+                  onClose={handleCloseUseFeeProto}
+                  selectedId={useFeeProtoDetailId}
+                  onSelectId={(id) => {
+                    setUseFeeProtoDetailId((prev) => {
+                      const next = prev === id ? null : id
+                      if (next !== prev) {
+                        setUseFeeProtoLedgerId(null)
+                        if (next) flyToFeeLinkedLedger(next)
+                      }
+                      return next
+                    })
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useFeeProtoOpen && useFeeProtoDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeeProtoDetailWidth}
+                minWidth={USE_FEE_PROTO_DETAIL_MIN_WIDTH}
+                maxWidth={USE_LEDGER_PROTO_DETAIL_MAX_WIDTH}
+                leftOffsetPx={useFeeProtoDetailLeftPx}
+                onWidthChange={setUseFeeProtoDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <UseFeeProtoDetailPanel
+                  detailId={useFeeProtoDetailId}
+                  onClose={() => {
+                    setUseFeeProtoDetailId(null)
+                    setUseFeeProtoLedgerId(null)
+                  }}
+                  selectedLedgerId={useFeeProtoLedgerId}
+                  onSelectLedger={(ledgerId) => {
+                    setUseFeeProtoLedgerId((prev) => {
+                      const next = prev === ledgerId ? null : ledgerId
+                      if (next) flyToProtoLedgerById(next)
+                      return next
+                    })
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useFeeProtoOpen && useFeeProtoLedgerId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeeProtoLedgerWidth}
+                minWidth={USE_LEDGER_PROTO_DETAIL_MIN_WIDTH}
+                maxWidth={USE_LEDGER_PROTO_DETAIL_MAX_WIDTH}
+                leftOffsetPx={useFeeProtoLedgerLeftPx}
+                onWidthChange={setUseFeeProtoLedgerWidth}
+                contentClassName="overflow-hidden"
+              >
+                {(() => {
+                  const ledger =
+                    useLedgerProtoRows.find((r) => r.id === useFeeProtoLedgerId) ??
+                    PROTO_LEDGERS.find((r) => r.id === useFeeProtoLedgerId)
+                  if (!ledger) return null
+                  return (
+                    <UseLedgerProtoLinkedPanel
+                      ledger={ledger}
+                      onClose={() => setUseFeeProtoLedgerId(null)}
+                    />
+                  )
+                })()}
+              </MapSideListPanel>
+            </div>
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -1215,6 +1550,26 @@ function MapLayoutContent({
                 onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
               />
               <AddressInfoDetail />
+            </div>
+            <div className="pointer-events-auto">
+              <UserAccountProtoPanel
+                open={protoUserAccountOpen}
+                initialExpand={protoUserAccountExpand}
+                onClose={() => {
+                  setProtoUserAccountOpen(false)
+                  setProtoUserAccountExpand(null)
+                }}
+                onOpenLedger={(ledgerId) => {
+                  setOpened([USE_LEDGER_PROTO_OPENED_KEY])
+                  setUseLedgerProtoDetailId(ledgerId)
+                  setUseLedgerProtoFeeId(null)
+                }}
+                onOpenFee={(feeId) => {
+                  setOpened([USE_FEE_PROTO_OPENED_KEY])
+                  setUseFeeProtoDetailId(feeId)
+                  flyToFeeLinkedLedger(feeId)
+                }}
+              />
             </div>
           </div>
         </div>

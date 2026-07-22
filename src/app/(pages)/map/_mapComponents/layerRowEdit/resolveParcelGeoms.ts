@@ -1,4 +1,5 @@
 import { call } from "@/lib/api";
+import { getParcelExtent3857 } from "./layerRowParcelUtils";
 import type { LayerRowParcelItem } from "./types";
 
 function parseResolvedRow(raw: Record<string, unknown> | undefined): Pick<
@@ -21,32 +22,37 @@ function parseResolvedRow(raw: Record<string, unknown> | undefined): Pick<
 /** public_layer.jijuk geom 조회 후 병합 (항상 DB 기준) */
 export async function resolveParcelGeoms(items: LayerRowParcelItem[]): Promise<LayerRowParcelItem[]> {
   if (items.length === 0) return [];
+  if (items.every((item) => getParcelExtent3857(item))) return items;
 
-  const res = await call("", "POST", {
-    service: "layerRowService",
-    action: "resolveJijukParcelGeomsByAddresses",
-    params: {
-      items: items.map((i) => ({
-        address: i.address,
-        pnu: i.pnu,
-        lon: i.point4326?.x,
-        lat: i.point4326?.y,
-      })),
-    },
-  });
-  const data = res?.data ?? res;
-  const resolvedList = Array.isArray(data?.parcels) ? data.parcels : [];
+  try {
+    const res = await call("", "POST", {
+      service: "layerRowService",
+      action: "resolveJijukParcelGeomsByAddresses",
+      params: {
+        items: items.map((i) => ({
+          address: i.address,
+          pnu: i.pnu,
+          lon: i.point4326?.x,
+          lat: i.point4326?.y,
+        })),
+      },
+    });
+    const data = res?.data ?? res;
+    const resolvedList = Array.isArray(data?.parcels) ? data.parcels : [];
 
-  return items.map((item, index) => {
-    const parsed = parseResolvedRow(resolvedList[index] as Record<string, unknown> | undefined);
-    const resolvedPnu = String((resolvedList[index] as Record<string, unknown> | undefined)?.pnu ?? "").trim();
-    if (!parsed?.geometry3857) return item;
-    return {
-      ...item,
-      pnu: resolvedPnu || item.pnu,
-      extent3857: parsed.extent3857 ?? item.extent3857,
-      geometry3857: parsed.geometry3857,
-      showMapGeom: item.showMapGeom !== false ? true : false,
-    };
-  });
+    return items.map((item, index) => {
+      const parsed = parseResolvedRow(resolvedList[index] as Record<string, unknown> | undefined);
+      const resolvedPnu = String((resolvedList[index] as Record<string, unknown> | undefined)?.pnu ?? "").trim();
+      if (!parsed) return item;
+      return {
+        ...item,
+        pnu: resolvedPnu || item.pnu,
+        extent3857: parsed.extent3857 ?? item.extent3857,
+        geometry3857: parsed.geometry3857 ?? item.geometry3857,
+        showMapGeom: item.showMapGeom !== false ? true : false,
+      };
+    });
+  } catch {
+    return items;
+  }
 }

@@ -276,6 +276,10 @@ export type LayerRowGeomEditState = {
   keyField: string;
   keyValue: string;
   mode: 'draw' | 'modify';
+  /** DB 조회 대신 시드 WKT로 도형 표시 (프로토·메모리) */
+  seedWkt5181?: string | null;
+  /** true면 getTableRowGeomGeoJson3857 호출 생략 */
+  protoGeom?: boolean;
 } | null;
 
 const MapContext = createContext<MapContextValue | null>(null);
