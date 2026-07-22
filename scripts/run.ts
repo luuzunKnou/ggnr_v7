@@ -83,7 +83,9 @@ async function setupDb(): Promise<void> {
 
 function runNext(cmd: 'dev' | 'start'): void {
   const nextBin = path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'next.cmd' : 'next');
-  const proc = spawn(nextBin, [cmd], {
+  // Windows: 경로 공백 시 shell:true 가 경로를 쪼개므로 따옴표로 감싼다
+  const bin = process.platform === 'win32' ? `"${nextBin}"` : nextBin;
+  const proc = spawn(bin, [cmd], {
     cwd: process.cwd(),
     stdio: 'inherit',
     env: process.env,

@@ -43,6 +43,21 @@ import { RoadUseLedgerListPanel } from "./_mapContents/road/roadUseLedger/RoadUs
 import { RoadUseLedgerDetailPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerDetailPanel"
 import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerListPanel"
 import { RiverUseLedgerDetailPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerDetailPanel"
+import { AerialManagePanel } from "./_mapContents/aerialView/AerialManagePanel"
+import type { AerialKind } from "./_mapContents/aerialView/aerialMediaTypes"
+import { ShootingRequestPanel } from "./_mapContents/shootingRequest/ShootingRequestPanel"
+import { ShootingRequestDetailPanel } from "./_mapContents/shootingRequest/ShootingRequestDetailPanel"
+import { ShootingRequestFormModal } from "./_mapContents/shootingRequest/ShootingRequestFormModal"
+import {
+  SHOOTING_REQUEST_NEW_ID,
+  beginMediaRegistration,
+  findShootingRequest,
+} from "./_mapContents/shootingRequest/shootingRequestMockStore"
+import {
+  aerialKindToOpenedKey,
+  shootTypeToAerialKind,
+} from "./_mapContents/shootingRequest/shootTypeToAerialKind"
+
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
@@ -174,6 +189,23 @@ const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
 const BUILD_PUBLIC_LAND_OPENED_KEY = "buildPublicLand"
 const RIVER_USE_LEDGER_OPENED_KEY = "riverUseLedger"
+const AERIAL_VIEW_OPENED_KEY = "aerialView"
+/** 레거시 통합 키 — UAV는 종류별 키 사용 */
+const AERIAL_MANAGE_OPENED_KEY = "aerialManage"
+const AERIAL_ORTHO_OPENED_KEY = "aerialOrtho"
+const AERIAL_DRONE_OPENED_KEY = "aerialDrone"
+const AERIAL_PANORAMA_OPENED_KEY = "aerialPanorama"
+const AERIAL_SATELLITE_OPENED_KEY = "aerialSatellite"
+const AERIAL_MANAGE_KIND_KEYS = [
+  AERIAL_MANAGE_OPENED_KEY,
+  AERIAL_ORTHO_OPENED_KEY,
+  AERIAL_DRONE_OPENED_KEY,
+  AERIAL_PANORAMA_OPENED_KEY,
+  AERIAL_SATELLITE_OPENED_KEY,
+] as const
+const SHOOTING_REQUEST_OPENED_KEY = "shootingRequest"
+const SHOOTING_APPROVAL_OPENED_KEY = "shootingApproval"
+const SHOOTING_PANEL_KEYS = [SHOOTING_REQUEST_OPENED_KEY, SHOOTING_APPROVAL_OPENED_KEY] as const
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -181,6 +213,15 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
+const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = 360
+const AERIAL_MANAGE_PANEL_MIN_WIDTH = 300
+const AERIAL_MANAGE_PANEL_MAX_WIDTH = 1200
+const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = 340
+const SHOOTING_REQUEST_PANEL_MIN_WIDTH = 280
+const SHOOTING_REQUEST_PANEL_MAX_WIDTH = 480
+const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = 520
+const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = 420
+const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = 720
 
 function MapLayoutContent({
   children,
@@ -253,6 +294,31 @@ function MapLayoutContent({
   const buildPublicLandOpen = openedWindows.includes(BUILD_PUBLIC_LAND_OPENED_KEY)
   const roadUseLedgerOpen = openedWindows.includes(ROAD_USE_LEDGER_OPENED_KEY)
   const riverUseLedgerOpen = openedWindows.includes(RIVER_USE_LEDGER_OPENED_KEY)
+  const aerialManageOpenedKey =
+    AERIAL_MANAGE_KIND_KEYS.find((k) => openedWindows.includes(k)) ?? null
+  const aerialManageOpen = aerialManageOpenedKey != null
+  const aerialManageKind: AerialKind | undefined =
+    aerialManageOpenedKey === AERIAL_ORTHO_OPENED_KEY
+      ? "ortho"
+      : aerialManageOpenedKey === AERIAL_DRONE_OPENED_KEY
+        ? "drone"
+        : aerialManageOpenedKey === AERIAL_PANORAMA_OPENED_KEY
+          ? "panorama"
+          : aerialManageOpenedKey === AERIAL_SATELLITE_OPENED_KEY
+            ? "satellite"
+            : undefined
+  const shootingApprovalOpen = openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
+  const shootingRequestOpen = openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
+  const shootingListOpen = shootingApprovalOpen
+  const shootingPanelOpen = shootingApprovalOpen || shootingRequestOpen
+  const [shootingRequestDetailId, setShootingRequestDetailId] = useState<string | null>(null)
+  const [shootingRequestListMode, setShootingRequestListMode] = useState<'mine' | 'approval'>('mine')
+  /** 내 정보 → 촬영요청 목록에서 연 신청서 모달 id (사이드 패널 아님) */
+  const [myInfoShootingModalId, setMyInfoShootingModalId] = useState<string | null>(null)
+  const shootingRequestDetailOpen =
+    shootingPanelOpen &&
+    Boolean(shootingRequestDetailId) &&
+    shootingRequestDetailId !== SHOOTING_REQUEST_NEW_ID
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -333,6 +399,13 @@ function MapLayoutContent({
   const [roadUseLedgerDetailWidth, setRoadUseLedgerDetailWidth] = useState(ROAD_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [aerialManagePanelWidth, setAerialManagePanelWidth] = useState(AERIAL_MANAGE_PANEL_DEFAULT_WIDTH)
+  const [shootingRequestPanelWidth, setShootingRequestPanelWidth] = useState(
+    SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH
+  )
+  const [shootingRequestDetailWidth, setShootingRequestDetailWidth] = useState(
+    SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH
+  )
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -354,6 +427,9 @@ function MapLayoutContent({
     (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0) +
     (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0) +
     (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0) +
+    (aerialManageOpen ? aerialManagePanelWidth : 0) +
+    (shootingListOpen ? shootingRequestPanelWidth : 0) +
+    (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -400,8 +476,14 @@ function MapLayoutContent({
     roadUseLedgerDetailLeftPx + (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0)
   const riverUseLedgerDetailLeftPx =
     riverUseLedgerPanelLeftPx + (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0)
-  const memoPanelLeftPx =
+  const aerialManagePanelLeftPx =
     riverUseLedgerDetailLeftPx + (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0)
+  const shootingRequestPanelLeftPx =
+    aerialManagePanelLeftPx + (aerialManageOpen ? aerialManagePanelWidth : 0)
+  const shootingRequestDetailLeftPx =
+    shootingRequestPanelLeftPx + (shootingListOpen ? shootingRequestPanelWidth : 0)
+  const memoPanelLeftPx =
+    shootingRequestDetailLeftPx + (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
@@ -424,7 +506,7 @@ function MapLayoutContent({
       const map = mapInstanceRef?.current
       if (!map) return
       map.getView().padding = [0, 0, 0, mapPaddingLeft]
-      setMapPaddingLeft?.(mapPaddingLeft)
+      setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
     }
     if (applyMapViewPaddingRef) {
       applyMapViewPaddingRef.current = apply
@@ -587,6 +669,22 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseAerialManage = () => {
+    const next = openedWindows.filter(
+      (w) => !(AERIAL_MANAGE_KIND_KEYS as readonly string[]).includes(w)
+    )
+    setOpened(next)
+  }
+
+  const handleCloseShootingRequest = () => {
+    setShootingRequestDetailId(null)
+    setShootingRequestListMode('mine')
+    const next = openedWindows.filter(
+      (w) => !(SHOOTING_PANEL_KEYS as readonly string[]).includes(w)
+    )
+    setOpened(next)
+  }
+
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
@@ -610,6 +708,59 @@ function MapLayoutContent({
   useEffect(() => {
     if (!memoManagementOpen) setMemoDetailId(null)
   }, [memoManagementOpen])
+
+  useEffect(() => {
+    if (!shootingPanelOpen) {
+      setShootingRequestDetailId(null)
+      setShootingRequestListMode('mine')
+      return
+    }
+    if (shootingApprovalOpen) {
+      setShootingRequestListMode('approval')
+    } else if (shootingRequestOpen) {
+      setShootingRequestListMode('mine')
+    }
+  }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
+
+  useEffect(() => {
+    if (!shootingRequestOpen) return
+    if (searchParams.get('shotForm') !== 'new') return
+    setShootingRequestListMode('mine')
+    setShootingRequestDetailId(SHOOTING_REQUEST_NEW_ID)
+    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    current.delete('shotForm')
+    router.replace(`/map?${current.toString()}`)
+  }, [shootingRequestOpen, searchParams, router])
+
+  const openShootingRequestForm = useCallback(() => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    current.set('opened', SHOOTING_REQUEST_OPENED_KEY)
+    current.set('shotForm', 'new')
+    router.push(`/map?${current.toString()}`)
+  }, [router, searchParams])
+
+  /** 승인 건 → 촬영형태에 맞는 영상관리 + 활성 신청 연결 */
+  const openMediaRegisterFromRequest = useCallback(
+    (requestId: string) => {
+      const req = findShootingRequest(requestId)
+      if (!req) return
+      const started = beginMediaRegistration(requestId)
+      if (!started) return
+
+      setShootingRequestDetailId(null)
+
+      const kindKey = aerialKindToOpenedKey(shootTypeToAerialKind(req.shootType))
+      const next = openedWindows.filter(
+        (w) =>
+          !(SHOOTING_PANEL_KEYS as readonly string[]).includes(w) &&
+          !(AERIAL_MANAGE_KIND_KEYS as readonly string[]).includes(w) &&
+          w !== AERIAL_VIEW_OPENED_KEY
+      )
+      next.push(kindKey)
+      setOpened(next)
+    },
+    [openedWindows]
+  )
 
   useEffect(() => {
     if (!buildPublicLandOpen) setBuildPublicLandSelectedId(null)
@@ -709,7 +860,10 @@ function MapLayoutContent({
         )}
         <div className="absolute inset-0 z-0">{children}</div>
 
-        <MapSidebar indexLogoSrc={indexLogoSrc} />
+        <MapSidebar
+          indexLogoSrc={indexLogoSrc}
+          onSelectMyShootingRequest={(id) => setMyInfoShootingModalId(id)}
+        />
         <RoadDataFlowAnalysisOrchestrator />
         <ParcelAnalysisOrchestrator />
 
@@ -1017,6 +1171,108 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {aerialManageOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={aerialManagePanelWidth}
+                minWidth={AERIAL_MANAGE_PANEL_MIN_WIDTH}
+                maxWidth={AERIAL_MANAGE_PANEL_MAX_WIDTH}
+                leftOffsetPx={aerialManagePanelLeftPx}
+                onWidthChange={setAerialManagePanelWidth}
+                className="transition-[width] duration-200 ease-out"
+                contentClassName="overflow-hidden"
+              >
+                <AerialManagePanel
+                  kind={aerialManageKind}
+                  onClose={handleCloseAerialManage}
+                  onContentWidthChange={(w) => {
+                    setAerialManagePanelWidth(
+                      Math.min(
+                        AERIAL_MANAGE_PANEL_MAX_WIDTH,
+                        Math.max(AERIAL_MANAGE_PANEL_MIN_WIDTH, w)
+                      )
+                    )
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {shootingListOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={shootingRequestPanelWidth}
+                minWidth={SHOOTING_REQUEST_PANEL_MIN_WIDTH}
+                maxWidth={SHOOTING_REQUEST_PANEL_MAX_WIDTH}
+                leftOffsetPx={shootingRequestPanelLeftPx}
+                onWidthChange={setShootingRequestPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <ShootingRequestPanel
+                  onClose={handleCloseShootingRequest}
+                  selectedDetailId={shootingRequestDetailId}
+                  onSelectDetailId={setShootingRequestDetailId}
+                  listMode={shootingRequestListMode}
+                  onListModeChange={setShootingRequestListMode}
+                  hideModeTabs
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {shootingPanelOpen &&
+            shootingRequestDetailId &&
+            shootingRequestDetailId !== SHOOTING_REQUEST_NEW_ID && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={shootingRequestDetailWidth}
+                minWidth={SHOOTING_REQUEST_DETAIL_MIN_WIDTH}
+                maxWidth={SHOOTING_REQUEST_DETAIL_MAX_WIDTH}
+                leftOffsetPx={shootingRequestDetailLeftPx}
+                onWidthChange={setShootingRequestDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <ShootingRequestDetailPanel
+                  detailId={shootingRequestDetailId}
+                  onClose={() => {
+                    if (shootingRequestOpen) {
+                      handleCloseShootingRequest()
+                    } else {
+                      setShootingRequestDetailId(null)
+                    }
+                  }}
+                  onCreated={(newId) => setShootingRequestDetailId(newId)}
+                  listMode={shootingRequestListMode}
+                  onStartMediaRegister={
+                    shootingRequestListMode === 'approval' ? openMediaRegisterFromRequest : undefined
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          <ShootingRequestFormModal
+            open={
+              myInfoShootingModalId != null ||
+              (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID)
+            }
+            detailId={
+              myInfoShootingModalId ??
+              (shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID
+                ? SHOOTING_REQUEST_NEW_ID
+                : null)
+            }
+            onOpenChange={(o) => {
+              if (o) return
+              if (myInfoShootingModalId != null) {
+                setMyInfoShootingModalId(null)
+                return
+              }
+              if (shootingRequestOpen) {
+                handleCloseShootingRequest()
+              } else {
+                setShootingRequestDetailId(null)
+              }
+            }}
+            onCreated={(newId) => setShootingRequestDetailId(newId)}
+          />
           {memoManagementOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel

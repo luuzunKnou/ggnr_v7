@@ -78,6 +78,9 @@ import { fromCircle } from 'ol/geom/Polygon';
 import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
+import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
+import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
+import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
 function normalizeSpatialFilterWktForOl(wkt: string): string {
@@ -127,7 +130,7 @@ const LAYER_IDS_OFF_ON_ALL_OFF = [
 ];
 
 // 액션 전용 버튼 (토글 없이 클릭만)
-const ACTION_ONLY_IDS = ['print', 'reset-measurements'];
+const ACTION_ONLY_IDS = ['print', 'reset-measurements', 'shooting-request'];
 
 // 측정 관련 버튼 ID 목록
 const MEASUREMENT_IDS = ['distance', 'area', 'altitude', 'slope'];
@@ -165,6 +168,8 @@ export default function OpenLayersMap({
   const [backgroundMapGroups, setBackgroundMapGroups] = useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
+  const [isAerialViewPanelExiting, setIsAerialViewPanelExiting] = useState(false);
+  const [aerialViewCheckedIds, setAerialViewCheckedIds] = useState<Set<string>>(() => new Set());
   const [openSubPanel, setOpenSubPanel] = useState<
     | 'land-category'
     | 'ownership'
@@ -691,6 +696,22 @@ export default function OpenLayersMap({
 
   const router = useRouter();
   const searchParams = useSearchParams();
+  const systemKey = searchParams.get('system') ?? '';
+  const mapControlGroups = useMemo((): MapControlGroup[] => {
+    if (systemKey === 'uav') return defaultMapControlGroups;
+    return defaultMapControlGroups.map((g) =>
+      g.id === 'base-maps'
+        ? { ...g, items: g.items.filter((item) => item.id !== 'aerial-view') }
+        : g
+    );
+  }, [systemKey]);
+
+  const aerialViewPanelOpen =
+    activeControls.includes('aerial-view') || isAerialViewPanelExiting;
+  useAerialViewCheckedMarkers({
+    enabled: aerialViewCheckedIds.size > 0,
+    checkedUnitIds: aerialViewCheckedIds,
+  });
 
   const totalIdentifyCount = popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
 
@@ -970,6 +991,12 @@ export default function OpenLayersMap({
     return () => clearTimeout(t);
   }, [isBackgroundPanelExiting]);
 
+  useEffect(() => {
+    if (!isAerialViewPanelExiting) return;
+    const t = setTimeout(() => setIsAerialViewPanelExiting(false), 400);
+    return () => clearTimeout(t);
+  }, [isAerialViewPanelExiting]);
+
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
 
@@ -1060,9 +1087,24 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       } else {
-        setActiveControls((prev) =>
-          prev.includes('background-map') ? prev : [...prev, 'background-map']
-        );
+        setIsAerialViewPanelExiting(false);
+        setActiveControls((prev) => {
+          const next = prev.filter((item) => item !== 'aerial-view');
+          return next.includes('background-map') ? next : [...next, 'background-map'];
+        });
+      }
+      return;
+    }
+    if (id === 'aerial-view') {
+      if (activeControls.includes('aerial-view')) {
+        setIsAerialViewPanelExiting(true);
+        setActiveControls((prev) => prev.filter((item) => item !== 'aerial-view'));
+      } else {
+        setIsBackgroundPanelExiting(false);
+        setActiveControls((prev) => {
+          const next = prev.filter((item) => item !== 'background-map');
+          return next.includes('aerial-view') ? next : [...next, 'aerial-view'];
+        });
       }
       return;
     }
@@ -1085,6 +1127,13 @@ export default function OpenLayersMap({
 
     // 액션 전용 버튼은 상태 변경 없이 액션만 실행
     if (ACTION_ONLY_IDS.includes(id)) {
+      if (id === 'shooting-request') {
+        const current = new URLSearchParams(Array.from(searchParams.entries()));
+        current.set('opened', 'shootingRequest');
+        current.set('shotForm', 'new');
+        router.push(`/map?${current.toString()}`);
+        return;
+      }
       console.log(`[v0] Action triggered: ${id}`);
       // 여기에 인쇄 등 실제 액션 로직 추가
       return;
@@ -1116,9 +1165,10 @@ export default function OpenLayersMap({
       setActiveControls((prev) =>
         isActive ? prev.filter((item) => item !== id) : [...prev, id]
       );
-    } else if (id === 'background-map' && isActive) {
-      // 배경지도 패널 닫기: exit 애니메이션 먼저 시작한 뒤 activeControls에서 제거 (깜빡임 방지)
-      setIsBackgroundPanelExiting(true);
+    } else if ((id === 'background-map' || id === 'aerial-view') && isActive) {
+      // 배경지도·영상조회 패널 닫기: exit 애니메이션 먼저
+      if (id === 'background-map') setIsBackgroundPanelExiting(true);
+      else setIsAerialViewPanelExiting(true);
       setActiveControls((prev) => {
         const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
         return withoutSingle;
@@ -1179,6 +1229,25 @@ export default function OpenLayersMap({
                 groups={backgroundMapGroups}
                 value={selectedBackgroundMap}
                 onValueChange={setSelectedBackgroundMap}
+              />
+            </div>
+          )}
+
+          {aerialViewPanelOpen && (
+            <div
+              className={
+                isAerialViewPanelExiting
+                  ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
+                  : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+              }
+            >
+              <AerialViewLayerPanel
+                checkedUnitIds={aerialViewCheckedIds}
+                onCheckedChange={setAerialViewCheckedIds}
+                onClose={() => {
+                  setIsAerialViewPanelExiting(true);
+                  setActiveControls((prev) => prev.filter((x) => x !== 'aerial-view'));
+                }}
               />
             </div>
           )}
@@ -1299,7 +1368,7 @@ export default function OpenLayersMap({
           )}
 
           <MapControlPanel
-            groups={defaultMapControlGroups}
+            groups={mapControlGroups}
             activeIds={activeControls}
             onItemClick={handleControlClick}
             onItemRightClick={handleItemRightClick}

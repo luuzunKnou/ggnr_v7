@@ -17,6 +17,8 @@ import {
   Printer,
   RotateCcw,
   Banknote,
+  ClipboardPen,
+  Images,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -133,6 +135,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
     id: "base-maps",
     items: [
       { id: "background-map", icon: Globe, label: "배경지도" },
+      { id: "aerial-view", icon: Images, label: "드론영상" },
     ],
   },
   {
@@ -167,6 +170,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
     id: "actions",
     items: [
       { id: "print", icon: Printer, label: "인쇄" },
+      { id: "shooting-request", icon: ClipboardPen, label: "촬영요청" },
     ],
   },
 ]
