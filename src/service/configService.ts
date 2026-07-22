@@ -5,12 +5,6 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
-import {
-  PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
-  PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
-  PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
-  PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
-} from "@/lib/parcelAnalysisTheme"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -314,80 +308,41 @@ export function getMapConfig(_params?: unknown): {
   }
 }
 
-/** 필지 연계(행망 KRAS·브이월드 fallback) 설정 */
+/** 필지 연계(행망 KRAS·KOREPS·브이월드 fallback) 설정 */
 export function getLandLinkageConfig(_params?: unknown): {
   useKras: boolean
-  useKrasFallback: boolean
-  maskPersonalInfo: boolean
   krasKey: string
   krasIp: string
   krasPort: string
   krasPath: string
+  korepsKey: string
+  korepsIp: string
+  korepsPort: string
+  korepsPath: string
   sggCode: string
   vworldKey: string
   dataPortalKey: string
+  useSeum: boolean
 } {
   const vars = getRuntimeEnvVars()
   const map = getMapConfig()
-  const truthy = (v: string | undefined) => String(v ?? "").trim().toLowerCase() === "true"
-  const falsy = (v: string | undefined) => String(v ?? "").trim().toLowerCase() === "false"
+  /** 행망 호출: GGNR_ENV가 dev가 아닐 때만(demo·prod) */
+  const ggnrEnv = (typeof process !== "undefined" ? process.env.GGNR_ENV : "")?.trim().toLowerCase() ?? ""
   return {
-    useKras: truthy(vars.USE_KRAS),
-    useKrasFallback: !falsy(vars.USE_KRAS_FALLBACK),
-    maskPersonalInfo: truthy(vars.MASK_PERSONAL_INFO),
+    useKras: ggnrEnv !== "dev",
     krasKey: vars.KRAS_KEY?.trim() ?? vars.KRAS_API_KEY?.trim() ?? "",
     krasIp: vars.KRAS_IP?.trim() ?? "",
     krasPort: vars.KRAS_PORT?.trim() ?? "",
     krasPath: vars.KRAS_PATH?.trim() ?? "",
+    korepsKey: vars.KOREPS_KEY?.trim() ?? vars.KOREPS_API_KEY?.trim() ?? "",
+    korepsIp: vars.KOREPS_IP?.trim() ?? vars.KRAS_IP?.trim() ?? "",
+    korepsPort: vars.KOREPS_PORT?.trim() ?? vars.KRAS_PORT?.trim() ?? "",
+    korepsPath: vars.KOREPS_PATH?.trim() ?? "",
     sggCode: vars.SGG_CODE?.trim() ?? "",
     vworldKey: map.VWORLD_API_KEY,
     dataPortalKey: map.DATA_PORTAL_KEY,
-  }
-}
-
-function clampInt(value: string | undefined, fallback: number, min: number, max: number): number {
-  const n = Number.parseInt(String(value ?? "").trim(), 10)
-  if (!Number.isFinite(n)) return fallback
-  return Math.max(min, Math.min(max, n))
-}
-
-/**
- * 필지분석 서버 외부 API 동시성·단건 타임아웃 (runtime.env 선택 오버라이드).
- * 기본값은 parcelAnalysisTheme.ts. 키 미설정 시 동일.
- * 토지 청크(PARCEL_ANALYSIS_LAND_CHUNK)는 클라이언트 parcelAnalysisChunk.ts 전용 — 여기서 다루지 않음.
- */
-export function getParcelAnalysisTuning(_params?: unknown): {
-  buildingConcurrency: number
-  linkageConcurrency: number
-  buildingTimeoutMs: number
-  linkageTimeoutMs: number
-} {
-  const vars = getRuntimeEnvVars()
-  return {
-    buildingConcurrency: clampInt(
-      vars.PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
-      PARCEL_ANALYSIS_BUILDING_CONCURRENCY,
-      1,
-      16
-    ),
-    linkageConcurrency: clampInt(
-      vars.PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
-      PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
-      1,
-      16
-    ),
-    buildingTimeoutMs: clampInt(
-      vars.PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
-      PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS,
-      2_000,
-      60_000
-    ),
-    linkageTimeoutMs: clampInt(
-      vars.PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
-      PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
-      2_000,
-      60_000
-    ),
+    /** 세움터 DB 우선. 실패·타임아웃 시 포털 */
+    useSeum: true,
   }
 }
 

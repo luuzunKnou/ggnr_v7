@@ -1,8 +1,12 @@
 <GeoServerTileLayer>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f9d.xml
+  <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7f9d</id>
+========
   <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55d3</id>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3f73bcf1_19cc7f9cfc4_-55d3.xml
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:landown_ranch</name>
+  <name>ggnr:river_d_index</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>

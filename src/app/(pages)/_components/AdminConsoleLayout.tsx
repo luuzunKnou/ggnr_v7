@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 import Link from "next/link"
 import { ChevronDown, LayoutGrid, List } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
 import { cn } from "@/lib/utils"
 import { signOut } from "next-auth/react"
@@ -35,6 +35,8 @@ type AdminConsoleLayoutProps = {
   renderContent: (menuId: string) => ReactNode
   /** 카드 제목 옆 보조 UI (예: 개발자 모드 LAS 샘플 버튼) */
   renderTitleExtra?: (menuId: string) => ReactNode
+  /** 카드 제목 행 우측 액션 (예: 이력 버튼) */
+  renderHeaderActions?: (menuId: string) => ReactNode
   onLogout?: () => void | Promise<void>
   /** 설정 시 서브메뉴별 console:{area}:{menuId} 권한 적용 */
   consoleArea?: ConsoleAreaId
@@ -49,6 +51,7 @@ export function AdminConsoleLayout({
   getDescription,
   renderContent,
   renderTitleExtra,
+  renderHeaderActions,
   onLogout,
   consoleArea,
 }: AdminConsoleLayoutProps) {
@@ -420,11 +423,14 @@ export function AdminConsoleLayout({
         <main className="flex-1 overflow-auto p-4">
           <Card className="rounded-none min-h-full">
             <CardHeader>
-              <CardTitle>{currentLabel}</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <CardTitle>{currentLabel}</CardTitle>
+                  {renderTitleExtra?.(selectedMenu)}
+                </div>
+                {renderHeaderActions?.(selectedMenu)}
+              </div>
               <CardDescription>{getDescription(selectedMenu)}</CardDescription>
-              {renderTitleExtra?.(selectedMenu) ? (
-                <CardAction className="self-end">{renderTitleExtra(selectedMenu)}</CardAction>
-              ) : null}
             </CardHeader>
             <CardContent>
               {consoleArea && accessLoading ? (

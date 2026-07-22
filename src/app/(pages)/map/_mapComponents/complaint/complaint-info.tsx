@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import { useMapContext } from '../MapContext';
+import { AddressSearchPanel } from '../addressSearch/AddressSearchPanel';
 
 export type ComplaintFormValues = {
   compName: string;
@@ -82,6 +84,8 @@ function InfoItemWithInput({
 }
 
 export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = false, deleting = false }: ComplaintInfoProps) {
+  const mapContext = useMapContext();
+  const vworldApiKey = mapContext?.vworldApiKey ?? '';
   const [form, setForm] = useState<ComplaintFormValues>(() => toFormValues(complaint));
 
   useEffect(() => {
@@ -142,12 +146,30 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
             onChange={(v) => update('compTel', v)}
           />
         </div>
-        <InfoItemWithInput
-          icon={<MapPin className="h-3.5 w-3.5" />}
-          label="주소"
-          value={form.compAdr}
-          onChange={(v) => update('compAdr', v)}
-        />
+        <div className="flex items-start gap-2">
+          <span className="flex h-8 shrink-0 items-center text-muted-foreground/80">
+            <MapPin className="h-3.5 w-3.5" />
+          </span>
+          <span className="flex h-8 shrink-0 items-center w-14 text-[12px] text-muted-foreground/90">
+            주소
+          </span>
+          <div className="min-w-0 flex-1">
+            <AddressSearchPanel
+              layout="field"
+              vworldApiKey={vworldApiKey}
+              initialQuery={form.compAdr}
+              placeholder="주소/지번 검색"
+              onSelect={(item) => {
+                const adr =
+                  (item.roadAddress ?? '').trim() ||
+                  (item.jibunAddress ?? '').trim() ||
+                  (item.address ?? '').trim();
+                if (adr) update('compAdr', adr);
+              }}
+              onClear={() => update('compAdr', '')}
+            />
+          </div>
+        </div>
         <div className="flex items-start gap-2">
           <span className="flex h-5 shrink-0 items-center text-muted-foreground/80">
             <FileText className="h-3.5 w-3.5" />
@@ -169,9 +191,10 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
           <Button
             size="sm"
             variant="outline"
+            title={deleting ? '삭제 중…' : '삭제'}
             onClick={onDelete}
             disabled={deleting}
-            className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-destructive hover:bg-destructive/15 hover:text-destructive"
+            className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-destructive hover:bg-destructive/15 hover:text-destructive disabled:cursor-not-allowed"
           >
             <X className="h-3 w-3" />
             {deleting ? '삭제 중…' : '삭제'}
@@ -180,9 +203,10 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
         {onSave && (
           <Button
             size="sm"
+            title={saving ? '저장 중…' : '저장'}
             onClick={() => onSave(form)}
             disabled={saving}
-            className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary"
+            className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary disabled:cursor-not-allowed"
           >
             <Check className="h-3 w-3" />
             {saving ? '저장 중…' : '저장'}
@@ -192,8 +216,9 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
           <Button
             size="sm"
             variant="outline"
+            title="닫기"
             onClick={onClose}
-            className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
             <X className="h-3 w-3" />
             닫기

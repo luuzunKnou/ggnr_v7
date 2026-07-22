@@ -105,16 +105,17 @@ export function getEditableFieldDefinitions(params: {
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       const readOnly = isTrueFlag(raw.define_field_read_only);
       if (!showDetail) return null;
-      return {
+      const meta: DefineFieldMeta = {
         field,
         label: String(raw.define_field_kor_name ?? field).trim() || field,
         type: String(raw.define_field_type ?? 'text').trim().toLowerCase(),
         readOnly,
         showDetail,
         idx: parseInt(String(raw.define_field_idx ?? '999999'), 10) || 999999,
-      } satisfies DefineFieldMeta;
+      };
+      return meta;
     })
-    .filter((x): x is DefineFieldMeta => x != null)
+    .filter((x): x is DefineFieldMeta => x !== null)
     .sort((a, b) => (a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field)));
 }
 
@@ -732,6 +733,35 @@ async function loadAdminNamesByPnuCodes(
   }
 
   return { emdNames, riNames };
+}
+
+/** PNU → 대지위치(읍·면·동·리) + 지번(본·부번). 건축물대장 주소 폴백용 */
+export async function resolvePlatLocAndLotByPnus(
+  pnus: string[]
+): Promise<Map<string, { platLoc: string; jibunLot: string }>> {
+  const out = new Map<string, { platLoc: string; jibunLot: string }>();
+  const unique = [...new Set(pnus.map((p) => String(p ?? '').trim()).filter((p) => /^\d{19}$/.test(p)))];
+  if (!unique.length) return out;
+
+  const emdCds: string[] = [];
+  const liCds: string[] = [];
+  for (const pnu of unique) {
+    const { emdCd, liCd } = pnuAdminCodes(pnu);
+    if (emdCd) emdCds.push(emdCd);
+    if (liCd) liCds.push(liCd);
+  }
+  const { emdNames, riNames } = await loadAdminNamesByPnuCodes(emdCds, liCds);
+
+  for (const pnu of unique) {
+    const { emdCd, liCd } = pnuAdminCodes(pnu);
+    const platLoc = [emdNames.get(emdCd) ?? '', riNames.get(liCd) ?? '']
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(' ');
+    const jibunLot = formatLotFromPnuDigits(pnuDigitsOnly(pnu));
+    out.set(pnu, { platLoc, jibunLot });
+  }
+  return out;
 }
 
 async function enrichJijukRowsWithAdminNames(rows: JijukParcelGeomRow[]): Promise<JijukParcelGeomRow[]> {

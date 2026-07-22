@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
 import dns from 'node:dns/promises';
+import { Agent } from 'undici';
 import {
   failUploadProgress,
+  patchUploadProgress,
   setChunkProgress,
   setUploadProgressPhase,
 } from '@/service/sourceUploadProgress';
@@ -10,7 +12,7 @@ export const SOURCE_UPLOAD_REMOTE_BASE =
   process.env.SOURCE_UPLOAD_REMOTE_BASE ?? 'http://192.168.126.1:3000/api/source/upload';
 export const SOURCE_UPLOAD_REMOTE_BEARER = process.env.SOURCE_UPLOAD_REMOTE_BEARER ?? '';
 
-export type RemoteUploadStageId = 'preflight' | 'init' | 'chunk' | 'complete';
+export type RemoteUploadStageId = 'preflight' | 'init' | 'chunk' | 'complete' | 'npmInstall';
 
 export type RemoteStageReport = {
   id: RemoteUploadStageId;
@@ -133,6 +135,63 @@ export function buildRemoteAuthHeaders(json = true): Record<string, string> {
   return headers;
 }
 
+export type CancelRemoteSourceUploadResult = {
+  ok: boolean;
+  status: number;
+  gnmsStatus?: string;
+  error?: string;
+};
+
+/** GNMS 소스 업로드 세션 취소 통보 (브라우저 AbortSignal에 묶지 말 것) */
+export async function cancelRemoteSourceUpload(params: {
+  uploadId: string;
+  reason?: string;
+}): Promise<CancelRemoteSourceUploadResult> {
+  const uploadId = params.uploadId.trim();
+  if (!uploadId) {
+    return { ok: false, status: 400, error: 'uploadId 필요' };
+  }
+  const url = `${getRemoteUploadBase()}/cancel`;
+  const body = {
+    uploadId,
+    reason: params.reason?.trim() || 'user_abort',
+  };
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: buildRemoteAuthHeaders(true),
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      error?: string;
+    };
+    logStage('remote-cancel', {
+      url,
+      uploadId,
+      httpStatus: res.status,
+      response: json,
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        gnmsStatus: json.status,
+        error: json.error ?? `HTTP ${res.status}`,
+      };
+    }
+    return {
+      ok: true,
+      status: res.status,
+      gnmsStatus: json.status ?? 'cancelled',
+    };
+  } catch (err: unknown) {
+    const message = formatFetchCause(err);
+    logStage('remote-cancel', { url, uploadId, error: message });
+    return { ok: false, status: 0, error: message };
+  }
+}
+
 function formatFetchCause(err: unknown): string {
   if (err instanceof Error) {
     const cause = (err as Error & { cause?: unknown }).cause;
@@ -163,8 +222,36 @@ async function readResponseJson(res: Response): Promise<{ json: JsonRecord; text
   }
 }
 
-/** complete(병합+압축해제)는 대용량 ZIP에서 5분 이상 걸릴 수 있음 */
+/** complete(병합+압축해제) 및 npm install 은 대용량에서 5분 이상 걸릴 수 있음 */
 const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Node fetch(undici) 기본 headersTimeout=300s — complete 응답 대기용 */
+const longRunningFetchAgent = new Agent({
+  headersTimeout: COMPLETE_FETCH_TIMEOUT_MS,
+  bodyTimeout: COMPLETE_FETCH_TIMEOUT_MS,
+});
+
+type UndiciFetchInit = RequestInit & { dispatcher?: Agent };
+
+async function fetchCompleteLongRunning(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), COMPLETE_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      ...init,
+      cache: 'no-store',
+      signal: controller.signal,
+      dispatcher: longRunningFetchAgent,
+    } as UndiciFetchInit);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`요청 시간 초과 (${COMPLETE_FETCH_TIMEOUT_MS}ms)`);
+    }
+    throw new Error(formatFetchCause(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -186,6 +273,38 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+const PREFLIGHT_PROBE_TIMEOUT_MS = 15_000;
+const PREFLIGHT_TIMEOUT_USER_MSG = '예상 시간 초과(15초). 다시 시도해주세요.';
+
+/** preflight reach/init 전용 — 15초 초과와 일반 연결 실패 구분 */
+function preflightProbeErrorMessage(err: unknown): string {
+  const raw = formatFetchCause(err);
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('시간 초과') ||
+    lower.includes('timeout') ||
+    lower.includes('aborterror') ||
+    /요청 시간 초과\s*\(15000\s*ms\)/.test(raw)
+  ) {
+    return PREFLIGHT_TIMEOUT_USER_MSG;
+  }
+  return `서버 연결 실패: ${raw}`;
+}
+
+function preflightInitErrorMessage(err: unknown): string {
+  const raw = formatFetchCause(err);
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('시간 초과') ||
+    lower.includes('timeout') ||
+    lower.includes('aborterror') ||
+    /요청 시간 초과\s*\(15000\s*ms\)/.test(raw)
+  ) {
+    return PREFLIGHT_TIMEOUT_USER_MSG;
+  }
+  return `init API 호출 실패: ${raw}`;
 }
 
 function preflightResult(
@@ -239,7 +358,11 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
   checks.push({ id: 'target', ok: true, message: target.targetLabel });
 
   try {
-    const reachRes = await fetchWithTimeout(target.targetOrigin, { method: 'GET' }, 15_000);
+    const reachRes = await fetchWithTimeout(
+      target.targetOrigin,
+      { method: 'GET' },
+      PREFLIGHT_PROBE_TIMEOUT_MS
+    );
     const ok = reachRes.status < 500;
     checks.push({
       id: 'reach',
@@ -252,7 +375,7 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
     checks.push({
       id: 'reach',
       ok: false,
-      message: `서버 연결 실패: ${formatFetchCause(err)}`,
+      message: preflightProbeErrorMessage(err),
     });
     return preflightResult(target, false, checks);
   }
@@ -266,7 +389,7 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
         headers: buildRemoteAuthHeaders(),
         body: JSON.stringify(INIT_PROBE_BODY),
       },
-      15_000
+      PREFLIGHT_PROBE_TIMEOUT_MS
     );
     const { json: initJson, text: initText } = await readResponseJson(initRes);
     const initMsg = initJson.error ?? initJson.message ?? (initText ? initText.slice(0, 200) : '');
@@ -290,7 +413,7 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
     checks.push({
       id: 'init-api',
       ok: false,
-      message: `init API 호출 실패: ${formatFetchCause(err)}`,
+      message: preflightInitErrorMessage(err),
     });
     return preflightResult(target, false, checks);
   }
@@ -308,6 +431,7 @@ type UploadZipParams = {
   bundleRoot: string;
   skipPreflight?: boolean;
   progressId?: string;
+  includeNodeModules?: boolean;
 };
 
 export type RemoteUploadResult = {
@@ -334,7 +458,18 @@ function reportFail(progressId: string | undefined, stage: string, message: stri
 }
 
 export async function uploadZipByChunks(params: UploadZipParams): Promise<RemoteUploadResult> {
-  const { zipPath, zipName, totalSize, mode, date, changeNote, bundleRoot, skipPreflight, progressId } = params;
+  const {
+    zipPath,
+    zipName,
+    totalSize,
+    mode,
+    date,
+    changeNote,
+    bundleRoot,
+    skipPreflight,
+    progressId,
+    includeNodeModules = false,
+  } = params;
   const base = getRemoteUploadBase();
   const initUrl = `${base}/init`;
   const chunkUrl = `${base}/chunk`;
@@ -386,6 +521,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     changeNote,
     bundleRoot,
     bundleType: 'sourceZip',
+    includeNodeModules,
   };
 
   let initRes: Response;
@@ -445,11 +581,13 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   });
 
   if (progressId) {
+    patchUploadProgress(progressId, { remoteUploadId: uploadId });
     setUploadProgressPhase(progressId, 'chunk', `청크 0/${expectedChunks} — 전송 시작`, {
       sentChunks: 0,
       expectedChunks,
       zipName,
       zipSize: totalSize,
+      remoteUploadId: uploadId,
     });
   }
 
@@ -572,11 +710,16 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   });
 
   if (progressId) {
-    setUploadProgressPhase(progressId, 'complete', `청크 ${sentChunks}/${expectedChunks} 완료 — 병합/압축 해제 중...`, {
-      sentChunks,
-      expectedChunks,
-      progressPct: 94,
-    });
+    setUploadProgressPhase(
+      progressId,
+      'complete',
+      `청크 ${sentChunks}/${expectedChunks} 완료 — 원격 병합/압축 해제 중...`,
+      {
+        sentChunks,
+        expectedChunks,
+        progressPct: 72,
+      }
+    );
   }
 
   try {
@@ -596,15 +739,18 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     extract: true,
     extractFolder: bundleRoot,
     preserveBundleZip: true,
+    skipNpmInstall: !includeNodeModules,
   };
+
+  const npmInstallUrl = `${base}/npm-install`;
 
   let completeRes: Response;
   try {
-    completeRes = await fetchWithTimeout(
-      completeUrl,
-      { method: 'POST', headers, body: JSON.stringify(completeBody) },
-      COMPLETE_FETCH_TIMEOUT_MS
-    );
+    completeRes = await fetchCompleteLongRunning(completeUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(completeBody),
+    });
   } catch (err) {
     const message = `complete 호출 실패: ${formatFetchCause(err)}`;
     stages.push({ id: 'complete', ok: false, error: message });
@@ -612,7 +758,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     throw new RemoteUploadError({ stage: 'complete', message, sentChunks, expectedChunks, stages });
   }
 
-  const { json: completeJson, text: completeText } = await readResponseJson(completeRes);
+  let { json: completeJson, text: completeText } = await readResponseJson(completeRes);
   logStage('complete', {
     url: completeUrl,
     request: completeBody,
@@ -658,6 +804,80 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     status: completeRes.status,
     detail: completeDetail || 'complete 성공',
   });
+
+  let npmInstall = completeJson.npmInstall as
+    | { ok?: boolean; message?: string; skipped?: boolean }
+    | undefined;
+
+  const npmInstallPending = completeJson.npmInstallPending === true;
+
+  if (npmInstallPending) {
+    if (progressId) {
+      setUploadProgressPhase(progressId, 'npmInstall', 'npm install 중...', {
+        sentChunks,
+        expectedChunks,
+        progressPct: 93,
+      });
+    }
+
+    let npmRes: Response;
+    try {
+      npmRes = await fetchCompleteLongRunning(npmInstallUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ uploadId }),
+      });
+    } catch (err) {
+      const message = `npm install 호출 실패: ${formatFetchCause(err)}`;
+      reportFail(progressId, 'npmInstall', message, { sentChunks, expectedChunks });
+      throw new RemoteUploadError({
+        stage: 'npmInstall',
+        message,
+        sentChunks,
+        expectedChunks,
+        stages,
+      });
+    }
+
+    const { json: npmJson, text: npmText } = await readResponseJson(npmRes);
+    logStage('npm-install', {
+      url: npmInstallUrl,
+      request: { uploadId },
+      status: npmRes.status,
+      response: npmJson,
+    });
+
+    if (!npmRes.ok || npmJson.error) {
+      const message =
+        (typeof npmJson.error === 'string' ? npmJson.error : null) ??
+        (npmText.slice(0, 800) || 'npm install 실패');
+      reportFail(progressId, 'npmInstall', message, { sentChunks, expectedChunks });
+      throw new RemoteUploadError({
+        stage: 'npmInstall',
+        message,
+        status: npmRes.status,
+        responseBody: npmText,
+        stages,
+        sentChunks,
+        expectedChunks,
+      });
+    }
+
+    npmInstall = npmJson.npmInstall as typeof npmInstall;
+    completeJson = { ...completeJson, npmInstall };
+  }
+
+  if (progressId) {
+    if (npmInstall?.skipped) {
+      setUploadProgressPhase(progressId, 'npmInstall', 'npm install 생략 (node_modules 포함)', {
+        progressPct: 98,
+      });
+    } else if (npmInstall) {
+      setUploadProgressPhase(progressId, 'npmInstall', npmInstall.message ?? 'npm install 완료', {
+        progressPct: npmInstall.ok ? 98 : 95,
+      });
+    }
+  }
 
   return {
     uploadId,

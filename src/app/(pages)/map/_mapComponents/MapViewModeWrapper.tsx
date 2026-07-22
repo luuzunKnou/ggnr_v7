@@ -74,11 +74,13 @@ function ViewModeButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center justify-center gap-0 shrink-0 box-border p-0 transition-colors',
+        'flex flex-col items-center justify-center gap-0 shrink-0 box-border p-0 transition-colors cursor-pointer',
         'hover:bg-slate-100 hover:text-blue-600',
-        isActive && 'bg-slate-100 text-blue-600'
+        'dark:text-white/90 dark:hover:bg-white/10 dark:hover:text-white',
+        isActive && 'bg-slate-100 text-blue-600 dark:bg-white/20 dark:text-white'
       )}
       style={{ width: 45, height: 45 }}
+      title={label}
     >
       <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
       <span className="leading-tight text-center whitespace-nowrap overflow-hidden truncate" style={{ maxWidth: 45, fontSize: '9px' }}>{label}</span>

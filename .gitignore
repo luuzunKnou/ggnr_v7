@@ -29,6 +29,9 @@
 .cursor/local/
 .cursor/plans/
 
+# 기동 명령(boot)·버전관리 재시작 신호 (npm run 시 자동 생성, PC/세션마다 다름)
+.cursor-runtime/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -83,3 +86,28 @@ next-env.d.ts
 
 # PaddleOCR inference models (docs/ocr-paddle-setup.md)
 /python/models/paddleocr/
+
+# 필지분석 — 개인 개발메모 (팀 공식 문서: docs/plan, docs/reports)
+/docs/parcelAnalysis/필지분석-개발메모.md
+
+# 로컬 조사·디버그 임시 JSON (레이어·좌표계 테스트 등)
+/tmp-*.json
+/scripts/tmp-*.json
+
+# GeoServer legend 샘플 (런타임 생성)
+/geoserver_modules/data_dir/legendsamples/
+
+# ggnr_start.bat(ggnr_v7 서비스 실행용 bat. 00_make_ggnr_starter.bat으로 생성 가능해 제외)
+/ggnr_start.bat
+# 필지분석 — 개인 개발메모 (팀 공식 문서: docs/plan, docs/reports)
+/docs/parcelAnalysis/필지분석-개발메모.md
+
+# 로컬 조사·디버그 임시 JSON (레이어·좌표계 테스트 등)
+/tmp-*.json
+/scripts/tmp-*.json
+
+# GeoServer legend 샘플 (런타임 생성)
+/geoserver_modules/data_dir/legendsamples/
+
+# ggnr_start.bat(ggnr_v7 서비스 실행용 bat. 00_make_ggnr_starter.bat으로 생성 가능해 제외)
+/ggnr_start.bat

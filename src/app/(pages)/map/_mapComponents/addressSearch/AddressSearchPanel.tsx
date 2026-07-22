@@ -34,6 +34,15 @@ type Props = {
   vworldApiKey: string;
   onSelect: (item: VWorldAddressItem) => void;
   placeholder?: string;
+  /** 저장된·선택된 주소 — 마운트·변경 시 검색창에 반영 */
+  initialQuery?: string;
+  /** 검색어 지우기 시 (폼 주소 비우기 등) */
+  onClear?: () => void;
+  /**
+   * default: 지도용 전체 패널
+   * field: 폼 Input 한 칸 대체(결과만 드롭다운)
+   */
+  layout?: 'default' | 'field';
 };
 
 /** 지도 map-search-bar와 동일한 VWorld 주소검색 UI */
@@ -41,11 +50,25 @@ export function AddressSearchPanel({
   vworldApiKey,
   onSelect,
   placeholder = "주소/지번 검색",
+  initialQuery = '',
+  onClear,
+  layout = 'default',
 }: Props) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [addressResults, setAddressResults] = useState<VWorldAddressItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
+  /** field: 선택·초기값 반영 직후 재검색·드롭다운 억제 */
+  const [dropdownClosed, setDropdownClosed] = useState(true);
+  const isField = layout === 'field';
+
+  useEffect(() => {
+    setQuery(initialQuery ?? '');
+    if (isField) {
+      setAddressResults([]);
+      setDropdownClosed(true);
+    }
+  }, [initialQuery, isField]);
 
   const addRecentQuery = useCallback((trimmed: string) => {
     if (!trimmed) return;
@@ -72,6 +95,10 @@ export function AddressSearchPanel({
   );
 
   useEffect(() => {
+    if (isField && dropdownClosed) {
+      setAddressResults([]);
+      return;
+    }
     if (!query.trim()) {
       setAddressResults([]);
       return;
@@ -79,49 +106,79 @@ export function AddressSearchPanel({
     if (!vworldApiKey) return;
     const t = setTimeout(() => runSearch(query), ADDRESS_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [query, runSearch, vworldApiKey]);
+  }, [query, runSearch, vworldApiKey, isField, dropdownClosed]);
 
   const handleSelect = useCallback(
     (item: VWorldAddressItem) => {
       if (query.trim()) addRecentQuery(query.trim());
+      const display =
+        (item.roadAddress ?? '').trim() ||
+        (item.jibunAddress ?? '').trim() ||
+        (item.address ?? '').trim();
+      if (display) setQuery(display);
+      setAddressResults([]);
+      setDropdownClosed(true);
       onSelect(item);
     },
     [addRecentQuery, onSelect, query]
   );
 
+  const clearQuery = useCallback(() => {
+    setQuery('');
+    setAddressResults([]);
+    setDropdownClosed(true);
+    onClear?.();
+  }, [onClear]);
+
+  const showResultsPanel = isField
+    ? !dropdownClosed && (loading || addressResults.length > 0 || Boolean(query.trim()))
+    : true;
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className={isField ? 'relative flex flex-col gap-1' : 'flex flex-col gap-2'}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (isField) setDropdownClosed(false);
           runSearch(query);
         }}
-        className="flex items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-2 py-1.5"
+        className={
+          isField
+            ? 'flex h-8 items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2'
+            : 'flex items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-2 py-1.5'
+        }
       >
         <button
           type="submit"
-          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-slate-600 hover:bg-slate-100"
+          title="검색"
+          className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[5px] text-muted-foreground hover:bg-muted/80"
           aria-label="검색"
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-3.5 w-3.5" />
         </button>
         <Input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setDropdownClosed(false);
+            setQuery(e.target.value);
+          }}
           placeholder={placeholder}
-          className="h-5 min-h-5 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0"
+          style={isField ? { fontSize: '12px' } : undefined}
+          className={
+            isField
+              ? 'h-7 min-h-7 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
+              : 'h-5 min-h-5 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
+          }
         />
         {query.trim().length > 0 && (
           <button
             type="button"
-            onClick={() => {
-              setQuery("");
-              setAddressResults([]);
-            }}
-            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+            title="지우기"
+            onClick={clearQuery}
+            className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted/80"
             aria-label="검색어 지우기"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         )}
       </form>
@@ -132,76 +189,90 @@ export function AddressSearchPanel({
         </div>
       )}
 
-      <div className="max-h-[280px] overflow-y-auto rounded-[5px] border border-slate-200 bg-white">
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-[12px] text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            검색 중…
-          </div>
-        ) : addressResults.length > 0 ? (
-          <ul className="py-0.5">
-            {addressResults.map((item, idx) => (
-              <li key={`${item.id ?? item.address}-${idx}`}>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(item)}
-                  className="flex min-h-[44px] w-full flex-col justify-center gap-0.5 border-b border-slate-100 px-3 py-1.5 text-left transition-colors last:border-b-0 hover:bg-slate-50"
-                >
-                  {item.roadAddress && (
-                    <div className="flex min-h-[1.25rem] items-center gap-2">
-                      <span className="w-12 shrink-0 rounded bg-blue-100 py-0.5 text-center text-[10px] font-semibold text-blue-700">
-                        도로명
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800">
-                        {item.roadAddress}
-                        {item.buildingName ? ` (${item.buildingName})` : ""}
-                      </span>
-                    </div>
-                  )}
-                  {item.jibunAddress && (
-                    <div className="flex min-h-[1.25rem] items-center gap-2">
-                      <span className="w-12 shrink-0 rounded bg-amber-100 py-0.5 text-center text-[10px] font-semibold text-amber-800">
-                        지번
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800">{item.jibunAddress}</span>
-                    </div>
-                  )}
-                  {!item.roadAddress && !item.jibunAddress && (
-                    <span className="line-clamp-2 text-[12px] text-slate-800">{item.address}</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : query.trim() ? (
-          <div className="py-6 text-center text-[12px] text-slate-500">검색 결과가 없습니다</div>
-        ) : recentQueries.length > 0 ? (
-          <div className="px-3 py-2">
-            <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-              <History className="h-3.5 w-3.5" />
-              최근 검색어
-            </p>
-            <ul className="flex flex-wrap gap-1.5">
-              {recentQueries.map((q) => (
-                <li key={q}>
+      {showResultsPanel && (
+        <div
+          className={
+            isField
+              ? 'absolute left-0 right-0 top-full z-30 mt-1 max-h-[220px] overflow-y-auto rounded-md border border-border bg-card shadow-md'
+              : 'max-h-[280px] overflow-y-auto rounded-[5px] border border-slate-200 bg-white'
+          }
+        >
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-[12px] text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              검색 중…
+            </div>
+          ) : addressResults.length > 0 ? (
+            <ul className="py-0.5">
+              {addressResults.map((item, idx) => (
+                <li key={`${item.id ?? item.address}-${idx}`}>
                   <button
                     type="button"
-                    onClick={() => {
-                      setQuery(q);
-                      runSearch(q);
-                    }}
-                    className="rounded-[5px] bg-slate-100 px-2.5 py-1.5 text-[12px] text-slate-700 transition-colors hover:bg-slate-200"
+                    title={item.address}
+                    onClick={() => handleSelect(item)}
+                    className="flex min-h-[44px] w-full cursor-pointer flex-col justify-center gap-0.5 border-b border-border/60 px-3 py-1.5 text-left transition-colors last:border-b-0 hover:bg-muted/40"
                   >
-                    {q}
+                    {item.roadAddress && (
+                      <div className="flex min-h-[1.25rem] items-center gap-2">
+                        <span className="w-12 shrink-0 rounded bg-blue-100 py-0.5 text-center text-[10px] font-semibold text-blue-700">
+                          도로명
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+                          {item.roadAddress}
+                          {item.buildingName ? ` (${item.buildingName})` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {item.jibunAddress && (
+                      <div className="flex min-h-[1.25rem] items-center gap-2">
+                        <span className="w-12 shrink-0 rounded bg-amber-100 py-0.5 text-center text-[10px] font-semibold text-amber-800">
+                          지번
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+                          {item.jibunAddress}
+                        </span>
+                      </div>
+                    )}
+                    {!item.roadAddress && !item.jibunAddress && (
+                      <span className="line-clamp-2 text-[12px] text-foreground">{item.address}</span>
+                    )}
                   </button>
                 </li>
               ))}
             </ul>
-          </div>
-        ) : (
-          <div className="py-6 text-center text-[12px] text-slate-400">주소 또는 지번을 입력하세요</div>
-        )}
-      </div>
+          ) : query.trim() ? (
+            <div className="py-6 text-center text-[12px] text-muted-foreground">검색 결과가 없습니다</div>
+          ) : !isField && recentQueries.length > 0 ? (
+            <div className="px-3 py-2">
+              <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                <History className="h-3.5 w-3.5" />
+                최근 검색어
+              </p>
+              <ul className="flex flex-wrap gap-1.5">
+                {recentQueries.map((q) => (
+                  <li key={q}>
+                    <button
+                      type="button"
+                      title={q}
+                      onClick={() => {
+                        setQuery(q);
+                        runSearch(q);
+                      }}
+                      className="cursor-pointer rounded-[5px] bg-muted px-2.5 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/80"
+                    >
+                      {q}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : isField ? null : (
+            <div className="py-6 text-center text-[12px] text-muted-foreground/70">
+              주소 또는 지번을 입력하세요
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

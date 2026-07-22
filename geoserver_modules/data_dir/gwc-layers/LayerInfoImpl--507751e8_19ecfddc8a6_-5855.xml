@@ -1,8 +1,15 @@
 <GeoServerTileLayer>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f94.xml
+  <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7f94</id>
+  <enabled>true</enabled>
+  <inMemoryCached>true</inMemoryCached>
+  <name>ggnr:river_plan_gd_ps</name>
+========
   <id>LayerInfoImpl--507751e8:19ecfddc8a6:-5855</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:river_use_ledger</name>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--507751e8_19ecfddc8a6_-5855.xml
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +19,17 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f94.xml
+          <double>129.0059866141888</double>
+          <double>36.58855999711726</double>
+          <double>129.21131074553642</double>
+          <double>36.79760124244171</double>
+========
           <double>129.00772318275338</double>
           <double>36.50090848666381</double>
           <double>129.28623665602478</double>
           <double>36.86309321447912</double>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--507751e8_19ecfddc8a6_-5855.xml
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +37,17 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f94.xml
+          <double>1.4360880739175363E7</double>
+          <double>4381911.476053382</double>
+          <double>1.4383737316924553E7</double>
+          <double>4410932.434770003</double>
+========
           <double>1.4361074053103702E7</double>
           <double>4369766.32019511</double>
           <double>1.439207803112734E7</double>
           <double>4420040.888644069</double>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--507751e8_19ecfddc8a6_-5855.xml
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +63,11 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f94.xml
+      <defaultStyle>river_plan_gd_ps</defaultStyle>
+========
       <defaultStyle>river_use_ledger</defaultStyle>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--507751e8_19ecfddc8a6_-5855.xml
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

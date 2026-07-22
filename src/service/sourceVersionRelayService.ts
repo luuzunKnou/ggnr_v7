@@ -2,7 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { nanoid } from 'nanoid';
-import { applySourceZipFile, type RestartMode } from '@/service/sourceVersionService';
+import {
+  applySourceZipFile,
+  type ApplySourceProgressEvent,
+  type RestartMode,
+} from '@/service/sourceVersionService';
 
 export const VERSION_RELAY_CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -13,12 +17,35 @@ type RelayMeta = {
   chunkSize: number;
   version: string;
   requestedBy: string;
+  /** 브라우저에서 확정한 클라이언트 IP */
+  clientIp?: string;
   restart: boolean;
   restartMode: RestartMode;
+  includeNodeModules: boolean;
 };
 
+function assertSafeUploadId(uploadId: string): void {
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(uploadId)) {
+    throw new Error('Invalid uploadId');
+  }
+}
+
 function getRelayTempDir(uploadId: string): string {
+  assertSafeUploadId(uploadId);
   return path.join(os.tmpdir(), 'ggnr_version_relay', uploadId);
+}
+
+/** 취소·실패 시 청크 tmp 디렉터리 삭제 (없으면 ok) */
+export async function abortVersionRelay(params: { uploadId: string }): Promise<{ ok: boolean; removed: boolean }> {
+  const { uploadId } = params;
+  const tempDir = getRelayTempDir(uploadId);
+  try {
+    await fs.access(tempDir);
+  } catch {
+    return { ok: true, removed: false };
+  }
+  await fs.rm(tempDir, { recursive: true, force: true });
+  return { ok: true, removed: true };
 }
 
 async function readMeta(tempDir: string): Promise<RelayMeta> {
@@ -37,10 +64,21 @@ export async function initVersionRelay(params: {
   totalSize: number;
   version: string;
   requestedBy: string;
+  clientIp?: string;
   restart: boolean;
   restartMode: RestartMode;
+  includeNodeModules?: boolean;
 }): Promise<InitVersionRelayResult> {
-  const { fileName, totalSize, version, requestedBy, restart, restartMode } = params;
+  const {
+    fileName,
+    totalSize,
+    version,
+    requestedBy,
+    clientIp,
+    restart,
+    restartMode,
+    includeNodeModules = true,
+  } = params;
   if (!fileName.trim()) throw new Error('fileName required');
   if (!Number.isFinite(totalSize) || totalSize <= 0) throw new Error('totalSize must be positive');
 
@@ -56,8 +94,10 @@ export async function initVersionRelay(params: {
     chunkSize: VERSION_RELAY_CHUNK_SIZE,
     version,
     requestedBy,
+    clientIp: clientIp?.trim() || undefined,
     restart,
     restartMode,
+    includeNodeModules,
   };
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
 
@@ -88,8 +128,11 @@ export async function uploadVersionRelayChunk(params: {
   return { ok: true };
 }
 
-export async function completeVersionRelay(params: { uploadId: string }) {
-  const { uploadId } = params;
+export async function completeVersionRelay(params: {
+  uploadId: string;
+  onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
+}) {
+  const { uploadId, onProgress } = params;
   const tempDir = getRelayTempDir(uploadId);
   let meta: RelayMeta;
   try {
@@ -102,6 +145,9 @@ export async function completeVersionRelay(params: { uploadId: string }) {
   if (!safeName || safeName.includes('..')) {
     throw new Error('Invalid fileName');
   }
+
+  /** ZIP 조립은 중지 직전 준비 — 단계 목록 순서는 중지 → 병합·적용 유지 */
+  await onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중 (ZIP 조립)...' });
 
   const zipPath = path.join(tempDir, safeName);
   const handle = await fs.open(zipPath, 'w');
@@ -125,8 +171,11 @@ export async function completeVersionRelay(params: { uploadId: string }) {
     version: meta.version,
     fileName: meta.fileName,
     requestedBy: meta.requestedBy,
+    clientIp: meta.clientIp,
     restart: meta.restart,
     restartMode: meta.restartMode,
+    includeNodeModules: meta.includeNodeModules,
+    onProgress,
   });
 
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});

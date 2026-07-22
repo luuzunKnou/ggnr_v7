@@ -57,7 +57,7 @@ function getStateStyle(state: string) {
   return { ...style, icon: iconMap[state] ?? <CircleDot className="h-3 w-3 text-muted-foreground" /> };
 }
 
-export default function ComplaintListPanel() {
+export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const mapContext = useMapContext();
   const setComplaintDetail = mapContext?.setComplaintDetail;
   const complaintDetail = mapContext?.complaintDetail ?? null;
@@ -97,7 +97,7 @@ export default function ComplaintListPanel() {
 
   useEffect(() => {
     loadList();
-  }, [loadList]);
+  }, [loadList, refreshKey]);
 
   const handleSelect = useCallback(
     async (comp: CompUI) => {
@@ -346,7 +346,6 @@ export default function ComplaintListPanel() {
               mode="add"
               complaint={EMPTY_COMP}
               histories={[]}
-              files={[]}
               onSave={handleCreateComplaint}
               onClose={() => setAddDialogOpen(false)}
               saving={saving}

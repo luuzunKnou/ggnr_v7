@@ -9,6 +9,7 @@ import VectorSource from "ol/source/Vector";
 import GeoJSON from "ol/format/GeoJSON";
 import WKT from "ol/format/WKT";
 import Feature from "ol/Feature";
+import type { FeatureLike } from "ol/Feature";
 import { MultiPolygon, Polygon } from "ol/geom";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import { useMapContext } from "../MapContext";
@@ -89,7 +90,7 @@ const parcelEditStyle = new Style({
 
 const parentEditStyle = createParentEditStyle();
 
-function layerRowGeomFeatureStyle(feature: Feature) {
+function layerRowGeomFeatureStyle(feature: FeatureLike) {
   return feature.get(LAYER_ROW_KIND_KEY) === LAYER_ROW_KIND_PARCEL ? parcelEditStyle : parentEditStyle;
 }
 
@@ -156,7 +157,7 @@ function syncDraftParcelsFromSource(
     const geometry3857 = format.writeGeometryObject(geom, {
       dataProjection: "EPSG:3857",
       featureProjection: "EPSG:3857",
-    }) as Record<string, unknown>;
+    }) as unknown as Record<string, unknown>;
     const ext = geom.getExtent();
     const extent3857 =
       ext.length === 4 && ext.every((v) => Number.isFinite(v))
@@ -346,7 +347,11 @@ export function LayerRowGeomEditHandler({
       syncDraftParcelsFromSource(source, setLayerRowDraftParcels);
     };
 
-    const subtractParcelFromParentGeom = async (parcel: LayerRowParcelItem) => {
+    const subtractParcelFromParentGeom = async (parcel: {
+      address: string;
+      pnu?: string;
+      geometry3857?: Record<string, unknown> | null;
+    }) => {
       const parentWkt = writeCombinedWkt5181FromParentFeatures(source);
       if (!parentWkt) return;
 

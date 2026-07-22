@@ -1,14 +1,16 @@
 import type { MapContextValue } from '@/app/(pages)/map/_mapComponents/MapContext';
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from '@/app/(pages)/map/_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 
-type ServiceMenuLayerClearTarget = Pick<
-  MapContextValue,
-  | 'setVisibleLayerNames'
-  | 'setSafetyMapLayerVisibility'
-  | 'setSpatialFilterWkt'
-  | 'setSpatialFilteredLayerNames'
-  | 'setIdentifyResultList'
-  | 'setIdentifySelectedRow'
+type ServiceMenuLayerClearTarget = Partial<
+  Pick<
+    MapContextValue,
+    | 'setVisibleLayerNames'
+    | 'setSafetyMapLayerVisibility'
+    | 'setSpatialFilterWkt'
+    | 'setSpatialFilteredLayerNames'
+    | 'setIdentifyResultList'
+    | 'setIdentifySelectedRow'
+  >
 >;
 
 /** 도로대장 총괄(a0020000)을 기본으로 켜 두는 좌측 서비스 메뉴 */
