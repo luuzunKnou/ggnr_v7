@@ -17,7 +17,9 @@ set "OUT=%ROOT%\ggnr_start.bat"
 set "NSSM_BAT=%ROOT%\nssm_install_ggnr.bat"
 set "LOGS_BAT=%ROOT%\open_ggnr_logs.bat"
 set "SMOKE_PS1=%ROOT%\smoke_ggnr_start.ps1"
+set "SMOKE_CLEANUP_PS1=%ROOT%\smoke_ggnr_cleanup.ps1"
 set "SMOKE_PORT=3000"
+set "SMOKE_GEO_PORT=8080"
 set "SMOKE_TIMEOUT_SEC=180"
 
 echo.
@@ -84,10 +86,20 @@ if not defined PROJECT_NAME (
   echo [오류] 프로젝트명이 비어 있습니다.
   exit /b 1
 )
+echo(!PROJECT_NAME!| findstr /C:" " >nul 2>&1
+if not errorlevel 1 (
+  echo [오류] 프로젝트명에 공백이 있습니다. 공백 없이 입력하세요.
+  exit /b 1
+)
 
 set /p "ENV_NAME=환경 (GGNR_ENV): "
 if not defined ENV_NAME (
   echo [오류] 환경이 비어 있습니다.
+  exit /b 1
+)
+echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
+if not errorlevel 1 (
+  echo [오류] 환경명에 공백이 있습니다. 공백 없이 입력하세요.
   exit /b 1
 )
 
@@ -133,11 +145,11 @@ if "!SKIP_WRITE!"=="0" (
   echo set PATH=%%PATH%%;%NODE_DIR%
   echo.
   echo :: [프로젝트 설정]
-  echo set GGNR_PROJECT=%PROJECT_NAME%
-  echo set GGNR_ENV=%ENV_NAME%
+  echo set "GGNR_PROJECT=%PROJECT_NAME%"
+  echo set "GGNR_ENV=%ENV_NAME%"
   echo.
   echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
-  echo call npm run start -- %PROJECT_NAME% %ENV_NAME%
+  echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
   )
 
   if not exist "%OUT%" (
@@ -150,13 +162,17 @@ if "!SKIP_WRITE!"=="0" (
     echo [오류] ggnr_start.bat 이 없습니다.
     exit /b 1
   )
+  echo [주의] 기존 ggnr_start.bat 을 유지합니다.
+  echo         방금 입력한 프로젝트명/환경은 기존 파일에 반영되지 않습니다.
+  echo         바꾸려면 덮어쓰기 Y 로 다시 실행하세요.
+  echo.
 )
 
 echo.
 set /p "DO_NEXT=기동 검사 후 nssm 등록·로그 열기를 진행할까요? (Y/N): "
 if /i not "!DO_NEXT!"=="Y" (
   echo [종료] 생성만 완료했습니다.
-  echo   수동: nssm_install_ggnr.bat ^(관리자^) → open_ggnr_logs.bat
+  echo   수동: nssm_install_ggnr.bat ^(관리자 CMD^) → open_ggnr_logs.bat
   echo.
   exit /b 0
 )
@@ -164,12 +180,20 @@ if /i not "!DO_NEXT!"=="Y" (
 :: --- 관리자 확인 (nssm 등록용) ---
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [오류] nssm 등록에는 관리자 권한이 필요합니다. 관리자 CMD에서 다시 실행하세요.
+  echo [오류] 관리자 실행이 아닙니다.
+  echo         기동 검사·nssm 등록은 관리자 CMD에서 실행해야 합니다.
+  echo         CMD를 마우스 오른쪽 버튼 → «관리자 권한으로 실행» 후 다시 실행하세요.
   exit /b 1
 )
+echo [확인] 관리자 권한으로 실행 중입니다.
 
 if not exist "%SMOKE_PS1%" (
   echo [오류] 없음: %SMOKE_PS1%
+  exit /b 1
+)
+if not exist "%SMOKE_CLEANUP_PS1%" (
+  echo [오류] 없음: %SMOKE_CLEANUP_PS1%
+  echo         잔여 프로세스 정리 스크립트가 필요합니다. 설치 패키지를 확인하세요.
   exit /b 1
 )
 if not exist "%NSSM_BAT%" (
@@ -185,18 +209,47 @@ echo.
 echo [1/3] ggnr_start.bat 기동 검사 ^(포트 %SMOKE_PORT%, 최대 %SMOKE_TIMEOUT_SEC%초^)...
 echo       주의: 같은 포트에서 이미 npm run dev/start 가 돌면 실패할 수 있습니다.
 echo       진행 로그는 아래 [smoke] 줄로 표시됩니다 ^(약 5초마다^).
+echo       취소^([Ctrl]+[C]^) 시 백그라운드 Next·GeoServer 도 정리합니다.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%SMOKE_PS1%" -StartBat "%OUT%" -Root "%ROOT%" -Port %SMOKE_PORT% -TimeoutSec %SMOKE_TIMEOUT_SEC%
-if errorlevel 1 (
-  echo [중단] 기동 검사 실패 — nssm 등록을 하지 않습니다.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SMOKE_PS1%" -StartBat "%OUT%" -Root "%ROOT%" -Port %SMOKE_PORT% -TimeoutSec %SMOKE_TIMEOUT_SEC% -GeoPort %SMOKE_GEO_PORT%
+set "SMOKE_EC=!ERRORLEVEL!"
+
+:: CMD 강제 종료 대비·잔여 포트 재정리 (스모크가 이미 정리했어도 안전)
+echo [1/3] 잔여 프로세스 추가 정리 ^(포트 %SMOKE_PORT%/%SMOKE_GEO_PORT%^)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SMOKE_CLEANUP_PS1%" -Root "%ROOT%" -Port %SMOKE_PORT% -GeoPort %SMOKE_GEO_PORT%
+
+if not "!SMOKE_EC!"=="0" (
+  if "!SMOKE_EC!"=="130" (
+    echo [중단] 사용자가 기동 검사를 취소했습니다 — nssm 등록을 하지 않습니다.
+  ) else (
+    if "!SMOKE_EC!"=="2" (
+      echo [중단] 포트 %SMOKE_PORT% 가 이미 사용 중입니다 — nssm 등록을 하지 않습니다.
+    ) else (
+      echo [중단] 기동 검사 실패 ^(exit=!SMOKE_EC!^) — nssm 등록을 하지 않습니다.
+    )
+  )
+  echo         폴더가 안 지워지면: powershell -NoProfile -File "%SMOKE_CLEANUP_PS1%" -Root "%ROOT%"
   exit /b 1
 )
 
 echo.
 echo [2/3] nssm 서비스 등록...
 call "%NSSM_BAT%"
-if errorlevel 1 (
-  echo [중단] nssm 등록/시작 실패
+set "NSSM_EC=!ERRORLEVEL!"
+if "!NSSM_EC!"=="2" (
+  echo [안내] 기존 GGNR_V7 서비스를 유지했습니다 ^(재등록 안 함^).
+  echo         기동 검사로 잠깐 멈춘 뒤 서비스가 꺼져 있을 수 있습니다.
+  echo         필요 시 서비스 관리자에서 GGNR_V7 을 시작하세요.
+  echo.
+  echo [3/3] 로그 창 열기...
+  call "%LOGS_BAT%"
+  echo.
+  echo [완료] 생성 → 기동 검사 → ^(기존 서비스 유지^) → 로그 창까지 끝났습니다.
+  echo.
+  exit /b 0
+)
+if not "!NSSM_EC!"=="0" (
+  echo [중단] nssm 등록/시작 실패 ^(exit=!NSSM_EC!^)
   exit /b 1
 )
 
