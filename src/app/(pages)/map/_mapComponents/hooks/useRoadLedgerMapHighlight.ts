@@ -12,6 +12,7 @@ import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 
@@ -99,10 +100,9 @@ export function useRoadLedgerMapHighlight(mapReady: boolean) {
       source,
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
-      zIndex: 1100,
     });
     layer.set('roadLedgerHighlight', true);
-    map.getLayers().push(layer);
+    insertLayerBelowServiceLayer(map, layer);
     layerRef.current = layer;
 
     return () => {

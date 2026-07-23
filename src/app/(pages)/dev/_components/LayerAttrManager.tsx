@@ -45,6 +45,9 @@ const BOOL_FIELD_KEYS = new Set([
   "define_field_show_detail",
 ])
 const READONLY_FIELD_KEYS = new Set(["define_field_name"])
+/** geom은 정합성 key로 불가. ogc_fid는 선택 가능하나 재업로드 시 번호가 바뀔 수 있음 */
+const KEY_INELIGIBLE_FIELD_NAMES = new Set(["geom"])
+const KEY_WARN_FIELD_NAMES = new Set(["ogc_fid"])
 const FIELD_TYPE_OPTIONS = ["TEXT", "NUMBER", "GEOMETRY", "DATE", "BOOLEAN", "CODE"] as const
 const SORT_TYPE_OPTIONS = ["DESC", "ASC"] as const
 const SELECT_KEYS = new Set(["define_field_type", "define_field_sort_type"])
@@ -142,6 +145,16 @@ const HEADER_CATEGORIES: { label: string; keys: string[] }[] = [
   },
 ]
 
+/** keyFieldOnly 모드에서 보여줄 컬럼: 영문명·한글명·자료형·키·필수·읽기전용 */
+const KEY_FIELD_ONLY_VISIBLE_KEYS = new Set([
+  "define_field_name",
+  "define_field_kor_name",
+  "define_field_type",
+  "define_field_is_key",
+  "define_field_is_required",
+  "define_field_read_only",
+])
+
 const PAGE_SIZE = 50
 const SCROLL_LOAD_THRESHOLD = 200
 const LAYER_LIST_WIDTH = 280
@@ -155,8 +168,8 @@ const LAYER_FILTER_OPTIONS: { value: LayerFilterMode; label: string }[] = [
 ]
 
 /** wrapper 100% 채우기: 영문명·한글명은 minmax로 남는 공간 채움, 나머지 고정 */
-function getGridTemplateColumns(): string {
-  return FIELD_KEYS.map((k) =>
+function getGridTemplateColumns(keys: string[]): string {
+  return keys.map((k) =>
     k === "define_field_name" || k === "define_field_kor_name"
       ? "minmax(180px, 1fr)"
       : COLUMN_WIDTHS[k] || "1fr"
@@ -167,12 +180,15 @@ export function LayerAttrManager({
   embedded = false,
   fixedTableKey = null,
   fixedSchema = null,
+  keyFieldOnly = false,
 }: LayerDefineEmbedProps = {}) {
   const [tables, setTables] = useState<DefineLayerTable[]>([])
   const [selectedTableKey, setSelectedTableKey] = useState<string>("")
   const [layerListSearch, setLayerListSearch] = useState("")
   const [debouncedLayerListSearch, setDebouncedLayerListSearch] = useState("")
   const [fields, setFields] = useState<DefineField[]>([])
+  /** define_field_name이 중복될 수 있어 이름이 아닌 배열 인덱스로 키를 잡아 비교함 */
+  const originalFieldsRef = useRef<Map<number, Record<string, unknown>>>(new Map())
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
@@ -196,6 +212,24 @@ export function LayerAttrManager({
   useEffect(() => {
     if (fixedTableKey) setSelectedTableKey(fixedTableKey)
   }, [fixedTableKey])
+
+  // geom은 key로 쓸 수 없으므로 기존에 켜져 있던 값은 자동으로 해제(저장 전까지는 변경사항으로 표시됨)
+  useEffect(() => {
+    setFields((prev) => {
+      let changed = false
+      const next = prev.map((f) => {
+        const row = f as Record<string, unknown>
+        const name = String(row.define_field_name ?? "")
+        const isKey = String(row.define_field_is_key ?? "").toLowerCase() === "true"
+        if (KEY_INELIGIBLE_FIELD_NAMES.has(name) && isKey) {
+          changed = true
+          return { ...row, define_field_is_key: "false" }
+        }
+        return f
+      })
+      return changed ? next : prev
+    })
+  }, [fields])
 
   // 테이블 목록 로드 (전체)
   useEffect(() => {
@@ -258,6 +292,9 @@ export function LayerAttrManager({
       const body = await res.json()
       if (body.success && body.data) {
         setFields(body.data)
+        originalFieldsRef.current = new Map(
+          (body.data as Record<string, unknown>[]).map((f, idx) => [idx, f])
+        )
         setTotal(body.total ?? body.data.length)
         setPage(1)
         const more = (body.data?.length ?? 0) < (body.total ?? 0)
@@ -291,6 +328,10 @@ export function LayerAttrManager({
       if (body.success && Array.isArray(body.data)) {
         if (body.data.length > 0) {
           setFields((prev) => [...prev, ...body.data])
+          const baseIdx = fields.length
+          for (const [i, f] of (body.data as Record<string, unknown>[]).entries()) {
+            originalFieldsRef.current.set(baseIdx + i, f)
+          }
           setPage(nextPage)
         }
         const newLen = fields.length + (body.data?.length ?? 0)
@@ -392,6 +433,14 @@ export function LayerAttrManager({
       if (idx < 0) return
       const next = [...fields]
       next[idx] = { ...next[idx], [key]: value }
+      // key는 테이블당 하나만 존재해야 하므로, 새로 켜면 다른 필드의 key는 자동 해제
+      if (key === "define_field_is_key" && value === "true") {
+        for (let i = 0; i < next.length; i++) {
+          if (i !== idx && String(next[i].define_field_is_key ?? "").toLowerCase() === "true") {
+            next[i] = { ...next[i], define_field_is_key: "false" }
+          }
+        }
+      }
       setFields(next)
     },
     [fields, filteredFields]
@@ -418,6 +467,18 @@ export function LayerAttrManager({
         const key = String(f.define_field_name ?? "")
         return byKey.get(key) ?? f
       })
+      // 이번 편집에서 새로 key로 지정한 필드가 있으면, 페이지네이션으로 로컬에 없던
+      // 다른 필드에 남아있는 이전 key 설정도 함께 해제해 key가 항상 하나만 존재하도록 함
+      const newKeyName = fields.find(
+        (f) => String(f.define_field_is_key ?? "").toLowerCase() === "true"
+      )?.define_field_name
+      if (newKeyName) {
+        fullFields = fullFields.map((f) =>
+          f.define_field_name !== newKeyName && String(f.define_field_is_key ?? "").toLowerCase() === "true"
+            ? { ...f, define_field_is_key: "false" }
+            : f
+        )
+      }
       const res = await fetch(
         `/api/config/defineLayer/fields/${encodeURIComponent(selectedTableKey)}`,
         {
@@ -427,14 +488,30 @@ export function LayerAttrManager({
         }
       )
       const body = await res.json()
-      if (body.success) setSuccessMsg("저장되었습니다.")
-      else setError(body.error ?? "저장에 실패했습니다.")
+      if (body.success) {
+        setSuccessMsg("저장되었습니다.")
+        originalFieldsRef.current = new Map(
+          (fields as Record<string, unknown>[]).map((f, idx) => [idx, f])
+        )
+      } else {
+        setError(body.error ?? "저장에 실패했습니다.")
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장에 실패했습니다.")
     } finally {
       setSaving(false)
     }
   }, [selectedTableKey, fields])
+
+  const visibleFieldKeys = keyFieldOnly
+    ? FIELD_KEYS.filter((k) => KEY_FIELD_ONLY_VISIBLE_KEYS.has(k))
+    : FIELD_KEYS
+  const visibleHeaderCategories = keyFieldOnly
+    ? HEADER_CATEGORIES.map((cat) => ({
+        ...cat,
+        keys: cat.keys.filter((k) => KEY_FIELD_ONLY_VISIBLE_KEYS.has(k)),
+      })).filter((cat) => cat.keys.length > 0)
+    : HEADER_CATEGORIES
 
   const selectedTable = tables.find(
     (t) => String((t as Record<string, unknown>).define_table_name ?? "") === selectedTableKey
@@ -490,7 +567,7 @@ export function LayerAttrManager({
               onChange={(e) => setUsedOnly(e.target.checked)}
               className="rounded border-input"
             />
-            사용중인 레이어만 보기
+            접속 DB에 있는 레이어만
           </label>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -523,7 +600,7 @@ export function LayerAttrManager({
                       title={label}
                       className={cn(
                         "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0",
-                        "hover:bg-muted/70",
+                        "hover:bg-primary/10 focus-visible:bg-primary/10",
                         isSelected
                           ? "border-l-primary bg-primary/10 text-foreground font-medium"
                           : "border-l-transparent text-muted-foreground"
@@ -550,52 +627,80 @@ export function LayerAttrManager({
         ) : (
           <>
             <div className="flex items-center gap-3 flex-wrap shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-md"
-                onClick={saveConfig}
-                disabled={saving}
-              >
-                <Save className="w-4 h-4 mr-1.5 opacity-70" />
-                {saving ? "저장 중..." : "저장"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-md"
-                onClick={() => {
-                  setFields((prev) =>
-                    prev.map((f) => ({ ...f, define_field_show_detail: "false" }))
-                  )
-                }}
-                title="모든 필드의 상세보기를 false로 설정합니다. 저장 버튼으로 반영하세요."
-              >
-                상세보기 전체 해제
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-md"
-                onClick={() => {
-                  setSearchName("")
-                  setDebouncedSearchName("")
-                }}
-              >
-                <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
-                초기화
-              </Button>
-              {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
-              {error && <span className="text-sm text-destructive">{error}</span>}
-              <span className="text-sm text-muted-foreground">
-                {fields.length} / {total}
-              </span>
-              <Input
-                placeholder="필드명/한글명 검색"
-                value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
-                className="h-8 w-48 rounded-md text-sm"
-              />
+              {keyFieldOnly ? (
+                <>
+                  <Input
+                    placeholder="필드명/한글명 검색"
+                    value={searchName}
+                    onChange={(e) => setSearchName(e.target.value)}
+                    className="h-8 w-48 rounded-md text-sm"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {fields.length} / {total}
+                  </span>
+                  {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
+                  {error && <span className="text-sm text-destructive">{error}</span>}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md ml-auto"
+                    onClick={saveConfig}
+                    disabled={saving}
+                  >
+                    <Save className="w-4 h-4 mr-1.5 opacity-70" />
+                    {saving ? "저장 중..." : "저장"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md"
+                    onClick={saveConfig}
+                    disabled={saving}
+                  >
+                    <Save className="w-4 h-4 mr-1.5 opacity-70" />
+                    {saving ? "저장 중..." : "저장"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md"
+                    onClick={() => {
+                      setFields((prev) =>
+                        prev.map((f) => ({ ...f, define_field_show_detail: "false" }))
+                      )
+                    }}
+                    title="모든 필드의 상세보기를 false로 설정합니다. 저장 버튼으로 반영하세요."
+                  >
+                    상세보기 전체 해제
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md"
+                    onClick={() => {
+                      setSearchName("")
+                      setDebouncedSearchName("")
+                    }}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
+                    초기화
+                  </Button>
+                  {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
+                  {error && <span className="text-sm text-destructive">{error}</span>}
+                  <span className="text-sm text-muted-foreground">
+                    {fields.length} / {total}
+                  </span>
+                  <Input
+                    placeholder="필드명/한글명 검색"
+                    value={searchName}
+                    onChange={(e) => setSearchName(e.target.value)}
+                    className="h-8 w-48 rounded-md text-sm"
+                  />
+                </>
+              )}
             </div>
 
             {loading ? (
@@ -610,12 +715,12 @@ export function LayerAttrManager({
                   className="sticky top-0 z-10 bg-muted border-b w-full min-w-0"
                   style={{
                     display: "grid",
-                    gridTemplateColumns: getGridTemplateColumns(),
+                    gridTemplateColumns: getGridTemplateColumns(visibleFieldKeys),
                     width: "100%",
                   }}
                 >
                   {/* 상단 분류 행 */}
-                  {HEADER_CATEGORIES.map((cat) => (
+                  {visibleHeaderCategories.map((cat) => (
                     <div
                       key={cat.label}
                       className="py-1 px-2 text-xs font-semibold border-r border-b border-muted-foreground/20 bg-muted/80 flex items-center justify-center text-center"
@@ -625,7 +730,7 @@ export function LayerAttrManager({
                     </div>
                   ))}
                   {/* 컬럼명 행 */}
-                  {FIELD_KEYS.map((key) => (
+                  {visibleFieldKeys.map((key) => (
                     <div
                       key={key}
                       className="py-1 px-1 text-xs font-medium whitespace-nowrap border-r last:border-r-0 bg-muted border-b flex items-center justify-center text-center"
@@ -639,20 +744,31 @@ export function LayerAttrManager({
                     const fieldIdx = fields.indexOf(f)
                     if (fieldIdx < 0) return null
                     const row = f as Record<string, unknown>
+                    const originalRow = originalFieldsRef.current.get(fieldIdx)
+                    const isDirty = !originalRow || JSON.stringify(row) !== JSON.stringify(originalRow)
 
                     return (
                       <div
                         key={fieldIdx}
-                        className="grid border-b hover:bg-muted/50 w-full min-w-0"
+                        className={cn(
+                          "grid border-b hover:bg-amber-100/40 dark:hover:bg-amber-600/20 w-full min-w-0",
+                          isDirty && "bg-amber-100/40 dark:bg-amber-600/20"
+                        )}
                         style={{
-                          gridTemplateColumns: getGridTemplateColumns(),
+                          gridTemplateColumns: getGridTemplateColumns(visibleFieldKeys),
                           width: "100%",
                         }}
                       >
-                        {FIELD_KEYS.map((key) => {
+                        {visibleFieldKeys.map((key) => {
                           const val = String(row[key] ?? "")
                           const isBool = BOOL_FIELD_KEYS.has(key)
-                          const isReadOnly = READONLY_FIELD_KEYS.has(key)
+                          const isKeyCell = key === "define_field_is_key"
+                          const lockedByKeyFieldOnly = keyFieldOnly && !isKeyCell
+                          const isReadOnly = READONLY_FIELD_KEYS.has(key) || lockedByKeyFieldOnly
+                          const keyIneligible =
+                            isKeyCell && KEY_INELIGIBLE_FIELD_NAMES.has(String(row.define_field_name ?? ""))
+                          const keyWarn =
+                            isKeyCell && KEY_WARN_FIELD_NAMES.has(String(row.define_field_name ?? ""))
                           const isTypeSelect = key === "define_field_type"
                           const isSortTypeSelect = key === "define_field_sort_type"
                           return (
@@ -668,10 +784,18 @@ export function LayerAttrManager({
                                   <input
                                     type="checkbox"
                                     checked={val.toLowerCase() === "true"}
+                                    disabled={lockedByKeyFieldOnly || keyIneligible}
+                                    title={
+                                      keyIneligible
+                                        ? "geom은 정합성 key로 설정할 수 없습니다."
+                                        : keyWarn
+                                          ? "ogc_fid는 재업로드 시 번호가 바뀔 수 있어 정합성이 어긋날 수 있습니다. 유일 업무키가 없을 때만 사용하세요."
+                                          : undefined
+                                    }
                                     onChange={(e) =>
                                       updateCell(listIndex, key, e.target.checked ? "true" : "false")
                                     }
-                                    className="rounded border-input shrink-0"
+                                    className="rounded border-input shrink-0 disabled:opacity-40"
                                   />
                                 </label>
                               ) : isReadOnly ? (

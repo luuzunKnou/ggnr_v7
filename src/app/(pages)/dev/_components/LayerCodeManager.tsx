@@ -41,6 +41,7 @@ export function LayerCodeManager({
   const [debouncedFieldListSearch, setDebouncedFieldListSearch] = useState("")
   const [selectedFieldKey, setSelectedFieldKey] = useState<string>("")
   const [codes, setCodes] = useState<DefineCode[]>([])
+  const originalCodesRef = useRef<Map<number, Record<string, unknown>>>(new Map())
   const [deletedIndices, setDeletedIndices] = useState<Set<number>>(new Set())
   const [loadingTables, setLoadingTables] = useState(true)
   const [loadingFields, setLoadingFields] = useState(false)
@@ -149,6 +150,7 @@ export function LayerCodeManager({
     if (!selectedFieldKey) {
       setCodes([])
       setDeletedIndices(new Set())
+      originalCodesRef.current = new Map()
       return
     }
     setLoadingCodes(true)
@@ -158,8 +160,12 @@ export function LayerCodeManager({
       .then((body) => {
         if (body.success && Array.isArray(body.data)) {
           setCodes(body.data)
+          originalCodesRef.current = new Map(
+            (body.data as Record<string, unknown>[]).map((c, idx) => [idx, c])
+          )
         } else {
           setCodes([])
+          originalCodesRef.current = new Map()
         }
       })
       .catch(() => setCodes([]))
@@ -267,6 +273,9 @@ export function LayerCodeManager({
       const body = await res.json()
       if (body.success) {
         setCodes(toSave)
+        originalCodesRef.current = new Map(
+          (toSave as Record<string, unknown>[]).map((c, idx) => [idx, c])
+        )
         setDeletedIndices(new Set())
         setSuccessMsg("저장되었습니다.")
       } else setError(body.error ?? "저장에 실패했습니다.")
@@ -320,7 +329,7 @@ export function LayerCodeManager({
               onChange={(e) => setUsedOnly(e.target.checked)}
               className="rounded border-input"
             />
-            사용중인 레이어만 보기
+            접속 DB에 있는 레이어만
           </label>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -503,14 +512,14 @@ export function LayerCodeManager({
                   <div className="grid grid-cols-[minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)_minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)_minmax(0,0.8fr)_1fr_minmax(3.5rem,3.5rem)] gap-x-2 border-b border-border bg-muted shrink-0 min-w-0">
                     {[0, 1, 2].map((i) => (
                       <Fragment key={i}>
-                        <div className="py-1 px-1.5 text-xs font-medium flex items-center justify-start text-left text-muted-foreground min-w-0">
+                        <div className="py-1 px-1.5 text-xs font-medium flex items-center justify-start text-left text-foreground min-w-0">
                           코드명
                         </div>
-                        <div className="py-1 px-1.5 text-xs font-medium flex items-center justify-start text-left text-muted-foreground min-w-0">
+                        <div className="py-1 px-1.5 text-xs font-medium flex items-center justify-start text-left text-foreground min-w-0">
                           한글명
                         </div>
                         <div className={cn(
-                          "py-1 px-1.5 pr-[23px] text-xs font-medium flex items-center justify-start text-left text-muted-foreground min-w-14 shrink-0 whitespace-nowrap",
+                          "py-1 px-1.5 pr-[23px] text-xs font-medium flex items-center justify-start text-left text-foreground min-w-14 shrink-0 whitespace-nowrap",
                           i < 2 && "border-r border-border/60"
                         )}>
                           삭제
@@ -549,6 +558,10 @@ export function LayerCodeManager({
                             }
                             const row = codes[idx]
                             const isDeleted = deletedIndices.has(idx)
+                            const originalRow = originalCodesRef.current.get(idx)
+                            const isDirty =
+                              !originalRow ||
+                              String(row.define_code_kor_name ?? "") !== String(originalRow.define_code_kor_name ?? "")
                             return (
                               <div
                                 key={idx}
@@ -562,11 +575,16 @@ export function LayerCodeManager({
                                     {String(row.define_code_name ?? "")}
                                   </span>
                                 </div>
-                                <div className="py-0 px-1 flex items-center min-h-[28px]">
+                                <div
+                                  className={cn(
+                                    "py-0 px-1 flex items-center min-h-[28px] hover:bg-amber-100/40 dark:hover:bg-amber-600/20",
+                                    isDirty && "bg-amber-100/40 dark:bg-amber-600/20"
+                                  )}
+                                >
                                   <Input
                                     value={String(row.define_code_kor_name ?? "")}
                                     onChange={(e) => updateCodeCell(idx, "define_code_kor_name", e.target.value)}
-                                    className="h-6 rounded-none text-sm min-w-0 py-0 px-1"
+                                    className="h-6 rounded-none text-sm min-w-0 py-0 px-1 bg-transparent"
                                   />
                                 </div>
                                 <div className={cn(

@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -225,7 +225,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "UP_DOWN",
+    "define_field_name": "up_down",
     "define_field_kor_name": "상하행 구분",
     "define_field_type": "text",
     "define_field_idx": 10,
@@ -400,7 +400,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DAMAGE_ETC",
+    "define_field_name": "damage_etc",
     "define_field_kor_name": "손상여부",
     "define_field_type": "text",
     "define_field_idx": 17,
@@ -425,7 +425,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DELEGATE",
+    "define_field_name": "delegate",
     "define_field_kor_name": "위임국도",
     "define_field_type": "text",
     "define_field_idx": 18,

@@ -11,7 +11,7 @@ import '@/app/(pages)/map/_mapComponents/config/projections';
 import { createVWorldLayer } from '@/app/(pages)/map/_mapComponents/layerFactory/backgroundLayerFactory';
 import { RESOLUTIONS_3857 } from '@/app/(pages)/map/_mapComponents/config/mapDefaults';
 import { getTransform } from 'ol/proj';
-import { Home } from 'lucide-react';
+import { Locate } from 'lucide-react';
 import 'ol/ol.css';
 
 type GeoJsonGeometry = GeoJSON.Geometry | Record<string, unknown>;
@@ -164,9 +164,9 @@ export function GeoJsonMiniMap({ geometry, dataProjection = 'EPSG:4326', classNa
           type="button"
           onClick={goToInitialView}
           className="absolute bottom-1 right-1 rounded-[30px] bg-background/90 border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-background"
-          title="처음 보기로"
+          title="초기 위치로"
         >
-          <Home className="w-3.5 h-3.5" />
+          <Locate className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

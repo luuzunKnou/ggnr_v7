@@ -69,7 +69,7 @@ const defaultStyleProps: StyleProps = {
   strokeWidth: 1,
   opacity: 1,
   labelField: "",
-  size: 8,
+  size: 14,
 }
 
 type DefineLayerTable = Record<string, unknown> & { fields?: unknown[] }
@@ -153,6 +153,7 @@ const SHARE_OPTIONS = [
   { label: "부서", value: "G" },
   { label: "개인", value: "O" },
 ] as const
+const SCHEMA_OPTIONS = ["layer", "public_layer"] as const
 
 const PAGE_SIZE = 50
 const SCROLL_LOAD_THRESHOLD = 200
@@ -169,6 +170,7 @@ export function LayerInfoManager({
   fixedSchema = null,
 }: LayerInfoManagerProps = {}) {
   const [config, setConfig] = useState<DefineLayerConfig | null>(null)
+  const originalTablesRef = useRef<Map<string, Record<string, unknown>>>(new Map())
   const [total, setTotal] = useState(0)
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true)
@@ -229,6 +231,9 @@ export function LayerInfoManager({
       const body = await res.json()
       if (body.success && body.data) {
         setConfig({ tables: body.data })
+        originalTablesRef.current = new Map(
+          (body.data as Record<string, unknown>[]).map((t) => [String(t.define_table_name ?? ""), t])
+        )
         setTotal(Array.isArray(body.data) ? body.data.length : 0)
         setDisplayCount(PAGE_SIZE)
       } else {
@@ -331,6 +336,14 @@ export function LayerInfoManager({
       .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
   }, [])
 
+  // 저장 전까지는 마지막 저장 시점의 스키마로 필터링·정렬해 편집 중인 행이 목록에서 사라지거나 위치가 튀지 않게 함
+  const getStableSchema = useCallback((row: Record<string, unknown>): string => {
+    const name = String(row.define_table_name ?? "").trim()
+    const original = name ? originalTablesRef.current.get(name) : undefined
+    const raw = original ? original.define_table_schema : row.define_table_schema
+    return String(raw ?? "layer") === "public_layer" ? "public_layer" : "layer"
+  }, [])
+
   const filteredTables = useMemo(() => {
     if (!config?.tables) return []
     let list = [...config.tables]
@@ -341,25 +354,21 @@ export function LayerInfoManager({
         const name = String((t as Record<string, unknown>).define_table_name ?? "")
           .trim()
           .toLowerCase()
-        const tSchema = String((t as Record<string, unknown>).define_table_schema ?? "layer").trim()
+        const tSchema = getStableSchema(t as Record<string, unknown>)
         if (name !== key) return false
         if (schema && tSchema !== schema) return false
         return true
       })
     }
     if (layerFilterMode === "public_layer") {
-      list = list.filter(
-        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") === "public_layer"
-      )
+      list = list.filter((t) => getStableSchema(t as Record<string, unknown>) === "public_layer")
     } else if (layerFilterMode === "layer") {
-      list = list.filter(
-        (t) => String((t as Record<string, unknown>).define_table_schema ?? "layer") !== "public_layer"
-      )
+      list = list.filter((t) => getStableSchema(t as Record<string, unknown>) !== "public_layer")
     }
     if (usedOnly) {
       list = list.filter((t) => {
         const row = t as Record<string, unknown>
-        const schema = String(row.define_table_schema ?? "layer") === "public_layer" ? "public_layer" : "layer"
+        const schema = getStableSchema(row)
         const name = String(row.define_table_name ?? "").trim().toLowerCase()
         return name && dbTableKeySet.has(`${schema}:${name}`)
       })
@@ -376,7 +385,7 @@ export function LayerInfoManager({
     // 정렬: layer/SHP → layer/Excel → public_layer/SHP → public_layer/Excel → 그 외
     const sortRank = (t: DefineLayerTable) => {
       const row = t as Record<string, unknown>
-      const isPublic = String(row.define_table_schema ?? "layer") === "public_layer"
+      const isPublic = getStableSchema(row) === "public_layer"
       const source = String(row.define_table_source ?? "").toLowerCase()
       if (!isPublic && source === "shp") return 0
       if (!isPublic && source === "excel") return 1
@@ -394,6 +403,7 @@ export function LayerInfoManager({
     layerFilterMode,
     usedOnly,
     dbTableKeySet,
+    getStableSchema,
   ])
 
   const displayedTables = useMemo(
@@ -465,8 +475,14 @@ export function LayerInfoManager({
         body: JSON.stringify({ data: fullTables }),
       })
       const body = await res.json()
-      if (body.success) setSuccessMsg("저장되었습니다.")
-      else setError(body.error ?? "저장에 실패했습니다.")
+      if (body.success) {
+        setSuccessMsg("저장되었습니다.")
+        originalTablesRef.current = new Map(
+          config.tables.map((t) => [String((t as Record<string, unknown>).define_table_name ?? ""), t as Record<string, unknown>])
+        )
+      } else {
+        setError(body.error ?? "저장에 실패했습니다.")
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장에 실패했습니다.")
     } finally {
@@ -995,7 +1011,7 @@ export function LayerInfoManager({
 
   return (
     <div className={cn("flex flex-col gap-3 p-2 min-h-0 h-full", embedded && "overflow-hidden")}>
-      <div className="flex items-center gap-3 flex-wrap shrink-0">
+      <div className="flex items-center gap-3 flex-nowrap shrink-0 overflow-x-auto">
         {!embedded && (
           <>
             <Input
@@ -1028,7 +1044,7 @@ export function LayerInfoManager({
                 onChange={(e) => setUsedOnly(e.target.checked)}
                 className="rounded border-input"
               />
-              사용중인 레이어만 보기
+              접속 DB에 있는 레이어만
             </label>
             <span className="text-sm text-muted-foreground">
               총 {filteredTables.length}건
@@ -1040,7 +1056,7 @@ export function LayerInfoManager({
             </span>
           </>
         )}
-        <div className="ml-auto flex items-center gap-3 flex-wrap">
+        <div className="ml-auto flex items-center gap-3 flex-nowrap shrink-0">
           {successMsg && <span className="text-sm text-green-600 dark:text-green-400">{successMsg}</span>}
           <Button variant="outline" size="sm" className="rounded-md" onClick={saveConfig} disabled={saving}>
             <Save className="w-4 h-4 mr-1.5 opacity-70" />
@@ -1115,11 +1131,16 @@ export function LayerInfoManager({
             const hasCssStyle = styleInfo?.hasCssStyle ?? false
             const styleName = styleInfo?.styleName
             const shpType = String(row.define_table_shp_type ?? "")
+            const originalRow = originalTablesRef.current.get(tableName)
+            const isDirty = !originalRow || JSON.stringify(row) !== JSON.stringify(originalRow)
 
             return (
               <div
                 key={String(row.define_table_name ?? listIndex)}
-                className="flex border-b hover:bg-green-50/30 dark:hover:bg-green-950/10"
+                className={cn(
+                  "flex border-b hover:bg-amber-100/40 dark:hover:bg-amber-600/20",
+                  isDirty && "bg-amber-100/40 dark:bg-amber-600/20"
+                )}
               >
                 {TABLE_COLUMNS.map((col, colIndex) => {
                   const isLast = colIndex === TABLE_COLUMNS.length - 1
@@ -1171,6 +1192,7 @@ export function LayerInfoManager({
                             strokeColor={(fallbackState as StyleProps & { geometryType: GeometryType }).strokeColor}
                             opacity={(fallbackState as StyleProps & { geometryType: GeometryType }).opacity}
                             showFrame={false}
+                            size="sm"
                           />
                         )}
                         {showLoading && (
@@ -1213,7 +1235,20 @@ export function LayerInfoManager({
                           {val}
                         </span>
                       ) : col.badge === "schema" ? (
-                        <SchemaBadge value={val} />
+                        <button
+                          type="button"
+                          className="cursor-pointer rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          title="클릭하면 layer ↔ public_layer 전환 (정의만 바뀝니다. 실제 DB 테이블·GeoServer 레이어는 별도로 이전해야 합니다)"
+                          onClick={() => {
+                            const current = SCHEMA_OPTIONS.includes(val as (typeof SCHEMA_OPTIONS)[number])
+                              ? val
+                              : "layer"
+                            const next = current === "public_layer" ? "layer" : "public_layer"
+                            updateCell(tableIdx, key, next)
+                          }}
+                        >
+                          <SchemaBadge value={val} />
+                        </button>
                       ) : col.badge === "source" ? (
                         <SourceBadge value={String(row.define_table_source ?? "")} />
                       ) : col.shapeType ? (

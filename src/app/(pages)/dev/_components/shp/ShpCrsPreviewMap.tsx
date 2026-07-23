@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect } from 'react';
+import { Locate } from 'lucide-react';
 import { Map, View } from 'ol';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -27,6 +28,8 @@ const VIEW_PROJECTION = 'EPSG:3857';
 
 export function ShpCrsPreviewMap({ geojson, dataProjection, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<Map | null>(null);
+  const extentRef = useRef<[number, number, number, number] | null>(null);
 
   // 정사영상관리 미리보기와 동일한 방식: 도형 범위를 먼저 계산해 View에 곧바로 fit() 적용 후 지도를 생성한다.
   // (지도부터 만들고 나중에 fit하면 다이얼로그 진입 애니메이션 중 컨테이너 크기가 0이라 범위가 넓게 보이는 문제가 있었음)
@@ -89,6 +92,8 @@ export function ShpCrsPreviewMap({ geojson, dataProjection, className }: Props) 
       controls: defaults({ zoom: false, attribution: false }),
     });
 
+    extentRef.current = extent;
+
     if (extent) {
       map.getView().fit(extent, { padding: [14, 14, 14, 14], maxZoom: 19 });
     }
@@ -100,16 +105,43 @@ export function ShpCrsPreviewMap({ geojson, dataProjection, className }: Props) 
     });
     resizeObserver.observe(containerRef.current);
 
+    mapRef.current = map;
+
     return () => {
       resizeObserver.disconnect();
       map.setTarget(undefined);
+      mapRef.current = null;
     };
   }, [geojson, dataProjection]);
+
+  const goToInitialView = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const view = map.getView();
+    const extent = extentRef.current;
+    if (extent) {
+      view.fit(extent, { padding: [14, 14, 14, 14], maxZoom: 19 });
+    } else {
+      view.setCenter(DEFAULT_CENTER);
+      view.setZoom(DEFAULT_ZOOM);
+    }
+  };
 
   return (
     <div className={className}>
       <div className="relative w-full rounded bg-muted/20" style={{ height: 200 }}>
         <div ref={containerRef} className="absolute inset-0 rounded" />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goToInitialView();
+          }}
+          className="absolute bottom-1 right-1 z-10 rounded-[30px] bg-background/90 border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-background"
+          title="초기 위치로"
+        >
+          <Locate className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
