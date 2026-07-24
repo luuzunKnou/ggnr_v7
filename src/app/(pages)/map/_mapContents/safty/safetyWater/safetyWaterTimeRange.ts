@@ -182,6 +182,59 @@ export function clampStatsRange(time: FloodTimeType, range: StatsRange): StatsRa
   return { start: toLocalDateTimeValue(start), end: toLocalDateTimeValue(e) };
 }
 
+/** 오늘(지금) 기준 과거 기간 — 종료=현재 정렬, 시작=해당 기간 전 */
+export type StatsQuickPreset = '1w' | '1m' | '1y';
+
+function alignedNowEnd(time: FloodTimeType, now = new Date()): Date {
+  const end = new Date(now);
+  if (time === '1D') {
+    end.setHours(0, 0, 0, 0);
+    return end;
+  }
+  if (time === '1H') {
+    end.setMinutes(0, 0, 0);
+    return end;
+  }
+  end.setMinutes(Math.floor(end.getMinutes() / 10) * 10, 0, 0);
+  return end;
+}
+
+export function quickStatsRange(
+  preset: StatsQuickPreset,
+  time: FloodTimeType,
+  now = new Date()
+): StatsRange {
+  const end = alignedNowEnd(time, now);
+  const start = new Date(end);
+  if (preset === '1w') {
+    // 1D: 오늘 포함 N일 → N-1일 전. 그 외: 정확히 N일 구간.
+    start.setDate(start.getDate() - (time === '1D' ? 6 : 7));
+  } else if (preset === '1m') start.setMonth(start.getMonth() - 1);
+  else if (time === '1D') start.setDate(start.getDate() - 364); // 오늘 포함 365일
+  else start.setFullYear(start.getFullYear() - 1);
+
+  let range: StatsRange;
+  if (time === '1D') {
+    start.setHours(0, 0, 0, 0);
+    range = { start: toLocalDateValue(start), end: toLocalDateValue(end) };
+  } else {
+    range = { start: toLocalDateTimeValue(start), end: toLocalDateTimeValue(end) };
+  }
+  return clampStatsRange(time, range);
+}
+
+/** 10분은 최대 1개월이라 1년 빠른선택 제외 */
+export function availableQuickPresets(time: FloodTimeType): StatsQuickPreset[] {
+  if (time === '10M') return ['1w', '1m'];
+  return ['1w', '1m', '1y'];
+}
+
+export const STATS_QUICK_PRESET_LABEL: Record<StatsQuickPreset, string> = {
+  '1w': '1주',
+  '1m': '1달',
+  '1y': '1년',
+};
+
 export function isStatsRangeValid(time: FloodTimeType, start: string, end: string): boolean {
   const s = parseLocalDateTime(start);
   const e = parseLocalDateTime(end);

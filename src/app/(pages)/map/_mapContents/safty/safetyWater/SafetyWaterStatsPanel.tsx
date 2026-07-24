@@ -12,6 +12,10 @@ import {
   isStatsRangeValid,
   maxInputValue,
   maxRangeNotice,
+  availableQuickPresets,
+  quickStatsRange,
+  STATS_QUICK_PRESET_LABEL,
+  type StatsQuickPreset,
 } from './safetyWaterTimeRange';
 import type { FloodTimeType, SafetyWaterStatPoint, SafetyWaterStationKind } from './safetyWaterTypes';
 
@@ -30,6 +34,7 @@ type Props = {
   rangeNotice: string;
   onChangeStart: (value: string) => void;
   onChangeEnd: (value: string) => void;
+  onApplyRange: (start: string, end: string) => void;
 };
 
 type MergedRow = {
@@ -438,6 +443,7 @@ export function SafetyWaterStatsPanel({
   rangeNotice,
   onChangeStart,
   onChangeEnd,
+  onApplyRange,
 }: Props) {
   const inputType = inputTypeForTime(timeType);
   const step = inputStepForTime(timeType);
@@ -452,6 +458,12 @@ export function SafetyWaterStatsPanel({
     : rangeTooLong
       ? maxRangeNotice(timeType)
       : null;
+  const quickPresets = availableQuickPresets(timeType);
+
+  const applyQuick = (preset: StatsQuickPreset) => {
+    const next = quickStatsRange(preset, timeType);
+    onApplyRange(next.start, next.end);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
@@ -459,6 +471,20 @@ export function SafetyWaterStatsPanel({
         <div className="flex flex-col gap-1.5 text-[11px]">
           <span className="font-medium text-slate-700">기간 선택</span>
           <p className="text-[10px] leading-snug text-slate-500">{rangeNotice}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-[10px] text-slate-500">빠른 선택</span>
+            {quickPresets.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                title={STATS_QUICK_PRESET_LABEL[preset]}
+                onClick={() => applyQuick(preset)}
+                className="cursor-pointer rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-800"
+              >
+                {STATS_QUICK_PRESET_LABEL[preset]}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-nowrap items-center gap-1.5">
             <label
               className={cn(

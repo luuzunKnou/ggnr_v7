@@ -11,13 +11,16 @@ import {
   X,
 } from 'lucide-react';
 import { MapFloatingPanel } from '@/app/(pages)/map/_mapComponents/MapFloatingPanel';
-import {
-  FLOAT_PANEL_BELOW_SEARCH_TOP_EXTRA,
-  useSearchBarOffset,
-} from '@/app/(pages)/map/searchBarOffsetContext';
+import { useSearchBarOffset } from '@/app/(pages)/map/searchBarOffsetContext';
 import { cn } from '@/lib/utils';
 import { RoadCctvHlsPlayer } from '../../road/roadCCTV/RoadCctvHlsPlayer';
 import { useSafetyWater } from './safetyWaterContext';
+import {
+  FORECAST_HEIGHT_FALLBACK_PX,
+  FORECAST_TO_CCTV_GAP_PX,
+  safetyWaterFloatBaseTop,
+  safetyWaterForecastFloatTop,
+} from './safetyWaterFloatLayout';
 
 export function SafetyWaterNearbyCctv() {
   const {
@@ -28,15 +31,21 @@ export function SafetyWaterNearbyCctv() {
     cctvError,
     selectedCctvKey,
     setSelectedCctvKey,
+    forecastOpen,
+    forecastPanelBottomPx,
   } = useSafetyWater();
   const { leftPx, topPx } = useSearchBarOffset();
   const [listOpen, setListOpen] = useState(false);
   const listPanelRef = useRef<HTMLDivElement>(null);
 
-  const anchorPosition = useMemo(
-    () => ({ top: topPx + FLOAT_PANEL_BELOW_SEARCH_TOP_EXTRA + 48, left: leftPx }),
-    [leftPx, topPx]
-  );
+  const anchorPosition = useMemo(() => {
+    const aloneTop = safetyWaterFloatBaseTop(topPx);
+    if (!forecastOpen) return { top: aloneTop, left: leftPx };
+    const bottom =
+      forecastPanelBottomPx ??
+      safetyWaterForecastFloatTop(topPx) + FORECAST_HEIGHT_FALLBACK_PX;
+    return { top: bottom + FORECAST_TO_CCTV_GAP_PX, left: leftPx };
+  }, [leftPx, topPx, forecastOpen, forecastPanelBottomPx]);
 
   const listItems = cctvListItems;
   const selected = useMemo(
@@ -81,14 +90,16 @@ export function SafetyWaterNearbyCctv() {
       style={{ position: 'fixed', zIndex: 210 }}
       header={
         <>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <Cctv className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
-              <span className="truncate text-[13px] font-medium text-slate-800">주변 도로 영상</span>
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <Cctv className="h-4 w-4 shrink-0 self-center text-sky-600" aria-hidden />
+            <div className="flex min-w-0 flex-col justify-center gap-0.5">
+              <span className="truncate text-[13px] font-medium leading-none text-slate-800">
+                주변 도로 영상
+              </span>
+              <span className="text-[10px] leading-none text-slate-500">반경 500m 내</span>
             </div>
-            <span className="pl-5 text-[10px] leading-none text-slate-500">반경 500m 내</span>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex shrink-0 items-center gap-0.5 self-center">
             {listItems.length >= 2 ? (
               <>
                 <button

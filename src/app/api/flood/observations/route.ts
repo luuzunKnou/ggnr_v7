@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       ? `waterlevel/list/${time}/${encodeURIComponent(code)}.json`
       : `rainfall/list/${time}/${encodeURIComponent(code)}.json`;
 
-  const res = await fetchHrfco(apiKey, path, 'json');
+  const res = await fetchHrfco(apiKey, path, 'json', { quietCodes: [990] });
   if (!res.ok) {
     return NextResponse.json(res.body, { status: res.status });
   }

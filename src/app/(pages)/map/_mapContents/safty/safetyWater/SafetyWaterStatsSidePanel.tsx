@@ -168,6 +168,7 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
           rangeNotice={maxRangeNotice(timeType)}
           onChangeStart={(value) => applyRange(value, endValue)}
           onChangeEnd={(value) => applyRange(startValue, value)}
+          onApplyRange={applyRange}
         />
       </div>
     </div>

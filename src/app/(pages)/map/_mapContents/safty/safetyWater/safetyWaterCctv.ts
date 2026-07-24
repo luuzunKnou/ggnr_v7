@@ -85,7 +85,7 @@ export async function fetchMergedCctvList(bbox: Wgs84Bbox): Promise<ItsCctvItem[
   return merged;
 }
 
-/** 관측소 id → 500m 내 CCTV 1건 이상 */
+/** 수위 관측소 id → 500m 내 CCTV 1건 이상 (강수는 제외) */
 export function buildStationIdsWithCctv(
   stations: SafetyWaterStation[],
   items: ItsCctvItem[],
@@ -93,6 +93,7 @@ export function buildStationIdsWithCctv(
 ): Set<string> {
   const ids = new Set<string>();
   for (const st of stations) {
+    if (st.kind !== 'water') continue;
     if (items.some((it) => withinStation(it, st, maxM))) ids.add(st.id);
   }
   return ids;

@@ -76,8 +76,17 @@ export function buildFloodErrorBody(
   detail?: string
 ): FloodApiErrorBody {
   if (code != null) {
-    const errorClass = classifyHrfcoCode(code);
     const desc = describeHrfcoCode(code);
+    /** 990: 자료 없음 — 연계 실패가 아님 */
+    if (code === 990) {
+      return {
+        error: detail ? `${desc} (${detail})` : desc,
+        errorClass: 'ours',
+        code,
+        uiMessage: desc,
+      };
+    }
+    const errorClass = classifyHrfcoCode(code);
     return {
       error: detail ? `${desc} (${detail})` : desc,
       errorClass,

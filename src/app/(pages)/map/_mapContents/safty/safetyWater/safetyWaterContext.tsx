@@ -35,18 +35,28 @@ import type {
 const UI_MSG = {
   provider: '현재 제공처 상태가 원활하지 않습니다.',
   ours: '연계 실패',
+  noData: '검색된 자료가 없습니다.',
 } as const;
 
 function parseFloodError(data: unknown): FloodUiError | null {
   if (!data || typeof data !== 'object') return null;
   const o = data as Record<string, unknown>;
   if (o.errorClass !== 'provider' && o.errorClass !== 'ours') return null;
+  const code = typeof o.code === 'number' ? o.code : Number(o.code);
   return {
     errorClass: o.errorClass,
     uiMessage:
-      typeof o.uiMessage === 'string' && o.uiMessage ? o.uiMessage : UI_MSG[o.errorClass],
-    code: typeof o.code === 'number' ? o.code : undefined,
+      code === 990
+        ? UI_MSG.noData
+        : typeof o.uiMessage === 'string' && o.uiMessage
+          ? o.uiMessage
+          : UI_MSG[o.errorClass],
+    code: Number.isFinite(code) ? code : undefined,
   };
+}
+
+function isNoDataError(error: FloodUiError | null | undefined) {
+  return error?.code === 990;
 }
 
 function dist2(a: SafetyWaterStation, b: SafetyWaterStation) {
@@ -75,13 +85,18 @@ async function fetchStationObservation(st: SafetyWaterStation, time: FloodTimeTy
   const res = await fetch(`/api/flood/observations?${qs.toString()}`);
   const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
-    return {
-      ok: false as const,
-      error: parseFloodError(j) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours },
-    };
+    const error = parseFloodError(j) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours };
+    if (isNoDataError(error) || Number(j.code) === 990) {
+      return { ok: true as const, item: null, noData: true as const };
+    }
+    return { ok: false as const, error, noData: false as const };
   }
   const item = j.item as SafetyWaterObservation | null | undefined;
-  return { ok: true as const, item: item ? { ...item, stationName: st.name } : null };
+  return {
+    ok: true as const,
+    item: item ? { ...item, stationName: st.name } : null,
+    noData: false as const,
+  };
 }
 
 function avgToObservation(
@@ -138,6 +153,10 @@ type SafetyWaterContextValue = {
   stations: SafetyWaterStation[];
   waterObs: SafetyWaterObservation | null;
   rainObs: SafetyWaterObservation | null;
+  /** 수위 카드: HRFCO 990 등 자료 없음 */
+  waterNoData: boolean;
+  /** 강수 카드: HRFCO 990 등 자료 없음 */
+  rainNoData: boolean;
   obsError: FloodUiError | null;
   uiError: FloodUiError | null;
   selectedStationId: string | null;
@@ -168,6 +187,9 @@ type SafetyWaterContextValue = {
   forecastOpen: boolean;
   setForecastOpen: (open: boolean) => void;
   toggleForecastOpen: () => void;
+  /** 홍수 예보 패널 화면 하단 y (주변 도로 top 계산용). 닫히면 null */
+  forecastPanelBottomPx: number | null;
+  setForecastPanelBottomPx: (bottom: number | null) => void;
   cctvOpen: boolean;
   setCctvOpen: (open: boolean) => void;
   toggleCctvOpen: () => void;
@@ -209,6 +231,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   const [stations, setStations] = useState<SafetyWaterStation[]>([]);
   const [waterObs, setWaterObs] = useState<SafetyWaterObservation | null>(null);
   const [rainObs, setRainObs] = useState<SafetyWaterObservation | null>(null);
+  const [waterNoData, setWaterNoData] = useState(false);
+  const [rainNoData, setRainNoData] = useState(false);
   const [obsError, setObsError] = useState<FloodUiError | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [timeType, setTimeType] = useState<FloodTimeType>('10M');
@@ -216,6 +240,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   const [forecasts, setForecasts] = useState<SafetyWaterForecast[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastOpen, setForecastOpen] = useState(false);
+  const [forecastPanelBottomPx, setForecastPanelBottomPx] = useState<number | null>(null);
   const [cctvOpen, setCctvOpen] = useState(false);
   const [cctvLayerItems, setCctvLayerItems] = useState<ItsCctvItem[]>([]);
   const [cctvLoading, setCctvLoading] = useState(false);
@@ -332,6 +357,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
 
   const cctvListItems = useMemo(() => {
     if (!selectedStation) return cctvLayerItems;
+    if (selectedStation.kind !== 'water') return [];
     return cctvLayerItems.filter((it) =>
       withinStation(it, selectedStation, SAFETY_WATER_CCTV_NEAR_M)
     );
@@ -388,7 +414,9 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         if (cancelled || gen !== cctvFetchGenRef.current) return;
         setCctvLayerItems(
           merged.filter((it) =>
-            stations.some((st) => withinStation(it, st, SAFETY_WATER_CCTV_NEAR_M))
+            stations.some(
+              (st) => st.kind === 'water' && withinStation(it, st, SAFETY_WATER_CCTV_NEAR_M)
+            )
           )
         );
       } catch (e) {
@@ -417,9 +445,15 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   }, []);
 
   useEffect(() => {
+    if (!forecastOpen) setForecastPanelBottomPx(null);
+  }, [forecastOpen]);
+
+  useEffect(() => {
     if (stations.length === 0) {
       setWaterObs(null);
       setRainObs(null);
+      setWaterNoData(false);
+      setRainNoData(false);
       setObsError(null);
       return;
     }
@@ -432,25 +466,45 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
           const [waterRes, rainRes] = await Promise.all([
             waterTargetStation
               ? fetchStationObservation(waterTargetStation, timeType)
-              : Promise.resolve({ ok: true as const, item: null }),
+              : Promise.resolve({ ok: true as const, item: null, noData: false as const }),
             rainTargetStation
               ? fetchStationObservation(rainTargetStation, timeType)
-              : Promise.resolve({ ok: true as const, item: null }),
+              : Promise.resolve({ ok: true as const, item: null, noData: false as const }),
           ]);
           if (cancelled) return;
           setWaterObs(waterRes.ok ? waterRes.item : null);
           setRainObs(rainRes.ok ? rainRes.item : null);
-          setObsError(!waterRes.ok ? waterRes.error : !rainRes.ok ? rainRes.error : null);
+          setWaterNoData(waterRes.ok ? waterRes.noData : false);
+          setRainNoData(rainRes.ok ? rainRes.noData : false);
+          const err =
+            !waterRes.ok && !isNoDataError(waterRes.error)
+              ? waterRes.error
+              : !rainRes.ok && !isNoDataError(rainRes.error)
+                ? rainRes.error
+                : null;
+          setObsError(err);
         } else {
           const avgRes = await fetchAverageObservations(stations, timeType);
           if (cancelled) return;
           if (!avgRes.ok) {
-            setWaterObs(null);
-            setRainObs(null);
-            setObsError(avgRes.error);
+            if (isNoDataError(avgRes.error)) {
+              setWaterObs(null);
+              setRainObs(null);
+              setWaterNoData(true);
+              setRainNoData(true);
+              setObsError(null);
+            } else {
+              setWaterObs(null);
+              setRainObs(null);
+              setWaterNoData(false);
+              setRainNoData(false);
+              setObsError(avgRes.error);
+            }
           } else {
             setWaterObs(avgRes.water);
             setRainObs(avgRes.rain);
+            setWaterNoData(!avgRes.water || avgRes.water.averageCount === 0);
+            setRainNoData(!avgRes.rain || avgRes.rain.averageCount === 0);
             setObsError(null);
           }
         }
@@ -458,6 +512,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       } catch (e) {
         if (cancelled) return;
         console.error('[flood] loadCurrentObservations failed', e);
+        setWaterNoData(false);
+        setRainNoData(false);
         setObsError({ errorClass: 'ours', uiMessage: UI_MSG.ours });
       } finally {
         if (!cancelled) setObsLoading(false);
@@ -541,6 +597,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       stations,
       waterObs,
       rainObs,
+      waterNoData,
+      rainNoData,
       obsError,
       uiError,
       selectedStationId,
@@ -568,6 +626,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       forecastOpen,
       setForecastOpen,
       toggleForecastOpen,
+      forecastPanelBottomPx,
+      setForecastPanelBottomPx,
       cctvOpen,
       setCctvOpen,
       toggleCctvOpen,
@@ -590,6 +650,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       stations,
       waterObs,
       rainObs,
+      waterNoData,
+      rainNoData,
       obsError,
       uiError,
       selectedStationId,
@@ -614,6 +676,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       forecastLoading,
       forecastOpen,
       toggleForecastOpen,
+      forecastPanelBottomPx,
       cctvOpen,
       toggleCctvOpen,
       cctvLayerItems,

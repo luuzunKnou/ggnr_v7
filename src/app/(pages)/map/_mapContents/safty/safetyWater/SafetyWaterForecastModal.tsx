@@ -1,15 +1,13 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, X } from 'lucide-react';
 import { MapFloatingPanel } from '@/app/(pages)/map/_mapComponents/MapFloatingPanel';
-import {
-  FLOAT_PANEL_BELOW_SEARCH_TOP_EXTRA,
-  useSearchBarOffset,
-} from '@/app/(pages)/map/searchBarOffsetContext';
+import { useSearchBarOffset } from '@/app/(pages)/map/searchBarOffsetContext';
 import { cn } from '@/lib/utils';
 import { useSafetyWater } from './safetyWaterContext';
+import { safetyWaterForecastFloatTop } from './safetyWaterFloatLayout';
 import type { SafetyWaterForecast } from './safetyWaterTypes';
 
 type ForecastChip = '주의보' | '경보';
@@ -60,10 +58,17 @@ function ForecastDetailRows({ f }: { f: SafetyWaterForecast }) {
 }
 
 export function SafetyWaterForecastModal() {
-  const { forecastOpen, setForecastOpen, forecasts, forecastLoading } = useSafetyWater();
+  const {
+    forecastOpen,
+    setForecastOpen,
+    forecasts,
+    forecastLoading,
+    setForecastPanelBottomPx,
+  } = useSafetyWater();
   const { leftPx, topPx } = useSearchBarOffset();
   const [selectedChips, setSelectedChips] = useState<ForecastChip[]>(['주의보', '경보']);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = useMemo(
     () =>
@@ -84,9 +89,35 @@ export function SafetyWaterForecastModal() {
   };
 
   const anchorPosition = useMemo(
-    () => ({ top: topPx + FLOAT_PANEL_BELOW_SEARCH_TOP_EXTRA + 48, left: leftPx }),
+    () => ({ top: safetyWaterForecastFloatTop(topPx), left: leftPx }),
     [leftPx, topPx]
   );
+
+  useEffect(() => {
+    if (!forecastOpen) {
+      setForecastPanelBottomPx(null);
+      return;
+    }
+    const el = panelRef.current;
+    if (!el) return;
+
+    const report = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.height > 0) setForecastPanelBottomPx(rect.bottom);
+    };
+
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    const mo = new MutationObserver(report);
+    mo.observe(el, { attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('resize', report);
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener('resize', report);
+    };
+  }, [forecastOpen, filtered.length, expandedKey, setForecastPanelBottomPx]);
 
   if (!forecastOpen || typeof document === 'undefined') return null;
 
@@ -96,6 +127,7 @@ export function SafetyWaterForecastModal() {
       width="360px"
       maxHeight="55vh"
       defaultPosition={anchorPosition}
+      panelRef={panelRef}
       style={{ position: 'fixed', zIndex: 210 }}
       header={
         <>

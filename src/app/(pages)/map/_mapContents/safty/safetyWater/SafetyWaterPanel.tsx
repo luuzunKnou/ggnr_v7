@@ -97,6 +97,8 @@ export function SafetyWaterPanel({ onClose }: Props) {
     stations,
     waterObs,
     rainObs,
+    waterNoData,
+    rainNoData,
     obsError,
     uiError,
     selectedStationId,
@@ -161,6 +163,28 @@ export function SafetyWaterPanel({ onClose }: Props) {
           </button>
         </div>
 
+        <div className="flex h-10 w-full items-center gap-2 border-t border-slate-200/80 px-4">
+          <span className="text-[11px] leading-none text-slate-500">마지막 갱신</span>
+          <span className="text-[11px] font-medium leading-none tabular-nums text-slate-700">
+            {lastRefresh ? formatTime(lastRefresh) : '—'}
+          </span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={refreshStations}
+            disabled={refreshing || loading}
+            className={cn(
+              'inline-flex h-full cursor-pointer items-center gap-1 text-[11px] font-medium transition-colors',
+              refreshing || loading ? 'cursor-wait text-slate-400' : 'text-primary hover:text-primary/80'
+            )}
+            title="현황 새로고침"
+            aria-label="현황 새로고침"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', (refreshing || loading) && 'animate-spin')} />
+            새로고침
+          </button>
+        </div>
+
         <div ref={stationRowRef} className="relative border-t border-slate-200/80">
           <button
             type="button"
@@ -198,68 +222,45 @@ export function SafetyWaterPanel({ onClose }: Props) {
           />
         </div>
 
-        <div className="flex h-10 w-full items-center gap-2 border-t border-slate-200/80 px-4">
-          <span className="text-[11px] leading-none text-slate-500">마지막 갱신</span>
-          <span className="text-[11px] font-medium leading-none tabular-nums text-slate-700">
-            {lastRefresh ? formatTime(lastRefresh) : '—'}
-          </span>
-          <span className="flex-1" />
-          <button
-            type="button"
-            onClick={refreshStations}
-            disabled={refreshing || loading}
-            className={cn(
-              'inline-flex h-full cursor-pointer items-center gap-1 text-[11px] font-medium transition-colors',
-              refreshing || loading ? 'cursor-wait text-slate-400' : 'text-primary hover:text-primary/80'
-            )}
-            title="현황 새로고침"
-            aria-label="현황 새로고침"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', (refreshing || loading) && 'animate-spin')} />
-            새로고침
-          </button>
-        </div>
-
-        <div className="flex w-full items-center gap-2 border-t border-slate-200/80 px-4 py-2">
-          <div className="flex flex-col gap-1">
-            <TimeChipGroup value={timeType} onChange={setTimeType} />
-          </div>
-          <span className="flex-1" />
-          <button
-            type="button"
-            title="홍수 예보"
-            aria-label="홍수 예보"
-            aria-pressed={forecastOpen}
-            onClick={toggleForecastOpen}
-            className={cn(
-              'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
-              forecastOpen
-                ? 'border-rose-300 bg-rose-50 text-rose-700'
-                : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-            )}
-          >
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-            홍수 예보
-          </button>
-          <button
-            type="button"
-            title="주변 도로 현황"
-            aria-label="주변 도로 현황"
-            aria-pressed={cctvOpen}
-            disabled={!hasCctvForSelection}
-            onClick={toggleCctvOpen}
-            className={cn(
-              'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
-              !hasCctvForSelection
-                ? 'cursor-not-allowed border-slate-200 text-slate-400'
-                : cctvOpen
-                  ? 'border-sky-300 bg-sky-50 text-sky-700'
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200/80 px-4 py-2">
+          <TimeChipGroup value={timeType} onChange={setTimeType} />
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              title="홍수 예보"
+              aria-label="홍수 예보"
+              aria-pressed={forecastOpen}
+              onClick={toggleForecastOpen}
+              className={cn(
+                'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
+                forecastOpen
+                  ? 'border-rose-300 bg-rose-50 text-rose-700'
                   : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-            )}
-          >
-            <Cctv className="h-3.5 w-3.5" aria-hidden />
-            주변 도로
-          </button>
+              )}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+              홍수 예보
+            </button>
+            <button
+              type="button"
+              title="주변 도로 현황"
+              aria-label="주변 도로 현황"
+              aria-pressed={cctvOpen}
+              disabled={!hasCctvForSelection}
+              onClick={toggleCctvOpen}
+              className={cn(
+                'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
+                !hasCctvForSelection
+                  ? 'cursor-not-allowed border-slate-200 text-slate-400'
+                  : cctvOpen
+                    ? 'border-sky-300 bg-sky-50 text-sky-700'
+                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+              )}
+            >
+              <Cctv className="h-3.5 w-3.5" aria-hidden />
+              주변 도로
+            </button>
+          </div>
         </div>
       </div>
 
@@ -302,7 +303,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
               <h3 className="text-[12px] font-semibold text-slate-800">현재 강수량</h3>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {isAverageMode && rainObs?.averageCount != null ? (
+              {isAverageMode && rainObs?.averageCount != null && !rainNoData ? (
                 <span className="text-[10px] leading-none text-slate-500">
                   관측소 {rainObs.averageCount}개 평균
                 </span>
@@ -324,18 +325,24 @@ export function SafetyWaterPanel({ onClose }: Props) {
               </span>
             </div>
           </div>
-          <dl className="mt-2 space-y-1.5 text-[11px]">
-            <div className="flex justify-between gap-2">
-              <dt className="min-w-0 truncate text-slate-500">{rainLabel}</dt>
-              <dd className="shrink-0 font-medium tabular-nums text-slate-800">
-                {rainObs?.value != null ? `${rainObs.value.toFixed(1)} mm` : '— mm'}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-slate-500">데이터 기준 시각</dt>
-              <dd className="tabular-nums text-slate-600">{formatYmdhm(rainObs?.observedAt)}</dd>
-            </div>
-          </dl>
+          <div className="mt-2 space-y-1.5 text-[11px]">
+            {rainNoData && !obsLoading ? (
+              <p className="text-[11px] text-slate-500">검색된 자료가 없습니다.</p>
+            ) : (
+              <dl className="space-y-1.5">
+                <div className="flex justify-between gap-2">
+                  <dt className="min-w-0 truncate text-slate-500">{rainLabel}</dt>
+                  <dd className="shrink-0 font-medium tabular-nums text-slate-800">
+                    {rainObs?.value != null ? `${rainObs.value.toFixed(1)} mm` : '— mm'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">데이터 기준 시각</dt>
+                  <dd className="tabular-nums text-slate-600">{formatYmdhm(rainObs?.observedAt)}</dd>
+                </div>
+              </dl>
+            )}
+          </div>
           {obsLoading ? <Loader2 className="mt-2 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden /> : null}
         </div>
 
@@ -363,7 +370,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
               <h3 className="text-[12px] font-semibold text-slate-800">현재 수위</h3>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {isAverageMode && waterObs?.averageCount != null ? (
+              {isAverageMode && waterObs?.averageCount != null && !waterNoData ? (
                 <span className="text-[10px] leading-none text-slate-500">
                   관측소 {waterObs.averageCount}개 평균
                 </span>
@@ -385,18 +392,24 @@ export function SafetyWaterPanel({ onClose }: Props) {
               </span>
             </div>
           </div>
-          <dl className="mt-2 space-y-1.5 text-[11px]">
-            <div className="flex justify-between gap-2">
-              <dt className="min-w-0 truncate text-slate-500">{waterLabel}</dt>
-              <dd className="shrink-0 font-medium tabular-nums text-slate-800">
-                {waterObs?.value != null ? `${waterObs.value.toFixed(2)} m` : '— m'}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-slate-500">데이터 기준 시각</dt>
-              <dd className="tabular-nums text-slate-600">{formatYmdhm(waterObs?.observedAt)}</dd>
-            </div>
-          </dl>
+          <div className="mt-2 space-y-1.5 text-[11px]">
+            {waterNoData && !obsLoading ? (
+              <p className="text-[11px] text-slate-500">검색된 자료가 없습니다.</p>
+            ) : (
+              <dl className="space-y-1.5">
+                <div className="flex justify-between gap-2">
+                  <dt className="min-w-0 truncate text-slate-500">{waterLabel}</dt>
+                  <dd className="shrink-0 font-medium tabular-nums text-slate-800">
+                    {waterObs?.value != null ? `${waterObs.value.toFixed(2)} m` : '— m'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">데이터 기준 시각</dt>
+                  <dd className="tabular-nums text-slate-600">{formatYmdhm(waterObs?.observedAt)}</dd>
+                </div>
+              </dl>
+            )}
+          </div>
           {obsLoading ? <Loader2 className="mt-2 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden /> : null}
         </div>
 

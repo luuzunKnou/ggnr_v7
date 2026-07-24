@@ -17,6 +17,8 @@ export interface MapFloatingPanelProps {
   defaultPosition?: MapFloatingPanelPosition;
   width?: string;
   maxHeight?: string;
+  /** 루트 패널 DOM (높이·위치 측정용) */
+  panelRef?: React.Ref<HTMLDivElement | null>;
 }
 
 export function MapFloatingPanel({
@@ -27,6 +29,7 @@ export function MapFloatingPanel({
   defaultPosition = DEFAULT_POSITION,
   width = '380px',
   maxHeight = '80vh',
+  panelRef,
 }: MapFloatingPanelProps) {
   const useLeft = defaultPosition.left != null;
   const [position, setPosition] = useState(defaultPosition);
@@ -100,6 +103,7 @@ export function MapFloatingPanel({
 
   return (
     <div
+      ref={panelRef}
       className={cn(
         'flex flex-col rounded-xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto',
         className
