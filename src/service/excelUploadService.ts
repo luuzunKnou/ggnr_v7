@@ -475,6 +475,20 @@ export function parseAddressForPnu(address: string): ParsedPnuParts | null {
   return { emdName, riName, bonbun, bubun };
 }
 
+/** PNU 폴백 .log 한 줄 (plain text, `|` 구분) */
+function formatPnuFallbackLogLine(p: {
+  rowTag: string;
+  address: string;
+  parsed: ParsedPnuParts | null;
+  pnu: string | null;
+  jijukFound: boolean;
+}): string {
+  const parsePart = p.parsed
+    ? `parse=ok | emd=${p.parsed.emdName} | ri=${p.parsed.riName} | bonbun=${p.parsed.bonbun} | bubun=${p.parsed.bubun}`
+    : 'parse=fail';
+  return `${p.rowTag}${p.address} | ${parsePart} | pnu=${p.pnu ?? 'fail'} | jijuk=${p.jijukFound ? 'found' : 'not_found'}`;
+}
+
 export async function getPnuFromAddress(address: string): Promise<string | null> {
   const parsed = parseAddressForPnu(address);
   if (!parsed) return null;
@@ -563,7 +577,19 @@ export async function createTableFromExcel(params: {
   separateMulgunjiTable?: boolean;
   /** separateMulgunjiTable 시 layer.{name}_mulgunji 테이블 COMMENT (예: 한글레이어명_물건지) */
   mulgunjiTableComment?: string;
-}): Promise<{ success: boolean; error?: string; rowCount?: number; polygonMatchedCount?: number; polygonNullCount?: number }> {
+  /** 엑셀 행 번호(1-based) — PNU 폴백 .log 식별용 */
+  excelRowNumber?: number;
+  /** 키값 힌트 — PNU 폴백 .log 식별용 */
+  rowKeyHint?: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  rowCount?: number;
+  polygonMatchedCount?: number;
+  polygonNullCount?: number;
+  pnuAttemptCount?: number;
+  pnuOkCount?: number;
+}> {
   const tableName = safeTableName(params.tableName);
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const keyField = safeColumnName(params.keyField);
@@ -679,7 +705,7 @@ export async function createTableFromExcel(params: {
     };
     if (logPath && !appendOnly) {
       try {
-        await fs.writeFile(logPath, `# Geocoding 실패 → PNU 폴백 로그 (${new Date().toISOString()})\n`, 'utf-8');
+        await fs.writeFile(logPath, `### Geocoding 실패 → PNU 폴백 로그 (${new Date().toISOString()})\n`, 'utf-8');
       } catch {
         // ignore
       }
@@ -687,6 +713,12 @@ export async function createTableFromExcel(params: {
 
     let polygonMatchedCount = 0;
     let polygonNullCount = 0;
+    let pnuAttemptCount = 0;
+    let pnuOkCount = 0;
+    const rowTag =
+      params.excelRowNumber != null || params.rowKeyHint?.trim()
+        ? `row=${params.excelRowNumber ?? '?'} key=${(params.rowKeyHint ?? '').trim() || '(없음)'} | `
+        : '';
 
     // jijuk 테이블 좌표는 5181이나 컬럼 SRID가 0인 경우 있음 → 비교 시 geom에 5181 지정하여 동일 SRID로 연산
     const getJijukGeom = async (x: number, y: number, address?: string): Promise<string | null> => {
@@ -737,13 +769,20 @@ export async function createTableFromExcel(params: {
         } else {
           let wkt = await getJijukGeom(parcel.x, parcel.y, parcel.address);
           if (!wkt && parcel.address?.trim()) {
+            pnuAttemptCount++;
             const parsed = parseAddressForPnu(parcel.address);
             const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
             if (pnu) wkt = await getJijukGeomByPnu(pnu, geomSrid);
-            const parseStr = parsed ? `parse=ok emd=${parsed.emdName} ri=${parsed.riName} bonbun=${parsed.bonbun} bubun=${parsed.bubun}` : 'parse=fail';
-            const pnuStr = pnu ?? 'pnu=fail';
-            const jijukStr = wkt ? 'jijuk=found' : 'jijuk=not_found';
-            await appendPnuLog(`${parcel.address} | ${parseStr} | pnu=${pnuStr} | ${jijukStr}`);
+            if (wkt) pnuOkCount++;
+            await appendPnuLog(
+              formatPnuFallbackLogLine({
+                rowTag,
+                address: parcel.address,
+                parsed,
+                pnu,
+                jijukFound: !!wkt,
+              })
+            );
           }
           if (wkt) {
             geomWkt = wkt;
@@ -754,13 +793,20 @@ export async function createTableFromExcel(params: {
           }
         }
       } else if (geometryType === 'Polygon' && parcel.address?.trim()) {
+        pnuAttemptCount++;
         const parsed = parseAddressForPnu(parcel.address);
         const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
         const wkt = pnu ? await getJijukGeomByPnu(pnu, geomSrid) : null;
-        const parseStr = parsed ? `parse=ok emd=${parsed.emdName} ri=${parsed.riName} bonbun=${parsed.bonbun} bubun=${parsed.bubun}` : 'parse=fail';
-        const pnuStr = pnu ?? 'pnu=fail';
-        const jijukStr = wkt ? 'jijuk=found' : 'jijuk=not_found';
-        await appendPnuLog(`${parcel.address} | ${parseStr} | pnu=${pnuStr} | ${jijukStr}`);
+        if (wkt) pnuOkCount++;
+        await appendPnuLog(
+          formatPnuFallbackLogLine({
+            rowTag,
+            address: parcel.address,
+            parsed,
+            pnu,
+            jijukFound: !!wkt,
+          })
+        );
         if (wkt) {
           geomWkt = wkt;
           geomInputSrid = 5181;
@@ -891,6 +937,8 @@ export async function createTableFromExcel(params: {
     return {
       success: true,
       rowCount: insertCount,
+      pnuAttemptCount,
+      pnuOkCount,
       ...(geometryType === 'Polygon' && { polygonMatchedCount, polygonNullCount }),
     };
   } catch (e: unknown) {
@@ -926,7 +974,10 @@ export async function writeExcelWizardLog(params: {
   let out = `# Excel 마법사 처리 로그 (${ts})\n\n## 마법사 화면(4단계) 로그\n\n`;
   out += params.uiLines.length > 0 ? params.uiLines.join('\n') : '(로그 없음)';
   if (serverSection.trim()) {
-    out += `\n\n---\n\n## 행 삽입 중 서버 기록 (Geocoding 실패·PNU 폴백 등)\n\n${serverSection.trim()}`;
+    const serverBody = serverSection
+      .trim()
+      .replace(/^#\s+Geocoding 실패/m, '### Geocoding 실패');
+    out += `\n\n## 행 삽입 중 서버 기록 (Geocoding 실패·PNU 폴백 등)\n\n${serverBody}`;
   }
 
   try {

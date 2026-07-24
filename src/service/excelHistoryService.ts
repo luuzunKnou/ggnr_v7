@@ -2,9 +2,15 @@
  * Excel Upload History Service
  * - excel_upload_history CRUD
  */
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import { db } from '@/database/db';
 import { eh } from '@/database/schema/excel_upload_history';
 import { sql, desc, eq } from 'drizzle-orm';
+
+const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+/** 로그 파일 최대 읽기 크기 (2MB) — 그 이상은 잘림 */
+const MAX_LOG_BYTES = 2 * 1024 * 1024;
 
 export type ExcelHistoryRow = {
   ehKey: number;
@@ -190,5 +196,58 @@ export async function getLatestExcelHistoryByTable(params: { tableName?: string 
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, data: null, error: msg };
+  }
+}
+
+/**
+ * 이력의 엑셀 경로와 동일 폴더·동일 basename의 `.log` 내용을 읽는다.
+ * writeExcelWizardLog 와 같은 경로 규칙.
+ */
+export async function getExcelHistoryLog(params: {
+  sourcePath?: string;
+}): Promise<{
+  success: boolean;
+  content?: string;
+  logPath?: string;
+  truncated?: boolean;
+  error?: string;
+}> {
+  const sourcePath = params?.sourcePath?.trim();
+  if (!sourcePath) {
+    return { success: false, error: '파일 경로가 없습니다.' };
+  }
+
+  const relative = sourcePath.replace(/\//g, path.sep).replace(/^[/\\]+/, '');
+  const absoluteDir = path.join(GGNR_DATA_DIR, path.dirname(relative));
+  const base = path.basename(relative).replace(/\.xlsx?$/i, '');
+  const logAbs = path.resolve(absoluteDir, `${base}.log`);
+  const dataRoot = path.resolve(GGNR_DATA_DIR);
+  const relToRoot = path.relative(dataRoot, logAbs);
+  if (!relToRoot || relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
+    return { success: false, error: '허용되지 않은 경로입니다.' };
+  }
+
+  const logRelative = relToRoot.replace(/\\/g, '/');
+
+  try {
+    const stat = await fs.stat(logAbs);
+    if (!stat.isFile()) {
+      return { success: false, logPath: logRelative, error: '로그 파일이 없습니다.' };
+    }
+    const buf = await fs.readFile(logAbs);
+    const truncated = buf.length > MAX_LOG_BYTES;
+    const slice = truncated ? buf.subarray(0, MAX_LOG_BYTES) : buf;
+    let content = slice.toString('utf-8');
+    if (truncated) {
+      content += `\n\n… (이하 생략: 파일이 ${MAX_LOG_BYTES}바이트를 초과합니다)`;
+    }
+    return { success: true, content, logPath: logRelative, truncated };
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return { success: false, logPath: logRelative, error: '로그 파일이 없습니다.' };
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, logPath: logRelative, error: msg };
   }
 }

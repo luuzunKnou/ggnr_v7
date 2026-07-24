@@ -22,6 +22,14 @@ import {
 } from '@/lib/excelSheetParse';
 import { LEDGER_ROW_KEY_HEADER, expandDevBehaviorLedgerRowsAsync } from '@/lib/excelDevLedgerExpand';
 import { cn } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
+import {
+  buildExcelWizardClosingLines,
+  buildExcelWizardMetaLines,
+  formatGeocodeFailLine,
+  formatProcessDuration,
+} from './excelWizardProcessLog';
+import { ExcelProcessLogLines } from './ExcelProcessLogLines';
 
 type ParseResult = {
   headers: string[];
@@ -446,6 +454,7 @@ export function ExlWizardModal({
   showServerPickButton,
   onPickFromServer,
 }: Props) {
+  const { data: session } = useSession();
   const [step, setStep] = useState(1);
   const [pathOrResult, setPathOrResult] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -618,10 +627,10 @@ export function ExlWizardModal({
 
     const TOTAL_STEPS = 4;
   const stepLabels: Record<number, string> = {
-    1: '01. 파일 업로드',
-    2: '02. 지도에 표현할 값 선택',
-    3: '03. 영문·한글 파일명 및 필드명',
-    4: '04. 데이터 처리',
+    1: '파일 업로드',
+    2: '지도에 표현할 값 선택',
+    3: '영문·한글 파일명 및 필드명',
+    4: '데이터 처리',
   };
 
   const hasKorean = (s: string) => /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(s);
@@ -736,6 +745,8 @@ export function ExlWizardModal({
         ? syntheticKeyEngOk
         : hasKeySelected;
   const hasListSearchSelected = activeFieldDefs.some((f) => f.showList);
+  const listSearchAllSelected = fieldDefs.length > 0 && fieldDefs.every((f) => f.showList);
+  const listSearchSomeSelected = fieldDefs.some((f) => f.showList);
   const keyEngTrim = useSyntheticKeyField ? syntheticKeyEng.trim() : '';
   const keyColSafe = useSyntheticKeyField ? safeColumnName(keyEngTrim) : safeColumnName(activeFieldDefs.find((f) => f.isKey)?.headerEng ?? '');
   const keyNotDropped =
@@ -1092,7 +1103,42 @@ export function ExlWizardModal({
 
     const skEngRaw = syntheticKeyEng.trim();
     const skSafe = safeColumnName(skEngRaw);
+    const startedAt = new Date();
+    const startedMs = Date.now();
+    const operatorId = String(session?.user?.id ?? '').trim();
+    const operatorName = String(session?.user?.name ?? '').trim();
+    const operatorLabel =
+      operatorId && operatorName
+        ? `${operatorId}(${operatorName})`
+        : operatorId || operatorName || '미확인';
+    const writeMode = layerTableMeta?.exists
+      ? '덮어쓰기(기존 테이블 TRUNCATE 후 삽입)'
+      : '신규';
+    const parcelAddressMode =
+      parcelSelectMode === 'splitColumns'
+        ? '열 구분 조합'
+        : `한 열(${selectedGeocodingHeader ?? '-'})`;
+    const objectAddressMode =
+      objectAddressSelectMode === 'splitColumns'
+        ? '열 구분 조합'
+        : selectedObjectAddressHeader
+          ? `한 열(${selectedObjectAddressHeader})`
+          : '미사용';
 
+    pushLog(
+      ...buildExcelWizardMetaLines({
+        operatorLabel,
+        startedAtLabel: startedAt.toLocaleString(),
+        tableEng: tableEng.trim(),
+        tableKor: tableKor.trim() || tableEng.trim(),
+        writeMode,
+        keyFieldLabel: keyField || (useSyntheticKeyField ? skEngRaw : ''),
+        geometryType: geometryType ?? '-',
+        parcelAddressMode,
+        objectAddressMode,
+        sourcePath: pathOrResult,
+      })
+    );
     pushLog('주소 추출 및 지오코딩을 시작합니다.');
     if (isLedgerWorkflow) {
       pushLog('대장 업로드: 행키는 규칙(ledger_row_key) 고정, 4단계에서 행 확장 후 삽입합니다.');
@@ -1115,7 +1161,10 @@ export function ExlWizardModal({
     let effectivePath: string | null = pathOrResult;
     if (selectedFile && !pathOrResult) {
       pushLog('파일을 서버에 저장 중...');
-      const up = await upload(selectedFile, 'excel');
+      const te = safeTableName(tableEng.trim());
+      const up = await upload(selectedFile, 'excel', {
+        excelSavePath: `${te}/${selectedFile.name}`,
+      });
       if (!up?.savedPath) {
         const msg = up?.error ?? '파일 저장에 실패했습니다.';
         setProcessingError(msg);
@@ -1125,7 +1174,7 @@ export function ExlWizardModal({
       }
       setPathOrResult(up.savedPath);
       effectivePath = up.savedPath;
-      pushLog('파일 저장 완료.');
+      pushLog(`파일 저장 완료: ${up.savedPath}`);
     }
     setProcessingProgress(5);
 
@@ -1345,9 +1394,24 @@ export function ExlWizardModal({
           `점용대장정보 ${inserted.ledgerInfo ?? 0}건, 부과정보 ${inserted.charge ?? 0}건, 점용지 ${inserted.occupancyParcel ?? 0}건, 물건지 ${inserted.objectParcel ?? 0}건`,
           `도형 매칭: 성공 ${geom.resolved ?? 0}건, NULL ${geom.nullGeom ?? 0}건`
         );
+        pushLog(
+          ...buildExcelWizardClosingLines({
+            endedAtLabel: new Date().toLocaleString(),
+            durationLabel: formatProcessDuration(Date.now() - startedMs),
+            extractCount: andongRows.length,
+            coordOk: Number(geom.resolved ?? 0),
+            coordFail: Number(geom.nullGeom ?? 0),
+            pnuAttempt: 0,
+            pnuOk: 0,
+            jijukOk: Number(geom.resolved ?? 0),
+            jijukNull: Number(geom.nullGeom ?? 0),
+            insertCount: totalInsertCount,
+            defineResult: '안동 전용 처리(서버 내장)',
+            geoserverResult: '안동 전용 처리(서버 내장)',
+          })
+        );
         await flushLogToFile(effectivePath);
         setProcessingDone(true);
-        onSuccess?.();
         return;
       } catch (e: unknown) {
         andongEventSource.close();
@@ -1627,11 +1691,15 @@ export function ExlWizardModal({
     }
 
     let geocodeFailCount = 0;
-    const geocodeFailReasons: { address: string; reason: string }[] = [];
+    const geocodeFailReasons: { row: number; key: string; rawCell: string; address: string; reason: string }[] = [];
     const totalRows = workRows.length;
     let totalInsertCount = 0;
     let totalPolygonMatched = 0;
     let totalPolygonNull = 0;
+    let totalExtractCount = 0;
+    let totalCoordOk = 0;
+    let totalPnuAttempt = 0;
+    let totalPnuOk = 0;
 
     for (let i = 0; i < workRows.length; i++) {
       const row = workRows[i];
@@ -1653,6 +1721,19 @@ export function ExlWizardModal({
       const addresses = (addressesByRow.get(i) ?? []).map((a) => normalizeExcelAddressForGeocode(a)).filter(Boolean);
       rawText = unifiedAddressByRow.get(i) ?? '';
       const objectRawText = objectUnifiedAddressByRow.get(i) ?? '';
+      const rowKeyVal = String(
+        attrs[safeColumnName(keyField)] ?? attrs.ledger_row_key ?? attrs[skSafe] ?? ''
+      ).trim();
+      const pushGeocodeFail = (address: string, reason: string) => {
+        geocodeFailCount++;
+        geocodeFailReasons.push({
+          row: i + 1,
+          key: rowKeyVal,
+          rawCell: rawText || objectRawText,
+          address,
+          reason,
+        });
+      };
       const mulgunjiAddrs = (mulgunjiByRow.get(i) ?? [])
         .map((a) => normalizeExcelAddressForGeocode(a))
         .filter(Boolean);
@@ -1667,15 +1748,13 @@ export function ExlWizardModal({
           if (coord.ok) {
             mulgunjis.push({ address: addr, x: coord.lon, y: coord.lat });
           } else {
-            geocodeFailCount++;
             mulgunjis.push({ address: addr });
-            geocodeFailReasons.push({ address: addr, reason: coord.message || '물건지 GetCoord 실패' });
+            pushGeocodeFail(addr, coord.message || '물건지 GetCoord 실패');
           }
         } catch (e: unknown) {
-          geocodeFailCount++;
           mulgunjis.push({ address: addr });
           const msg = e instanceof Error ? e.message : String(e);
-          geocodeFailReasons.push({ address: addr, reason: msg || '물건지 API 오류' });
+          pushGeocodeFail(addr, msg || '물건지 API 오류');
         }
       }
 
@@ -1691,20 +1770,21 @@ export function ExlWizardModal({
           if (coord.ok) {
             parcels.push({ address: addr, x: coord.lon, y: coord.lat });
           } else {
-            geocodeFailCount++;
             parcels.push({ address: addr });
-            geocodeFailReasons.push({ address: addr, reason: coord.message || 'GetCoord 실패' });
+            pushGeocodeFail(addr, coord.message || 'GetCoord 실패');
           }
         } catch (e: unknown) {
-          geocodeFailCount++;
           parcels.push({ address: addr });
           const msg = e instanceof Error ? e.message : String(e);
-          geocodeFailReasons.push({ address: addr, reason: msg || 'API 오류' });
+          pushGeocodeFail(addr, msg || 'API 오류');
         }
       }
       if (addresses.length === 0) parcels.push({ address: '' });
 
+      const extractN = addresses.filter((a) => a.trim()).length;
       const coordOk = parcels.filter((p) => p.x != null && p.y != null).length;
+      totalExtractCount += extractN;
+      totalCoordOk += coordOk;
       const resultText =
         addresses.length > 0
           ? ` — 필지 ${addresses.length}개 추출, ${coordOk}개 좌표 획득`
@@ -1751,6 +1831,8 @@ export function ExlWizardModal({
             separateMulgunjiTable,
             jijukTableComment: `${(tableKor || tableEng).trim()}_필지목록`,
             mulgunjiTableComment: `${(tableKor || tableEng).trim()}_물건지`,
+            excelRowNumber: i + 1,
+            rowKeyHint: rowKeyVal,
           },
         });
         const createData = createRes?.data ?? createRes;
@@ -1762,6 +1844,8 @@ export function ExlWizardModal({
           return;
         }
         totalInsertCount += createData.rowCount ?? 0;
+        totalPnuAttempt += createData.pnuAttemptCount ?? 0;
+        totalPnuOk += createData.pnuOkCount ?? 0;
         if (geometryType === 'Polygon') {
           totalPolygonMatched += createData.polygonMatchedCount ?? 0;
           totalPolygonNull += createData.polygonNullCount ?? 0;
@@ -1776,8 +1860,8 @@ export function ExlWizardModal({
     }
 
     const failLogLines = [`지오코딩 실패: ${geocodeFailCount}건`];
-    geocodeFailReasons.forEach(({ address, reason }) => {
-      failLogLines.push(`  · ${address}: ${reason}`);
+    geocodeFailReasons.forEach((f) => {
+      failLogLines.push(formatGeocodeFailLine(f));
     });
     pushLog(...failLogLines);
     setProcessingProgress(85);
@@ -1786,11 +1870,14 @@ export function ExlWizardModal({
       if (geometryType === 'Polygon' && (totalPolygonMatched > 0 || totalPolygonNull > 0)) {
         pushLog(
           `[지적(jijuk) 폴리곤 매칭] 성공 ${totalPolygonMatched}건, 미매칭(geom NULL) ${totalPolygonNull}건`,
-          '  - 서버 콘솔에서 상세 로그 확인 가능 (매칭 성공/미매칭 좌표, 오류 메시지)',
+          '  - 서버 .log 하단에 PNU 폴백 상세(행·키·주소)가 이어 붙습니다.',
         );
       }
       setProcessingProgress(90);
-      await call('', 'POST', {
+      let defineResult = '미실행';
+      let geoserverResult = '미실행';
+      let fieldMapResult = '미실행';
+      const defineRes = await call('', 'POST', {
         service: 'excelUploadService',
         action: 'createDefineTableAndFieldsForExcel',
         params: {
@@ -1816,8 +1903,12 @@ export function ExlWizardModal({
             : {}),
         },
       });
+      const defineData = defineRes?.data ?? defineRes;
+      defineResult = defineData?.success === false
+        ? `실패: ${defineData?.error ?? '알 수 없음'}`
+        : '성공';
       setProcessingProgress(95);
-      await call('', 'POST', {
+      const gsRes = await call('', 'POST', {
         service: 'excelUploadService',
         action: 'createGeoServerLayerForExcel',
         params: {
@@ -1831,6 +1922,10 @@ export function ExlWizardModal({
             : {}),
         },
       });
+      const gsData = gsRes?.data ?? gsRes;
+      geoserverResult = gsData?.success === false
+        ? `실패: ${gsData?.error ?? '알 수 없음'}`
+        : '성공';
       const fieldMap: Record<string, string> = {};
       if (isLedgerWorkflow) {
         fieldMap[LEDGER_ROW_KEY_HEADER] = 'ledger_row_key';
@@ -1838,13 +1933,34 @@ export function ExlWizardModal({
       activeFieldDefs.forEach((f) => {
         if (f.headerEng) fieldMap[f.originalHeader] = f.headerEng;
       });
-      await call('', 'POST', {
+      const mapRes = await call('', 'POST', {
         service: 'excelUploadService',
         action: 'writeExcelFieldNameMap',
         params: { entries: fieldMap },
       });
+      const mapData = mapRes?.data ?? mapRes;
+      fieldMapResult = mapData?.success === false
+        ? `실패: ${mapData?.error ?? '알 수 없음'}`
+        : '성공';
       setProcessingProgress(100);
       pushLog('완료.', `삽입 행 수: ${totalInsertCount}`);
+      pushLog(
+        ...buildExcelWizardClosingLines({
+          endedAtLabel: new Date().toLocaleString(),
+          durationLabel: formatProcessDuration(Date.now() - startedMs),
+          extractCount: totalExtractCount,
+          coordOk: totalCoordOk,
+          coordFail: geocodeFailCount,
+          pnuAttempt: totalPnuAttempt,
+          pnuOk: totalPnuOk,
+          jijukOk: totalPolygonMatched,
+          jijukNull: totalPolygonNull,
+          insertCount: totalInsertCount,
+          defineResult,
+          geoserverResult,
+          fieldMapResult,
+        })
+      );
       await flushLogToFile(effectivePath);
       const geocodingDef =
         parcelSelectMode === 'singleColumn' && selectedGeocodingHeader
@@ -1869,11 +1985,27 @@ export function ExlWizardModal({
         },
       }).catch(() => {});
       setProcessingDone(true);
-      onSuccess?.();
     } catch (e: unknown) {
       const err = e instanceof Error ? e.message : String(e);
       setProcessingError(err);
       pushLog(err);
+      pushLog(
+        ...buildExcelWizardClosingLines({
+          endedAtLabel: new Date().toLocaleString(),
+          durationLabel: formatProcessDuration(Date.now() - startedMs),
+          extractCount: totalExtractCount,
+          coordOk: totalCoordOk,
+          coordFail: geocodeFailCount,
+          pnuAttempt: totalPnuAttempt,
+          pnuOk: totalPnuOk,
+          jijukOk: totalPolygonMatched,
+          jijukNull: totalPolygonNull,
+          insertCount: totalInsertCount,
+          defineResult: '오류로 중단',
+          geoserverResult: '오류로 중단',
+          fieldMapResult: '오류로 중단',
+        })
+      );
       await flushLogToFile(effectivePath);
     }
   }, [
@@ -1907,7 +2039,6 @@ export function ExlWizardModal({
     diffDropColumns,
     geometryType,
     apiKeys,
-    onSuccess,
     selectedFile,
     pathOrResult,
     upload,
@@ -1916,6 +2047,8 @@ export function ExlWizardModal({
     syntheticKeyKor,
     createSeparateJijukTable,
     createSeparateMulgunjiTable,
+    session?.user?.id,
+    session?.user?.name,
   ]);
 
   useEffect(() => {
@@ -1926,6 +2059,7 @@ export function ExlWizardModal({
   }, [step, processingDone, processingError, runStep4]);
 
   const handleClose = () => {
+    const shouldNotifySuccess = processingDone;
     step4StartedRef.current = false;
     setStep(1);
     setPathOrResult(null);
@@ -1974,11 +2108,13 @@ export function ExlWizardModal({
     setProcessingDone(false);
     setProcessingError(null);
     onOpenChange(false);
+    // 4단계 완료 직후가 아니라 닫기(버튼·ESC·바깥 클릭) 시에만 이력 탭 등으로 이동
+    if (shouldNotifySuccess) onSuccess?.();
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="w-[1200px] h-[700px] min-w-[1200px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col gap-y-2 p-4" showCloseButton>
+      <DialogContent className="w-[1200px] h-[800px] min-w-[1200px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col gap-y-2 p-4" showCloseButton>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" aria-hidden />
@@ -2684,7 +2820,7 @@ export function ExlWizardModal({
                   {schemaDiff.excelBoth.length > 0 && (
                     <div>
                       <p className="text-xs font-medium text-green-800 dark:text-green-300 mb-1">양쪽에 있음 ({schemaDiff.excelBoth.length})</p>
-                      <ul className="text-xs space-y-0.5 list-disc list-inside text-muted-foreground">
+                      <ul className="text-xs space-y-0.5 list-disc list-inside text-muted-foreground max-h-32 overflow-y-auto">
                         {schemaDiff.excelBoth.map((f) => (
                           <li key={f.originalHeader}>
                             {f.headerKor} → <span className="font-mono text-foreground">{safeColumnName(f.headerEng)}</span>
@@ -2757,10 +2893,15 @@ export function ExlWizardModal({
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                   테이블명 요약
                 </p>
-                <p className="text-sm">
-                  <span className="text-muted-foreground">한글</span> {tableKor || '—'}{' '}
-                  <span className="text-muted-foreground ml-2">영문</span>{' '}
-                  <span className="font-mono">{tableEng || '—'}</span>
+                <p className="text-sm flex flex-wrap items-baseline gap-x-8 gap-y-1">
+                  <span className="inline-flex items-baseline gap-3">
+                    <span className="text-muted-foreground shrink-0">한글</span>
+                    <span>{tableKor || '—'}</span>
+                  </span>
+                  <span className="inline-flex items-baseline gap-3">
+                    <span className="text-muted-foreground shrink-0">영문</span>
+                    <span className="font-mono">{tableEng || '—'}</span>
+                  </span>
                 </p>
               </div>
 
@@ -2829,7 +2970,7 @@ export function ExlWizardModal({
                 </div>
               )}
 
-              <div className="flex min-h-0 flex-1 flex-col gap-1.5 rounded-md border border-gray-200 bg-muted/30 p-2">
+              <div className="flex min-h-[180px] flex-1 flex-col gap-1.5 rounded-md border border-gray-200 bg-muted/30 p-2">
                 <p className="shrink-0 text-xs font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
                   {isLedgerWorkflow || isAndongRoadUseWorkflow
@@ -2840,13 +2981,30 @@ export function ExlWizardModal({
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-gray-100 border-b border-gray-200 sticky top-0 z-[1]">
-                        <th className="text-left font-medium py-0.5 px-2 border-r border-gray-200 last:border-r-0">한글명</th>
-                        <th className="text-left font-medium py-0.5 px-2 border-r border-gray-200 last:border-r-0">영문명</th>
-                        <th className="text-center font-medium py-0.5 px-1 border-r border-gray-200 last:border-r-0 w-16">목록·검색</th>
+                        <th className="text-left font-medium py-1 px-2 border-r border-gray-200 last:border-r-0 w-[43%]">한글명</th>
+                        <th className="text-left font-medium py-1 px-2 border-r border-gray-200 last:border-r-0 w-[43%]">영문명</th>
+                        <th className="text-center font-medium py-1 px-1 border-r border-gray-200 last:border-r-0 w-20">
+                          <label className="inline-flex cursor-pointer items-center justify-center gap-1" title="목록·검색 전체 선택/해제">
+                            <input
+                              type="checkbox"
+                              checked={listSearchAllSelected}
+                              ref={(el) => {
+                                if (el) el.indeterminate = listSearchSomeSelected && !listSearchAllSelected;
+                              }}
+                              onChange={() => {
+                                const next = !listSearchAllSelected;
+                                setFieldDefs((prev) =>
+                                  prev.map((f) => ({ ...f, showList: next, showSearch: next }))
+                                );
+                              }}
+                            />
+                            <span>목록·검색</span>
+                          </label>
+                        </th>
                         {!isLedgerWorkflow && !isAndongRoadUseWorkflow ? (
                           <th
                             className={cn(
-                              'text-center font-medium py-0.5 px-1 w-11 border-l border-transparent',
+                              'text-center font-medium py-1 px-1 w-11 border-l border-transparent',
                               useSyntheticKeyField && 'bg-muted/80 text-muted-foreground'
                             )}
                             title={
@@ -2955,11 +3113,9 @@ export function ExlWizardModal({
               </div>
               <div
                 ref={processingLogScrollRef}
-                className="rounded-md border border-gray-200 bg-muted/30 p-3 text-xs font-mono h-[340px] overflow-auto shadow-xs"
+                className="rounded-md border border-gray-200 bg-muted/30 p-3 h-[530px] overflow-auto shadow-xs"
               >
-                {processingLog.map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
+                <ExcelProcessLogLines lines={processingLog} />
               </div>
             </div>
           )}
