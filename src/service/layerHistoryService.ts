@@ -411,12 +411,17 @@ export async function abortIncompleteLayerHistory(params: {
       await db.execute(sql`
         DELETE FROM sync_log
         WHERE sl_operation IS NULL
-          AND sl_superseded_at IS NULL
           AND LOWER(sl_table_name) IN (${sql.join(
             tableNames.map((n) => sql`${n.toLowerCase()}`),
             sql`, `
           )})
       `);
+      try {
+        const { dropShpSyncTempTablesForNames } = await import('./shpUploadService');
+        await dropShpSyncTempTablesForNames({ tableNames });
+      } catch {
+        /* best-effort */
+      }
     }
 
     await db.delete(dh).where(eq(dh.dhLhKey, lhKey));

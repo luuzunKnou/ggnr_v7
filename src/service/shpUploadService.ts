@@ -2390,7 +2390,7 @@ function syncLogJsonAttrHashSql(jsonExpr: string, dbCols: string[]): string {
 
 /**
  * sync_log JSONB 내용 해시 — PostgreSQL jsonb canonical ::text 기준.
- * 미결 중복/대체 판정에서 JSONB 통째 IS DISTINCT FROM 대신 사용 (의미≈jsonb 동등).
+ * 미결 중복 판정에서 JSONB 통째 IS DISTINCT FROM 대신 사용 (의미≈jsonb 동등).
  */
 function syncLogJsonbContentHashSql(jsonExpr: string): string {
   return `md5(COALESCE((${jsonExpr})::text, ''))`;
@@ -2516,6 +2516,43 @@ async function dropShpSyncTempTable(dbSchema: string, syncTableName: string): Pr
     await db.execute(sql.raw(`DROP TABLE IF EXISTS ${dbSchema}."${syncTableName}"`));
   } catch {
     // cleanup best-effort
+  }
+}
+
+/**
+ * 위저드 중단·이전 단계 복귀 시 비교용 임시 테이블 일괄 삭제.
+ * `_sync_` / `_sync_match_` / `_sync_shpread_` 접두 테이블을 대상 스키마에서 DROP.
+ */
+export async function dropShpSyncTempTablesForNames(params: {
+  tableNames: string[];
+}): Promise<{ success: boolean; dropped: string[]; error?: string }> {
+  const tableNames = [
+    ...new Set((params?.tableNames ?? []).map((n) => String(n ?? '').trim()).filter(Boolean)),
+  ];
+  if (tableNames.length === 0) return { success: true, dropped: [] };
+  const dropped: string[] = [];
+  try {
+    for (const raw of tableNames) {
+      const tableName = safeTableName(raw.replace(/\.shp$/i, ''));
+      if (!tableName) continue;
+      const dbSchema = await resolveDefineTableSchema(tableName);
+      const candidates = [
+        `_sync_${tableName}`,
+        `_sync_match_${tableName}`,
+        `_sync_shpread_${tableName}`,
+      ];
+      for (const syncName of candidates) {
+        await dropShpSyncTempTable(dbSchema, syncName);
+        dropped.push(`${dbSchema}.${syncName}`);
+      }
+    }
+    return { success: true, dropped };
+  } catch (e: unknown) {
+    return {
+      success: false,
+      dropped,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
@@ -3573,12 +3610,11 @@ export async function compareShpWithTable(params: {
     timing.mark('removeFetch');
 
     // --- sync_log에 미결(operation=NULL) 상태로 저장 ---
-    // 기존 미결 건은 삭제하지 않고 대체됨(superseded) 표시만 남겨 이력을 보존 (중복 업로드 대응).
-    // 단, 직전 미결 건과 데이터가 완전히 동일하면 재삽입하지 않고 그대로 둔다 — 매번 재검증할 때마다
-    // 변경 없는 후보까지 통째로 superseded 처리 후 재삽입하면 sync_log가 무의미하게 계속 불어난다.
+    // 재비교 시 달라진·사라진 미결은 삭제하고, 내용이 동일하면 재삽입하지 않는다.
+    // 변경 없는 후보까지 통째로 지운 뒤 재삽입하면 sync_log가 무의미하게 계속 불어난다.
 
     // append: old=NULL, new=SHP (단, 이미 "유지"로 검토 끝난 동일 SHP 값은 재등록하지 않음)
-    // 미결 중복/대체 판정은 JSONB 통째 비교 대신 content_hash(md5 of jsonb::text) 사용 — 저장 값은 그대로.
+    // 미결 중복 판정은 JSONB 통째 비교 대신 content_hash(md5 of jsonb::text) 사용 — 저장 값은 그대로.
     const newHash = syncLogJsonbContentHashSql('new_data');
     const oldHash = syncLogJsonbContentHashSql('old_data');
     const slNewHash = syncLogJsonbContentHashSql('sl.sl_new_data');
@@ -3596,12 +3632,10 @@ export async function compareShpWithTable(params: {
            SELECT key_val, new_data, ${newHash} AS content_hash
            FROM candidate_rows
          ),
-         superseded AS (
-           UPDATE sync_log sl
-           SET sl_superseded_at = NOW()
+         deleted AS (
+           DELETE FROM sync_log sl
            WHERE sl.sl_table_name = '${tableName}'
              AND sl.sl_operation IS NULL
-             AND sl.sl_superseded_at IS NULL
              AND sl.sl_old_data IS NULL
              AND (
                NOT EXISTS (SELECT 1 FROM candidates c WHERE c.key_val = sl.sl_key_value)
@@ -3618,16 +3652,16 @@ export async function compareShpWithTable(params: {
          FROM candidates c
          WHERE NOT EXISTS (
            SELECT 1 FROM sync_log sl2
-           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL AND sl2.sl_superseded_at IS NULL
+           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL
              AND sl2.sl_old_data IS NULL AND sl2.sl_key_value = c.key_val
              AND ${sl2NewHash} = c.content_hash
          )`
       ));
     } else {
-      // 이번 회차에 append 후보가 하나도 없으면, 이전 append 미결 건들은 전부 해소된 것이므로 superseded 처리만 한다.
+      // 이번 회차에 append 후보가 하나도 없으면, 이전 append 미결 건들은 전부 해소된 것이므로 삭제한다.
       await db.execute(sql.raw(
-        `UPDATE sync_log SET sl_superseded_at = NOW()
-         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL AND sl_superseded_at IS NULL
+        `DELETE FROM sync_log
+         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL
            AND sl_old_data IS NULL`
       ));
     }
@@ -3645,12 +3679,10 @@ export async function compareShpWithTable(params: {
              ${newHash} AS new_content_hash
            FROM candidate_rows
          ),
-         superseded AS (
-           UPDATE sync_log sl
-           SET sl_superseded_at = NOW()
+         deleted AS (
+           DELETE FROM sync_log sl
            WHERE sl.sl_table_name = '${tableName}'
              AND sl.sl_operation IS NULL
-             AND sl.sl_superseded_at IS NULL
              AND sl.sl_old_data IS NOT NULL AND sl.sl_new_data IS NOT NULL
              AND (
                NOT EXISTS (SELECT 1 FROM candidates c WHERE c.key_val = sl.sl_key_value)
@@ -3670,17 +3702,17 @@ export async function compareShpWithTable(params: {
          FROM candidates c
          WHERE NOT EXISTS (
            SELECT 1 FROM sync_log sl2
-           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL AND sl2.sl_superseded_at IS NULL
+           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL
              AND sl2.sl_old_data IS NOT NULL AND sl2.sl_new_data IS NOT NULL AND sl2.sl_key_value = c.key_val
              AND ${sl2OldHash} = c.old_content_hash
              AND ${sl2NewHash} = c.new_content_hash
          )`
       ));
     } else {
-      // 이번 회차에 conflict 후보가 하나도 없으면, 이전 conflict 미결 건들은 전부 해소된 것이므로 superseded 처리만 한다.
+      // 이번 회차에 conflict 후보가 하나도 없으면, 이전 conflict 미결 건들은 전부 해소된 것이므로 삭제한다.
       await db.execute(sql.raw(
-        `UPDATE sync_log SET sl_superseded_at = NOW()
-         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL AND sl_superseded_at IS NULL
+        `DELETE FROM sync_log
+         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL
            AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL`
       ));
     }
@@ -3695,12 +3727,10 @@ export async function compareShpWithTable(params: {
            SELECT key_val, old_data, ${oldHash} AS content_hash
            FROM candidate_rows
          ),
-         superseded AS (
-           UPDATE sync_log sl
-           SET sl_superseded_at = NOW()
+         deleted AS (
+           DELETE FROM sync_log sl
            WHERE sl.sl_table_name = '${tableName}'
              AND sl.sl_operation IS NULL
-             AND sl.sl_superseded_at IS NULL
              AND sl.sl_new_data IS NULL
              AND (
                NOT EXISTS (SELECT 1 FROM candidates c WHERE c.key_val = sl.sl_key_value)
@@ -3717,16 +3747,16 @@ export async function compareShpWithTable(params: {
          FROM candidates c
          WHERE NOT EXISTS (
            SELECT 1 FROM sync_log sl2
-           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL AND sl2.sl_superseded_at IS NULL
+           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL
              AND sl2.sl_new_data IS NULL AND sl2.sl_key_value = c.key_val
              AND ${sl2OldHash} = c.content_hash
          )`
       ));
     } else {
-      // 이번 회차에 remove 후보가 하나도 없으면, 이전 remove 미결 건들은 전부 해소된 것이므로 superseded 처리만 한다.
+      // 이번 회차에 remove 후보가 하나도 없으면, 이전 remove 미결 건들은 전부 해소된 것이므로 삭제한다.
       await db.execute(sql.raw(
-        `UPDATE sync_log SET sl_superseded_at = NOW()
-         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL AND sl_superseded_at IS NULL
+        `DELETE FROM sync_log
+         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL
            AND sl_new_data IS NULL AND sl_old_data IS NOT NULL`
       ));
     }
@@ -3871,7 +3901,7 @@ export async function applySyncEntries(params: {
     const keyList = slKeys.join(', ');
     const logRes = await db.execute(sql.raw(
       `SELECT sl_key, sl_table_name, sl_key_field, sl_key_value, sl_old_data, sl_new_data
-       FROM sync_log WHERE sl_key IN (${keyList}) AND sl_operation IS NULL AND sl_superseded_at IS NULL ORDER BY sl_key`
+       FROM sync_log WHERE sl_key IN (${keyList}) AND sl_operation IS NULL ORDER BY sl_key`
     ));
     const logs = logRes.rows as Array<{
       sl_key: number; sl_table_name: string; sl_key_field: string;
@@ -4071,7 +4101,7 @@ export async function keepSyncEntries(params: {
     const appliedSql = params.intentOnly ? 'NULL' : 'NOW()';
     const res = await db.execute(sql.raw(
       `UPDATE sync_log SET sl_operation = 'kept', sl_applied_at = ${appliedSql}, sl_dh_key = ${dhKeyVal}
-       WHERE sl_key IN (${keyList}) AND sl_operation IS NULL AND sl_superseded_at IS NULL
+       WHERE sl_key IN (${keyList}) AND sl_operation IS NULL
        RETURNING sl_key`
     ));
     const keptCount = (res.rows as Array<{ sl_key: number }>).length;
@@ -4096,8 +4126,7 @@ export async function clearSyncIntents(params: {
        SET sl_operation = NULL, sl_applied_at = NULL, sl_dh_key = NULL
        WHERE sl_key IN (${keyList})
          AND sl_operation IS NOT NULL
-         AND sl_applied_at IS NULL
-         AND sl_superseded_at IS NULL`
+         AND sl_applied_at IS NULL`
     ));
     return { success: true, clearedCount: (res as { rowCount?: number }).rowCount ?? 0 };
   } catch (e: unknown) {
@@ -4140,7 +4169,6 @@ export async function commitSyncIntents(params: {
        WHERE LOWER(sl_table_name) = LOWER('${safeTbl}')
          AND sl_operation = 'kept'
          AND sl_applied_at IS NULL
-         AND sl_superseded_at IS NULL
          AND (sl_dh_key IS NULL OR sl_dh_key = ${dhKey})
        RETURNING sl_key`
     ));
@@ -4151,7 +4179,6 @@ export async function commitSyncIntents(params: {
        WHERE LOWER(sl_table_name) = LOWER('${safeTbl}')
          AND sl_operation IN ('append', 'conflict', 'remove')
          AND sl_applied_at IS NULL
-         AND sl_superseded_at IS NULL
          AND (sl_dh_key IS NULL OR sl_dh_key = ${dhKey})
        ORDER BY sl_key`
     ));
@@ -4308,7 +4335,6 @@ function buildSyncLogWhere(params: {
     if (currentSessionOnly) where += ` AND sl_dh_key IS NULL`;
   }
   if (pendingOnly) where += ` AND sl_operation IS NULL`;
-  where += ` AND sl_superseded_at IS NULL`;
 
   if (tab && tab !== 'all') {
     if (tab === 'pending') where += ` AND sl_operation IS NULL`;
@@ -4354,7 +4380,106 @@ function enrichLightSyncLogRow(row: Record<string, unknown>): Record<string, unk
   return row;
 }
 
-/** sync_log 조회 (page/limit 있으면 페이징, light면 geom 제외) */
+/**
+ * 신규 레이어 일괄 import 후 — 현재 테이블 행을 sync_log에 append(반영 완료)로 남긴다.
+ * 이력 탭 «이력 조회»에서 신규 import 내용을 볼 수 있게 한다.
+ * 동일 dhKey에 이미 로그가 있으면 재삽입하지 않는다.
+ */
+export async function recordNewLayerImportLogs(params: {
+  tableName: string;
+  dhKey: number;
+  sourceSrs?: string | null;
+}): Promise<{ success: boolean; appendedCount?: number; error?: string }> {
+  const tableName = safeTableName(params?.tableName ?? '');
+  const dhKey = Math.floor(Number(params?.dhKey));
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  if (!Number.isFinite(dhKey) || dhKey <= 0) return { success: false, error: 'dhKey가 필요합니다.' };
+
+  const keyField = getKeyFieldName(tableName);
+  if (!keyField) {
+    return {
+      success: false,
+      error: `key 필드가 설정되어 있지 않습니다. 레이어 속성정보에서 key를 설정하세요. (${tableName})`,
+    };
+  }
+
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const dbSchema = await resolveDefineTableSchema(tableName);
+
+    const existing = await db.execute(sql.raw(
+      `SELECT count(*)::int AS cnt FROM sync_log
+       WHERE sl_dh_key = ${dhKey}`
+    ));
+    const existingCnt = (existing.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
+    if (existingCnt > 0) {
+      return { success: true, appendedCount: existingCnt };
+    }
+
+    const dbColumns = await fetchInfoSchemaColumns(dbSchema, tableName);
+    const resolvedKeyDb = resolveSyncedColumn(dbColumns, keyField);
+    if (!resolvedKeyDb) {
+      return { success: false, error: `key 필드 '${keyField}'가 테이블에 존재하지 않습니다.` };
+    }
+
+    let geometryDb: string | null = null;
+    try {
+      const gCol = await db.execute(sql.raw(
+        `SELECT f_geometry_column::text AS col FROM geometry_columns
+         WHERE f_table_schema = '${dbSchema}' AND f_table_name = '${tableName}' LIMIT 1`
+      ));
+      const c = (gCol.rows as Array<{ col: string }>)[0]?.col;
+      if (c?.trim()) geometryDb = c.trim();
+    } catch {
+      geometryDb = null;
+    }
+    if (!geometryDb && dbColumns.includes('geom')) geometryDb = 'geom';
+
+    const geomPair: SyncColPair | null = geometryDb
+      ? { db: geometryDb, sync: geometryDb }
+      : null;
+    const attrPairs: SyncColPair[] = dbColumns
+      .filter(
+        (c) =>
+          c !== resolvedKeyDb
+          && (!geometryDb || c !== geometryDb)
+          && c.toLowerCase() !== 'ogc_fid',
+      )
+      .map((c) => ({ db: c, sync: c }));
+
+    const rowJson = syncLogRowJsonSqlFromPairs('e', attrPairs, geomPair, {
+      includeRollbackGeom: true,
+      sourceSrs: params.sourceSrs ?? null,
+    });
+    const safeKeyField = resolvedKeyDb.replace(/'/g, "''");
+
+    const inserted = await db.execute(sql.raw(
+      `INSERT INTO sync_log (
+         sl_dh_key, sl_table_name, sl_key_field, sl_key_value,
+         sl_operation, sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back
+       )
+       SELECT
+         ${dhKey},
+         '${tableName.replace(/'/g, "''")}',
+         '${safeKeyField}',
+         btrim(e."${resolvedKeyDb}"::text),
+         'append',
+         NULL,
+         (${rowJson}),
+         NOW(),
+         false
+       FROM ${dbSchema}."${tableName}" e
+       WHERE e."${resolvedKeyDb}" IS NOT NULL
+         AND btrim(e."${resolvedKeyDb}"::text) <> ''
+       RETURNING sl_key`
+    ));
+    return { success: true, appendedCount: inserted.rows?.length ?? 0 };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 function normalizeSyncLogFieldFilters(raw: unknown): string[] | undefined {
   if (raw == null) return undefined;
   if (Array.isArray(raw)) {
@@ -4480,9 +4605,9 @@ export async function getSyncLogs(params: {
          (${syncLogGeomMetaComparableSql(`sl_old_data -> 'geom'`)} IS DISTINCT FROM ${syncLogGeomMetaComparableSql(`sl_new_data -> 'geom'`)}) AS geom_changed,
          sl_old_data -> 'geom' ->> 'type' AS old_geom_type,
          sl_new_data -> 'geom' ->> 'type' AS new_geom_type,
-         sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at, sl_superseded_at`
+         sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at`
       : `sl_key, sl_dh_key, sl_table_name, sl_key_field, sl_key_value, sl_operation,
-         sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at, sl_superseded_at`;
+         sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at`;
 
     const limitSql = usePaging ? ` LIMIT ${pageSize} OFFSET ${offset}` : '';
     // 목록을 COUNT보다 먼저 — 필터 시 1페이지 데이터를 건수 집계보다 먼저 확보
@@ -4593,7 +4718,7 @@ export async function getSyncLogDetail(params: {
     const { sql } = await import('drizzle-orm');
     const res = await db.execute(sql.raw(
       `SELECT sl_key, sl_dh_key, sl_table_name, sl_key_field, sl_key_value, sl_operation,
-              sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at, sl_superseded_at
+              sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at
        FROM sync_log WHERE sl_key = ${slKey} LIMIT 1`
     ));
     const row = (res.rows as Array<Record<string, unknown>>)[0];

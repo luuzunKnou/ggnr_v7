@@ -683,10 +683,12 @@ export function ShpWizardModal({
         error: '테이블 없음 — 2단계에서 구성요소를 먼저 생성하세요.',
       };
     }
-    if (!(row.pathOrResult in oldRowCountsRef.current)) {
-      oldRowCountsRef.current[row.pathOrResult] = await fetchTableRowCount(tableName);
-    }
     const layerRow = layers.find((l) => l.name.toLowerCase() === row.sourceFile.toLowerCase());
+    // 신규는 적재 전 기준(0). 기존만 비교 직전 DB 행 수를 «이전»으로 스냅샷.
+    if (!(row.pathOrResult in oldRowCountsRef.current)) {
+      oldRowCountsRef.current[row.pathOrResult] =
+        layerRow?.schemaStatus === 'new' ? 0 : await fetchTableRowCount(tableName);
+    }
     // 비교 전 초안 확보 — 이후 유지 선택 시 sl_dh_key가 NULL로 남지 않음
     const dhKeyBefore = await ensureDhKeyForTable({
       tableName,
@@ -1047,7 +1049,13 @@ export function ShpWizardModal({
         }
 
         const rowCount = componentsOk ? await fetchTableRowCount(tableName) : null;
-        const oldRowCount = oldRowCountsRef.current[status.pathOrResult] ?? (isNewLayer ? 0 : null);
+        // 신규: 이전은 항상 0, 추가 = 적재 후 행 수 (일괄 import는 정합성 비교 건수가 없음)
+        const oldRowCount = isNewLayer
+          ? 0
+          : (oldRowCountsRef.current[status.pathOrResult] ?? null);
+        if (isNewLayer && rowCount != null && rowCount > 0) {
+          syncAppend = rowCount;
+        }
         const defineMeta = defineMap.get(tableName.toLowerCase());
         // 비교 추가·변경·삭제 0 → «변경 없음». 미결·비교 건수가 있으면 0으로 «변경 없음» 처리하지 않음.
         const appliedDiff = syncAppend + syncUpdated + syncRemoved;
@@ -1584,6 +1592,11 @@ export function ShpWizardModal({
           action: 'clearUnappliedSyncLogs',
           params: { tableNames },
         }).catch(() => {});
+        void call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'dropShpSyncTempTablesForNames',
+          params: { tableNames },
+        }).catch(() => {});
       }
       setStep(2);
       setConsistencyRows([]);
@@ -1638,6 +1651,11 @@ export function ShpWizardModal({
           alert(typeof d?.error === 'string' ? d.error : '미반영 정합성 로그 정리에 실패했습니다.');
           return false;
         }
+        await call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'dropShpSyncTempTablesForNames',
+          params: { tableNames },
+        }).catch(() => {});
       }
       if (lhKey != null) {
         const res = await call('', 'POST', {
@@ -1768,7 +1786,29 @@ export function ShpWizardModal({
       let syncRemoved = r.syncRemoved;
       let commitError: string | undefined;
 
-      if (r.layerType !== '신규' && status?.table) {
+      if (r.layerType === '신규' && status?.table) {
+        // 신규 일괄 import → 행 단위 append 로그를 남겨 «이력 조회» 가능하게 함
+        try {
+          const logRes = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'recordNewLayerImportLogs',
+            params: {
+              tableName,
+              dhKey,
+              sourceSrs: sourceSrsOverride,
+            },
+          });
+          const ld = logRes?.data ?? logRes;
+          if (ld?.success && typeof ld.appendedCount === 'number' && ld.appendedCount > 0) {
+            syncAppend = ld.appendedCount;
+          } else if (typeof r.rowCount === 'number' && r.rowCount > 0) {
+            syncAppend = r.rowCount;
+          }
+          // key 미설정 등으로 로그 실패해도 건수(이전0·추가N)는 저장. 이력 조회는 비어 있을 수 있음.
+        } catch {
+          if (typeof r.rowCount === 'number' && r.rowCount > 0) syncAppend = r.rowCount;
+        }
+      } else if (r.layerType !== '신규' && status?.table) {
         try {
           const commitRes = await call('', 'POST', {
             service: 'shpUploadService',
@@ -1836,27 +1876,36 @@ export function ShpWizardModal({
         : hasDiff || syncKept > 0
           ? '정합성 검증'
           : '기존';
-      const countPatch = initial
+      const newRowCount = r.rowCount ?? 0;
+      const countPatch = r.layerType === '신규'
         ? {
-            appendCount: initial.appendCount,
-            conflictCount: initial.conflictCount,
-            removeCount: initial.removeCount,
+            appendCount: syncAppend > 0 ? syncAppend : newRowCount,
+            conflictCount: 0,
+            removeCount: 0,
           }
-        : syncAppend + syncUpdated + syncRemoved + syncKept > 0
+        : initial
           ? {
-              appendCount: syncAppend,
-              conflictCount: syncUpdated + syncKept,
-              removeCount: syncRemoved,
+              appendCount: initial.appendCount,
+              conflictCount: initial.conflictCount,
+              removeCount: initial.removeCount,
             }
-          : {};
+          : syncAppend + syncUpdated + syncRemoved + syncKept > 0
+            ? {
+                appendCount: syncAppend,
+                conflictCount: syncUpdated + syncKept,
+                removeCount: syncRemoved,
+              }
+            : {};
       const result = commitError ? '실패' : (r.result === '실패' ? '실패' : '성공');
       const contents = commitError
         ? commitError
         : result === '성공'
           ? (
-              syncAppend + syncUpdated + syncKept + syncRemoved > 0
-                ? buildSyncSummary(syncAppend, syncUpdated, syncKept, syncRemoved)
-                : (r.syncSummary || '변경 없음')
+              r.layerType === '신규'
+                ? (r.syncSummary || '신규 레이어 import')
+                : syncAppend + syncUpdated + syncKept + syncRemoved > 0
+                  ? buildSyncSummary(syncAppend, syncUpdated, syncKept, syncRemoved)
+                  : (r.syncSummary || '변경 없음')
             )
           : (r.remark || '실패');
       try {
@@ -1865,8 +1914,8 @@ export function ShpWizardModal({
           action: 'updateDetailCounts',
           params: {
             dhKey,
-            oldData: r.oldRowCount ?? 0,
-            newData: r.rowCount ?? 0,
+            oldData: r.layerType === '신규' ? 0 : (r.oldRowCount ?? 0),
+            newData: newRowCount,
             ...countPatch,
           },
         });
@@ -2176,7 +2225,7 @@ export function ShpWizardModal({
                           <tr className="text-left text-muted-foreground">
                             <th className="w-10 px-2 py-1.5">#</th>
                             <th className="px-2 py-1.5">레이어 (SHP)</th>
-                            <th className="w-42 px-2 py-1.5 text-center">좌표계(EPSG)</th>
+                            <th className="w-56 px-2 py-1.5 text-center">좌표계(EPSG)</th>
                             <th className="w-20 px-2 py-1.5 text-center">정합성 검증</th>
                             <th className="min-w-[9rem] px-2 py-1.5">비고</th>
                             <th className="w-24 px-2 py-1.5 text-right">크기</th>
@@ -2193,11 +2242,11 @@ export function ShpWizardModal({
                                 {row.name.replace(/\.shp$/i, '')}
                               </td>
                               <td className="px-2 py-1 text-center">
-                                <div className="flex items-center gap-1">
+                                <div className="flex w-full items-center gap-1">
                                   <select
                                     value={row.epsg != null ? `EPSG:${row.epsg}` : ''}
                                     onChange={(e) => handleManualEpsgChange(row.name, e.target.value)}
-                                    className="h-6 rounded border border-input bg-background px-1 font-mono text-[12px]"
+                                    className="h-7 min-w-0 flex-1 rounded border border-input bg-background px-1.5 font-mono text-[12px]"
                                     disabled={isBusy}
                                   >
                                     <option value="" disabled hidden>좌표계 탐색중…</option>
@@ -2212,7 +2261,7 @@ export function ShpWizardModal({
                                       type="button"
                                       disabled={isBusy}
                                       onClick={() => void openCrsModalForFile(`${readyPath.replace(/\/$/, '')}/${row.name}`, row.epsg ?? null)}
-                                      className="text-[11px] text-blue-600 hover:underline disabled:pointer-events-none disabled:opacity-40 dark:text-blue-400"
+                                      className="shrink-0 text-[11px] text-blue-600 hover:underline disabled:pointer-events-none disabled:opacity-40 dark:text-blue-400"
                                     >
                                       확인
                                     </button>
