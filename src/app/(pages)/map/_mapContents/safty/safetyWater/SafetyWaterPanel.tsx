@@ -28,32 +28,28 @@ const TIME_OPTIONS: { value: FloodTimeType; label: string }[] = [
 ];
 
 function formatTime(d: Date) {
-  return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day} ${h}:${mi}`;
 }
 
-/** Ymdhm: 12+ → HH:mm, 10 → MM-DD HH시, 8 → YYYY-MM-DD */
+/** 데이터 기준 시각: 항상 yyyy-MM-dd HH:mm (검색 단위와 무관) */
 function formatYmdhm(ymdhm: string | undefined) {
   if (!ymdhm) return '—';
   const s = ymdhm.replace(/\D/g, '');
   if (s.length >= 12) {
-    return `${s.slice(8, 10)}:${s.slice(10, 12)}`;
-  }
-  if (s.length >= 10) {
-    return `${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}시`;
-  }
-  if (s.length >= 8) {
-    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-  }
-  return '—';
-}
-
-function formatForecastAncdt(raw: string) {
-  const s = raw.replace(/\D/g, '');
-  if (s.length >= 12) {
     return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}`;
   }
-  if (s.length >= 8) return formatYmdhm(s);
-  return raw || '—';
+  if (s.length >= 10) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:00`;
+  }
+  if (s.length >= 8) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} 00:00`;
+  }
+  return '—';
 }
 
 function TimeChipGroup({
@@ -118,8 +114,6 @@ export function SafetyWaterPanel({ onClose }: Props) {
     isAverageMode,
     lastRefresh,
     refreshStations,
-    forecasts,
-    forecastLoading,
     forecastOpen,
     toggleForecastOpen,
     cctvOpen,
@@ -338,7 +332,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
               </dd>
             </div>
             <div className="flex justify-between gap-2">
-              <dt className="text-slate-500">기준 시각</dt>
+              <dt className="text-slate-500">데이터 기준 시각</dt>
               <dd className="tabular-nums text-slate-600">{formatYmdhm(rainObs?.observedAt)}</dd>
             </div>
           </dl>
@@ -399,49 +393,12 @@ export function SafetyWaterPanel({ onClose }: Props) {
               </dd>
             </div>
             <div className="flex justify-between gap-2">
-              <dt className="text-slate-500">기준 시각</dt>
+              <dt className="text-slate-500">데이터 기준 시각</dt>
               <dd className="tabular-nums text-slate-600">{formatYmdhm(waterObs?.observedAt)}</dd>
             </div>
           </dl>
           {obsLoading ? <Loader2 className="mt-2 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden /> : null}
         </div>
-
-        <section className="rounded-[5px] border border-slate-200/90 bg-white p-3 shadow-sm">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" strokeWidth={1.75} aria-hidden />
-            <h3 className="text-[12px] font-semibold text-slate-800">홍수 예보 발령</h3>
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-              (더미)
-            </span>
-          </div>
-          <p className="mt-1.5 text-[10px] text-slate-500">최근 24시간 내 예보</p>
-          {forecastLoading ? (
-            <Loader2 className="mt-2 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />
-          ) : forecasts.length === 0 ? (
-            <p className="mt-2 text-[11px] text-slate-500">해당 없음</p>
-          ) : (
-            <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
-              {forecasts.map((f, i) => (
-                <li
-                  key={`${f.sttnm}-${f.ancdt}-${f.no}-${i}`}
-                  className="rounded border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-[11px]"
-                >
-                  <div className="font-medium text-slate-800">
-                    {f.kind || '예보'}
-                    {f.obsnm ? ` · ${f.obsnm}` : ''}
-                  </div>
-                  <div className="mt-0.5 text-slate-500">
-                    {formatForecastAncdt(f.ancdt)}
-                    {f.rvrnm ? ` · ${f.rvrnm}` : ''}
-                  </div>
-                  {f.wrnaranm ? (
-                    <div className="mt-0.5 truncate text-[10px] text-slate-500">주의 지역 · {f.wrnaranm}</div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
 
         <section className="rounded-[5px] border border-slate-200/90 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2">

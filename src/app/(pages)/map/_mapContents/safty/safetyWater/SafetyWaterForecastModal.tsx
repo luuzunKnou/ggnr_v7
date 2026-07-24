@@ -119,6 +119,7 @@ export function SafetyWaterForecastModal() {
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
+        <p className="text-[11px] text-slate-500">현재 시간 기준 최근 24시간 자료 제공</p>
         <div className="flex flex-wrap gap-1.5">
           {FORECAST_CHIPS.map(({ id, label }) => {
             const on = selectedChips.includes(id);
