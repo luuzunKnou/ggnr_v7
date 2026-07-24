@@ -4,6 +4,7 @@ import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
 import { LayerManagerContent } from "./LayerManagerContent"
+import { DataHistoryManagerContent } from "./DataHistoryManagerContent"
 import { GeoserverManagerContent } from "./GeoserverManagerContent"
 import { LasFileUploaderContent } from "./LasFileUploaderContent"
 import { ShpFileUploaderContent } from "./ShpFileUploaderContent"
@@ -46,6 +47,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     icon: Database,
     menuIds: [
       "layerManager",
+      "dataHistoryManager",
       "orthophotoManager",
       "dataFileUploader",
       "systemIntegration",
@@ -103,6 +105,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "비공개 리소스 개별 신청 승인·반려"
     case "layerManager":
       return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
+    case "dataHistoryManager":
+      return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
     case "systemVar":
       return "현재 프로젝트 runtime.env (GGNR_PROJECT) 를 표에서 바로 편집합니다."
     case "dbManager":
@@ -164,8 +168,14 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return <AccessRequestQueue />
     case "layerManager":
       return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-13rem)]">
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <LayerManagerContent />
+        </div>
+      )
+    case "dataHistoryManager":
+      return (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <DataHistoryManagerContent />
         </div>
       )
     case "systemVar":
