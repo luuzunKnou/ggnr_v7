@@ -1,0 +1,14 @@
+[
+  { "stationId": "st-01", "levelM": 1.24, "status": "주의", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-02", "levelM": 0.86, "status": "정상", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-03", "levelM": 1.58, "status": "주의", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-04", "levelM": 2.11, "status": "경계", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-05", "levelM": 1.92, "status": "주의", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-06", "levelM": 0.71, "status": "정상", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-07", "levelM": 1.05, "status": "정상", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-08", "levelM": 0.54, "status": "정상", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-09", "levelM": 0.98, "status": "정상", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-10", "levelM": 2.45, "status": "경계", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-11", "levelM": 1.67, "status": "주의", "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-12", "levelM": 0.63, "status": "정상", "observedAt": "2026-07-23T12:00:00+09:00" }
+]

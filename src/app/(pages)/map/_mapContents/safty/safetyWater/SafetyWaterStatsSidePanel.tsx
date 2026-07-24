@@ -1,0 +1,175 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FileSpreadsheet, X } from 'lucide-react';
+import { SafetyWaterStatsPanel, type StatsKindBlock } from './SafetyWaterStatsPanel';
+import { useSafetyWater } from './safetyWaterContext';
+import {
+  convertStatsRange,
+  defaultStatsRange,
+  isNotFuture,
+  isStatsRangeValid,
+  maxRangeNotice,
+  parseLocalDateTime,
+  toApiRangeToken,
+} from './safetyWaterTimeRange';
+import type { FloodTimeType, FloodUiError, SafetyWaterStatPoint, SafetyWaterStationKind } from './safetyWaterTypes';
+
+const UI_MSG = { ours: '연계 실패' } as const;
+
+function parseFloodError(data: unknown): FloodUiError | null {
+  if (!data || typeof data !== 'object') return null;
+  const o = data as Record<string, unknown>;
+  if (o.errorClass !== 'provider' && o.errorClass !== 'ours') return null;
+  return {
+    errorClass: o.errorClass,
+    uiMessage:
+      typeof o.uiMessage === 'string' && o.uiMessage
+        ? o.uiMessage
+        : o.errorClass === 'provider'
+          ? '현재 제공처 상태가 원활하지 않습니다.'
+          : UI_MSG.ours,
+    code: typeof o.code === 'number' ? o.code : undefined,
+  };
+}
+
+function kindLabelOf(kind: SafetyWaterStationKind) {
+  return kind === 'water' ? '수위' : '강수량';
+}
+
+export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) {
+  const { statsKinds, getStatsTargetStations, timeType } = useSafetyWater();
+  const initial = defaultStatsRange(timeType);
+  const [startValue, setStartValue] = useState(initial.start);
+  const [endValue, setEndValue] = useState(initial.end);
+  const [itemsByKind, setItemsByKind] = useState<Partial<Record<SafetyWaterStationKind, SafetyWaterStatPoint[]>>>(
+    {}
+  );
+  const [loadingByKind, setLoadingByKind] = useState<Partial<Record<SafetyWaterStationKind, boolean>>>({});
+  const prevTimeRef = useRef<FloodTimeType>(timeType);
+  const rangeRef = useRef({ start: startValue, end: endValue });
+  rangeRef.current = { start: startValue, end: endValue };
+
+  useEffect(() => {
+    const prev = prevTimeRef.current;
+    if (prev === timeType) return;
+    const next = convertStatsRange(prev, timeType, rangeRef.current);
+    prevTimeRef.current = timeType;
+    setStartValue(next.start);
+    setEndValue(next.end);
+  }, [timeType]);
+
+  useEffect(() => {
+    if (statsKinds.length === 0) return;
+    if (!isNotFuture(startValue, timeType) || !isNotFuture(endValue, timeType)) return;
+    if (!isStatsRangeValid(timeType, startValue, endValue)) return;
+
+    const startDate = parseLocalDateTime(startValue);
+    const endDate = parseLocalDateTime(endValue);
+    if (!startDate || !endDate) return;
+
+    const sdt = toApiRangeToken(startDate, timeType);
+    const edt = toApiRangeToken(endDate, timeType);
+    let cancelled = false;
+
+    const run = async () => {
+      await Promise.all(
+        statsKinds.map(async (kind) => {
+          setLoadingByKind((prev) => ({ ...prev, [kind]: true }));
+          try {
+            const stations = getStatsTargetStations(kind);
+            const res = await fetch('/api/flood/observations/stats', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                kind,
+                time: timeType,
+                sdt,
+                edt,
+                stations: stations.map((item) => ({ code: item.code })),
+              }),
+            });
+            const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+            if (cancelled) return;
+            if (!res.ok) {
+              console.error('[flood] loadStats failed', parseFloodError(j));
+              setItemsByKind((prev) => ({ ...prev, [kind]: [] }));
+              return;
+            }
+            setItemsByKind((prev) => ({
+              ...prev,
+              [kind]: Array.isArray(j.items) ? (j.items as SafetyWaterStatPoint[]) : [],
+            }));
+          } catch (e) {
+            if (cancelled) return;
+            console.error('[flood] loadStats failed', e);
+            setItemsByKind((prev) => ({ ...prev, [kind]: [] }));
+          } finally {
+            if (!cancelled) setLoadingByKind((prev) => ({ ...prev, [kind]: false }));
+          }
+        })
+      );
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [statsKinds, startValue, endValue, timeType, getStatsTargetStations]);
+
+  const applyRange = useCallback((nextStart: string, nextEnd: string) => {
+    setStartValue(nextStart);
+    setEndValue(nextEnd);
+  }, []);
+
+  const blocks: StatsKindBlock[] = useMemo(
+    () =>
+      statsKinds.map((kind) => ({
+        kind,
+        kindLabel: kindLabelOf(kind),
+        items: itemsByKind[kind] ?? [],
+        loading: !!loadingByKind[kind],
+      })),
+    [statsKinds, itemsByKind, loadingByKind]
+  );
+
+  if (statsKinds.length === 0) return null;
+
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden opacity-[0.98]">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-gradient-to-b from-[#f0f9fc] to-white px-4 py-3">
+        <h2 className="min-w-0 text-[15px] font-semibold leading-tight text-slate-800">기간별 통계</h2>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            title="엑셀 다운로드(예정)"
+            aria-label="엑셀 다운로드(예정)"
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-emerald-600 transition-colors hover:bg-emerald-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            title="닫기"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/90 p-3">
+        <SafetyWaterStatsPanel
+          blocks={blocks}
+          timeType={timeType}
+          startValue={startValue}
+          endValue={endValue}
+          rangeNotice={maxRangeNotice(timeType)}
+          onChangeStart={(value) => applyRange(value, endValue)}
+          onChangeEnd={(value) => applyRange(startValue, value)}
+        />
+      </div>
+    </div>
+  );
+}

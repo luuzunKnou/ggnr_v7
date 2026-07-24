@@ -1,0 +1,14 @@
+[
+  { "stationId": "st-01", "rain1hMm": 12.4, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-02", "rain1hMm": 8.1, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-03", "rain1hMm": 15.6, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-04", "rain1hMm": 22.3, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-05", "rain1hMm": 18.9, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-06", "rain1hMm": 5.2, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-07", "rain1hMm": 11.0, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-08", "rain1hMm": 3.7, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-09", "rain1hMm": 9.4, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-10", "rain1hMm": 27.1, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-11", "rain1hMm": 14.8, "observedAt": "2026-07-23T12:00:00+09:00" },
+  { "stationId": "st-12", "rain1hMm": 6.5, "observedAt": "2026-07-23T12:00:00+09:00" }
+]
