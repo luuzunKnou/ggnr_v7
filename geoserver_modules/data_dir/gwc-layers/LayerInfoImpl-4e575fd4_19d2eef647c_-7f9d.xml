@@ -1,9 +1,5 @@
 <GeoServerTileLayer>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3f73bcf1_19cc8020009_57be.xml
-  <id>LayerInfoImpl--3f73bcf1:19cc8020009:57be</id>
-========
   <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7f9d</id>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f9d.xml
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:river_d_index</name>
@@ -14,11 +10,6 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3f73bcf1_19cc8020009_57be.xml
-    </gridSubset>
-    <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
-========
       <extent>
         <coords>
           <double>129.0031808932782</double>
@@ -38,7 +29,6 @@
           <double>4411361.754518664</double>
         </coords>
       </extent>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f9d.xml
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -52,11 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3f73bcf1_19cc8020009_57be.xml
-      <defaultStyle>generic</defaultStyle>
-========
       <defaultStyle>river_d_index</defaultStyle>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f9d.xml
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

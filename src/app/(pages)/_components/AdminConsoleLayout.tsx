@@ -40,6 +40,8 @@ type AdminConsoleLayoutProps = {
   onLogout?: () => void | Promise<void>
   /** 설정 시 서브메뉴별 console:{area}:{menuId} 권한 적용 */
   consoleArea?: ConsoleAreaId
+  /** 해당 메뉴 선택 시 사이드바를 아이콘 모드로 접음 (예: 레이어 관리) */
+  autoCollapseMenuIds?: readonly string[]
 }
 
 export function AdminConsoleLayout({
@@ -54,6 +56,7 @@ export function AdminConsoleLayout({
   renderHeaderActions,
   onLogout,
   consoleArea,
+  autoCollapseMenuIds,
 }: AdminConsoleLayoutProps) {
   const { getPolicy, loading: accessLoading } = useConsoleMenuAccess()
   const [deniedOpen, setDeniedOpen] = useState(false)
@@ -157,6 +160,13 @@ export function AdminConsoleLayout({
     if (!collapsedStorageKey || typeof window === "undefined") return
     window.localStorage.setItem(collapsedStorageKey, collapsed ? "1" : "0")
   }, [collapsed, collapsedStorageKey])
+
+  useEffect(() => {
+    if (!autoCollapseMenuIds?.length) return
+    if (autoCollapseMenuIds.includes(selectedMenu)) {
+      setCollapsed(true)
+    }
+  }, [selectedMenu, autoCollapseMenuIds])
 
   useEffect(() => {
     if (accessLoading || !consoleArea) return

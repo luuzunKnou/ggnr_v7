@@ -1,15 +1,8 @@
 <GeoServerTileLayer>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--4fde225b_19da052eb3b_-5c05.xml
-  <id>LayerInfoImpl--4fde225b:19da052eb3b:-5c05</id>
-  <enabled>true</enabled>
-  <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:20260422_huga_03</name>
-========
   <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7f91</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:river_plan_hd_lm</name>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f91.xml
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -19,17 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--4fde225b_19da052eb3b_-5c05.xml
-          <double>128.43373571809556</double>
-          <double>36.33518480868565</double>
-          <double>128.99217198414897</double>
-          <double>36.81195439069194</double>
-========
           <double>129.0056261146717</double>
           <double>36.58745871879057</double>
           <double>129.21262497442166</double>
           <double>36.798486052091185</double>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f91.xml
         </coords>
       </extent>
     </gridSubset>
@@ -37,17 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--4fde225b_19da052eb3b_-5c05.xml
-          <double>1.4297178060816271E7</double>
-          <double>4346840.842473733</double>
-          <double>1.435934290159383E7</double>
-          <double>4412927.966489126</double>
-========
           <double>1.436084060855269E7</double>
           <double>4381758.795402805</double>
           <double>1.4383883616214842E7</double>
           <double>4411055.439871805</double>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f91.xml
         </coords>
       </extent>
     </gridSubset>
@@ -63,11 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--4fde225b_19da052eb3b_-5c05.xml
-      <defaultStyle>20260422_huga_03</defaultStyle>
-========
       <defaultStyle>river_plan_hd_lm</defaultStyle>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f91.xml
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

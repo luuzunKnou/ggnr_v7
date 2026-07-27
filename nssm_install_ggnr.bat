@@ -30,9 +30,12 @@ echo.
 :: 관리자 여부
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [오류] 관리자 권한 CMD에서 실행하세요.
+  echo [오류] 관리자 실행이 아닙니다.
+  echo         이 스크립트는 관리자 CMD에서 실행해야 합니다.
+  echo         CMD를 마우스 오른쪽 버튼 → «관리자 권한으로 실행» 후 다시 실행하세요.
   exit /b 1
 )
+echo [확인] 관리자 권한으로 실행 중입니다.
 
 if not exist "%APP_BAT%" (
   echo [오류] ggnr_start.bat 이 root에 없습니다: %APP_BAT%
@@ -71,7 +74,7 @@ if not errorlevel 1 (
   set /p "DO_REREG=삭제 후 재등록할까요? (Y/N): "
   if /i not "!DO_REREG!"=="Y" (
     echo [중단] 기존 서비스를 유지합니다. 재등록하지 않았습니다.
-    exit /b 0
+    exit /b 2
   )
   echo [nssm-install] 기존 서비스 중지/제거...
   "%NSSM%" stop %SERVICE_NAME% confirm >nul 2>&1

@@ -2899,7 +2899,9 @@ export async function fixLayerSetupIssues(params: {
   schemaMismatchAction?: 'move' | 'drop';
 }) {
   const tableName = String(params.tableName ?? '').trim();
-  let schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
+  // 2026-07-23 이수빈: 빌드 오류 수정
+  let schema: 'layer' | 'public_layer' =
+    params.schema === 'public_layer' ? 'public_layer' : 'layer';
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
 
@@ -2925,7 +2927,7 @@ export async function fixLayerSetupIssues(params: {
 
     // 레이어 설정 스키마와 DB 스키마가 다르면: 정의 스키마로 이동, 또는 잔여 DROP
     if (issueSet.has('schema_mismatch')) {
-      let targetSchema =
+      let targetSchema: 'layer' | 'public_layer' | undefined =
         params.defineSchema === 'public_layer' || params.defineSchema === 'layer'
           ? params.defineSchema
           : undefined;

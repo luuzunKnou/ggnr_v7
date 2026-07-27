@@ -392,6 +392,33 @@ export function SourceCodeUploaderContent() {
     };
   }, []);
 
+  const resetSourceUploadForm = () => {
+    setMode('install');
+    setIncludeNodeModules(false);
+    setDate(todayYmd());
+    setChangeNote('');
+    setLastSavedRoot(null);
+    setRows([]);
+    setDbConfirm(null);
+    setBuildCheckSkipConfirmOpen(false);
+    buildCheckCompletedOnceRef.current = false;
+    setProgressPhase('idle');
+    progressPhaseRef.current = 'idle';
+    setProgressPct(0);
+    setProgressText('대기 중');
+    setStages(buildBaseStages(false));
+    setLiveLogs([]);
+    setUploadMeta({});
+    setChunkProgress(null);
+  };
+
+  const handleMainTabChange = (next: MainTab) => {
+    if (next === mainTab) return;
+    if (uploading || buildChecking) return;
+    resetSourceUploadForm();
+    setMainTab(next);
+  };
+
   const formatLogLine = (line: string) => {
     const ts = new Date().toLocaleTimeString('ko-KR', { hour12: false });
     return `[${ts}] ${line}`;
@@ -1064,7 +1091,8 @@ export function SourceCodeUploaderContent() {
               : 'border-transparent text-muted-foreground'
           }`}
           disabled={uploading || buildChecking}
-          onClick={() => setMainTab('install_download')}
+          title="설치파일 다운로드"
+          onClick={() => handleMainTabChange('install_download')}
         >
           설치파일 다운로드
         </button>
@@ -1075,7 +1103,9 @@ export function SourceCodeUploaderContent() {
               ? 'border-primary font-medium text-foreground'
               : 'border-transparent text-muted-foreground'
           }`}
-          onClick={() => setMainTab('source_upload')}
+          disabled={uploading || buildChecking}
+          title="소스코드 업로드"
+          onClick={() => handleMainTabChange('source_upload')}
         >
           소스코드 업로드
         </button>

@@ -1,38 +1,18 @@
 <GeoServerTileLayer>
-<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-4e575fd4_19d2eef647c_-7f9d.xml
-  <id>LayerInfoImpl-4e575fd4:19d2eef647c:-7f9d</id>
-========
   <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55d3</id>
->>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3f73bcf1_19cc7f9cfc4_-55d3.xml
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:river_d_index</name>
+  <name>ggnr:landown_ranch</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4297232518880635E7</double>
-          <double>4346027.31681158</double>
-          <double>1.4359580355073173E7</double>
-          <double>4413188.0865415735</double>
-        </coords>
-      </extent>
+      <gridSetName>EPSG:4326</gridSetName>
     </gridSubset>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.4342249232112</double>
-          <double>36.32929749984947</double>
-          <double>128.99430506504655</double>
-          <double>36.81382514329081</double>
-        </coords>
-      </extent>
+      <gridSetName>EPSG:900913</gridSetName>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -46,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>landown_ranch</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
