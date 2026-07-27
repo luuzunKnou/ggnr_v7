@@ -229,7 +229,7 @@ export function LayerRowGeomEditHandler({
   }, []);
 
   const loadParcelsFromParentGeom = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (opts?: { silent?: boolean; attempt?: number }) => {
       const source = geomEditSourceRef.current;
       const wktFromSource = source ? writeCombinedWkt5181FromParentFeatures(source) : null;
       const wkt = wktFromSource ?? wktRef?.current ?? null;
@@ -239,7 +239,15 @@ export function LayerRowGeomEditHandler({
         apply?.([], { replaceAuto: true });
         return;
       }
-      if (!apply) return;
+      if (!apply) {
+        const attempt = opts?.attempt ?? 0;
+        if (attempt < 12) {
+          requestAnimationFrame(() => {
+            void loadParcelsFromParentGeom({ ...opts, attempt: attempt + 1 });
+          });
+        }
+        return;
+      }
 
       setLoadingParcels(true);
       try {
@@ -253,7 +261,11 @@ export function LayerRowGeomEditHandler({
           if (!opts?.silent) window.alert(String(data.error));
           return;
         }
-        const raw = Array.isArray(data?.parcels) ? data.parcels : [];
+        if (!Array.isArray(data?.parcels) || data.parcels.length === 0) {
+          apply?.([], { replaceAuto: true });
+          return;
+        }
+        const raw = data.parcels;
         const items = raw
           .map((x: Record<string, unknown>) => {
             const address = String(x?.address ?? "").trim();

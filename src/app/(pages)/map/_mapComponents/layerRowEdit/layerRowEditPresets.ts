@@ -29,6 +29,19 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childTableName: "river_use_ledger_jijuk",
     childParentField: "parent_id",
   },
+  usageDataAs: {
+    tableName: "usage_data_as",
+    schema: "layer",
+    keyField: "cons_code",
+    /** cons_code는 defineLayer 읽기전용 — insert 시 서버 자동 채번 */
+    autoGenerateKeyOnCreate: true,
+    excludeFields: ["ogc_fid", "gkey_code"],
+    dateFields: [],
+    childTableName: "usage_data_as_solo",
+    additionalChildTableNames: ["usage_data_as_mgj"],
+    childParentField: "cons_code",
+    childAddressField: "usage_loc",
+  },
 } as const satisfies Record<string, LayerRowEditPreset>;
 
 export type LayerRowEditPresetKey = keyof typeof LAYER_ROW_EDIT_PRESETS;

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { call } from "@/lib/api";
 import { tryFormatToYmd } from "@/lib/formatDateYmd";
 import { useMapContext } from "../MapContext";
+import { refreshServiceWmsLayer } from "../layerFactory/serviceLayerFactory";
 import { LAYER_ROW_GEOM_CLEAR_SENTINEL } from "./LayerRowGeomEditHandler";
 import { fetchReadOnlyFieldSet } from "./buildFormAttributes";
 import { parcelAddressesFromItems, fitMapToLayerRowParcel } from "./layerRowParcelUtils";
@@ -41,7 +42,7 @@ type UseLayerRowEditArgs = {
   attributes: LayerRowDetailAttr[];
   initialParcels?: LayerRowParcelItem[];
   isCreateMode?: boolean;
-  onReload: () => void | Promise<void>;
+  onReload: (savedKey?: string) => void | Promise<void>;
   onCreated?: (newKey: string) => void;
   onDeleted?: () => void;
   onCancelCreate?: () => void;
@@ -145,7 +146,7 @@ export function useLayerRowEdit({
     setLayerRowDraftParcels?.(isEditing ? draftParcels : []);
   }, [draftParcels, isEditing, setLayerRowDraftParcels]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isEditing || !layerRowParcelApplyRef) return;
     layerRowParcelApplyRef.current = (items, options) => {
       setDraftParcels((prev) => {
@@ -183,6 +184,9 @@ export function useLayerRowEdit({
       setIsEditing(true);
       setEditError(null);
       void fetchReadOnlyFieldSet(preset).then((locked) => {
+        if (preset.keyFieldEditableOnCreate && preset.keyField) {
+          locked.delete(String(preset.keyField).toLowerCase());
+        }
         setReadOnlyFields(locked);
         setDraft(buildEmptyDraft(attributes));
       });
@@ -291,9 +295,18 @@ export function useLayerRowEdit({
         removed = prev[index];
         return prev.filter((_, i) => i !== index);
       });
-      if (removed) {
-        void layerRowParcelRemoveRef?.current?.(removed);
-      }
+      if (!removed) return;
+      void (async () => {
+        let target = removed!;
+        const hasSubtractGeom =
+          target.geometry3857 != null ||
+          String(target.pnu ?? "").trim().length >= 18;
+        if (!hasSubtractGeom) {
+          const [resolved] = await resolveParcelGeoms([target]);
+          if (resolved) target = resolved;
+        }
+        void layerRowParcelRemoveRef?.current?.(target);
+      })();
     },
     [layerRowParcelRemoveRef]
   );
@@ -314,6 +327,7 @@ export function useLayerRowEdit({
           schema: preset.schema,
           childTableName,
           childParentField: preset.childParentField,
+          childAddressField: preset.childAddressField,
           parentId,
           parcels,
           addresses,
@@ -325,7 +339,7 @@ export function useLayerRowEdit({
       }
       return { ok: true as const };
     },
-    [draftParcels, preset.childParentField, preset.childTableName, preset.schema]
+    [draftParcels, preset.childAddressField, preset.childParentField, preset.childTableName, preset.schema]
   );
 
   const handleSave = useCallback(async () => {
@@ -368,7 +382,7 @@ export function useLayerRowEdit({
         }
         onCreated?.(newKey);
         stopGeomEdit();
-        await onReload();
+        await onReload(newKey);
         return;
       }
 
@@ -402,22 +416,31 @@ export function useLayerRowEdit({
       setIsEditing(false);
       setDraft({});
       stopGeomEdit();
-      await onReload();
+      await onReload(id);
     } catch {
       setEditError(isCreateMode ? "등록에 실패했습니다." : "저장에 실패했습니다.");
     } finally {
       setSaving(false);
     }
-  }, [collectChanges, isCreateMode, layerRowGeomEditWktRef, onCreated, onReload, preset, rowKey, stopGeomEdit, syncChildParcels]);
+  }, [attributes, collectChanges, draft, isCreateMode, layerRowGeomEditWktRef, onCreated, onReload, preset, rowKey, stopGeomEdit, syncChildParcels]);
 
   const handleDelete = useCallback(async () => {
     const id = String(rowKey ?? "").trim();
     if (!id || isCreateMode) return;
-    if (!window.confirm("이 항목을 삭제하시겠습니까?\n연결된 필지 정보도 함께 삭제됩니다.")) return;
+    const deleteConfirmMsg = preset.additionalChildTableNames?.length
+      ? "이 항목을 삭제하시겠습니까?\n연결된 필지·물건지 정보도 함께 삭제됩니다."
+      : "이 항목을 삭제하시겠습니까?\n연결된 필지 정보도 함께 삭제됩니다.";
+    if (!window.confirm(deleteConfirmMsg)) return;
 
     setDeleting(true);
     setEditError(null);
     try {
+      const childTableNames = [
+        preset.childTableName,
+        ...(preset.additionalChildTableNames ?? []),
+      ]
+        .map((name) => String(name ?? "").trim())
+        .filter(Boolean);
       const res = await call("", "POST", {
         service: "layerRowService",
         action: "deleteTableRowByKey",
@@ -427,6 +450,7 @@ export function useLayerRowEdit({
           keyField: preset.keyField,
           keyValue: id,
           childTableName: preset.childTableName,
+          childTableNames,
           childParentField: preset.childParentField,
         },
       });
@@ -436,13 +460,16 @@ export function useLayerRowEdit({
         return;
       }
       stopGeomEdit();
+      const map = mapContext?.mapInstanceRef?.current;
+      refreshServiceWmsLayer(map);
+      requestAnimationFrame(() => refreshServiceWmsLayer(map));
       onDeleted?.();
     } catch {
       setEditError("삭제에 실패했습니다.");
     } finally {
       setDeleting(false);
     }
-  }, [isCreateMode, onDeleted, preset, rowKey, stopGeomEdit]);
+  }, [isCreateMode, mapContext?.mapInstanceRef, onDeleted, preset, rowKey, stopGeomEdit]);
 
   return {
     isEditing,

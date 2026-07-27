@@ -1,6 +1,5 @@
 /**
- * VWorld 검색 API 2.0 기반 주소/지번 검색 (JSONP 방식)
- * CORS 영향을 받지 않도록 <script> 태그 + callback 파라미터로 호출.
+ * VWorld 검색 API 2.0 — 우선 `/api/vworld/search` 서버 프록시, 실패 시 JSONP 폴백
  * @see https://www.vworld.kr/dev/v4dv_search2_s001.do
  */
 
@@ -107,11 +106,10 @@ export async function searchAddress(
   const trimmed = query?.trim();
   if (!trimmed) return [];
 
-  const apiKey = options?.apiKey ?? (typeof process !== 'undefined' ? process.env.VWORLD_API_KEY : undefined);
-  if (!apiKey) {
-    console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
-    return [];
-  }
+  const apiKey =
+    options?.apiKey ??
+    (typeof process !== 'undefined' ? process.env.VWORLD_API_KEY : undefined) ??
+    '';
 
   const crs = options?.crs ?? 'EPSG:4326';
   const maxResults = options?.maxResults ?? 5;
@@ -142,13 +140,45 @@ export async function searchAddress(
   return searchAddressOne(trimmed, { ...options, category: singleCategory }, apiKey);
 }
 
-function searchAddressOne(
+function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VWorldAddressItem[] {
+  const status = data?.response?.status;
+  if (status !== 'OK') return [];
+  const items = data?.response?.result?.items ?? [];
+  const result: VWorldAddressItem[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const point = item?.point;
+    const x = point?.x != null ? Number(point.x) : NaN;
+    const y = point?.y != null ? Number(point.y) : NaN;
+    if (Number.isNaN(x) || Number.isNaN(y)) continue;
+    const id = item?.id != null ? String(item.id) : undefined;
+    const key = id ?? `${x.toFixed(6)},${y.toFixed(6)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const road = item?.address?.road ?? '';
+    const parcel = item?.address?.parcel ?? '';
+    const bldnm = item?.address?.bldnm ?? '';
+    const title = item?.title ?? '';
+    const address = road || parcel || title || `${x}, ${y}`;
+    result.push({
+      id,
+      address,
+      roadAddress: road || undefined,
+      jibunAddress: parcel || undefined,
+      buildingName: bldnm || undefined,
+      title: title || undefined,
+      point: { x, y },
+    });
+  }
+  return result.slice(0, maxResults);
+}
+
+function buildSearchParams(
   trimmed: string,
   options: SearchAddressOptions & { category: 'road' | 'parcel' },
-  apiKey: string
-): Promise<VWorldAddressItem[]> {
+  apiKey?: string
+): URLSearchParams {
   const { crs = 'EPSG:4326', maxResults = 5, type = 'address', category } = options;
-
   const params = new URLSearchParams({
     service: 'search',
     request: 'search',
@@ -161,8 +191,51 @@ function searchAddressOne(
     category,
     format: 'json',
     errorformat: 'json',
-    key: apiKey,
   });
+  if (apiKey) params.set('key', apiKey);
+  return params;
+}
+
+async function searchAddressViaProxy(
+  params: URLSearchParams,
+  maxResults: number
+): Promise<VWorldAddressItem[] | 'upstream_failed' | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch(`/api/vworld/search?${params.toString()}`, { cache: 'no-store' });
+    if (!res.ok) return 'upstream_failed';
+    const data = (await res.json()) as VWorldSearchResponse;
+    return parseSearchResponse(data, maxResults);
+  } catch {
+    return null;
+  }
+}
+
+function searchAddressOne(
+  trimmed: string,
+  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  apiKey: string
+): Promise<VWorldAddressItem[]> {
+  const maxResults = options.maxResults ?? 5;
+  const proxyParams = buildSearchParams(trimmed, options);
+  return searchAddressViaProxy(proxyParams, maxResults).then((viaProxy) => {
+    if (Array.isArray(viaProxy)) return viaProxy;
+    if (viaProxy === 'upstream_failed') return [];
+    if (!apiKey) {
+      console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
+      return [];
+    }
+    return searchAddressOneJsonp(trimmed, options, apiKey);
+  });
+}
+
+function searchAddressOneJsonp(
+  trimmed: string,
+  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  apiKey: string
+): Promise<VWorldAddressItem[]> {
+  const { maxResults = 5 } = options;
+  const params = buildSearchParams(trimmed, options, apiKey);
 
   return new Promise<VWorldAddressItem[]>((resolve) => {
     const callbackName = `__vworldSearch_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -177,39 +250,7 @@ function searchAddressOne(
     (window as unknown as Record<string, (data: VWorldSearchResponse) => void>)[callbackName] = (data: VWorldSearchResponse) => {
       cleanup();
       try {
-        const status = data?.response?.status;
-        if (status !== 'OK') {
-          resolve([]);
-          return;
-        }
-        const items = data?.response?.result?.items ?? [];
-        const result: VWorldAddressItem[] = [];
-        const seen = new Set<string>();
-        for (const item of items) {
-          const point = item?.point;
-          const x = point?.x != null ? Number(point.x) : NaN;
-          const y = point?.y != null ? Number(point.y) : NaN;
-          if (Number.isNaN(x) || Number.isNaN(y)) continue;
-          const id = item?.id != null ? String(item.id) : undefined;
-          const key = id ?? `${x.toFixed(6)},${y.toFixed(6)}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const road = item?.address?.road ?? '';
-          const parcel = item?.address?.parcel ?? '';
-          const bldnm = item?.address?.bldnm ?? '';
-          const title = item?.title ?? '';
-          const address = road || parcel || title || `${x}, ${y}`;
-          result.push({
-            id,
-            address,
-            roadAddress: road || undefined,
-            jibunAddress: parcel || undefined,
-            buildingName: bldnm || undefined,
-            title: title || undefined,
-            point: { x, y },
-          });
-        }
-        resolve(result.slice(0, maxResults));
+        resolve(parseSearchResponse(data, maxResults));
       } catch {
         resolve([]);
       }
@@ -219,7 +260,7 @@ function searchAddressOne(
     script.async = true;
     script.onerror = () => {
       cleanup();
-      console.error('[vworldAddressSearch] JSONP script load failed');
+      console.warn('[vworldAddressSearch] JSONP script load failed');
       resolve([]);
     };
     document.head.appendChild(script);

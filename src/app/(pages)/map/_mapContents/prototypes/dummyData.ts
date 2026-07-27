@@ -125,6 +125,8 @@ export type ProtoNotifItem = {
   category: '만료임박' | '미납임박'
   title: string
   name: string
+  /** 목록 우측 키 열 표시 (없으면 name 파싱) */
+  listKey?: string
   read: boolean
   important: boolean
   target: 'ledger' | 'fee'
@@ -1073,58 +1075,7 @@ export const PROTO_FEES: ProtoFeeRow[] = [
   },
 ]
 
-export const PROTO_NOTIFS: ProtoNotifItem[] = [
-  {
-    id: 'N1',
-    category: '만료임박',
-    title: '점용 기간 만료 임박',
-    name: '도로 RD-2022-028 상하수도배관점용',
-    read: false,
-    important: true,
-    target: 'ledger',
-    targetId: 'L2',
-  },
-  {
-    id: 'N2',
-    category: '만료임박',
-    title: '점용 기간 만료 임박',
-    name: '도로 RD-2021-089 공사용가설건축물',
-    read: false,
-    important: true,
-    target: 'ledger',
-    targetId: 'L3',
-  },
-  {
-    id: 'N3',
-    category: '미납임박',
-    title: '점사용료 수납 기한 임박 미납',
-    name: '부과번호 20260101234 김영수',
-    read: false,
-    important: true,
-    target: 'fee',
-    targetId: 'F1',
-  },
-  {
-    id: 'N4',
-    category: '미납임박',
-    title: '점사용료 수납 기한 임박 미납',
-    name: '부과번호 20260102089 영양군수도사업소',
-    read: true,
-    important: true,
-    target: 'fee',
-    targetId: 'F4',
-  },
-  {
-    id: 'N5',
-    category: '미납임박',
-    title: '점사용료 수납 기한 임박 미납',
-    name: '부과번호 20260106002 영양광고(주)',
-    read: false,
-    important: true,
-    target: 'fee',
-    targetId: 'F10',
-  },
-]
+export const PROTO_NOTIFS: ProtoNotifItem[] = []
 
 /** 프로토 알림 — 패널·사이드바 공유 (메모리) */
 export const PROTO_NOTIF_CHANGED_EVENT = 'ggnr-proto-notifs-changed'

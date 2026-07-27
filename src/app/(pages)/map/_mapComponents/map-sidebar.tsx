@@ -16,8 +16,6 @@ import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
 import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
-  ledgerTypeLabel,
-  resolveProtoLedgerType,
 } from '../_mapContents/prototypes/dummyData';
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 
@@ -149,6 +147,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const [systemList, setSystemList] = useState<{ sys_key: string; serviceList?: string[] }[]>([]);
   const [deniedSerOpen, setDeniedSerOpen] = useState(false);
   const [deniedSerEng, setDeniedSerEng] = useState('');
+  const [bootProject, setBootProject] = useState('');
   const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
 
   const systemKeyFromUrl = searchParams.get('system') ?? '';
@@ -188,6 +187,12 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   useEffect(() => {
     fetchServiceList();
     fetchSystemList();
+    call('', 'POST', { service: 'configService', action: 'getBootProject', params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        setBootProject(String(data?.project ?? '').trim());
+      })
+      .catch(() => setBootProject(''));
   }, [fetchServiceList, fetchSystemList]);
 
   useEffect(() => {
@@ -214,7 +219,11 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const serviceMap = new Map(serviceListConfig.map((s) => [s.ser_eng ?? '', s]));
   const sidebarItemsRaw: ServiceItem[] = serviceKeysInOrder
     .map((key) => serviceMap.get(key))
-    .filter((s): s is ServiceItem => s != null);
+    .filter((s): s is ServiceItem => s != null)
+    .filter((item) => {
+      if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
+      return true;
+    });
 
   const sidebarItems = sidebarItemsRaw.filter((item) => {
     if (item.ser_is_private !== true) return true;
@@ -223,8 +232,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   });
 
   const roadDataFlowSidebarLock = openedWindows.includes('roadDataFlow');
-  const protoLedgerMenuLabel = ledgerTypeLabel(resolveProtoLedgerType(systemKeyFromUrl));
-  const hasShapeEditorInList = sidebarItems.some((s) => s.ser_eng === 'shapeEditor');
+  const hasUseFeeInList = sidebarItems.some((s) => s.ser_eng === 'useFee');
 
   useEffect(() => {
     updateNavScrollState();
@@ -303,25 +311,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     );
   };
 
-  const renderProtoLedgerButtons = () => (
-    <>
-      <SidebarButton
-        icon={renderMaskIcon('useLedgerProto')}
-        label={protoLedgerMenuLabel}
-        onClick={() => toggleWindow('useLedgerProto')}
-        isActive={openedWindows.includes('useLedgerProto')}
-        disabled={roadDataFlowSidebarLock}
-      />
-      <SidebarButton
-        icon={renderMaskIcon('useFeeProto')}
-        label="점사용료"
-        onClick={() => toggleWindow('useFeeProto')}
-        isActive={openedWindows.includes('useFeeProto')}
-        disabled={roadDataFlowSidebarLock}
-      />
-    </>
-  );
-
   return (
     <aside className="fixed left-0 top-0 flex h-screen w-[65px] flex-col items-center overflow-hidden bg-black/40 pt-2 backdrop-blur-sm z-50">
       <Link
@@ -395,11 +384,31 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                     }
                     disabled={policy === 'block' ? false : svcDisabled}
                   />
-                  {serEng === 'shapeEditor' && renderProtoLedgerButtons()}
+                  {serEng === 'usageDataAs' &&
+                    bootProject === 'build_uj' &&
+                    !hasUseFeeInList && (
+                      <SidebarButton
+                        icon={renderMaskIcon('useFee')}
+                        label="점사용료"
+                        onClick={() => toggleWindow('useFee')}
+                        isActive={openedWindows.includes('useFee')}
+                        disabled={roadDataFlowSidebarLock}
+                      />
+                    )}
                 </React.Fragment>
               );
             })}
-            {!hasShapeEditorInList && renderProtoLedgerButtons()}
+            {bootProject === 'build_uj' &&
+              !hasUseFeeInList &&
+              !sidebarItems.some((s) => s.ser_eng === 'usageDataAs') && (
+                <SidebarButton
+                  icon={renderMaskIcon('useFee')}
+                  label="점사용료"
+                  onClick={() => toggleWindow('useFee')}
+                  isActive={openedWindows.includes('useFee')}
+                  disabled={roadDataFlowSidebarLock}
+                />
+              )}
           </div>
           {navHover && canScrollDown && (
             <button
@@ -413,7 +422,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
             </button>
           )}
         </nav>
-        {/* 프로토타입: 내 정보 (알림·촬영요청 통합) */}
+        {/* 프로토타입: 내 정보 · 알림 */}
         <div className="relative flex w-full shrink-0 flex-col border-t border-white/15">
           <div ref={myInfoAnchorRef} className="w-full">
             <SidebarButton

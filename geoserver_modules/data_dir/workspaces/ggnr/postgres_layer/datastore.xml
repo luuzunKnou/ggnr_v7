@@ -10,15 +10,15 @@
     <entry key="schema">layer</entry>
     <entry key="Estimated extends">false</entry>
     <entry key="preparedStatements">false</entry>
-    <entry key="database">build_yy</entry>
+    <entry key="database">build_uj</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:KJeEHAQdPca1A9XZ7myXqLreDLRGB8Mo</entry>
+    <entry key="passwd">crypt1:FS2LKBn15EcSWip9PK2b5KzPHCwitKin</entry>
     <entry key="validate connections">true</entry>
-    <entry key="host">192.168.120.82</entry>
+    <entry key="host">localhost</entry>
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>
-    <entry key="user">build_yy</entry>
+    <entry key="user">build_uj</entry>
   </connectionParameters>
   <__default>false</__default>
   <dateCreated>2026-02-11 16:00:05.307 UTC</dateCreated>

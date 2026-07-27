@@ -282,6 +282,11 @@ export function getParcelAnalysisRegionFromFooter(_params?: unknown): {
 /** 지도용 클라이언트 설정 (주소 검색 등).
  * runtime.env 의 지도/외부연계 키를 반환.
  */
+/** npm run dev -- <project> 로 기동한 프로젝트 키 (사이드바 메뉴 분기 등) */
+export function getBootProject(_params?: unknown): { project: string } {
+  return { project: (process.env.GGNR_PROJECT ?? "build_yy").trim() || "build_yy" }
+}
+
 export function getMapConfig(_params?: unknown): {
   VWORLD_API_KEY: string
   OPENAI_API_KEY: string

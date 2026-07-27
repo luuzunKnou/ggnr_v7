@@ -1,74 +1,85 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, ChevronDown, ChevronRight, ClipboardList, X } from 'lucide-react'
+import { signOut, useSession } from 'next-auth/react'
+import { LogOut, Mail, Phone, X } from 'lucide-react'
+import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
-  getProtoNotifs,
+  dismissAllUsageDataAsExpiryNotifs,
+  dismissUsageDataAsExpiryNotif,
+  markUsageDataAsExpiryNotifRead,
   PROTO_NOTIF_CHANGED_EVENT,
-  PROTO_PHOTO_REQUESTS,
-  PROTO_USER,
+  refreshUsageDataAsExpiryNotifs,
+  setUsageDataAsNotifUsrId,
+} from '../river/usageDataAs/usageDataAsExpiryNotifClient'
+import {
+  getProtoNotifs,
   hasProtoUnreadNotifications,
-  setProtoNotifs,
   type ProtoNotifItem,
 } from './dummyData'
+import { UserAccountProtoNotifTab } from './UserAccountProtoNotifTab'
 
-/** 프로토 내 정보 패널 — 통일 spacing·타이포 */
+/** 프로토 내 정보 패널 */
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
 const PANEL_ROUND = 'rounded-sm'
 const BUBBLE_ROUND = 'rounded-[2px]'
 const PANEL_PAD = 'px-3 py-3'
 const TEXT_BODY = 'text-xs'
-const TEXT_MUTED = 'text-xs text-slate-500'
-const TEXT_LABEL = 'text-xs font-medium text-slate-600'
-const TEXT_NOTIF = 'text-xs leading-snug'
-const TEXT_NOTIF_MUTED = 'text-xs leading-snug text-slate-500'
-const TEXT_NOTIF_LABEL = 'text-xs font-medium leading-snug text-slate-600'
-const BTN_GHOST_12 =
-  'shrink-0 rounded-sm px-1 py-0.5 text-xs leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-500'
 
-// /** 패널 드래그 (비활성 — 필요 시 복구) */
-// const PANEL_WIDTH = 340
-// const PANEL_MAX_HEIGHT = 520
-// const PANEL_VIEWPORT_MARGIN = 8
-//
-// function clampPanelPos(bottom: number, left: number, panelEl: HTMLElement | null) {
-//   const width = panelEl?.offsetWidth ?? PANEL_WIDTH
-//   const height = panelEl?.offsetHeight ?? PANEL_MAX_HEIGHT
-//   const maxBottom = Math.max(PANEL_VIEWPORT_MARGIN, window.innerHeight - height - PANEL_VIEWPORT_MARGIN)
-//   const maxLeft = Math.max(PANEL_VIEWPORT_MARGIN, window.innerWidth - width - PANEL_VIEWPORT_MARGIN)
-//   return {
-//     bottom: Math.min(Math.max(PANEL_VIEWPORT_MARGIN, bottom), maxBottom),
-//     left: Math.min(Math.max(PANEL_VIEWPORT_MARGIN, left), maxLeft),
-//   }
-// }
-//
-// function panelRectToPos(rect: DOMRect) {
-//   return {
-//     bottom: window.innerHeight - rect.bottom,
-//     left: rect.left,
-//   }
-// }
+type MyProfileView = {
+  usrId: string
+  name: string
+  dept: string
+  phone: string
+  email: string
+}
+
+function profileFromSession(session: ReturnType<typeof useSession>['data']): MyProfileView {
+  const usrId = String(session?.user?.id ?? '').trim()
+  const name = String(session?.user?.name ?? '').trim() || usrId || '사용자'
+  return {
+    usrId,
+    name,
+    dept: usrId === 'su' ? '시스템' : '',
+    phone: '',
+    email: '',
+  }
+}
+
+function profileInitials(name: string): string {
+  const trimmed = String(name ?? '').trim()
+  if (!trimmed) return '?'
+  return trimmed.slice(0, 2)
+}
+
+/** 패널 하단 탭 — 추후 탭 추가 시 이 배열에만 항목 추가 */
+const PROTO_PANEL_TABS = [{ id: 'notif', label: '알림' }] as const
+type ProtoPanelTabId = (typeof PROTO_PANEL_TABS)[number]['id']
 
 type Props = {
   open: boolean
   onClose: () => void
   onOpenLedger: (ledgerId: string) => void
-  onOpenFee: (feeId: string) => void
-  /** 배너 등에서 열 때 알림 섹션 펼침 */
-  initialExpand?: 'notif' | 'photo' | null
 }
 
-export function UserAccountProtoPanel({
-  open,
-  onClose,
-  onOpenLedger,
-  onOpenFee,
-  initialExpand = null,
-}: Props) {
+export function UserAccountProtoPanel({ open, onClose, onOpenLedger }: Props) {
+  const { data: session, status } = useSession()
   const [notifItems, setNotifItemsLocal] = useState(getProtoNotifs)
-  const [photoItems] = useState(PROTO_PHOTO_REQUESTS)
+  const [activeTab, setActiveTab] = useState<ProtoPanelTabId | null>(null)
+  const [profile, setProfile] = useState<MyProfileView>(() => profileFromSession(null))
+  const [profileLoading, setProfileLoading] = useState(false)
+
+  useEffect(() => {
+    if (status === 'loading') return
+    setUsageDataAsNotifUsrId(session?.user?.id)
+  }, [session?.user?.id, status])
+
+  useEffect(() => {
+    if (!open || status === 'loading') return
+    void refreshUsageDataAsExpiryNotifs()
+  }, [open, session?.user?.id, status])
 
   useEffect(() => {
     const sync = () => setNotifItemsLocal(getProtoNotifs())
@@ -76,120 +87,60 @@ export function UserAccountProtoPanel({
     return () => window.removeEventListener(PROTO_NOTIF_CHANGED_EVENT, sync)
   }, [])
 
-  const setNotifItems = useCallback(
-    (updater: ProtoNotifItem[] | ((prev: ProtoNotifItem[]) => ProtoNotifItem[])) => {
-      setNotifItemsLocal((prev) =>
-        typeof updater === 'function' ? updater(prev) : updater
-      )
-    },
-    []
-  )
-
   useEffect(() => {
-    setProtoNotifs(notifItems)
-  }, [notifItems])
-  const [expandedNotifGroups, setExpandedNotifGroups] = useState<Record<string, boolean>>({
-    만료임박: true,
-    미납임박: false,
-  })
-  const [sectionOpen, setSectionOpen] = useState({ notif: false, photo: false })
+    if (!open) return
+    let cancelled = false
+    setProfileLoading(true)
+    void call('', 'POST', {
+      service: 'usrService',
+      action: 'getMyProfile',
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return
+        const payload = (res?.data ?? res) as {
+          success?: boolean
+          data?: MyProfileView
+        }
+        if (payload?.success && payload.data) {
+          setProfile(payload.data)
+          return
+        }
+        setProfile(profileFromSession(session))
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(profileFromSession(session))
+      })
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, session])
 
-  // /** 패널 드래그 (비활성 — 필요 시 복구) */
-  // const [panelPos, setPanelPos] = useState<{ bottom: number; left: number } | null>(null)
-  // const panelRef = useRef<HTMLDivElement>(null)
-  // const dragRef = useRef({
-  //   isDragging: false,
-  //   startX: 0,
-  //   startY: 0,
-  //   startBottom: 0,
-  //   startLeft: 0,
-  // })
-  //
-  // useEffect(() => {
-  //   if (!open) return
-  //   const onResize = () => {
-  //     setPanelPos((prev) => {
-  //       if (!prev) return prev
-  //       return clampPanelPos(prev.bottom, prev.left, panelRef.current)
-  //     })
-  //   }
-  //   window.addEventListener('resize', onResize)
-  //   return () => window.removeEventListener('resize', onResize)
-  // }, [open])
-  //
-  // useEffect(() => {
-  //   const onMove = (e: PointerEvent) => {
-  //     if (!dragRef.current.isDragging) return
-  //     const dx = e.clientX - dragRef.current.startX
-  //     const dy = e.clientY - dragRef.current.startY
-  //     const next = clampPanelPos(
-  //       dragRef.current.startBottom - dy,
-  //       dragRef.current.startLeft + dx,
-  //       panelRef.current
-  //     )
-  //     setPanelPos(next)
-  //   }
-  //   const onUp = () => {
-  //     if (!dragRef.current.isDragging) return
-  //     dragRef.current.isDragging = false
-  //     document.body.style.cursor = ''
-  //   }
-  //   window.addEventListener('pointermove', onMove)
-  //   window.addEventListener('pointerup', onUp)
-  //   window.addEventListener('pointercancel', onUp)
-  //   return () => {
-  //     window.removeEventListener('pointermove', onMove)
-  //     window.removeEventListener('pointerup', onUp)
-  //     window.removeEventListener('pointercancel', onUp)
-  //   }
-  // }, [])
-  //
-  // const handleHeaderPointerDown = useCallback(
-  //   (e: React.PointerEvent<HTMLDivElement>) => {
-  //     if ((e.target as HTMLElement).closest('button')) return
-  //     const rect = panelRef.current?.getBoundingClientRect()
-  //     if (!rect) return
-  //
-  //     const fromRect = panelRectToPos(rect)
-  //     const startBottom = panelPos?.bottom ?? fromRect.bottom
-  //     const startLeft = panelPos?.left ?? fromRect.left
-  //
-  //     if (!panelPos) {
-  //       setPanelPos({ bottom: startBottom, left: startLeft })
-  //     }
-  //
-  //     dragRef.current = {
-  //       isDragging: true,
-  //       startX: e.clientX,
-  //       startY: e.clientY,
-  //       startBottom,
-  //       startLeft,
-  //     }
-  //     document.body.style.cursor = 'move'
-  //     e.currentTarget.setPointerCapture(e.pointerId)
-  //   },
-  //   [panelPos]
-  // )
+  const handleLogout = useCallback(() => {
+    void signOut({ callbackUrl: '/' })
+  }, [])
+
+  const handleDismissNotif = useCallback((item: ProtoNotifItem) => {
+    dismissUsageDataAsExpiryNotif(item.targetId)
+  }, [])
+
+  const handleDismissAllNotifs = useCallback(() => {
+    dismissAllUsageDataAsExpiryNotifs()
+  }, [])
+
+  const handleMarkNotifRead = useCallback((item: ProtoNotifItem) => {
+    markUsageDataAsExpiryNotifRead(item.targetId)
+  }, [])
 
   useEffect(() => {
     if (!open) return
-    setSectionOpen({
-      notif: initialExpand === 'notif' || initialExpand == null,
-      photo: initialExpand === 'photo',
-    })
-  }, [open, initialExpand])
-
-  const notifGroups = useMemo(() => {
-    const expire = notifItems.filter((i) => i.category === '만료임박')
-    const unpaid = notifItems.filter((i) => i.category === '미납임박')
-    return [
-      { key: '만료임박' as const, label: '점용 기간 만료 임박', list: expire },
-      { key: '미납임박' as const, label: '점사용료 수납 기한 임박 미납', list: unpaid },
-    ]
-  }, [notifItems])
+    setActiveTab(null)
+  }, [open])
 
   const unreadNotifCount = notifItems.filter((n) => !n.read).length
-  const hasUnreadNotif = unreadNotifCount > 0
 
   if (!open) return null
 
@@ -209,279 +160,151 @@ export function UserAccountProtoPanel({
         role="dialog"
         aria-label="내 정보"
       >
-        <div
-          className={cn(
-            'flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/80',
-            PANEL_PAD
-          )}
-        >
-          <span className={TEXT_LABEL}>내 정보</span>
-          <button
-            type="button"
-            className={cn('rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600', PANEL_ROUND)}
-            onClick={onClose}
-            aria-label="닫기"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <PanelHeader onClose={onClose} />
+        <ProfileSection profile={profile} loading={profileLoading} onLogout={handleLogout} />
 
-        <div className={cn('shrink-0 border-b border-slate-100', PANEL_PAD)}>
-          <div className="flex items-center justify-between gap-2">
-            <p className={cn('min-w-0 truncate', TEXT_BODY, 'text-slate-700')}>
-              <span className="text-slate-600">{PROTO_USER.dept}</span>
-              <span className="text-slate-400"> | </span>
-              <span className="font-medium text-slate-800">{PROTO_USER.name}</span>
-            </p>
-            <button
-              type="button"
-              className={cn(
-                'shrink-0 border border-slate-200 bg-white px-2 py-1.5 hover:bg-slate-50',
-                PANEL_ROUND,
-                TEXT_MUTED
-              )}
-            >
-              로그아웃
-            </button>
-          </div>
-          <p className={cn('mt-2 truncate', TEXT_MUTED)}>
-            <span className="tabular-nums">{PROTO_USER.phone}</span>
-            <span className="text-slate-400"> | </span>
-            <span>{PROTO_USER.email}</span>
-          </p>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <AccountSectionToggle
-            icon={<Bell className="h-3.5 w-3.5 text-slate-500" />}
-            label="알림"
-            count={hasUnreadNotif ? unreadNotifCount : notifItems.length || undefined}
-            countTone={hasUnreadNotif ? 'danger' : 'neutral'}
-            showUnreadDot={hasUnreadNotif}
-            open={sectionOpen.notif}
-            onToggle={() => setSectionOpen((prev) => ({ ...prev, notif: !prev.notif }))}
-            clearLabel={sectionOpen.notif && notifItems.length > 0 ? '지우기' : undefined}
-            onClear={() => setNotifItems([])}
+        <div className={cn('flex flex-col overflow-hidden', activeTab != null && 'min-h-0 flex-1')}>
+          <PanelTabBar
+            tabs={PROTO_PANEL_TABS}
+            activeTab={activeTab}
+            notifUnreadCount={unreadNotifCount}
+            onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
           />
-          {sectionOpen.notif && (
-            <div
-              className={cn(
-                'scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden border-b border-slate-100',
-                PANEL_PAD
-              )}
-            >
-              {notifItems.length === 0 ? (
-                <div className={cn('py-2 text-center', TEXT_NOTIF_MUTED)}>받은 알림이 없습니다.</div>
-              ) : (
-                <div className="space-y-2">
-                  {notifGroups.map((g) =>
-                    g.list.length === 0 ? null : (
-                      <div
-                        key={g.key}
-                        className={cn('bg-slate-50/60', PANEL_ROUND)}
-                      >
-                        <button
-                          type="button"
-                          className={cn(
-                            'flex w-full items-center gap-1.5 px-2 py-2 text-left',
-                            TEXT_NOTIF_LABEL
-                          )}
-                          onClick={() =>
-                            setExpandedNotifGroups((prev) => ({ ...prev, [g.key]: !prev[g.key] }))
-                          }
-                        >
-                          {g.list.some((i) => !i.read) ? (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
-                          ) : (
-                            <span className="h-1.5 w-1.5 shrink-0" />
-                          )}
-                          <span className="min-w-0 flex-1 leading-snug">
-                            {g.label} 건이 {g.list.length}건 있습니다
-                          </span>
-                          {expandedNotifGroups[g.key] ? (
-                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                          ) : (
-                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                          )}
-                        </button>
-                        {expandedNotifGroups[g.key] && (
-                          <ul className="space-y-0.5 border-t border-slate-200/70 px-2 pb-2">
-                          {g.list.map((item) => (
-                            <NotifRow
-                              key={item.id}
-                              item={item}
-                              onOpen={() => {
-                                setNotifItems((prev) =>
-                                  prev.map((x) => (x.id === item.id ? { ...x, read: true } : x))
-                                )
-                                if (item.target === 'ledger') onOpenLedger(item.targetId)
-                                else onOpenFee(item.targetId)
-                                onClose()
-                              }}
-                              onDelete={() =>
-                                setNotifItems((prev) => prev.filter((x) => x.id !== item.id))
-                              }
-                            />
-                          ))}
-                        </ul>
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
-          <AccountSectionToggle
-            icon={<ClipboardList className="h-3.5 w-3.5 text-blue-500" />}
-            label="내 촬영요청"
-            count={photoItems.length}
-            countTone="neutral"
-            open={sectionOpen.photo}
-            onToggle={() => setSectionOpen((prev) => ({ ...prev, photo: !prev.photo }))}
-          />
-          {sectionOpen.photo && (
-            <div
-              className={cn(
-                'scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden',
-                PANEL_PAD
-              )}
-            >
-              {photoItems.length === 0 ? (
-                <div className={cn('py-2 text-center', TEXT_MUTED)}>촬영요청 내역이 없습니다.</div>
-              ) : (
-                <ul className="space-y-1">
-                  {photoItems.map((item) => (
-                    <li
-                      key={item.id}
-                      className={cn('truncate px-0.5 py-1', TEXT_BODY, 'text-slate-600')}
-                    >
-                      · {item.title}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          {activeTab === 'notif' ? (
+            <UserAccountProtoNotifTab
+              items={notifItems}
+              onDismiss={handleDismissNotif}
+              onDismissAll={handleDismissAllNotifs}
+              onMarkRead={handleMarkNotifRead}
+              onOpenLedger={onOpenLedger}
+              onClosePanel={onClose}
+            />
+          ) : null}
         </div>
       </div>
     </>
   )
 }
 
-function AccountSectionToggle({
-  icon,
-  label,
-  count,
-  countTone = 'neutral',
-  showUnreadDot = false,
-  open,
-  onToggle,
-  clearLabel,
-  onClear,
-}: {
-  icon: ReactNode
-  label: string
-  count?: number
-  countTone?: 'danger' | 'neutral'
-  showUnreadDot?: boolean
-  open: boolean
-  onToggle: () => void
-  clearLabel?: string
-  onClear?: () => void
-}) {
+function PanelHeader({ onClose }: { onClose: () => void }) {
   return (
     <div
       className={cn(
-        'flex w-full shrink-0 items-center gap-1.5 border-b border-slate-100',
+        'flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/80',
         PANEL_PAD
       )}
     >
+      <span className="text-xs font-medium text-slate-600">내 정보</span>
       <button
         type="button"
-        className="flex min-w-0 flex-1 items-center gap-2 text-left hover:opacity-80"
-        onClick={onToggle}
+        className={cn('rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600', PANEL_ROUND)}
+        onClick={onClose}
+        aria-label="닫기"
       >
-        {icon}
-        <span className={TEXT_LABEL}>{label}</span>
-        {showUnreadDot && !count ? (
-          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-        ) : null}
-        {count != null && count > 0 ? <CountBadge count={count} tone={countTone} /> : null}
-      </button>
-      {open && clearLabel && onClear ? (
-        <button type="button" className={BTN_GHOST_12} onClick={onClear}>
-          {clearLabel}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="shrink-0 p-0.5 text-slate-400 hover:text-slate-600"
-        onClick={onToggle}
-        aria-label={open ? '접기' : '펼치기'}
-      >
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5" />
-        )}
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   )
 }
 
-function CountBadge({ count, tone }: { count: number; tone: 'danger' | 'neutral' }) {
-  const multiDigit = count >= 10
+function ProfileSection({
+  profile,
+  loading,
+  onLogout,
+}: {
+  profile: MyProfileView
+  loading: boolean
+  onLogout: () => void
+}) {
+  const userInitials = profileInitials(profile.name)
+  const phone = profile.phone || '—'
+  const email = profile.email || '—'
+
   return (
-    <span
-      className={cn(
-        'inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full tabular-nums text-[10px] font-medium leading-none',
-        multiDigit ? 'px-1' : 'w-[18px]',
-        tone === 'danger'
-          ? 'bg-red-50 text-red-600 ring-1 ring-red-100'
-          : 'bg-slate-100 text-slate-500'
-      )}
-    >
-      {count}
-    </span>
+    <div className="shrink-0 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50/80 px-3 py-3">
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-semibold tracking-tight text-white shadow-sm"
+          aria-hidden
+        >
+          {userInitials}
+        </div>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="truncate text-sm font-semibold text-slate-900">
+            {loading ? '불러오는 중…' : profile.name}
+          </p>
+          {profile.dept ? (
+            <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200">
+              {profile.dept}
+            </span>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1 rounded-sm border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+            PANEL_ROUND
+          )}
+        >
+          <LogOut className="h-3 w-3" />
+          로그아웃
+        </button>
+      </div>
+      <div className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-2.5">
+        <p className="flex items-center gap-2 text-[11px] text-slate-600">
+          <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+          <span className="tabular-nums">{loading ? '…' : phone}</span>
+        </p>
+        <p className="flex items-center gap-2 text-[11px] text-slate-600">
+          <Mail className="h-3 w-3 shrink-0 text-slate-400" />
+          <span className="truncate">{loading ? '…' : email}</span>
+        </p>
+      </div>
+    </div>
   )
 }
 
-function NotifRow({
-  item,
-  onOpen,
-  onDelete,
+function PanelTabBar({
+  tabs,
+  activeTab,
+  notifUnreadCount,
+  onToggleTab,
 }: {
-  item: ProtoNotifItem
-  onOpen: () => void
-  onDelete: () => void
+  tabs: typeof PROTO_PANEL_TABS
+  activeTab: ProtoPanelTabId | null
+  notifUnreadCount: number
+  onToggleTab: (tabId: ProtoPanelTabId) => void
 }) {
   return (
-    <li className={cn('flex items-center gap-1 px-0.5 py-0.5 hover:bg-white/80', PANEL_ROUND)}>
-      <button
-        type="button"
-        className={cn(
-          'min-w-0 flex-1 truncate text-left',
-          TEXT_NOTIF,
-          item.read ? 'text-slate-400' : 'text-slate-600'
-        )}
-        onClick={onOpen}
-      >
-        · {item.name}
-      </button>
-      <button
-        type="button"
-        className={cn(
-          'shrink-0 px-1 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-500',
-          PANEL_ROUND,
-          TEXT_NOTIF
-        )}
-        onClick={onDelete}
-      >
-        삭제
-      </button>
-    </li>
+    <div className="flex shrink-0 items-end gap-0 border-b border-slate-200 bg-white px-3">
+      {tabs.map((tab) => {
+        const active = activeTab === tab.id
+        const count = tab.id === 'notif' ? notifUnreadCount : 0
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onToggleTab(tab.id)}
+            aria-expanded={active}
+            className={cn(
+              'relative -mb-px inline-flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-xs font-medium transition-colors',
+              active
+                ? 'border-slate-800 text-slate-800'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            )}
+          >
+            {tab.label}
+            {tab.id === 'notif' && count > 0 ? (
+              <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-50 px-1 text-[10px] font-medium tabular-nums text-red-600 ring-1 ring-red-100">
+                {count}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -608,7 +431,7 @@ export function ImportantNotifBannerProto({
   onOpenNotif: () => void
 }) {
   const [show, setShow] = useState(true)
-  const unreadImportant = PROTO_NOTIFS.some((n) => n.important && !n.read)
+  const unreadImportant = hasProtoUnreadNotifications()
 
   useEffect(() => {
     if (!unreadImportant) return
@@ -637,8 +460,8 @@ export function ImportantNotifBannerProto({
 }
 
 /** @deprecated NotificationProtoModal → UserAccountProtoPanel */
-export function NotificationProtoModal(props: Omit<Props, 'initialExpand'>) {
-  return <UserAccountProtoPanel {...props} initialExpand="notif" />
+export function NotificationProtoModal(props: Omit<Props, never>) {
+  return <UserAccountProtoPanel {...props} />
 }
 
 export { hasProtoUnreadNotifications }

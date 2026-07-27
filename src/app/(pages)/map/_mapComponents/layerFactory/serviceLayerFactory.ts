@@ -155,6 +155,30 @@ export function createServiceLayer(): ImageLayer<ImageWMS> {
   return layer;
 }
 
+/** DB 저장·삭제 후 WMS 뷰포트 이미지 캐시 갱신 */
+export function refreshServiceWmsLayer(map: OLMap | null | undefined): void {
+  if (!map) return;
+  const serviceLayer = map.getLayers().getArray().find((l) => l.get('serviceLayer')) as
+    | {
+        changed?(): void;
+        getSource(): {
+          getParams(): Record<string, string | undefined>;
+          updateParams?(p: Record<string, string | undefined>): void;
+          changed(): void;
+        } | null;
+      }
+    | undefined;
+  const source = serviceLayer?.getSource();
+  if (!source) return;
+  const stamp = String(Date.now());
+  if (typeof source.updateParams === 'function') {
+    source.updateParams({ ...source.getParams(), _dc: stamp });
+  }
+  source.changed();
+  serviceLayer?.changed?.();
+  map.render();
+}
+
 /**
  * visibleLayerNames / layerFilterRows / spatialFilterWkt 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.

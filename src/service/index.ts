@@ -22,6 +22,7 @@ import * as riverBasicPlanService from './riverBasicPlanService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as riverUseLedgerService from './riverUseLedgerService';
+import * as usageDataAsService from './usageDataAsService';
 import * as roadUseAndongService from './roadUseAndongService';
 import * as buildPublicLandService from './buildPublicLandService';
 import * as fileDataUploadService from './fileDataUploadService';
@@ -40,6 +41,7 @@ import * as noticeService from './noticeService';
 import * as boardService from './boardService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
+import * as useFeeService from './useFeeService';
 
 export {
   configService,
@@ -64,6 +66,7 @@ export {
   roadLedgerService,
   roadUseLedgerService,
   riverUseLedgerService,
+  usageDataAsService,
   roadUseAndongService,
   buildPublicLandService,
   fileDataUploadService,
@@ -80,4 +83,5 @@ export {
   noticeService,
   boardService,
   mngVersionHistoryService,
+  useFeeService,
 };

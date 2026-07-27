@@ -588,6 +588,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "usage_data_sisul_as",
+    "define_table_kor_name": "usage_data_sisul_as",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "ufl_gman_ps",
     "define_table_kor_name": "천연가스맨홀",
     "define_table_shp_type": "POINT",
@@ -7118,6 +7130,42 @@
     "define_table_write_share": "P",
     "define_table_group": "하천기본계획",
     "define_table_idx": "4",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "usage_data_as",
+    "define_table_kor_name": "하천점용대장",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "usage_data_as_mgj",
+    "define_table_kor_name": "하천점용물건지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "usage_data_as_solo",
+    "define_table_kor_name": "하천점용필지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천점용대장",
+    "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"

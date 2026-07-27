@@ -1,5 +1,4 @@
 import { call } from "@/lib/api";
-import { getParcelExtent3857 } from "./layerRowParcelUtils";
 import type { LayerRowParcelItem } from "./types";
 
 function parseResolvedRow(raw: Record<string, unknown> | undefined): Pick<
@@ -19,10 +18,15 @@ function parseResolvedRow(raw: Record<string, unknown> | undefined): Pick<
   return { extent3857, geometry3857 };
 }
 
+function parcelHasSubtractGeom(item: LayerRowParcelItem): boolean {
+  if (item.geometry3857 != null && typeof item.geometry3857 === "object") return true;
+  return String(item.pnu ?? "").trim().length >= 18;
+}
+
 /** public_layer.jijuk geom 조회 후 병합 (항상 DB 기준) */
 export async function resolveParcelGeoms(items: LayerRowParcelItem[]): Promise<LayerRowParcelItem[]> {
   if (items.length === 0) return [];
-  if (items.every((item) => getParcelExtent3857(item))) return items;
+  if (items.every(parcelHasSubtractGeom)) return items;
 
   try {
     const res = await call("", "POST", {

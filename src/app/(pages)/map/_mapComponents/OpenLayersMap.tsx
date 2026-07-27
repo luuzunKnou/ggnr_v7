@@ -404,7 +404,8 @@ export default function OpenLayersMap({
     visibleLayerNames,
     undefined,
     spatialFilterWkt,
-    layerGeometryTypes
+    layerGeometryTypes,
+    mapContext?.hiddenWmsFeaturesByLayer
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
