@@ -14,6 +14,10 @@ import {
   type GeometryType,
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
+import {
+  buildElevationContourCss,
+  ELEVATION_LAYER_NAME,
+} from '@/lib/geoserverStyles/elevationContourStyle';
 import { normalizeDefineTableSource } from '@/lib/defineLayerTablesNormalize';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 
@@ -357,11 +361,23 @@ export async function setupGeoServerDb(params: {
       datastores.push({ name: target.name, schema: target.schema, status: 'created' });
     }
 
+    // elevation 등고선 CSS를 data_dir·GeoServer에 동기화 (실패해도 DB 설정 성공은 유지)
+    let elevationStyle: { success: boolean; error?: string } | undefined;
+    try {
+      elevationStyle = await applyElevationContourStyle({ url: baseUrl, workspace });
+    } catch (e: unknown) {
+      elevationStyle = {
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+
     return {
       success: true,
       workspace,
       datastoreName: targets.map((t) => t.name).join(','),
       datastores,
+      elevationStyle,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1114,6 +1130,102 @@ export async function deleteGeoServerStyle(params: { url?: string; name: string 
   }
 }
 
+/**
+ * GeoServer에 CSS 본문 전체 업로드 (없으면 생성, 있으면 PUT 덮어쓰기)
+ */
+export async function putGeoServerCssStyle(params: {
+  url?: string;
+  name: string;
+  cssBody: string;
+}) {
+  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const name = params?.name?.trim().toLowerCase();
+  const cssBody = params?.cssBody ?? '';
+  if (!name) return { success: false, error: '스타일 이름이 필요합니다.' };
+  if (!cssBody.trim()) return { success: false, error: 'CSS 본문이 비어 있습니다.' };
+
+  try {
+    const exists = await geoServerStyleExists(baseUrl, name);
+    if (!exists) {
+      const path = `/rest/styles?name=${encodeURIComponent(name)}`;
+      const postRes = await geoserverFetch(baseUrl, path, {
+        method: 'POST',
+        body: cssBody,
+        contentType: 'application/vnd.geoserver.geocss+css',
+      });
+      if (postRes.ok || postRes.status === 201) {
+        writeCssStyleToDataDir(name, cssBody);
+        return { success: true, created: true as const };
+      }
+      const text = (await postRes.text()).replace(/\s+/g, ' ').trim().slice(0, 500);
+      if (!(postRes.status === 403 && /already exists/i.test(text))) {
+        return { success: false, error: `스타일 생성 실패: ${postRes.status} ${text}` };
+      }
+    }
+
+    const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: cssBody,
+      contentType: 'application/vnd.geoserver.geocss+css',
+    });
+    if (!putRes.ok) {
+      const text = (await putRes.text()).replace(/\s+/g, ' ').trim().slice(0, 500);
+      return {
+        success: false,
+        error: text
+          ? `스타일 업로드 실패: ${putRes.status} ${text}`
+          : `스타일 업로드 실패: ${putRes.status}`,
+      };
+    }
+    writeCssStyleToDataDir(name, cssBody);
+    return { success: true, created: false as const };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * elevation 등고선 분류·축척·라벨 CSS를 GeoServer에 올리고 레이어 기본 스타일로 지정
+ */
+export async function applyElevationContourStyle(params: { url?: string; workspace?: string } = {}) {
+  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const workspace = params?.workspace?.trim() || 'ggnr';
+  const layerName = ELEVATION_LAYER_NAME;
+  const cssBody = buildElevationContourCss();
+
+  try {
+    const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
+    if (!putRes.success) {
+      return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+    }
+
+    const setRes = await setLayerDefaultStyle({
+      url: baseUrl,
+      workspace,
+      layerName,
+      styleName: layerName,
+    });
+    if (!setRes.success) {
+      return {
+        success: false,
+        error: setRes.error ?? '레이어 기본 스타일 지정 실패',
+        uploaded: true as const,
+      };
+    }
+
+    return {
+      success: true,
+      layerName,
+      styleName: layerName,
+      created: putRes.created === true,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
 // --- GeoServer Layer + Style (레이어 기준 스타일 정보) ---
 
 export type GeoServerLayerWithStyle = {
@@ -1568,6 +1680,11 @@ export async function applyDefaultStyleToLayer(params: {
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim().toLowerCase();
   if (!layerName) return { success: false, error: '레이어 이름이 필요합니다.' };
+
+  // elevation은 Material Tone 단색 대신 등고선 분류·축척 CSS 고정
+  if (layerName === ELEVATION_LAYER_NAME) {
+    return applyElevationContourStyle({ url: baseUrl, workspace });
+  }
 
   try {
     let geometryType: GeometryType = 'POLYGON';
@@ -3059,8 +3176,13 @@ export async function fixLayerSetupIssues(params: {
         layerName: tableName,
         url: baseUrl,
       });
-      if (!styleRes.success) errors.push(styleRes.error ?? 'GeoServer 스타일 생성 실패');
-      else fixed.push('geoserver_style');
+      if (!styleRes.success) {
+        const err =
+          'error' in styleRes && typeof styleRes.error === 'string'
+            ? styleRes.error
+            : 'GeoServer 스타일 생성 실패';
+        errors.push(err);
+      } else fixed.push('geoserver_style');
     }
 
     return {

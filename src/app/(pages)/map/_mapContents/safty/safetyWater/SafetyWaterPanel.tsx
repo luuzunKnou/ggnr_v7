@@ -11,15 +11,19 @@ import {
   List,
   Loader2,
   MapPin,
+  MountainSnow,
   RefreshCw,
   X,
 } from 'lucide-react';
 import { fromLonLat } from 'ol/proj';
 import { cn } from '@/lib/utils';
+import { useMapContext } from '../../../_mapComponents/MapContext';
 import { SafetyWaterStationFloating } from './SafetyWaterStationFloating';
 import { buildDummyRiskAreas, riskFillRgba } from './safetyWaterDummyRisk';
 import { useSafetyWater } from './safetyWaterContext';
 import type { FloodTimeType, SafetyWaterDummyRisk } from './safetyWaterTypes';
+
+const ELEVATION_LAYER_NAME = 'elevation';
 
 const TIME_OPTIONS: { value: FloodTimeType; label: string }[] = [
   { value: '10M', label: '10분' },
@@ -88,6 +92,16 @@ type Props = {
 
 export function SafetyWaterPanel({ onClose }: Props) {
   const stationRowRef = useRef<HTMLDivElement>(null);
+  const mapCtx = useMapContext();
+  const elevationOn = !!mapCtx?.visibleLayerNames.has(ELEVATION_LAYER_NAME);
+  const toggleElevation = useCallback(() => {
+    mapCtx?.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(ELEVATION_LAYER_NAME)) next.delete(ELEVATION_LAYER_NAME);
+      else next.add(ELEVATION_LAYER_NAME);
+      return next;
+    });
+  }, [mapCtx]);
   const {
     loading,
     refreshing,
@@ -160,6 +174,25 @@ export function SafetyWaterPanel({ onClose }: Props) {
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200/80 px-4 py-2">
+          <button
+            type="button"
+            title="등고선"
+            aria-label="등고선"
+            aria-pressed={elevationOn}
+            onClick={toggleElevation}
+            className={cn(
+              'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
+              elevationOn
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+            )}
+          >
+            <MountainSnow className="h-3.5 w-3.5" aria-hidden />
+            등고선
           </button>
         </div>
 

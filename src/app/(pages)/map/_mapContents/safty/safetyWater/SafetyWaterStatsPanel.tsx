@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -43,8 +43,8 @@ type MergedRow = {
   water: SafetyWaterStatPoint | null;
 };
 
-const RAIN_COLOR = '#16a34a';
-const WATER_COLOR = '#de7979';
+const RAIN_COLOR = '#00897B';
+const WATER_COLOR = '#0B65C6';
 
 function seriesRange(items: SafetyWaterStatPoint[]) {
   const values = items.map((item) => item.value).filter((value): value is number => value != null);
@@ -53,6 +53,16 @@ function seriesRange(items: SafetyWaterStatPoint[]) {
   const max = Math.max(...values);
   if (min === max) return { min: min - 1, max: max + 1 };
   return { min, max };
+}
+
+function pointX(dates: string[], index: number, chartWidth: number, padX: number) {
+  const innerW = Math.max(1, chartWidth - padX * 2);
+  return dates.length <= 1 ? padX : padX + (index * innerW) / (dates.length - 1);
+}
+
+function pointY(value: number, chartHeight: number, min: number, max: number) {
+  const range = Math.max(1e-6, max - min);
+  return 12 + ((max - value) / range) * (chartHeight - 28);
 }
 
 function polylinePoints(
@@ -64,14 +74,12 @@ function polylinePoints(
   min: number,
   max: number
 ) {
-  const range = Math.max(1e-6, max - min);
-  const innerW = Math.max(1, chartWidth - padX * 2);
   return dates
     .map((date, index) => {
       const value = byDate.get(date)?.value;
       if (value == null) return null;
-      const x = dates.length <= 1 ? padX : padX + (index * innerW) / (dates.length - 1);
-      const y = 12 + ((max - value) / range) * (chartHeight - 28);
+      const x = pointX(dates, index, chartWidth, padX);
+      const y = pointY(value, chartHeight, min, max);
       return `${x},${y}`;
     })
     .filter(Boolean)
@@ -127,6 +135,7 @@ function StatsChartSvg({
   showWater: boolean;
 }) {
   const padX = 40;
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const rainPoints = showRain
     ? polylinePoints(dates, rainByDate, width, height, padX, rainRange.min, rainRange.max)
     : '';
@@ -136,50 +145,125 @@ function StatsChartSvg({
   const maxLabels = Math.max(2, Math.min(6, Math.floor(width / 90)));
   const labelEvery = Math.max(1, Math.ceil(dates.length / maxLabels));
 
+  const hoverDate = hoverIndex != null ? dates[hoverIndex] : null;
+  const hoverRain = hoverDate && showRain ? rainByDate.get(hoverDate)?.value : null;
+  const hoverWater = hoverDate && showWater ? waterByDate.get(hoverDate)?.value : null;
+  const hoverX = hoverIndex != null ? pointX(dates, hoverIndex, width, padX) : 0;
+  const hoverRainY =
+    hoverRain != null ? pointY(hoverRain, height, rainRange.min, rainRange.max) : null;
+  const hoverWaterY =
+    hoverWater != null ? pointY(hoverWater, height, waterRange.min, waterRange.max) : null;
+
+  const handleMouseMove = (e: MouseEvent<SVGSVGElement>) => {
+    if (dates.length === 0) {
+      setHoverIndex(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const scaleX = width / Math.max(1, rect.width);
+    const x = (e.clientX - rect.left) * scaleX;
+    const innerW = Math.max(1, width - padX * 2);
+    if (dates.length <= 1) {
+      setHoverIndex(0);
+      return;
+    }
+    const raw = Math.round(((x - padX) / innerW) * (dates.length - 1));
+    setHoverIndex(Math.max(0, Math.min(dates.length - 1, raw)));
+  };
+
+  const tipLeft = Math.min(Math.max(8, hoverX + 10), Math.max(8, width - 140));
+  const tipTop = 8;
+
   return (
-    <svg width={width} height={height} className="block max-w-full" viewBox={`0 0 ${width} ${height}`}>
-      <line x1={padX} y1={height - 16} x2={width - padX} y2={height - 16} stroke="#cbd5e1" />
-      {showRain ? <line x1={padX} y1="12" x2={padX} y2={height - 16} stroke="#cbd5e1" /> : null}
-      {showWater ? (
-        <line x1={width - padX} y1="12" x2={width - padX} y2={height - 16} stroke="#cbd5e1" />
+    <div className="relative" onMouseLeave={() => setHoverIndex(null)}>
+      <svg
+        width={width}
+        height={height}
+        className="block max-w-full cursor-crosshair"
+        viewBox={`0 0 ${width} ${height}`}
+        onMouseMove={handleMouseMove}
+      >
+        <line x1={padX} y1={height - 16} x2={width - padX} y2={height - 16} stroke="#cbd5e1" />
+        {showRain ? <line x1={padX} y1="12" x2={padX} y2={height - 16} stroke="#cbd5e1" /> : null}
+        {showWater ? (
+          <line x1={width - padX} y1="12" x2={width - padX} y2={height - 16} stroke="#cbd5e1" />
+        ) : null}
+        {rainPoints ? <polyline fill="none" stroke={RAIN_COLOR} strokeWidth="2" points={rainPoints} /> : null}
+        {waterPoints ? (
+          <polyline fill="none" stroke={WATER_COLOR} strokeWidth="2" points={waterPoints} />
+        ) : null}
+        {hoverDate ? (
+          <>
+            <line
+              x1={hoverX}
+              y1={12}
+              x2={hoverX}
+              y2={height - 16}
+              stroke="#94a3b8"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            {hoverRainY != null ? (
+              <circle cx={hoverX} cy={hoverRainY} r="4" fill="#fff" stroke={RAIN_COLOR} strokeWidth="2" />
+            ) : null}
+            {hoverWaterY != null ? (
+              <circle cx={hoverX} cy={hoverWaterY} r="4" fill="#fff" stroke={WATER_COLOR} strokeWidth="2" />
+            ) : null}
+          </>
+        ) : null}
+        {dates.map((date, index) => {
+          const isEdge = index === 0 || index === dates.length - 1;
+          const show = isEdge || index % labelEvery === 0;
+          if (!show) return null;
+          // 마지막 라벨이 직전과 너무 가까우면 생략
+          if (!isEdge && index > labelEvery && dates.length - 1 - index < labelEvery / 2) return null;
+          const x = pointX(dates, index, width, padX);
+          return (
+            <text key={`${date}-x`} x={x} y={height - 2} fontSize="9" textAnchor="middle" fill="#64748b">
+              {formatStatBucketLabel(date)}
+            </text>
+          );
+        })}
+        {showRain ? (
+          <>
+            <text x="4" y="18" fontSize="9" fill={RAIN_COLOR}>
+              {rainRange.max.toFixed(1)}
+            </text>
+            <text x="4" y={height - 18} fontSize="9" fill={RAIN_COLOR}>
+              {rainRange.min.toFixed(1)}
+            </text>
+          </>
+        ) : null}
+        {showWater ? (
+          <>
+            <text x={width - 4} y="18" fontSize="9" textAnchor="end" fill={WATER_COLOR}>
+              {waterRange.max.toFixed(2)}
+            </text>
+            <text x={width - 4} y={height - 18} fontSize="9" textAnchor="end" fill={WATER_COLOR}>
+              {waterRange.min.toFixed(2)}
+            </text>
+          </>
+        ) : null}
+      </svg>
+      {hoverDate ? (
+        <div
+          className="pointer-events-none absolute z-10 min-w-[120px] rounded border border-slate-200 bg-white/95 px-2 py-1.5 text-[11px] shadow-md"
+          style={{ left: tipLeft, top: tipTop }}
+        >
+          <div className="mb-0.5 font-medium text-slate-700">{formatStatBucketLabel(hoverDate)}</div>
+          {showRain ? (
+            <div style={{ color: RAIN_COLOR }}>
+              강수량 {hoverRain != null ? `${hoverRain.toFixed(1)} mm` : '—'}
+            </div>
+          ) : null}
+          {showWater ? (
+            <div style={{ color: WATER_COLOR }}>
+              수위 {hoverWater != null ? `${hoverWater.toFixed(2)} m` : '—'}
+            </div>
+          ) : null}
+        </div>
       ) : null}
-      {rainPoints ? <polyline fill="none" stroke={RAIN_COLOR} strokeWidth="2" points={rainPoints} /> : null}
-      {waterPoints ? <polyline fill="none" stroke={WATER_COLOR} strokeWidth="2" points={waterPoints} /> : null}
-      {dates.map((date, index) => {
-        const isEdge = index === 0 || index === dates.length - 1;
-        const show = isEdge || index % labelEvery === 0;
-        if (!show) return null;
-        // 마지막 라벨이 직전과 너무 가까우면 생략
-        if (!isEdge && index > labelEvery && dates.length - 1 - index < labelEvery / 2) return null;
-        const x =
-          dates.length <= 1 ? padX : padX + (index * (width - padX * 2)) / Math.max(1, dates.length - 1);
-        return (
-          <text key={`${date}-x`} x={x} y={height - 2} fontSize="9" textAnchor="middle" fill="#64748b">
-            {formatStatBucketLabel(date)}
-          </text>
-        );
-      })}
-      {showRain ? (
-        <>
-          <text x="4" y="18" fontSize="9" fill={RAIN_COLOR}>
-            {rainRange.max.toFixed(1)}
-          </text>
-          <text x="4" y={height - 18} fontSize="9" fill={RAIN_COLOR}>
-            {rainRange.min.toFixed(1)}
-          </text>
-        </>
-      ) : null}
-      {showWater ? (
-        <>
-          <text x={width - 4} y="18" fontSize="9" textAnchor="end" fill={WATER_COLOR}>
-            {waterRange.max.toFixed(2)}
-          </text>
-          <text x={width - 4} y={height - 18} fontSize="9" textAnchor="end" fill={WATER_COLOR}>
-            {waterRange.min.toFixed(2)}
-          </text>
-        </>
-      ) : null}
-    </svg>
+    </div>
   );
 }
 
@@ -344,6 +428,17 @@ function MergedChart({ blocks }: { blocks: StatsKindBlock[] }) {
     showWater,
   };
 
+  const avgRain = (() => {
+    const vals = rows.map((r) => r.rain?.value).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+  const avgWater = (() => {
+    const vals = rows.map((r) => r.water?.value).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded-[5px] border border-slate-200/90 bg-white p-3 shadow-sm">
       <div className="flex shrink-0 items-center justify-between gap-2 text-[11px] text-slate-500">
@@ -380,28 +475,68 @@ function MergedChart({ blocks }: { blocks: StatsKindBlock[] }) {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="mb-1 flex shrink-0 items-center justify-between gap-2 text-[11px] text-slate-500">
-          <span className="font-medium text-slate-700">테이블</span>
-          <span className="tabular-nums text-slate-600" title="테이블 행 수">
+          <span className="font-medium text-slate-700">도표</span>
+          <span className="tabular-nums text-slate-600" title="도표 행 수">
             총 {rows.length}건
           </span>
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded border border-slate-100">
-          <table className="min-w-full text-[11px]">
-            <thead className="sticky top-0 bg-slate-50 text-slate-500">
+          <table className="min-w-full border-separate border-spacing-0 text-[11px]">
+            <thead>
               <tr>
-                <th className="px-3 py-2 text-left font-medium">시각</th>
-                {showRain ? <th className="px-3 py-2 text-right font-medium">강수량(mm)</th> : null}
-                {showWater ? <th className="px-3 py-2 text-right font-medium">수위(m)</th> : null}
+                <th className="sticky top-0 z-20 border-b border-slate-100 bg-slate-50 px-3 py-2 text-left font-medium text-slate-500">
+                  시각
+                </th>
+                {showRain ? (
+                  <th className="sticky top-0 z-20 border-b border-slate-100 bg-slate-50 px-3 py-2 text-right font-medium text-slate-500">
+                    강수량(mm)
+                  </th>
+                ) : null}
+                {showWater ? (
+                  <th className="sticky top-0 z-20 border-b border-slate-100 bg-slate-50 px-3 py-2 text-right font-medium text-slate-500">
+                    수위(m)
+                  </th>
+                ) : null}
+              </tr>
+              <tr>
+                <th
+                  className="sticky top-[29px] z-20 border-b-[3px] border-double border-slate-300 bg-white px-3 py-2 text-left font-medium text-slate-700"
+                  scope="row"
+                >
+                  평균
+                </th>
+                {showRain ? (
+                  <th
+                    className={cn(
+                      'sticky top-[29px] z-20 border-b-[3px] border-double border-slate-300 bg-white px-3 py-2 text-right font-medium',
+                      avgRain == null ? 'text-slate-400' : 'text-slate-800'
+                    )}
+                  >
+                    {avgRain == null ? '—' : avgRain.toFixed(1)}
+                  </th>
+                ) : null}
+                {showWater ? (
+                  <th
+                    className={cn(
+                      'sticky top-[29px] z-20 border-b-[3px] border-double border-slate-300 bg-white px-3 py-2 text-right font-medium',
+                      avgWater == null ? 'text-slate-400' : 'text-slate-800'
+                    )}
+                  >
+                    {avgWater == null ? '—' : avgWater.toFixed(2)}
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.date} className="border-t border-slate-100">
-                  <td className="px-3 py-2 text-slate-700">{formatStatBucketLabel(row.date)}</td>
+                <tr key={row.date}>
+                  <td className="border-t border-slate-100 px-3 py-2 text-slate-700">
+                    {formatStatBucketLabel(row.date)}
+                  </td>
                   {showRain ? (
                     <td
                       className={cn(
-                        'px-3 py-2 text-right font-medium',
+                        'border-t border-slate-100 px-3 py-2 text-right font-medium',
                         row.rain?.value == null ? 'text-slate-400' : 'text-slate-800'
                       )}
                     >
@@ -411,7 +546,7 @@ function MergedChart({ blocks }: { blocks: StatsKindBlock[] }) {
                   {showWater ? (
                     <td
                       className={cn(
-                        'px-3 py-2 text-right font-medium',
+                        'border-t border-slate-100 px-3 py-2 text-right font-medium',
                         row.water?.value == null ? 'text-slate-400' : 'text-slate-800'
                       )}
                     >

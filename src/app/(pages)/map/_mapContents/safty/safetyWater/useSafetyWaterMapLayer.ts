@@ -7,11 +7,11 @@ import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
-import { Style, Circle as CircleStyle, Fill, Stroke, Text, Icon } from 'ol/style';
+import { Style, Fill, Stroke, Text, Icon } from 'ol/style';
 import type { SafetyWaterStation, SafetyWaterStationKind } from './safetyWaterTypes';
 
-/** 구조물도(교량)와 동일 SVG */
-const WATER_STATION_ICON = '/symbol/river_plan_gd_ps_gr.svg';
+const WATER_STATION_ICON = '/symbol/waves_ps.svg';
+const RAIN_STATION_ICON = '/symbol/rainfall_ps.svg';
 
 function stationStyle(
   selectedId: string | null,
@@ -21,21 +21,13 @@ function stationStyle(
 ) {
   const selected = selectedId != null && selectedId === featureId;
   const isRain = kind === 'rain';
-  const labelColor = isRain ? '#15803d' : '#DE7979';
+  const labelColor = isRain ? '#00897B' : '#0B65C6';
 
-  const image = isRain
-    ? new CircleStyle({
-        radius: selected ? 10 : 7,
-        fill: new Fill({
-          color: selected ? 'rgba(22, 163, 74, 0.9)' : 'rgba(34, 197, 94, 0.75)',
-        }),
-        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.85)', width: 2 }),
-      })
-    : new Icon({
-        src: WATER_STATION_ICON,
-        scale: selected ? 1.15 : 1,
-        anchor: [0.5, 0.5],
-      });
+  const image = new Icon({
+    src: isRain ? RAIN_STATION_ICON : WATER_STATION_ICON,
+    scale: selected ? 1.15 : 1,
+    anchor: [0.5, 0.5],
+  });
 
   return new Style({
     image,

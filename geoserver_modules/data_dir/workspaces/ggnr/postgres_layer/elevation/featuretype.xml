@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--3f61ad2b:19f69edb1ad:-63cf</id>
+  <name>elevation</name>
+  <nativeName>elevation</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>elevation</title>
+  <keywords>
+    <string>elevation</string>
+    <string>features</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>271237.58331623627</minx>
+    <maxx>632508.2835420823</maxx>
+    <miny>231557.14935002214</miny>
+    <maxy>457373.7759966862</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>127.78592243736219</minx>
+    <maxx>131.89062289871399</maxx>
+    <miny>35.4868080914532</miny>
+    <maxy>37.61319696022455</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

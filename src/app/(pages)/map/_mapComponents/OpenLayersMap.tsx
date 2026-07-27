@@ -56,6 +56,7 @@ import {
 import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMapVisualCenterPixel } from './hooks/useMapVisualCenterPixel';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
+import { useAltitudeMeasure } from './hooks/useAltitudeMeasure';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
@@ -592,17 +593,22 @@ export default function OpenLayersMap({
     };
   }, [mapContext]);
 
-  // 지도 클릭 → 도형 검색 (visible 레이어 대상)
+  // 지도 클릭 → 도형 검색 (visible 레이어 대상). 측정·CCTV·행편집 중에는 식별 끔
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
-    roadCctvPanelOpen || !!layerRowGeomEdit
+    roadCctvPanelOpen ||
+      !!layerRowGeomEdit ||
+      activeControls.some((id) => MEASUREMENT_IDS.includes(id))
   );
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
   const handleContextMenu = useCallback(
     (coordinate: [number, number], viewProjection: string) => {
+      // 고도 측정 모드: 주소정보 대신 측정 종료(훅에서 처리)
+      if (activeControls.includes('altitude')) return;
+
       const setAddressInfoDetail = mapContext?.setAddressInfoDetail;
       if (!setAddressInfoDetail) return;
 
@@ -708,7 +714,7 @@ export default function OpenLayersMap({
           setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
         });
     },
-    [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
+    [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail, activeControls]
   );
   useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
 
@@ -1005,17 +1011,28 @@ export default function OpenLayersMap({
     }
   );
 
+  const altitudeActive = activeControls.includes('altitude');
+  const stopAltitudeMeasure = useCallback(() => {
+    setActiveControls((prev) => prev.filter((id) => id !== 'altitude'));
+  }, []);
+  const { clearAltitudeMarkers } = useAltitudeMeasure(
+    mapInstanceRef.current,
+    altitudeActive,
+    stopAltitudeMeasure
+  );
+
   const clearMapDrawInteractions = useCallback(
     (except?: MapDrawInteractionKind) => {
       if (except !== 'measure') {
         setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
         clearMeasurements();
+        clearAltitudeMarkers();
       }
       if (except !== 'spatialSearch') {
         setSpatialDrawRequest?.(null);
       }
     },
-    [clearMeasurements, setSpatialDrawRequest]
+    [clearMeasurements, clearAltitudeMarkers, setSpatialDrawRequest]
   );
 
   useEffect(() => {
@@ -1102,6 +1119,7 @@ export default function OpenLayersMap({
     if (id === 'reset-measurements') {
       setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
       clearMeasurements();
+      clearAltitudeMarkers();
       console.log(`[v0] Reset measurements triggered`);
       return;
     }
