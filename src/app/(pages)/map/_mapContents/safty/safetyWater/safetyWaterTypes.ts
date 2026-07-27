@@ -3,6 +3,22 @@ export type SafetyWaterStationKind = 'water' | 'rain';
 /** HRFCO 관측 시간 단위 */
 export type FloodTimeType = '10M' | '1H' | '1D';
 
+/** 수위 관측소 제원 기준수위 (한강홍수통제소 waterlevel/info) */
+export type SafetyWaterLevelThresholds = {
+  /** 영점표고 EL.m */
+  gdt: number | null;
+  /** 관심 수위 m */
+  attwl: number | null;
+  /** 주의보 수위 m */
+  wrnwl: number | null;
+  /** 경보 수위 m */
+  almwl: number | null;
+  /** 심각 수위 m */
+  srswl: number | null;
+  /** 계획홍수위 m */
+  pfh: number | null;
+};
+
 export type SafetyWaterStation = {
   id: string;
   code: string;
@@ -11,7 +27,7 @@ export type SafetyWaterStation = {
   lon: number;
   lat: number;
   address: string;
-};
+} & Partial<SafetyWaterLevelThresholds>;
 
 export type SafetyWaterObservation = {
   code: string;
@@ -44,14 +60,13 @@ export type SafetyWaterRiskArea = {
   note: string;
   lon: number;
   lat: number;
-};
-
-/** 피해 예상 더미 필지 (지도 폴리곤 + 목록) */
-export type SafetyWaterDummyRisk = SafetyWaterRiskArea & {
-  /** 관측소에 가까울수록 1에 가까움(진한 파랑). 0~1 */
+  /** 심각도 시각용 0~1 (진한 파랑일수록 높음) */
   proximity: number;
-  /** 닫힌 링 [lon, lat][] — 필지형(네모·불규칙) */
+  /** 닫힌 링 [lon, lat][] */
   ring: [number, number][];
+  elevM?: number;
+  distM?: number;
+  depthM?: number;
 };
 
 export type FloodErrorClass = 'provider' | 'ours';

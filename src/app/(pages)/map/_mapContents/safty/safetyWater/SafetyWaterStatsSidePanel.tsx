@@ -38,7 +38,8 @@ function kindLabelOf(kind: SafetyWaterStationKind) {
 }
 
 export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) {
-  const { statsKinds, getStatsTargetStations, timeType } = useSafetyWater();
+  const { statsKinds, getStatsTargetStations, timeType, selectedStation, isAverageMode } =
+    useSafetyWater();
   const initial = defaultStatsRange(timeType);
   const [startValue, setStartValue] = useState(initial.start);
   const [endValue, setEndValue] = useState(initial.end);
@@ -133,12 +134,26 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
     [statsKinds, itemsByKind, loadingByKind]
   );
 
+  const waterThresholds = useMemo(() => {
+    if (isAverageMode) return null;
+    if (!selectedStation || selectedStation.kind !== 'water') return null;
+    if (!statsKinds.includes('water')) return null;
+    return {
+      gdt: selectedStation.gdt ?? null,
+      attwl: selectedStation.attwl ?? null,
+      wrnwl: selectedStation.wrnwl ?? null,
+      almwl: selectedStation.almwl ?? null,
+      srswl: selectedStation.srswl ?? null,
+      pfh: selectedStation.pfh ?? null,
+    };
+  }, [isAverageMode, selectedStation, statsKinds]);
+
   if (statsKinds.length === 0) return null;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden opacity-[0.98]">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-gradient-to-b from-[#f0f9fc] to-white px-4 py-3">
-        <h2 className="min-w-0 text-[15px] font-semibold leading-tight text-slate-800">기간별 통계</h2>
+        <h2 className="min-w-0 text-[15px] font-semibold leading-tight text-slate-800">기간별 현황</h2>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -169,6 +184,7 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
           onChangeStart={(value) => applyRange(value, endValue)}
           onChangeEnd={(value) => applyRange(startValue, value)}
           onApplyRange={applyRange}
+          waterThresholds={waterThresholds}
         />
       </div>
     </div>

@@ -91,7 +91,21 @@ export function parseHrfcoXmlBlocks(xml: string, blockTag: string): Record<strin
       }
     }
     // 표준 태그 보강
-    for (const f of ['addr', 'etcaddr', 'lat', 'lon', 'obsnm', 'rfobscd', 'wlobscd']) {
+    for (const f of [
+      'addr',
+      'etcaddr',
+      'lat',
+      'lon',
+      'obsnm',
+      'rfobscd',
+      'wlobscd',
+      'gdt',
+      'attwl',
+      'wrnwl',
+      'almwl',
+      'srswl',
+      'pfh',
+    ]) {
       const v = pickXmlTag(block, f);
       if (v && row[f] == null) row[f] = v;
     }
@@ -125,6 +139,12 @@ export type ParsedStation = {
   lon: number;
   lat: number;
   address: string;
+  gdt?: number | null;
+  attwl?: number | null;
+  wrnwl?: number | null;
+  almwl?: number | null;
+  srswl?: number | null;
+  pfh?: number | null;
 };
 
 function rowsToWaterStations(rows: Record<string, unknown>[]): ParsedStation[] {
@@ -145,6 +165,12 @@ function rowsToWaterStations(rows: Record<string, unknown>[]): ParsedStation[] {
       lon,
       lat,
       address: [addr, etc].filter(Boolean).join(' ') || addr,
+      gdt: pickNumber(row, 'Gdt', 'gdt', 'GDT'),
+      attwl: pickNumber(row, 'Attwl', 'attwl', 'ATTWL'),
+      wrnwl: pickNumber(row, 'Wrnwl', 'wrnwl', 'WRNWL'),
+      almwl: pickNumber(row, 'Almwl', 'almwl', 'ALMWL'),
+      srswl: pickNumber(row, 'Srswl', 'srswl', 'SRSWL'),
+      pfh: pickNumber(row, 'Pfh', 'pfh', 'PFH'),
     });
   }
   return out;

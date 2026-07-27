@@ -8,6 +8,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { Style, Stroke, Fill, Circle as CircleStyle } from 'ol/style';
 import Overlay from 'ol/Overlay';
+import DoubleClickZoom from 'ol/interaction/DoubleClickZoom';
 import { call } from '@/lib/api';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 
@@ -52,7 +53,7 @@ function createOverlayShell(withInstruction: boolean): {
   if (withInstruction) {
     instructionLine = document.createElement('div');
     instructionLine.style.cssText = 'color: #666; font-size: 11px; margin-top: 2px;';
-    instructionLine.textContent = '클릭으로 측정 · 우클릭 또는 ESC로 종료';
+    instructionLine.textContent = '클릭으로 측정 · 더블클릭으로 마침';
     root.appendChild(instructionLine);
   }
 
@@ -93,7 +94,7 @@ async function fetchElevationAt(
 }
 
 /**
- * 고도 측정 모드 — 이동 중 debounce 미리보기, 좌클릭 확정, 우클릭·ESC 종료
+ * 고도 측정 모드 — 이동 중 debounce 미리보기·파란 커서 점, 좌클릭 확정, 더블클릭 종료(거리 측정과 동일)
  */
 export function useAltitudeMeasure(
   map: OlMap | null,
@@ -102,6 +103,7 @@ export function useAltitudeMeasure(
 ) {
   const sourceRef = useRef<VectorSource | null>(null);
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  const cursorFeatureRef = useRef<Feature<Point> | null>(null);
   const previewOverlayRef = useRef<Overlay | null>(null);
   const previewValueRef = useRef<HTMLDivElement | null>(null);
   const completedOverlaysRef = useRef<Overlay[]>([]);
@@ -131,8 +133,29 @@ export function useAltitudeMeasure(
     }
   }, []);
 
+  const ensureCursorFeature = useCallback(() => {
+    if (!sourceRef.current) return;
+    if (cursorFeatureRef.current) return;
+    const feat = new Feature({
+      geometry: new Point([0, 0]),
+      altitudeRole: 'cursor',
+    });
+    feat.setGeometry(undefined);
+    cursorFeatureRef.current = feat;
+    sourceRef.current.addFeature(feat);
+  }, []);
+
+  const clearResultFeatures = useCallback(() => {
+    const source = sourceRef.current;
+    if (!source) return;
+    const toRemove = source
+      .getFeatures()
+      .filter((f) => f.get('altitudeRole') !== 'cursor');
+    for (const f of toRemove) source.removeFeature(f);
+  }, []);
+
   const clearAltitudeMarkers = useCallback(() => {
-    sourceRef.current?.clear();
+    clearResultFeatures();
     if (map && completedOverlaysRef.current.length > 0) {
       for (const ov of completedOverlaysRef.current) {
         try {
@@ -147,7 +170,10 @@ export function useAltitudeMeasure(
       previewValueRef.current.innerHTML = `고도 : <span style="color: #3388ff; font-weight: 600;">…</span>`;
       previewOverlayRef.current.setPosition(undefined);
     }
-  }, [map]);
+    if (cursorFeatureRef.current) {
+      cursorFeatureRef.current.setGeometry(undefined);
+    }
+  }, [map, clearResultFeatures]);
 
   // 레이어 수명
   useEffect(() => {
@@ -162,6 +188,8 @@ export function useAltitudeMeasure(
         }
         layerRef.current = null;
       }
+      sourceRef.current = null;
+      cursorFeatureRef.current = null;
     };
   }, [map, ensureLayer]);
 
@@ -183,10 +211,22 @@ export function useAltitudeMeasure(
         previewOverlayRef.current = null;
         previewValueRef.current = null;
       }
+      if (cursorFeatureRef.current && sourceRef.current) {
+        sourceRef.current.removeFeature(cursorFeatureRef.current);
+        cursorFeatureRef.current = null;
+      }
       return;
     }
 
     ensureLayer(map);
+    ensureCursorFeature();
+
+    const dblClickZoom = map
+      .getInteractions()
+      .getArray()
+      .find((i) => i instanceof DoubleClickZoom) as DoubleClickZoom | undefined;
+    const dblClickZoomWasActive = dblClickZoom?.getActive() ?? false;
+    dblClickZoom?.setActive(false);
 
     const { root, valueLine } = createOverlayShell(true);
     previewValueRef.current = valueLine;
@@ -234,9 +274,18 @@ export function useAltitudeMeasure(
 
     const onPointerMove = (e: { coordinate?: number[]; dragging?: boolean }) => {
       if (e.dragging || !e.coordinate) return;
+      const coord = e.coordinate.slice(0, 2);
+      const cursor = cursorFeatureRef.current;
+      if (cursor) {
+        const geom = cursor.getGeometry();
+        if (geom) {
+          geom.setCoordinates(coord);
+        } else {
+          cursor.setGeometry(new Point(coord));
+        }
+      }
       preview.setPosition(e.coordinate);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      const coord = e.coordinate.slice(0, 2);
       debounceTimerRef.current = setTimeout(() => {
         runQuery(coord, true);
       }, DEBOUNCE_MS);
@@ -261,6 +310,7 @@ export function useAltitudeMeasure(
         // 오류여도 클릭 지점에 안내 고정 (지원지역 벗어남 등)
         const feature = new Feature({
           geometry: new Point(coordinate),
+          altitudeRole: 'result',
         });
         sourceRef.current?.addFeature(feature);
 
@@ -278,24 +328,14 @@ export function useAltitudeMeasure(
       });
     };
 
-    const onContextMenu = (evt: MouseEvent) => {
-      evt.preventDefault();
-      evt.stopPropagation();
+    const onDblClick = (e: { originalEvent?: Event }) => {
+      e.originalEvent?.preventDefault?.();
       onStopRef.current();
-    };
-
-    const onKeyDown = (evt: KeyboardEvent) => {
-      if (evt.key === 'Escape') {
-        evt.preventDefault();
-        onStopRef.current();
-      }
     };
 
     map.on('pointermove', onPointerMove);
     map.on('singleclick', onSingleClick);
-    const viewport = map.getViewport();
-    viewport.addEventListener('contextmenu', onContextMenu, true);
-    window.addEventListener('keydown', onKeyDown);
+    map.on('dblclick', onDblClick);
 
     return () => {
       if (debounceTimerRef.current) {
@@ -304,8 +344,8 @@ export function useAltitudeMeasure(
       }
       map.un('pointermove', onPointerMove);
       map.un('singleclick', onSingleClick);
-      viewport.removeEventListener('contextmenu', onContextMenu, true);
-      window.removeEventListener('keydown', onKeyDown);
+      map.un('dblclick', onDblClick);
+      dblClickZoom?.setActive(dblClickZoomWasActive);
       if (previewOverlayRef.current) {
         try {
           map.removeOverlay(previewOverlayRef.current);
@@ -315,8 +355,12 @@ export function useAltitudeMeasure(
         previewOverlayRef.current = null;
         previewValueRef.current = null;
       }
+      if (cursorFeatureRef.current && sourceRef.current) {
+        sourceRef.current.removeFeature(cursorFeatureRef.current);
+        cursorFeatureRef.current = null;
+      }
     };
-  }, [map, active, ensureLayer]);
+  }, [map, active, ensureLayer, ensureCursorFeature]);
 
   return { clearAltitudeMarkers };
 }

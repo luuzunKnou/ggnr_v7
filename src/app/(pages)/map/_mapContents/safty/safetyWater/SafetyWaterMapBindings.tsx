@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { buildDummyRiskAreas } from './safetyWaterDummyRisk';
 import { useSafetyWater } from './safetyWaterContext';
+import { buildDummyWaterStatusById } from './safetyWaterStatus';
 import { useSafetyWaterMapLayer } from './useSafetyWaterMapLayer';
 import { useSafetyWaterMapZoom } from './useSafetyWaterMapZoom';
 import { useSafetyWaterNearbyCctvLayer } from './useSafetyWaterNearbyCctvLayer';
@@ -22,15 +22,24 @@ export function SafetyWaterMapBindings() {
     selectedCctvKey,
     setSelectedCctvKey,
     cctvOpen,
+    riskAreas,
   } = useSafetyWater();
 
-  const riskAreas = useMemo(() => buildDummyRiskAreas(stations), [stations]);
+  const waterStatusById = useMemo(() => buildDummyWaterStatusById(stations), [stations]);
 
-  useSafetyWaterMapZoom(true, mapReady);
-  useSafetyWaterMapLayer(mapReady, map, true, stations, selectedStationId, (id) => {
-    focusStation(id);
-    setListOpen(false);
-  });
+  useSafetyWaterMapZoom(true, mapReady, stations);
+  useSafetyWaterMapLayer(
+    mapReady,
+    map,
+    true,
+    stations,
+    selectedStationId,
+    waterStatusById,
+    (id) => {
+      focusStation(id);
+      setListOpen(false);
+    }
+  );
   useSafetyWaterRiskLayer(mapReady, map, true, riskAreas);
   /** 전체=전부 파랑, 특정=목록만 파랑·나머지 흐림, 선택=빨강(패널 open 시) */
   useSafetyWaterNearbyCctvLayer(

@@ -32,6 +32,7 @@ import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
+import * as floodRiskService from './floodRiskService';
 import * as landLinkageService from './landLinkageService';
 import * as seumService from './seumService';
 /** API `service: 'seumPermitService'` 호환 — seumService와 동일 모듈 */
@@ -75,6 +76,7 @@ export {
   layerRowService,
   mapAnalyseService,
   elevationService,
+  floodRiskService,
   landLinkageService,
   seumService,
   seumPermitService,

@@ -606,9 +606,6 @@ export default function OpenLayersMap({
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
   const handleContextMenu = useCallback(
     (coordinate: [number, number], viewProjection: string) => {
-      // 고도 측정 모드: 주소정보 대신 측정 종료(훅에서 처리)
-      if (activeControls.includes('altitude')) return;
-
       const setAddressInfoDetail = mapContext?.setAddressInfoDetail;
       if (!setAddressInfoDetail) return;
 
@@ -714,7 +711,7 @@ export default function OpenLayersMap({
           setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
         });
     },
-    [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail, activeControls]
+    [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );
   useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
 

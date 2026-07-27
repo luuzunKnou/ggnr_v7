@@ -9,12 +9,12 @@ import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
 import { Style, Fill, Stroke } from 'ol/style';
 import { riskFillRgba, riskStrokeRgba } from './safetyWaterDummyRisk';
-import type { SafetyWaterDummyRisk } from './safetyWaterTypes';
+import type { SafetyWaterRiskArea } from './safetyWaterTypes';
 
-function riskStyle(proximity: number) {
+function riskStyle(riskLevelOrProximity: number | string) {
   return new Style({
-    fill: new Fill({ color: riskFillRgba(proximity) }),
-    stroke: new Stroke({ color: riskStrokeRgba(proximity), width: 1.4 }),
+    fill: new Fill({ color: riskFillRgba(riskLevelOrProximity) }),
+    stroke: new Stroke({ color: riskStrokeRgba(riskLevelOrProximity), width: 1.4 }),
   });
 }
 
@@ -22,7 +22,7 @@ export function useSafetyWaterRiskLayer(
   mapReady: boolean,
   map: Map | null,
   active: boolean,
-  areas: SafetyWaterDummyRisk[]
+  areas: SafetyWaterRiskArea[]
 ) {
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
 
@@ -33,13 +33,16 @@ export function useSafetyWaterRiskLayer(
     const layer = new VectorLayer({
       source,
       zIndex: 110,
-      properties: { id: 'safetyWaterDummyRisk' },
+      properties: { id: 'safetyWaterFloodRisk' },
       style: (feature) => {
-        const p = Number((feature as Feature).get('proximity') ?? 0.5);
+        const f = feature as Feature;
+        const riskLevel = String(f.get('riskLevel') ?? '');
+        if (riskLevel) return riskStyle(riskLevel);
+        const p = Number(f.get('proximity') ?? 0.5);
         return riskStyle(Number.isFinite(p) ? p : 0.5);
       },
     });
-    layer.set('safetyWaterDummyRiskLayer', true);
+    layer.set('safetyWaterFloodRiskLayer', true);
     map.addLayer(layer);
     layerRef.current = layer;
 
@@ -63,6 +66,7 @@ export function useSafetyWaterRiskLayer(
         riskId: area.id,
         proximity: area.proximity,
         name: area.name,
+        riskLevel: area.riskLevel,
       });
       source.addFeature(f);
     }

@@ -1,5 +1,5 @@
 /**
- * 고도 측정 — layer.elevation 등고선 거리가중 보간, 시군구(sgg) 범위 검사
+ * 고도 측정 — layer.elevation 상·하 인접 등고 보간, 시군구(sgg) 범위 검사
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -11,6 +11,8 @@ const SGG_TABLE = 'sgg';
 
 /** 등고선 위에 있다고 볼 거리(m) — 이내면 보간 없이 cont 그대로 */
 const ON_LINE_EPS_M = 0.5;
+/** 점 주변에서만 등고 후보를 모을 반경(m) */
+const SEARCH_RADIUS_M = 300;
 /** 보간에 쓸 서로 다른 높이 후보 개수 */
 const CANDIDATE_DISTINCT_ELEV = 12;
 
@@ -23,7 +25,7 @@ export type ElevationAtPointResult = {
   elevation?: number;
   /** 최근접 등고선까지 거리(m) */
   distanceM?: number;
-  /** nearest=한 선만, idw=두 선 거리가중 보간 */
+  /** nearest=한 선만, idw=상·하 등고 거리가중 보간 */
   method?: 'nearest' | 'idw';
 };
 
@@ -31,6 +33,25 @@ type ElevCandidate = { elevation: number; distanceM: number };
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+/** geometry_columns.srid 가 0·NULL 이면 프로젝트 기본(EPSG:5181) */
+function normalizedSrid(catalogSrid: unknown): number {
+  const n = Number(catalogSrid);
+  if (catalogSrid == null || !Number.isFinite(n) || n <= 0) return 5181;
+  return Math.floor(n);
+}
+
+function asBool(value: unknown): boolean {
+  return value === true || value === 't' || value === 'true' || value === 1;
+}
+
+/**
+ * catalog SRID 로 스탬프 (SRID 0 컬럼 ↔ Transform 점 mixed-SRID 방지).
+ * 좌표값은 그대로 두고 메타만 맞춤 — jijuk/emd 등과 동일 패턴.
+ */
+function geomStamped(geomIdent: string, catalogSrid: number): string {
+  return `ST_SetSRID(${geomIdent}, ${catalogSrid})`;
 }
 
 async function getGeomMeta(
@@ -48,10 +69,9 @@ async function getGeomMeta(
     );
     const row = res.rows?.[0] as { name?: string; srid?: number } | undefined;
     if (!row?.name) return null;
-    const srid = Number(row.srid);
     return {
       geomCol: String(row.name).trim(),
-      srid: Number.isFinite(srid) && srid > 0 ? srid : 5181,
+      srid: normalizedSrid(row.srid),
     };
   } catch {
     return null;
@@ -71,10 +91,10 @@ async function tableExists(schema: string, table: string): Promise<boolean> {
 }
 
 /**
- * 두 등고선까지의 거리로 높이 보간 (역거리 가중).
- * - 점↔선 거리(가까운 정도)
- * - 두 선의 높이 차(등고 간격)를 반영해 중간 고도 추정
- * - 높이 차가 작은 이웃 등고선을 우선 (인접 주/간곡선)
+ * 상·하 인접 등고선으로만 높이 보간 (역거리 가중).
+ * - low·high 둘 다 있을 때만 보간 → 결과는 항상 [low, high] 안
+ * - 한쪽만 있으면 최근접 cont만 사용 (외삽 금지)
+ * - 선 위(0.5m 이내)면 해당 cont 그대로
  */
 export function interpolateElevationFromCandidates(
   candidates: ElevCandidate[]
@@ -94,34 +114,32 @@ export function interpolateElevationFromCandidates(
     return { elevation: a.elevation, method: 'nearest', distanceM: a.distanceM };
   }
 
-  const others = sorted.filter((c) => Math.abs(c.elevation - a.elevation) > 0.05);
-  if (!others.length) {
-    return { elevation: a.elevation, method: 'nearest', distanceM: a.distanceM };
+  let low: ElevCandidate | null = null;
+  let high: ElevCandidate | null = null;
+  for (const c of sorted) {
+    if (c.elevation < a.elevation - 0.05) {
+      if (!low || c.distanceM < low.distanceM) low = c;
+    } else if (c.elevation > a.elevation + 0.05) {
+      if (!high || c.distanceM < high.distanceM) high = c;
+    }
   }
 
-  // 인접 등고 간격 우선: |Δh|가 작고, 거리가 과도하지 않은 후보
-  const pool = others.slice(0, 6);
-  pool.sort((x, y) => {
-    const dhX = Math.abs(x.elevation - a.elevation);
-    const dhY = Math.abs(y.elevation - a.elevation);
-    if (dhX !== dhY) return dhX - dhY;
-    return x.distanceM - y.distanceM;
-  });
-  const b = pool[0];
+  if (low && high) {
+    const d0 = Math.max(low.distanceM, 1e-6);
+    const d1 = Math.max(high.distanceM, 1e-6);
+    const elevation = (low.elevation * d1 + high.elevation * d0) / (d0 + d1);
+    return {
+      elevation,
+      method: 'idw',
+      distanceM: a.distanceM,
+    };
+  }
 
-  const d0 = Math.max(a.distanceM, 1e-6);
-  const d1 = Math.max(b.distanceM, 1e-6);
-  // 역거리 가중: 가까운 선의 높이에 더 큰 비중
-  const elevation = (a.elevation * d1 + b.elevation * d0) / (d0 + d1);
-  return {
-    elevation,
-    method: 'idw',
-    distanceM: a.distanceM,
-  };
+  return { elevation: a.elevation, method: 'nearest', distanceM: a.distanceM };
 }
 
 /**
- * 지도 좌표(기본 EPSG:3857)에서 고도 조회 — 등고선 간 거리가중 보간
+ * 지도 좌표(기본 EPSG:3857)에서 고도 조회 — 상·하 인접 등고 보간
  */
 export async function getElevationAtPoint(params: {
   x?: number;
@@ -152,15 +170,25 @@ export async function getElevationAtPoint(params: {
     };
   }
 
-  const pointSql = `ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), ${inputSrid}), ${elevMeta.srid})`;
-  const elevGeom = `"${elevMeta.geomCol.replace(/"/g, '""')}"`;
+  const elevGeomCol = `"${elevMeta.geomCol.replace(/"/g, '""')}"`;
+  const elevGeom = geomStamped(elevGeomCol, elevMeta.srid);
   const elevFrom = `"${ELEVATION_SCHEMA.replace(/"/g, '""')}"."${ELEVATION_TABLE.replace(/"/g, '""')}"`;
+  const pointSql = `ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), ${inputSrid}), ${elevMeta.srid})`;
+
+  const outOfSgg = (): ElevationAtPointResult => ({
+    success: false,
+    code: 'OUT_OF_SGG',
+    message: '지원 지역을 벗어남',
+  });
 
   let insideSgg = true;
+  let boundaryChecked = false;
   const sggExists = await tableExists(SGG_SCHEMA, SGG_TABLE);
   const sggMeta = sggExists ? await getGeomMeta(SGG_SCHEMA, SGG_TABLE) : null;
   if (sggMeta) {
-    const sggGeom = `"${sggMeta.geomCol.replace(/"/g, '""')}"`;
+    boundaryChecked = true;
+    const sggGeomCol = `"${sggMeta.geomCol.replace(/"/g, '""')}"`;
+    const sggGeom = geomStamped(sggGeomCol, sggMeta.srid);
     const sggFrom = `"${SGG_SCHEMA.replace(/"/g, '""')}"."${SGG_TABLE.replace(/"/g, '""')}"`;
     const sggPoint = `ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), ${inputSrid}), ${sggMeta.srid})`;
     try {
@@ -168,48 +196,46 @@ export async function getElevationAtPoint(params: {
         sql.raw(
           `SELECT EXISTS (
              SELECT 1 FROM ${sggFrom}
-             WHERE ${sggGeom} IS NOT NULL
+             WHERE ${sggGeomCol} IS NOT NULL
                AND ST_Intersects(${sggGeom}, ${sggPoint})
            ) AS inside`
         )
       );
-      insideSgg = (sggRes.rows?.[0] as { inside?: boolean } | undefined)?.inside === true;
+      insideSgg = asBool((sggRes.rows?.[0] as { inside?: unknown } | undefined)?.inside);
     } catch {
-      insideSgg = true;
+      return outOfSgg();
     }
   } else {
     const emdExists = await tableExists('public_layer', 'emd');
     const emdMeta = emdExists ? await getGeomMeta('public_layer', 'emd') : null;
     if (emdMeta) {
-      const emdGeom = `"${emdMeta.geomCol.replace(/"/g, '""')}"`;
+      boundaryChecked = true;
+      const emdGeomCol = `"${emdMeta.geomCol.replace(/"/g, '""')}"`;
+      const emdGeom = geomStamped(emdGeomCol, emdMeta.srid);
       const emdPoint = `ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), ${inputSrid}), ${emdMeta.srid})`;
       try {
         const emdRes = await db.execute(
           sql.raw(
             `SELECT EXISTS (
                SELECT 1 FROM "public_layer"."emd"
-               WHERE ${emdGeom} IS NOT NULL
+               WHERE ${emdGeomCol} IS NOT NULL
                  AND ST_Intersects(${emdGeom}, ${emdPoint})
              ) AS inside`
           )
         );
-        insideSgg = (emdRes.rows?.[0] as { inside?: boolean } | undefined)?.inside === true;
+        insideSgg = asBool((emdRes.rows?.[0] as { inside?: unknown } | undefined)?.inside);
       } catch {
-        insideSgg = true;
+        return outOfSgg();
       }
     }
   }
 
-  if (!insideSgg) {
-    return {
-      success: false,
-      code: 'OUT_OF_SGG',
-      message: '지원 지역을 벗어남',
-    };
+  if (boundaryChecked && !insideSgg) {
+    return outOfSgg();
   }
 
   try {
-    // 높이(cont)별로 가장 가까운 선 1개씩 → 가까운 순 후보
+    // 검색 반경 내, 높이(cont)별 최근접 선 → 가까운 순 후보
     const res = await db.execute(
       sql.raw(
         `WITH by_elev AS (
@@ -217,7 +243,8 @@ export async function getElevationAtPoint(params: {
              cont::double precision AS elevation,
              ST_Distance(${elevGeom}, ${pointSql}) AS distance_m
            FROM ${elevFrom}
-           WHERE ${elevGeom} IS NOT NULL AND cont IS NOT NULL
+           WHERE ${elevGeomCol} IS NOT NULL AND cont IS NOT NULL
+             AND ST_DWithin(${elevGeom}, ${pointSql}, ${SEARCH_RADIUS_M})
            ORDER BY (cont::double precision), ${elevGeom} <-> ${pointSql}
          )
          SELECT elevation, distance_m

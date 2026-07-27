@@ -125,7 +125,7 @@ export function SafetyWaterForecastModal() {
     <MapFloatingPanel
       className="rounded-[5px]"
       width="360px"
-      maxHeight="55vh"
+      maxHeight="min(70vh, 420px)"
       defaultPosition={anchorPosition}
       panelRef={panelRef}
       style={{ position: 'fixed', zIndex: 210 }}
@@ -151,7 +151,10 @@ export function SafetyWaterForecastModal() {
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
-        <p className="text-[11px] text-slate-500">현재 시간 기준 최근 24시간 자료 제공</p>
+        <div className="space-y-0.5">
+          <p className="text-[11px] text-slate-500">현재 시간 기준 최근 24시간 자료 제공</p>
+          <p className="text-[10px] text-slate-400">정보제공: 한강 홍수통제소</p>
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {FORECAST_CHIPS.map(({ id, label }) => {
             const on = selectedChips.includes(id);
@@ -174,7 +177,7 @@ export function SafetyWaterForecastModal() {
             );
           })}
         </div>
-        <div className="min-h-0 max-h-[min(40vh,280px)] flex-1 overflow-y-auto">
+        <div className="min-h-0 max-h-[240px] flex-1 overflow-y-auto">
           {forecastLoading ? (
             <p className="py-4 text-center text-[12px] text-slate-400">불러오는 중…</p>
           ) : filtered.length === 0 ? (

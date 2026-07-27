@@ -67,6 +67,10 @@ export function SafetyWaterNearbyCctv() {
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [listOpen]);
 
+  useEffect(() => {
+    if (listItems.length < 2 && listOpen) setListOpen(false);
+  }, [listItems.length, listOpen]);
+
   const goPrev = useCallback(() => {
     if (listItems.length === 0) return;
     const i = selectedIndex < 0 ? 0 : (selectedIndex - 1 + listItems.length) % listItems.length;
@@ -92,12 +96,16 @@ export function SafetyWaterNearbyCctv() {
         <>
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <Cctv className="h-4 w-4 shrink-0 self-center text-sky-600" aria-hidden />
-            <div className="flex min-w-0 flex-col justify-center gap-0.5">
-              <span className="truncate text-[13px] font-medium leading-none text-slate-800">
-                주변 도로 영상
+            <span className="truncate text-[13px] font-medium leading-none text-slate-800">
+              주변 도로 영상
+            </span>
+            {cctvLoading ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" aria-hidden />
+            ) : (
+              <span className="shrink-0 text-[10px] font-normal leading-none text-slate-500">
+                반경 500m 내 · {listItems.length}건
               </span>
-              <span className="text-[10px] leading-none text-slate-500">반경 500m 내</span>
-            </div>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-0.5 self-center">
             {listItems.length >= 2 ? (
@@ -120,21 +128,21 @@ export function SafetyWaterNearbyCctv() {
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
+                <button
+                  type="button"
+                  title="영상 목록"
+                  aria-label="영상 목록"
+                  aria-expanded={listOpen}
+                  onClick={() => setListOpen((v) => !v)}
+                  className={cn(
+                    'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded transition-colors',
+                    listOpen ? 'bg-slate-100 text-slate-800' : 'text-slate-500 hover:bg-slate-100'
+                  )}
+                >
+                  <List className="h-4 w-4" />
+                </button>
               </>
             ) : null}
-            <button
-              type="button"
-              title="영상 목록"
-              aria-label="영상 목록"
-              aria-expanded={listOpen}
-              onClick={() => setListOpen((v) => !v)}
-              className={cn(
-                'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded transition-colors',
-                listOpen ? 'bg-slate-100 text-slate-800' : 'text-slate-500 hover:bg-slate-100'
-              )}
-            >
-              <List className="h-4 w-4" />
-            </button>
             <button
               type="button"
               title="닫기"
@@ -154,6 +162,7 @@ export function SafetyWaterNearbyCctv() {
             {cctvError}
           </p>
         ) : null}
+        <p className="text-[10px] text-slate-400">정보제공: ITS 국가교통정보센터</p>
         <div className="overflow-hidden rounded-md border border-slate-200 bg-black">
           {selected ? (
             <RoadCctvHlsPlayer
@@ -170,11 +179,6 @@ export function SafetyWaterNearbyCctv() {
         {selected ? (
           <p className="line-clamp-2 text-[11px] font-medium text-slate-700">{selected.cctvname}</p>
         ) : null}
-        {cctvLoading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />
-        ) : (
-          <p className="text-[10px] text-slate-500">반경 500m 내 · {listItems.length}건</p>
-        )}
 
         {listOpen ? (
           <div

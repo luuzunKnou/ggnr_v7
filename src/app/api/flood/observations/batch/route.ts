@@ -150,10 +150,25 @@ export async function POST(req: NextRequest) {
     `[flood] batch average time=${time} requested=${stations.length} water=${waterAvg.count}/${stations.filter((s) => s.kind === 'water').length} rain=${rainAvg.count}/${stations.filter((s) => s.kind === 'rain').length}`
   );
 
+  const items: { kind: 'water' | 'rain'; code: string; value: number | null; observedAt: string }[] =
+    [];
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    const st = stations[i];
+    if (!r?.ok || !st?.code) continue;
+    items.push({
+      kind: r.kind,
+      code: st.code,
+      value: r.value,
+      observedAt: r.observedAt,
+    });
+  }
+
   return NextResponse.json({
     time,
     water: waterAvg,
     rain: rainAvg,
+    items,
     meta: {
       requested: stations.length,
       waterOk: waterAvg.count,

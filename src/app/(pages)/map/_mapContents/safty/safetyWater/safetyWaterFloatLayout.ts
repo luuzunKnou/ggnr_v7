@@ -13,5 +13,5 @@ export function safetyWaterForecastFloatTop(searchTopPx: number) {
 /** 홍수 예보 패널 아래 ↔ 주변 도로 간격 */
 export const FORECAST_TO_CCTV_GAP_PX = 12;
 
-/** 높이 미측정 시 폴백 (대략 예보 모달) */
-export const FORECAST_HEIGHT_FALLBACK_PX = 360;
+/** 높이 미측정 시 폴백 (예보 모달 — 목록 1건 펼침 기준) */
+export const FORECAST_HEIGHT_FALLBACK_PX = 380;

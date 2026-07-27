@@ -252,15 +252,22 @@ export function inputStepForTime(time: FloodTimeType): number | undefined {
   return undefined;
 }
 
-export function formatStatBucketLabel(key: string): string {
-  if (key.length === 8) {
-    return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+/** 도표·그래프용 버킷 표시. 검색단위에 따라 날짜/일시 서식 */
+export function formatStatBucketLabel(key: string, time: FloodTimeType): string {
+  const raw = key.replace(/\D/g, '');
+  if (time === '1D') {
+    if (raw.length < 8) return key;
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
   }
-  if (key.length === 10) {
-    return `${key.slice(4, 6)}-${key.slice(6, 8)} ${key.slice(8, 10)}시`;
+  // 1시간·10분: YYYY-MM-dd HH:mm
+  if (raw.length >= 12) {
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
   }
-  if (key.length >= 12) {
-    return `${key.slice(4, 6)}-${key.slice(6, 8)} ${key.slice(8, 10)}:${key.slice(10, 12)}`;
+  if (raw.length >= 10) {
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)} ${raw.slice(8, 10)}:00`;
+  }
+  if (raw.length >= 8) {
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
   }
   return key;
 }

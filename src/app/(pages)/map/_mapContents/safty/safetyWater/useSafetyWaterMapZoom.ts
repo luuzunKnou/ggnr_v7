@@ -1,44 +1,64 @@
 'use client';
 
+import type { Map as OlMap } from 'ol';
+import { fromLonLat } from 'ol/proj';
 import { useEffect, useRef } from 'react';
-import { call } from '@/lib/api';
 import { useMapContext } from '../../../_mapComponents/MapContext';
-import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
-import { transformCoordinate } from '../../../_mapComponents/services/coordinateService';
+import {
+  scheduleFitMapToExtent3857,
+  type Extent3857,
+} from '../../../_mapComponents/config/mapAutoNavigation';
+import type { SafetyWaterStation } from './safetyWaterTypes';
 
-function extent5181To3857(
-  minX: number,
-  minY: number,
-  maxX: number,
-  maxY: number
-): [number, number, number, number] | null {
-  const corners: [number, number][] = [
-    [minX, minY],
-    [minX, maxY],
-    [maxX, minY],
-    [maxX, maxY],
-  ];
-  const transformed = corners.map(
-    (c) => transformCoordinate(c, 'EPSG:5181', 'EPSG:3857') as [number, number]
-  );
+const OVERVIEW_FIT_PADDING: [number, number, number, number] = [48, 48, 48, 48];
+
+/** 관측소 lon/lat → 3857 extent. 유효 좌표 없으면 null */
+export function stationsExtent3857(stations: SafetyWaterStation[]): Extent3857 | null {
   let xmin = Infinity;
   let ymin = Infinity;
   let xmax = -Infinity;
   let ymax = -Infinity;
-  for (const [x, y] of transformed) {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  let count = 0;
+  for (const st of stations) {
+    const lon = Number(st.lon);
+    const lat = Number(st.lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const [x, y] = fromLonLat([lon, lat]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     xmin = Math.min(xmin, x);
     ymin = Math.min(ymin, y);
     xmax = Math.max(xmax, x);
     ymax = Math.max(ymax, y);
+    count += 1;
   }
+  if (count === 0) return null;
   return [xmin, ymin, xmax, ymax];
 }
 
+/** 전체 관측소가 보이도록 fit (좌측 패널은 view.padding으로만 보정) */
+export function fitStationsOverview(
+  map: OlMap,
+  stations: SafetyWaterStation[],
+  applyMapViewPadding?: (() => void) | null
+): boolean {
+  const extent = stationsExtent3857(stations);
+  if (!extent) return false;
+  scheduleFitMapToExtent3857(map, extent, {
+    duration: 500,
+    fitPadding: OVERVIEW_FIT_PADDING,
+    applyMapViewPadding: applyMapViewPadding ?? null,
+  });
+  return true;
+}
+
 /**
- * 침수현황 진입 시 사업 시군구(schema.emd envelope)가 화면에 다 보이도록 fit.
+ * 침수현황 진입 시 전체 관측소 extent가 화면에 다 보이도록 fit.
  */
-export function useSafetyWaterMapZoom(active: boolean, mapReady: boolean) {
+export function useSafetyWaterMapZoom(
+  active: boolean,
+  mapReady: boolean,
+  stations: SafetyWaterStation[]
+) {
   const mapContext = useMapContext();
   const fittedRef = useRef(false);
 
@@ -48,51 +68,20 @@ export function useSafetyWaterMapZoom(active: boolean, mapReady: boolean) {
       return;
     }
     if (!mapReady || fittedRef.current) return;
+    if (!stations.length) return;
 
-    let cancelled = false;
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
 
-    const run = async () => {
-      const map = mapContext?.mapInstanceRef?.current;
-      if (!map) return;
-
-      try {
-        const res = await call('', 'POST', {
-          service: 'devTestService',
-          action: 'getEmdExtent5181',
-          params: {},
-        });
-        if (cancelled || fittedRef.current) return;
-        const data = res?.data ?? res;
-        const minX = Number(data?.minX);
-        const maxX = Number(data?.maxX);
-        const minY = Number(data?.minY);
-        const maxY = Number(data?.maxY);
-        if (![minX, maxX, minY, maxY].every(Number.isFinite)) return;
-
-        const ext3857 = extent5181To3857(minX, minY, maxX, maxY);
-        if (!ext3857) return;
-
-        const paddingLeft = Math.max(24, mapContext?.mapPaddingLeft ?? 0);
-        scheduleFitMapToExtent3857(map, ext3857, {
-          duration: 500,
-          fitPadding: [48, 48, 48, paddingLeft + 24],
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
-        fittedRef.current = true;
-      } catch {
-        /* 맞춤 실패해도 진행 */
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
+    const ok = fitStationsOverview(map, stations, () =>
+      mapContext?.applyMapViewPaddingRef?.current?.()
+    );
+    if (ok) fittedRef.current = true;
   }, [
     active,
     mapReady,
+    stations,
     mapContext?.mapInstanceRef,
     mapContext?.applyMapViewPaddingRef,
-    mapContext?.mapPaddingLeft,
   ]);
 }

@@ -204,6 +204,18 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "elevation",
+    "define_table_kor_name": "등고선",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "re_02",
     "define_table_kor_name": "re_02",
     "define_table_shp_type": "POLYGON",
@@ -7397,18 +7409,6 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "LPG배관",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "elevation",
-    "define_table_kor_name": "elevation",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",

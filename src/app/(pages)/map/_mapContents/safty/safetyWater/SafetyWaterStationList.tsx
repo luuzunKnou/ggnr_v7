@@ -2,6 +2,11 @@
 
 import { Cctv } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  WATER_STATUS_HEX,
+  WATER_STATUS_ICON,
+  type WaterStatusLevel,
+} from './safetyWaterStatus';
 import type { SafetyWaterStation } from './safetyWaterTypes';
 
 type Props = {
@@ -16,10 +21,12 @@ type Props = {
   cctvOnly?: boolean;
   /** 500m 내 CCTV 있는 관측소 id */
   cctvStationIds?: Set<string>;
+  /** 수위 관측소 id → 화면 확인용 더미 상태 */
+  waterStatusById?: Record<string, WaterStatusLevel>;
 };
 
 function kindLabel(kind: SafetyWaterStation['kind']) {
-  return kind === 'water' ? '수위' : '강수';
+  return kind === 'water' ? '수위' : '강수량';
 }
 
 export function SafetyWaterStationList({
@@ -31,6 +38,7 @@ export function SafetyWaterStationList({
   className,
   cctvOnly = false,
   cctvStationIds,
+  waterStatusById = {},
 }: Props) {
   const allSelected = selectedId === null;
   const q = searchText.trim().toLowerCase();
@@ -40,12 +48,10 @@ export function SafetyWaterStationList({
     if (!q) return true;
     return `${st.name} ${st.address} ${st.code}`.toLowerCase().includes(q);
   });
-  const waterCount = stations.filter((st) => st.kind === 'water').length;
-  const rainCount = stations.filter((st) => st.kind === 'rain').length;
   const hasAnyCctv = (cctvStationIds?.size ?? 0) > 0;
 
   return (
-    <ul className={cn('min-h-0 flex-1 overflow-y-auto', className)} role="listbox" aria-label="관측소 목록">
+    <ul className={cn('min-h-0', className)} role="listbox" aria-label="관측소 목록">
       <li role="option" aria-selected={allSelected}>
         <button
           type="button"
@@ -56,7 +62,7 @@ export function SafetyWaterStationList({
             allSelected ? 'bg-primary/10' : 'hover:bg-slate-50'
           )}
         >
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-1 items-center">
             <span
               className={cn(
                 'min-w-0 truncate text-[12px] font-medium leading-none',
@@ -65,24 +71,27 @@ export function SafetyWaterStationList({
             >
               전체
             </span>
-            <span className="truncate text-[10px] text-slate-500">
-              수위 관측소 {waterCount}개, 강수량 관측소 {rainCount}개
-            </span>
           </div>
-          {hasAnyCctv ? (
-            <span
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-full bg-sky-500 text-white"
-              title="반경 500m 내 CCTV"
-              aria-label="반경 500m 내 CCTV"
-            >
-              <Cctv className="block h-3 w-3" aria-hidden />
-            </span>
-          ) : null}
+          <span className="inline-flex h-4 w-4 shrink-0 self-center" aria-hidden />
+          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center">
+            {hasAnyCctv ? (
+              <span
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-500 text-white"
+                title="주변 도로 현황 있음"
+                aria-label="주변 도로 현황 있음"
+              >
+                <Cctv className="block h-3 w-3" aria-hidden />
+              </span>
+            ) : null}
+          </span>
         </button>
       </li>
       {filteredStations.map((st) => {
         const selected = st.id === selectedId;
         const hasCctv = cctvStationIds?.has(st.id) ?? false;
+        const statusLevel = st.kind === 'water' ? (waterStatusById[st.id] ?? null) : null;
+        const StatusIcon = statusLevel ? WATER_STATUS_ICON[statusLevel] : null;
+        const statusColor = statusLevel ? WATER_STATUS_HEX[statusLevel] : null;
         return (
           <li key={st.id} role="option" aria-selected={selected}>
             <button
@@ -94,8 +103,8 @@ export function SafetyWaterStationList({
                 selected ? 'bg-primary/10' : 'hover:bg-slate-50'
               )}
             >
-              <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-                <div className="flex items-center gap-1.5">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <span
                     className={cn(
                       'shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none',
@@ -108,26 +117,42 @@ export function SafetyWaterStationList({
                   </span>
                   <span
                     className={cn(
-                      'min-w-0 flex-1 truncate text-[12px] font-medium leading-none',
+                      'min-w-0 truncate text-[12px] font-medium leading-none',
                       selected ? 'text-primary' : 'text-slate-800'
                     )}
                   >
                     {st.name}
                   </span>
                 </div>
-                <span className="truncate text-[10px] text-slate-500">
-                  {st.address || st.code}
-                </span>
+                <span className="truncate text-[10px] text-slate-500">{st.address || '—'}</span>
               </div>
-              {hasCctv ? (
-                <span
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-full bg-sky-500 text-white"
-                  title="반경 500m 내 CCTV"
-                  aria-label="반경 500m 내 CCTV"
-                >
-                  <Cctv className="block h-3 w-3" aria-hidden />
-                </span>
-              ) : null}
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center self-center">
+                {StatusIcon && statusColor ? (
+                  <span
+                    className="inline-flex"
+                    title={statusLevel ?? undefined}
+                    aria-label={statusLevel ? `수위 상태 ${statusLevel}` : undefined}
+                  >
+                    <StatusIcon
+                      className="h-4 w-4"
+                      style={{ color: statusColor }}
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                  </span>
+                ) : null}
+              </span>
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center">
+                {hasCctv ? (
+                  <span
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-500 text-white"
+                    title="주변 도로 현황 있음"
+                    aria-label="주변 도로 현황 있음"
+                  >
+                    <Cctv className="block h-3 w-3" aria-hidden />
+                  </span>
+                ) : null}
+              </span>
             </button>
           </li>
         );

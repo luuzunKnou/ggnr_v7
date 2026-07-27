@@ -22,11 +22,13 @@ import {
   withinStation,
 } from './safetyWaterCctv';
 import { SAFETY_WATER_DUMMY_FORECASTS } from './safetyWaterDummyForecast';
+import { fitStationsOverview } from './useSafetyWaterMapZoom';
 import type {
   FloodBatchKindAvg,
   FloodTimeType,
   FloodUiError,
   SafetyWaterForecast,
+  SafetyWaterRiskArea,
   SafetyWaterObservation,
   SafetyWaterStation,
   SafetyWaterStationKind,
@@ -163,6 +165,8 @@ type SafetyWaterContextValue = {
   setSelectedStationId: (id: string | null) => void;
   /** 관측소 선택 + 지도 이동(동일 id 재클릭에도 이동) */
   focusStation: (id: string) => void;
+  /** 전체 선택 + 초기와 동일한 관측소 overview fit */
+  focusAllStations: () => void;
   selectedStation: SafetyWaterStation | null;
   timeType: FloodTimeType;
   setTimeType: (value: FloodTimeType) => void;
@@ -201,6 +205,20 @@ type SafetyWaterContextValue = {
   hasCctvForSelection: boolean;
   selectedCctvKey: string | null;
   setSelectedCctvKey: (key: string | null) => void;
+  /** 피해 예상 필지 기준 수위 관측소 (선택·근접·전체 시 첫 수위) */
+  floodRiskStation: SafetyWaterStation | null;
+  riskAreas: SafetyWaterRiskArea[];
+  riskLoading: boolean;
+  riskError: string | null;
+  /** 테스트 수위 입력 초안(문자열). 비우면 API 수위 */
+  testWaterLevelDraft: string;
+  setTestWaterLevelDraft: (value: string) => void;
+  /** 적용된 테스트 수위(m). null이면 API */
+  testWaterLevelApplied: number | null;
+  applyTestWaterLevel: () => void;
+  clearTestWaterLevel: () => void;
+  /** 수위 관측소 코드 → 현재 수위(m). 목록 상태 원용 */
+  waterLevelByCode: Record<string, number | null>;
 };
 
 const SafetyWaterContext = createContext<SafetyWaterContextValue | null>(null);
@@ -235,7 +253,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   const [rainNoData, setRainNoData] = useState(false);
   const [obsError, setObsError] = useState<FloodUiError | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [timeType, setTimeType] = useState<FloodTimeType>('10M');
+  const [timeType, setTimeType] = useState<FloodTimeType>('1D');
   const [uiError, setUiError] = useState<FloodUiError | null>(null);
   const [forecasts, setForecasts] = useState<SafetyWaterForecast[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
@@ -247,6 +265,21 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   const [cctvError, setCctvError] = useState<string | null>(null);
   const [selectedCctvKey, setSelectedCctvKey] = useState<string | null>(null);
   const cctvFetchGenRef = useRef(0);
+  const [riskAreas, setRiskAreas] = useState<SafetyWaterRiskArea[]>([]);
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskError, setRiskError] = useState<string | null>(null);
+  const [testWaterLevelDraft, setTestWaterLevelDraft] = useState('');
+  const [testWaterLevelApplied, setTestWaterLevelApplied] = useState<number | null>(null);
+  const riskFetchGenRef = useRef(0);
+  const [waterLevelByCode, setWaterLevelByCode] = useState<Record<string, number | null>>({});
+  const waterLevelFetchGenRef = useRef(0);
+  const autoOpenStatsRef = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenStatsRef.current || stations.length === 0 || selectedStationId !== null) return;
+    autoOpenStatsRef.current = true;
+    onStatsKindsChange(['rain', 'water']);
+  }, [stations.length, selectedStationId, onStatsKindsChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -285,6 +318,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         setUiError({ errorClass: 'ours', uiMessage: UI_MSG.ours });
         setStations([]);
         setForecasts([]);
+        setForecastOpen(false);
         return;
       }
 
@@ -302,6 +336,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         setWaterObs(null);
         setRainObs(null);
         setForecasts([]);
+        setForecastOpen(false);
         return;
       }
 
@@ -313,11 +348,13 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       // 홍수 예보 — 더미 표시 (실 API 연동 전)
       setForecastLoading(false);
       setForecasts(SAFETY_WATER_DUMMY_FORECASTS);
+      setForecastOpen(SAFETY_WATER_DUMMY_FORECASTS.length > 0);
     } catch (e) {
       console.error('[flood] loadStations failed', e);
       setUiError({ errorClass: 'ours', uiMessage: UI_MSG.ours });
       setStations([]);
       setForecasts([]);
+      setForecastOpen(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -349,6 +386,115 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         ? nearestOpposite
         : null;
   const isAverageMode = selectedStationId === null;
+
+  const floodRiskStation = useMemo(() => {
+    if (waterTargetStation) return waterTargetStation;
+    if (isAverageMode) return stations.find((s) => s.kind === 'water') ?? null;
+    return null;
+  }, [waterTargetStation, isAverageMode, stations]);
+
+  const applyTestWaterLevel = useCallback(() => {
+    const t = testWaterLevelDraft.trim();
+    if (!t) {
+      setTestWaterLevelApplied(null);
+      return;
+    }
+    const n = Number(t);
+    if (Number.isFinite(n)) setTestWaterLevelApplied(n);
+  }, [testWaterLevelDraft]);
+
+  const clearTestWaterLevel = useCallback(() => {
+    setTestWaterLevelDraft('');
+    setTestWaterLevelApplied(null);
+  }, []);
+
+  useEffect(() => {
+    const t = testWaterLevelDraft.trim();
+    if (!t) {
+      setTestWaterLevelApplied(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const n = Number(t);
+      if (Number.isFinite(n)) setTestWaterLevelApplied(n);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [testWaterLevelDraft]);
+
+  useEffect(() => {
+    const station = floodRiskStation;
+    const gdt = station?.gdt != null ? Number(station.gdt) : NaN;
+    const apiWl = waterObs?.value != null ? Number(waterObs.value) : NaN;
+    const effectiveWl =
+      testWaterLevelApplied != null && Number.isFinite(testWaterLevelApplied)
+        ? testWaterLevelApplied
+        : apiWl;
+
+    if (
+      !station ||
+      !Number.isFinite(gdt) ||
+      !Number.isFinite(effectiveWl) ||
+      !Number.isFinite(station.lon) ||
+      !Number.isFinite(station.lat)
+    ) {
+      setRiskAreas([]);
+      setRiskError(null);
+      setRiskLoading(false);
+      return;
+    }
+
+    const seaLevelM = gdt + effectiveWl;
+    const gen = ++riskFetchGenRef.current;
+    let cancelled = false;
+    setRiskLoading(true);
+    setRiskError(null);
+
+    void (async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'floodRiskService',
+          action: 'listFloodRiskParcels',
+          params: {
+            lon: station.lon,
+            lat: station.lat,
+            seaLevelM,
+            gdt,
+            radiusM: 2000,
+            thresholds: {
+              attwl: station.attwl ?? null,
+              wrnwl: station.wrnwl ?? null,
+              almwl: station.almwl ?? null,
+              srswl: station.srswl ?? null,
+              pfh: station.pfh ?? null,
+            },
+          },
+        });
+        if (cancelled || gen !== riskFetchGenRef.current) return;
+        const data = (res?.data ?? res) as {
+          success?: boolean;
+          message?: string;
+          items?: SafetyWaterRiskArea[];
+        };
+        if (!data?.success) {
+          setRiskAreas([]);
+          setRiskError(data?.message || '피해 예상 필지를 불러오지 못했습니다');
+          return;
+        }
+        setRiskAreas(Array.isArray(data.items) ? data.items : []);
+        setRiskError(null);
+      } catch (e) {
+        if (cancelled || gen !== riskFetchGenRef.current) return;
+        setRiskAreas([]);
+        setRiskError(e instanceof Error ? e.message : '피해 예상 필지를 불러오지 못했습니다');
+      } finally {
+        if (!cancelled && gen === riskFetchGenRef.current) setRiskLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [floodRiskStation, waterObs?.value, testWaterLevelApplied]);
 
   const stationIdsWithCctv = useMemo(
     () => buildStationIdsWithCctv(stations, cctvLayerItems, SAFETY_WATER_CCTV_NEAR_M),
@@ -449,6 +595,49 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   }, [forecastOpen]);
 
   useEffect(() => {
+    const waterStations = stations.filter((s) => s.kind === 'water');
+    if (waterStations.length === 0) {
+      setWaterLevelByCode({});
+      return;
+    }
+    let cancelled = false;
+    const gen = ++waterLevelFetchGenRef.current;
+    void (async () => {
+      try {
+        const res = await fetch('/api/flood/observations/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            time: timeType,
+            stations: waterStations.map((s) => ({ kind: 'water' as const, code: s.code })),
+          }),
+        });
+        const j = (await res.json().catch(() => ({}))) as {
+          items?: { kind?: string; code?: string; value?: number | null }[];
+        };
+        if (cancelled || gen !== waterLevelFetchGenRef.current) return;
+        if (!res.ok) {
+          setWaterLevelByCode({});
+          return;
+        }
+        const next: Record<string, number | null> = {};
+        for (const it of j.items ?? []) {
+          if (it.kind !== 'water' || !it.code) continue;
+          next[it.code] =
+            it.value != null && Number.isFinite(Number(it.value)) ? Number(it.value) : null;
+        }
+        setWaterLevelByCode(next);
+      } catch {
+        if (cancelled || gen !== waterLevelFetchGenRef.current) return;
+        setWaterLevelByCode({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [stations, timeType]);
+
+  useEffect(() => {
     if (stations.length === 0) {
       setWaterObs(null);
       setRainObs(null);
@@ -529,16 +718,28 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
     (id: string) => {
       const st = stations.find((item) => item.id === id);
       setSelectedStationId(id);
+      onStatsKindsChange(['rain', 'water']);
       if (!st) return;
       const instance = mapRef?.current ?? map;
       if (!instance || !mapReady) return;
       instance.getView().animate({
         center: fromLonLat([st.lon, st.lat]),
+        zoom: Math.max(instance.getView().getZoom() ?? 16, 16),
         duration: 450,
       });
     },
-    [stations, map, mapReady, mapRef]
+    [stations, map, mapReady, mapRef, onStatsKindsChange]
   );
+
+  const focusAllStations = useCallback(() => {
+    setSelectedStationId(null);
+    onStatsKindsChange(['rain', 'water']);
+    const instance = mapRef?.current ?? map;
+    if (!instance || !mapReady || stations.length === 0) return;
+    fitStationsOverview(instance, stations, () =>
+      mapContext?.applyMapViewPaddingRef?.current?.()
+    );
+  }, [stations, map, mapReady, mapRef, mapContext?.applyMapViewPaddingRef, onStatsKindsChange]);
 
   const rainIsPaired = !isAverageMode && selectedStation?.kind === 'water' && !!rainTargetStation;
   const waterIsPaired = !isAverageMode && selectedStation?.kind === 'rain' && !!waterTargetStation;
@@ -604,6 +805,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       selectedStationId,
       setSelectedStationId,
       focusStation,
+      focusAllStations,
       selectedStation,
       timeType,
       setTimeType,
@@ -639,6 +841,16 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       hasCctvForSelection,
       selectedCctvKey,
       setSelectedCctvKey,
+      floodRiskStation,
+      riskAreas,
+      riskLoading,
+      riskError,
+      testWaterLevelDraft,
+      setTestWaterLevelDraft,
+      testWaterLevelApplied,
+      applyTestWaterLevel,
+      clearTestWaterLevel,
+      waterLevelByCode,
     }),
     [
       map,
@@ -657,6 +869,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       selectedStationId,
       selectedStation,
       focusStation,
+      focusAllStations,
       timeType,
       statsKinds,
       toggleStats,
@@ -686,6 +899,15 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       stationIdsWithCctv,
       hasCctvForSelection,
       selectedCctvKey,
+      floodRiskStation,
+      riskAreas,
+      riskLoading,
+      riskError,
+      testWaterLevelDraft,
+      testWaterLevelApplied,
+      applyTestWaterLevel,
+      clearTestWaterLevel,
+      waterLevelByCode,
     ]
   );
 
