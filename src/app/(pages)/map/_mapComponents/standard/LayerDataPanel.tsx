@@ -103,6 +103,7 @@ interface InfoField {
 
 function InfoSection({ title, fields, defaultOpen = true }: { title: string; fields: InfoField[]; defaultOpen?: boolean }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  if (fields.length === 0) return null;
   return (
     <div className="border-b border-slate-200">
       <button
@@ -139,6 +140,10 @@ function InfoSection({ title, fields, defaultOpen = true }: { title: string; fie
       )}
     </div>
   );
+}
+
+function isDefineShowDetail(f: DefineFieldRow): boolean {
+  return String(f.define_field_show_detail ?? '').toLowerCase() === 'true';
 }
 
 const PAGE_SIZE_LIST = 30;
@@ -997,34 +1002,31 @@ export function LayerDataPanel({
                     defaultOpen={true}
                   />
                 ) : (
-                  <>
-                    <InfoSection
-                      title="기본정보"
-                      fields={detailFields
-                        .filter((f) => String(f.define_field_show_detail ?? '').toLowerCase() !== 'true')
-                        .map((f, i) => {
-                          const key = String(f.define_field_name ?? '');
-                          const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
-                          const raw = getRowValueByField(selectedRow, key);
-                          const value = formatDetailScalarValue(raw);
-                          return { fieldKey: key || `basic-${i}`, label, value, highlight: i === 0 };
-                        })}
-                      defaultOpen={true}
-                    />
-                    <InfoSection
-                      title="상세정보"
-                      fields={detailFields
-                        .filter((f) => String(f.define_field_show_detail ?? '').toLowerCase() === 'true')
-                        .map((f, i) => {
-                          const key = String(f.define_field_name ?? '');
-                          const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
-                          const raw = getRowValueByField(selectedRow, key);
-                          const value = formatDetailScalarValue(raw);
-                          return { fieldKey: key || `detail-${i}`, label, value };
-                        })}
-                      defaultOpen={true}
-                    />
-                  </>
+                  (() => {
+                    // define_field_show_detail=true → 기본 표시, false → 상세(추가). 기본이 없으면 전부 기본으로.
+                    const primary = detailFields.filter(isDefineShowDetail);
+                    const secondary = detailFields.filter((f) => !isDefineShowDetail(f));
+                    const basicList = primary.length > 0 ? primary : detailFields;
+                    const moreList = primary.length > 0 ? secondary : [];
+                    const toFields = (list: DefineFieldRow[], prefix: string, highlightFirst: boolean) =>
+                      list.map((f, i) => {
+                        const key = String(f.define_field_name ?? '');
+                        const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
+                        const raw = getRowValueByField(selectedRow, key);
+                        return {
+                          fieldKey: key || `${prefix}-${i}`,
+                          label,
+                          value: formatDetailScalarValue(raw),
+                          highlight: highlightFirst && i === 0,
+                        };
+                      });
+                    return (
+                      <>
+                        <InfoSection title="기본정보" fields={toFields(basicList, 'basic', true)} defaultOpen={true} />
+                        <InfoSection title="상세정보" fields={toFields(moreList, 'detail', false)} defaultOpen={true} />
+                      </>
+                    );
+                  })()
                 )}
               </div>
             )}

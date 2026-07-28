@@ -9,7 +9,7 @@ import { Point } from "ol/geom";
 import { Style, Circle as CircleStyle, Fill, Stroke } from "ol/style";
 import { Loader2, MapPin } from "lucide-react";
 import { call } from "@/lib/api";
-import { tryFormatToYmd } from "@/lib/formatDateYmd";
+import { formatToYmdOrText } from "@/lib/formatDateYmd";
 import { useMapContext } from "../../_mapComponents/MapContext";
 import { LAYER_ROW_NEW_ID } from "../../_mapComponents/layerRowEdit";
 import { encodeMemoRowKey, memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
@@ -113,11 +113,12 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
     if (isCreateMode) {
       setTitle("");
       setContents("");
-      setCreateDate(tryFormatToYmd(new Date()) ?? "");
+      setCreateDate(formatToYmdOrText(new Date()));
       setHasGeom(false);
       setPointSet(false);
       setLoading(false);
       setIsEditing(true);
+      setError(null);
       point3857Ref.current = null;
       return;
     }
@@ -174,7 +175,6 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
             table: tableName,
             title,
             contents,
-            createDate,
             pointX3857: point?.x,
             pointY3857: point?.y,
           },
@@ -204,7 +204,6 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
           memoKey,
           title,
           contents,
-          createDate,
           pointX3857: point?.x,
           pointY3857: point?.y,
         },
@@ -322,11 +321,9 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
               <span className="mb-1 block text-[10px] font-medium text-slate-500">작성일</span>
               <input
                 type="text"
-                value={createDate}
-                readOnly={!isEditing}
-                onChange={(e) => setCreateDate(e.target.value)}
-                placeholder="YYYY-MM-DD"
-                className="h-8 w-full rounded border border-slate-200 px-2 disabled:bg-slate-50"
+                value={createDate || "-"}
+                readOnly
+                className="h-8 w-full rounded border border-slate-200 bg-slate-50 px-2 text-slate-600"
               />
             </label>
             <label className="block">

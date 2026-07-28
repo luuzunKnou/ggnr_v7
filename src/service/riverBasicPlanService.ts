@@ -1,6 +1,5 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
 import {
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
@@ -25,6 +24,41 @@ function esc(value: string): string {
 
 function normalizeTab(tab?: RiverType | string | null): RiverType {
   return tab === 'smallRiver' ? 'smallRiver' : 'river';
+}
+
+/** 표시용 천단위 콤마 제거 후 연장 매칭용 문자열 */
+function normalizePlanLenParam(raw: unknown): string {
+  return String(raw ?? '').trim().replace(/,/g, '');
+}
+
+/**
+ * 기본계획 1건 식별 조건 (목록 GROUP BY: 연도·계획명·연장과 동일).
+ * planLen 이 undefined 이면 연장 조건 생략.
+ */
+function planIdentityWhereParts(opts: {
+  riverName: string;
+  planYear: string;
+  planName: string;
+  planLen?: string;
+}): string[] {
+  const parts = [
+    `river_name = '${esc(opts.riverName)}'`,
+    opts.planYear ? `COALESCE(plan_year, '') = '${esc(opts.planYear)}'` : '',
+    opts.planName ? `COALESCE(plan_name, '') = '${esc(opts.planName)}'` : '',
+  ];
+  if (opts.planLen !== undefined) {
+    const len = normalizePlanLenParam(opts.planLen);
+    if (len === '') {
+      parts.push(`COALESCE(plan_len::text, '') = ''`);
+    } else if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(len)) {
+      parts.push(
+        `(COALESCE(plan_len::text, '') ~ '^-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?$' AND plan_len::float8 = '${esc(len)}'::float8)`,
+      );
+    } else {
+      parts.push(`COALESCE(plan_len::text, '') = '${esc(len)}'`);
+    }
+  }
+  return parts.filter(Boolean);
 }
 
 async function resolveLayerTableName(wantedLower: string): Promise<string> {
@@ -171,7 +205,8 @@ export async function getRiverBasicPlanYearList(params?: {
       return {
         planYear: String(row.planYear ?? '').trim(),
         planName: String(row.planName ?? '').trim(),
-        planLen: rawLen ? formatDetailScalarValue(rawLen, '') : '',
+        // GROUP BY 원문 유지 — 상세/색인도 조회 시 연장 매칭용 (표시 포맷은 UI에서)
+        planLen: rawLen,
       };
     }),
   };
@@ -182,6 +217,7 @@ export async function getRiverBasicPlanDetail(params?: {
   riverName?: string;
   planYear?: string;
   planName?: string;
+  planLen?: string;
 }): Promise<{ row: Record<string, unknown> | null }> {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
@@ -190,11 +226,12 @@ export async function getRiverBasicPlanDetail(params?: {
   if (!riverName) return { row: null };
   const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
 
-  const where = [
-    `river_name = '${esc(riverName)}'`,
-    planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
-    planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
-  ].filter(Boolean).join(' AND ');
+  const where = planIdentityWhereParts({
+    riverName,
+    planYear,
+    planName,
+    planLen: params?.planLen,
+  }).join(' AND ');
 
   const res = await db.execute(
     sql.raw(
@@ -312,6 +349,36 @@ function indexNoFromConsCode(consCode: string, ogcFid: number): { label: string;
 }
 
 /**
+ * 선택 기본계획 1건 (geom + 하천명·차수).
+ * 색인도는 공간교차만 하면 타 하천·타 차수 시트가 섞여 같은 번호가 중복되므로
+ * river_name·rivp_code 로 좁힌다.
+ */
+function planPickCteSql(safeAs: string, planWhere: string): string {
+  return `plan_pick AS (
+      SELECT
+        geom,
+        COALESCE(river_name, '') AS river_name,
+        COALESCE(rivp_code, '') AS rivp_code
+      FROM layer."${safeAs}" p
+      WHERE ${planWhere}
+      ORDER BY p.ogc_fid ASC
+      LIMIT 1
+    )`;
+}
+
+/** 색인도 ↔ 선택 기본계획: 교차 + 같은 하천(+ 차수코드가 있으면 동일 차수) */
+function indexMatchesPlanSql(indexAlias = 'i', planAlias = 'pg'): string {
+  return `${indexAlias}.geom IS NOT NULL
+         AND ${planAlias}.geom IS NOT NULL
+         AND ST_Intersects(${indexAlias}.geom, ${planAlias}.geom)
+         AND COALESCE(${indexAlias}.river_name, '') = ${planAlias}.river_name
+         AND (
+           ${planAlias}.rivp_code = ''
+           OR COALESCE(${indexAlias}.rivp_code, '') = ${planAlias}.rivp_code
+         )`;
+}
+
+/**
  * 선택한 기본계획과 교차하는 색인도 목록.
  * 하천 상세에서 색인도 목록 UI에 사용.
  */
@@ -320,6 +387,7 @@ export async function getRiverBasicPlanIndexList(params?: {
   riverName?: string;
   planYear?: string;
   planName?: string;
+  planLen?: string;
 }): Promise<{
   indexes: {
     ogcFid: number;
@@ -340,23 +408,16 @@ export async function getRiverBasicPlanIndexList(params?: {
   const safeAs = asTable.replace(/"/g, '""');
   const safeIdx = idxTable.replace(/"/g, '""');
 
-  const planWhere = [
-    `river_name = '${esc(riverName)}'`,
-    planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
-    planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
-  ]
-    .filter(Boolean)
-    .join(' AND ');
+  const planWhere = planIdentityWhereParts({
+    riverName,
+    planYear,
+    planName,
+    planLen: params?.planLen,
+  }).join(' AND ');
 
   const res = await db.execute(
     sql.raw(
-      `WITH plan_geom AS (
-         SELECT geom
-         FROM layer."${safeAs}" p
-         WHERE ${planWhere}
-         ORDER BY p.ogc_fid ASC
-         LIMIT 1
-       )
+      `WITH ${planPickCteSql(safeAs, planWhere)}
        SELECT
          i.ogc_fid AS "ogcFid",
          TRIM(
@@ -370,10 +431,8 @@ export async function getRiverBasicPlanIndexList(params?: {
          ST_XMax(ST_Transform(i.geom, 3857))::float8 AS xmax,
          ST_YMax(ST_Transform(i.geom, 3857))::float8 AS ymax
        FROM layer."${safeIdx}" i
-       CROSS JOIN plan_geom pg
-       WHERE pg.geom IS NOT NULL
-         AND i.geom IS NOT NULL
-         AND ST_Intersects(i.geom, pg.geom)
+       CROSS JOIN plan_pick pg
+       WHERE ${indexMatchesPlanSql('i', 'pg')}
        ORDER BY i.ogc_fid ASC`
     )
   );
@@ -504,6 +563,7 @@ export async function getRiverBasicPlanIndexView(params?: {
   riverName?: string;
   planYear?: string;
   planName?: string;
+  planLen?: string;
   /** 지도에서 클릭한 색인도 피처 ogc_fid — 주어지면 해당 건만(선택 기본계획 폴리곤과 교차할 때) 사용 */
   indexOgcFid?: number;
 }): Promise<{
@@ -538,13 +598,12 @@ export async function getRiverBasicPlanIndexView(params?: {
   const safeAs = asTable.replace(/"/g, '""');
   const safeIdx = idxTable.replace(/"/g, '""');
 
-  const planWhere = [
-    `river_name = '${esc(riverName)}'`,
-    planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
-    planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
-  ]
-    .filter(Boolean)
-    .join(' AND ');
+  const planWhere = planIdentityWhereParts({
+    riverName,
+    planYear,
+    planName,
+    planLen: params?.planLen,
+  }).join(' AND ');
 
   const pinnedIdx = Number(params?.indexOgcFid);
   const usePinnedIdx = Number.isFinite(pinnedIdx) && pinnedIdx > 0;
@@ -554,28 +613,22 @@ export async function getRiverBasicPlanIndexView(params?: {
     ? `idx_hit AS (
       SELECT i.ogc_fid AS iid
       FROM layer."${safeIdx}" i
-      CROSS JOIN plan_geom pg
-      WHERE pg.geom IS NOT NULL
+      CROSS JOIN plan_pick pg
+      WHERE ${indexMatchesPlanSql('i', 'pg')}
         AND i.ogc_fid = ${pinnedSql}
-        AND ST_Intersects(i.geom, pg.geom)
       LIMIT 1
     )`
     : `idx_hit AS (
       SELECT i.ogc_fid AS iid
       FROM layer."${safeIdx}" i
-      CROSS JOIN plan_geom pg
-      WHERE pg.geom IS NOT NULL AND ST_Intersects(i.geom, pg.geom)
+      CROSS JOIN plan_pick pg
+      WHERE ${indexMatchesPlanSql('i', 'pg')}
       ORDER BY i.ogc_fid ASC
       LIMIT 1
     )`;
 
   const idxSql = `
-    WITH plan_geom AS (
-      SELECT geom FROM layer."${safeAs}" p
-      WHERE ${planWhere}
-      ORDER BY p.ogc_fid ASC
-      LIMIT 1
-    ),
+    WITH ${planPickCteSql(safeAs, planWhere)},
     ${idxHitSql}
     SELECT
       (to_jsonb(i) - 'geom') AS idx_row,

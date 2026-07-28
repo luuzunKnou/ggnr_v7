@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5417137b:19f83ba2858:343</id>
+  <id>FeatureTypeInfoImpl--71188a54:19f7e56f171:-78eb</id>
   <name>usage_data_as_mgj</name>
   <nativeName>usage_data_as_mgj</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>385034.21120246</minx>
-    <maxx>420982.21829153</maxx>
-    <miny>353062.27148776</miny>
-    <maxy>407000.59711748</maxy>
+    <minx>413676.18814776</minx>
+    <maxx>413688.66482021</maxx>
+    <miny>387323.42772133</miny>
+    <maxy>387332.4796874</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.0694029551915</minx>
-    <maxx>129.4868430602227</maxx>
-    <miny>36.65040289243611</miny>
-    <maxy>37.14378063716121</maxy>
+    <minx>129.3991056818524</minx>
+    <maxx>129.3992482136533</maxx>
+    <miny>36.96052766431556</miny>
+    <maxy>36.96061198857384</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

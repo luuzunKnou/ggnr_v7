@@ -13,10 +13,21 @@ import {
   Loader2,
   Images,
   MapPin,
+  ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDetailScalarValue } from "@/lib/formatDetailScalar";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
+
+/** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
+function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
+  if (/year|연도/i.test(key)) {
+    if (raw === null || raw === undefined) return "-";
+    const s = String(raw).trim().replace(/,/g, "");
+    return s === "" ? "-" : s;
+  }
+  return formatDetailScalarValue(raw);
+}
 import {
   riverBasicPlanAsDefineTable,
   riverBasicPlanGdParentDefineTable,
@@ -306,6 +317,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             riverName,
             planYear: selected.planYear,
             planName: selected.planName,
+            planLen: selected.planLen,
           },
         });
         if (!alive) return;
@@ -397,6 +409,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             riverName,
             planYear: selected.planYear,
             planName: selected.planName,
+            planLen: selected.planLen,
             indexOgcFid: mapRequestedIndexOgcFid,
           },
         });
@@ -476,6 +489,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             riverName,
             planYear: selected.planYear,
             planName: selected.planName,
+            planLen: selected.planLen,
           },
         });
         if (!alive) return;
@@ -688,6 +702,21 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     { label: "횡단면도", icon: FlipVertical },
   ];
 
+  const indexSectionHeader = (
+    <div className="flex items-center justify-between gap-2 mb-2">
+      <p className="text-[11px] font-medium text-slate-600">색인도</p>
+      <button
+        type="button"
+        onClick={exitIndexAttributeView}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+        title="색인도 목록으로"
+        aria-label="색인도 목록으로"
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
+  );
+
   const toggleServiceLayer = (defineTableName: string) => {
     if (!setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
@@ -774,18 +803,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     <div className="flex flex-col min-h-0 h-full bg-white border-l border-slate-200">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 bg-white">
         <div className="min-w-0 flex-1">
-          {indexViewMode ? (
-            <button
-              type="button"
-              onClick={exitIndexAttributeView}
-              className="w-full text-left text-sm font-semibold text-slate-800 hover:underline"
-              title="색인도 목록으로"
-            >
-              {riverName || "기본계획 상세"}
-            </button>
-          ) : (
-            <p className="text-sm font-semibold text-slate-800">{riverName || "기본계획 상세"}</p>
-          )}
+          <p className="text-sm font-semibold text-slate-800">{riverName || "기본계획 상세"}</p>
           <p className="text-xs text-slate-500 mt-0.5">연도별 기본계획 및 속성정보</p>
         </div>
         {onClose && (
@@ -838,7 +856,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       <td className="px-2.5 py-1.5 border-t border-slate-200">{p.planYear || "-"}</td>
                       <td className="px-2.5 py-1.5 border-t border-slate-200">{p.planName || "-"}</td>
                       <td className="px-2.5 py-1.5 border-t border-slate-200">
-                        {p.planLen ? `${p.planLen} km` : "-"}
+                        {p.planLen ? `${formatDetailScalarValue(p.planLen)} km` : "-"}
                       </td>
                     </tr>
                   );
@@ -901,16 +919,25 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         {indexViewMode ? (
           <>
             {indexError ? (
-              <p className="text-sm text-red-600 px-4 py-4">{indexError}</p>
+              <div className="p-3">
+                {indexSectionHeader}
+                <p className="text-sm text-red-600 py-1">{indexError}</p>
+              </div>
             ) : indexLoading ? (
-              <p className="text-sm text-slate-500 px-4 py-4">색인도 정보 불러오는 중...</p>
+              <div className="p-3">
+                {indexSectionHeader}
+                <p className="text-sm text-slate-500 py-1">색인도 정보 불러오는 중...</p>
+              </div>
             ) : !indexBundle?.index ? (
-              <p className="text-sm text-slate-500 px-4 py-4">
-                선택한 기본계획과 교차하는 색인도가 없습니다.
-              </p>
+              <div className="p-3">
+                {indexSectionHeader}
+                <p className="text-sm text-slate-500 py-1">
+                  선택한 기본계획과 교차하는 색인도가 없습니다.
+                </p>
+              </div>
             ) : (
               <div className="p-3 space-y-4">
-                <p className="text-[11px] font-medium text-slate-600 mb-2">색인도</p>
+                {indexSectionHeader}
                 <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-100">
                   <div
                     className={INDEX_THUMB_FRAME}
@@ -1088,7 +1115,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                     >
                       <div className="w-[130px] shrink-0 bg-slate-100 px-2.5 py-1.5 text-[11px] text-[#666]">{k}</div>
                       <div className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] text-[#666] break-all">
-                        {formatDetailScalarValue(v)}
+                        {formatRiverBasicPlanAttrValue(k, v)}
                       </div>
                     </div>
                   ))}
