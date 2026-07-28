@@ -8,6 +8,7 @@ import {
 } from '../map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { useJimokLayerSync } from '../map/_mapComponents/layerFactory/jimokLayerFactory';
 import { useLandownLayerSync } from '../map/_mapComponents/layerFactory/landownLayerFactory';
+import { useThematicMapLayerSync } from '../map/_mapComponents/layerFactory/thematicMapLayerFactory';
 import { useServiceLayerSync } from '../map/_mapComponents/layerFactory/serviceLayerFactory';
 import type { ShapeEditorOverlayControls } from './_hooks/useShapeEditorOverlayControls';
 import { useShapeEditorMapInstance } from './_hooks/useShapeEditorMapInstance';
@@ -37,6 +38,7 @@ export function ShapeEditorMap({
     visibleJimokLayerNames,
     visibleLandownLayerNames,
     visibleBuildingRoadLayerNames,
+    visibleThematicLayerNames,
   } = overlayControls;
 
   useEffect(() => {
@@ -54,6 +56,12 @@ export function ShapeEditorMap({
   );
   useJimokLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleJimokLayerNames);
   useLandownLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleLandownLayerNames);
+  useThematicMapLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleThematicLayerNames
+  );
   useOfficialLandPriceMapLayer(
     mapInstanceRef.current,
     mapReady,

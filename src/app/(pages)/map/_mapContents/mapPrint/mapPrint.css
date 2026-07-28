@@ -1,0 +1,375 @@
+/* 인쇄 모달 — 화면용 */
+.map-print-root {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.map-print-paper {
+  display: flex;
+  flex-direction: column;
+  width: min(98vw, 1680px);
+  height: min(94vh, 900px);
+  background: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.map-print-map-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #e8eef5;
+}
+
+.map-print-map-host > .ol-viewport {
+  border-radius: 0;
+}
+
+.map-print-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 11px;
+  color: #334155;
+}
+
+.map-print-toolbar-left,
+.map-print-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1px;
+}
+
+.map-print-toolbar-right {
+  gap: 0 2px;
+  margin-left: auto;
+}
+
+.map-print-color-btn {
+  gap: 5px;
+}
+
+.map-print-color-swatch {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  box-shadow: none;
+  flex-shrink: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.map-print-color-swatch input[type='color'] {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  padding: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.map-print-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.map-print-tool-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.map-print-tool-icon {
+  padding: 4px 6px;
+  min-width: 28px;
+  justify-content: center;
+}
+
+.map-print-tool-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.map-print-layers-clear {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-print-slash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.map-print-close-btn {
+  margin-left: 4px;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+.map-print-tool-btn:hover {
+  background: #f1f5f9;
+}
+
+.map-print-tool-btn.is-active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.map-print-vsep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
+/* 하단 안내 — 지도 위 좌/우 분리, 가장자리 여백 */
+.map-print-footer-left {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 4;
+  max-width: min(48%, 420px);
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #334155;
+  background-color: rgba(217, 217, 217, 0.8);
+  border: 1px solid #c6c6c6;
+  border-bottom: none;
+  border-left: none;
+  border-top-right-radius: 15px;
+}
+
+.map-print-footer-right {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #334155;
+  text-align: right;
+  white-space: nowrap;
+  background-color: rgba(217, 217, 217, 0.8);
+  border: 1px solid #c6c6c6;
+  border-bottom: none;
+  border-right: none;
+  border-top-left-radius: 15px;
+}
+
+.map-print-side-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+}
+
+.map-print-coord-panel {
+  width: 280px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+}
+
+.map-print-comment-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 글자 입력 상자 */
+.map-print-comment-box {
+  position: relative;
+  padding: 6px 8px;
+  padding-right: 10px;
+  background: #fff;
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  min-width: 220px;
+}
+
+.map-print-comment-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-print-comment-size {
+  height: 28px;
+  min-width: 44px;
+  padding: 0 4px;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.map-print-comment-size:focus {
+  outline: none;
+  border-color: #6485a6;
+}
+
+.map-print-comment-bold {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  background: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.map-print-comment-bold.is-active {
+  background: #6485a6;
+  border-color: #6485a6;
+  color: #fff;
+}
+
+.map-print-comment-text {
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.map-print-comment-text:focus {
+  outline: none;
+  border-color: #6485a6;
+}
+
+.map-print-comment-save {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #6485a6;
+  border-radius: 3px;
+  background: #6485a6;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.map-print-comment-save:hover {
+  background: #043c6b;
+  border-color: #043c6b;
+}
+
+.map-print-comment-cancel {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.map-print-comment-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  cursor: default;
+}
+
+.map-print-symbol-pin {
+  display: inline-flex;
+  align-items: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* 브라우저 인쇄 */
+@media print {
+  body.map-print-printing * {
+    visibility: hidden !important;
+  }
+
+  body.map-print-printing .map-print-paper-active,
+  body.map-print-printing .map-print-paper-active * {
+    visibility: visible !important;
+  }
+
+  body.map-print-printing .map-print-paper-active {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  body.map-print-printing .map-print-ignore {
+    display: none !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+}

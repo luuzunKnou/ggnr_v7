@@ -17,8 +17,13 @@ import {
   type BackgroundMapGroup,
 } from './mapControlPanel/backgroundMapSelector';
 import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
+import { ThematicMapLayerSelector } from './mapControlPanel/ThematicMapLayerSelector';
 import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
 import { LANDOWN_LAYERS } from './layerFactory/landownLayerFactory';
+import {
+  THEMATIC_MAP_LAYERS,
+  useThematicMapLayerSync,
+} from './layerFactory/thematicMapLayerFactory';
 import { useMapInstance } from './hooks/useMapInstance';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
@@ -57,6 +62,8 @@ import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMapVisualCenterPixel } from './hooks/useMapVisualCenterPixel';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { useSlopeMeasure } from './hooks/useSlopeMeasure';
+import { MapPrintModal } from '../_mapContents/mapPrint/MapPrintModal';
+import type { MapPrintSnapshot } from '../_mapContents/mapPrint/mapPrintTypes';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
@@ -241,6 +248,11 @@ export default function OpenLayersMap({
   const [visibleBuildingRoadLayerNames, setVisibleBuildingRoadLayerNames] = useState<
     Set<string> | null
   >(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printSnapshot, setPrintSnapshot] = useState<MapPrintSnapshot | null>(null);
+  const [visibleThematicLayerNames, setVisibleThematicLayerNames] = useState<Set<string> | null>(
+    null
+  );
   const [geoserverLogLines, setGeoserverLogLines] = useState<string[]>([]);
   const { lines: consoleLines } = useConsoleCapture();
   const consoleLogRef = useRef<HTMLDivElement>(null);
@@ -301,6 +313,13 @@ export default function OpenLayersMap({
       if (state.visibleBuildingRoadLayerNames != null)
         setVisibleBuildingRoadLayerNames(
           buildingRoadValid.length ? new Set(buildingRoadValid) : new Set()
+        );
+      const thematicValid = (state.visibleThematicLayerNames ?? []).filter((t) =>
+        THEMATIC_MAP_LAYERS.some((l) => l.tableName === t)
+      );
+      if (state.visibleThematicLayerNames != null)
+        setVisibleThematicLayerNames(
+          thematicValid.length ? new Set(thematicValid) : new Set()
         );
     }
     setRestored(true);
@@ -403,12 +422,15 @@ export default function OpenLayersMap({
         visibleBuildingRoadLayerNames != null
           ? Array.from(visibleBuildingRoadLayerNames)
           : null,
+      visibleThematicLayerNames:
+        visibleThematicLayerNames != null ? Array.from(visibleThematicLayerNames) : null,
     }),
     [
       visibleJimokLayerNames,
       visibleLandownLayerNames,
       visibleCadastralLayerNames,
       visibleBuildingRoadLayerNames,
+      visibleThematicLayerNames,
     ]
   );
   useMapStatePersist(
@@ -603,6 +625,13 @@ export default function OpenLayersMap({
   useJimokLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleJimokLayerNames);
   // 소유구분 레이어 동기화 (activeControls + visibleLandownLayerNames)
   useLandownLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleLandownLayerNames);
+  // 주제도 레이어 동기화 (activeControls + visibleThematicLayerNames)
+  useThematicMapLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleThematicLayerNames
+  );
 
   const safetyMapLayerVisibility = mapContext?.safetyMapLayerVisibility ?? {};
   const visibleSafetyMapGeoTables = useMemo(
@@ -1219,6 +1248,9 @@ export default function OpenLayersMap({
     }
     if (id === 'thematic-map') {
       setOpenSubPanel((prev) => (prev === 'thematic-map' ? null : 'thematic-map'));
+      if (openSubPanel !== 'thematic-map') {
+        setVisibleThematicLayerNames((prev) => (prev != null ? prev : new Set()));
+      }
       return;
     }
     if (id === 'background-map') {
@@ -1251,8 +1283,44 @@ export default function OpenLayersMap({
 
     // 액션 전용 버튼은 상태 변경 없이 액션만 실행
     if (ACTION_ONLY_IDS.includes(id)) {
-      console.log(`[v0] Action triggered: ${id}`);
-      // 여기에 인쇄 등 실제 액션 로직 추가
+      if (id === 'print') {
+        const map = mapInstanceRef.current;
+        const view = map?.getView();
+        const center = view?.getCenter();
+        const zoom = view?.getZoom();
+        if (!map || !center || zoom == null) return;
+        const layerControls = [
+          'cadastral',
+          'building-road',
+          'basic-section',
+          'land-category',
+          'ownership',
+          'thematic-map',
+        ];
+        setPrintSnapshot({
+          center: [center[0], center[1]],
+          zoom,
+          backgroundMapId: selectedBackgroundMap,
+          visibleLayerNames: Array.from(visibleLayerNames),
+          activeLayerControls: activeControls.filter((c) => layerControls.includes(c)),
+          visibleCadastralLayerNames: visibleCadastralLayerNames
+            ? Array.from(visibleCadastralLayerNames)
+            : null,
+          visibleBuildingRoadLayerNames: visibleBuildingRoadLayerNames
+            ? Array.from(visibleBuildingRoadLayerNames)
+            : null,
+          visibleJimokLayerNames: visibleJimokLayerNames
+            ? Array.from(visibleJimokLayerNames)
+            : null,
+          visibleLandownLayerNames: visibleLandownLayerNames
+            ? Array.from(visibleLandownLayerNames)
+            : null,
+          visibleThematicLayerNames: visibleThematicLayerNames
+            ? Array.from(visibleThematicLayerNames)
+            : null,
+        });
+        setPrintOpen(true);
+      }
       return;
     }
 
@@ -1276,6 +1344,11 @@ export default function OpenLayersMap({
             prev != null && prev.size > 0
               ? prev
               : new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName))
+          );
+        } else if (id === 'thematic-map') {
+          setOpenSubPanel('thematic-map');
+          setVisibleThematicLayerNames((prev) =>
+            prev != null && prev.size > 0 ? prev : new Set()
           );
         }
       }
@@ -1444,23 +1517,21 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'thematic-map' && (
-            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
-              <div className="w-56 bg-white shadow-xl overflow-hidden flex flex-col rounded-[5px] opacity-90">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
-                  <span className="text-[13px] font-medium">주제도</span>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSubPanel(null)}
-                    className="text-slate-500 hover:text-slate-700 text-xs"
-                    aria-label="닫기"
-                  >
-                    닫기
-                  </button>
-                </div>
-                <div className="px-3 py-3 text-[11px] text-slate-600 leading-snug">
-                  주제도 레이어 목록·표시는 곧 연결됩니다.
-                </div>
-              </div>
+            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]">
+              <ThematicMapLayerSelector
+                selectedTableNames={visibleThematicLayerNames ?? new Set()}
+                onSelectionChange={(next) => {
+                  setVisibleThematicLayerNames(next);
+                  setActiveControls((prev) =>
+                    next.size === 0
+                      ? prev.filter((x) => x !== 'thematic-map')
+                      : prev.includes('thematic-map')
+                        ? prev
+                        : [...prev, 'thematic-map']
+                  );
+                }}
+                onClose={() => setOpenSubPanel(null)}
+              />
             </div>
           )}
 
@@ -1538,6 +1609,15 @@ export default function OpenLayersMap({
 
       {/* 목록창(팝업) 제거: 클릭 시 바로 '지도에서 선택된 항목' 데이터 패널로 열림 */}
 
+      <MapPrintModal
+        open={printOpen}
+        onClose={() => {
+          setPrintOpen(false);
+          setPrintSnapshot(null);
+        }}
+        snapshot={printSnapshot}
+        backgroundMapGroups={backgroundMapGroups}
+      />
     </div>
   );
 }

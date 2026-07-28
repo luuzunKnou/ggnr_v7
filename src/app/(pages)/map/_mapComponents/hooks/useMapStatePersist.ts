@@ -18,11 +18,12 @@ export interface PersistedMapState {
   activeControls: string[];
   /** 데이터 조회 레이어 목록에서 켜 둔 레이어 테이블명 목록 */
   visibleLayerNames: string[];
-  /** 지목/소유구분/지적도/건물도로 상세 패널 체크박스 선택 (테이블명 배열) */
+  /** 지목/소유구분/지적도/건물도로/주제도 상세 패널 체크박스 선택 (테이블명 배열) */
   visibleJimokLayerNames?: string[];
   visibleLandownLayerNames?: string[];
   visibleCadastralLayerNames?: string[];
   visibleBuildingRoadLayerNames?: string[];
+  visibleThematicLayerNames?: string[];
 }
 
 export function loadPersistedMapState(projectName?: string): PersistedMapState | null {
@@ -55,6 +56,9 @@ export function loadPersistedMapState(projectName?: string): PersistedMapState |
         visibleBuildingRoadLayerNames: Array.isArray(parsed.visibleBuildingRoadLayerNames)
           ? parsed.visibleBuildingRoadLayerNames
           : undefined,
+        visibleThematicLayerNames: Array.isArray(parsed.visibleThematicLayerNames)
+          ? parsed.visibleThematicLayerNames
+          : undefined,
       } as PersistedMapState;
     }
   } catch { /* ignore corrupted data */ }
@@ -74,12 +78,13 @@ export function patchPersistedBackgroundMap(backgroundMap: string, projectName?:
   saveMapState({ ...prev, backgroundMap }, projectName);
 }
 
-/** 지목/소유구분/지적도/건물도로 체크박스 상태 (null이면 저장 시 빈 배열로 저장하지 않음) */
+/** 지목/소유구분/지적도/건물도로/주제도 체크박스 상태 (null이면 저장 시 빈 배열로 저장하지 않음) */
 export type PersistedLayerPanelSelections = {
   visibleJimokLayerNames: string[] | null;
   visibleLandownLayerNames: string[] | null;
   visibleCadastralLayerNames: string[] | null;
   visibleBuildingRoadLayerNames: string[] | null;
+  visibleThematicLayerNames: string[] | null;
 };
 
 /**
@@ -138,6 +143,9 @@ export function useMapStatePersist(
         ...(sel.visibleBuildingRoadLayerNames && {
           visibleBuildingRoadLayerNames: sel.visibleBuildingRoadLayerNames,
         }),
+        ...(sel.visibleThematicLayerNames && {
+          visibleThematicLayerNames: sel.visibleThematicLayerNames,
+        }),
       }, projectName);
     };
 
@@ -178,6 +186,9 @@ export function useMapStatePersist(
       }),
       ...(sel.visibleBuildingRoadLayerNames && {
         visibleBuildingRoadLayerNames: sel.visibleBuildingRoadLayerNames,
+      }),
+      ...(sel.visibleThematicLayerNames && {
+        visibleThematicLayerNames: sel.visibleThematicLayerNames,
       }),
     }, projectName);
   }, [
