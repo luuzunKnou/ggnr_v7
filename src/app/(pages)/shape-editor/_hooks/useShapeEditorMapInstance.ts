@@ -18,6 +18,7 @@ import {
 import { createBasicSectionLayers } from '../../map/_mapComponents/layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '../../map/_mapComponents/layerFactory/jimokLayerFactory';
 import { createLandownLayers } from '../../map/_mapComponents/layerFactory/landownLayerFactory';
+import { createThematicMapLayers } from '../../map/_mapComponents/layerFactory/thematicMapLayerFactory';
 import { createServiceLayer } from '../../map/_mapComponents/layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from '../../map/_mapComponents/hooks/useMapStatePersist';
 
@@ -62,6 +63,7 @@ export function useShapeEditorMapInstance(
         ...createBasicSectionLayers(),
         ...createJimokLayers(),
         ...createLandownLayers(),
+        ...createThematicMapLayers(),
       ],
       view: new View({
         center: initialCenter,
