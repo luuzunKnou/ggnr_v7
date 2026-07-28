@@ -17,6 +17,8 @@ import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riv
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
 import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/RoadLedgerFacilityAttrModal"
+import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetworkListPanel"
+import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterPanel } from "./_mapContents/safty/safetyWater/SafetyWaterPanel"
@@ -43,6 +45,8 @@ import { RoadUseLedgerListPanel } from "./_mapContents/road/roadUseLedger/RoadUs
 import { RoadUseLedgerDetailPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerDetailPanel"
 import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerListPanel"
 import { RiverUseLedgerDetailPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerDetailPanel"
+import { RiverConstructionLedgerListPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerListPanel"
+import { RiverConstructionLedgerDetailPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerDetailPanel"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
@@ -98,6 +102,14 @@ const ROAD_LEDGER_LIST_MAX_WIDTH = 680
 const ROAD_LEDGER_DETAIL_DEFAULT_WIDTH = 460
 const ROAD_LEDGER_DETAIL_MIN_WIDTH = 360
 const ROAD_LEDGER_DETAIL_MAX_WIDTH = 900
+
+const ROAD_NETWORK_LIST_DEFAULT_WIDTH = 400
+const ROAD_NETWORK_LIST_MIN_WIDTH = 300
+const ROAD_NETWORK_LIST_MAX_WIDTH = 680
+
+const ROAD_NETWORK_DETAIL_DEFAULT_WIDTH = 420
+const ROAD_NETWORK_DETAIL_MIN_WIDTH = 340
+const ROAD_NETWORK_DETAIL_MAX_WIDTH = 720
 
 const SAFETY_MAP_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_MAP_PANEL_MIN_WIDTH = 280
@@ -161,6 +173,7 @@ const MEMO_OPENED_KEY = "memoManagement"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
+const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
@@ -181,6 +194,13 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
+const RIVER_CONSTRUCTION_LEDGER_OPENED_KEY = "riverConstructionLedger"
+const RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH = 560
+const RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH = 420
+const RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH = 900
+const RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
+const RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH = 320
+const RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH = 640
 
 function MapLayoutContent({
   children,
@@ -201,6 +221,22 @@ function MapLayoutContent({
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
   const setRoadLedgerIdentifyRow = mapContext?.setRoadLedgerIdentifyRow
   const setRoadLedgerFacilityModal = mapContext?.setRoadLedgerFacilityModal
+  const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId
+  const setRoadNetworkPanelOpen = mapContext?.setRoadNetworkPanelOpen
+  const setRoadNetworkOverlayRows = mapContext?.setRoadNetworkOverlayRows
+  const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
+  const setRoadNetworkPointPickActive = mapContext?.setRoadNetworkPointPickActive
+  const setRoadNetworkDraftSitePoint = mapContext?.setRoadNetworkDraftSitePoint
+  const setRoadNetworkSitePointKind = mapContext?.setRoadNetworkSitePointKind
+  const setRoadNetworkEndpointMarkers = mapContext?.setRoadNetworkEndpointMarkers
+  const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
+  const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
+  const setRiverConstructionLedgerPanelOpen = mapContext?.setRiverConstructionLedgerPanelOpen
+  const setRiverConstructionLedgerOverlayRows = mapContext?.setRiverConstructionLedgerOverlayRows
+  const setRiverConstructionLedgerSelectedRiver = mapContext?.setRiverConstructionLedgerSelectedRiver
+  const setRiverConstructionLedgerRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus
+  const setRiverConstructionLedgerGeomEditingId =
+    mapContext?.setRiverConstructionLedgerGeomEditingId
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -239,6 +275,11 @@ function MapLayoutContent({
   const roadLedgerOpen = openedWindows.includes(ROAD_LEDGER_OPENED_KEY)
   const roadLedgerDetailOpen =
     roadLedgerOpen && Boolean(mapContext?.roadLedgerIdentifyRow)
+  const roadNetworkOpen = openedWindows.includes(ROAD_NETWORK_OPENED_KEY)
+  const roadNetworkDetailOpen =
+    roadNetworkOpen && Boolean(mapContext?.roadNetworkSelectedId)
+  const roadNetworkSelectedRow =
+    mapContext?.roadNetworkRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
@@ -253,6 +294,13 @@ function MapLayoutContent({
   const buildPublicLandOpen = openedWindows.includes(BUILD_PUBLIC_LAND_OPENED_KEY)
   const roadUseLedgerOpen = openedWindows.includes(ROAD_USE_LEDGER_OPENED_KEY)
   const riverUseLedgerOpen = openedWindows.includes(RIVER_USE_LEDGER_OPENED_KEY)
+  const riverConstructionLedgerOpen = openedWindows.includes(RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
+  const riverConstructionLedgerSelectedRow =
+    mapContext?.riverConstructionLedgerRows?.find(
+      (r) => r.id === mapContext?.riverConstructionLedgerSelectedId
+    ) ?? null
+  const riverConstructionLedgerDetailOpen =
+    riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -315,6 +363,8 @@ function MapLayoutContent({
   const [riverBasicPlanDetailWidth, setRiverBasicPlanDetailWidth] = useState(RIVER_BASIC_PLAN_DETAIL_DEFAULT_WIDTH)
   const [roadLedgerListWidth, setRoadLedgerListWidth] = useState(ROAD_LEDGER_LIST_DEFAULT_WIDTH)
   const [roadLedgerDetailWidth, setRoadLedgerDetailWidth] = useState(ROAD_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [roadNetworkListWidth, setRoadNetworkListWidth] = useState(ROAD_NETWORK_LIST_DEFAULT_WIDTH)
+  const [roadNetworkDetailWidth, setRoadNetworkDetailWidth] = useState(ROAD_NETWORK_DETAIL_DEFAULT_WIDTH)
   const [safetyMapPanelWidth, setSafetyMapPanelWidth] = useState(SAFETY_MAP_PANEL_DEFAULT_WIDTH)
   const [safetyInfoPanelWidth, setSafetyInfoPanelWidth] = useState(SAFETY_INFO_PANEL_DEFAULT_WIDTH)
   const [safetyWaterPanelWidth, setSafetyWaterPanelWidth] = useState(SAFETY_WATER_PANEL_DEFAULT_WIDTH)
@@ -333,6 +383,12 @@ function MapLayoutContent({
   const [roadUseLedgerDetailWidth, setRoadUseLedgerDetailWidth] = useState(ROAD_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [riverConstructionLedgerPanelWidth, setRiverConstructionLedgerPanelWidth] = useState(
+    RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH
+  )
+  const [riverConstructionLedgerDetailWidth, setRiverConstructionLedgerDetailWidth] = useState(
+    RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH
+  )
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -348,12 +404,16 @@ function MapLayoutContent({
     (riverBasicPlanOpen && selectedRiverName ? riverBasicPlanDetailWidth : 0) +
     (roadLedgerOpen ? roadLedgerListWidth : 0) +
     (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0) +
+    (roadNetworkOpen ? roadNetworkListWidth : 0) +
+    (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0) +
     (buildPublicLandOpen ? buildPublicLandPanelWidth : 0) +
     (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0) +
     (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0) +
     (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0) +
     (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0) +
     (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0) +
+    (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0) +
+    (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -389,7 +449,11 @@ function MapLayoutContent({
     roadLedgerListLeftPx + (roadLedgerOpen ? roadLedgerListWidth : 0)
   const afterRoadLedgerPanelsLeftPx =
     roadLedgerDetailLeftPx + (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0)
-  const buildPublicLandPanelLeftPx = afterRoadLedgerPanelsLeftPx
+  const roadNetworkListLeftPx = afterRoadLedgerPanelsLeftPx
+  const roadNetworkDetailLeftPx =
+    roadNetworkListLeftPx + (roadNetworkOpen ? roadNetworkListWidth : 0)
+  const buildPublicLandPanelLeftPx =
+    roadNetworkDetailLeftPx + (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
   const buildPublicLandDetailLeftPx =
     buildPublicLandPanelLeftPx + (buildPublicLandOpen ? buildPublicLandPanelWidth : 0)
   const roadUseLedgerPanelLeftPx =
@@ -400,8 +464,14 @@ function MapLayoutContent({
     roadUseLedgerDetailLeftPx + (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0)
   const riverUseLedgerDetailLeftPx =
     riverUseLedgerPanelLeftPx + (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0)
-  const memoPanelLeftPx =
+  const riverConstructionLedgerPanelLeftPx =
     riverUseLedgerDetailLeftPx + (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0)
+  const riverConstructionLedgerDetailLeftPx =
+    riverConstructionLedgerPanelLeftPx +
+    (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0)
+  const memoPanelLeftPx =
+    riverConstructionLedgerDetailLeftPx +
+    (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
@@ -443,6 +513,60 @@ function MapLayoutContent({
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
   }, [setRoadLedgerPanelOpen, roadLedgerOpen])
+
+  useEffect(() => {
+    setRoadNetworkPanelOpen?.(roadNetworkOpen)
+    if (!roadNetworkOpen) {
+      setRoadNetworkSelectedId?.(null)
+      setRoadNetworkOverlayRows?.([])
+      setSpatialDrawRequest?.(null)
+      setSpatialFilterWkt?.(null)
+      setRoadNetworkPointPickActive?.(false)
+      setRoadNetworkDraftSitePoint?.(null)
+      setRoadNetworkSitePointKind?.(null)
+      setRoadNetworkEndpointMarkers?.(null)
+      setRoadNetworkFocusedSitePointKey?.(null)
+      if (mapContext?.roadNetworkPointPickRef) {
+        mapContext.roadNetworkPointPickRef.current = null
+      }
+    }
+  }, [
+    roadNetworkOpen,
+    setRoadNetworkPanelOpen,
+    setRoadNetworkSelectedId,
+    setRoadNetworkOverlayRows,
+    setSpatialDrawRequest,
+    setSpatialFilterWkt,
+    setRoadNetworkPointPickActive,
+    setRoadNetworkDraftSitePoint,
+    setRoadNetworkSitePointKind,
+    setRoadNetworkEndpointMarkers,
+    setRoadNetworkFocusedSitePointKey,
+    mapContext?.roadNetworkPointPickRef,
+  ])
+
+  useEffect(() => {
+    setRiverConstructionLedgerPanelOpen?.(riverConstructionLedgerOpen)
+    if (!riverConstructionLedgerOpen) {
+      setRiverConstructionLedgerSelectedId?.(null)
+      setRiverConstructionLedgerOverlayRows?.([])
+      setRiverConstructionLedgerSelectedRiver?.(null)
+      setRiverConstructionLedgerRiverFocus?.(null)
+      setRiverConstructionLedgerGeomEditingId?.(null)
+      setSpatialDrawRequest?.(null)
+      setSpatialFilterWkt?.(null)
+    }
+  }, [
+    riverConstructionLedgerOpen,
+    setRiverConstructionLedgerPanelOpen,
+    setRiverConstructionLedgerSelectedId,
+    setRiverConstructionLedgerOverlayRows,
+    setRiverConstructionLedgerSelectedRiver,
+    setRiverConstructionLedgerRiverFocus,
+    setRiverConstructionLedgerGeomEditingId,
+    setSpatialDrawRequest,
+    setSpatialFilterWkt,
+  ])
 
   useEffect(() => {
     if (!roadLedgerOpen) {
@@ -575,6 +699,15 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleHideRoadNetwork = () => {
+    setRoadNetworkSelectedId?.(null)
+    setRoadNetworkOverlayRows?.([])
+    setSpatialDrawRequest?.(null)
+    setSpatialFilterWkt?.(null)
+    const next = openedWindows.filter((w) => w !== ROAD_NETWORK_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseRoadUseLedger = () => {
     setRoadUseLedgerDetailId(null)
     const next = openedWindows.filter((w) => w !== ROAD_USE_LEDGER_OPENED_KEY)
@@ -584,6 +717,18 @@ function MapLayoutContent({
   const handleCloseRiverUseLedger = () => {
     setRiverUseLedgerDetailId(null)
     const next = openedWindows.filter((w) => w !== RIVER_USE_LEDGER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseRiverConstructionLedger = () => {
+    setRiverConstructionLedgerSelectedId?.(null)
+    setRiverConstructionLedgerSelectedRiver?.(null)
+    setRiverConstructionLedgerRiverFocus?.(null)
+    setRiverConstructionLedgerGeomEditingId?.(null)
+    setRiverConstructionLedgerOverlayRows?.([])
+    setSpatialDrawRequest?.(null)
+    setSpatialFilterWkt?.(null)
+    const next = openedWindows.filter((w) => w !== RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
     setOpened(next)
   }
 
@@ -604,8 +749,40 @@ function MapLayoutContent({
   }, [roadUseLedgerOpen])
 
   useEffect(() => {
+    if (
+      roadNetworkOpen &&
+      mapContext?.roadNetworkSelectedId &&
+      !(mapContext.roadNetworkRows ?? []).some((r) => r.id === mapContext.roadNetworkSelectedId)
+    ) {
+      setRoadNetworkSelectedId?.(null)
+    }
+  }, [
+    roadNetworkOpen,
+    mapContext?.roadNetworkSelectedId,
+    mapContext?.roadNetworkRows,
+    setRoadNetworkSelectedId,
+  ])
+
+  useEffect(() => {
     if (!riverUseLedgerOpen) setRiverUseLedgerDetailId(null)
   }, [riverUseLedgerOpen])
+
+  useEffect(() => {
+    if (
+      riverConstructionLedgerOpen &&
+      mapContext?.riverConstructionLedgerSelectedId &&
+      !(mapContext.riverConstructionLedgerRows ?? []).some(
+        (r) => r.id === mapContext.riverConstructionLedgerSelectedId
+      )
+    ) {
+      setRiverConstructionLedgerSelectedId?.(null)
+    }
+  }, [
+    riverConstructionLedgerOpen,
+    mapContext?.riverConstructionLedgerSelectedId,
+    mapContext?.riverConstructionLedgerRows,
+    setRiverConstructionLedgerSelectedId,
+  ])
 
   useEffect(() => {
     if (!memoManagementOpen) setMemoDetailId(null)
@@ -882,6 +1059,41 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {roadNetworkOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadNetworkListWidth}
+                minWidth={ROAD_NETWORK_LIST_MIN_WIDTH}
+                maxWidth={ROAD_NETWORK_LIST_MAX_WIDTH}
+                leftOffsetPx={roadNetworkListLeftPx}
+                onWidthChange={setRoadNetworkListWidth}
+              >
+                <RoadNetworkListPanel onClose={handleHideRoadNetwork} />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadNetworkOpen && roadNetworkSelectedRow && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadNetworkDetailWidth}
+                minWidth={ROAD_NETWORK_DETAIL_MIN_WIDTH}
+                maxWidth={ROAD_NETWORK_DETAIL_MAX_WIDTH}
+                leftOffsetPx={roadNetworkDetailLeftPx}
+                onWidthChange={setRoadNetworkDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RoadNetworkDetailPanel
+                  row={roadNetworkSelectedRow}
+                  onClose={() => setRoadNetworkSelectedId?.(null)}
+                  overlayLeftPx={roadNetworkListLeftPx}
+                  overlayWidthPx={
+                    roadNetworkListWidth +
+                    (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {buildPublicLandOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -1012,6 +1224,40 @@ function MapLayoutContent({
                   onDeleted={() => {
                     setRiverUseLedgerDetailId(null)
                     setRiverUseLedgerListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverConstructionLedgerOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverConstructionLedgerPanelWidth}
+                minWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH}
+                maxWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH}
+                leftOffsetPx={riverConstructionLedgerPanelLeftPx}
+                onWidthChange={setRiverConstructionLedgerPanelWidth}
+              >
+                <RiverConstructionLedgerListPanel onClose={handleCloseRiverConstructionLedger} />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverConstructionLedgerOpen && riverConstructionLedgerSelectedRow && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverConstructionLedgerDetailWidth}
+                minWidth={RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH}
+                maxWidth={RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={riverConstructionLedgerDetailLeftPx}
+                onWidthChange={setRiverConstructionLedgerDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RiverConstructionLedgerDetailPanel
+                  row={riverConstructionLedgerSelectedRow}
+                  onClose={() => {
+                    setRiverConstructionLedgerRiverFocus?.(null)
+                    setRiverConstructionLedgerGeomEditingId?.(null)
+                    setRiverConstructionLedgerSelectedId?.(null)
                   }}
                 />
               </MapSideListPanel>

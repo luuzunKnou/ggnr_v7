@@ -323,5 +323,30 @@
     "define_field_sel_label_field": "",
     "define_field_default_value": "",
     "define_field_show_title": false
+  },
+  {
+    "define_field_name": "ogc_fid",
+    "define_field_kor_name": "ogc_fid",
+    "define_field_type": "integer",
+    "define_field_idx": 4,
+    "define_field_is_required": false,
+    "define_field_show_search": false,
+    "define_field_show_list": true,
+    "define_field_show_detail": true,
+    "define_field_read_only": false,
+    "define_field_is_key": false,
+    "define_field_show_search_detail": false,
+    "define_field_max_length": "",
+    "define_field_sort_idx": "",
+    "define_field_sort_type": "",
+    "define_field_sel_list": "",
+    "define_field_sel_table": "",
+    "define_field_sel_query": "",
+    "define_field_sel_url": "",
+    "define_field_show_detail_list": false,
+    "define_field_sel_key_field": "",
+    "define_field_sel_label_field": "",
+    "define_field_default_value": "",
+    "define_field_show_title": false
   }
 ]

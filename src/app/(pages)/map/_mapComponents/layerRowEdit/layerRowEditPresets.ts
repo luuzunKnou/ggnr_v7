@@ -29,6 +29,14 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childTableName: "river_use_ledger_jijuk",
     childParentField: "parent_id",
   },
+  /** 울진 점용대장 (usage_data_as) */
+  riverUsageData: {
+    tableName: "usage_data_as",
+    schema: "layer",
+    keyField: "ogc_fid",
+    excludeFields: [],
+    dateFields: [],
+  },
 } as const satisfies Record<string, LayerRowEditPreset>;
 
 export type LayerRowEditPresetKey = keyof typeof LAYER_ROW_EDIT_PRESETS;

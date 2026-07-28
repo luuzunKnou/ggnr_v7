@@ -137,12 +137,20 @@ export function useLayerRowEdit({
         void resolveParcelGeoms(base).then(setDraftParcels);
       }
     }
-    if (!isEditing) setDraftParcels([]);
+    // 빈 배열을 매번 setState 하면 참조가 바뀌어 Maximum update depth 유발
+    if (!isEditing) {
+      setDraftParcels((prev) => (prev.length === 0 ? prev : []));
+    }
     prevEditingRef.current = isEditing;
   }, [initialParcels, isCreateMode, isEditing]);
 
   useEffect(() => {
-    setLayerRowDraftParcels?.(isEditing ? draftParcels : []);
+    if (!setLayerRowDraftParcels) return;
+    if (isEditing) {
+      setLayerRowDraftParcels(draftParcels);
+    } else {
+      setLayerRowDraftParcels([]);
+    }
   }, [draftParcels, isEditing, setLayerRowDraftParcels]);
 
   useEffect(() => {

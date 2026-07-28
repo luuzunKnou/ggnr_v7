@@ -636,7 +636,9 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
       geometryType,
       table: hasTable,
       layer: layerNames.includes(dbTableName) || layerNames.includes(basename),
-      style: styleNames.includes(dbTableName) || styleNames.includes(basename),
+      style: styleNames.some(
+        (s) => s.toLowerCase() === dbTableName || s.toLowerCase() === basename.toLowerCase()
+      ),
       define: inDefine && hasDefineFields,
     });
   }
@@ -684,7 +686,14 @@ function buildGdalEnv(envDir: string): NodeJS.ProcessEnv {
 /**
  * ogr2ogr 실행 방식: GGNR_GDAL_OGR2OGR → 프로젝트 python/env(직접 호출 + buildGdalEnv) → PATH
  */
-function resolveOgr2ogrRun(): { cmd: string; args: string[]; env?: NodeJS.ProcessEnv } {
+function resolveOgr2ogrRun(): {
+  cmd: string;
+  args: string[];
+  env?: NodeJS.ProcessEnv;
+  /** 파이프라인 env에 ogr2ogr가 없어 PATH 폴백을 쓰게 된 경우 */
+  pipelineOgrMissing?: boolean;
+  pipelineOgrExpected?: string;
+} {
   const root = process.cwd();
   if (process.env.GGNR_GDAL_OGR2OGR) {
     const custom = path.resolve(root, process.env.GGNR_GDAL_OGR2OGR);
@@ -701,6 +710,12 @@ function resolveOgr2ogrRun(): { cmd: string; args: string[]; env?: NodeJS.Proces
     if (fsSync.existsSync(candidate)) {
       return { cmd: candidate, args: [], env: buildGdalEnv(envDir) };
     }
+    return {
+      cmd: 'ogr2ogr',
+      args: [],
+      pipelineOgrMissing: true,
+      pipelineOgrExpected: candidate,
+    };
   }
   return { cmd: 'ogr2ogr', args: [] };
 }
@@ -799,7 +814,17 @@ export async function createTableFromShp(params: {
   const pgConnection = `PG:host=${db.host} port=${db.port} dbname=${db.database} user=${db.user} password=${db.password}`;
   const layerTable = `layer.${tableName}`;
 
-  const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv } = resolveOgr2ogrRun();
+  const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv, pipelineOgrMissing, pipelineOgrExpected } =
+    resolveOgr2ogrRun();
+  if (pipelineOgrMissing) {
+    return {
+      success: false,
+      error:
+        `파이프라인 환경에 ogr2ogr가 없습니다 (${pipelineOgrExpected ?? 'python/env/Library/bin/ogr2ogr.exe'}). ` +
+        `개발자 모드 > LAS 파일 업로더에서 «환경 생성 및 설치»를 실행하거나, 프로젝트 루트에서 ` +
+        `conda run --prefix python/env conda install -c conda-forge gdal libpq -y 를 실행하세요.`,
+    };
+  }
   const ogr2ogrArgs = [
     '-f', 'PostgreSQL',
     pgConnection,
@@ -858,7 +883,7 @@ export async function createTableFromShp(params: {
     if (notFound) {
       error = `ogr2ogr를 찾을 수 없습니다. 프로젝트 python/env에 GDAL이 설치되어 있어야 합니다(개발자 모드 > LAS 파이프라인 환경 생성 및 설치). 또는 env에 GGNR_GDAL_OGR2OGR로 ogr2ogr 실행 파일 경로를 지정하세요.`;
     } else if (noPgDriver) {
-      error = `GDAL에 PostgreSQL 드라이버가 없습니다. 반드시 프로젝트 루트(예: D:\\ggnr_v7)에서 아래 명령을 실행하세요. python 폴더 안에서 실행하면 안 됩니다.\n\n  conda run --prefix python/env conda install -c conda-forge libpq -y`;
+      error = `GDAL에 PostgreSQL 드라이버가 없습니다. PATH의 ogr2ogr가 아닌 프로젝트 python/env의 GDAL을 쓰려면 개발자 모드 > LAS 파일 업로더에서 «환경 생성 및 설치»를 실행하세요. 또는 프로젝트 루트에서:\n\n  conda run --prefix python/env conda install -c conda-forge gdal libpq -y`;
     }
     return { success: false, error };
   }
@@ -1398,6 +1423,50 @@ export async function processShpBatch(params: {
   }
 
   const allSuccess = results.every((r) => r.table.success && r.layer.success && r.style.success && r.define.success);
+
+  // #region agent log
+  {
+    const failed = results.filter(
+      (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
+    );
+    const payload = {
+      sessionId: '1c82ab',
+      runId: 'post-fix',
+      hypothesisId: 'A-C',
+      location: 'shpUploadService.ts:processShpBatch',
+      message: 'processShpBatch done',
+      data: {
+        inputRowCount: rows.length,
+        resultCount: results.length,
+        allSuccess,
+        failCount: failed.length,
+        sample: results.slice(0, 5).map((r) => ({
+          file: r.file,
+          table: r.table,
+          layer: r.layer,
+          style: r.style,
+          define: r.define,
+        })),
+        failedSample: failed.slice(0, 5).map((r) => ({
+          file: r.file,
+          table: r.table,
+          layer: r.layer,
+          style: r.style,
+          define: r.define,
+        })),
+      },
+      timestamp: Date.now(),
+    };
+    try {
+      fsSync.appendFileSync(path.join(process.cwd(), 'debug-1c82ab.log'), `${JSON.stringify(payload)}\n`);
+    } catch { /* ignore */ }
+    fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+  // #endregion
 
   try {
     const { createLayerHistory, createLayerDetailHistoryBatch } = await import('./layerHistoryService');

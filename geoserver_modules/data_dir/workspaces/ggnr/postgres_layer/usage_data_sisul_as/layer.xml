@@ -1,0 +1,19 @@
+<layer>
+  <name>usage_data_sisul_as</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-1124</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-1123</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-1125</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 04:20:00.398 UTC</dateCreated>
+  <dateModified>2026-07-14 04:20:00.504 UTC</dateModified>
+</layer>

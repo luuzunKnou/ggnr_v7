@@ -764,6 +764,32 @@ export function ShpWizardModal({
         const layerRow = layers.find((l) => l.name.toLowerCase() === r.sourceFile.toLowerCase());
         if (layerRow?.epsg != null) sourceSrsByPath[r.pathOrResult.replace(/\\/g, '/')] = `EPSG:${layerRow.epsg}`;
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+        body: JSON.stringify({
+          sessionId: '1c82ab',
+          runId: 'pre-fix',
+          hypothesisId: 'A-E',
+          location: 'ShpWizardModal.tsx:runComponentSetup:entry',
+          message: 'component setup start',
+          data: {
+            readyPath,
+            statusCount: statusRows.length,
+            needBefore: statusRows.filter((r) => !r.table || !r.layer || !r.style || !r.define).length,
+            sampleBefore: statusRows.slice(0, 3).map((r) => ({
+              file: r.sourceFile,
+              table: r.table,
+              layer: r.layer,
+              style: r.style,
+              define: r.define,
+            })),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const res = await call('', 'POST', {
         service: 'shpUploadService',
         action: 'processShpBatch',
@@ -774,10 +800,10 @@ export function ShpWizardModal({
       const d = res?.data ?? res;
       const batchResults: Array<{
         file: string;
-        table: { success: boolean };
-        layer: { success: boolean };
-        style: { success: boolean };
-        define: { success: boolean };
+        table: { success: boolean; skipped?: boolean; error?: string };
+        layer: { success: boolean; skipped?: boolean; error?: string };
+        style: { success: boolean; skipped?: boolean; error?: string };
+        define: { success: boolean; skipped?: boolean; error?: string };
       }> = d?.results ?? [];
 
       const pathSet = new Set(statusRows.map((r) => r.pathOrResult.replace(/\\/g, '/')));
@@ -792,12 +818,96 @@ export function ShpWizardModal({
       const failCount = batchResults.filter(
         (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
       ).length;
+      const needAfter = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
+      const allReady = rows.length > 0 && rows.every((r) => r.table && r.layer && r.style && r.define);
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+        body: JSON.stringify({
+          sessionId: '1c82ab',
+          runId: 'pre-fix',
+          hypothesisId: 'A-E',
+          location: 'ShpWizardModal.tsx:runComponentSetup:after',
+          message: 'component setup finished',
+          data: {
+            resKeys: res && typeof res === 'object' ? Object.keys(res as object) : [],
+            dKeys: d && typeof d === 'object' ? Object.keys(d as object) : [],
+            dSuccess: d?.success ?? null,
+            dError: d?.error ?? null,
+            resultCount: batchResults.length,
+            failCount,
+            needAfter: needAfter.length,
+            allReady,
+            failedSample: batchResults
+              .filter((r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success)
+              .slice(0, 5)
+              .map((r) => ({ file: r.file, table: r.table, layer: r.layer, style: r.style, define: r.define })),
+            statusSample: rows.slice(0, 5).map((r) => ({
+              file: r.sourceFile,
+              table: r.table,
+              layer: r.layer,
+              style: r.style,
+              define: r.define,
+            })),
+            stillNeedSample: needAfter.slice(0, 5).map((r) => ({
+              file: r.sourceFile,
+              table: r.table,
+              layer: r.layer,
+              style: r.style,
+              define: r.define,
+            })),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (failCount > 0) {
-        setLayersError(`${failCount}개 파일의 Table·Layer·Style·Define 생성에 실패했습니다.`);
+        const failed = batchResults.filter(
+          (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
+        );
+        const firstErr =
+          failed
+            .flatMap((r) => [
+              !r.table.success ? r.table.error : null,
+              !r.layer.success ? r.layer.error : null,
+              !r.style.success ? r.style.error : null,
+              !r.define.success ? r.define.error : null,
+            ])
+            .find((e): e is string => !!e?.trim())
+            ?.replace(/\s+/g, ' ')
+            .trim() ?? '';
+        const tableOnly =
+          failed.length > 0 && failed.every((r) => !r.table.success);
+        setLayersError(
+          tableOnly
+            ? `${failCount}개 파일의 Table 생성에 실패했습니다.${firstErr ? ` ${firstErr}` : ''}`
+            : `${failCount}개 파일의 Table·Layer·Style·Define 생성에 실패했습니다.${firstErr ? ` ${firstErr}` : ''}`
+        );
       } else if (d?.error) {
         setLayersError(String(d.error));
+      } else if (!allReady) {
+        // 배치 성공으로 보이지만 상태 재조회 후 아직 누락이면 안내
+        setLayersError(
+          `생성 후 상태 확인: 아직 ${needAfter.length}개 파일에 Table·Layer·Style·Define 누락이 있습니다.`
+        );
       }
     } catch (e: unknown) {
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+        body: JSON.stringify({
+          sessionId: '1c82ab',
+          runId: 'pre-fix',
+          hypothesisId: 'C',
+          location: 'ShpWizardModal.tsx:runComponentSetup:catch',
+          message: 'component setup threw',
+          data: { error: e instanceof Error ? e.message : String(e) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setLayersError(e instanceof Error ? e.message : String(e));
     } finally {
       setComponentSetupRunning(false);

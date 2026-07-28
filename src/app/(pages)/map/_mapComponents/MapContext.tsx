@@ -5,6 +5,10 @@ import type Map from 'ol/Map';
 import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
 import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
+import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
+import { cloneRoadNetworkRows } from '../_mapContents/road/roadNetwork/roadNetworkMock';
+import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
+import { cloneRiverConstructionLedgerRows } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
 
 export type RoadCctvOverlayState = {
   items: ItsCctvItem[];
@@ -185,6 +189,80 @@ export type MapContextValue = {
       pickFromMap?: boolean;
     } | null>
   >;
+  /** 도로망도 임시 목록(CRUD 반영) */
+  roadNetworkRows: RoadNetworkRow[];
+  setRoadNetworkRows: Dispatch<SetStateAction<RoadNetworkRow[]>>;
+  /** 도로망도 목록에서 선택한 도로 id — 상세·지도 강조 */
+  roadNetworkSelectedId: string | null;
+  setRoadNetworkSelectedId: Dispatch<SetStateAction<string | null>>;
+  /** URL opened 도로망도 패널 열림 */
+  roadNetworkPanelOpen: boolean;
+  setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 필터 결과 지도 레이어 표시 */
+  roadNetworkOverlayVisible: boolean;
+  setRoadNetworkOverlayVisible: Dispatch<SetStateAction<boolean>>;
+  /** 목록 필터·검색 결과(지도 오버레이용) */
+  roadNetworkOverlayRows: RoadNetworkRow[];
+  setRoadNetworkOverlayRows: Dispatch<SetStateAction<RoadNetworkRow[]>>;
+  /**
+   * 유지보수·민원 현장 위치 점 찍기 — 활성 시 overlay 훅이 지도 클릭을 가로채 호출.
+   * effect deps에 Context value 넣지 말 것(ref만 사용).
+   */
+  roadNetworkPointPickRef: MutableRefObject<((lon: number, lat: number) => void) | null>;
+  /** 점 찍기 모드(커서·식별 분기용) */
+  roadNetworkPointPickActive: boolean;
+  setRoadNetworkPointPickActive: Dispatch<SetStateAction<boolean>>;
+  /** 편집 중 임시 현장 점(저장 전 미리보기) */
+  roadNetworkDraftSitePoint: { lon: number; lat: number } | null;
+  setRoadNetworkDraftSitePoint: Dispatch<
+    SetStateAction<{ lon: number; lat: number } | null>
+  >;
+  /** 유지보수/민원 탭에 따라 지도에 표시할 현장 점 종류. null이면 현장 점 숨김 */
+  roadNetworkSitePointKind: "maint" | "comp" | null;
+  setRoadNetworkSitePointKind: Dispatch<SetStateAction<"maint" | "comp" | null>>;
+  /** 군도·농도 기점·종점 지도 표시(조회·속성 편집 중 초안 포함) */
+  roadNetworkEndpointMarkers: {
+    start: { lon: number; lat: number } | null;
+    end: { lon: number; lat: number } | null;
+  } | null;
+  setRoadNetworkEndpointMarkers: Dispatch<
+    SetStateAction<{
+      start: { lon: number; lat: number } | null;
+      end: { lon: number; lat: number } | null;
+    } | null>
+  >;
+  /** 목록에서 선택한 현장 점 키 (`m-{id}` / `c-{id}`) — 강조·이동 */
+  roadNetworkFocusedSitePointKey: string | null;
+  setRoadNetworkFocusedSitePointKey: Dispatch<SetStateAction<string | null>>;
+  /** 하천 공사대장 임시 목록(CRUD 반영) */
+  riverConstructionLedgerRows: RiverConstructionLedgerRow[];
+  setRiverConstructionLedgerRows: Dispatch<SetStateAction<RiverConstructionLedgerRow[]>>;
+  /** 공사대장 선택 id — 상세·지도 강조 */
+  riverConstructionLedgerSelectedId: string | null;
+  setRiverConstructionLedgerSelectedId: Dispatch<SetStateAction<string | null>>;
+  /** URL opened 공사대장 패널 열림 */
+  riverConstructionLedgerPanelOpen: boolean;
+  setRiverConstructionLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 목록 필터·검색 결과(지도 오버레이용) */
+  riverConstructionLedgerOverlayRows: RiverConstructionLedgerRow[];
+  setRiverConstructionLedgerOverlayRows: Dispatch<SetStateAction<RiverConstructionLedgerRow[]>>;
+  /** 하천목록에서 선택한 하천명(필터·지도 이동) */
+  riverConstructionLedgerSelectedRiver: string | null;
+  setRiverConstructionLedgerSelectedRiver: Dispatch<SetStateAction<string | null>>;
+  /** 상세 대상 하천 클릭 — 하천 위치 강조(3857 extent) */
+  riverConstructionLedgerRiverFocus: {
+    riverName: string;
+    extent3857: [number, number, number, number];
+  } | null;
+  setRiverConstructionLedgerRiverFocus: Dispatch<
+    SetStateAction<{
+      riverName: string;
+      extent3857: [number, number, number, number];
+    } | null>
+  >;
+  /** 상세에서 도형 그리기·수정 중인 공사 id — 오버레이·강조에서 제외(중복 표시 방지) */
+  riverConstructionLedgerGeomEditingId: string | null;
+  setRiverConstructionLedgerGeomEditingId: Dispatch<SetStateAction<string | null>>;
   /** ITS CCTV 패널 — 지도 벡터 레이어·목록 동기화 */
   roadCctvOverlay: RoadCctvOverlayState | null;
   setRoadCctvOverlay: Dispatch<SetStateAction<RoadCctvOverlayState | null>>;
@@ -326,6 +404,46 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     defineTableTitle: string;
     pickFromMap?: boolean;
   } | null>(null);
+  const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>(() => cloneRoadNetworkRows());
+  const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
+  const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
+  const [roadNetworkOverlayVisible, setRoadNetworkOverlayVisible] = useState(false);
+  const [roadNetworkOverlayRows, setRoadNetworkOverlayRows] = useState<RoadNetworkRow[]>([]);
+  const roadNetworkPointPickRef = useRef<((lon: number, lat: number) => void) | null>(null);
+  const [roadNetworkPointPickActive, setRoadNetworkPointPickActive] = useState(false);
+  const [roadNetworkDraftSitePoint, setRoadNetworkDraftSitePoint] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
+  const [roadNetworkSitePointKind, setRoadNetworkSitePointKind] = useState<
+    "maint" | "comp" | null
+  >(null);
+  const [roadNetworkEndpointMarkers, setRoadNetworkEndpointMarkers] = useState<{
+    start: { lon: number; lat: number } | null;
+    end: { lon: number; lat: number } | null;
+  } | null>(null);
+  const [roadNetworkFocusedSitePointKey, setRoadNetworkFocusedSitePointKey] = useState<
+    string | null
+  >(null);
+  const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
+    RiverConstructionLedgerRow[]
+  >(() => cloneRiverConstructionLedgerRows());
+  const [riverConstructionLedgerSelectedId, setRiverConstructionLedgerSelectedId] = useState<
+    string | null
+  >(null);
+  const [riverConstructionLedgerPanelOpen, setRiverConstructionLedgerPanelOpen] = useState(false);
+  const [riverConstructionLedgerOverlayRows, setRiverConstructionLedgerOverlayRows] = useState<
+    RiverConstructionLedgerRow[]
+  >([]);
+  const [riverConstructionLedgerSelectedRiver, setRiverConstructionLedgerSelectedRiver] = useState<
+    string | null
+  >(null);
+  const [riverConstructionLedgerRiverFocus, setRiverConstructionLedgerRiverFocus] = useState<{
+    riverName: string;
+    extent3857: [number, number, number, number];
+  } | null>(null);
+  const [riverConstructionLedgerGeomEditingId, setRiverConstructionLedgerGeomEditingId] =
+    useState<string | null>(null);
   const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
@@ -426,6 +544,41 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadLedgerIdentifyRow,
         roadLedgerFacilityModal,
         setRoadLedgerFacilityModal,
+        roadNetworkRows,
+        setRoadNetworkRows,
+        roadNetworkSelectedId,
+        setRoadNetworkSelectedId,
+        roadNetworkPanelOpen,
+        setRoadNetworkPanelOpen,
+        roadNetworkOverlayVisible,
+        setRoadNetworkOverlayVisible,
+        roadNetworkOverlayRows,
+        setRoadNetworkOverlayRows,
+        roadNetworkPointPickRef,
+        roadNetworkPointPickActive,
+        setRoadNetworkPointPickActive,
+        roadNetworkDraftSitePoint,
+        setRoadNetworkDraftSitePoint,
+        roadNetworkSitePointKind,
+        setRoadNetworkSitePointKind,
+        roadNetworkEndpointMarkers,
+        setRoadNetworkEndpointMarkers,
+        roadNetworkFocusedSitePointKey,
+        setRoadNetworkFocusedSitePointKey,
+        riverConstructionLedgerRows,
+        setRiverConstructionLedgerRows,
+        riverConstructionLedgerSelectedId,
+        setRiverConstructionLedgerSelectedId,
+        riverConstructionLedgerPanelOpen,
+        setRiverConstructionLedgerPanelOpen,
+        riverConstructionLedgerOverlayRows,
+        setRiverConstructionLedgerOverlayRows,
+        riverConstructionLedgerSelectedRiver,
+        setRiverConstructionLedgerSelectedRiver,
+        riverConstructionLedgerRiverFocus,
+        setRiverConstructionLedgerRiverFocus,
+        riverConstructionLedgerGeomEditingId,
+        setRiverConstructionLedgerGeomEditingId,
         roadCctvOverlay,
         setRoadCctvOverlay,
         roadCctvPanelOpen,

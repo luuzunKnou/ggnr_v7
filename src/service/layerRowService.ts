@@ -11,8 +11,9 @@ import { getDefineTableKeyFieldName } from './standardService';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer', 'public']);
-/** public_layer.jijuk — geometry_columns SRID=0, 실제 좌표는 EPSG:5181 */
+/** public_layer.jijuk 또는 layer.jijuk — 프로젝트마다 스키마가 다름 (울진=layer) */
 const JIJUK_GEOM_SRID = 5181;
+const JIJUK_SCHEMA_CANDIDATES = ['public_layer', 'layer'] as const;
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
 
@@ -280,6 +281,34 @@ function jijukGeom5181Sql(geomCol = 'geom'): string {
 
 function jijukGeom3857Sql(geomCol = 'geom'): string {
   return `ST_Transform(${jijukGeom5181Sql(geomCol)}, 3857)`;
+}
+
+type JijukTableRef = {
+  /** "schema"."table" */
+  qualified: string;
+  /** ORDER BY 용 PK (gid | ogc_fid 등) */
+  orderCol: string;
+};
+
+/** 프로젝트 DB에 있는 지적(jijuk) 테이블 위치 해석 — public_layer 우선, 없으면 layer */
+async function resolveJijukTableRef(): Promise<JijukTableRef | null> {
+  for (const schema of JIJUK_SCHEMA_CANDIDATES) {
+    const table = await resolveLayerPhysicalRelName(schema, 'jijuk');
+    if (!table) continue;
+    const columns = await getTableColumns(schema, table);
+    const colSet = new Set(columns.map((c) => c.toLowerCase()));
+    if (!colSet.has('geom')) continue;
+    const orderCol = colSet.has('gid')
+      ? 'gid'
+      : colSet.has('ogc_fid')
+        ? 'ogc_fid'
+        : columns[0]!;
+    return {
+      qualified: `${quoteIdent(schema)}.${quoteIdent(table)}`,
+      orderCol,
+    };
+  }
+  return null;
 }
 
 function geomTo3857Sql(geomCol: string, tableSrid: number): string {
@@ -758,7 +787,7 @@ async function enrichJijukRowsWithAdminNames(rows: JijukParcelGeomRow[]): Promis
   }
 }
 
-const jijukParcelSelectSql = (geomCol: string) => `
+const jijukParcelSelectSql = (geomCol: string, fromQualified: string) => `
   SELECT
     j.pnu::text AS pnu,
     j.jibun::text AS jibun,
@@ -767,7 +796,7 @@ const jijukParcelSelectSql = (geomCol: string) => `
     ST_YMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymin,
     ST_XMax(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmax,
     ST_YMax(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymax
-  FROM public_layer.jijuk j
+  FROM ${fromQualified} j
   WHERE j.geom IS NOT NULL`;
 
 function buildJijukPnuMatchWhereSql(pnuDigits: string): string | null {
@@ -812,7 +841,7 @@ function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
   return { address: address || pnu, pnu, extent3857, geometry3857 };
 }
 
-/** 주소·PNU(및 선택 좌표)로 public_layer.jijuk 필지 도형 조회 — jibun 문자열 비교 없음 */
+/** 주소·PNU(및 선택 좌표)로 jijuk 필지 도형 조회 — jibun 문자열 비교 없음 */
 export async function resolveJijukParcelGeomsByAddresses(params: {
   items: Array<{ address: string; lon?: number; lat?: number; pnu?: string }>;
 }): Promise<{
@@ -832,6 +861,19 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
     geometry3857: Record<string, unknown> | null;
   }> = [];
 
+  const jijukRef = await resolveJijukTableRef();
+  if (!jijukRef) {
+    return {
+      parcels: items.map((item) => ({
+        address: String(item.address ?? '').trim(),
+        pnu: pnuDigitsOnly(item.pnu ?? item.address),
+        extent3857: null,
+        geometry3857: null,
+      })),
+      error: 'jijuk 테이블을 찾을 수 없습니다.',
+    };
+  }
+
   for (const item of items) {
     const address = String(item.address ?? '').trim();
     const lon = item.lon;
@@ -839,9 +881,10 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
     const hasPoint =
       typeof lon === 'number' && typeof lat === 'number' && Number.isFinite(lon) && Number.isFinite(lat);
 
-    const selectSql = jijukParcelSelectSql('j.geom');
+    const selectSql = jijukParcelSelectSql('j.geom', jijukRef.qualified);
+    const orderSql = `j.${quoteIdent(jijukRef.orderCol)}`;
 
-    const runQuery = async (whereSql: string, orderSql: string) => {
+    const runQuery = async (whereSql: string) => {
       const queryStr = `${selectSql} AND ${whereSql} ORDER BY ${orderSql} LIMIT 1`;
       const res = await db.execute(sql.raw(queryStr));
       const enriched = await enrichJijukRowsWithAdminNames([(res.rows?.[0] ?? {}) as JijukParcelGeomRow]);
@@ -853,14 +896,14 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
 
       if (hasPoint) {
         const point5181 = `ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), ${JIJUK_GEOM_SRID})`;
-        mapped = await runQuery(`ST_Intersects(${jijukGeom5181Sql('j.geom')}, ${point5181})`, 'j.gid');
+        mapped = await runQuery(`ST_Intersects(${jijukGeom5181Sql('j.geom')}, ${point5181})`);
       }
 
       if (!mapped?.geometry3857) {
         const pnuDigits = await resolvePnuDigitsFromInput(address, item.pnu);
         const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
         if (pnuWhere) {
-          mapped = await runQuery(pnuWhere, 'j.gid');
+          mapped = await runQuery(pnuWhere);
         }
       }
 
@@ -877,7 +920,7 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
   return { parcels };
 }
 
-/** 도형(WKT 5181)과 면적으로 겹치는 public_layer.jijuk 필지 (경계 접합·선 접촉만 제외) */
+/** 도형(WKT 5181)과 면적으로 겹치는 jijuk 필지 (경계 접합·선 접촉만 제외) */
 export async function listJijukParcelsByGeomWkt5181(params: {
   wkt5181: string;
   limit?: number;
@@ -893,6 +936,9 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   const wkt = String(params?.wkt5181 ?? '').trim();
   if (!wkt) return { parcels: [], error: 'wkt5181이 필요합니다.' };
 
+  const jijukRef = await resolveJijukTableRef();
+  if (!jijukRef) return { parcels: [], error: 'jijuk 테이블을 찾을 수 없습니다.' };
+
   const limit = Math.min(Math.max(Math.floor(params?.limit ?? 500), 1), 1000);
   const searchGeom = `ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), ${JIJUK_GEOM_SRID})`;
   const jijukGeom = jijukGeom5181Sql('j.geom');
@@ -900,12 +946,12 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   const intersectGeom = `ST_Intersection(${jijukGeom}, ${searchGeom})`;
 
   const queryStr = `
-    ${jijukParcelSelectSql('j.geom')}
+    ${jijukParcelSelectSql('j.geom', jijukRef.qualified)}
       AND ${jijukGeom} && ${searchGeom}
       AND ST_Intersects(${jijukGeom}, ${searchGeom})
       AND ST_Dimension(${intersectGeom}) = 2
       AND ST_Area(${intersectGeom}) > 1.0
-    ORDER BY j.gid
+    ORDER BY j.${quoteIdent(jijukRef.orderCol)}
     LIMIT ${limit}`;
 
   try {
@@ -946,7 +992,10 @@ export async function subtractParcelFromParentWkt5181(params: {
     const pnuDigits = pnuDigitsOnly(params?.subtractPnu);
     const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
     if (pnuWhere) {
-      subtractExpr = `(SELECT ${jijukGeom5181Sql('j.geom')} FROM public_layer.jijuk j WHERE j.geom IS NOT NULL AND ${pnuWhere} ORDER BY j.gid LIMIT 1)`;
+      const jijukRef = await resolveJijukTableRef();
+      if (jijukRef) {
+        subtractExpr = `(SELECT ${jijukGeom5181Sql('j.geom')} FROM ${jijukRef.qualified} j WHERE j.geom IS NOT NULL AND ${pnuWhere} ORDER BY j.${quoteIdent(jijukRef.orderCol)} LIMIT 1)`;
+      }
     }
   }
   if (!subtractExpr) {
@@ -1028,15 +1077,17 @@ export async function syncChildParcelsByParentId(params: {
       )
     );
 
+    const jijukRef = geomCol ? await resolveJijukTableRef() : null;
+
     for (const row of parcelRows) {
       const addr = row.address;
       const pnuDigits = await resolvePnuDigitsFromInput(addr, row.pnu);
       const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
       const geomInsert =
-        geomCol && pnuWhere
-          ? `(SELECT j.geom FROM public_layer.jijuk j
+        geomCol && pnuWhere && jijukRef
+          ? `(SELECT j.geom FROM ${jijukRef.qualified} j
               WHERE j.geom IS NOT NULL AND ${pnuWhere}
-              ORDER BY j.gid
+              ORDER BY j.${quoteIdent(jijukRef.orderCol)}
               LIMIT 1)`
           : null;
       const cols = [quoteIdent(parentCol), quoteIdent(addressCol)];

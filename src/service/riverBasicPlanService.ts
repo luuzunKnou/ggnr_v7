@@ -1,15 +1,30 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import { isRiverBasicPlanMapAttachmentDefineTable } from '@/lib/riverBasicPlanMapAttachmentLayers';
+import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
+import {
+  isRiverBasicPlanIndexDefineTable,
+  isRiverBasicPlanMapAttachmentDefineTable,
+  riverBasicPlanAsDefineTable,
+  riverBasicPlanGdParentDefineTable,
+  riverBasicPlanHdDefineTable,
+  riverBasicPlanIndexDefineTable,
+  riverBasicPlanJdDefineTable,
+  riverBasicPlanTabFromIndexDefineTable,
+  type RiverBasicPlanTab,
+} from '@/lib/riverBasicPlanMapAttachmentLayers';
 import {
   getDefineTableKeyFieldName,
   resolveDefineTablePhysicalBaseName,
 } from '@/service/standardService';
 
-type RiverType = 'river' | 'smallRiver';
+type RiverType = RiverBasicPlanTab;
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+function normalizeTab(tab?: RiverType | string | null): RiverType {
+  return tab === 'smallRiver' ? 'smallRiver' : 'river';
 }
 
 async function resolveLayerTableName(wantedLower: string): Promise<string> {
@@ -25,20 +40,13 @@ async function resolveLayerTableName(wantedLower: string): Promise<string> {
   return String(row?.table_name ?? wantedLower);
 }
 
-function riverTypeWhere(tab: RiverType): string {
-  if (tab === 'smallRiver') {
-    return `COALESCE(river_type, '') LIKE '%소하천%'`;
-  }
-  return `COALESCE(river_type, '') NOT LIKE '%소하천%'`;
-}
-
 export async function getRiverBasicPlanRiverList(params?: {
   tab?: RiverType;
   keyword?: string;
 }): Promise<{ rivers: { riverName: string; riverType: string | null; count: number }[] }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const keyword = String(params?.keyword ?? '').trim();
-  const tableName = await resolveLayerTableName('river_plan_as');
+  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
   const keywordWhere = keyword ? ` AND COALESCE(river_name, '') ILIKE '%${esc(keyword)}%'` : '';
 
   const res = await db.execute(
@@ -49,7 +57,6 @@ export async function getRiverBasicPlanRiverList(params?: {
          COUNT(*)::int AS "count"
        FROM layer."${tableName.replace(/"/g, '""')}"
        WHERE COALESCE(river_name, '') <> ''
-         AND ${riverTypeWhere(tab)}
          ${keywordWhere}
        GROUP BY river_name
        ORDER BY river_name`
@@ -69,11 +76,13 @@ export async function getRiverBasicPlanRiverList(params?: {
 }
 
 /**
- * 색인도(river_d_index) 피처와 공간으로 겹치는 기본계획(river_plan_as) 1건을 찾아
+ * 색인도 피처와 공간으로 겹치는 기본계획 1건을 찾아
  * 하천·연도·탭(지방/소하천)을 맞출 때 사용.
+ * indexDefineTable: river_d_index | river_s_index
  */
 export async function getRiverBasicPlanPickFromIndex(params?: {
   indexOgcFid?: number;
+  indexDefineTable?: string;
 }): Promise<{
   riverName: string;
   planYear: string;
@@ -83,8 +92,16 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
   const fid = Number(params?.indexOgcFid);
   if (!Number.isFinite(fid) || fid <= 0) return null;
 
-  const idxTable = await resolveLayerTableName('river_d_index');
-  const asTable = await resolveLayerTableName('river_plan_as');
+  const indexLogical = String(params?.indexDefineTable ?? '').trim().toLowerCase();
+  const tab = isRiverBasicPlanIndexDefineTable(indexLogical)
+    ? riverBasicPlanTabFromIndexDefineTable(indexLogical)
+    : 'river';
+  const idxLogical = isRiverBasicPlanIndexDefineTable(indexLogical)
+    ? indexLogical
+    : riverBasicPlanIndexDefineTable(tab);
+
+  const idxTable = await resolveLayerTableName(idxLogical);
+  const asTable = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
   const safeIdx = idxTable.replace(/"/g, '""');
   const safeAs = asTable.replace(/"/g, '""');
 
@@ -92,8 +109,7 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
     sql.raw(`SELECT
       COALESCE(p.river_name, '') AS "riverName",
       COALESCE(p.plan_year, '') AS "planYear",
-      COALESCE(p.plan_name, '') AS "planName",
-      COALESCE(i.river_type, '') AS "indexRiverType"
+      COALESCE(p.plan_name, '') AS "planName"
     FROM layer."${safeIdx}" i
     INNER JOIN layer."${safeAs}" p
       ON p.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(i.geom, p.geom)
@@ -108,13 +124,10 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
   );
 
   const row = res.rows?.[0] as
-    | { riverName?: string; planYear?: string; planName?: string; indexRiverType?: string }
+    | { riverName?: string; planYear?: string; planName?: string }
     | undefined;
   const riverName = String(row?.riverName ?? '').trim();
   if (!riverName) return null;
-
-  const idxRt = String(row?.indexRiverType ?? '');
-  const tab: RiverType = idxRt.includes('소하천') ? 'smallRiver' : 'river';
 
   return {
     riverName,
@@ -128,10 +141,10 @@ export async function getRiverBasicPlanYearList(params?: {
   tab?: RiverType;
   riverName?: string;
 }): Promise<{ plans: { planYear: string; planName: string; planLen: string }[] }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   if (!riverName) return { plans: [] };
-  const tableName = await resolveLayerTableName('river_plan_as');
+  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
 
   const res = await db.execute(
     sql.raw(
@@ -141,7 +154,6 @@ export async function getRiverBasicPlanYearList(params?: {
          COALESCE(plan_len::text, '') AS "planLen"
        FROM layer."${tableName.replace(/"/g, '""')}"
        WHERE river_name = '${esc(riverName)}'
-         AND ${riverTypeWhere(tab)}
        GROUP BY COALESCE(plan_year, ''), COALESCE(plan_name, ''), COALESCE(plan_len::text, '')
        ORDER BY
          CASE
@@ -155,10 +167,11 @@ export async function getRiverBasicPlanYearList(params?: {
   return {
     plans: (res.rows ?? []).map((r) => {
       const row = r as { planYear?: string; planName?: string; planLen?: string | number | null };
+      const rawLen = row.planLen == null ? '' : String(row.planLen).trim();
       return {
         planYear: String(row.planYear ?? '').trim(),
         planName: String(row.planName ?? '').trim(),
-        planLen: row.planLen == null ? '' : String(row.planLen).trim(),
+        planLen: rawLen ? formatDetailScalarValue(rawLen, '') : '',
       };
     }),
   };
@@ -170,16 +183,15 @@ export async function getRiverBasicPlanDetail(params?: {
   planYear?: string;
   planName?: string;
 }): Promise<{ row: Record<string, unknown> | null }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   const planYear = String(params?.planYear ?? '').trim();
   const planName = String(params?.planName ?? '').trim();
   if (!riverName) return { row: null };
-  const tableName = await resolveLayerTableName('river_plan_as');
+  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
 
   const where = [
     `river_name = '${esc(riverName)}'`,
-    riverTypeWhere(tab),
     planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
     planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
   ].filter(Boolean).join(' AND ');
@@ -202,10 +214,10 @@ export async function getRiverBasicPlanExtent(params?: {
   tab?: RiverType;
   riverName?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   if (!riverName) return { extent3857: null };
-  const tableName = await resolveLayerTableName('river_plan_as');
+  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
 
   const res = await db.execute(
     sql.raw(
@@ -218,7 +230,6 @@ export async function getRiverBasicPlanExtent(params?: {
          SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS ext
          FROM layer."${tableName.replace(/"/g, '""')}"
          WHERE river_name = '${esc(riverName)}'
-           AND ${riverTypeWhere(tab)}
        ) s
        WHERE ext IS NOT NULL`
     )
@@ -238,17 +249,17 @@ export async function getRiverBasicPlanExtent(params?: {
 }
 
 /**
- * 하천명·탭(지방/소하천)에 해당하는 색인도(river_d_index) 전체 피처의 3857 bbox.
+ * 하천명·탭(지방/소하천)에 해당하는 색인도 전체 피처의 3857 bbox.
  * (기본계획 polygon extent가 아닌, 색인도 도형 기준)
  */
 export async function getRiverBasicPlanIndexExtent(params?: {
   tab?: RiverType;
   riverName?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   if (!riverName) return { extent3857: null };
-  const tableName = await resolveLayerTableName('river_d_index');
+  const tableName = await resolveLayerTableName(riverBasicPlanIndexDefineTable(tab));
 
   const res = await db.execute(
     sql.raw(
@@ -261,7 +272,6 @@ export async function getRiverBasicPlanIndexExtent(params?: {
          SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS ext
          FROM layer."${tableName.replace(/"/g, '""')}"
          WHERE COALESCE(river_name, '') = '${esc(riverName)}'
-           AND ${riverTypeWhere(tab)}
            AND geom IS NOT NULL
        ) s
        WHERE ext IS NOT NULL`
@@ -302,7 +312,7 @@ function indexNoFromConsCode(consCode: string, ogcFid: number): { label: string;
 }
 
 /**
- * 선택한 기본계획(river_plan_as)과 교차하는 색인도(river_d_index) 목록.
+ * 선택한 기본계획과 교차하는 색인도 목록.
  * 하천 상세에서 색인도 목록 UI에 사용.
  */
 export async function getRiverBasicPlanIndexList(params?: {
@@ -319,20 +329,19 @@ export async function getRiverBasicPlanIndexList(params?: {
     extent3857: [number, number, number, number] | null;
   }[];
 }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   const planYear = String(params?.planYear ?? '').trim();
   const planName = String(params?.planName ?? '').trim();
   if (!riverName) return { indexes: [] };
 
-  const asTable = await resolveLayerTableName('river_plan_as');
-  const idxTable = await resolveLayerTableName('river_d_index');
+  const asTable = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const idxTable = await resolveLayerTableName(riverBasicPlanIndexDefineTable(tab));
   const safeAs = asTable.replace(/"/g, '""');
   const safeIdx = idxTable.replace(/"/g, '""');
 
   const planWhere = [
     `river_name = '${esc(riverName)}'`,
-    riverTypeWhere(tab),
     planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
     planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
   ]
@@ -488,7 +497,7 @@ function parseExtent3857(row: {
 }
 
 /**
- * 선택한 기본계획(river_plan_as) 폴리곤과 교차하는 색인도 1건 + 해당 색인도 폴리곤과 교차하는 종단/횡단/구조물 시설 목록
+ * 선택한 기본계획 폴리곤과 교차하는 색인도 1건 + 해당 색인도 폴리곤과 교차하는 종단/횡단/구조물 시설 목록
  */
 export async function getRiverBasicPlanIndexView(params?: {
   tab?: RiverType;
@@ -518,20 +527,19 @@ export async function getRiverBasicPlanIndexView(params?: {
     extent3857: [number, number, number, number] | null;
   }[];
 }> {
-  const tab: RiverType = params?.tab === 'smallRiver' ? 'smallRiver' : 'river';
+  const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   const planYear = String(params?.planYear ?? '').trim();
   const planName = String(params?.planName ?? '').trim();
   if (!riverName) return { index: null, related: [] };
 
-  const asTable = await resolveLayerTableName('river_plan_as');
-  const idxTable = await resolveLayerTableName('river_d_index');
+  const asTable = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const idxTable = await resolveLayerTableName(riverBasicPlanIndexDefineTable(tab));
   const safeAs = asTable.replace(/"/g, '""');
   const safeIdx = idxTable.replace(/"/g, '""');
 
   const planWhere = [
     `river_name = '${esc(riverName)}'`,
-    riverTypeWhere(tab),
     planYear ? `COALESCE(plan_year, '') = '${esc(planYear)}'` : '',
     planName ? `COALESCE(plan_name, '') = '${esc(planName)}'` : '',
   ]
@@ -672,14 +680,15 @@ export async function getRiverBasicPlanIndexView(params?: {
   };
 
   /**
-   * 구조물: 물리 테이블은 부모 river_plan_gd_ps 하나.
+   * 구조물: 물리 테이블은 부모 하나(지방: river_plan_gd_ps / 소하천: river_plan_s_gd_ps).
    * 분할 define마다 동일 INTERSECT 쿼리를 반복하면 같은 ogc_fid가 중복되어 React key 충돌·DB 낭비가 난다 → 1회 조회.
    */
   const queryRelatedStructurePoints = async () => {
-    const physicalBase = resolveDefineTablePhysicalBaseName('river_plan_gd_ps', 'layer');
+    const gdLogical = riverBasicPlanGdParentDefineTable(tab);
+    const physicalBase = resolveDefineTablePhysicalBaseName(gdLogical, 'layer');
     const t = await resolveLayerTableName(physicalBase);
     const safeT = t.replace(/"/g, '""');
-    const keySql = attachmentKeySelectSql('river_plan_gd_ps');
+    const keySql = attachmentKeySelectSql(gdLogical);
     const q = `
       SELECT
         t.ogc_fid AS fid,
@@ -730,8 +739,8 @@ export async function getRiverBasicPlanIndexView(params?: {
     }
   };
 
-  await queryRelatedLm('river_plan_jd_lm', '종단면도');
-  await queryRelatedLm('river_plan_hd_lm', '횡단면도');
+  await queryRelatedLm(riverBasicPlanJdDefineTable(tab), '종단면도');
+  await queryRelatedLm(riverBasicPlanHdDefineTable(tab), '횡단면도');
   await queryRelatedStructurePoints();
 
   return {

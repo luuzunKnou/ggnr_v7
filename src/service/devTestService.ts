@@ -1243,6 +1243,33 @@ function writeCssStyleToDataDir(name: string, cssBody: string): void {
   }
 }
 
+/** 카탈로그에 없는데 data_dir에만 남은 스타일 파일(고아 css/xml/tmp) 제거 — 재생성 전 정리 */
+function removeOrphanStyleFiles(name: string): void {
+  try {
+    const stylesDir = getStylesDir();
+    if (!fs.existsSync(stylesDir)) return;
+    const safe = name.trim().toLowerCase();
+    for (const ext of ['.css', '.xml', '.sld'] as const) {
+      try {
+        fs.unlinkSync(path.join(stylesDir, `${safe}${ext}`));
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const f of fs.readdirSync(stylesDir)) {
+      if (f.startsWith(`${safe}.sld.`) && f.endsWith('.tmp')) {
+        try {
+          fs.unlinkSync(path.join(stylesDir, f));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function getGeoServerStyleNameSet(baseUrl: string): Promise<Set<string>> {
   const set = new Set<string>();
   const res = await getGeoServerStyleList({ url: baseUrl });
@@ -1665,7 +1692,14 @@ export async function applyDefaultStyleToLayer(params: {
     }
 
     const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
-    const createRes = await createGeoServerStyle({
+
+    // 고아 css만 있고 카탈로그에 없으면 GeoServer가 already exists로 오판 → PUT만 되고 목록엔 안 잡힘
+    let catalogExists = await geoServerStyleExists(baseUrl, layerName);
+    if (!catalogExists) {
+      removeOrphanStyleFiles(layerName);
+    }
+
+    let createRes = await createGeoServerStyle({
       url: baseUrl,
       name: layerName,
       geometryType,
@@ -1673,29 +1707,71 @@ export async function applyDefaultStyleToLayer(params: {
     });
 
     if (createRes.success && 'alreadyExists' in createRes && createRes.alreadyExists) {
-      const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
-        method: 'PUT',
-        body: cssBody,
-        contentType: 'application/vnd.geoserver.geocss+css',
-      });
-      if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
-    } else if (!createRes.success) {
-      const exists = await geoServerStyleExists(baseUrl, layerName);
-      if (!exists) {
-        return { success: false, error: createRes.error ?? '스타일 생성 실패' };
-      }
-      const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
-        method: 'PUT',
-        body: cssBody,
-        contentType: 'application/vnd.geoserver.geocss+css',
-      });
-      if (putRes.ok) {
-        writeCssStyleToDataDir(layerName, cssBody);
-      } else if (!(await geoServerStyleExists(baseUrl, layerName))) {
-        const text = await putRes.text().catch(() => '');
-        return { success: false, error: `스타일 수정 실패: ${putRes.status} ${text}` };
+      catalogExists = await geoServerStyleExists(baseUrl, layerName);
+      if (!catalogExists) {
+        // #region agent log
+        fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+          body: JSON.stringify({
+            sessionId: '1c82ab',
+            runId: 'post-fix',
+            hypothesisId: 'B',
+            location: 'devTestService.ts:applyDefaultStyleToLayer',
+            message: 'orphan style alreadyExists without catalog',
+            data: { layerName },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        removeOrphanStyleFiles(layerName);
+        createRes = await createGeoServerStyle({
+          url: baseUrl,
+          name: layerName,
+          geometryType,
+          styleProps,
+        });
+      } else {
+        const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
+          method: 'PUT',
+          body: cssBody,
+          contentType: 'application/vnd.geoserver.geocss+css',
+        });
+        if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
       }
     }
+
+    if (!createRes.success) {
+      catalogExists = await geoServerStyleExists(baseUrl, layerName);
+      if (!catalogExists) {
+        removeOrphanStyleFiles(layerName);
+        createRes = await createGeoServerStyle({
+          url: baseUrl,
+          name: layerName,
+          geometryType,
+          styleProps,
+        });
+      }
+      if (!createRes.success && !(await geoServerStyleExists(baseUrl, layerName))) {
+        return { success: false, error: createRes.error ?? '스타일 생성 실패' };
+      }
+      if (await geoServerStyleExists(baseUrl, layerName)) {
+        const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
+          method: 'PUT',
+          body: cssBody,
+          contentType: 'application/vnd.geoserver.geocss+css',
+        });
+        if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
+      }
+    }
+
+    if (!(await geoServerStyleExists(baseUrl, layerName))) {
+      return {
+        success: false,
+        error: `스타일이 GeoServer 카탈로그에 등록되지 않았습니다: ${layerName}`,
+      };
+    }
+
     const setRes = await setLayerDefaultStyle({
       url: baseUrl,
       workspace,

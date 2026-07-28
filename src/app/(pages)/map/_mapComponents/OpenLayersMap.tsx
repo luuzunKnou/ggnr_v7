@@ -44,9 +44,9 @@ import { getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
 import { collectOpenScanLayerTableNames } from '@/lib/mapServiceOpened';
 import {
+  isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
   riverBasicPlanIdentifyGeometryRank,
-  RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE,
 } from '@/lib/riverBasicPlanMapAttachmentLayers';
 import {
   compareFeaturesByGeometryStackOrder,
@@ -59,6 +59,10 @@ import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
+import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
+import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
+import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstructionLedgerMapHighlight';
+import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
 import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
 import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
 import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler';
@@ -552,6 +556,10 @@ export default function OpenLayersMap({
   const addressInfoDetail = mapContext?.addressInfoDetail ?? null;
   useAddressParcelHighlight(mapInstanceRef.current, mapReady, addressInfoDetail);
   useRoadLedgerMapHighlight(mapReady);
+  useRoadNetworkMapHighlight(mapReady);
+  useRoadNetworkOverlayLayer(mapReady);
+  useRiverConstructionLedgerMapHighlight(mapReady);
+  useRiverConstructionLedgerOverlayLayer(mapReady);
 
   const roadCctvOverlay = mapContext?.roadCctvOverlay ?? null;
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay;
@@ -592,12 +600,16 @@ export default function OpenLayersMap({
     };
   }, [mapContext]);
 
-  // 지도 클릭 → 도형 검색 (visible 레이어 대상)
+  const roadNetworkOverlayPickActive =
+    Boolean(mapContext?.roadNetworkPanelOpen) ||
+    Boolean(mapContext?.roadNetworkPointPickActive);
+
+  // 지도 클릭 → 도형 검색. 도로망도 패널 열림 시 오버레이 클릭 우선(식별 비활성)
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
-    roadCctvPanelOpen || !!layerRowGeomEdit
+    roadCctvPanelOpen || !!layerRowGeomEdit || roadNetworkOverlayPickActive
   );
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
@@ -732,7 +744,7 @@ export default function OpenLayersMap({
           const r = withFeat[wi];
           const tn = String(r.tableName ?? '').trim();
           if (!tn) continue;
-          if (tn === RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE && openScanLayers.has(tn)) {
+          if (isRiverBasicPlanIndexDefineTable(tn) && openScanLayers.has(tn)) {
             cands.push({
               tableName: tn,
               rank: riverBasicPlanIdentifyGeometryRank(tn),
@@ -756,7 +768,7 @@ export default function OpenLayersMap({
           const best = cands[0]!;
           const hitLayer = best.layer;
 
-          if (best.tableName === RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE) {
+          if (isRiverBasicPlanIndexDefineTable(best.tableName)) {
             const fid = pickIdentifyOgcFid(hitLayer.features[0]?.data);
             if (fid == null) {
               if (cancelled) return;
@@ -768,7 +780,7 @@ export default function OpenLayersMap({
               const pickRes = await call('', 'POST', {
                 service: 'riverBasicPlanService',
                 action: 'getRiverBasicPlanPickFromIndex',
-                params: { indexOgcFid: fid },
+                params: { indexOgcFid: fid, indexDefineTable: best.tableName },
               });
               if (cancelled) return;
               const pdata = pickRes?.data ?? pickRes;

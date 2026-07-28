@@ -1,45 +1,5 @@
-/* 1. 기본 선 스타일 */
 * {
-  stroke: #FFFFFF, #EE65AB;
-  stroke-width: 4, 3.5;
-}
-
-/* 2. 상단 라벨 (홀수) */
-*:nth-symbol(1) {
-  label: [odd_bsi_mn];
-  label-geometry: [centroid(geom)];
-  label-anchor: 0.5 0;      
-  label-offset: 0 12;       
-
-  font-family: "Nanum Gothic";
-  font-size: 14;
-  font-weight: bold;
-  font-fill: #333333;
-  halo-color: #FFFFFF;
-  halo-radius: 2;
-
-  /* StackExchange 권장 벤더 옵션 */
-  label-conflict-resolution: false; /* conflictResolution: false */
-  label-group: true;                /* labelAllGroup: true */
-  label-overlap: true;              /* spaceAround: -1 효과 */
-}
-
-/* 3. 하단 라벨 (짝수) */
-*:nth-symbol(2) {
-  label: [eve_bsi_mn];
-  label-geometry: [centroid(geom)];
-  label-anchor: 0.5 1;      
-  label-offset: 0 -12;      
-
-  font-family: "Nanum Gothic";
-  font-size: 14;
-  font-weight: bold;
-  font-fill: #EE65AB;
-  halo-color: #FFFFFF;
-  halo-radius: 2;
-
-  /* 동일하게 설정하여 두 라벨이 모두 나오게 강제 */
-  label-conflict-resolution: false;
-  label-group: true;
-  label-overlap: true;
+  stroke: #FFFFFF, #FF5722;
+  stroke-width: 3, 2;
+  stroke-opacity: 0.4, 0.5;
 }
