@@ -37,6 +37,7 @@ export function SafetyWaterNearbyCctv() {
   const { leftPx, topPx } = useSearchBarOffset();
   const [listOpen, setListOpen] = useState(false);
   const listPanelRef = useRef<HTMLDivElement>(null);
+  const listToggleRef = useRef<HTMLButtonElement>(null);
 
   const anchorPosition = useMemo(() => {
     const aloneTop = safetyWaterFloatBaseTop(topPx);
@@ -60,7 +61,10 @@ export function SafetyWaterNearbyCctv() {
   useEffect(() => {
     if (!listOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (listPanelRef.current?.contains(e.target as Node)) return;
+      const t = e.target as Node;
+      if (listPanelRef.current?.contains(t)) return;
+      // 목록 토글 버튼은 click 토글에 맡김 (여기서 닫으면 click이 다시 염)
+      if (listToggleRef.current?.contains(t)) return;
       setListOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -129,6 +133,7 @@ export function SafetyWaterNearbyCctv() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
                 <button
+                  ref={listToggleRef}
                   type="button"
                   title="영상 목록"
                   aria-label="영상 목록"

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type Map from 'ol/Map';
+import type OlMap from 'ol/Map';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
@@ -123,13 +123,14 @@ function createStationLayer(kind: SafetyWaterStationKind, zIndex: number) {
 
 export function useSafetyWaterMapLayer(
   mapReady: boolean,
-  map: Map | null,
+  map: OlMap | null,
   active: boolean,
   stations: SafetyWaterStation[],
   selectedId: string | null,
   waterDeltaById: Record<string, WaterLevelDelta>,
   listFilterChips: readonly StationListFilterChip[],
   stationIdsWithCctv: Set<string> | undefined,
+  listSearchQuery: string,
   onSelectId: (id: string) => void
 ) {
   const rainLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
@@ -217,7 +218,8 @@ export function useSafetyWaterMapLayer(
       const name = String(f.get('stationName') ?? '');
       const st = stationById.current.get(k);
       const matched =
-        st != null && stationMatchesListFilter(st, listFilterChips, stationIdsWithCctv);
+        st != null &&
+        stationMatchesListFilter(st, listFilterChips, stationIdsWithCctv, listSearchQuery);
       return stationStyle(selectedId, k, 'rain', name, null, matched ? 1 : FILTERED_OUT_OPACITY);
     });
     waterLayer.setStyle((feature) => {
@@ -227,10 +229,11 @@ export function useSafetyWaterMapLayer(
       const delta = waterDeltaById[k] ?? null;
       const st = stationById.current.get(k);
       const matched =
-        st != null && stationMatchesListFilter(st, listFilterChips, stationIdsWithCctv);
+        st != null &&
+        stationMatchesListFilter(st, listFilterChips, stationIdsWithCctv, listSearchQuery);
       return stationStyle(selectedId, k, 'water', name, delta, matched ? 1 : FILTERED_OUT_OPACITY);
     });
     rainLayer.changed();
     waterLayer.changed();
-  }, [active, selectedId, waterDeltaById, listFilterChips, stationIdsWithCctv, stations]);
+  }, [active, selectedId, waterDeltaById, listFilterChips, stationIdsWithCctv, listSearchQuery, stations]);
 }

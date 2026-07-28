@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SafetyWaterStationList } from './SafetyWaterStationList';
@@ -46,8 +46,15 @@ export function SafetyWaterStationFloating({
   onSelect,
   cctvStationIds,
 }: Props) {
-  const { stationListFilterChips, setStationListFilterChips, waterStatusById } = useSafetyWater();
-  const [searchText, setSearchText] = useState('');
+  const {
+    stationListFilterChips,
+    setStationListFilterChips,
+    stationListSearchQuery,
+    setStationListSearchQuery,
+    waterStatusById,
+  } = useSafetyWater();
+  /** 입력 초안 — Enter 시 stationListSearchQuery에 반영 */
+  const [searchDraft, setSearchDraft] = useState(stationListSearchQuery);
 
   const waterCount = stations.filter((st) => st.kind === 'water').length;
   const rainCount = stations.filter((st) => st.kind === 'rain').length;
@@ -71,19 +78,49 @@ export function SafetyWaterStationFloating({
     return activeSet.has(id);
   };
 
+  const applySearch = () => {
+    setStationListSearchQuery(searchDraft.trim());
+  };
+
+  const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    applySearch();
+  };
+
+  /** 검색·필터·선택 관측소를 초기 상태(전체)로 */
+  const resetListControls = () => {
+    setSearchDraft('');
+    setStationListSearchQuery('');
+    setStationListFilterChips([]);
+    onSelect(null);
+  };
+
   return (
     <div className="flex w-full flex-col" aria-label="관측소 목록">
       <div className="flex w-full flex-col gap-2 border-t border-border/80 px-4 py-2">
-        <label className="flex shrink-0 items-center gap-2 rounded border border-border bg-background px-2 py-2">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-          <input
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="관측소 이름 또는 주소 검색"
-            title="관측소 이름 또는 주소 검색"
-            className="w-full cursor-text bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
-          />
-        </label>
+        <div className="flex shrink-0 items-center gap-2">
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-border bg-background px-2 py-2">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <input
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              onKeyDown={onSearchKeyDown}
+              placeholder="관측소 이름 또는 주소 검색 (Enter)"
+              title="관측소 이름 또는 주소 검색 (Enter)"
+              className="w-full cursor-text bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          <button
+            type="button"
+            title="초기화"
+            aria-label="초기화"
+            onClick={resetListControls}
+            className="cursor-pointer shrink-0 rounded border border-border bg-background px-2.5 py-2 text-[11px] font-medium text-foreground/90 transition-colors hover:bg-muted/50"
+          >
+            초기화
+          </button>
+        </div>
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <div className="flex flex-wrap gap-2" role="group" aria-label="관측소 필터">
             {FILTER_CHIPS.map((chip) => {
@@ -116,7 +153,7 @@ export function SafetyWaterStationFloating({
           stations={stations}
           selectedId={selectedId}
           onSelect={onSelect}
-          searchText={searchText}
+          searchText={stationListSearchQuery}
           selectedKinds={selectedKinds}
           cctvOnly={cctvOnly}
           cctvStationIds={cctvStationIds}

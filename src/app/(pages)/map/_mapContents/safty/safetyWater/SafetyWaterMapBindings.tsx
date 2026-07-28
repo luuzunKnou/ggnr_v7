@@ -24,6 +24,7 @@ export function SafetyWaterMapBindings() {
     waterDeltaById,
     stationListFilterChips,
     stationIdsWithCctv,
+    stationListSearchQuery,
   } = useSafetyWater();
 
   useSafetyWaterMapZoom(true, mapReady, stations);
@@ -36,6 +37,7 @@ export function SafetyWaterMapBindings() {
     waterDeltaById,
     stationListFilterChips,
     stationIdsWithCctv,
+    stationListSearchQuery,
     (id) => {
       focusStation(id);
       setListOpen(false);

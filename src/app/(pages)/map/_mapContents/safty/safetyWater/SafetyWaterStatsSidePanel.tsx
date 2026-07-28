@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileSpreadsheet, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { SafetyWaterStatsPanel, type StatsKindBlock } from './SafetyWaterStatsPanel';
 import { useSafetyWater } from './safetyWaterContext';
 import {
@@ -155,14 +155,6 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-3">
         <h2 className="min-w-0 text-[15px] font-semibold leading-tight text-foreground">기간별 현황</h2>
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            title="엑셀 다운로드(예정)"
-            aria-label="엑셀 다운로드(예정)"
-            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-emerald-600 transition-colors hover:bg-emerald-50"
-          >
-            <FileSpreadsheet className="h-4 w-4" aria-hidden />
-          </button>
           <button
             type="button"
             onClick={onClose}

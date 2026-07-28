@@ -235,6 +235,9 @@ type SafetyWaterContextValue = {
   /** 관측소 목록 토글칩 (빈 배열 = 전체). 지도 불투명도 연동 */
   stationListFilterChips: StationListFilterChip[];
   setStationListFilterChips: (chips: StationListFilterChip[]) => void;
+  /** 관측소 목록 검색어 (Enter로 적용). 지도 불투명도 연동 */
+  stationListSearchQuery: string;
+  setStationListSearchQuery: (query: string) => void;
 };
 
 const SafetyWaterContext = createContext<SafetyWaterContextValue | null>(null);
@@ -293,6 +296,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   const waterDeltaFetchGenRef = useRef(0);
   const autoOpenStatsRef = useRef(false);
   const [stationListFilterChips, setStationListFilterChips] = useState<StationListFilterChip[]>([]);
+  const [stationListSearchQuery, setStationListSearchQuery] = useState('');
 
   useEffect(() => {
     if (autoOpenStatsRef.current || stations.length === 0 || selectedStationId !== null) return;
@@ -979,6 +983,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       waterDeltaById,
       stationListFilterChips,
       setStationListFilterChips,
+      stationListSearchQuery,
+      setStationListSearchQuery,
     }),
     [
       map,
@@ -1039,6 +1045,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       waterStatusById,
       waterDeltaById,
       stationListFilterChips,
+      stationListSearchQuery,
     ]
   );
 

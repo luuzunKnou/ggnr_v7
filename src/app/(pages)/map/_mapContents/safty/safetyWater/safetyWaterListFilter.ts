@@ -17,14 +17,26 @@ export function deriveStationListFilter(chips: readonly StationListFilterChip[])
   return { isAll, selectedKinds, cctvOnly };
 }
 
-/** 목록·지도 공통: 토글칩 필터에 포함되는지 */
+/** 목록·지도 공통: 검색어 매칭 (빈 문자열이면 통과) */
+export function stationMatchesSearchQuery(
+  st: Pick<SafetyWaterStation, 'name' | 'address' | 'code'>,
+  searchQuery: string
+): boolean {
+  const q = searchQuery.trim().toLowerCase();
+  if (!q) return true;
+  return `${st.name} ${st.address} ${st.code}`.toLowerCase().includes(q);
+}
+
+/** 목록·지도 공통: 토글칩·검색 필터에 포함되는지 */
 export function stationMatchesListFilter(
-  st: Pick<SafetyWaterStation, 'id' | 'kind'>,
+  st: Pick<SafetyWaterStation, 'id' | 'kind' | 'name' | 'address' | 'code'>,
   chips: readonly StationListFilterChip[],
-  stationIdsWithCctv: Set<string> | undefined
+  stationIdsWithCctv: Set<string> | undefined,
+  searchQuery = ''
 ): boolean {
   const { selectedKinds, cctvOnly } = deriveStationListFilter(chips);
   if (!selectedKinds.includes(st.kind)) return false;
   if (cctvOnly && !(stationIdsWithCctv?.has(st.id) ?? false)) return false;
+  if (!stationMatchesSearchQuery(st, searchQuery)) return false;
   return true;
 }
