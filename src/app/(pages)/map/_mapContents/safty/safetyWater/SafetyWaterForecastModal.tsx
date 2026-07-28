@@ -46,11 +46,11 @@ function ForecastDetailRows({ f }: { f: SafetyWaterForecast }) {
     { label: '현재 해발수위', value: f.sttcursealvl.trim() ? `${f.sttcursealvl} m` : '—' },
   ];
   return (
-    <dl className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+    <dl className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
       {rows.map((row) => (
         <div key={row.label} className="flex justify-between gap-2 text-[12px]">
-          <dt className="shrink-0 text-slate-500">{row.label}</dt>
-          <dd className="min-w-0 text-right tabular-nums text-slate-700">{row.value}</dd>
+          <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
+          <dd className="min-w-0 text-right tabular-nums text-foreground/90">{row.value}</dd>
         </div>
       ))}
     </dl>
@@ -133,17 +133,14 @@ export function SafetyWaterForecastModal() {
         <>
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden />
-            <span className="truncate text-[13px] font-medium text-slate-800">홍수 예보 발령</span>
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-              (더미)
-            </span>
+            <span className="truncate text-[13px] font-medium text-foreground">홍수 예보 발령</span>
           </div>
           <button
             type="button"
             title="닫기"
             aria-label="닫기"
             onClick={() => setForecastOpen(false)}
-            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100"
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -152,10 +149,10 @@ export function SafetyWaterForecastModal() {
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
         <div className="space-y-0.5">
-          <p className="text-[11px] text-slate-500">현재 시간 기준 최근 24시간 자료 제공</p>
-          <p className="text-[10px] text-slate-400">정보제공: 한강 홍수통제소</p>
+          <p className="text-[11px] text-muted-foreground">현재 시간 기준 최근 24시간 자료 제공</p>
+          <p className="text-[10px] text-muted-foreground/70">정보제공: 한강 홍수통제소</p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 border-b border-border/80 pb-2">
           {FORECAST_CHIPS.map(({ id, label }) => {
             const on = selectedChips.includes(id);
             const isWatch = id === '주의보';
@@ -167,7 +164,7 @@ export function SafetyWaterForecastModal() {
                 onClick={() => toggleChip(id)}
                 className={cn(
                   'cursor-pointer rounded-full px-3 py-1 text-[12px] font-medium transition-colors',
-                  !on && 'bg-slate-100 text-slate-500',
+                  !on && 'bg-muted text-muted-foreground',
                   on && isWatch && 'bg-amber-100 text-amber-800',
                   on && !isWatch && 'bg-rose-100 text-rose-800'
                 )}
@@ -179,16 +176,16 @@ export function SafetyWaterForecastModal() {
         </div>
         <div className="min-h-0 max-h-[240px] flex-1 overflow-y-auto">
           {forecastLoading ? (
-            <p className="py-4 text-center text-[12px] text-slate-400">불러오는 중…</p>
+            <p className="py-4 text-center text-[12px] text-muted-foreground/70">불러오는 중…</p>
           ) : filtered.length === 0 ? (
-            <p className="py-4 text-center text-[12px] text-slate-400">해당 없음</p>
+            <p className="py-4 text-center text-[12px] text-muted-foreground/70">해당 예보 없음</p>
           ) : (
             <ul className="space-y-1.5">
               {filtered.map((f, i) => {
                 const key = `${f.sttnm}-${f.ancdt}-${f.no}-${i}`;
                 const open = expandedKey === key;
                 return (
-                  <li key={key} className="rounded border border-slate-100 bg-slate-50/80">
+                  <li key={key} className="rounded border border-border/60 bg-muted/40">
                     <button
                       type="button"
                       title={open ? '접기' : '펼치기'}
@@ -197,21 +194,21 @@ export function SafetyWaterForecastModal() {
                       className="flex w-full cursor-pointer items-start gap-1.5 px-2.5 py-2 text-left"
                     >
                       <div className="min-w-0 flex-1 space-y-0.5 text-[12px]">
-                        <div className="font-medium text-slate-800">
+                        <div className="font-medium text-foreground">
                           {displayOrDash(f.kind)}
                           {f.obsnm ? ` · ${f.obsnm}` : ''}
                         </div>
-                        <div className="tabular-nums text-slate-500">
+                        <div className="tabular-nums text-muted-foreground">
                           {formatForecastDt(f.ancdt)}
                           {f.rvrnm ? ` · ${f.rvrnm}` : ''}
                         </div>
                         {f.wrnaranm ? (
-                          <div className="truncate text-slate-500">주의 지역 · {f.wrnaranm}</div>
+                          <div className="truncate text-muted-foreground">주의 지역 · {f.wrnaranm}</div>
                         ) : null}
                       </div>
                       <ChevronDown
                         className={cn(
-                          'mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform',
+                          'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform',
                           open && 'rotate-180'
                         )}
                         aria-hidden

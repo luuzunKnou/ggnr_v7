@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { CalendarDays, Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+  formatStatAxisLabel,
   formatStatBucketLabel,
   inputStepForTime,
   inputTypeForTime,
@@ -15,6 +16,7 @@ import {
   availableQuickPresets,
   quickStatsRange,
   STATS_QUICK_PRESET_LABEL,
+  yearFromStatBucket,
   type StatsQuickPreset,
 } from './safetyWaterTimeRange';
 import type {
@@ -128,7 +130,8 @@ function pointX(
 
 function pointY(value: number, chartHeight: number, min: number, max: number) {
   const range = Math.max(1e-6, max - min);
-  return 12 + ((max - value) / range) * (chartHeight - 28);
+  /** 상단 12 · 하단 축/라벨용 여백 36 */
+  return 12 + ((max - value) / range) * (chartHeight - 48);
 }
 
 function polylinePoints(
@@ -210,6 +213,8 @@ function StatsChartSvg({
 }) {
   const padX = 40;
   const padR = Math.max(8, padRight);
+  const axisY = height - 28;
+  const labelY = height - 8;
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const rainPoints = showRain
     ? polylinePoints(dates, rainByDate, width, height, padX, rainRange.min, rainRange.max, padR)
@@ -219,6 +224,101 @@ function StatsChartSvg({
     : '';
   const maxLabels = Math.max(2, Math.min(6, Math.floor(width / 90)));
   const labelEvery = Math.max(1, Math.ceil(dates.length / maxLabels));
+
+  /** 각 연도 첫 버킷 인덱스 (x축 연도 표기·구분선) */
+  const firstIndexOfYear = useMemo(() => {
+    const map = new Map<string, number>();
+    dates.forEach((date, index) => {
+      const y = yearFromStatBucket(date);
+      if (!y || map.has(y)) return;
+      map.set(y, index);
+    });
+    return map;
+  }, [dates]);
+
+  const yearBoundaryIndexes = useMemo(() => {
+    const out: number[] = [];
+    firstIndexOfYear.forEach((idx) => {
+      if (idx > 0) out.push(idx);
+    });
+    return out.sort((a, b) => a - b);
+  }, [firstIndexOfYear]);
+
+  /** x축 라벨: 연도 표기(긴 문자열)와 짧은 표기가 겹치지 않도록 픽셀 간격으로 선별 */
+  const xAxisLabels = useMemo(() => {
+    if (dates.length === 0) {
+      return [] as {
+        index: number;
+        date: string;
+        includeYear: boolean;
+        x: number;
+        anchor: 'start' | 'middle' | 'end';
+      }[];
+    }
+
+    const estimateWidth = (includeYear: boolean) => {
+      // fontSize 9 기준 대략치. 연도 포함·시분 포함 시 더 넓음
+      if (timeType === '1D') return includeYear ? 58 : 32;
+      return includeYear ? 88 : 58;
+    };
+
+    type Cand = {
+      index: number;
+      date: string;
+      includeYear: boolean;
+      priority: number; // 높을수록 우선 (연도시작·양끝)
+    };
+    const candidates: Cand[] = [];
+    for (let index = 0; index < dates.length; index++) {
+      const date = dates[index];
+      const year = yearFromStatBucket(date);
+      const includeYear = year != null && firstIndexOfYear.get(year) === index;
+      const isEdge = index === 0 || index === dates.length - 1;
+      const onStride = index % labelEvery === 0;
+      if (!isEdge && !includeYear && !onStride) continue;
+      if (
+        !isEdge &&
+        !includeYear &&
+        index > labelEvery &&
+        dates.length - 1 - index < labelEvery / 2
+      ) {
+        continue;
+      }
+      const priority = includeYear ? 3 : isEdge ? 2 : 1;
+      candidates.push({ index, date, includeYear, priority });
+    }
+
+    const boundsFor = (index: number, x: number, w: number) => {
+      if (index === 0) return { left: x, right: x + w };
+      if (index === dates.length - 1) return { left: x - w, right: x };
+      return { left: x - w / 2, right: x + w / 2 };
+    };
+
+    // 우선순위 높은 것부터 배치, 겹치면 낮은 우선순위 버림
+    candidates.sort((a, b) => b.priority - a.priority || a.index - b.index);
+    const placed: { index: number; date: string; includeYear: boolean; x: number; left: number; right: number }[] =
+      [];
+    const minGap = 8;
+
+    for (const c of candidates) {
+      const x = pointX(dates, c.index, width, padX, padR);
+      const w = estimateWidth(c.includeYear);
+      const { left, right } = boundsFor(c.index, x, w);
+      const overlaps = placed.some((p) => left < p.right + minGap && right > p.left - minGap);
+      if (overlaps) continue;
+      placed.push({ index: c.index, date: c.date, includeYear: c.includeYear, x, left, right });
+    }
+
+    placed.sort((a, b) => a.index - b.index);
+    return placed.map((p) => ({
+      index: p.index,
+      date: p.date,
+      includeYear: p.includeYear,
+      x: p.x,
+      anchor:
+        p.index === 0 ? ('start' as const) : p.index === dates.length - 1 ? ('end' as const) : ('middle' as const),
+    }));
+  }, [dates, firstIndexOfYear, labelEvery, width, padX, padR, timeType]);
 
   const hoverDate = hoverIndex != null ? dates[hoverIndex] : null;
   const hoverRain = hoverDate && showRain ? rainByDate.get(hoverDate)?.value : null;
@@ -425,11 +525,26 @@ function StatsChartSvg({
             {lab.value.toFixed(2)}
           </text>
         ))}
-        <line x1={padX} y1={height - 16} x2={width - padR} y2={height - 16} stroke="#cbd5e1" />
-        {showRain ? <line x1={padX} y1="12" x2={padX} y2={height - 16} stroke="#cbd5e1" /> : null}
+        <line x1={padX} y1={axisY} x2={width - padR} y2={axisY} stroke="#cbd5e1" />
+        {showRain ? <line x1={padX} y1="12" x2={padX} y2={axisY} stroke="#cbd5e1" /> : null}
         {showWater ? (
-          <line x1={width - padR} y1="12" x2={width - padR} y2={height - 16} stroke="#cbd5e1" />
+          <line x1={width - padR} y1="12" x2={width - padR} y2={axisY} stroke="#cbd5e1" />
         ) : null}
+        {yearBoundaryIndexes.map((idx) => {
+          const x = pointX(dates, idx, width, padX, padR);
+          return (
+            <line
+              key={`year-${dates[idx]}`}
+              x1={x}
+              y1={12}
+              x2={x}
+              y2={axisY}
+              stroke="#94a3b8"
+              strokeWidth="1"
+              strokeDasharray="4 3"
+            />
+          );
+        })}
         {rainPoints ? <polyline fill="none" stroke={RAIN_COLOR} strokeWidth="2" points={rainPoints} /> : null}
         {waterPoints ? (
           <polyline fill="none" stroke={WATER_COLOR} strokeWidth="2" points={waterPoints} />
@@ -440,7 +555,7 @@ function StatsChartSvg({
               x1={hoverX}
               y1={12}
               x2={hoverX}
-              y2={height - 16}
+              y2={axisY}
               stroke="#94a3b8"
               strokeWidth="1"
               strokeDasharray="3 3"
@@ -453,24 +568,24 @@ function StatsChartSvg({
             ) : null}
           </>
         ) : null}
-        {dates.map((date, index) => {
-          const isEdge = index === 0 || index === dates.length - 1;
-          const show = isEdge || index % labelEvery === 0;
-          if (!show) return null;
-          if (!isEdge && index > labelEvery && dates.length - 1 - index < labelEvery / 2) return null;
-          const x = pointX(dates, index, width, padX, padR);
-          return (
-            <text key={`${date}-x`} x={x} y={height - 2} fontSize="9" textAnchor="middle" fill="#64748b">
-              {formatStatBucketLabel(date, timeType)}
-            </text>
-          );
-        })}
+        {xAxisLabels.map((lab) => (
+          <text
+            key={`${lab.date}-x`}
+            x={lab.x}
+            y={labelY}
+            fontSize="9"
+            textAnchor={lab.anchor}
+            fill="#64748b"
+          >
+            {formatStatAxisLabel(lab.date, timeType, lab.includeYear)}
+          </text>
+        ))}
         {showRain ? (
           <>
             <text x="4" y="18" fontSize="9" fill={RAIN_COLOR}>
               {rainRange.max.toFixed(1)}
             </text>
-            <text x="4" y={height - 18} fontSize="9" fill={RAIN_COLOR}>
+            <text x="4" y={axisY - 2} fontSize="9" fill={RAIN_COLOR}>
               {rainRange.min.toFixed(1)}
             </text>
           </>
@@ -478,10 +593,10 @@ function StatsChartSvg({
       </svg>
       {hoverDate ? (
         <div
-          className="pointer-events-none absolute z-10 min-w-[120px] rounded border border-slate-200 bg-white/95 px-2 py-1.5 text-[11px] shadow-md"
+          className="pointer-events-none absolute z-10 min-w-[120px] rounded border border-border bg-card/95 px-2 py-1.5 text-[11px] shadow-md"
           style={{ left: tipLeft, top: tipTop }}
         >
-          <div className="mb-0.5 font-medium text-slate-700">{formatStatBucketLabel(hoverDate, timeType)}</div>
+          <div className="mb-0.5 font-medium text-foreground/90">{formatStatBucketLabel(hoverDate, timeType)}</div>
           {showRain ? (
             <div style={{ color: RAIN_COLOR }}>
               강수량 {hoverRain != null ? `${hoverRain.toFixed(1)} mm` : '—'}
@@ -505,7 +620,7 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
   }
 
   const cell = (row: (typeof THRESHOLD_ROWS)[number] | null, splitLeft?: boolean) => {
-    const edge = splitLeft ? 'border-l border-slate-200 pl-2.5 ' : '';
+    const edge = splitLeft ? 'border-l border-border pl-2.5 ' : '';
     if (!row) {
       return (
         <>
@@ -528,10 +643,10 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
               <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: iconColor }} strokeWidth={2} aria-hidden />
             </span>
           ) : (
-            <span className="text-[10px] text-slate-400">—</span>
+            <span className="text-[10px] text-muted-foreground/70">—</span>
           )}
         </td>
-        <td className="max-w-0 px-2 py-1 text-slate-700">
+        <td className="max-w-0 px-2 py-1 text-foreground/90">
           <span className="block break-keep leading-snug" title={row.label}>
             {row.label}
           </span>
@@ -539,7 +654,7 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
         <td
           className={cn(
             'whitespace-nowrap px-2 py-1 text-right tabular-nums',
-            missing ? 'text-slate-400' : 'text-slate-800'
+            missing ? 'text-muted-foreground/70' : 'text-foreground'
           )}
         >
           {display}
@@ -549,8 +664,8 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
   };
 
   return (
-    <div className="shrink-0 overflow-hidden rounded border border-slate-100">
-      <div className="border-b border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+    <div className="shrink-0 overflow-hidden rounded border border-border/60">
+      <div className="border-b border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-foreground/90">
         기준 수위
       </div>
       <table className="min-w-full table-fixed text-[11px]">
@@ -563,7 +678,7 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
           <col className="w-[4.75rem]" />
         </colgroup>
         <thead>
-          <tr className="text-slate-500">
+          <tr className="text-muted-foreground">
             <th className="overflow-hidden whitespace-nowrap px-2 py-1 text-left font-medium">
               구분
             </th>
@@ -571,7 +686,7 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
               <span className="block break-keep">항목</span>
             </th>
             <th className="whitespace-nowrap px-2 py-1 text-right font-medium">값</th>
-            <th className="overflow-hidden whitespace-nowrap border-l border-slate-200 px-2 py-1 pl-2.5 text-left font-medium">
+            <th className="overflow-hidden whitespace-nowrap border-l border-border px-2 py-1 pl-2.5 text-left font-medium">
               구분
             </th>
             <th className="overflow-hidden px-2 py-1 text-left font-medium">
@@ -582,7 +697,7 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
         </thead>
         <tbody>
           {pairs.map(([left, right]) => (
-            <tr key={left.key} className="border-t border-slate-100">
+            <tr key={left.key} className="border-t border-border/60">
               {cell(left)}
               {cell(right, true)}
             </tr>
@@ -595,7 +710,7 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
 
 function ChartLegend({ showRain, showWater }: { showRain: boolean; showWater: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
       {showRain ? (
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-0.5 w-3 rounded" style={{ background: RAIN_COLOR }} />
@@ -669,13 +784,13 @@ function ChartExpandFloatingModal({
 
   return createPortal(
     <div
-      className="pointer-events-auto fixed z-[80] flex flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl"
+      className="pointer-events-auto fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-xl"
       style={{ left: pos.x, top: pos.y, width: size.width, height: size.height }}
       role="dialog"
       aria-label={title}
     >
       <div
-        className="flex h-10 shrink-0 cursor-move items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3"
+        className="flex h-10 shrink-0 cursor-move items-center justify-between gap-2 border-b border-border bg-muted/40 px-3"
         onMouseDown={(e) => {
           if ((e.target as HTMLElement).closest('button')) return;
           dragRef.current = { ox: e.clientX, oy: e.clientY, px: pos.x, py: pos.y };
@@ -683,18 +798,18 @@ function ChartExpandFloatingModal({
           document.body.style.cursor = 'move';
         }}
       >
-        <span className="truncate text-[13px] font-semibold text-slate-800">{title}</span>
+        <span className="truncate text-[13px] font-semibold text-foreground">{title}</span>
         <button
           type="button"
           onClick={onClose}
-          className="cursor-pointer rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+          className="cursor-pointer rounded p-1 text-muted-foreground/70 hover:bg-muted hover:text-foreground/90"
           title="닫기"
           aria-label="닫기"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="shrink-0 border-b border-slate-100 px-4 py-2">{legend}</div>
+      <div className="shrink-0 border-b border-border/60 px-4 py-2">{legend}</div>
       <div className="min-h-0 flex-1 p-4">{children({ width: chartW, height: chartH })}</div>
       <div
         className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
@@ -781,24 +896,24 @@ function MergedChart({
     return vals.reduce((a, b) => a + b, 0) / vals.length;
   })();
 
-  // sticky 높이 고정: border 대신 inset shadow (스크롤 시 흔들림 방지)
+  // sticky 헤더: 불투명 배경 (다크모드에서 스크롤 row 비침 방지)
   const thHead =
-    'sticky top-0 z-20 box-border h-8 border-0 bg-slate-50 px-3 py-0 leading-8 text-left font-medium text-slate-500 shadow-[inset_0_-1px_0_0_#e2e8f0]';
+    'sticky top-0 z-20 box-border h-8 border-0 border-b border-border bg-muted px-3 py-0 leading-8 text-left font-medium text-muted-foreground';
   const thHeadRight =
-    'sticky top-0 z-20 box-border h-8 border-0 bg-slate-50 px-3 py-0 leading-8 text-right font-medium text-slate-500 shadow-[inset_0_-1px_0_0_#e2e8f0]';
+    'sticky top-0 z-20 box-border h-8 border-0 border-b border-border bg-muted px-3 py-0 leading-8 text-right font-medium text-muted-foreground';
   const thAvg =
-    'sticky top-8 z-20 box-border h-8 border-0 bg-white px-3 py-0 leading-8 text-left font-medium text-slate-700 shadow-[inset_0_-1px_0_0_#cbd5e1,inset_0_-2px_0_0_#fff,inset_0_-3px_0_0_#cbd5e1]';
+    'sticky top-8 z-20 box-border h-8 border-0 border-b-2 border-border bg-card px-3 py-0 leading-8 text-left font-medium text-foreground/90';
   const thAvgRight =
-    'sticky top-8 z-20 box-border h-8 border-0 bg-white px-3 py-0 leading-8 text-right font-medium shadow-[inset_0_-1px_0_0_#cbd5e1,inset_0_-2px_0_0_#fff,inset_0_-3px_0_0_#cbd5e1]';
+    'sticky top-8 z-20 box-border h-8 border-0 border-b-2 border-border bg-card px-3 py-0 leading-8 text-right font-medium';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-[5px] border border-slate-200/90 bg-white p-3 shadow-sm">
-      <div className="flex shrink-0 items-center justify-between gap-2 text-[11px] text-slate-500">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-[5px] border border-border/90 bg-card p-3 shadow-sm">
+      <div className="flex shrink-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <ChartLegend showRain={showRain} showWater={showWater} />
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="cursor-pointer rounded p-1 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/90"
           title="그래프 확장"
           aria-label="그래프 확장"
         >
@@ -827,13 +942,13 @@ function MergedChart({
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2 text-[11px] text-slate-500">
-            <span className="font-medium text-slate-700">도표</span>
-            <span className="tabular-nums text-slate-600" title="도표 행 수">
+          <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground/90">도표</span>
+            <span className="tabular-nums text-muted-foreground" title="도표 행 수">
               총 {rows.length}건
             </span>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto rounded border border-slate-100">
+          <div className="min-h-0 flex-1 overflow-auto rounded border border-border/60">
             <table className="min-w-full border-separate border-spacing-0 text-[11px]">
               <thead>
                 <tr>
@@ -846,12 +961,12 @@ function MergedChart({
                     평균
                   </th>
                   {showRain ? (
-                    <th className={cn(thAvgRight, avgRain == null ? 'text-slate-400' : 'text-slate-800')}>
+                    <th className={cn(thAvgRight, avgRain == null ? 'text-muted-foreground/70' : 'text-foreground')}>
                       {avgRain == null ? '—' : avgRain.toFixed(1)}
                     </th>
                   ) : null}
                   {showWater ? (
-                    <th className={cn(thAvgRight, avgWater == null ? 'text-slate-400' : 'text-slate-800')}>
+                    <th className={cn(thAvgRight, avgWater == null ? 'text-muted-foreground/70' : 'text-foreground')}>
                       {avgWater == null ? '—' : avgWater.toFixed(2)}
                     </th>
                   ) : null}
@@ -860,14 +975,14 @@ function MergedChart({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.date}>
-                    <td className="border-t border-slate-100 px-3 py-2 text-slate-700">
+                    <td className="border-t border-border/60 px-3 py-2 text-foreground/90">
                       {formatStatBucketLabel(row.date, timeType)}
                     </td>
                     {showRain ? (
                       <td
                         className={cn(
-                          'border-t border-slate-100 px-3 py-2 text-right font-medium',
-                          row.rain?.value == null ? 'text-slate-400' : 'text-slate-800'
+                          'border-t border-border/60 px-3 py-2 text-right font-medium',
+                          row.rain?.value == null ? 'text-muted-foreground/70' : 'text-foreground'
                         )}
                       >
                         {row.rain?.value == null ? '—' : row.rain.value.toFixed(1)}
@@ -876,8 +991,8 @@ function MergedChart({
                     {showWater ? (
                       <td
                         className={cn(
-                          'border-t border-slate-100 px-3 py-2 text-right font-medium',
-                          row.water?.value == null ? 'text-slate-400' : 'text-slate-800'
+                          'border-t border-border/60 px-3 py-2 text-right font-medium',
+                          row.water?.value == null ? 'text-muted-foreground/70' : 'text-foreground'
                         )}
                       >
                         {row.water?.value == null ? '—' : row.water.value.toFixed(2)}
@@ -887,7 +1002,7 @@ function MergedChart({
                 ))}
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={colSpan} className="px-3 py-6 text-center text-slate-400">
+                    <td colSpan={colSpan} className="px-3 py-6 text-center text-muted-foreground/70">
                       {loading ? '불러오는 중…' : '기간 현황이 없습니다.'}
                     </td>
                   </tr>
@@ -934,19 +1049,19 @@ export function SafetyWaterStatsPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-      <div className="shrink-0 rounded-[5px] border border-slate-200/90 bg-white p-3 shadow-sm">
+      <div className="shrink-0 rounded-[5px] border border-border/90 bg-card p-3 shadow-sm">
         <div className="flex flex-col gap-1.5 text-[11px]">
-          <span className="font-medium text-slate-700">기간 선택</span>
-          <p className="text-[10px] leading-snug text-slate-500">{rangeNotice}</p>
+          <span className="font-medium text-foreground/90">기간 선택</span>
+          <p className="text-[10px] leading-snug text-muted-foreground">{rangeNotice}</p>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="shrink-0 text-[10px] text-slate-500">빠른 선택</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground">빠른 선택</span>
             {quickPresets.map((preset) => (
               <button
                 key={preset}
                 type="button"
                 title={STATS_QUICK_PRESET_LABEL[preset]}
                 onClick={() => applyQuick(preset)}
-                className="cursor-pointer rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-800"
+                className="cursor-pointer rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium text-foreground/90 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
               >
                 {STATS_QUICK_PRESET_LABEL[preset]}
               </button>
@@ -956,35 +1071,35 @@ export function SafetyWaterStatsPanel({
             <label
               className={cn(
                 'inline-flex min-w-0 flex-1 items-center gap-1 rounded border px-1.5 py-1',
-                startError ? 'border-red-400 bg-red-50/60' : 'border-slate-200'
+                startError ? 'border-red-400 bg-destructive/10' : 'border-border bg-background'
               )}
             >
-              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
               <input
                 type={inputType}
                 step={step}
                 max={maxValue}
                 value={startValue}
                 onChange={(e) => onChangeStart(e.target.value)}
-                className="min-w-0 flex-1 cursor-pointer bg-transparent text-[10px] outline-none"
+                className="min-w-0 flex-1 cursor-pointer bg-transparent text-[10px] text-foreground outline-none [color-scheme:light] dark:[color-scheme:dark]"
                 title="시작"
               />
             </label>
-            <span className="shrink-0 text-slate-400">-</span>
+            <span className="shrink-0 text-muted-foreground/70">-</span>
             <label
               className={cn(
                 'inline-flex min-w-0 flex-1 items-center gap-1 rounded border px-1.5 py-1',
-                endError ? 'border-red-400 bg-red-50/60' : 'border-slate-200'
+                endError ? 'border-red-400 bg-destructive/10' : 'border-border bg-background'
               )}
             >
-              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
               <input
                 type={inputType}
                 step={step}
                 max={maxValue}
                 value={endValue}
                 onChange={(e) => onChangeEnd(e.target.value)}
-                className="min-w-0 flex-1 cursor-pointer bg-transparent text-[10px] outline-none"
+                className="min-w-0 flex-1 cursor-pointer bg-transparent text-[10px] text-foreground outline-none [color-scheme:light] dark:[color-scheme:dark]"
                 title="종료"
               />
             </label>

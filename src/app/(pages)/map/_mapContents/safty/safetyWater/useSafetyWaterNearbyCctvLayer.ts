@@ -9,6 +9,7 @@ import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
 import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style';
 import type { ItsCctvItem } from '../../road/roadCCTV/itsCctvTypes';
+import { SAFETY_WATER_LAYER_Z } from './useSafetyWaterMapLayer';
 
 /** 전체=기본 파랑, 관측소 목록=파랑·나머지 흐림, 선택=빨강 */
 function cctvStyle(
@@ -65,7 +66,7 @@ export function useSafetyWaterNearbyCctvLayer(
     const source = new VectorSource();
     const layer = new VectorLayer({
       source,
-      zIndex: 121,
+      zIndex: SAFETY_WATER_LAYER_Z.cctv,
       properties: { id: 'safetyWaterNearbyCctv' },
       style: (feature) => {
         const k = String((feature as Feature).get('cctvKey') ?? '');

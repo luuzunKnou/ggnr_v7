@@ -21,12 +21,18 @@ type Props = {
   cctvOnly?: boolean;
   /** 500m 내 CCTV 있는 관측소 id */
   cctvStationIds?: Set<string>;
-  /** 수위 관측소 id → 화면 확인용 더미 상태 */
+  /** 수위 관측소 id → 기준수위 대비 현재 상태 */
   waterStatusById?: Record<string, WaterStatusLevel>;
 };
 
 function kindLabel(kind: SafetyWaterStation['kind']) {
   return kind === 'water' ? '수위' : '강수량';
+}
+
+function kindBadgeClass(kind: SafetyWaterStation['kind']) {
+  return kind === 'water'
+    ? 'bg-[#3B8DE0] text-white'
+    : 'bg-[#26A69A] text-white';
 }
 
 export function SafetyWaterStationList({
@@ -58,21 +64,21 @@ export function SafetyWaterStationList({
           title="전체"
           onClick={() => onSelect(null)}
           className={cn(
-            'flex w-full cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2.5 text-left transition-colors',
-            allSelected ? 'bg-primary/10' : 'hover:bg-slate-50'
+            'flex w-full cursor-pointer items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors',
+            allSelected ? 'bg-primary/10' : 'hover:bg-muted/50'
           )}
         >
           <div className="flex min-w-0 flex-1 items-center">
             <span
               className={cn(
                 'min-w-0 truncate text-[12px] font-medium leading-none',
-                allSelected ? 'text-primary' : 'text-slate-800'
+                allSelected ? 'text-primary' : 'text-foreground'
               )}
             >
               전체
             </span>
           </div>
-          <span className="inline-flex h-4 w-4 shrink-0 self-center" aria-hidden />
+          <span className="inline-flex h-5 w-5 shrink-0 self-center" aria-hidden />
           <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center">
             {hasAnyCctv ? (
               <span
@@ -99,8 +105,8 @@ export function SafetyWaterStationList({
               title={st.name}
               onClick={() => onSelect(st.id)}
               className={cn(
-                'flex w-full cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2.5 text-left transition-colors',
-                selected ? 'bg-primary/10' : 'hover:bg-slate-50'
+                'flex w-full cursor-pointer items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors',
+                selected ? 'bg-primary/10' : 'hover:bg-muted/50'
               )}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -108,9 +114,7 @@ export function SafetyWaterStationList({
                   <span
                     className={cn(
                       'shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none',
-                      st.kind === 'water'
-                        ? 'bg-sky-100 text-sky-700'
-                        : 'bg-emerald-100 text-emerald-700'
+                      kindBadgeClass(st.kind)
                     )}
                   >
                     {kindLabel(st.kind)}
@@ -118,15 +122,15 @@ export function SafetyWaterStationList({
                   <span
                     className={cn(
                       'min-w-0 truncate text-[12px] font-medium leading-none',
-                      selected ? 'text-primary' : 'text-slate-800'
+                      selected ? 'text-primary' : 'text-foreground'
                     )}
                   >
                     {st.name}
                   </span>
                 </div>
-                <span className="truncate text-[10px] text-slate-500">{st.address || '—'}</span>
+                <span className="truncate text-[10px] text-muted-foreground">{st.address || '—'}</span>
               </div>
-              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center self-center">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center">
                 {StatusIcon && statusColor ? (
                   <span
                     className="inline-flex"
@@ -134,7 +138,7 @@ export function SafetyWaterStationList({
                     aria-label={statusLevel ? `수위 상태 ${statusLevel}` : undefined}
                   >
                     <StatusIcon
-                      className="h-4 w-4"
+                      className="h-5 w-5"
                       style={{ color: statusColor }}
                       strokeWidth={2}
                       aria-hidden
@@ -158,7 +162,7 @@ export function SafetyWaterStationList({
         );
       })}
       {filteredStations.length === 0 ? (
-        <li className="px-3 py-6 text-center text-[11px] text-slate-400">검색 결과가 없습니다.</li>
+        <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">검색 결과가 없습니다.</li>
       ) : null}
     </ul>
   );

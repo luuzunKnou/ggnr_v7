@@ -58,24 +58,6 @@ export const THRESHOLD_KEY_TO_LEVEL: Record<ThresholdStageKey, WaterStatusLevel>
   srswl: '심각',
 };
 
-/** 화면 확인용 — 목록 위쪽 수위 관측소 4개에 순서대로 부여 */
-export const DUMMY_WATER_STATUS_LEVELS: WaterStatusLevel[] = ['관심', '주의보', '경보', '심각'];
-
-/** 화면 확인용 — 수위 관측소 순서대로 상위 4개에 더미 상태 부여 (목록·지도 공통) */
-export function buildDummyWaterStatusById(
-  stations: { id: string; kind: string }[]
-): Record<string, WaterStatusLevel> {
-  const out: Record<string, WaterStatusLevel> = {};
-  let idx = 0;
-  for (const st of stations) {
-    if (st.kind !== 'water') continue;
-    if (idx >= DUMMY_WATER_STATUS_LEVELS.length) break;
-    out[st.id] = DUMMY_WATER_STATUS_LEVELS[idx];
-    idx += 1;
-  }
-  return out;
-}
-
 /** null·비유한·0 이하는 미설정 */
 export function isValidThreshold(v: number | null | undefined): v is number {
   return v != null && Number.isFinite(v) && v > 0;

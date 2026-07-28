@@ -21,7 +21,13 @@ import {
   fetchMergedCctvList,
   withinStation,
 } from './safetyWaterCctv';
-import { SAFETY_WATER_DUMMY_FORECASTS } from './safetyWaterDummyForecast';
+import { resolveWaterStatusLevel, type WaterStatusLevel } from './safetyWaterStatus';
+import {
+  defaultStatsRange,
+  parseLocalDateTime,
+  toApiRangeToken,
+} from './safetyWaterTimeRange';
+import type { StationListFilterChip } from './safetyWaterListFilter';
 import { fitStationsOverview } from './useSafetyWaterMapZoom';
 import type {
   FloodBatchKindAvg,
@@ -33,6 +39,9 @@ import type {
   SafetyWaterStation,
   SafetyWaterStationKind,
 } from './safetyWaterTypes';
+
+/** 기간별 현황 기준 최신 vs 직전 */
+export type WaterLevelDelta = 'up' | 'down' | null;
 
 const UI_MSG = {
   provider: '현재 제공처 상태가 원활하지 않습니다.',
@@ -219,6 +228,13 @@ type SafetyWaterContextValue = {
   clearTestWaterLevel: () => void;
   /** 수위 관측소 코드 → 현재 수위(m). 목록 상태 원용 */
   waterLevelByCode: Record<string, number | null>;
+  /** 수위 관측소 id → 기준수위 대비 현재 상태 (실측 기준) */
+  waterStatusById: Record<string, WaterStatusLevel>;
+  /** 수위 관측소 id → 기간 통계 최신 vs 직전 증감 */
+  waterDeltaById: Record<string, WaterLevelDelta>;
+  /** 관측소 목록 토글칩 (빈 배열 = 전체). 지도 불투명도 연동 */
+  stationListFilterChips: StationListFilterChip[];
+  setStationListFilterChips: (chips: StationListFilterChip[]) => void;
 };
 
 const SafetyWaterContext = createContext<SafetyWaterContextValue | null>(null);
@@ -273,7 +289,10 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   const riskFetchGenRef = useRef(0);
   const [waterLevelByCode, setWaterLevelByCode] = useState<Record<string, number | null>>({});
   const waterLevelFetchGenRef = useRef(0);
+  const [waterDeltaById, setWaterDeltaById] = useState<Record<string, WaterLevelDelta>>({});
+  const waterDeltaFetchGenRef = useRef(0);
   const autoOpenStatsRef = useRef(false);
+  const [stationListFilterChips, setStationListFilterChips] = useState<StationListFilterChip[]>([]);
 
   useEffect(() => {
     if (autoOpenStatsRef.current || stations.length === 0 || selectedStationId !== null) return;
@@ -345,10 +364,32 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       setSelectedStationId((prev) => (prev && items.some((item) => item.id === prev) ? prev : null));
       setLastRefresh(new Date());
 
-      // 홍수 예보 — 더미 표시 (실 API 연동 전)
-      setForecastLoading(false);
-      setForecasts(SAFETY_WATER_DUMMY_FORECASTS);
-      setForecastOpen(SAFETY_WATER_DUMMY_FORECASTS.length > 0);
+      const waterCodes = items.filter((s) => s.kind === 'water').map((s) => s.code);
+      setForecastLoading(true);
+      try {
+        const fcQs =
+          waterCodes.length > 0
+            ? `?codes=${encodeURIComponent(waterCodes.join(','))}`
+            : '';
+        const fcRes = await fetch(`/api/flood/forecast${fcQs}`);
+        const fcJson = (await fcRes.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!fcRes.ok) {
+          setForecasts([]);
+          setForecastOpen(false);
+        } else {
+          const fcItems = Array.isArray(fcJson.items)
+            ? (fcJson.items as SafetyWaterForecast[])
+            : [];
+          setForecasts(fcItems);
+          setForecastOpen(fcItems.length > 0);
+        }
+      } catch (e) {
+        console.error('[flood] loadForecasts failed', e);
+        setForecasts([]);
+        setForecastOpen(false);
+      } finally {
+        setForecastLoading(false);
+      }
     } catch (e) {
       console.error('[flood] loadStations failed', e);
       setUiError({ errorClass: 'ours', uiMessage: UI_MSG.ours });
@@ -369,6 +410,17 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
     () => stations.find((item) => item.id === selectedStationId) ?? null,
     [stations, selectedStationId]
   );
+
+  const waterStatusById = useMemo(() => {
+    const out: Record<string, WaterStatusLevel> = {};
+    for (const st of stations) {
+      if (st.kind !== 'water') continue;
+      const level = resolveWaterStatusLevel(waterLevelByCode[st.code] ?? null, st);
+      if (level) out[st.id] = level;
+    }
+    return out;
+  }, [stations, waterLevelByCode]);
+
   const nearestOpposite = useMemo(
     () => (selectedStation ? findNearestOpposite(selectedStation, stations) : null),
     [selectedStation, stations]
@@ -638,6 +690,78 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
   }, [stations, timeType]);
 
   useEffect(() => {
+    const waterStations = stations.filter((s) => s.kind === 'water');
+    if (waterStations.length === 0) {
+      setWaterDeltaById({});
+      return;
+    }
+    let cancelled = false;
+    const gen = ++waterDeltaFetchGenRef.current;
+    const range = defaultStatsRange(timeType);
+    const startDate = parseLocalDateTime(range.start);
+    const endDate = parseLocalDateTime(range.end);
+    if (!startDate || !endDate) {
+      setWaterDeltaById({});
+      return;
+    }
+    const sdt = toApiRangeToken(startDate, timeType);
+    const edt = toApiRangeToken(endDate, timeType);
+
+    void (async () => {
+      const next: Record<string, WaterLevelDelta> = {};
+      const CONCURRENCY = 4;
+      let cursor = 0;
+      async function worker() {
+        while (cursor < waterStations.length) {
+          const i = cursor++;
+          const st = waterStations[i];
+          try {
+            const res = await fetch('/api/flood/observations/stats', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                kind: 'water',
+                time: timeType,
+                sdt,
+                edt,
+                stations: [{ code: st.code }],
+              }),
+            });
+            const j = (await res.json().catch(() => ({}))) as {
+              items?: { date?: string; value?: number | null }[];
+            };
+            if (!res.ok || !Array.isArray(j.items)) {
+              next[st.id] = null;
+              continue;
+            }
+            const vals = j.items
+              .filter((it) => it.value != null && Number.isFinite(Number(it.value)))
+              .map((it) => Number(it.value));
+            if (vals.length < 2) {
+              next[st.id] = null;
+              continue;
+            }
+            const latest = vals[vals.length - 1];
+            const prev = vals[vals.length - 2];
+            next[st.id] = latest > prev ? 'up' : latest < prev ? 'down' : null;
+          } catch {
+            next[st.id] = null;
+          }
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, waterStations.length) }, () => worker())
+      );
+      if (cancelled || gen !== waterDeltaFetchGenRef.current) return;
+      setWaterDeltaById(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [stations, timeType]);
+
+  useEffect(() => {
     if (stations.length === 0) {
       setWaterObs(null);
       setRainObs(null);
@@ -851,6 +975,10 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       applyTestWaterLevel,
       clearTestWaterLevel,
       waterLevelByCode,
+      waterStatusById,
+      waterDeltaById,
+      stationListFilterChips,
+      setStationListFilterChips,
     }),
     [
       map,
@@ -908,6 +1036,9 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       applyTestWaterLevel,
       clearTestWaterLevel,
       waterLevelByCode,
+      waterStatusById,
+      waterDeltaById,
+      stationListFilterChips,
     ]
   );
 

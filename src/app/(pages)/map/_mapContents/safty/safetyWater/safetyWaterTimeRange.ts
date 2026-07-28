@@ -272,6 +272,33 @@ export function formatStatBucketLabel(key: string, time: FloodTimeType): string 
   return key;
 }
 
+/** 그래프 x축용. includeYear=false 이면 mm-dd / mm-dd HH:mm */
+export function formatStatAxisLabel(key: string, time: FloodTimeType, includeYear: boolean): string {
+  const full = formatStatBucketLabel(key, time);
+  if (includeYear) return full;
+  const raw = key.replace(/\D/g, '');
+  if (time === '1D') {
+    if (raw.length < 8) return full;
+    return `${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  }
+  if (raw.length >= 12) {
+    return `${raw.slice(4, 6)}-${raw.slice(6, 8)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+  }
+  if (raw.length >= 10) {
+    return `${raw.slice(4, 6)}-${raw.slice(6, 8)} ${raw.slice(8, 10)}:00`;
+  }
+  if (raw.length >= 8) {
+    return `${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  }
+  return full;
+}
+
+/** 버킷 키의 연도(yyyy). 없으면 null */
+export function yearFromStatBucket(key: string): string | null {
+  const raw = key.replace(/\D/g, '');
+  return raw.length >= 4 ? raw.slice(0, 4) : null;
+}
+
 export function bucketKeyFromObservedAt(observedAt: string, time: FloodTimeType): string | null {
   const raw = observedAt.replace(/\D/g, '');
   if (time === '1D') return raw.length >= 8 ? raw.slice(0, 8) : null;

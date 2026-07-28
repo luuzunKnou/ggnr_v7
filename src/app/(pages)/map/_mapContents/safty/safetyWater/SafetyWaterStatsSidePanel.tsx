@@ -152,8 +152,8 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden opacity-[0.98]">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-gradient-to-b from-[#f0f9fc] to-white px-4 py-3">
-        <h2 className="min-w-0 text-[15px] font-semibold leading-tight text-slate-800">기간별 현황</h2>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-3">
+        <h2 className="min-w-0 text-[15px] font-semibold leading-tight text-foreground">기간별 현황</h2>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -166,7 +166,7 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-muted hover:text-muted-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -174,7 +174,7 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
           </button>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/90 p-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/30 p-3">
         <SafetyWaterStatsPanel
           blocks={blocks}
           timeType={timeType}

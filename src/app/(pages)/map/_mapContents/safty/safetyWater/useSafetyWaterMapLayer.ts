@@ -7,22 +7,55 @@ import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
-import { Style, Fill, Stroke, Text, Icon, Circle as CircleStyle } from 'ol/style';
-import { WATER_STATUS_HEX, type WaterStatusLevel } from './safetyWaterStatus';
+import { Style, Fill, Stroke, Text, Icon } from 'ol/style';
+import type { WaterLevelDelta } from './safetyWaterContext';
+import type { StationListFilterChip } from './safetyWaterListFilter';
+import { stationMatchesListFilter } from './safetyWaterListFilter';
 import type { SafetyWaterStation, SafetyWaterStationKind } from './safetyWaterTypes';
+
+/** CCTV < 강수량 관측소 < 수위 관측소 */
+export const SAFETY_WATER_LAYER_Z = {
+  cctv: 118,
+  rainStation: 119,
+  waterStation: 120,
+} as const;
 
 const WATER_STATION_ICON = '/symbol/cus_waves_ps.svg';
 const RAIN_STATION_ICON = '/symbol/cus_rainfall_ps.svg';
 const STATION_ICON_PX = 18;
 
-/** OL displacement: 양수 = 오른쪽·위쪽. 심볼 우측 상단에 상태 점 배치 */
-function statusDotDisplacement(selected: boolean): [number, number] {
+/** 토글칩에 안 맞는 관측소 심볼 불투명도 */
+const FILTERED_OUT_OPACITY = 0.5;
+
+const DELTA_UP_COLOR = '#DC2626';
+const DELTA_DOWN_COLOR = '#0B65C6';
+
+/** 우측 상단 화살표 오프셋 (OL: 양수 = 오른쪽·위) */
+function deltaArrowDisplacement(selected: boolean): [number, number] {
   const scale = selected ? 1.15 : 1;
   const half = (STATION_ICON_PX * scale) / 2;
-  const dotR = selected ? 4.5 : 4;
-  const offset = half + dotR * 0.35;
   const nudge = 1.5;
+  const offset = half + 2;
   return [offset - nudge, offset - nudge];
+}
+
+function arrowDataUri(delta: 'up' | 'down'): string {
+  const color = delta === 'up' ? DELTA_UP_COLOR : DELTA_DOWN_COLOR;
+  // lucide ArrowUp / ArrowDown 스타일 (12×12) — 흰색 외곽선 + 색 화살표
+  const path =
+    delta === 'up'
+      ? 'M6 10V2M6 2L2.5 5.5M6 2l3.5 3.5'
+      : 'M6 2v8M6 10L2.5 6.5M6 10l3.5-3.5';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="${path}" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="${path}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (!Number.isFinite(n)) return `rgba(0,0,0,${alpha})`;
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
 function stationStyle(
@@ -30,16 +63,19 @@ function stationStyle(
   featureId: string,
   kind: SafetyWaterStationKind | string,
   name: string,
-  statusColor: string | null
+  delta: WaterLevelDelta,
+  opacity: number
 ): Style[] {
   const selected = selectedId != null && selectedId === featureId;
   const isRain = kind === 'rain';
   const labelColor = isRain ? '#00897B' : '#0B65C6';
+  const op = selected ? 1 : opacity;
 
   const image = new Icon({
     src: isRain ? RAIN_STATION_ICON : WATER_STATION_ICON,
     scale: selected ? 1.15 : 1,
     anchor: [0.5, 0.5],
+    opacity: op,
   });
 
   const styles: Style[] = [
@@ -48,8 +84,8 @@ function stationStyle(
       text: new Text({
         text: name || '',
         font: selected ? '600 12px sans-serif' : '500 11px sans-serif',
-        fill: new Fill({ color: labelColor }),
-        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.95)', width: 3 }),
+        fill: new Fill({ color: hexToRgba(labelColor, op) }),
+        stroke: new Stroke({ color: `rgba(255, 255, 255, ${0.95 * op})`, width: 3 }),
         offsetY: selected ? 16 : 14,
         textAlign: 'center',
         textBaseline: 'top',
@@ -58,15 +94,16 @@ function stationStyle(
     }),
   ];
 
-  if (!isRain && statusColor) {
-    const [dx, dy] = statusDotDisplacement(selected);
+  if (!isRain && (delta === 'up' || delta === 'down')) {
+    const [dx, dy] = deltaArrowDisplacement(selected);
     styles.push(
       new Style({
-        image: new CircleStyle({
-          radius: selected ? 4.5 : 4,
-          fill: new Fill({ color: statusColor }),
-          stroke: new Stroke({ color: '#ffffff', width: 1.5 }),
+        image: new Icon({
+          src: arrowDataUri(delta),
+          scale: selected ? 1.1 : 1,
+          anchor: [0.5, 0.5],
           displacement: [dx, dy],
+          opacity: op,
         }),
         zIndex: 2,
       })
@@ -76,69 +113,84 @@ function stationStyle(
   return styles;
 }
 
+function createStationLayer(kind: SafetyWaterStationKind, zIndex: number) {
+  return new VectorLayer({
+    source: new VectorSource(),
+    zIndex,
+    properties: { id: kind === 'water' ? 'safetyWaterStationWater' : 'safetyWaterStationRain' },
+  });
+}
+
 export function useSafetyWaterMapLayer(
   mapReady: boolean,
   map: Map | null,
   active: boolean,
   stations: SafetyWaterStation[],
   selectedId: string | null,
-  waterStatusById: Record<string, WaterStatusLevel>,
+  waterDeltaById: Record<string, WaterLevelDelta>,
+  listFilterChips: readonly StationListFilterChip[],
+  stationIdsWithCctv: Set<string> | undefined,
   onSelectId: (id: string) => void
 ) {
-  const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  const rainLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  const waterLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const onSelectIdRef = useRef(onSelectId);
   onSelectIdRef.current = onSelectId;
+
+  const stationById = useRef(new Map<string, SafetyWaterStation>());
+  stationById.current = new Map(stations.map((st) => [st.id, st]));
 
   useEffect(() => {
     if (!mapReady || !map || !active) return;
 
-    const source = new VectorSource();
-    const layer = new VectorLayer({
-      source,
-      zIndex: 120,
-      properties: { id: 'safetyWaterStationOverlay' },
-      style: (feature) => {
-        const f = feature as Feature;
-        const k = String(f.get('stationId') ?? '');
-        const kind = String(f.get('stationKind') ?? 'water');
-        const name = String(f.get('stationName') ?? '');
-        const level = waterStatusById[k];
-        const statusColor = level ? WATER_STATUS_HEX[level] : null;
-        return stationStyle(selectedId, k, kind, name, statusColor);
-      },
-    });
-    layer.set('safetyWaterStationLayer', true);
-    map.addLayer(layer);
-    layerRef.current = layer;
+    const rainLayer = createStationLayer('rain', SAFETY_WATER_LAYER_Z.rainStation);
+    const waterLayer = createStationLayer('water', SAFETY_WATER_LAYER_Z.waterStation);
+    rainLayer.set('safetyWaterStationLayer', true);
+    waterLayer.set('safetyWaterStationLayer', true);
+    map.addLayer(rainLayer);
+    map.addLayer(waterLayer);
+    rainLayerRef.current = rainLayer;
+    waterLayerRef.current = waterLayer;
 
     const onClick = (evt: { pixel: import('ol/pixel').Pixel }) => {
-      const feats = map.getFeaturesAtPixel(evt.pixel, {
-        layerFilter: (lyr) => lyr === layer,
-        hitTolerance: 10,
-      });
-      const f = feats[0];
-      if (f && typeof (f as Feature).get === 'function') {
-        const id = (f as Feature).get('stationId');
-        if (typeof id === 'string') onSelectIdRef.current(id);
+      for (const layer of [waterLayer, rainLayer]) {
+        const feats = map.getFeaturesAtPixel(evt.pixel, {
+          layerFilter: (lyr) => lyr === layer,
+          hitTolerance: 10,
+        });
+        const f = feats[0];
+        if (f && typeof (f as Feature).get === 'function') {
+          const id = (f as Feature).get('stationId');
+          if (typeof id === 'string') {
+            onSelectIdRef.current(id);
+            return;
+          }
+        }
       }
     };
     map.on('singleclick', onClick);
 
     return () => {
       map.un('singleclick', onClick);
-      map.removeLayer(layer);
-      layerRef.current = null;
+      map.removeLayer(rainLayer);
+      map.removeLayer(waterLayer);
+      rainLayerRef.current = null;
+      waterLayerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 레이어 수명은 mapReady/map/active만
   }, [mapReady, map, active]);
 
   useEffect(() => {
     if (!active) return;
-    const layer = layerRef.current;
-    if (!layer) return;
-    const source = layer.getSource();
-    if (!source) return;
-    source.clear();
+    const rainLayer = rainLayerRef.current;
+    const waterLayer = waterLayerRef.current;
+    if (!rainLayer || !waterLayer) return;
+
+    const rainSource = rainLayer.getSource();
+    const waterSource = waterLayer.getSource();
+    if (!rainSource || !waterSource) return;
+
+    rainSource.clear();
+    waterSource.clear();
     for (const st of stations) {
       const f = new Feature({
         geometry: new Point(fromLonLat([st.lon, st.lat])),
@@ -146,24 +198,39 @@ export function useSafetyWaterMapLayer(
         stationName: st.name,
         stationKind: st.kind,
       });
-      source.addFeature(f);
+      if (st.kind === 'rain') rainSource.addFeature(f);
+      else waterSource.addFeature(f);
     }
-    layer.changed();
+    rainLayer.changed();
+    waterLayer.changed();
   }, [active, stations]);
 
   useEffect(() => {
     if (!active) return;
-    const layer = layerRef.current;
-    if (!layer) return;
-    layer.setStyle((feature) => {
+    const rainLayer = rainLayerRef.current;
+    const waterLayer = waterLayerRef.current;
+    if (!rainLayer || !waterLayer) return;
+
+    rainLayer.setStyle((feature) => {
       const f = feature as Feature;
       const k = String(f.get('stationId') ?? '');
-      const kind = String(f.get('stationKind') ?? 'water');
       const name = String(f.get('stationName') ?? '');
-      const level = waterStatusById[k];
-      const statusColor = level ? WATER_STATUS_HEX[level] : null;
-      return stationStyle(selectedId, k, kind, name, statusColor);
+      const st = stationById.current.get(k);
+      const matched =
+        st != null && stationMatchesListFilter(st, listFilterChips, stationIdsWithCctv);
+      return stationStyle(selectedId, k, 'rain', name, null, matched ? 1 : FILTERED_OUT_OPACITY);
     });
-    layer.changed();
-  }, [active, selectedId, waterStatusById]);
+    waterLayer.setStyle((feature) => {
+      const f = feature as Feature;
+      const k = String(f.get('stationId') ?? '');
+      const name = String(f.get('stationName') ?? '');
+      const delta = waterDeltaById[k] ?? null;
+      const st = stationById.current.get(k);
+      const matched =
+        st != null && stationMatchesListFilter(st, listFilterChips, stationIdsWithCctv);
+      return stationStyle(selectedId, k, 'water', name, delta, matched ? 1 : FILTERED_OUT_OPACITY);
+    });
+    rainLayer.changed();
+    waterLayer.changed();
+  }, [active, selectedId, waterDeltaById, listFilterChips, stationIdsWithCctv, stations]);
 }

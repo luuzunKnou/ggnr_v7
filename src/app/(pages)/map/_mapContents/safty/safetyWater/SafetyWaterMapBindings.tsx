@@ -1,8 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
 import { useSafetyWater } from './safetyWaterContext';
-import { buildDummyWaterStatusById } from './safetyWaterStatus';
 import { useSafetyWaterMapLayer } from './useSafetyWaterMapLayer';
 import { useSafetyWaterMapZoom } from './useSafetyWaterMapZoom';
 import { useSafetyWaterNearbyCctvLayer } from './useSafetyWaterNearbyCctvLayer';
@@ -23,9 +21,10 @@ export function SafetyWaterMapBindings() {
     setSelectedCctvKey,
     cctvOpen,
     riskAreas,
+    waterDeltaById,
+    stationListFilterChips,
+    stationIdsWithCctv,
   } = useSafetyWater();
-
-  const waterStatusById = useMemo(() => buildDummyWaterStatusById(stations), [stations]);
 
   useSafetyWaterMapZoom(true, mapReady, stations);
   useSafetyWaterMapLayer(
@@ -34,7 +33,9 @@ export function SafetyWaterMapBindings() {
     true,
     stations,
     selectedStationId,
-    waterStatusById,
+    waterDeltaById,
+    stationListFilterChips,
+    stationIdsWithCctv,
     (id) => {
       focusStation(id);
       setListOpen(false);

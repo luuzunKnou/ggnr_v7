@@ -105,7 +105,7 @@ export function MapFloatingPanel({
     <div
       ref={panelRef}
       className={cn(
-        'flex flex-col rounded-xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto',
+        'flex flex-col rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto',
         className
       )}
       style={{
@@ -122,7 +122,7 @@ export function MapFloatingPanel({
         role="button"
         tabIndex={0}
         onPointerDown={handlePointerDown}
-        className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 shrink-0 cursor-grab active:cursor-grabbing hover:bg-slate-50/60 select-none bg-slate-50/40"
+        className="flex items-center justify-between border-b border-border/60 px-3 py-1.5 shrink-0 cursor-grab active:cursor-grabbing hover:bg-muted/60 select-none bg-muted/40"
         onKeyDown={(e) => {
           if (e.key === ' ' || e.key === 'Enter') e.preventDefault();
         }}

@@ -96,13 +96,13 @@ export function SafetyWaterNearbyCctv() {
         <>
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <Cctv className="h-4 w-4 shrink-0 self-center text-sky-600" aria-hidden />
-            <span className="truncate text-[13px] font-medium leading-none text-slate-800">
+            <span className="truncate text-[13px] font-medium leading-none text-foreground">
               주변 도로 영상
             </span>
             {cctvLoading ? (
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" aria-hidden />
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground/70" aria-hidden />
             ) : (
-              <span className="shrink-0 text-[10px] font-normal leading-none text-slate-500">
+              <span className="shrink-0 text-[10px] font-normal leading-none text-muted-foreground">
                 반경 500m 내 · {listItems.length}건
               </span>
             )}
@@ -115,7 +115,7 @@ export function SafetyWaterNearbyCctv() {
                   title="이전 영상"
                   aria-label="이전 영상"
                   onClick={goPrev}
-                  className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100"
+                  className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -124,7 +124,7 @@ export function SafetyWaterNearbyCctv() {
                   title="다음 영상"
                   aria-label="다음 영상"
                   onClick={goNext}
-                  className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100"
+                  className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -136,7 +136,7 @@ export function SafetyWaterNearbyCctv() {
                   onClick={() => setListOpen((v) => !v)}
                   className={cn(
                     'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded transition-colors',
-                    listOpen ? 'bg-slate-100 text-slate-800' : 'text-slate-500 hover:bg-slate-100'
+                    listOpen ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted'
                   )}
                 >
                   <List className="h-4 w-4" />
@@ -148,7 +148,7 @@ export function SafetyWaterNearbyCctv() {
               title="닫기"
               aria-label="닫기"
               onClick={() => setCctvOpen(false)}
-              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100"
+              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
             >
               <X className="h-4 w-4" />
             </button>
@@ -162,8 +162,8 @@ export function SafetyWaterNearbyCctv() {
             {cctvError}
           </p>
         ) : null}
-        <p className="text-[10px] text-slate-400">정보제공: ITS 국가교통정보센터</p>
-        <div className="overflow-hidden rounded-md border border-slate-200 bg-black">
+        <p className="text-[10px] text-muted-foreground/70">정보제공: ITS 국가교통정보센터</p>
+        <div className="overflow-hidden rounded-md border border-border bg-black">
           {selected ? (
             <RoadCctvHlsPlayer
               key={selected.cctvurl}
@@ -177,22 +177,22 @@ export function SafetyWaterNearbyCctv() {
           )}
         </div>
         {selected ? (
-          <p className="line-clamp-2 text-[11px] font-medium text-slate-700">{selected.cctvname}</p>
+          <p className="line-clamp-2 text-[11px] font-medium text-foreground/90">{selected.cctvname}</p>
         ) : null}
 
         {listOpen ? (
           <div
             ref={listPanelRef}
-            className="absolute left-3 right-3 top-3 z-20 max-h-48 overflow-y-auto rounded border border-slate-200 bg-white shadow-md"
+            className="absolute left-3 right-3 top-3 z-20 max-h-48 overflow-y-auto rounded border border-border bg-card shadow-md"
           >
             {listItems.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] text-slate-500">목록이 없습니다.</p>
+              <p className="px-3 py-2 text-[11px] text-muted-foreground">목록이 없습니다.</p>
             ) : (
               <ul>
                 {listItems.map((it) => {
                   const active = it.key === selectedCctvKey;
                   return (
-                    <li key={it.key} className="border-b border-slate-100 last:border-0">
+                    <li key={it.key} className="border-b border-border/60 last:border-0">
                       <button
                         type="button"
                         title={it.cctvname}
@@ -201,7 +201,7 @@ export function SafetyWaterNearbyCctv() {
                           setListOpen(false);
                         }}
                         className={cn(
-                          'flex w-full cursor-pointer flex-col gap-0.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-slate-50',
+                          'flex w-full cursor-pointer flex-col gap-0.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-muted/50',
                           active && 'bg-primary/5 text-primary'
                         )}
                       >

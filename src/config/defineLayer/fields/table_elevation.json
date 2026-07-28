@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "divi",
-    "define_field_kor_name": "divi",
+    "define_field_kor_name": "구분",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "cont",
-    "define_field_kor_name": "cont",
+    "define_field_kor_name": "등고수치",
     "define_field_type": "number",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "scls",
-    "define_field_kor_name": "scls",
+    "define_field_kor_name": "통합코드",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "fmta",
-    "define_field_kor_name": "fmta",
+    "define_field_kor_name": "제작정보",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
