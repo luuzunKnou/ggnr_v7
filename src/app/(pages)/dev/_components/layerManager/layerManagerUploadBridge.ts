@@ -28,3 +28,17 @@ export function registerLayerManagerListRefresh(fn: RefreshListMetaFn) {
 export function requestLayerManagerListRefresh() {
   refreshListMeta?.()
 }
+
+type RefreshHistoryFn = () => void
+let refreshHistory: RefreshHistoryFn | null = null
+
+export function registerShpHistoryRefresh(fn: RefreshHistoryFn) {
+  refreshHistory = fn
+  return () => {
+    if (refreshHistory === fn) refreshHistory = null
+  }
+}
+
+export function requestShpHistoryRefresh() {
+  refreshHistory?.()
+}

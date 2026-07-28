@@ -134,7 +134,7 @@
     "define_field_show_list": true,
     "define_field_show_detail": true,
     "define_field_read_only": false,
-    "define_field_is_key": false,
+    "define_field_is_key": "true",
     "define_field_show_search_detail": false,
     "define_field_max_length": "",
     "define_field_sort_idx": "",

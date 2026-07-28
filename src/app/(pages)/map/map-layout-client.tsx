@@ -313,6 +313,7 @@ function MapLayoutContent({
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
   const memoDetailOpen = memoManagementOpen && Boolean(memoDetailId)
+  const [complaintListRefreshKey, setComplaintListRefreshKey] = useState(0)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
   /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
@@ -1316,7 +1317,7 @@ function MapLayoutContent({
                 leftOffsetPx={complaintPanelLeftPx}
                 onWidthChange={setComplaintPanelWidth}
               >
-                <ComplaintListPanel />
+                <ComplaintListPanel refreshKey={complaintListRefreshKey} />
               </MapSideListPanel>
             </div>
           )}
@@ -1456,7 +1457,9 @@ function MapLayoutContent({
                 }
               />
               <StandardDetail />
-              <ComplaintDetail />
+              <ComplaintDetail
+                onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
+              />
               <AddressInfoDetail />
             </div>
           </div>

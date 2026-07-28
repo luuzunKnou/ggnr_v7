@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -250,7 +250,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DIRECTION",
+    "define_field_name": "direction",
     "define_field_kor_name": "방향",
     "define_field_type": "text",
     "define_field_idx": 11,
@@ -275,7 +275,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DUN_TYPE",
+    "define_field_name": "dun_type",
     "define_field_kor_name": "등주형식",
     "define_field_type": "text",
     "define_field_idx": 12,
@@ -300,7 +300,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DUN_MAT",
+    "define_field_name": "dun_mat",
     "define_field_kor_name": "등주재질",
     "define_field_type": "text",
     "define_field_idx": 13,
@@ -325,7 +325,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "LGT_TYPE",
+    "define_field_name": "lgt_type",
     "define_field_kor_name": "광원종류",
     "define_field_type": "text",
     "define_field_idx": 14,
@@ -350,7 +350,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "LGT_WGT",
+    "define_field_name": "lgt_wgt",
     "define_field_kor_name": "광원용량",
     "define_field_type": "text",
     "define_field_idx": 15,

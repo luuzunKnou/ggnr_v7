@@ -21,6 +21,16 @@ import { OcrMigrationTab } from './fileConverter/OcrMigrationTab';
 
 type ConverterTabId = 'pdfToJpg' | 'tifToJpg' | 'objToB3dm' | 'lasToPnts' | 'ocr';
 
+/** pdfToJpgService.listPdfToJpgJobs 응답 행 (클라이언트용 복제 타입) */
+type PdfToJpgJobRow = {
+  jobName: string;
+  pdfCount: number;
+  convertedPdfCount: number;
+  pendingPdfCount: number;
+  totalJpgCount: number;
+  modified?: string;
+};
+
 type ObjDatasetRow = {
   datasetName: string;
   sourceRelativeDir: string;

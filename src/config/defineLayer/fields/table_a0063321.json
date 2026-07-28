@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의 종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -350,7 +350,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "TYPE",
+    "define_field_name": "type",
     "define_field_kor_name": "육교 형식",
     "define_field_type": "text",
     "define_field_idx": 15,
@@ -375,7 +375,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DE_WET",
+    "define_field_name": "de_wet",
     "define_field_kor_name": "설계활하중",
     "define_field_type": "text",
     "define_field_idx": 16,
@@ -525,7 +525,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "GU_U_TYPE",
+    "define_field_name": "gu_u_type",
     "define_field_kor_name": "구체_상부구조",
     "define_field_type": "text",
     "define_field_idx": 22,
@@ -625,7 +625,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "GU_D_TYPE",
+    "define_field_name": "gu_d_type",
     "define_field_kor_name": "구체_하부구조",
     "define_field_type": "text",
     "define_field_idx": 26,
@@ -650,7 +650,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "SR_TYPE",
+    "define_field_name": "sr_type",
     "define_field_kor_name": "계단_재질",
     "define_field_type": "text",
     "define_field_idx": 27,
@@ -675,7 +675,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "RA_TYPE",
+    "define_field_name": "ra_type",
     "define_field_kor_name": "난간_재질",
     "define_field_type": "text",
     "define_field_idx": 28,
@@ -700,7 +700,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "LGT_TYPE",
+    "define_field_name": "lgt_type",
     "define_field_kor_name": "조명시설_종류",
     "define_field_type": "text",
     "define_field_idx": 29,
@@ -750,7 +750,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DIS_TYPE",
+    "define_field_name": "dis_type",
     "define_field_kor_name": "장애인편익시설_종류",
     "define_field_type": "text",
     "define_field_idx": 31,
@@ -800,7 +800,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "FA_TYPE",
+    "define_field_name": "fa_type",
     "define_field_kor_name": "부대시설_종류",
     "define_field_type": "text",
     "define_field_idx": 33,

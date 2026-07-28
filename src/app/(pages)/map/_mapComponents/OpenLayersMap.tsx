@@ -40,7 +40,7 @@ import {
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useFeatureIdentify } from './hooks/useFeatureIdentify';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
-import { getAddressFromCoord } from './addressSearch/vworldAddressSearch';
+import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
 import { collectOpenScanLayerTableNames } from '@/lib/mapServiceOpened';
 import {
@@ -664,12 +664,17 @@ export default function OpenLayersMap({
             const row = jijukResult?.features?.[0]?.data;
             const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
             const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
+            // 지적 jibun은 「1-3」「1-3잡」처럼 짧은 경우가 많음 — 전체 주소는 브이월드 역지오코딩 결과를 우선
+            const parcelJibunLooksFull =
+              parcelJibun.length >= 8 &&
+              /(도|특별|광역|자치)/u.test(parcelJibun) &&
+              /(읍|면|동|리)/u.test(parcelJibun);
             setAddressInfoDetail((prev) =>
               prev
                 ? {
                     ...prev,
                     pnu: prev.pnu ?? (pnu || null),
-                    jibun: prev.jibun ?? (parcelJibun || null),
+                    jibun: prev.jibun ?? (parcelJibunLooksFull ? parcelJibun : null),
                   }
                 : null
             );
@@ -682,20 +687,38 @@ export default function OpenLayersMap({
         setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null));
         return;
       }
-      getAddressFromCoord(lon, lat, { apiKey }).then((result) => {
-        setAddressInfoDetail((prev) =>
-          prev
-            ? {
-                ...prev,
-                loading: false,
-                pnu: prev.pnu ?? (result?.pnu?.trim() || null),
-                jibun: result?.jibun ?? null,
-                road: result?.road ?? null,
-                buildingName: result?.buildingName ?? null,
-              }
-            : null
-        );
-      });
+      getAddressFromCoord(lon, lat, { apiKey })
+        .then(async (result) => {
+          let roadText = result?.road?.trim() || '';
+          if (!roadText) {
+            const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
+            roadText = roadOnly?.road?.trim() || '';
+          }
+          // 역지오코딩 ROAD=NOT_FOUND 인 경우 — 지번으로 검색 API에서 road 보강
+          if (!roadText) {
+            const jibunHint = result?.jibun?.trim() || '';
+            if (jibunHint) {
+              roadText =
+                (await findRoadAddressByJibun(jibunHint, { apiKey, lon, lat }))?.trim() || '';
+            }
+          }
+          setAddressInfoDetail((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  loading: false,
+                  pnu: prev.pnu ?? (result?.pnu?.trim() || null),
+                  // 브이월드 법정동 전체 주소를 지적 짧은 지번보다 우선
+                  jibun: result?.jibun?.trim() || prev.jibun || null,
+                  road: roadText || prev.road || null,
+                  buildingName: result?.buildingName?.trim() || prev.buildingName || null,
+                }
+              : null
+          );
+        })
+        .catch(() => {
+          setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
+        });
     },
     [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );

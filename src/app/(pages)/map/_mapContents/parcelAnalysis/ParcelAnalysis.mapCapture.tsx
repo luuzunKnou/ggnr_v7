@@ -75,11 +75,6 @@ export function resolveParcelAnalysisCaptureHomeView(wkt5181: string): ParcelAna
   return home;
 }
 
-export function clearParcelAnalysisCaptureHomeViewCache(wkt5181?: string): void {
-  if (wkt5181) homeViewCache.delete(wkt5181.trim());
-  else homeViewCache.clear();
-}
-
 /** 디코드 실패·WMS 오류 응답 시 빈 타일 대체 — Next 개발 오버레이 EncodingError 방지 */
 export const MAP_CAPTURE_TRANSPARENT_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ZQAAAAASUVORK5CYII=';
@@ -168,7 +163,8 @@ export async function loadMapCaptureImage(
 export async function loadWmsCapturePost(
   img: HTMLImageElement,
   src: string,
-  onFail?: () => void
+  onFail?: () => void,
+  networkRetries = 1
 ): Promise<void> {
   const fallback = () => {
     onFail?.();
@@ -180,28 +176,46 @@ export async function loadWmsCapturePost(
     return;
   }
 
-  try {
-    const url = new URL(src);
-    const baseUrl = url.origin + url.pathname;
-    const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-      cache: 'no-store',
-    });
-    if (!res.ok) {
+  const postOnce = async (): Promise<'ok' | 'retry' | 'fail'> => {
+    try {
+      const url = new URL(src);
+      const baseUrl = url.origin + url.pathname;
+      const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        cache: 'no-store',
+      });
+      if (!res.ok) return 'retry';
+      const contentType = res.headers.get('content-type') ?? '';
+      if (/xml|text\/html|text\/plain/i.test(contentType)) return 'fail';
+      const blob = await res.blob();
+      if (await isWmsErrorPayload(blob)) return 'fail';
+      if (!(await isImageBlob(blob))) return 'fail';
+      const blobUrl = URL.createObjectURL(blob);
+      img.crossOrigin = 'anonymous';
+      img.onload = () => URL.revokeObjectURL(blobUrl);
+      img.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        fallback();
+      };
+      img.src = blobUrl;
+      return 'ok';
+    } catch {
+      return 'retry';
+    }
+  };
+
+  let left = networkRetries;
+  while (true) {
+    const result = await postOnce();
+    if (result === 'ok') return;
+    if (result === 'fail' || left <= 0) {
       fallback();
       return;
     }
-    const contentType = res.headers.get('content-type') ?? '';
-    if (/xml|text\/html|text\/plain/i.test(contentType)) {
-      fallback();
-      return;
-    }
-    await applyValidatedImageBlob(img, await res.blob(), onFail);
-  } catch {
-    fallback();
+    left -= 1;
   }
 }
 
@@ -399,15 +413,26 @@ function ParcelAnalysisMapCaptureInner({
   const [captureVisible, setCaptureVisible] = useState<boolean | null>(hideOnFailure ? null : true);
   const [preparing, setPreparing] = useState(true);
   const visible = useMapCaptureWhenVisible(rootRef);
+  const lastCaptureSessionRef = useRef<string | null>(null);
 
   const captureKey = [
     layerIds?.join('|') ?? '',
     wmsLayerKeys?.join('|') ?? '',
     showSatellite ? 'sat' : '',
+    Object.entries(wmsLayerGeomTypes ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}:${v}`)
+      .join('|'),
   ].join(';');
+  const captureSessionKey = `${wkt5181.trim()}|${captureKey}`;
 
   useEffect(() => {
     if (!visible) return;
+    if (lastCaptureSessionRef.current === captureSessionKey) return;
+
+    setWmsNotice(null);
+    setPreparing(true);
+    if (hideOnFailure) setCaptureVisible(null);
 
     const basicDefs = layerIds?.length ? resolveBasicMapLayersForCapture(layerIds) : [];
     const basicWmsKeys = basicDefs.filter((d) => d.wmsLayer).map((d) => d.wmsLayer!);
@@ -417,7 +442,10 @@ function ParcelAnalysisMapCaptureInner({
       ? sortLayerNamesForWmsStack(facilityKeys, wmsLayerGeomTypes ?? {})
       : sortLayerNamesForWmsStack(basicWmsKeys, {});
     const hasRenderable = useSatellite || wmsKeys.length > 0 || basicDefs.length > 0;
-    if (!hasRenderable || !wkt5181.trim()) return;
+    if (!hasRenderable || !wkt5181.trim()) {
+      setPreparing(false);
+      return;
+    }
 
     const mapContainer = document.createElement('div');
     mapContainer.style.width = `${PARCEL_ANALYSIS_CAPTURE_SIZE[0]}px`;
@@ -436,6 +464,8 @@ function ParcelAnalysisMapCaptureInner({
     let cancelled = false;
     let composed = false;
     let fallbackTimer = 0;
+    let wmsFailed = false;
+    let failedWmsKeys: string[] = [];
 
     const teardownMap = () => {
       if (map) {
@@ -471,7 +501,13 @@ function ParcelAnalysisMapCaptureInner({
 
       paintParcelAnalysisCaptureOverlay(map, canvas, home.displayGeom);
       if (hideOnFailure) setCaptureVisible(true);
+      lastCaptureSessionRef.current = captureSessionKey;
       setPreparing(false);
+      if (wmsFailed && !hideOnFailure) {
+        setWmsNotice(
+          `GeoServer 레이어(${failedWmsKeys.join(', ')})를 불러오지 못했습니다. 위 지도는 항공·분석영역만 표시됩니다.`
+        );
+      }
       teardownMap();
     };
 
@@ -516,11 +552,10 @@ function ParcelAnalysisMapCaptureInner({
             imageLoadFunction: (image: ImageWrapper, src: string) => {
               const img = image.getImage() as HTMLImageElement;
               void loadWmsCapturePost(img, src, () => {
-                if (cancelled || hideOnFailure) return;
-                setWmsNotice(
-                  `GeoServer 레이어(${wmsKeys.join(', ')})를 불러오지 못했습니다. 항공·분석영역만 표시됩니다.`
-                );
-                // 실패해도 항공·노란영역은 보여야 하므로 합성 진행
+                if (cancelled) return;
+                wmsFailed = true;
+                failedWmsKeys = wmsKeys;
+                // 실패해도 항공·노란영역은 보여야 하므로 합성 진행 (안내는 합성 완료 후)
                 scheduleCompose();
               });
             },
@@ -564,7 +599,7 @@ function ParcelAnalysisMapCaptureInner({
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
       teardownMap();
     };
-  }, [visible, wkt5181, captureKey, geoserverUrl, workspace, layerIds, wmsLayerKeys, wmsLayerGeomTypes, showSatellite, hideOnFailure]);
+  }, [visible, captureSessionKey, geoserverUrl, workspace, hideOnFailure]);
 
   if (hideOnFailure && captureVisible === false) return null;
 
@@ -583,10 +618,11 @@ function ParcelAnalysisMapCaptureInner({
           aspectRatio: `${PARCEL_ANALYSIS_CAPTURE_SIZE[0]} / ${PARCEL_ANALYSIS_CAPTURE_SIZE[1]}`,
         }}
       />
-      {preparing || !visible ? (
+      {visible && preparing ? (
         <p className="mb-2 text-[11px] text-slate-400">지도 캡처 준비 중…</p>
+      ) : !preparing && wmsNotice ? (
+        <p className="mb-2 text-[11px] text-amber-700">{wmsNotice}</p>
       ) : null}
-      {wmsNotice ? <p className="mb-2 text-[11px] text-amber-700">{wmsNotice}</p> : null}
     </div>
   );
 }

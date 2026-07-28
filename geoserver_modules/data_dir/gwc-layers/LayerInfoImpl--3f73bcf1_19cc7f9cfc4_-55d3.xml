@@ -9,26 +9,10 @@
   </mimeFormats>
   <gridSubsets>
     <gridSubset>
-      <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4297232518880635E7</double>
-          <double>4346027.31681158</double>
-          <double>1.4359580355073173E7</double>
-          <double>4413188.0865415735</double>
-        </coords>
-      </extent>
+      <gridSetName>EPSG:4326</gridSetName>
     </gridSubset>
     <gridSubset>
-      <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>128.4342249232112</double>
-          <double>36.32929749984947</double>
-          <double>128.99430506504655</double>
-          <double>36.81382514329081</double>
-        </coords>
-      </extent>
+      <gridSetName>EPSG:900913</gridSetName>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>landown_ranch</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

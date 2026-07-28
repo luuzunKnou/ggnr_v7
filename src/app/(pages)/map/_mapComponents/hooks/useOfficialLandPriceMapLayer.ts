@@ -82,30 +82,6 @@ function formatPriceLabel(priceNum: number | null | undefined): string {
   return `${priceNum.toLocaleString('ko-KR')}원/㎡`;
 }
 
-async function fetchCachedLandPricesByPnu(
-  pnus: string[]
-): Promise<Record<string, { pblntf_pclnd: number | null }>> {
-  if (!pnus.length) return {};
-  try {
-    const res = await call('', 'POST', {
-      service: 'jijukLandAttrService',
-      action: 'getJijukLandAttrsByPnus',
-      params: { pnus },
-    });
-    const payload = (res?.data ?? res) as {
-      rows?: Record<string, { pblntf_pclnd?: unknown }>;
-    };
-    const rows = payload?.rows ?? {};
-    const out: Record<string, { pblntf_pclnd: number | null }> = {};
-    for (const [pnu, row] of Object.entries(rows)) {
-      const num = Number(row?.pblntf_pclnd);
-      out[pnu] = { pblntf_pclnd: Number.isFinite(num) ? num : null };
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
 
 /**
  * 공시지가 토글 시 bbox 내 jijuk 필지 + VWorld 공시지가를 OpenLayers 벡터·텍스트로 표시.
@@ -193,20 +169,10 @@ export function useOfficialLandPriceMapLayer(
 
       const geoJson = new GeoJSON();
       const withGeom = parcels.filter((p) => p.geom && String(p.pnu ?? '').trim());
-      const pnuList = withGeom.map((row) => String(row.pnu ?? '').trim());
-      const cachedPrices = await fetchCachedLandPricesByPnu(pnuList);
 
       const priced = await mapWithConcurrency(withGeom, PRICE_CONCURRENCY, async (row) => {
         const pnu = String(row.pnu ?? '').trim();
         const jibun = formatJibun(row.jibun);
-        const cached = cachedPrices[pnu];
-        if (cached?.pblntf_pclnd != null) {
-          return {
-            row,
-            jibun,
-            priceLabel: formatPriceLabel(cached.pblntf_pclnd),
-          };
-        }
         if (!vworldKey) {
           return { row, jibun, priceLabel: '-' };
         }

@@ -146,6 +146,7 @@ export function RoadLedgerListPanel({ onClose }: Props) {
           const width = Math.abs(xmax - xmin);
           const height = Math.abs(ymax - ymin);
           if (width < 2 && height < 2) {
+            if (!map) return;
             scheduleFitMapToExtent3857(map, [xmin, ymin, xmax, ymax], {
               maxZoom: 12,
               pointZoom: 12,
@@ -153,6 +154,7 @@ export function RoadLedgerListPanel({ onClose }: Props) {
             });
             return;
           }
+          if (!map) return;
           scheduleFitMapToExtent3857(map, [xmin, ymin, xmax, ymax], {
             maxZoom: 13,
             applyMapViewPadding: () => c?.applyMapViewPaddingRef?.current?.(),

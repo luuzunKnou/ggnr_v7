@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { Loader2, Minus, X, AlertTriangle } from 'lucide-react';
 import { SyncDetailModal } from './SyncDetailModal';
 import { extractFolderPartsFromPath } from './parseShpFolderMeta';
+import { requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 
 type StepStatus = 'pending' | 'running' | 'created' | 'existed' | 'fail' | 'sync';
 
@@ -51,6 +52,8 @@ type FileLogEntry = {
   removeCount?: number;
   syncData?: SyncData;
   error?: string;
+  /** 실제 이력(layer_detail_history) row 키. 처리 시작 전 eager하게 생성되어, 정합성 검증 모달을 열 때 sync_log와 이력을 연결하는 데 쓰인다. */
+  dhKey?: number;
 };
 
 type PreStatus = { table: boolean; layer: boolean; style: boolean; define: boolean; geometryType?: string };
@@ -139,7 +142,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
   }, [fileLogs]);
 
   const postProcessOneFile = useCallback(
-    async (pathOrResult: string, fileName: string, logIndex: number, pre?: PreStatus, group?: string): Promise<FileLogEntry> => {
+    async (pathOrResult: string, fileName: string, logIndex: number, pre?: PreStatus, group?: string, dhKey?: number): Promise<FileLogEntry> => {
       const entry: FileLogEntry = {
         file: fileName,
         shpPath: pathOrResult,
@@ -147,6 +150,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
         layer: 'pending',
         style: 'pending',
         define: 'pending',
+        dhKey,
       };
       const baseName = fileName
         .replace(/\.shp$/i, '')
@@ -163,6 +167,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
           syncData: entry.syncData,
           shpPath: entry.shpPath,
           error: entry.error,
+          dhKey: entry.dhKey,
         });
       };
 
@@ -221,7 +226,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
           const cmpRes = await call('', 'POST', {
             service: 'shpUploadService',
             action: 'compareShpWithTable',
-            params: { pathOrResult },
+            params: { pathOrResult, ...(dhKey != null ? { dhKey } : {}) },
           });
           const cmp = cmpRes?.data ?? cmpRes;
           if (cmp?.success) {
@@ -357,52 +362,64 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
     [updateFileLog]
   );
 
-  const saveHistory = useCallback(async (results: FileLogEntry[], folderMemo?: string) => {
-    try {
-      const successCount = results.filter(
-        (r) => r.table !== 'fail' && r.layer !== 'fail' && r.style !== 'fail' && r.define !== 'fail'
-      ).length;
-      const failCount = results.length - successCount;
-      const contents = folderMemo ?? '';
-
-      const histRes = await call('', 'POST', {
-        service: 'layerHistoryService',
-        action: 'createLayerHistory',
-        params: {
-          contents: contents.length > 500 ? contents.slice(0, 497) + '…' : contents,
-          successCount,
-          failCount,
-        },
-      });
-      const hd = histRes?.data ?? histRes;
-      if (hd?.lhKey) {
-        const details = results.map((r) => {
-          const allOk =
-            r.table !== 'fail' && r.table !== 'sync' && r.layer !== 'fail' && r.style !== 'fail' && r.define !== 'fail';
-          let type = '신규';
-          if (r.table === 'existed') type = '동일';
-          else if (r.table === 'sync' || (r.appendCount || r.conflictCount || r.removeCount)) type = '정합성 검증';
-          else if (r.oldData != null && r.oldData > 0) type = '업데이트';
-          return {
-            group: r.group ?? '',
-            name: r.file.replace(/\.shp$/i, ''),
-            type,
+  /**
+   * lhKey/dhKey는 처리 시작 전에 이미 eager하게 생성되어 있다(runProcess 참고).
+   * 여기서는 각 파일의 최종 처리 결과를 해당 dhKey/lhKey row에 UPDATE로 반영만 한다.
+   */
+  const finalizeHistory = useCallback(async (results: FileLogEntry[], lhKey?: number) => {
+    for (const r of results) {
+      if (!r.dhKey) continue;
+      const allOk =
+        r.table !== 'fail' && r.table !== 'sync' && r.layer !== 'fail' && r.style !== 'fail' && r.define !== 'fail';
+      let type = '신규';
+      if (r.table === 'existed') type = '동일';
+      else if (r.table === 'sync' || (r.appendCount || r.conflictCount || r.removeCount)) type = '정합성 검증';
+      else if (r.oldData != null && r.oldData > 0) type = '업데이트';
+      try {
+        await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'updateDetailCounts',
+          params: {
+            dhKey: r.dhKey,
             oldData: r.oldData ?? 0,
             newData: r.newData ?? 0,
             appendCount: r.appendCount ?? 0,
             conflictCount: r.conflictCount ?? 0,
             removeCount: r.removeCount ?? 0,
-            contents: allOk ? '업데이트 완료' : r.table === 'sync' ? '정합성 검증 대기' : (r.error ?? '실패'),
-            result: allOk ? '성공' : r.table === 'sync' ? '대기' : '실패',
-            shpPath: r.shpPath ?? '',
-          };
+          },
         });
         await call('', 'POST', {
           service: 'layerHistoryService',
-          action: 'createLayerDetailHistoryBatch',
-          params: { lhKey: hd.lhKey, details },
+          action: 'updateDetailResult',
+          params: {
+            dhKey: r.dhKey,
+            type,
+            result: allOk ? '성공' : r.table === 'sync' ? '대기' : '실패',
+            contents: allOk
+              ? (r.table === 'existed' && !(r.appendCount || r.conflictCount || r.removeCount)
+                ? '변경 없음'
+                : '업데이트 완료')
+              : r.table === 'sync'
+                ? '정합성 검증 대기'
+                : (r.error ?? '실패'),
+          },
         });
+      } catch {
+        /* ignore */
       }
+    }
+
+    if (!lhKey) return;
+    try {
+      const successCount = results.filter(
+        (r) => r.table !== 'fail' && r.layer !== 'fail' && r.style !== 'fail' && r.define !== 'fail'
+      ).length;
+      const failCount = results.length - successCount;
+      await call('', 'POST', {
+        service: 'layerHistoryService',
+        action: 'updateLayerHistory',
+        params: { lhKey, successCount, failCount },
+      });
     } catch {
       /* ignore */
     }
@@ -482,6 +499,20 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
       const { memo: parsedMemo } = extractFolderPartsFromPath(shpRows[0]?.pathOrResult ?? rp);
       const folderMemo = workName?.trim() || parsedMemo;
 
+      // 이력(lh) row를 처리 시작 전에 먼저 만들어 lhKey를 확보 — 정합성 검증 충돌을
+      // 실시간으로 처리할 때도 실제 이력에 연결될 수 있도록 함. 실패해도 처리는 계속 진행.
+      const historyContents = (folderMemo ?? '').length > 500 ? (folderMemo ?? '').slice(0, 497) + '…' : (folderMemo ?? '');
+      let lhKey: number | undefined;
+      try {
+        const histRes = await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'createLayerHistory',
+          params: { contents: historyContents, successCount: 0, failCount: 0 },
+        });
+        const hd = histRes?.data ?? histRes;
+        lhKey = hd?.lhKey;
+      } catch { /* ignore */ }
+
       for (let i = 0; i < shpRows.length; i++) {
         const row = shpRows[i];
         setPostProgress({ current: i + 1, total: shpRows.length });
@@ -493,14 +524,29 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
           geometryType: row.geometryType,
         };
         const { group } = extractFolderPartsFromPath(row.pathOrResult);
-        const result = await postProcessOneFile(row.pathOrResult, row.sourceFile, i, pre, group);
+
+        let dhKey: number | undefined;
+        if (lhKey) {
+          try {
+            const draftRes = await call('', 'POST', {
+              service: 'layerHistoryService',
+              action: 'createLayerDetailHistoryDraft',
+              params: { lhKey, group, name: row.sourceFile.replace(/\.shp$/i, ''), type: '진행중', shpPath: row.pathOrResult },
+            });
+            const dd = draftRes?.data ?? draftRes;
+            dhKey = dd?.dhKey;
+          } catch { /* ignore */ }
+        }
+
+        const result = await postProcessOneFile(row.pathOrResult, row.sourceFile, i, pre, group, dhKey);
         result.group = group;
         results[i] = result;
       }
 
       setPostProgress(null);
       setFinished(true);
-      await saveHistory(results, folderMemo);
+      await finalizeHistory(results, lhKey);
+      requestShpHistoryRefresh();
       await saveLogFile(results, rp);
       onSuccess?.();
     } catch (e: unknown) {
@@ -508,7 +554,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
     } finally {
       setPostProcessing(false);
     }
-  }, [relativePath, workName, postProcessOneFile, saveHistory, saveLogFile, onSuccess]);
+  }, [relativePath, workName, postProcessOneFile, finalizeHistory, saveLogFile, onSuccess]);
 
   useEffect(() => {
     if (!open) {
@@ -740,7 +786,7 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
 
       {syncModalOpen && syncModalTable && (
         <SyncDetailModal
-          dhKey={0}
+          dhKey={fileLogs[syncModalTable.logIndex]?.dhKey ?? 0}
           tableName={syncModalTable.tableName}
           shpPath={syncModalTable.shpPath ?? null}
           pendingOnly

@@ -103,6 +103,8 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
             url: GEOSERVER_DEFAULT_URL,
             geometryType: row.shpType || undefined,
             group: row.group || undefined,
+            defineSchema: row.defineSchema,
+            schemaMismatchAction: row.schemaMismatchAction,
           },
         })
         const data = res?.data ?? res
@@ -110,7 +112,14 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
           setError(data?.error ?? `"${row.tableName}" 자동 수정 실패`)
           return
         }
-        setSuccessMsg(`"${row.tableName}" 자동 수정 완료`)
+        const isRemnantDrop =
+          row.issues.includes("temp_sync_table") ||
+          (row.issues.includes("schema_mismatch") && row.schemaMismatchAction === "drop")
+        setSuccessMsg(
+          isRemnantDrop
+            ? `"${row.tableName}" 잔여 테이블 삭제 완료`
+            : `"${row.tableName}" 자동 수정 완료`
+        )
         await loadIssues()
       } catch (e) {
         setError(e instanceof Error ? e.message : "자동 수정 실패")
@@ -142,6 +151,8 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
             url: GEOSERVER_DEFAULT_URL,
             geometryType: row.shpType || undefined,
             group: row.group || undefined,
+            defineSchema: row.defineSchema,
+            schemaMismatchAction: row.schemaMismatchAction,
           },
         })
         const data = res?.data ?? res
@@ -266,7 +277,11 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
                               ? row.missingFields.join(", ")
                               : issue === "define_code" && row.missingCodeFields.length > 0
                                 ? row.missingCodeFields.join(", ")
-                                : undefined
+                                : issue === "schema_mismatch" && row.defineSchema
+                                  ? row.schemaMismatchAction === "drop"
+                                    ? `잘못된 스키마 잔여 삭제 (${row.schema}, 정의=${row.defineSchema})`
+                                    : `${row.schema} → ${row.defineSchema}`
+                                  : undefined
                           }
                         />
                       ))}
@@ -281,7 +296,15 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
                       disabled={fixingKey === row.rowKey || bulkFixing}
                       onClick={() => void fixOne(row)}
                     >
-                      {fixingKey === row.rowKey ? "수정 중" : "자동 수정"}
+                      {fixingKey === row.rowKey
+                        ? row.issues.includes("temp_sync_table") ||
+                          row.schemaMismatchAction === "drop"
+                          ? "삭제 중"
+                          : "수정 중"
+                        : row.issues.includes("temp_sync_table") ||
+                            row.schemaMismatchAction === "drop"
+                          ? "삭제"
+                          : "자동 수정"}
                     </Button>
                   </td>
                 </tr>

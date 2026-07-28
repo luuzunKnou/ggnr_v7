@@ -528,6 +528,66 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "tl_sgco_rnadr_mst",
+    "define_table_kor_name": "tl_sgco_rnadr_mst",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "tl_sgco_rnadr_mst_gun",
+    "define_table_kor_name": "tl_sgco_rnadr_mst_gun",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "tl_sgco_rnadr_mst_number",
+    "define_table_kor_name": "tl_sgco_rnadr_mst_number",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "tl_sprd_intrvl_temp",
+    "define_table_kor_name": "tl_sprd_intrvl_temp",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "tl_sprd_manage_temp",
+    "define_table_kor_name": "tl_sprd_manage_temp",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "ufl_gman_ps",
     "define_table_kor_name": "천연가스맨홀",
     "define_table_shp_type": "POINT",
@@ -546,6 +606,30 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "개간농지대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_photo_ps",
+    "define_table_kor_name": "wtl_photo_ps",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "공공측량",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_review_as",
+    "define_table_kor_name": "wtl_review_as",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "공공측량",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
@@ -7577,18 +7661,6 @@
     "define_table_etc": "VWorld 필지정보 캐시",
     "define_table_schema": "public_layer",
     "define_table_source": "excel"
-  },
-  {
-    "define_table_name": "tl_sgco_rnadr_mst",
-    "define_table_kor_name": "건물 , 건물군",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "행정경계",
-    "define_table_idx": "1",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp"
   },
   {
     "define_table_name": "tl_spbd_entrc",

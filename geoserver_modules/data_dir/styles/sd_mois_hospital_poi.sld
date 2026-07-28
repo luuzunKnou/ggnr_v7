@@ -10,10 +10,16 @@
               <sld:Mark>
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
+<<<<<<<< HEAD:geoserver_modules/data_dir/styles/20260420_ad_junghwajo_02.sld
+                  <sld:CssParameter name="fill">#E91E63</sld:CssParameter>
+                  <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
+========
                   <sld:CssParameter name="fill">#2196F3</sld:CssParameter>
+>>>>>>>> 657bc7923f851f05152341d58f5db8a9b9472a0d:geoserver_modules/data_dir/styles/sd_mois_hospital_poi.sld
                 </sld:Fill>
                 <sld:Stroke>
                   <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
+                  <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
                   <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>

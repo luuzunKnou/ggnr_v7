@@ -34,7 +34,7 @@
     "define_field_type": "TEXT",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
-    "define_field_is_key": "true",
+    "define_field_is_key": "false",
     "define_field_show_search_detail": "false",
     "define_field_max_length": "0",
     "define_field_idx": "",
@@ -50,7 +50,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "OPERT_DE",
+    "define_field_name": "opert_de",
     "define_field_kor_name": "작업일시",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -75,7 +75,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RW_SN",
+    "define_field_name": "rw_sn",
     "define_field_kor_name": "실폭도로일련번호",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -84,7 +84,7 @@
     "define_field_type": "TEXT",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
-    "define_field_is_key": "false",
+    "define_field_is_key": "true",
     "define_field_show_search_detail": "false",
     "define_field_max_length": "0",
     "define_field_idx": "",
@@ -100,7 +100,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "SIG_CD",
+    "define_field_name": "sig_cd",
     "define_field_kor_name": "시군구코드",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -134,7 +134,7 @@
     "define_field_show_list": true,
     "define_field_show_detail": true,
     "define_field_read_only": false,
-    "define_field_is_key": false,
+    "define_field_is_key": "false",
     "define_field_show_search_detail": false,
     "define_field_max_length": "",
     "define_field_sort_idx": "",

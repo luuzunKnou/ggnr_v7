@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -250,7 +250,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DIRECTION",
+    "define_field_name": "direction",
     "define_field_kor_name": "방향",
     "define_field_type": "text",
     "define_field_idx": 11,
@@ -300,7 +300,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "UDDI",
+    "define_field_name": "uddi",
     "define_field_kor_name": "상하단구분",
     "define_field_type": "text",
     "define_field_idx": 13,
@@ -325,7 +325,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "TYPE",
+    "define_field_name": "type",
     "define_field_kor_name": "깎기비탈면 종류",
     "define_field_type": "text",
     "define_field_idx": 14,

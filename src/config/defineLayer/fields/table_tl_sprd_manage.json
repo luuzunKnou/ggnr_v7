@@ -1,6 +1,6 @@
 [
   {
-    "define_field_name": "ALWNC_DE",
+    "define_field_name": "alwnc_de",
     "define_field_kor_name": "부여일자",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -25,7 +25,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ALWNC_RESN",
+    "define_field_name": "alwnc_resn",
     "define_field_kor_name": "부여사유",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -50,7 +50,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "BSI_INT",
+    "define_field_name": "bsi_int",
     "define_field_kor_name": "기초간격",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -75,7 +75,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ENG_RN",
+    "define_field_name": "eng_rn",
     "define_field_kor_name": "영문도로명",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -134,7 +134,7 @@
     "define_field_type": "TEXT",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
-    "define_field_is_key": "true",
+    "define_field_is_key": "false",
     "define_field_show_search_detail": "false",
     "define_field_max_length": "0",
     "define_field_idx": "",
@@ -150,7 +150,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "MVM_RES_CD",
+    "define_field_name": "mvm_res_cd",
     "define_field_kor_name": "이동사유코드",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -175,7 +175,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "MVMN_DE",
+    "define_field_name": "mvmn_de",
     "define_field_kor_name": "이동일자",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -200,7 +200,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "MVMN_RESN",
+    "define_field_name": "mvmn_resn",
     "define_field_kor_name": "이동사유",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -225,7 +225,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "NTFC_DE",
+    "define_field_name": "ntfc_de",
     "define_field_kor_name": "고시일자",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -250,7 +250,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "OPERT_DE",
+    "define_field_name": "opert_de",
     "define_field_kor_name": "작업일시",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -275,7 +275,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RBP_CN",
+    "define_field_name": "rbp_cn",
     "define_field_kor_name": "기점",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -300,7 +300,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RDS_DPN_SE",
+    "define_field_name": "rds_dpn_se",
     "define_field_kor_name": "도로구간종속구분",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -325,7 +325,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RDS_MAN_NO",
+    "define_field_name": "rds_man_no",
     "define_field_kor_name": "도로구간일련번호",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -334,7 +334,7 @@
     "define_field_type": "TEXT",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
-    "define_field_is_key": "false",
+    "define_field_is_key": "true",
     "define_field_show_search_detail": "false",
     "define_field_max_length": "0",
     "define_field_idx": "",
@@ -350,7 +350,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "REP_CN",
+    "define_field_name": "rep_cn",
     "define_field_kor_name": "종점",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -375,7 +375,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RN",
+    "define_field_name": "rn",
     "define_field_kor_name": "도로명",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -400,7 +400,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RN_CD",
+    "define_field_name": "rn_cd",
     "define_field_kor_name": "도로명코드",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -425,7 +425,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ROA_CLS_SE",
+    "define_field_name": "roa_cls_se",
     "define_field_kor_name": "도로법적위계",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -450,7 +450,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ROAD_BT",
+    "define_field_name": "road_bt",
     "define_field_kor_name": "도로폭",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -475,7 +475,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ROAD_LT",
+    "define_field_name": "road_lt",
     "define_field_kor_name": "도로길이",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -500,7 +500,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "SIG_CD",
+    "define_field_name": "sig_cd",
     "define_field_kor_name": "시군구코드",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -525,7 +525,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "WDR_RD_CD",
+    "define_field_name": "wdr_rd_cd",
     "define_field_kor_name": "광역도로구분코드",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -559,7 +559,7 @@
     "define_field_show_list": true,
     "define_field_show_detail": true,
     "define_field_read_only": false,
-    "define_field_is_key": false,
+    "define_field_is_key": "false",
     "define_field_show_search_detail": false,
     "define_field_max_length": "",
     "define_field_sort_idx": "",

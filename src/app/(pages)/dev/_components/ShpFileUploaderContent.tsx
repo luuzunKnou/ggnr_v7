@@ -63,7 +63,7 @@ export function ShpFileUploaderContent() {
           className="absolute inset-0 flex flex-col"
           style={{ display: activeTab === 'history' ? 'flex' : 'none' }}
         >
-          <ShpHistoryTab />
+          <ShpHistoryTab active={activeTab === 'history'} />
         </div>
       </div>
     </div>

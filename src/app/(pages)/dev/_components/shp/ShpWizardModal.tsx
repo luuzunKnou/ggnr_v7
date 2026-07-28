@@ -18,9 +18,16 @@ import { parseShpFolderName } from './parseShpFolderMeta';
 import { type FolderPickFile } from './pickShpFolderFiles';
 import { SyncDetailModal } from './SyncDetailModal';
 import { isShpSyncDetailModalTarget } from './shpModalLayers';
+import { requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ShpCrsCandidateModal, type ShpCrsCandidate } from './ShpCrsCandidateModal';
 import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared';
+import { LayerAttrManager } from '../LayerAttrManager';
 import * as XLSX from 'xlsx';
+
+const KEY_FIELD_ERROR_MARKERS = ['key 필드가 설정되어 있지 않습니다', '테이블에 존재하지 않습니다'];
+function isKeyFieldFixableError(error?: string): boolean {
+  return !!error && KEY_FIELD_ERROR_MARKERS.some((marker) => error.includes(marker));
+}
 
 type EpsgSource = 'prj' | 'folder' | 'candidate' | 'manual' | null;
 
@@ -32,6 +39,8 @@ type LayerRow = {
   schemaDetail?: string;
   epsg?: number | null;
   epsgSource?: EpsgSource;
+  /** 자동 탐지 시도가 끝났는지(성공/실패 무관). epsg가 null이어도 이 값이 true면 더 이상 로딩 중이 아니라 수동 입력 대기 상태다. */
+  crsChecked?: boolean;
 };
 
 
@@ -62,10 +71,13 @@ type ConsistencyRow = {
   pathOrResult: string;
   tableName: string;
   isNew: boolean;
+  /** 최초 비교 결과 — 목록 표시용 (모달 반영 후에도 유지) */
   appendCount: number;
   conflictCount: number;
   removeCount: number;
   unchangedCount: number;
+  /** 남은 미결 합계 — «반영·검토 필요» / 다음 단계 판정용 */
+  pendingRemaining: number;
   error?: string;
 };
 
@@ -74,8 +86,20 @@ function tableNameFromShpPath(pathOrResult: string, sourceFile: string): string 
   return base.replace(/\.shp$/i, '');
 }
 
+function lookupDhKey(
+  map: Record<string, number>,
+  tableName: string
+): number | undefined {
+  if (map[tableName] != null) return map[tableName];
+  const lower = tableName.toLowerCase();
+  for (const [k, v] of Object.entries(map)) {
+    if (k.toLowerCase() === lower) return v;
+  }
+  return undefined;
+}
+
 function consistencyNeedsReview(row: ConsistencyRow): boolean {
-  return !row.error && !row.isNew && row.appendCount + row.conflictCount + row.removeCount > 0;
+  return !row.error && !row.isNew && row.pendingRemaining > 0;
 }
 
 type ReportRow = {
@@ -117,8 +141,8 @@ async function fetchTableRowCount(tableName: string): Promise<number> {
 function buildSyncSummary(append: number, updated: number, kept: number, removed: number): string {
   const parts: string[] = [];
   if (append > 0) parts.push(`추가 ${append}`);
-  if (updated > 0) parts.push(`변경반영 ${updated}`);
-  if (kept > 0) parts.push(`DB유지 ${kept}`);
+  if (updated > 0) parts.push(`SHP 반영 ${updated}`);
+  if (kept > 0) parts.push(`DB 유지 ${kept}`);
   if (removed > 0) parts.push(`삭제 ${removed}`);
   return parts.length > 0 ? parts.join(' · ') : '변경 없음';
 }
@@ -131,16 +155,99 @@ function epsgSummaryText(layers: LayerRow[]): string {
   return `혼재 (${uniq.map((e) => `EPSG:${e}`).join(', ')})`;
 }
 
-function parseGeomTypeForReport(g: unknown): string | null {
+function parseGeomMetaForReport(g: unknown): {
+  hasGeom: boolean;
+  type: string | null;
+  hash: string | null;
+  srs: string | null;
+} {
+  if (g == null) return { hasGeom: false, type: null, hash: null, srs: null };
   let obj: Record<string, unknown> | null = null;
-  if (g == null) return null;
   if (typeof g === 'string') {
-    try { obj = JSON.parse(g) as Record<string, unknown>; } catch { return null; }
-  } else if (typeof g === 'object') {
+    try { obj = JSON.parse(g) as Record<string, unknown>; } catch {
+      return { hasGeom: false, type: null, hash: null, srs: null };
+    }
+  } else if (typeof g === 'object' && !Array.isArray(g)) {
     obj = g as Record<string, unknown>;
   }
-  const t = obj?.type;
-  return typeof t === 'string' ? t.toUpperCase() : null;
+  if (!obj) return { hasGeom: false, type: null, hash: null, srs: null };
+  const type = typeof obj.type === 'string' ? obj.type.toUpperCase() : null;
+  const hash = typeof obj.hash === 'string' ? obj.hash : null;
+  const srs = typeof obj.srs === 'string' && obj.srs.trim() ? obj.srs.trim().toUpperCase() : null;
+  const hasGeom =
+    type != null
+    || hash != null
+    || obj._meta === true
+    || 'coordinates' in obj
+    || 'geometries' in obj;
+  return { hasGeom, type, hash, srs };
+}
+
+function normalizeGeomForReportDiff(g: unknown): unknown {
+  if (g == null || typeof g !== 'object' || Array.isArray(g)) return g;
+  const obj = { ...(g as Record<string, unknown>) };
+  delete obj.srs;
+  return obj;
+}
+
+/** Key값 자연 정렬: "2" < "10" < "11", "A2" < "A10" */
+function compareKeyValuesNatural(a: string, b: string): number {
+  return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' });
+}
+
+/**
+ * geom 메타 기반 변경 표시 (좌표 본문 없이).
+ * 도형 추가·삭제 / 유형 변경 / 좌표 변경 / 좌표계만 변경 — 전·후 칸을 비대칭으로.
+ */
+function buildGeomDiffForReport(
+  opLabel: string,
+  keyField: string,
+  keyValue: string,
+  oldGeom: unknown,
+  newGeom: unknown,
+): SyncDiffRow | null {
+  const o = parseGeomMetaForReport(oldGeom);
+  const n = parseGeomMetaForReport(newGeom);
+  if (!o.hasGeom && !n.hasGeom) return null;
+
+  const base = { op: opLabel, keyField, keyValue, field: 'geom' as const };
+
+  if (!o.hasGeom && n.hasGeom) {
+    return {
+      ...base,
+      oldVal: '-',
+      newVal: n.type ? `도형 추가 (${n.type})` : '도형 추가',
+    };
+  }
+  if (o.hasGeom && !n.hasGeom) {
+    return {
+      ...base,
+      oldVal: o.type ? `도형 삭제 (${o.type})` : '도형 삭제',
+      newVal: '-',
+    };
+  }
+
+  if (o.type && n.type && o.type !== n.type) {
+    return { ...base, oldVal: o.type, newVal: n.type };
+  }
+
+  const contentChanged =
+    JSON.stringify(normalizeGeomForReportDiff(oldGeom)) !==
+    JSON.stringify(normalizeGeomForReportDiff(newGeom));
+  const hashChanged = !!(o.hash && n.hash && o.hash !== n.hash);
+  const srsChanged = (o.srs ?? '') !== (n.srs ?? '');
+
+  if (hashChanged || contentChanged) {
+    return { ...base, oldVal: '(기존)', newVal: '좌표 변경' };
+  }
+  if (srsChanged) {
+    return {
+      ...base,
+      oldVal: o.srs ?? '(없음)',
+      newVal: n.srs ? `${n.srs} (좌표계만 변경)` : '(없음) (좌표계만 변경)',
+    };
+  }
+  return null;
 }
 
 function stringifyRowSummary(data: Record<string, unknown> | null): string {
@@ -167,7 +274,7 @@ function buildSyncDiffRowsForReport(log: Record<string, unknown>): SyncDiffRow[]
     return [{ op: '삭제', keyField, keyValue, field: '(삭제 행)', oldVal: stringifyRowSummary(old), newVal: '-' }];
   }
 
-  const opLabel = op === 'kept' ? 'DB유지' : '변경반영';
+  const opLabel = op === 'kept' ? 'DB 유지' : 'SHP 반영';
   const oldData = old ?? {};
   const newData = nw ?? {};
   const changed = Object.keys(oldData).filter(
@@ -181,15 +288,8 @@ function buildSyncDiffRowsForReport(log: Record<string, unknown>): SyncDiffRow[]
     oldVal: oldData[f] == null ? '' : String(oldData[f]),
     newVal: newData[f] == null ? '' : String(newData[f]),
   }));
-  if (JSON.stringify(oldData.geom) !== JSON.stringify(newData.geom)) {
-    const oldGeomType = parseGeomTypeForReport(oldData.geom);
-    const newGeomType = parseGeomTypeForReport(newData.geom);
-    if (oldGeomType && newGeomType && oldGeomType !== newGeomType) {
-      rows.push({ op: opLabel, keyField, keyValue, field: 'geom', oldVal: oldGeomType, newVal: newGeomType });
-    } else {
-      rows.push({ op: opLabel, keyField, keyValue, field: 'geom', oldVal: '좌표 변경', newVal: '좌표 변경' });
-    }
-  }
+  const geomRow = buildGeomDiffForReport(opLabel, keyField, keyValue, oldData.geom, newData.geom);
+  if (geomRow) rows.push(geomRow);
   if (rows.length === 0) {
     rows.push({ op: opLabel, keyField, keyValue, field: '-', oldVal: '-', newVal: '-' });
   }
@@ -207,17 +307,6 @@ function sanitizeSheetName(name: string, used: Set<string>): string {
   }
   used.add(candidate);
   return candidate;
-}
-
-function syncLogAppliedInSession(log: Record<string, unknown>, sessionStartedAt: number): boolean {
-  if (log.sl_rolled_back === true) return false;
-  const op = log.sl_operation;
-  if (!op || typeof op !== 'string') return false;
-  const appliedRaw = log.sl_applied_at;
-  if (!appliedRaw) return false;
-  const appliedAt = new Date(String(appliedRaw)).getTime();
-  if (Number.isNaN(appliedAt)) return false;
-  return appliedAt >= sessionStartedAt - 60_000;
 }
 
 const SHP_EXTENSIONS = new Set([
@@ -325,11 +414,23 @@ export function ShpWizardModal({
   const folderInputRef = useRef<HTMLInputElement>(null);
   const workNameRef = useRef('');
   const consistencyStartedRef = useRef(false);
+  /** 같은 테이블에 대한 정합성 검증(ogr2ogr import)이 겹쳐 실행되어 임시 테이블 락 대기로 멈추는 것을 방지 */
+  const inFlightChecksRef = useRef<Map<string, Promise<ConsistencyRow>>>(new Map());
   const step1NextClickRef = useRef(0);
   const step3NextClickRef = useRef(0);
-  const sessionStartedAtRef = useRef(Date.now());
   const oldRowCountsRef = useRef<Record<string, number>>({});
+  /** 최초 정합성 비교 건수. 목록 표시·이력 확정용 (모달 닫기 후 pending으로 덮지 않음) */
+  const initialCompareCountsRef = useRef<
+    Record<
+      string,
+      { appendCount: number; conflictCount: number; removeCount: number; unchangedCount: number }
+    >
+  >({});
   const syncLogsByTableRef = useRef<Record<string, Array<Record<string, unknown>>>>({});
+  /** 이력(lh) row 키. 정합성 검증 시작 시 eager하게 생성되어 sync_log와 이력을 연결하는 데 쓰인다. */
+  const wizardLhKeyRef = useRef<number | undefined>(undefined);
+  /** 테이블명 → 상세 이력(dh) row 키. 정합성 검증 시작 시 statusRows 전체에 대해 eager하게 생성됨. */
+  const dhKeyByTableRef = useRef<Record<string, number>>({});
   const { upload, reset, state: uploadState } = useChunkedUpload();
 
   const [step, setStep] = useState(1);
@@ -367,9 +468,14 @@ export function ShpWizardModal({
   const [consistencyRows, setConsistencyRows] = useState<ConsistencyRow[]>([]);
   const [consistencyChecking, setConsistencyChecking] = useState(false);
   const [consistencyDone, setConsistencyDone] = useState(false);
+  const [keyFieldModalTable, setKeyFieldModalTable] = useState<string | null>(null);
   const [componentSetupRunning, setComponentSetupRunning] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [syncModalTarget, setSyncModalTarget] = useState<{ tableName: string; shpPath: string } | null>(null);
+  const [syncModalTarget, setSyncModalTarget] = useState<{
+    tableName: string;
+    shpPath: string;
+    sourceSrsOverride?: string;
+  } | null>(null);
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportLoaded, setReportLoaded] = useState(false);
@@ -378,13 +484,8 @@ export function ShpWizardModal({
   const folderInputId = 'shp-wizard-folder-input';
 
   useEffect(() => {
-    if (open) sessionStartedAtRef.current = Date.now();
-  }, [open]);
-
-  useEffect(() => {
     workNameRef.current = workName;
   }, [workName]);
-
   const applyFolderMeta = useCallback((folderName: string) => {
     const meta = parseShpFolderName(folderName);
     const name = meta.workName ?? '';
@@ -439,7 +540,10 @@ export function ShpWizardModal({
     setReportLoading(false);
     setReportLoaded(false);
     oldRowCountsRef.current = {};
+    initialCompareCountsRef.current = {};
     syncLogsByTableRef.current = {};
+    wizardLhKeyRef.current = undefined;
+    dhKeyByTableRef.current = {};
     reset();
   }, [reset]);
 
@@ -499,69 +603,199 @@ export function ShpWizardModal({
     return (data?.rows ?? []) as ShpStatusRow[];
   }, []);
 
+  /** 배치(lh) 이력 키가 없으면 생성 */
+  const ensureWizardLhKey = useCallback(async (): Promise<number | undefined> => {
+    if (wizardLhKeyRef.current) return wizardLhKeyRef.current;
+    try {
+      const contents = workNameRef.current || '';
+      const histRes = await call('', 'POST', {
+        service: 'layerHistoryService',
+        action: 'createLayerHistory',
+        params: {
+          contents: contents.length > 500 ? contents.slice(0, 497) + '…' : contents,
+          successCount: 0,
+          failCount: 0,
+        },
+      });
+      const hd = histRes?.data ?? histRes;
+      if (hd?.lhKey) {
+        wizardLhKeyRef.current = hd.lhKey as number;
+        return wizardLhKeyRef.current;
+      }
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }, []);
+
+  /** 테이블별 상세이력 초안 — 유지/반영 시 sync_log에 dhKey가 붙도록 비교·모달 전에 확보 */
+  const ensureDhKeyForTable = useCallback(async (params: {
+    tableName: string;
+    shpPath?: string;
+    group?: string;
+    korName?: string;
+  }): Promise<number | undefined> => {
+    const tableName = String(params.tableName ?? '').trim();
+    if (!tableName) return undefined;
+    const existing = lookupDhKey(dhKeyByTableRef.current, tableName);
+    if (existing) return existing;
+    const lhKey = await ensureWizardLhKey();
+    if (!lhKey) return undefined;
+    try {
+      const draftRes = await call('', 'POST', {
+        service: 'layerHistoryService',
+        action: 'createLayerDetailHistoryDraft',
+        params: {
+          lhKey,
+          name: tableName,
+          type: '진행중',
+          shpPath: params.shpPath,
+          group: params.group,
+          korName: params.korName,
+        },
+      });
+      const dd = draftRes?.data ?? draftRes;
+      if (dd?.dhKey) {
+        const dhKey = dd.dhKey as number;
+        dhKeyByTableRef.current[tableName] = dhKey;
+        dhKeyByTableRef.current[tableName.toLowerCase()] = dhKey;
+        return dhKey;
+      }
+    } catch {
+      /* ignore */
+    }
+    return lookupDhKey(dhKeyByTableRef.current, tableName);
+  }, [ensureWizardLhKey]);
+
+  const performSingleRowCheck = useCallback(async (row: ShpStatusRow): Promise<ConsistencyRow> => {
+    const tableName = tableNameFromShpPath(row.pathOrResult, row.sourceFile);
+    if (!row.table) {
+      return {
+        sourceFile: row.sourceFile,
+        pathOrResult: row.pathOrResult,
+        tableName,
+        isNew: true,
+        appendCount: 0,
+        conflictCount: 0,
+        removeCount: 0,
+        unchangedCount: 0,
+        pendingRemaining: 0,
+        error: '테이블 없음 — 2단계에서 구성요소를 먼저 생성하세요.',
+      };
+    }
+    if (!(row.pathOrResult in oldRowCountsRef.current)) {
+      oldRowCountsRef.current[row.pathOrResult] = await fetchTableRowCount(tableName);
+    }
+    const layerRow = layers.find((l) => l.name.toLowerCase() === row.sourceFile.toLowerCase());
+    // 비교 전 초안 확보 — 이후 유지 선택 시 sl_dh_key가 NULL로 남지 않음
+    const dhKeyBefore = await ensureDhKeyForTable({
+      tableName,
+      shpPath: row.pathOrResult,
+    });
+    const res = await call('', 'POST', {
+      service: 'shpUploadService',
+      action: 'compareShpWithTable',
+      params: {
+        pathOrResult: row.pathOrResult,
+        sourceSrsOverride: layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined,
+        ...(dhKeyBefore != null ? { dhKey: dhKeyBefore } : {}),
+      },
+    });
+    const d = res?.data ?? res;
+    const resolvedTableName =
+      typeof d?.tableName === 'string' && d.tableName ? d.tableName : tableName;
+    // sync_log 테이블명(정규화)과 이력 name 불일치 방지
+    if (resolvedTableName !== tableName && dhKeyBefore != null) {
+      dhKeyByTableRef.current[resolvedTableName] = dhKeyBefore;
+      dhKeyByTableRef.current[resolvedTableName.toLowerCase()] = dhKeyBefore;
+    } else if (!lookupDhKey(dhKeyByTableRef.current, resolvedTableName)) {
+      await ensureDhKeyForTable({
+        tableName: resolvedTableName,
+        shpPath: row.pathOrResult,
+      });
+    }
+    if (!d?.success) {
+      return {
+        sourceFile: row.sourceFile,
+        pathOrResult: row.pathOrResult,
+        tableName: resolvedTableName,
+        isNew: false,
+        appendCount: 0,
+        conflictCount: 0,
+        removeCount: 0,
+        unchangedCount: 0,
+        pendingRemaining: 0,
+        error: typeof d?.error === 'string' ? d.error : '정합성 검증 실패',
+      };
+    }
+    const appendCount = d.appendCount ?? 0;
+    const conflictCount = d.conflictCount ?? 0;
+    const removeCount = d.removeCount ?? 0;
+    const unchangedCount = d.unchangedCount ?? 0;
+    const pendingRemaining = appendCount + conflictCount + removeCount;
+    const counts = { appendCount, conflictCount, removeCount, unchangedCount };
+    initialCompareCountsRef.current[tableName] = counts;
+    initialCompareCountsRef.current[resolvedTableName] = counts;
+    initialCompareCountsRef.current[tableName.toLowerCase()] = counts;
+    initialCompareCountsRef.current[resolvedTableName.toLowerCase()] = counts;
+
+    // A: 비교 성공 즉시 상세이력에 이전·추가·변경·삭제 저장 (4단계/ref에만 의존하지 않음)
+    const dhKey =
+      dhKeyBefore
+      ?? lookupDhKey(dhKeyByTableRef.current, resolvedTableName);
+    if (dhKey) {
+      const oldData = oldRowCountsRef.current[row.pathOrResult] ?? 0;
+      try {
+        await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'updateDetailCounts',
+          params: {
+            dhKey,
+            oldData,
+            appendCount,
+            conflictCount,
+            removeCount,
+          },
+        });
+      } catch { /* 이력 숫자 저장 실패가 비교 성공을 막지 않음 */ }
+    }
+
+    return {
+      sourceFile: row.sourceFile,
+      pathOrResult: row.pathOrResult,
+      tableName: resolvedTableName,
+      isNew: false,
+      appendCount,
+      conflictCount,
+      removeCount,
+      unchangedCount,
+      pendingRemaining,
+    };
+  }, [layers, ensureDhKeyForTable]);
+
+  const checkSingleRow = useCallback((row: ShpStatusRow): Promise<ConsistencyRow> => {
+    const tableName = tableNameFromShpPath(row.pathOrResult, row.sourceFile);
+    const existing = inFlightChecksRef.current.get(tableName);
+    if (existing) return existing;
+    const promise = performSingleRowCheck(row).finally(() => {
+      inFlightChecksRef.current.delete(tableName);
+    });
+    inFlightChecksRef.current.set(tableName, promise);
+    return promise;
+  }, [performSingleRowCheck]);
+
   const runConsistencyCheck = useCallback(async () => {
-    if (statusRows.length === 0) return;
+    if (statusRows.length === 0 || consistencyChecking) return;
     setLayersError(null);
     setConsistencyChecking(true);
     setConsistencyDone(false);
     setConsistencyRows([]);
     try {
+      // 3단계 진입 시 배치·상세 이력 초안을 먼저 만들어 유지/반영에 dhKey가 붙게 함
+      await ensureWizardLhKey();
       const results: ConsistencyRow[] = [];
       for (const row of statusRows) {
-        const tableName = tableNameFromShpPath(row.pathOrResult, row.sourceFile);
-        if (!row.table) {
-          results.push({
-            sourceFile: row.sourceFile,
-            pathOrResult: row.pathOrResult,
-            tableName,
-            isNew: true,
-            appendCount: 0,
-            conflictCount: 0,
-            removeCount: 0,
-            unchangedCount: 0,
-            error: '테이블 없음 — 2단계에서 구성요소를 먼저 생성하세요.',
-          });
-          continue;
-        }
-        if (!(row.pathOrResult in oldRowCountsRef.current)) {
-          oldRowCountsRef.current[row.pathOrResult] = await fetchTableRowCount(tableName);
-        }
-        const layerRow = layers.find((l) => l.name.toLowerCase() === row.sourceFile.toLowerCase());
-        const res = await call('', 'POST', {
-          service: 'shpUploadService',
-          action: 'compareShpWithTable',
-          params: {
-            pathOrResult: row.pathOrResult,
-            sourceSrsOverride: layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined,
-          },
-        });
-        const d = res?.data ?? res;
-        const resolvedTableName =
-          typeof d?.tableName === 'string' && d.tableName ? d.tableName : tableName;
-        if (!d?.success) {
-          results.push({
-            sourceFile: row.sourceFile,
-            pathOrResult: row.pathOrResult,
-            tableName: resolvedTableName,
-            isNew: false,
-            appendCount: 0,
-            conflictCount: 0,
-            removeCount: 0,
-            unchangedCount: 0,
-            error: typeof d?.error === 'string' ? d.error : '정합성 검증 실패',
-          });
-        } else {
-          results.push({
-            sourceFile: row.sourceFile,
-            pathOrResult: row.pathOrResult,
-            tableName: resolvedTableName,
-            isNew: false,
-            appendCount: d.appendCount ?? 0,
-            conflictCount: d.conflictCount ?? 0,
-            removeCount: d.removeCount ?? 0,
-            unchangedCount: d.unchangedCount ?? 0,
-          });
-        }
+        results.push(await checkSingleRow(row));
       }
       setConsistencyRows(results);
       setConsistencyDone(true);
@@ -570,11 +804,93 @@ export function ShpWizardModal({
     } finally {
       setConsistencyChecking(false);
     }
-  }, [statusRows, layers]);
+  }, [statusRows, checkSingleRow, consistencyChecking, ensureWizardLhKey]);
 
-  const openSyncReview = useCallback((row: ConsistencyRow) => {
-    setSyncModalTarget({ tableName: row.tableName, shpPath: row.pathOrResult });
+  const openSyncReview = useCallback(async (row: ConsistencyRow) => {
+    const layerRow = layers.find((l) => l.name.toLowerCase() === row.sourceFile.toLowerCase());
+    await ensureDhKeyForTable({
+      tableName: row.tableName,
+      shpPath: row.pathOrResult,
+    });
+    setSyncModalTarget({
+      tableName: row.tableName,
+      shpPath: row.pathOrResult,
+      sourceSrsOverride: layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined,
+    });
     setSyncModalOpen(true);
+  }, [layers, ensureDhKeyForTable]);
+
+  const recheckRowByTableName = useCallback(async (tableName: string) => {
+    const statusRow = statusRows.find(
+      (r) => tableNameFromShpPath(r.pathOrResult, r.sourceFile) === tableName
+    );
+    if (!statusRow) return;
+    const updated = await checkSingleRow(statusRow);
+    setConsistencyRows((prev) =>
+      prev.map((r) => (r.pathOrResult === updated.pathOrResult ? updated : r))
+    );
+    setConsistencyDone((prev) => {
+      if (!prev) return prev;
+      const next = consistencyRows.map((r) =>
+        r.pathOrResult === updated.pathOrResult ? updated : r
+      );
+      return next.every((r) => !r.error && (r.isNew || !consistencyNeedsReview(r)));
+    });
+  }, [statusRows, checkSingleRow, consistencyRows]);
+
+  /**
+   * 정합성 모달 닫은 뒤 미결만 갱신.
+   * 목록의 추가·변경·삭제·동일은 최초 비교 결과를 유지한다.
+   */
+  const refreshConsistencyRowFromLogs = useCallback(async (tableName: string) => {
+    const countPending = async (op: 'new' | 'conflict' | 'delete') => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'getSyncLogs',
+          params: {
+            tableName,
+            pendingOnly: true,
+            currentSessionOnly: true,
+            countOnly: true,
+            opFilters: [op],
+            page: 1,
+            limit: 1,
+          },
+        });
+        const d = res?.data ?? res;
+        return typeof d?.total === 'number' ? d.total : 0;
+      } catch {
+        return 0;
+      }
+    };
+    const [pendingAppend, pendingConflict, pendingRemove] = await Promise.all([
+      countPending('new'),
+      countPending('conflict'),
+      countPending('delete'),
+    ]);
+    const pendingRemaining = pendingAppend + pendingConflict + pendingRemove;
+    const initial =
+      initialCompareCountsRef.current[tableName]
+      ?? initialCompareCountsRef.current[tableName.toLowerCase()];
+    setConsistencyRows((prev) =>
+      prev.map((r) => {
+        if (r.tableName.toLowerCase() !== tableName.toLowerCase()) return r;
+        return {
+          ...r,
+          ...(initial
+            ? {
+                appendCount: initial.appendCount,
+                conflictCount: initial.conflictCount,
+                removeCount: initial.removeCount,
+                unchangedCount: initial.unchangedCount,
+              }
+            : {}),
+          pendingRemaining,
+          error: undefined,
+        };
+      })
+    );
   }, []);
 
   const copyRemark = useCallback((text: string, key: string) => {
@@ -592,7 +908,6 @@ export function ShpWizardModal({
     }
     setReportLoading(true);
     setLayersError(null);
-    const sessionStartedAt = sessionStartedAtRef.current;
     try {
       const defineMap = new Map<string, { group: string; korName: string }>();
       try {
@@ -616,8 +931,10 @@ export function ShpWizardModal({
 
       const rows: ReportRow[] = [];
       for (const status of statusRows) {
-        const tableName = tableNameFromShpPath(status.pathOrResult, status.sourceFile);
+        const pathTableName = tableNameFromShpPath(status.pathOrResult, status.sourceFile);
         const consistency = consistencyRows.find((r) => r.pathOrResult === status.pathOrResult);
+        // 비교 API가 정규화한 테이블명 우선 (경로 basename과 다를 수 있음)
+        const tableName = (consistency?.tableName?.trim() || pathTableName);
         const layerMeta = layers.find((l) => l.name.toLowerCase() === status.sourceFile.toLowerCase());
         const isNewLayer = layerMeta?.schemaStatus === 'new';
         const componentsOk = status.table && status.layer && status.style && status.define;
@@ -626,31 +943,130 @@ export function ShpWizardModal({
         let syncUpdated = 0;
         let syncKept = 0;
         let syncRemoved = 0;
+        let pendingCount = 0;
+        let hasCompareCounts = false;
+        let compareDiffTotal = 0;
+        let initial:
+          | { appendCount: number; conflictCount: number; removeCount: number; unchangedCount: number }
+          | undefined;
         if (!isNewLayer && status.table) {
-          const syncRes = await call('', 'POST', {
-            service: 'shpUploadService',
-            action: 'getSyncLogs',
-            params: { tableName },
-          });
-          const syncData = syncRes?.data ?? syncRes;
-          const logs: Array<Record<string, unknown>> = syncData?.success ? (syncData.rows ?? []) : [];
-          const appliedLogs = logs.filter((log) => syncLogAppliedInSession(log, sessionStartedAt));
-          syncLogsByTableRef.current[tableName] = appliedLogs;
-          for (const log of appliedLogs) {
-            const op = String(log.sl_operation ?? '');
-            if (op === 'append') syncAppend++;
-            else if (op === 'conflict') syncUpdated++;
-            else if (op === 'kept') syncKept++;
-            else if (op === 'remove') syncRemoved++;
+          // 추가·변경·삭제 열(countPatch)용 최초 비교 건수. 업데이트 내용 문구는 실제 반영 결과(sync_log) 사용.
+          initial =
+            initialCompareCountsRef.current[tableName]
+            ?? initialCompareCountsRef.current[tableName.toLowerCase()]
+            ?? initialCompareCountsRef.current[pathTableName]
+            ?? initialCompareCountsRef.current[pathTableName.toLowerCase()];
+          if (initial) {
+            hasCompareCounts = true;
+            compareDiffTotal = initial.appendCount + initial.conflictCount + initial.removeCount;
+          }
+
+          const dhKey =
+            lookupDhKey(dhKeyByTableRef.current, tableName)
+            ?? lookupDhKey(dhKeyByTableRef.current, pathTableName);
+          try {
+            const syncRes = await call('', 'POST', {
+              service: 'shpUploadService',
+              action: 'getSyncLogs',
+              params: {
+                tableName,
+                ...(dhKey ? { dhKey } : { currentSessionOnly: true }),
+                includeCounts: true,
+                page: 1,
+                limit: 1,
+                light: true,
+                includeTotal: false,
+              },
+            });
+            const syncData = syncRes?.data ?? syncRes;
+            if (syncData?.success && syncData.counts) {
+              const c = syncData.counts;
+              pendingCount = c.pending ?? 0;
+              const a = c.append ?? 0;
+              const u = c.updated ?? 0;
+              const k = c.kept ?? 0;
+              const r = c.remove ?? 0;
+              // 실제 의도/반영 건수가 있을 때만 sync_log 사용. 빈 counts는 fallback을 막지 않음
+              if (a + u + k + r > 0) {
+                syncAppend = a;
+                syncUpdated = u;
+                syncKept = k;
+                syncRemoved = r;
+              } else if (initial) {
+                syncAppend = initial.appendCount;
+                syncRemoved = initial.removeCount;
+                if (pendingCount > 0) {
+                  // 미결이면 충돌을 SHP 반영으로 오인하지 않음
+                  syncUpdated = 0;
+                  syncKept = 0;
+                } else {
+                  syncUpdated = initial.conflictCount;
+                  syncKept = 0;
+                }
+              }
+            } else if (initial) {
+              syncAppend = initial.appendCount;
+              syncUpdated = initial.conflictCount;
+              syncRemoved = initial.removeCount;
+            }
+          } catch {
+            if (initial) {
+              syncAppend = initial.appendCount;
+              syncUpdated = initial.conflictCount;
+              syncRemoved = initial.removeCount;
+            }
+          }
+
+          const appliedTotal = syncAppend + syncUpdated + syncKept + syncRemoved;
+          const EXCEL_LOG_CAP = 2000;
+          if (appliedTotal > 0 && appliedTotal <= EXCEL_LOG_CAP) {
+            try {
+              const listRes = await call('', 'POST', {
+                service: 'shpUploadService',
+                action: 'getSyncLogs',
+                params: {
+                  tableName,
+                  ...(dhKey ? { dhKey } : { currentSessionOnly: true }),
+                  light: true,
+                  page: 1,
+                  limit: Math.min(EXCEL_LOG_CAP, Math.max(appliedTotal, 1)),
+                  includeTotal: false,
+                },
+              });
+              const listData = listRes?.data ?? listRes;
+              const logs: Array<Record<string, unknown>> = listData?.success ? (listData.rows ?? []) : [];
+              syncLogsByTableRef.current[tableName] = logs.filter(
+                (log) => !!log.sl_operation && log.sl_rolled_back !== true
+              );
+            } catch {
+              syncLogsByTableRef.current[tableName] = [];
+            }
+          } else {
+            syncLogsByTableRef.current[tableName] = [];
           }
         }
 
         const rowCount = componentsOk ? await fetchTableRowCount(tableName) : null;
         const oldRowCount = oldRowCountsRef.current[status.pathOrResult] ?? (isNewLayer ? 0 : null);
         const defineMeta = defineMap.get(tableName.toLowerCase());
+        // 비교 추가·변경·삭제 0 → «변경 없음». 미결·비교 건수가 있으면 0으로 «변경 없음» 처리하지 않음.
+        const appliedDiff = syncAppend + syncUpdated + syncRemoved;
         const syncSummary = isNewLayer
           ? '신규 레이어 import'
-          : buildSyncSummary(syncAppend, syncUpdated, syncKept, syncRemoved);
+          : hasCompareCounts && compareDiffTotal === 0
+            ? '변경 없음'
+            : appliedDiff + syncKept > 0
+              ? buildSyncSummary(syncAppend, syncUpdated, syncKept, syncRemoved)
+              : pendingCount > 0
+                ? `미결 ${pendingCount}`
+                : compareDiffTotal > 0 && initial
+                  ? buildSyncSummary(
+                      initial.appendCount,
+                      initial.conflictCount,
+                      0,
+                      initial.removeCount
+                    )
+                  : '변경 없음';
         const hasError = !!consistency?.error || !componentsOk;
         const remark = consistency?.error
           ?? (!componentsOk ? 'Table·Layer·Style·Define 구성 미완료' : '');
@@ -800,10 +1216,10 @@ export function ShpWizardModal({
       const d = res?.data ?? res;
       const batchResults: Array<{
         file: string;
-        table: { success: boolean; skipped?: boolean; error?: string };
-        layer: { success: boolean; skipped?: boolean; error?: string };
-        style: { success: boolean; skipped?: boolean; error?: string };
-        define: { success: boolean; skipped?: boolean; error?: string };
+        table: { success: boolean; error?: string };
+        layer: { success: boolean; error?: string };
+        style: { success: boolean; error?: string };
+        define: { success: boolean; error?: string };
       }> = d?.results ?? [];
 
       const pathSet = new Set(statusRows.map((r) => r.pathOrResult.replace(/\\/g, '/')));
@@ -815,74 +1231,26 @@ export function ShpWizardModal({
       }
       setStatusRows(rows);
 
-      const failCount = batchResults.filter(
+      const failed = batchResults.filter(
         (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
-      ).length;
-      const needAfter = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
-      const allReady = rows.length > 0 && rows.every((r) => r.table && r.layer && r.style && r.define);
-      // #region agent log
-      fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
-        body: JSON.stringify({
-          sessionId: '1c82ab',
-          runId: 'pre-fix',
-          hypothesisId: 'A-E',
-          location: 'ShpWizardModal.tsx:runComponentSetup:after',
-          message: 'component setup finished',
-          data: {
-            resKeys: res && typeof res === 'object' ? Object.keys(res as object) : [],
-            dKeys: d && typeof d === 'object' ? Object.keys(d as object) : [],
-            dSuccess: d?.success ?? null,
-            dError: d?.error ?? null,
-            resultCount: batchResults.length,
-            failCount,
-            needAfter: needAfter.length,
-            allReady,
-            failedSample: batchResults
-              .filter((r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success)
-              .slice(0, 5)
-              .map((r) => ({ file: r.file, table: r.table, layer: r.layer, style: r.style, define: r.define })),
-            statusSample: rows.slice(0, 5).map((r) => ({
-              file: r.sourceFile,
-              table: r.table,
-              layer: r.layer,
-              style: r.style,
-              define: r.define,
-            })),
-            stillNeedSample: needAfter.slice(0, 5).map((r) => ({
-              file: r.sourceFile,
-              table: r.table,
-              layer: r.layer,
-              style: r.style,
-              define: r.define,
-            })),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      if (failCount > 0) {
-        const failed = batchResults.filter(
-          (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
-        );
-        const firstErr =
-          failed
-            .flatMap((r) => [
-              !r.table.success ? r.table.error : null,
-              !r.layer.success ? r.layer.error : null,
-              !r.style.success ? r.style.error : null,
-              !r.define.success ? r.define.error : null,
-            ])
-            .find((e): e is string => !!e?.trim())
-            ?.replace(/\s+/g, ' ')
-            .trim() ?? '';
-        const tableOnly =
-          failed.length > 0 && failed.every((r) => !r.table.success);
+      );
+      if (failed.length > 0) {
+        const detail = failed
+          .slice(0, 5)
+          .map((r) => {
+            const parts: string[] = [];
+            if (!r.table.success && r.table.error) parts.push(`Table: ${r.table.error}`);
+            if (!r.layer.success && r.layer.error) parts.push(`Layer: ${r.layer.error}`);
+            if (!r.style.success && r.style.error) parts.push(`Style: ${r.style.error}`);
+            if (!r.define.success && r.define.error) parts.push(`Define: ${r.define.error}`);
+            const name = r.file?.replace(/^.*[/\\]/, '') || '(파일)';
+            const msg = parts[0]?.replace(/\s+/g, ' ').slice(0, 160) || '실패';
+            return `${name} — ${msg}`;
+          })
+          .join('\n');
+        const more = failed.length > 5 ? `\n…외 ${failed.length - 5}개` : '';
         setLayersError(
-          tableOnly
-            ? `${failCount}개 파일의 Table 생성에 실패했습니다.${firstErr ? ` ${firstErr}` : ''}`
-            : `${failCount}개 파일의 Table·Layer·Style·Define 생성에 실패했습니다.${firstErr ? ` ${firstErr}` : ''}`
+          `${failed.length}개 파일의 Table·Layer·Style·Define 생성에 실패했습니다.\n${detail}${more}`
         );
       } else if (d?.error) {
         setLayersError(String(d.error));
@@ -968,7 +1336,11 @@ export function ShpWizardModal({
   const fileNameOfPath = (pathOrResult: string) => pathOrResult.split(/[\\/]/).pop() ?? pathOrResult;
 
   const setLayerEpsg = useCallback((fileName: string, epsg: number | null, epsgSource: EpsgSource) => {
-    setLayers((prev) => prev.map((l) => (l.name === fileName ? { ...l, epsg, epsgSource } : l)));
+    setLayers((prev) => prev.map((l) => (l.name === fileName ? { ...l, epsg, epsgSource, crsChecked: true } : l)));
+  }, []);
+
+  const markLayerCrsChecked = useCallback((fileName: string) => {
+    setLayers((prev) => prev.map((l) => (l.name === fileName ? { ...l, crsChecked: true } : l)));
   }, []);
 
   const handleManualEpsgChange = useCallback((fileName: string, value: string) => {
@@ -1029,17 +1401,19 @@ export function ShpWizardModal({
           if (candidates.length > 0) {
             setLayerEpsg(layer.name, candidates[0].epsg, 'candidate');
           } else {
+            markLayerCrsChecked(layer.name);
             setLayersError((prev) => prev ?? `좌표계 자동 탐지 (${layer.name}): 대한민국 경계와 겹치는 후보를 찾지 못했습니다. 직접 입력해주세요.`);
           }
         } catch (e: unknown) {
           if (cancelled) return;
+          markLayerCrsChecked(layer.name);
           setLayersError((prev) => prev ?? `좌표계 자동 탐지 중 오류 (${layer.name}): ${e instanceof Error ? e.message : String(e)}`);
         }
       }
     })();
 
     return () => { cancelled = true; };
-  }, [readyPath, layers.length, folderEpsg, schemaChecking, setLayerEpsg]);
+  }, [readyPath, layers.length, folderEpsg, schemaChecking, setLayerEpsg, markLayerCrsChecked]);
 
   // 행의 "확인" 버튼: 캐시된 후보(없으면 재조회) + 미리보기 도형을 불러와 모달로 확인
   const openCrsModalForFile = useCallback(async (pathOrResult: string, currentEpsg: number | null) => {
@@ -1243,6 +1617,20 @@ export function ShpWizardModal({
       return;
     }
     if (step === 3) {
+      const tableNames = [
+        ...new Set(
+          consistencyRows
+            .map((r) => String(r.tableName ?? '').trim())
+            .filter(Boolean)
+        ),
+      ];
+      if (tableNames.length > 0) {
+        void call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'clearUnappliedSyncLogs',
+          params: { tableNames },
+        }).catch(() => {});
+      }
       setStep(2);
       setConsistencyRows([]);
       setConsistencyDone(false);
@@ -1254,7 +1642,6 @@ export function ShpWizardModal({
     }
     if (step === 2) {
       setStep(1);
-      setReadyPath(null);
       setStatusRows([]);
       setConsistencyRows([]);
       setConsistencyDone(false);
@@ -1264,9 +1651,65 @@ export function ShpWizardModal({
     }
   };
 
-  const handleClose = () => {
+  const abortWizardHistoryIfNeeded = useCallback(async (): Promise<boolean> => {
+    const tableNames = [
+      ...new Set(
+        [
+          ...consistencyRows.map((r) => r.tableName),
+          ...statusRows.map((r) => tableNameFromShpPath(r.pathOrResult, r.sourceFile)),
+        ]
+          .map((n) => String(n ?? '').trim())
+          .filter(Boolean)
+      ),
+    ];
+    const lhKey = wizardLhKeyRef.current;
+    // 3단계 이후(비교·선택 로그) 또는 예전 진행중 이력이 있을 때만 확인
+    if (tableNames.length === 0 && lhKey == null) return true;
+    if (
+      !window.confirm(
+        '이번 작업의 미반영 정합성 비교·선택이 삭제됩니다. 닫으시겠습니까?'
+      )
+    ) {
+      return false;
+    }
+    try {
+      if (tableNames.length > 0) {
+        const res = await call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'clearUnappliedSyncLogs',
+          params: { tableNames },
+        });
+        const d = res?.data ?? res;
+        if (d?.success === false) {
+          alert(typeof d?.error === 'string' ? d.error : '미반영 정합성 로그 정리에 실패했습니다.');
+          return false;
+        }
+      }
+      if (lhKey != null) {
+        const res = await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'abortIncompleteLayerHistory',
+          params: { lhKey },
+        });
+        const d = res?.data ?? res;
+        if (d?.success === false) {
+          alert(typeof d?.error === 'string' ? d.error : '진행 중 이력 취소에 실패했습니다.');
+          return false;
+        }
+      }
+      requestShpHistoryRefresh();
+      return true;
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : String(e));
+      return false;
+    }
+  }, [consistencyRows, statusRows]);
+
+  const handleClose = async () => {
     if (syncModalOpen) return;
     if (uploading || stepBusy || componentSetupRunning || consistencyChecking || schemaChecking) return;
+    const ok = await abortWizardHistoryIfNeeded();
+    if (!ok) return;
     resetForm();
     onOpenChange(false);
   };
@@ -1275,7 +1718,7 @@ export function ShpWizardModal({
     if (nextOpen) return;
     if (syncModalOpen) return;
     if (uploading || stepBusy || componentSetupRunning || consistencyChecking || schemaChecking) return;
-    handleClose();
+    void handleClose();
   };
 
   const blockWizardDismiss = useCallback((event: Event) => {
@@ -1286,6 +1729,11 @@ export function ShpWizardModal({
   const wizardOpen = open && configureVisible;
   const isBusy = uploading || layersLoading || stepBusy || consistencyChecking || componentSetupRunning || schemaChecking;
   const wizardDismissBlocked = isBusy || syncModalOpen;
+
+  const todayYmd = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  })();
 
   const selectedLabel =
     source?.type === 'local'
@@ -1301,6 +1749,9 @@ export function ShpWizardModal({
     schemaValidationDone &&
     layers.every((l) => l.schemaStatus === 'ok' || l.schemaStatus === 'new');
   const crsDetectionDone = layers.length > 0 && layers.every((l) => l.epsg != null);
+  // 탐지 "시도"가 끝났는지(성공/실패 무관). 후보를 못 찾아 수동 입력이 필요한 경우에도 true가 되어,
+  // 진행 현황 스피너가 실제로는 끝났는데 계속 도는(무한로딩처럼 보이는) 문제를 막는다.
+  const crsDetectionAttempted = layers.length > 0 && layers.every((l) => l.crsChecked);
   const step1BasicReady =
     !!source &&
     layers.length > 0 &&
@@ -1323,54 +1774,187 @@ export function ShpWizardModal({
     !hasConsistencyErrors;
   const step3BasicReady = consistencyDone && !consistencyChecking && !syncModalOpen;
 
-  const saveHistory = useCallback(async () => {
+  /**
+   * 4단계 완료: 3단계에서 만든 이력에 의도 확정·결과 문구 갱신.
+   * (배치·상세 초안은 3단계 비교 시 이미 생성됨)
+   */
+  const finalizeHistory = useCallback(async () => {
     if (reportRows.length === 0) return;
-    try {
-      const successCount = reportRows.filter((r) => r.result === '성공').length;
-      const failCount = reportRows.length - successCount;
-      const contents = workNameRef.current || '';
 
-      const histRes = await call('', 'POST', {
-        service: 'layerHistoryService',
-        action: 'createLayerHistory',
-        params: {
-          contents: contents.length > 500 ? contents.slice(0, 497) + '…' : contents,
-          successCount,
-          failCount,
-        },
-      });
-      const hd = histRes?.data ?? histRes;
-      if (hd?.lhKey) {
-        const details = reportRows.map((r) => ({
+    const lhKey = await ensureWizardLhKey();
+    if (!lhKey) {
+      throw new Error('이력 생성에 실패했습니다.');
+    }
+
+    for (const r of reportRows) {
+      const tableName = r.tableName;
+      if (!tableName) continue;
+
+      const status = statusRows.find((s) => s.pathOrResult === r.pathOrResult)
+        ?? statusRows.find(
+          (s) => tableNameFromShpPath(s.pathOrResult, s.sourceFile).toLowerCase() === tableName.toLowerCase()
+        );
+
+      let dhKey = lookupDhKey(dhKeyByTableRef.current, tableName);
+      if (!dhKey) {
+        dhKey = await ensureDhKeyForTable({
+          tableName,
+          shpPath: status?.pathOrResult ?? r.pathOrResult,
           group: r.group || undefined,
-          name: r.tableName,
           korName: r.korName || undefined,
-          type: r.layerType === '신규' ? '신규' : (r.syncAppend || r.syncUpdated || r.syncKept || r.syncRemoved) ? '정합성 검증' : '기존',
-          oldData: r.oldRowCount ?? 0,
-          newData: r.rowCount ?? 0,
-          appendCount: r.syncAppend,
-          conflictCount: r.syncUpdated,
-          removeCount: r.syncRemoved,
-          contents: r.result === '성공' ? (r.syncSummary || '업데이트 완료') : (r.remark || '실패'),
-          result: r.result,
-          shpPath: r.pathOrResult,
-        }));
-        await call('', 'POST', {
-          service: 'layerHistoryService',
-          action: 'createLayerDetailHistoryBatch',
-          params: { lhKey: hd.lhKey, details },
         });
       }
+      if (!dhKey) continue;
+      const layerRow = layers.find((l) => l.name.toLowerCase() === (status?.sourceFile ?? '').toLowerCase());
+      const sourceSrsOverride = layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined;
+
+      let syncAppend = r.syncAppend;
+      let syncUpdated = r.syncUpdated;
+      let syncKept = r.syncKept;
+      let syncRemoved = r.syncRemoved;
+      let commitError: string | undefined;
+
+      if (r.layerType !== '신규' && status?.table) {
+        try {
+          const commitRes = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'commitSyncIntents',
+            params: {
+              tableName,
+              dhKey,
+              shpPath: status.pathOrResult,
+              sourceSrsOverride,
+            },
+          });
+          const cd = commitRes?.data ?? commitRes;
+          if (cd?.success === false) {
+            commitError = typeof cd?.error === 'string' ? cd.error : '정합성 반영 실패';
+          } else {
+            // 이력 문구·건수는 모달과 동일하게 이번 dhKey sync_log 집계를 사용 (과거 kept 합산·rowCount 오차 방지)
+            try {
+              const syncRes = await call('', 'POST', {
+                service: 'shpUploadService',
+                action: 'getSyncLogs',
+                params: {
+                  tableName,
+                  dhKey,
+                  strictDhKey: true,
+                  includeCounts: true,
+                  page: 1,
+                  limit: 1,
+                  light: true,
+                  includeTotal: false,
+                },
+              });
+              const syncData = syncRes?.data ?? syncRes;
+              const c = syncData?.success ? syncData.counts : undefined;
+              if (c && ((c.append ?? 0) + (c.updated ?? 0) + (c.kept ?? 0) + (c.remove ?? 0) > 0)) {
+                syncAppend = c.append ?? 0;
+                syncUpdated = c.updated ?? 0;
+                syncKept = c.kept ?? 0;
+                syncRemoved = c.remove ?? 0;
+              } else {
+                syncAppend = typeof cd?.appendedCount === 'number' ? cd.appendedCount : syncAppend;
+                syncUpdated = typeof cd?.updatedCount === 'number' ? cd.updatedCount : syncUpdated;
+                syncKept = typeof cd?.keptCount === 'number' ? cd.keptCount : syncKept;
+                syncRemoved = typeof cd?.removedCount === 'number' ? cd.removedCount : syncRemoved;
+              }
+            } catch {
+              syncAppend = typeof cd?.appendedCount === 'number' ? cd.appendedCount : syncAppend;
+              syncUpdated = typeof cd?.updatedCount === 'number' ? cd.updatedCount : syncUpdated;
+              syncKept = typeof cd?.keptCount === 'number' ? cd.keptCount : syncKept;
+              syncRemoved = typeof cd?.removedCount === 'number' ? cd.removedCount : syncRemoved;
+            }
+          }
+        } catch (e: unknown) {
+          commitError = e instanceof Error ? e.message : String(e);
+        }
+      }
+
+      const initial =
+        initialCompareCountsRef.current[tableName]
+        ?? initialCompareCountsRef.current[tableName.toLowerCase()];
+      const hasDiff = initial
+        ? initial.appendCount + initial.conflictCount + initial.removeCount > 0
+        : (syncAppend + syncUpdated + syncRemoved > 0);
+      const type = r.layerType === '신규'
+        ? '신규'
+        : hasDiff || syncKept > 0
+          ? '정합성 검증'
+          : '기존';
+      const countPatch = initial
+        ? {
+            appendCount: initial.appendCount,
+            conflictCount: initial.conflictCount,
+            removeCount: initial.removeCount,
+          }
+        : syncAppend + syncUpdated + syncRemoved + syncKept > 0
+          ? {
+              appendCount: syncAppend,
+              conflictCount: syncUpdated + syncKept,
+              removeCount: syncRemoved,
+            }
+          : {};
+      const result = commitError ? '실패' : (r.result === '실패' ? '실패' : '성공');
+      const contents = commitError
+        ? commitError
+        : result === '성공'
+          ? (
+              syncAppend + syncUpdated + syncKept + syncRemoved > 0
+                ? buildSyncSummary(syncAppend, syncUpdated, syncKept, syncRemoved)
+                : (r.syncSummary || '변경 없음')
+            )
+          : (r.remark || '실패');
+      try {
+        await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'updateDetailCounts',
+          params: {
+            dhKey,
+            oldData: r.oldRowCount ?? 0,
+            newData: r.rowCount ?? 0,
+            ...countPatch,
+          },
+        });
+        await call('', 'POST', {
+          service: 'layerHistoryService',
+          action: 'updateDetailResult',
+          params: {
+            dhKey,
+            type,
+            group: r.group || undefined,
+            korName: r.korName || undefined,
+            result,
+            contents,
+          },
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    try {
+      const successCount = reportRows.filter((row) => row.result === '성공').length;
+      const failCount = reportRows.length - successCount;
+      await call('', 'POST', {
+        service: 'layerHistoryService',
+        action: 'updateLayerHistory',
+        params: { lhKey, successCount, failCount },
+      });
     } catch {
       /* ignore */
     }
-  }, [reportRows]);
+  }, [reportRows, statusRows, layers, ensureWizardLhKey, ensureDhKeyForTable]);
 
   const handleComplete = async () => {
     if (step !== 4 || !reportLoaded || reportLoading || completing) return;
     setCompleting(true);
     try {
-      await saveHistory();
+      await finalizeHistory();
+      requestShpHistoryRefresh();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : String(e));
+      return;
     } finally {
       setCompleting(false);
     }
@@ -1412,7 +1996,7 @@ export function ShpWizardModal({
       ['경로', readyPath ?? '-'],
       ['저장 일시', savedAt],
       ['레이어 개수', reportRows.length, '성공', reportSuccessCount, '실패', reportFailCount],
-      ['추가', reportSyncTotals.append, '변경반영', reportSyncTotals.updated, 'DB유지', reportSyncTotals.kept, '삭제', reportSyncTotals.removed],
+      ['추가', reportSyncTotals.append, 'SHP 반영', reportSyncTotals.updated, 'DB 유지', reportSyncTotals.kept, '삭제', reportSyncTotals.removed],
       [],
       ['레이어', '구분', '좌표계', 'Table', 'Layer', 'Style', 'Define', 'DB행', '정합성 처리', '결과', '비고'],
       ...reportRows.map((r) => {
@@ -1442,14 +2026,14 @@ export function ShpWizardModal({
     XLSX.utils.book_append_sheet(wb, ws, '요약');
 
     const usedSheetNames = new Set<string>(['요약']);
-    const opOrder: Record<string, number> = { '추가': 0, '변경반영': 1, 'DB유지': 2, '삭제': 3 };
+    const opOrder: Record<string, number> = { '추가': 0, 'SHP 반영': 1, 'DB 유지': 2, '삭제': 3 };
     for (const r of reportRows) {
       const logs = syncLogsByTableRef.current[r.tableName] ?? [];
       if (logs.length === 0) continue;
       const diffRows = logs.flatMap((log) => buildSyncDiffRowsForReport(log));
       if (diffRows.length === 0) continue;
       diffRows.sort(
-        (a, b) => (opOrder[a.op] ?? 9) - (opOrder[b.op] ?? 9) || a.keyValue.localeCompare(b.keyValue)
+        (a, b) => (opOrder[a.op] ?? 9) - (opOrder[b.op] ?? 9) || compareKeyValuesNatural(a.keyValue, b.keyValue)
       );
       const layerAoa: (string | number)[][] = [
         ['구분', 'Key필드', 'Key값', '변경 필드', '변경 전', '변경 후'],
@@ -1461,15 +2045,17 @@ export function ShpWizardModal({
       XLSX.utils.book_append_sheet(wb, layerWs, sheetName);
     }
 
-    const safeName = (workName || 'shp_upload_result').replace(/[\\/:*?"<>|]/g, '_');
-    XLSX.writeFile(wb, `${safeName}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.xlsx`);
+    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const hm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const safeWork = (workName || 'shp_upload_result').replace(/[\\/:*?"<>|]/g, '_').trim() || 'shp_upload_result';
+    XLSX.writeFile(wb, `${ymd}_${hm}_${safeWork}.xlsx`);
   }, [reportRows, workName, layers, readyPath, reportSuccessCount, reportFailCount, reportSyncTotals]);
 
   return (
     <>
       <Dialog open={wizardOpen} onOpenChange={handleConfigureOpenChange} modal={!syncModalOpen}>
         <DialogContent
-          className="flex h-[700px] max-h-[90vh] w-[1200px] min-w-[1200px] max-w-[95vw] flex-col gap-y-2 overflow-hidden p-4"
+          className="flex h-[740px] max-h-[90vh] w-[1200px] min-w-[1200px] max-w-[95vw] flex-col gap-y-2 overflow-hidden p-4"
           showCloseButton={!wizardDismissBlocked}
           onInteractOutside={blockWizardDismiss}
           onPointerDownOutside={blockWizardDismiss}
@@ -1530,27 +2116,33 @@ export function ShpWizardModal({
                       <span className="text-sm text-muted-foreground">{selectedLabel}</span>
                     )}
                   </div>
-                  {uploading && (
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        <span className="min-w-0 truncate" title={uploadFileName}>
-                          {uploadFileName || '업로드 준비 중…'}
-                        </span>
-                        <span className="shrink-0 tabular-nums">
-                          파일 {folderUploadFileLabel} · 전체 {folderUploadOverall}%
-                          {uploadState.totalChunks > 0
-                            ? ` · 청크 ${uploadState.currentChunk}/${uploadState.totalChunks}`
-                            : ''}
-                        </span>
+                  <div className="min-h-[30px] flex flex-col justify-center">
+                    {uploading ? (
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          <span className="min-w-0 truncate" title={uploadFileName}>
+                            {uploadFileName || '업로드 준비 중…'}
+                          </span>
+                          <span className="shrink-0 tabular-nums">
+                            파일 {folderUploadFileLabel} · 전체 {folderUploadOverall}%
+                            {uploadState.totalChunks > 0
+                              ? ` · 청크 ${uploadState.currentChunk}/${uploadState.totalChunks}`
+                              : ''}
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full bg-primary transition-all duration-150"
+                            style={{ width: `${folderUploadOverall}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full bg-primary transition-all duration-150"
-                          style={{ width: `${folderUploadOverall}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="truncate text-xs text-muted-foreground">
+                        폴더명 규칙: <span className="font-mono">YYYYMMDD_EPSG_그룹명_메모</span> (예: {todayYmd}_5186_행정경계_공용레이어 업데이트) — 날짜/좌표계/그룹은 자동 인식에 쓰입니다.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3 rounded-md border border-gray-200 bg-muted/30 p-3">
@@ -1576,15 +2168,21 @@ export function ShpWizardModal({
                           <span className="text-sm text-muted-foreground">—</span>
                         ) : (
                           <>
-                            {!crsDetectionDone ? (
+                            {!crsDetectionAttempted ? (
                               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-                            ) : (
+                            ) : crsDetectionDone ? (
                               <Check className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-300" />
                             )}
                             <span
                               className={cn(
                                 'text-sm font-medium',
-                                crsDetectionDone ? 'text-green-600 dark:text-green-400' : 'text-foreground'
+                                crsDetectionDone
+                                  ? 'text-green-600 dark:text-green-400'
+                                  : crsDetectionAttempted
+                                    ? 'text-orange-600 dark:text-orange-300'
+                                    : 'text-foreground'
                               )}
                             >
                               {layers.filter((l) => l.epsg != null).length}/{layers.length}개 완료
@@ -1596,7 +2194,7 @@ export function ShpWizardModal({
                   </div>
                 </div>
 
-                <div className="flex min-h-[340px] flex-1 flex-col gap-2 rounded-md border border-gray-200 bg-muted/30 p-3">
+                <div className="flex min-h-[360px] flex-1 flex-col gap-2 rounded-md border border-gray-200 bg-muted/30 p-3">
                   <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                     레이어 목록
@@ -1853,10 +2451,19 @@ export function ShpWizardModal({
                           </td>
                           <td className="max-w-[14rem] px-2 py-1">
                             <div className="min-h-[1.5rem] flex items-center">
-                              {row.error ? (
+                              {row.error && isKeyFieldFixableError(row.error) ? (
                                 <button
                                   type="button"
-                                  onClick={() => copyRemark(row.error, `cons-${idx}`)}
+                                  onClick={() => setKeyFieldModalTable(row.tableName)}
+                                  title={row.error}
+                                  className="w-full text-left truncate text-red-600 dark:text-red-400 hover:underline hover:cursor-pointer"
+                                >
+                                  {row.error} · 키 필드 설정
+                                </button>
+                              ) : row.error ? (
+                                <button
+                                  type="button"
+                                  onClick={() => copyRemark(row.error ?? '', `cons-${idx}`)}
                                   title={row.error}
                                   className="w-full text-left truncate text-red-600 dark:text-red-400 hover:underline hover:cursor-pointer"
                                 >
@@ -1873,12 +2480,14 @@ export function ShpWizardModal({
                                   <>
                                     <AlertTriangle className="h-[14px] w-[14px] shrink-0 text-orange-600 dark:text-orange-300" />
                                     <span className="ml-0.5 whitespace-nowrap text-orange-600 dark:text-orange-300 group-hover:underline">
-                                      충돌 {row.conflictCount} · 삭제 {row.removeCount} · 신규 {row.appendCount}
+                                      미결 {row.pendingRemaining}건 · 검토
                                     </span>
                                   </>
                                 </button>
                               ) : row.isNew ? (
                                 <span className="text-muted-foreground">—</span>
+                              ) : row.appendCount + row.conflictCount + row.removeCount > 0 ? (
+                                <span className="text-green-600 dark:text-green-400">검토 완료</span>
                               ) : (
                                 <span className="text-green-600 dark:text-green-400">변경 없음</span>
                               )}
@@ -1934,9 +2543,9 @@ export function ShpWizardModal({
                         ) : null}
                         <span>
                           정합성 — 추가 <strong className="text-emerald-700 dark:text-emerald-400">{reportSyncTotals.append}</strong>
-                          {' '} · 변경반영{' '}
+                          {' '} · SHP 반영{' '}
                           <strong className="text-orange-600">{reportSyncTotals.updated}</strong>
-                          {' '} · DB유지 <strong className="text-blue-600">{reportSyncTotals.kept}</strong>
+                          {' '} · DB 유지 <strong className="text-blue-600">{reportSyncTotals.kept}</strong>
                           {' '} · 삭제 <strong className="text-red-500">{reportSyncTotals.removed}</strong>
                         </span>
                       </div>
@@ -2035,9 +2644,6 @@ export function ShpWizardModal({
               </div>
             )}
 
-            {layersError && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{layersError}</p>
-            )}
           </div>
 
           {toastMsg ? (
@@ -2051,7 +2657,15 @@ export function ShpWizardModal({
             </div>
           ) : null}
 
-          <DialogFooter className="shrink-0 gap-2 sm:gap-2 sm:justify-end">
+          <DialogFooter className="shrink-0 gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="min-w-0 flex-1 text-left">
+              {layersError ? (
+                <p className="whitespace-pre-wrap text-sm text-red-600 dark:text-red-400" title={layersError}>
+                  {layersError}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -2142,22 +2756,25 @@ export function ShpWizardModal({
                 {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : '완료'}
               </Button>
             )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {syncModalOpen && syncModalTarget && (
         <SyncDetailModal
-          dhKey={0}
+          dhKey={lookupDhKey(dhKeyByTableRef.current, syncModalTarget.tableName)}
           tableName={syncModalTarget.tableName}
           shpPath={syncModalTarget.shpPath}
+          sourceSrsOverride={syncModalTarget.sourceSrsOverride}
           pendingOnly
+          deferDbWrite
           onClose={() => {
+            const closedTable = syncModalTarget?.tableName;
             setSyncModalOpen(false);
             setSyncModalTarget(null);
-            consistencyStartedRef.current = false;
-            setConsistencyDone(false);
-            void runConsistencyCheck();
+            // 전체 재비교(runConsistencyCheck) 금지 — 미결 건수만 경량 갱신
+            if (closedTable) void refreshConsistencyRowFromLogs(closedTable);
           }}
         />
       )}
@@ -2172,6 +2789,27 @@ export function ShpWizardModal({
         onConfirm={handleCrsConfirm}
         onCancel={handleCrsCancel}
       />
+
+      <Dialog
+        open={!!keyFieldModalTable}
+        onOpenChange={(open) => {
+          if (open) return;
+          const tableName = keyFieldModalTable;
+          setKeyFieldModalTable(null);
+          if (tableName) void recheckRowByTableName(tableName);
+        }}
+      >
+        <DialogContent className="min-w-[42rem] max-w-3xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>키 필드 설정 — {keyFieldModalTable}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {keyFieldModalTable && (
+              <LayerAttrManager embedded fixedTableKey={keyFieldModalTable} keyFieldOnly />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

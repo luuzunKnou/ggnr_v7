@@ -75,7 +75,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MCO",
+    "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 4,
@@ -100,7 +100,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ROAD_RANK",
+    "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
     "define_field_type": "text",
     "define_field_idx": 5,
@@ -225,7 +225,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "FA_TYPE",
+    "define_field_name": "fa_type",
     "define_field_kor_name": "시설물종별",
     "define_field_type": "text",
     "define_field_idx": 10,
@@ -325,7 +325,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "STR_LEVEL",
+    "define_field_name": "str_level",
     "define_field_kor_name": "상태등급",
     "define_field_type": "text",
     "define_field_idx": 14,
@@ -350,7 +350,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "RE_DIA",
+    "define_field_name": "re_dia",
     "define_field_kor_name": "진단결과",
     "define_field_type": "text",
     "define_field_idx": 15,
@@ -700,7 +700,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "LGT_TYPE",
+    "define_field_name": "lgt_type",
     "define_field_kor_name": "조명시설_종류",
     "define_field_type": "text",
     "define_field_idx": 29,
@@ -750,7 +750,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "ET_TYPE",
+    "define_field_name": "et_type",
     "define_field_kor_name": "소화설비_종류",
     "define_field_type": "text",
     "define_field_idx": 31,
@@ -800,7 +800,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MA_CE",
+    "define_field_name": "ma_ce",
     "define_field_kor_name": "마감재_천정",
     "define_field_type": "text",
     "define_field_idx": 33,
@@ -825,7 +825,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "MA_BL",
+    "define_field_name": "ma_bl",
     "define_field_kor_name": "마감재_벽체",
     "define_field_type": "text",
     "define_field_idx": 34,
@@ -900,7 +900,7 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "DRAINAGE",
+    "define_field_name": "drainage",
     "define_field_kor_name": "배수시설",
     "define_field_type": "text",
     "define_field_idx": 37,

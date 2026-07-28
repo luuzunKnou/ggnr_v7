@@ -1,5 +1,27 @@
 * {
-  stroke: #FFFFFF, #9C27B0;
+  stroke: #FFFFFF, #000000;
   stroke-width: 3, 2;
-  stroke-opacity: 0.4, 0.5;
+  stroke-opacity: 0.0, 0.0;
+  
+  label: [rn];
+  label-anchor: 0.5 0.5;
+  label-geometry: [centroid(geom)];
+
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  font-size: 16;
+  font-weight: bold;
+  font-fill: #0B3379;
+
+  halo-color: #FFFFFF;
+  halo-radius: 2;
+  halo-opacity: 0.9;
+
+  label-conflict-resolution: true;
+  label-group: true;
+  label-max-displacement: 0;
+  label-priority: [area(geom)];
+  label-fit-goodness: 0.1;
+  
+  -gt-label-polygon-align: true;
+  -gt-label-all-group: true;
 }

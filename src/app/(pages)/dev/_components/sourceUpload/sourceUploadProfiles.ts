@@ -1,14 +1,15 @@
 export type SourceUploadCategory = 'core' | 'runtime' | 'data';
 export type SourceUploadMode = 'install' | 'update';
 
+/** 폐쇄망=node_modules 포함, 개방망=미포함 */
+export type SourcePackageProfile = 'closed' | 'open';
+
+export function profileIncludesNodeModules(profile: SourcePackageProfile): boolean {
+  return profile === 'closed';
+}
+
 /**
  * 모드와 무관하게 항상 업로드에서 제외할 "경로 prefix" 목록.
- * - 용량이 크거나 재생성 가능한 산출물
- * - IDE/패키지 캐시/빌드 결과물
- * - 런타임 로그·캐시 디렉터리
- *
- * 주의: `node_modules/`는 설치(install) 모드에서 대상 서버 구동에 필요하므로
- * 여기서 제외하지 않고, `MODE_EXCLUDE_PREFIXES.update`에서만 제외한다.
  */
 const ALWAYS_EXCLUDE_PREFIXES = [
   '.cursor/',
@@ -25,25 +26,15 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   'geoserver_modules/data_dir/gwc/',
 ];
 
-/** 모드와 무관하게 항상 제외할 "정확한 파일명" 목록. */
-const ALWAYS_EXCLUDE_EXACT = [
-  'next-env.d.ts',
-];
+/** 운영 서버마다 다른 기동 bat·Next 생성 타입 등은 패키지에 넣지 않음 */
+const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts', 'ggnr_start.bat'];
 
-/**
- * 경로 분류 시 runtime 카테고리로 간주할 prefix.
- * (업데이트 모드에서 기본 제외되는 대상)
- */
 const RUNTIME_PREFIXES = [
   'scripts/',
   'src/config/projects/',
   'geoserver_modules/scripts/',
 ];
 
-/**
- * 경로 분류 시 data 카테고리로 간주할 prefix.
- * (모드별 업로드 허용 정책에서 별도 판단)
- */
 const DATA_PREFIXES = [
   '3dtiles_las/',
   'tiles_tif/',
@@ -59,17 +50,8 @@ const DATA_PREFIXES = [
   'geoserver_modules/data_dir/',
 ];
 
-/**
- * update 모드에서 data 카테고리 중 업로드 허용할 prefix.
- * 현재는 geoserver data_dir만 허용.
- */
 const UPDATE_DATA_ALLOW_PREFIXES = ['geoserver_modules/data_dir/'];
 
-/**
- * 모드별 추가 제외 prefix.
- * - install: 구동 필수 번들(node_modules 포함)도 포함해야 하므로 추가 제외 없음
- * - update: 무거운 실행 바이너리/서비스 번들 및 의존성 디렉터리는 제외
- */
 const MODE_EXCLUDE_PREFIXES: Record<SourceUploadMode, string[]> = {
   install: [],
   update: [
@@ -96,12 +78,17 @@ export function classifySourcePath(relativePath: string): SourceUploadCategory {
   return 'core';
 }
 
-export function isExcludedSourcePath(relativePath: string, mode: SourceUploadMode): boolean {
+export function isExcludedSourcePath(
+  relativePath: string,
+  mode: SourceUploadMode,
+  includeNodeModules = true
+): boolean {
   const p = normalizeRelPath(relativePath);
   if (!p) return true;
   if (ALWAYS_EXCLUDE_EXACT.includes(p)) return true;
   if (p.endsWith('.log')) return true;
   if (hasAnyPrefix(p, ALWAYS_EXCLUDE_PREFIXES)) return true;
+  if (!includeNodeModules && (p === 'node_modules' || p.startsWith('node_modules/'))) return true;
   if (hasAnyPrefix(p, MODE_EXCLUDE_PREFIXES[mode])) return true;
   if (
     mode === 'update' &&
@@ -115,9 +102,13 @@ export function isExcludedSourcePath(relativePath: string, mode: SourceUploadMod
   return false;
 }
 
-export function shouldUploadSourcePath(relativePath: string, mode: SourceUploadMode): boolean {
+export function shouldUploadSourcePath(
+  relativePath: string,
+  mode: SourceUploadMode,
+  includeNodeModules = true
+): boolean {
   const p = normalizeRelPath(relativePath);
-  if (isExcludedSourcePath(p, mode)) return false;
+  if (isExcludedSourcePath(p, mode, includeNodeModules)) return false;
   const category = classifySourcePath(p);
   if (mode === 'install') return true;
   if (category === 'runtime') return false;
@@ -125,10 +116,86 @@ export function shouldUploadSourcePath(relativePath: string, mode: SourceUploadM
   return true;
 }
 
-export function shouldSkipSourceDir(relativeDir: string, mode: SourceUploadMode): boolean {
+export function shouldSkipSourceDir(
+  relativeDir: string,
+  mode: SourceUploadMode,
+  includeNodeModules = true
+): boolean {
   const p = normalizeRelPath(relativeDir);
   if (!p) return false;
   const dir = p.endsWith('/') ? p : `${p}/`;
+  if (!includeNodeModules && (dir === 'node_modules/' || dir.startsWith('node_modules/'))) return true;
   return hasAnyPrefix(dir, ALWAYS_EXCLUDE_PREFIXES) || hasAnyPrefix(dir, MODE_EXCLUDE_PREFIXES[mode]);
 }
 
+/**
+ * 최신 소스 적용 — 잔여 정리·롤백 삭제 금지 경로.
+ * 소스 업로드·설치 ZIP 제외 + 데이터/대용량 + 적용 시 병합 제외와 합집합.
+ */
+const APPLY_EXTRA_PROTECT_PREFIXES = [
+  '3dtiles_las/',
+  'tiles_tif/',
+  'tiles_jpg/',
+  '3dtiles_b3dm/',
+  '3dtiles_pnts/',
+  '3dtiles_obj/',
+  '3dtiles_tiff/',
+  'file_data/',
+  'shp_data/',
+  'excel_data/',
+  'source_upload/',
+  'geoserver_modules/data_dir/',
+  'geoserver_modules/java/',
+  'geoserver_modules/geoserver/',
+  'pg_map_modules/',
+  '.cursor-runtime/',
+];
+
+/** 잔여 정리 walk 루트 (패키지 관리 대상) */
+export const APPLY_ORPHAN_WALK_ROOTS = [
+  'src/',
+  'scripts/',
+  'public/',
+  'geoserver_modules/scripts/',
+] as const;
+
+export function isProtectedApplyResidualPath(
+  relativePath: string,
+  includeNodeModules = true
+): boolean {
+  const p = normalizeRelPath(relativePath);
+  if (!p) return true;
+  if (ALWAYS_EXCLUDE_EXACT.includes(p)) return true;
+  if (p.endsWith('.log')) return true;
+  if (hasAnyPrefix(p, ALWAYS_EXCLUDE_PREFIXES)) return true;
+  if (hasAnyPrefix(p, DATA_PREFIXES)) return true;
+  if (hasAnyPrefix(p, APPLY_EXTRA_PROTECT_PREFIXES)) return true;
+  if (p === '.cursor-runtime' || p.startsWith('.cursor-runtime/')) return true;
+  if (isExcludedSourcePath(p, 'install', includeNodeModules)) return true;
+  return false;
+}
+
+/** 잔여 정리 후보인지 (보호·데이터 제외, managed 루트 또는 루트 단일 파일) */
+export function isManagedApplyOrphanCandidate(
+  relativePath: string,
+  includeNodeModules = true
+): boolean {
+  const p = normalizeRelPath(relativePath);
+  if (!p || isProtectedApplyResidualPath(p, includeNodeModules)) return false;
+  if (APPLY_ORPHAN_WALK_ROOTS.some((root) => p.startsWith(root))) return true;
+  /** 워크스페이스 루트 파일만 (하위에서 보호되지 않은 임의 폴더 전체 walk 방지) */
+  if (!p.includes('/')) return true;
+  return false;
+}
+
+export function packageProfileFromInclude(includeNodeModules: boolean): SourcePackageProfile {
+  return includeNodeModules ? 'closed' : 'open';
+}
+
+export function includeNodeModulesFromProfile(profile: SourcePackageProfile): boolean {
+  return profileIncludesNodeModules(profile);
+}
+
+export function excludePrefixesForProfile(profile: SourcePackageProfile): string[] {
+  return profileIncludesNodeModules(profile) ? [] : ['node_modules/'];
+}

@@ -76,6 +76,9 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
 ]
 
+/** 이 메뉴로 진입 시 사이드바를 자동으로 접음. 필요에 따라 메뉴 id를 추가/삭제하세요. */
+export const DEV_AUTO_COLLAPSE_MENU_IDS: readonly DevConsoleMenuId[] = ["layerManager"]
+
 export type DevSubmenuId = DevConsoleMenuId
 
 function devMenuLabel(menuId: string): string {
@@ -119,9 +122,9 @@ export function getDevMenuDescription(menuId: string): string {
     case "dataFileUploader":
       return "첨부파일(file_data) 업로드·테이블·키 검증·이력"
     case "sourceCodeUploader":
-      return "현재 워크스페이스 소스코드를 압축/청크 전송 방식으로 원격 서버에 업로드"
+      return "설치파일 다운로드·소스코드 업로드(GNMS 전송)"
     case "versionManager":
-      return "GNMS 최신 소스코드 다운로드/덮어쓰기/재시작"
+      return "GNMS 최신 소스 적용·재시작"
     case "lasFixer":
       return "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
     case "orthophotoManager":
@@ -228,7 +231,11 @@ export function renderDevMenuContent(menuId: string): ReactNode {
         </div>
       )
     case "versionManager":
-      return <VersionManagerContent />
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <VersionManagerContent />
+        </div>
+      )
     case "lasFixer":
       return <LasFixerContent />
     case "orthophotoManager":

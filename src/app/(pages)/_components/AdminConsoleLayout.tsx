@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
 import Link from "next/link"
-import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ChevronDown, LayoutGrid, List } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { ThemeToggle } from "@/app/(pages)/(index)/theme-toggle"
 import { cn } from "@/lib/utils"
 import { signOut } from "next-auth/react"
@@ -35,9 +35,13 @@ type AdminConsoleLayoutProps = {
   renderContent: (menuId: string) => ReactNode
   /** 카드 제목 옆 보조 UI (예: 개발자 모드 LAS 샘플 버튼) */
   renderTitleExtra?: (menuId: string) => ReactNode
+  /** 카드 제목 행 우측 액션 (예: 이력 버튼) */
+  renderHeaderActions?: (menuId: string) => ReactNode
   onLogout?: () => void | Promise<void>
   /** 설정 시 서브메뉴별 console:{area}:{menuId} 권한 적용 */
   consoleArea?: ConsoleAreaId
+  /** 해당 메뉴 선택 시 사이드바를 아이콘 모드로 접음 (예: 레이어 관리) */
+  autoCollapseMenuIds?: readonly string[]
 }
 
 export function AdminConsoleLayout({
@@ -49,8 +53,10 @@ export function AdminConsoleLayout({
   getDescription,
   renderContent,
   renderTitleExtra,
+  renderHeaderActions,
   onLogout,
   consoleArea,
+  autoCollapseMenuIds,
 }: AdminConsoleLayoutProps) {
   const { getPolicy, loading: accessLoading } = useConsoleMenuAccess()
   const [deniedOpen, setDeniedOpen] = useState(false)
@@ -156,6 +162,13 @@ export function AdminConsoleLayout({
   }, [collapsed, collapsedStorageKey])
 
   useEffect(() => {
+    if (!autoCollapseMenuIds?.length) return
+    if (autoCollapseMenuIds.includes(selectedMenu)) {
+      setCollapsed(true)
+    }
+  }, [selectedMenu, autoCollapseMenuIds])
+
+  useEffect(() => {
     if (accessLoading || !consoleArea) return
     const policy = resolvePolicy(selectedMenu)
     if (policy === "hidden") {
@@ -193,6 +206,123 @@ export function AdminConsoleLayout({
     else await signOut({ redirect: false })
   }
 
+  const renderCollapsedIconRail = () => {
+    if (!menuGroups || menuGroups.length === 0) {
+      return (
+        <div className="flex flex-col items-center gap-1 pt-2 px-1">
+          {menus.map((menu) => {
+            if (consoleArea && resolvePolicy(menu.id) === "hidden") return null
+            const policy = resolvePolicy(menu.id)
+            const isBlock = policy === "block"
+            return (
+              <button
+                key={menu.id}
+                type="button"
+                title={menu.label}
+                onClick={() => handleMenuClick(menu.id)}
+                className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-md text-[10px] font-semibold transition-colors",
+                  selectedMenu === menu.id && !isBlock
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {menu.label.slice(0, 2)}
+              </button>
+            )
+          })}
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-col items-center gap-1 pt-2">
+        {menuGroups.map((group) => {
+          const visibleGroupMenuIds = group.menuIds.filter((id) => visibleMenuIds.includes(id))
+          if (visibleGroupMenuIds.length === 0) return null
+          const Icon = group.icon
+          const isActiveGroup = group.menuIds.includes(selectedMenu)
+          return (
+            <div key={group.id} className="group/navicon relative w-full flex justify-center">
+              <button
+                type="button"
+                title={group.label}
+                className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-md transition-colors",
+                  isActiveGroup
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {Icon ? (
+                  <Icon className="h-4 w-4" />
+                ) : (
+                  <span className="text-[10px] font-semibold">{group.label.slice(0, 2)}</span>
+                )}
+              </button>
+              <div
+                className={cn(
+                  "absolute left-full top-0 z-50 -ml-1.5",
+                  "invisible opacity-0 group-hover/navicon:visible group-hover/navicon:opacity-100",
+                  "transition-opacity"
+                )}
+              >
+                <div className="min-w-40 rounded-md border bg-popover shadow-md py-1">
+                <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1 whitespace-nowrap">
+                  {group.label}
+                </div>
+                {visibleGroupMenuIds.map((menuId) => {
+                  const menu = menuById.get(menuId)
+                  if (!menu) return null
+                  const policy = resolvePolicy(menu.id)
+                  const isBlock = policy === "block"
+                  return (
+                    <button
+                      key={menu.id}
+                      type="button"
+                      onClick={() => handleMenuClick(menu.id)}
+                      className={cn(
+                        "w-full text-left px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+                        selectedMenu === menu.id && !isBlock
+                          ? "bg-primary text-primary-foreground"
+                          : isBlock
+                            ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {menu.label}
+                    </button>
+                  )
+                })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const renderSidebarToggle = (compact = false) => {
+    const ToggleIcon = collapsed ? LayoutGrid : List
+
+    return (
+    <div className={cn("shrink-0 border-t pt-2", compact ? "flex justify-center px-1 pb-2" : "px-2 pb-2")}>
+      <Button
+        type="button"
+        variant="outline"
+        size={compact ? "icon" : "sm"}
+        className={cn(compact ? "h-8 w-8 rounded-none" : "w-full justify-start rounded-none")}
+        onClick={() => setCollapsed((prev) => !prev)}
+        title={collapsed ? "아이콘 메뉴" : "전체 메뉴"}
+      >
+        <ToggleIcon className="h-3.5 w-3.5" />
+        {!compact ? (collapsed ? "아이콘 메뉴" : "전체 메뉴") : null}
+      </Button>
+    </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
@@ -208,89 +338,21 @@ export function AdminConsoleLayout({
         </div>
       </header>
 
-      <div className="flex flex-1 min-h-0">
-        <aside
-          className={cn(
-            "shrink-0 border-r bg-muted/30 flex flex-col transition-[width] duration-150",
-            collapsed ? "w-12 overflow-visible" : "w-64 py-2 overflow-auto"
-          )}
-        >
-          <div className={cn("flex shrink-0", collapsed ? "justify-center py-2" : "justify-end px-2 pb-1")}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setCollapsed((prev) => !prev)}
-              title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}
-            >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </Button>
-          </div>
-          {collapsed && menuGroups && menuGroups.length > 0 ? (
-            <div className="flex flex-col items-center gap-1 pt-1">
-              {menuGroups.map((group) => {
-                const Icon = group.icon
-                const isActiveGroup = group.menuIds.includes(selectedMenu)
-                return (
-                  <div key={group.id} className="group/navicon relative w-full flex justify-center">
-                    <button
-                      type="button"
-                      title={group.label}
-                      className={cn(
-                        "flex items-center justify-center w-8 h-8 rounded-md transition-colors",
-                        isActiveGroup
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      )}
-                    >
-                      {Icon ? (
-                        <Icon className="h-4 w-4" />
-                      ) : (
-                        <span className="text-[10px] font-semibold">{group.label.slice(0, 2)}</span>
-                      )}
-                    </button>
-                    <div
-                      className={cn(
-                        "invisible opacity-0 group-hover/navicon:visible group-hover/navicon:opacity-100",
-                        "transition-opacity absolute left-full top-0 ml-1 z-50 min-w-40 rounded-md border bg-popover shadow-md py-1"
-                      )}
-                    >
-                      <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1 whitespace-nowrap">
-                        {group.label}
-                      </div>
-                      {group.menuIds.map((menuId) => {
-                        const menu = menuById.get(menuId)
-                        if (!menu) return null
-                        const policy = resolvePolicy(menu.id)
-                        if (consoleArea && policy === "hidden") return null
-                        const isBlock = policy === "block"
-                        return (
-                          <button
-                            key={menu.id}
-                            type="button"
-                            onClick={() => handleMenuClick(menu.id)}
-                            className={cn(
-                              "w-full text-left px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
-                              selectedMenu === menu.id && !isBlock
-                                ? "bg-primary text-primary-foreground"
-                                : isBlock
-                                  ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
-                                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            {menu.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
+      <div className="flex flex-1 min-h-0 overflow-visible">
+        {collapsed ? (
+          <aside className="shrink-0 w-12 border-r bg-muted/30 flex flex-col min-h-0 overflow-visible">
+            <div className="flex-1 min-h-0 overflow-x-visible py-2">
+              {renderCollapsedIconRail()}
             </div>
-          ) : null}
-          {collapsed ? null : menuGroups && menuGroups.length > 0 ? (
+            {renderSidebarToggle(true)}
+          </aside>
+        ) : (
+        <aside className="shrink-0 border-r bg-muted/30 flex flex-col w-64 min-h-0">
+          <div className="flex-1 min-h-0 overflow-auto py-2">
+          {menuGroups && menuGroups.length > 0 ? (
             menuGroups.map((group) => {
+              const visibleGroupMenuIds = group.menuIds.filter((id) => visibleMenuIds.includes(id))
+              if (visibleGroupMenuIds.length === 0) return null
               const isOpen = expandedGroupIds.includes(group.id)
               return (
                 <div key={group.id} className="border-b last:border-b-0">
@@ -311,11 +373,10 @@ export function AdminConsoleLayout({
                   </button>
                   {isOpen && (
                     <div className="py-1">
-                      {group.menuIds.map((menuId) => {
+                      {visibleGroupMenuIds.map((menuId) => {
                         const menu = menuById.get(menuId)
                         if (!menu) return null
                         const policy = resolvePolicy(menu.id)
-                        if (consoleArea && policy === "hidden") return null
                         const isBlock = policy === "block"
                         return (
                           <button
@@ -342,8 +403,8 @@ export function AdminConsoleLayout({
             })
           ) : (
             menus.map((menu) => {
+              if (consoleArea && resolvePolicy(menu.id) === "hidden") return null
               const policy = resolvePolicy(menu.id)
-              if (consoleArea && policy === "hidden") return null
               const isBlock = policy === "block"
               return (
                 <button
@@ -364,16 +425,22 @@ export function AdminConsoleLayout({
               )
             })
           )}
+          </div>
+          {renderSidebarToggle()}
         </aside>
+        )}
 
         <main className="flex-1 overflow-auto p-4">
           <Card className="rounded-none min-h-full">
             <CardHeader>
-              <CardTitle>{currentLabel}</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <CardTitle>{currentLabel}</CardTitle>
+                  {renderTitleExtra?.(selectedMenu)}
+                </div>
+                {renderHeaderActions?.(selectedMenu)}
+              </div>
               <CardDescription>{getDescription(selectedMenu)}</CardDescription>
-              {renderTitleExtra?.(selectedMenu) ? (
-                <CardAction className="self-end">{renderTitleExtra(selectedMenu)}</CardAction>
-              ) : null}
             </CardHeader>
             <CardContent>
               {consoleArea && accessLoading ? (

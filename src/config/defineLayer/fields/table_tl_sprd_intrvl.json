@@ -1,6 +1,6 @@
 [
   {
-    "define_field_name": "BSI_INT_SN",
+    "define_field_name": "bsi_int_sn",
     "define_field_kor_name": "기초구간일련번호",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -9,7 +9,7 @@
     "define_field_type": "TEXT",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
-    "define_field_is_key": "false",
+    "define_field_is_key": "true",
     "define_field_show_search_detail": "false",
     "define_field_max_length": "0",
     "define_field_idx": "",
@@ -25,7 +25,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "EVE_BSI_MN",
+    "define_field_name": "eve_bsi_mn",
     "define_field_kor_name": "짝수기초번호본번",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -50,7 +50,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "EVE_BSI_SL",
+    "define_field_name": "eve_bsi_sl",
     "define_field_kor_name": "짝수기초번호부번",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -109,7 +109,7 @@
     "define_field_type": "TEXT",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
-    "define_field_is_key": "true",
+    "define_field_is_key": "false",
     "define_field_show_search_detail": "false",
     "define_field_max_length": "0",
     "define_field_idx": "",
@@ -125,7 +125,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ODD_BSI_MN",
+    "define_field_name": "odd_bsi_mn",
     "define_field_kor_name": "홀수기초번호본번",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -150,7 +150,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "ODD_BSI_SL",
+    "define_field_name": "odd_bsi_sl",
     "define_field_kor_name": "홀수기초번호부번",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -175,7 +175,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "OPERT_DE",
+    "define_field_name": "opert_de",
     "define_field_kor_name": "작업일시",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -200,7 +200,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "RDS_MAN_NO",
+    "define_field_name": "rds_man_no",
     "define_field_kor_name": "도로구간일련번호",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
@@ -225,7 +225,7 @@
     "define_field_show_title": "false"
   },
   {
-    "define_field_name": "SIG_CD",
+    "define_field_name": "sig_cd",
     "define_field_kor_name": "시군구코드",
     "define_field_is_required": "false",
     "define_field_show_search": "false",

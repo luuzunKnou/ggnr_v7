@@ -47,7 +47,7 @@
     "hls.js": "^1.6.16",
     "iconv-lite": "^0.6.3",
     "lucide-react": "^0.563.0",
-    "maplibre-gl": "^5.16.0",
+    "maplibre-gl": "^5.24.0",
     "mermaid": "^11.12.2",
     "nanoid": "^5.1.6",
     "next": "16.1.4",
@@ -60,6 +60,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
+    "undici": "^7.28.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -29,17 +29,22 @@ import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as ocrMigrationService from './ocrMigrationService';
-import * as jijukLandAttrService from './jijukLandAttrService';
 import * as layerRowService from './layerRowService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as landLinkageService from './landLinkageService';
+import * as seumService from './seumService';
+/** API `service: 'seumPermitService'` 호환 — seumService와 동일 모듈 */
+import * as seumPermitService from './seumService';
 import * as memoService from './memoService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
+import * as mngVersionHistoryService from './mngVersionHistoryService';
+import * as geoserverProcessService from './geoserverProcessService';
 
 export {
   configService,
   devTestService,
+  geoserverProcessService,
   dbManagerService,
   sysService,
   serService,
@@ -66,11 +71,13 @@ export {
   fileConverterService,
   pdfToJpgService,
   ocrMigrationService,
-  jijukLandAttrService,
   layerRowService,
   mapAnalyseService,
   landLinkageService,
+  seumService,
+  seumPermitService,
   memoService,
   noticeService,
   boardService,
+  mngVersionHistoryService,
 };

@@ -14,6 +14,7 @@ export function StylePreviewSwatch({
   strokeColor,
   opacity,
   showFrame = true,
+  size = "md",
 }: {
   geometryType: GeometryType
   fillColor?: string
@@ -21,6 +22,8 @@ export function StylePreviewSwatch({
   opacity?: number
   /** 체크보드 배경 + 테두리 표시 여부. WMS 범례 이미지와 나란히 섞여 보이는 곳(목록 등)에서는 false로 꺼서 톤을 맞춘다 */
   showFrame?: boolean
+  /** "sm"(28px)은 목록 행의 범례 이미지(max-h-7)와 높이를 맞출 때, "md"(32px, 기본)은 그 외 미리보기용 */
+  size?: "sm" | "md"
 }) {
   const fill = fillColor || "#808080"
   const stroke = strokeColor || "#000000"
@@ -28,9 +31,10 @@ export function StylePreviewSwatch({
     geometryType === "LINE"
       ? `${geometryType} · 선색상 ${stroke}`
       : `${geometryType} · 색상 ${fill} · 투명도 ${opacity ?? 1}`
+  const sizeClass = size === "sm" ? "h-7 w-7" : "h-8 w-8"
   return (
     <div
-      className={showFrame ? "relative h-8 w-8 shrink-0 rounded border border-input overflow-hidden" : "relative h-8 w-8 shrink-0 overflow-hidden"}
+      className={showFrame ? `relative ${sizeClass} shrink-0 rounded border border-input overflow-hidden` : `relative ${sizeClass} shrink-0 overflow-hidden`}
       style={
         showFrame
           ? { backgroundImage: "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0/10px 10px" }
