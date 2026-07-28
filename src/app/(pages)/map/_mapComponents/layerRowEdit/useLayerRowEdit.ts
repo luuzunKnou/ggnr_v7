@@ -362,6 +362,7 @@ export function useLayerRowEdit({
             keyField: preset.keyField,
             values: changes,
             excludeFields: preset.excludeFields,
+            includeHiddenDetail: preset.includeHiddenDetail,
             geomWkt5181,
           },
         });
@@ -399,6 +400,7 @@ export function useLayerRowEdit({
           keyValue: id,
           changes,
           excludeFields: preset.excludeFields,
+          includeHiddenDetail: preset.includeHiddenDetail,
           geomWkt5181,
           geomClear,
         },

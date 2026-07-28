@@ -9,6 +9,7 @@ import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefault
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { LAYER_ROW_NEW_ID, LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
 import { USAGE_DATA_AS_WMS_LAYER_IDS } from "./usageDataAsLayerId";
+import { clearUsageDataAsWmsLayers } from "./usageDataAsMapSync";
 
 function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
@@ -69,20 +70,43 @@ export function UsageDataAsListPanel({
     }
 
     return () => {
-      const c = mapContextRef.current;
-      const toRemove = layersAddedByPanelRef.current;
-      if (toRemove.size === 0 || !c?.setVisibleLayerNames) return;
-      c.setVisibleLayerNames((prev) => {
-        let changed = false;
-        const next = new Set(prev);
-        for (const lid of toRemove) {
-          if (next.delete(lid)) changed = true;
-        }
-        return changed ? next : prev;
-      });
+      // 이 패널이 켠 것만 아니라 점용 WMS 전부 끔 (시스템 이동·재진입 잔상 방지)
+      clearUsageDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames);
       layersAddedByPanelRef.current = new Set();
     };
   }, []);
+
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const ensureUsageLayersVisible = useCallback(() => {
+    mapContext?.setVisibleLayerNames?.((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const lid of lowerLayerIds(USAGE_DATA_AS_WMS_LAYER_IDS)) {
+        if (!next.has(lid)) {
+          next.add(lid);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [mapContext]);
+
+  /** 상세 패널 폭이 map padding에 반영된 뒤 fit (상세 오픈 직후 어긋남 방지) */
+  const fitMapAfterDetailLayout = useCallback(
+    (extent3857: number[]) => {
+      const map = mapContext?.mapInstanceRef?.current;
+      if (!map) return;
+      ensureUsageLayersVisible();
+      window.setTimeout(() => {
+        scheduleFitMapToExtent3857(map, extent3857, {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
+      }, 80);
+    },
+    [mapContext, ensureUsageLayersVisible]
+  );
 
   const handleRowClick = useCallback(
     async (rowKey: string) => {
@@ -107,27 +131,58 @@ export function UsageDataAsListPanel({
           window.alert("위치 정보를 찾을 수 없습니다.");
           return;
         }
-        mapContext?.setVisibleLayerNames?.((prev) => {
-          const next = new Set(prev);
-          let changed = false;
-          for (const lid of lowerLayerIds(USAGE_DATA_AS_WMS_LAYER_IDS)) {
-            if (!next.has(lid)) {
-              next.add(lid);
-              changed = true;
-            }
-          }
-          return changed ? next : prev;
-        });
-        scheduleFitMapToExtent3857(map, ext as number[], {
-          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
+        fitMapAfterDetailLayout(ext as number[]);
       } catch {
         window.alert("지도 이동에 실패했습니다.");
       }
     },
-    [mapContext, onSelectDetailId]
+    [mapContext, onSelectDetailId, fitMapAfterDetailLayout]
   );
+
+  /** 지도에서 점용 레이어 클릭 → 목록·상세 선택 + 클릭 도형을 지도 중앙에 맞춤 */
+  useEffect(() => {
+    const pickRef = mapContext?.applyUsageDataAsMapPickRef;
+    if (!pickRef) return;
+    pickRef.current = (pick) => {
+      const consCode = String(pick?.consCode ?? "").trim();
+      if (!consCode) return;
+      onSelectDetailId(consCode);
+      const clickedExt = pick?.extent3857;
+      if (
+        Array.isArray(clickedExt) &&
+        clickedExt.length === 4 &&
+        clickedExt.every((v) => Number.isFinite(Number(v)))
+      ) {
+        fitMapAfterDetailLayout(clickedExt.map(Number));
+        return;
+      }
+      void handleRowClick(consCode);
+    };
+    return () => {
+      pickRef.current = null;
+    };
+  }, [
+    mapContext?.applyUsageDataAsMapPickRef,
+    onSelectDetailId,
+    fitMapAfterDetailLayout,
+    handleRowClick,
+  ]);
+
+  useEffect(() => {
+    if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;
+    const scroller = listScrollRef.current;
+    if (!scroller) return;
+    const el = scroller.querySelector(
+      `[data-usage-data-as-row="${CSS.escape(selectedDetailId)}"]`
+    );
+    if (!(el instanceof HTMLElement)) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const delta =
+      elRect.top + elRect.height / 2 - (scrollerRect.top + scrollerRect.height / 2);
+    if (Math.abs(delta) < 4) return;
+    scroller.scrollBy({ top: delta, behavior: "smooth" });
+  }, [selectedDetailId, items]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -197,7 +252,7 @@ export function UsageDataAsListPanel({
         {error && (
           <div className="shrink-0 border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
         )}
-        <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-hide">
           {loading ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
           ) : (
@@ -230,6 +285,7 @@ export function UsageDataAsListPanel({
                   return (
                     <tr
                       key={row.rowKey}
+                      data-usage-data-as-row={row.rowKey}
                       role="button"
                       tabIndex={0}
                       onClick={() => void handleRowClick(row.rowKey)}

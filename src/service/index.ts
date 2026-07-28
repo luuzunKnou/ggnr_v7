@@ -42,6 +42,7 @@ import * as boardService from './boardService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
 import * as useFeeService from './useFeeService';
+import * as bizNotifService from './bizNotifService';
 
 export {
   configService,
@@ -84,4 +85,5 @@ export {
   boardService,
   mngVersionHistoryService,
   useFeeService,
+  bizNotifService,
 };

@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS layer.usage_data_as_mgj (
 );
 
 CREATE INDEX IF NOT EXISTS usage_data_as_mgj_cons_code_idx ON layer.usage_data_as_mgj (cons_code);
+CREATE INDEX IF NOT EXISTS usage_data_as_mgj_geom_idx ON layer.usage_data_as_mgj USING GIST (geom);
 
 -- 기존 Point 테이블 → 폴리곤(Geometry) 전환 (레이어 재업로드 전 1회 실행)
 -- ALTER TABLE layer.usage_data_as_mgj

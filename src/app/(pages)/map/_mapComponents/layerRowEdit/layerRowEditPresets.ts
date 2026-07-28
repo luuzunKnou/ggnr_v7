@@ -35,7 +35,9 @@ export const LAYER_ROW_EDIT_PRESETS = {
     keyField: "cons_code",
     /** cons_code는 defineLayer 읽기전용 — insert 시 서버 자동 채번 */
     autoGenerateKeyOnCreate: true,
-    excludeFields: ["ogc_fid", "gkey_code"],
+    excludeFields: ["ogc_fid", "gkey_code", "river_code", "mng_cde", "user_name"],
+    /** show_detail=false 속성은 더보기로 표시 */
+    includeHiddenDetail: true,
     dateFields: [],
     childTableName: "usage_data_as_solo",
     additionalChildTableNames: ["usage_data_as_mgj"],

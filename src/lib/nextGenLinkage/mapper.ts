@@ -21,6 +21,32 @@ function vaFields(item: Record<string, unknown>): Record<string, string | null> 
   return out;
 }
 
+/** 과세번호 = 부서(7)+특별회계사업(4)+회계연도(4)+회계구분(2)+대표세입과목(6)+부과번호(6)+분납일련(2) */
+export function buildTaxnNoKey(parts: {
+  dptCd?: string | null;
+  spacBizCd?: string | null;
+  fyr?: string | null;
+  actSeCd?: string | null;
+  rprsTxmCd?: string | null;
+  lvyNo?: string | null;
+  itmSn?: string | null;
+}): string {
+  const pad = (v: string | null | undefined, n: number) =>
+    String(v ?? '')
+      .trim()
+      .padStart(n, '0')
+      .slice(-n);
+  return (
+    pad(parts.dptCd, 7) +
+    pad(parts.spacBizCd, 4) +
+    pad(parts.fyr, 4) +
+    pad(parts.actSeCd, 2) +
+    pad(parts.rprsTxmCd, 6) +
+    pad(parts.lvyNo, 6) +
+    pad(parts.itmSn, 2)
+  );
+}
+
 /** B-1 부과/체납 → fee_status=미납, rcvmt_sn='' */
 export function mapArrearsItem(item: Record<string, unknown>): NewNglFeeList {
   const mng: Record<string, string | null> = {};

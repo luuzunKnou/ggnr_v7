@@ -128,12 +128,15 @@ function resolveKeyField(tableName: string, override?: string): string | null {
 export function getEditableFieldDefinitions(params: {
   table: string;
   excludeFields?: string[];
+  /** true면 show_detail=false 필드도 포함 (더보기로 표시·저장) */
+  includeHiddenDetail?: boolean;
 }): DefineFieldMeta[] {
   const table = String(params?.table ?? '').trim().toLowerCase();
   if (!table) return [];
   const exclude = new Set(
     (params.excludeFields ?? []).map((f) => String(f).trim().toLowerCase()).filter(Boolean)
   );
+  const includeHidden = params.includeHiddenDetail === true;
   const fields = loadDefineFields(table);
   return fields
     .map((raw) => {
@@ -143,7 +146,7 @@ export function getEditableFieldDefinitions(params: {
       if (GEOM_COLUMN_NAMES.has(lower) || exclude.has(lower)) return null;
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       const readOnly = isTrueFlag(raw.define_field_read_only);
-      if (!showDetail) return null;
+      if (!showDetail && !includeHidden) return null;
       const meta: DefineFieldMeta = {
         field,
         label: String(raw.define_field_kor_name ?? field).trim() || field,
@@ -155,7 +158,11 @@ export function getEditableFieldDefinitions(params: {
       return meta;
     })
     .filter((x): x is DefineFieldMeta => x !== null)
-    .sort((a, b) => (a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field)));
+    .sort((a, b) => {
+      // 기본 표시 필드를 먼저, 숨김(더보기) 필드는 뒤에
+      if (a.showDetail !== b.showDetail) return a.showDetail ? -1 : 1;
+      return a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field);
+    });
 }
 
 /** defineLayer + 실제 DB 컬럼 교집합 (define만 있고 DB에 없는 필드 제외) */
@@ -163,6 +170,7 @@ export async function getEditableFieldDefinitionsForTable(params: {
   table: string;
   schema?: string;
   excludeFields?: string[];
+  includeHiddenDetail?: boolean;
 }): Promise<{ fields: DefineFieldMeta[]; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   if (!tableGuess) return { fields: [], error: 'table이 필요합니다.' };
@@ -176,6 +184,7 @@ export async function getEditableFieldDefinitionsForTable(params: {
   const fields = getEditableFieldDefinitions({
     table: tableGuess,
     excludeFields: params.excludeFields,
+    includeHiddenDetail: params.includeHiddenDetail,
   }).filter((d) => columnSet.has(d.field.toLowerCase()));
 
   return { fields };
@@ -391,6 +400,7 @@ export async function updateTableRowByKey(params: {
   keyField?: string;
   changes: Record<string, unknown>;
   excludeFields?: string[];
+  includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
   geomClear?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
@@ -424,6 +434,7 @@ export async function updateTableRowByKey(params: {
   const editableDefs = getEditableFieldDefinitions({
     table: tableGuess,
     excludeFields: params.excludeFields,
+    includeHiddenDetail: params.includeHiddenDetail,
   });
   const editableFields = new Map(
     editableDefs.filter((d) => !d.readOnly && d.field.toLowerCase() !== keyField.toLowerCase()).map((d) => [d.field.toLowerCase(), d])
@@ -500,9 +511,14 @@ async function getColumnMetaList(schema: string, table: string): Promise<ColumnM
 function buildInsertEditableMap(
   tableGuess: string,
   keyField: string,
-  excludeFields?: string[]
+  excludeFields?: string[],
+  includeHiddenDetail?: boolean
 ): Map<string, DefineFieldMeta> {
-  const editableDefs = getEditableFieldDefinitions({ table: tableGuess, excludeFields });
+  const editableDefs = getEditableFieldDefinitions({
+    table: tableGuess,
+    excludeFields,
+    includeHiddenDetail,
+  });
   return new Map(
     editableDefs
       .filter((d) => !d.readOnly && d.field.toLowerCase() !== keyField.toLowerCase())
@@ -517,6 +533,7 @@ export async function insertTableRow(params: {
   keyField?: string;
   values: Record<string, unknown>;
   excludeFields?: string[];
+  includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
 }): Promise<{ success: boolean; keyValue?: string; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
@@ -537,7 +554,12 @@ export async function insertTableRow(params: {
     return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
-  const editableFields = buildInsertEditableMap(tableGuess, keyField, params.excludeFields);
+  const editableFields = buildInsertEditableMap(
+    tableGuess,
+    keyField,
+    params.excludeFields,
+    params.includeHiddenDetail
+  );
   const values = { ...(params?.values ?? {}) };
   const insertCols: string[] = [];
   const insertVals: string[] = [];

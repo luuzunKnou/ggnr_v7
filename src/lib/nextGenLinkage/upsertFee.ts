@@ -1,9 +1,21 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { nglErrorLog } from '@/database/schema/ngl_error_log';
 import { nglFeeList, type NewNglFeeList } from '@/database/schema/ngl_fee_list';
+import { buildTaxnNoKey } from '@/lib/nextGenLinkage/mapper';
 
 const nowSql = sql`now()`;
+
+/** 미납 행에서 조합한 과세번호 키 (SQL) */
+const arrearsTaxnNoSql = sql`(
+  lpad(coalesce(trim(${nglFeeList.dptCd}), ''), 7, '0') ||
+  lpad(coalesce(trim(${nglFeeList.spacBizCd}), ''), 4, '0') ||
+  lpad(coalesce(trim(${nglFeeList.fyr}), ''), 4, '0') ||
+  lpad(coalesce(trim(${nglFeeList.actSeCd}), ''), 2, '0') ||
+  lpad(coalesce(trim(${nglFeeList.rprsTxmCd}), ''), 6, '0') ||
+  lpad(coalesce(trim(${nglFeeList.lvyNo}), ''), 6, '0') ||
+  lpad(coalesce(trim(${nglFeeList.itmSn}), ''), 2, '0')
+)`;
 
 function arrearsUpdateSet(row: NewNglFeeList) {
   return {
@@ -11,6 +23,7 @@ function arrearsUpdateSet(row: NewNglFeeList) {
     sgbCd: row.sgbCd,
     dptNm: row.dptNm,
     dptCd: row.dptCd,
+    spacBizCd: row.spacBizCd,
     sgbNm: row.sgbNm,
     fyr: row.fyr,
     actSeCd: row.actSeCd,
@@ -111,6 +124,7 @@ function arrearsUpdateSet(row: NewNglFeeList) {
   };
 }
 
+/** 수납 행 신규 upsert용 — 수납 응답 전체 반영 */
 function receiptUpdateSet(row: NewNglFeeList) {
   return {
     feeStatus: '수납' as const,
@@ -191,6 +205,32 @@ function receiptUpdateSet(row: NewNglFeeList) {
   };
 }
 
+/**
+ * 기존 미납 행 갱신용 — 수납 전용 컬럼만.
+ * 가상계좌·관리항목·납부자상세 등 미납에만 있던 값은 건드리지 않는다.
+ */
+function receiptOnlyMergeSet(row: NewNglFeeList) {
+  return {
+    feeStatus: '수납' as const,
+    rcvmtSn: row.rcvmtSn,
+    rcvmtYmd: row.rcvmtYmd,
+    rcvmtPctAmt: row.rcvmtPctAmt,
+    rcvmtAdtnAmt: row.rcvmtAdtnAmt,
+    itmIntrAmt: row.itmIntrAmt,
+    rcvmtBank: row.rcvmtBank,
+    rcvmtTyCd: row.rcvmtTyCd,
+    rcvmtTyNm: row.rcvmtTyNm,
+    actYmd: row.actYmd,
+    pmkYmd: row.pmkYmd,
+    rcvmtSeCd: row.rcvmtSeCd,
+    rcvmtSttSeCd: row.rcvmtSttSeCd,
+    taxnNo: row.taxnNo,
+    syncStatus: 'SYNCED',
+    syncedAt: nowSql,
+    updatedAt: nowSql,
+  };
+}
+
 export async function upsertArrearsRow(row: NewNglFeeList): Promise<void> {
   const key = String(row.lvyKey ?? '').trim();
   if (!key) return;
@@ -210,29 +250,65 @@ export async function upsertArrearsRow(row: NewNglFeeList): Promise<void> {
     });
 }
 
+/**
+ * 수납 연계:
+ * 1) 미납 조합키 = 수납 과세번호 → 기존 미납 행에 수납 전용 컬럼만 merge (미납 전용 값 유지)
+ * 2) 매칭 없거나 (부과키,수납일련) 충돌 → 수납 행 upsert
+ */
 export async function upsertReceiptRow(row: NewNglFeeList): Promise<void> {
   const key = String(row.lvyKey ?? '').trim();
-  if (!key) return;
   const sn = String(row.rcvmtSn ?? '').trim();
+  const taxnNo = String(row.taxnNo ?? '').trim() || buildTaxnNoKey(row);
   const values: NewNglFeeList = {
     ...row,
-    lvyKey: key,
+    lvyKey: key || null,
     rcvmtSn: sn,
     feeStatus: '수납',
+    taxnNo: taxnNo || row.taxnNo,
     syncedAt: new Date().toISOString(),
   };
+
+  if (taxnNo) {
+    const matched = await db
+      .select({ id: nglFeeList.id, lvyKey: nglFeeList.lvyKey })
+      .from(nglFeeList)
+      .where(
+        and(eq(nglFeeList.feeStatus, '미납'), eq(nglFeeList.rcvmtSn, ''), sql`${arrearsTaxnNoSql} = ${taxnNo}`)
+      )
+      .limit(1);
+
+    const matchedRow = matched[0];
+    if (matchedRow) {
+      // 유니크는 기존 미납 부과키 기준 — 미납에 있던 키·속성 유지
+      const targetKey = String(matchedRow.lvyKey ?? '').trim() || key;
+      if (targetKey) {
+        const conflict = await db
+          .select({ id: nglFeeList.id })
+          .from(nglFeeList)
+          .where(
+            and(eq(nglFeeList.lvyKey, targetKey), eq(nglFeeList.rcvmtSn, sn), ne(nglFeeList.id, matchedRow.id))
+          )
+          .limit(1);
+
+        if (!conflict[0]) {
+          await db
+            .update(nglFeeList)
+            .set(receiptOnlyMergeSet({ ...values, rcvmtSn: sn, taxnNo }))
+            .where(eq(nglFeeList.id, matchedRow.id));
+          return;
+        }
+      }
+    }
+  }
+
+  if (!key) return;
   await db
     .insert(nglFeeList)
-    .values(values)
+    .values({ ...values, lvyKey: key })
     .onConflictDoUpdate({
       target: [nglFeeList.lvyKey, nglFeeList.rcvmtSn],
-      set: receiptUpdateSet(values),
+      set: receiptUpdateSet({ ...values, lvyKey: key }),
     });
-
-  // 수납이 생기면 동일 부과키의 미납(수납일련='') 행 제거
-  await db
-    .delete(nglFeeList)
-    .where(and(eq(nglFeeList.lvyKey, key), eq(nglFeeList.feeStatus, '미납'), eq(nglFeeList.rcvmtSn, '')));
 }
 
 export async function insertNextGenErrorLog(params: {

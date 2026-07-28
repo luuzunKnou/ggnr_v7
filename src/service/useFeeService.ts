@@ -8,8 +8,10 @@ import {
   nglFeeListColumnComments,
   type NglFeeList,
 } from '@/database/schema/ngl_fee_list';
-import { formatToYmdOrText } from '@/lib/formatDateYmd';
+import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
 import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
+
+const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
 
 export type UseFeeListRow = {
   id: string;
@@ -60,12 +62,121 @@ function listAmount(row: NglFeeList): number | null {
   return row.lastPctAmt ?? row.frstPctAmt ?? null;
 }
 
+/** 목록 날짜: 수납→수납일자, 그 외→최종납기일(없으면 최초납기) */
+function listDateYmd(row: NglFeeList): string | null {
+  if (row.feeStatus === '수납') {
+    return row.rcvmtYmd ?? null;
+  }
+  return row.lastPidYmd ?? row.frstPidYmd ?? null;
+}
+
+function toYmd(raw: string | null | undefined): string | null {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  return tryFormatToYmd(s);
+}
+
+function startOfLocalDayMs(raw: string | Date): number | null {
+  if (raw instanceof Date) {
+    if (Number.isNaN(raw.getTime())) return null;
+    return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate()).getTime();
+  }
+  const ymd = toYmd(String(raw ?? ''));
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d).getTime();
+}
+
+function diffLocalCalendarDays(fromMs: number, toMs: number): number {
+  return Math.round((toMs - fromMs) / 86_400_000);
+}
+
+export type UseFeeUnpaidDueNotifRow = {
+  id: string;
+  chargeNo: string;
+  payer: string;
+  dueDate: string;
+  daysRemaining: number;
+};
+
+/** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 */
+export async function getUseFeeUnpaidDueNotifications(params?: {
+  withinDays?: number;
+}): Promise<{ items: UseFeeUnpaidDueNotifRow[]; error?: string }> {
+  const withinDays = Math.max(
+    1,
+    Math.min(365, Math.trunc(Number(params?.withinDays ?? UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS)))
+  );
+
+  try {
+    const rows = await db
+      .select()
+      .from(nglFeeList)
+      .where(eq(nglFeeList.feeStatus, '미납'))
+      .limit(10000);
+
+    const todayMs = startOfLocalDayMs(new Date());
+    if (todayMs == null) return { items: [] };
+
+    const items: UseFeeUnpaidDueNotifRow[] = [];
+    for (const row of rows) {
+      const dueYmd = toYmd(listDateYmd(row));
+      if (!dueYmd) continue;
+      const dueMs = startOfLocalDayMs(dueYmd);
+      if (dueMs == null) continue;
+      const daysRemaining = diffLocalCalendarDays(todayMs, dueMs);
+      if (daysRemaining < 0 || daysRemaining > withinDays) continue;
+      items.push({
+        id: String(row.id),
+        chargeNo: String(row.lvyNo ?? '').trim() || String(row.id),
+        payer: String(row.pyrNm ?? '').trim() || '—',
+        dueDate: dueYmd,
+        daysRemaining,
+      });
+    }
+
+    items.sort((a, b) => {
+      if (a.daysRemaining !== b.daysRemaining) return a.daysRemaining - b.daysRemaining;
+      if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      return a.chargeNo.localeCompare(b.chargeNo);
+    });
+
+    return { items };
+  } catch (e) {
+    return { items: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 부서 필터용: 데이터에 있는 부서명 목록 */
+export async function getUseFeeDepartments(): Promise<{
+  departments: string[];
+  error?: string;
+}> {
+  try {
+    const rows = await db
+      .selectDistinct({ dptNm: nglFeeList.dptNm })
+      .from(nglFeeList)
+      .where(sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ''`)
+      .orderBy(asc(nglFeeList.dptNm));
+    return {
+      departments: rows.map((r) => String(r.dptNm ?? '').trim()).filter(Boolean),
+    };
+  } catch (e) {
+    return { departments: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** 목록: 상태, 부과번호, 회계연도, 납부자, 납부금액, 납기일 */
 export async function getUseFeeList(params?: {
   keyword?: string;
+  /** 부서명 정확 일치. 비우면 전체 */
+  dptNm?: string;
   limit?: number;
 }): Promise<{ rows: UseFeeListRow[]; total: number; error?: string }> {
   const keyword = String(params?.keyword ?? '').trim();
+  const dptNm = String(params?.dptNm ?? '').trim();
   const limit = Math.min(Math.max(Number(params?.limit) || 5000, 1), 10000);
 
   try {
@@ -80,18 +191,32 @@ export async function getUseFeeList(params?: {
           ilike(nglFeeList.dptNm, `%${keyword}%`)
         )
       : undefined;
+    const dpt = dptNm ? eq(nglFeeList.dptNm, dptNm) : undefined;
+    const where = and(kw, dpt);
 
     const countRes = await db
       .select({ c: sql<number>`count(*)::int` })
       .from(nglFeeList)
-      .where(kw);
+      .where(where);
     const total = Number(countRes[0]?.c ?? 0);
 
+    // 1) 수납=수납일자 / 그 외=최종납기일 최신순 2) 부과번호 큰 순
+    const listDateExpr = sql`case
+      when ${nglFeeList.feeStatus} = '수납' then nullif(trim(${nglFeeList.rcvmtYmd}), '')
+      else coalesce(
+        nullif(trim(${nglFeeList.lastPidYmd}), ''),
+        nullif(trim(${nglFeeList.frstPidYmd}), '')
+      )
+    end`;
     const rows = await db
       .select()
       .from(nglFeeList)
-      .where(kw)
-      .orderBy(desc(nglFeeList.fyr), asc(nglFeeList.lvyNo), asc(nglFeeList.rcvmtSn), desc(nglFeeList.id))
+      .where(where)
+      .orderBy(
+        sql`${listDateExpr} desc nulls last`,
+        desc(nglFeeList.lvyNo),
+        desc(nglFeeList.id)
+      )
       .limit(limit);
 
     return {
@@ -106,7 +231,7 @@ export async function getUseFeeList(params?: {
           payer: String(r.pyrNm ?? ''),
           amount: formatAmount(amountRaw),
           amountRaw,
-          dueDate: formatYmd(r.frstPidYmd ?? r.lastPidYmd),
+          dueDate: formatYmd(listDateYmd(r)),
           rcvmtSn: String(r.rcvmtSn ?? ''),
         };
       }),
@@ -118,9 +243,8 @@ export async function getUseFeeList(params?: {
 
 const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string; label?: string }[] = [
   { key: 'feeStatus', db: 'fee_status', label: '상태' },
-  { key: 'lvyKey', db: 'lvy_key' },
   { key: 'lvyNo', db: 'lvy_no' },
-  { key: 'rcvmtSn', db: 'rcvmt_sn' },
+  { key: 'ledgerNo', db: 'ledger_no' },
   { key: 'fyr', db: 'fyr' },
   { key: 'dptNm', db: 'dpt_nm' },
   { key: 'dptCd', db: 'dpt_cd' },
@@ -135,11 +259,9 @@ const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string; label?: string }[
   { key: 'pyrAddr', db: 'pyr_addr' },
   { key: 'pyrSeCd', db: 'pyr_se_cd', label: '납부자구분코드' },
   { key: 'pyrMngNo', db: 'pyr_mng_no', label: '납부자관리번호' },
-  { key: 'pyrAddrSn', db: 'pyr_addr_sn', label: '납부자주소일련' },
   { key: 'pyrSttCd', db: 'pyr_stt_cd', label: '납부자상태코드' },
   { key: 'pyrSttNm', db: 'pyr_stt_nm', label: '납부자상태' },
   { key: 'zip', db: 'zip', label: '우편번호' },
-  { key: 'lotnoRoadAddrSeCd', db: 'lotno_road_addr_se_cd', label: '지번도로주소구분' },
   { key: 'pyrCnpcNo', db: 'pyr_cnpc_no', label: '전화번호' },
   { key: 'pyrMblCnpcNo', db: 'pyr_mbl_cnpc_no', label: '휴대폰번호' },
   { key: 'pyrEmlAddr', db: 'pyr_eml_addr', label: '이메일' },
@@ -163,20 +285,15 @@ const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string; label?: string }[
   { key: 'arrRsnCd', db: 'arr_rsn_cd', label: '체납사유코드' },
   { key: 'arrRsnNm', db: 'arr_rsn_nm', label: '체납사유' },
   { key: 'autoPaySeCd', db: 'auto_pay_se_cd', label: '자동납부구분' },
-  { key: 'rpmSzrVhrno', db: 'rpm_szr_vhrno', label: '압류차량번호' },
-  { key: 'untyRprsKey', db: 'unty_rprs_key', label: '통합대표키' },
   { key: 'glNm', db: 'gl_nm' },
   { key: 'glMngNo', db: 'gl_mng_no' },
   { key: 'glAddr', db: 'gl_addr' },
   { key: 'glZip', db: 'gl_zip', label: '물건지우편번호' },
-  { key: 'glLotnoRoadAddrSeCd', db: 'gl_lotno_road_addr_se_cd', label: '물건지지번도로구분' },
-  { key: 'epayNo', db: 'epay_no' },
-  { key: 'ledgerNo', db: 'ledger_no' },
   { key: 'acctItmCd', db: 'acct_itm_cd' },
-  { key: 'mngItemSn1', db: 'mng_item_sn1', label: '관리항목1' },
-  { key: 'mngItemSn2', db: 'mng_item_sn2', label: '관리항목2' },
-  { key: 'mngItemSn3', db: 'mng_item_sn3', label: '관리항목3' },
-  { key: 'mngItemSn4', db: 'mng_item_sn4', label: '관리항목4' },
+  { key: 'mngItemSn1', db: 'mng_item_sn1', label: '점용기간' },
+  { key: 'mngItemSn2', db: 'mng_item_sn2', label: '점용면적' },
+  { key: 'mngItemSn3', db: 'mng_item_sn3', label: '공시지가' },
+  { key: 'mngItemSn4', db: 'mng_item_sn4', label: '점용면적' },
   { key: 'mngItemSn5', db: 'mng_item_sn5' },
   { key: 'mngItemSn6', db: 'mng_item_sn6' },
   { key: 'spacBizCd', db: 'spac_biz_cd' },
@@ -192,10 +309,6 @@ const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string; label?: string }[
   { key: 'rcvmtSeCd', db: 'rcvmt_se_cd', label: '수납구분코드' },
   { key: 'rcvmtSttSeCd', db: 'rcvmt_stt_se_cd', label: '수납상태코드' },
   { key: 'taxnNo', db: 'taxn_no', label: '과세번호' },
-  { key: 'syncStatus', db: 'sync_status' },
-  { key: 'syncedAt', db: 'synced_at' },
-  { key: 'createdAt', db: 'created_at' },
-  { key: 'updatedAt', db: 'updated_at' },
 ];
 
 for (let i = 1; i <= 20; i++) {
@@ -226,8 +339,17 @@ const YMD_KEYS = new Set([
   'pmkYmd',
 ]);
 
+function isVirtualAccountField(key: string): boolean {
+  return /^vtlacBankNm\d+$/.test(key) || /^vrActno\d+$/.test(key);
+}
+
 function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
-  return DETAIL_FIELD_ORDER.map(({ key, db, label }) => {
+  const attrs: UseFeeDetailAttr[] = [];
+  for (const { key, db, label } of DETAIL_FIELD_ORDER) {
+    const resolvedLabel = label ?? nglFeeListColumnComments[db] ?? db;
+    // 코드성 필드는 상세 화면에서 숨김
+    if (resolvedLabel.includes('코드')) continue;
+
     const raw = row[key];
     let value: string;
     if (AMOUNT_KEYS.has(String(key))) {
@@ -237,12 +359,15 @@ function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
     } else {
       value = displayValue(raw);
     }
-    return {
+    // 가상계좌 은행·번호 1~20: 값 있는 것만 표시
+    if (isVirtualAccountField(String(key)) && (value === '—' || value === '')) continue;
+    attrs.push({
       field: String(key),
-      label: label ?? nglFeeListColumnComments[db] ?? db,
+      label: resolvedLabel,
       value,
-    };
-  });
+    });
+  }
+  return attrs;
 }
 
 export async function getUseFeeDetail(params: {
@@ -268,7 +393,7 @@ export async function getUseFeeDetail(params: {
         payer: String(r.pyrNm ?? ''),
         amount: formatAmount(amountRaw),
         amountRaw,
-        dueDate: formatYmd(r.frstPidYmd ?? r.lastPidYmd),
+        dueDate: formatYmd(listDateYmd(r)),
         rcvmtSn: String(r.rcvmtSn ?? ''),
       },
       attributes: buildAttributes(r),
@@ -303,7 +428,7 @@ export async function getUseFeeReceiptsByLvyKey(params: { lvyKey?: string }) {
         payer: String(r.pyrNm ?? ''),
         amount: formatAmount(amountRaw),
         amountRaw,
-        dueDate: formatYmd(r.frstPidYmd ?? r.lastPidYmd),
+        dueDate: formatYmd(listDateYmd(r)),
         rcvmtSn: String(r.rcvmtSn ?? ''),
       };
     }),

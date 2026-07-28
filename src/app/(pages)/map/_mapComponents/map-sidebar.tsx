@@ -16,7 +16,7 @@ import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
 import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
-} from '../_mapContents/prototypes/dummyData';
+} from '../_mapContents/bizNotif/bizNotifStore';
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 
 type ServiceItem = {

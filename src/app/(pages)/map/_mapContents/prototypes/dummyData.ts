@@ -120,18 +120,16 @@ export type ProtoFeeRow = {
   vbankNo3?: string
 }
 
-export type ProtoNotifItem = {
-  id: string
-  category: '만료임박' | '미납임박'
-  title: string
-  name: string
-  /** 목록 우측 키 열 표시 (없으면 name 파싱) */
-  listKey?: string
-  read: boolean
-  important: boolean
-  target: 'ledger' | 'fee'
-  targetId: string
-}
+export type {
+  ProtoNotifItem,
+} from '../bizNotif/bizNotifStore'
+export {
+  PROTO_NOTIFS,
+  PROTO_NOTIF_CHANGED_EVENT,
+  getProtoNotifs,
+  setProtoNotifs,
+  hasProtoUnreadNotifications,
+} from '../bizNotif/bizNotifStore'
 
 /** 프로토 내 정보 — 사용자 더미 */
 export const PROTO_USER = {
@@ -1074,31 +1072,6 @@ export const PROTO_FEES: ProtoFeeRow[] = [
     ledgerId: null,
   },
 ]
-
-export const PROTO_NOTIFS: ProtoNotifItem[] = []
-
-/** 프로토 알림 — 패널·사이드바 공유 (메모리) */
-export const PROTO_NOTIF_CHANGED_EVENT = 'ggnr-proto-notifs-changed'
-
-let protoNotifItems: ProtoNotifItem[] = [...PROTO_NOTIFS]
-
-export function getProtoNotifs(): ProtoNotifItem[] {
-  return protoNotifItems
-}
-
-export function setProtoNotifs(items: ProtoNotifItem[]) {
-  if (items === protoNotifItems) return
-  protoNotifItems = items
-  if (typeof window !== 'undefined') {
-    queueMicrotask(() => {
-      window.dispatchEvent(new CustomEvent(PROTO_NOTIF_CHANGED_EVENT))
-    })
-  }
-}
-
-export function hasProtoUnreadNotifications(): boolean {
-  return protoNotifItems.some((n) => !n.read)
-}
 
 export function feesForLedger(manageCode: string): ProtoFeeRow[] {
   return PROTO_FEES.filter(

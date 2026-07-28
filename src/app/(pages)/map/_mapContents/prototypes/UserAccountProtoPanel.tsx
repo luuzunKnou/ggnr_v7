@@ -3,22 +3,22 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { signOut, useSession } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
 import { LogOut, Mail, Phone, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
-  dismissAllUsageDataAsExpiryNotifs,
-  dismissUsageDataAsExpiryNotif,
-  markUsageDataAsExpiryNotifRead,
+  dismissAllBizNotifs,
+  dismissBizNotif,
+  markBizNotifRead,
   PROTO_NOTIF_CHANGED_EVENT,
-  refreshUsageDataAsExpiryNotifs,
-  setUsageDataAsNotifUsrId,
-} from '../river/usageDataAs/usageDataAsExpiryNotifClient'
+  refreshBizNotifs,
+} from '../bizNotif/bizNotifClient'
 import {
   getProtoNotifs,
   hasProtoUnreadNotifications,
   type ProtoNotifItem,
-} from './dummyData'
+} from '../bizNotif/bizNotifStore'
 import { UserAccountProtoNotifTab } from './UserAccountProtoNotifTab'
 
 /** 프로토 내 정보 패널 */
@@ -48,10 +48,11 @@ function profileFromSession(session: ReturnType<typeof useSession>['data']): MyP
   }
 }
 
+/** 프로필 배지 — 성 제외한 이름 두 글자(예: 김배근 → 배근) */
 function profileInitials(name: string): string {
   const trimmed = String(name ?? '').trim()
   if (!trimmed) return '?'
-  return trimmed.slice(0, 2)
+  return trimmed.length <= 2 ? trimmed : trimmed.slice(-2)
 }
 
 /** 패널 하단 탭 — 추후 탭 추가 시 이 배열에만 항목 추가 */
@@ -62,24 +63,22 @@ type Props = {
   open: boolean
   onClose: () => void
   onOpenLedger: (ledgerId: string) => void
+  onOpenFee: (feeId: string) => void
 }
 
-export function UserAccountProtoPanel({ open, onClose, onOpenLedger }: Props) {
+export function UserAccountProtoPanel({ open, onClose, onOpenLedger, onOpenFee }: Props) {
   const { data: session, status } = useSession()
+  const searchParams = useSearchParams()
+  const system = String(searchParams.get('system') ?? '').trim()
   const [notifItems, setNotifItemsLocal] = useState(getProtoNotifs)
   const [activeTab, setActiveTab] = useState<ProtoPanelTabId | null>(null)
   const [profile, setProfile] = useState<MyProfileView>(() => profileFromSession(null))
   const [profileLoading, setProfileLoading] = useState(false)
 
   useEffect(() => {
-    if (status === 'loading') return
-    setUsageDataAsNotifUsrId(session?.user?.id)
-  }, [session?.user?.id, status])
-
-  useEffect(() => {
     if (!open || status === 'loading') return
-    void refreshUsageDataAsExpiryNotifs()
-  }, [open, session?.user?.id, status])
+    void refreshBizNotifs({ system: system || null })
+  }, [open, session?.user?.id, status, system])
 
   useEffect(() => {
     const sync = () => setNotifItemsLocal(getProtoNotifs())
@@ -124,15 +123,15 @@ export function UserAccountProtoPanel({ open, onClose, onOpenLedger }: Props) {
   }, [])
 
   const handleDismissNotif = useCallback((item: ProtoNotifItem) => {
-    dismissUsageDataAsExpiryNotif(item.targetId)
+    void dismissBizNotif(item)
   }, [])
 
   const handleDismissAllNotifs = useCallback(() => {
-    dismissAllUsageDataAsExpiryNotifs()
+    void dismissAllBizNotifs()
   }, [])
 
   const handleMarkNotifRead = useCallback((item: ProtoNotifItem) => {
-    markUsageDataAsExpiryNotifRead(item.targetId)
+    void markBizNotifRead(item)
   }, [])
 
   useEffect(() => {
@@ -178,6 +177,7 @@ export function UserAccountProtoPanel({ open, onClose, onOpenLedger }: Props) {
               onDismissAll={handleDismissAllNotifs}
               onMarkRead={handleMarkNotifRead}
               onOpenLedger={onOpenLedger}
+              onOpenFee={onOpenFee}
               onClosePanel={onClose}
             />
           ) : null}

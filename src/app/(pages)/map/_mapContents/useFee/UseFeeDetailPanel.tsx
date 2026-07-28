@@ -105,9 +105,9 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
               {visibleAttributes.map((row) => (
                 <div
                   key={row.field}
-                  className="grid grid-cols-[8.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-2 py-1.5"
+                  className="grid grid-cols-[6.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-2 py-1.5"
                 >
-                  <dt className="w-[8.25rem] shrink-0 overflow-hidden whitespace-nowrap font-medium text-slate-600">
+                  <dt className="w-[6.25rem] shrink-0 overflow-hidden whitespace-nowrap font-medium text-slate-600">
                     {row.label}
                   </dt>
                   <dd

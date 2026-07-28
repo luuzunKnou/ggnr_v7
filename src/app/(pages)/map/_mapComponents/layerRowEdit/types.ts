@@ -24,12 +24,16 @@ export type LayerRowEditPreset = {
   keyFieldEditableOnCreate?: boolean;
   /** 신규 등록 시 PK를 서버에서 자동 채번 (defineLayer 읽기전용 키) */
   autoGenerateKeyOnCreate?: boolean;
+  /** show_detail=false 필드도 더보기로 표시·저장 */
+  includeHiddenDetail?: boolean;
 };
 
 export type LayerRowDetailAttr = {
   field: string;
   label: string;
   value: string;
+  /** false면 기본 숨김(더보기로 표시). 미지정은 기본 표시 */
+  showDetail?: boolean;
 };
 
 export type LayerRowParcelItem = {

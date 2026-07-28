@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import type { LayerRowDetailAttr } from "../../../_mapComponents/layerRowEdit";
 import {
   USAGE_AREA_FIELDS,
@@ -24,6 +25,8 @@ type Props = {
   readOnlyFields: Set<string>;
   dateFields: Set<string>;
   onDraftChange: (field: string, value: string) => void;
+  /** 상세 건 전환 시 더보기 접기용 */
+  resetKey?: string;
 };
 
 export function UsageDataAsAttributeSection({
@@ -33,7 +36,34 @@ export function UsageDataAsAttributeSection({
   readOnlyFields,
   dateFields,
   onDraftChange,
+  resetKey,
 }: Props) {
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (isEditing) setExpanded(true);
+  }, [isEditing]);
+
+  const { primaryAttributes, hiddenAttributes } = useMemo(() => {
+    const primary: LayerRowDetailAttr[] = [];
+    const hidden: LayerRowDetailAttr[] = [];
+    for (const row of attributes) {
+      if (row.showDetail === false) hidden.push(row);
+      else primary.push(row);
+    }
+    return { primaryAttributes: primary, hiddenAttributes: hidden };
+  }, [attributes]);
+
+  const visibleAttributes = expanded
+    ? [...primaryAttributes, ...hiddenAttributes]
+    : primaryAttributes;
+  const hiddenCount = hiddenAttributes.length;
+  const showMoreButton = hiddenCount > 0;
+
   const resolveDraftValue = (field: string): string => {
     if (field in draft) return draft[field] ?? "";
     const key = Object.keys(draft).find((k) => k.toLowerCase() === field.toLowerCase());
@@ -55,10 +85,10 @@ export function UsageDataAsAttributeSection({
     <>
       <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">상세 속성</div>
       <dl className="divide-y divide-slate-100 rounded border border-slate-200 bg-slate-50/50">
-        {attributes.length === 0 ? (
+        {visibleAttributes.length === 0 ? (
           <div className="px-2 py-3 text-slate-500">표시할 속성이 없습니다.</div>
         ) : (
-          attributes.map((row) => {
+          visibleAttributes.map((row) => {
             const fieldLower = row.field.toLowerCase();
             const locked = readOnlyFields.has(fieldLower);
             const showInput = isEditing && !locked;
@@ -148,6 +178,15 @@ export function UsageDataAsAttributeSection({
           })
         )}
       </dl>
+      {showMoreButton && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 w-full rounded border border-slate-200 bg-white py-1.5 text-[11px] font-medium text-primary hover:bg-slate-50"
+        >
+          {expanded ? "접기" : `더보기 (${hiddenCount}건)`}
+        </button>
+      )}
     </>
   );
 }

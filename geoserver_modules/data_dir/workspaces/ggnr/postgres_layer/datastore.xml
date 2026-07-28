@@ -12,9 +12,9 @@
     <entry key="preparedStatements">false</entry>
     <entry key="database">build_uj</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:FS2LKBn15EcSWip9PK2b5KzPHCwitKin</entry>
+    <entry key="passwd">crypt1:Fm4hNc2/XJgWqlp/WWiC8T+lVrqXqn8e</entry>
     <entry key="validate connections">true</entry>
-    <entry key="host">localhost</entry>
+    <entry key="host">192.168.127.32</entry>
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>

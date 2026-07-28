@@ -24,6 +24,9 @@ type ListProps = {
 export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) {
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  /** 빈 문자열 = 전체 */
+  const [dptNm, setDptNm] = useState('')
+  const [departments, setDepartments] = useState<string[]>([])
   const [rows, setRows] = useState<ListRow[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -36,12 +39,32 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
 
   useEffect(() => {
     let cancelled = false
+    void call('', 'POST', {
+      service: 'useFeeService',
+      action: 'getUseFeeDepartments',
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as { departments?: string[] }
+        setDepartments(Array.isArray(data?.departments) ? data.departments : [])
+      })
+      .catch(() => {
+        if (!cancelled) setDepartments([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
     void call('', 'POST', {
       service: 'useFeeService',
       action: 'getUseFeeList',
-      params: { keyword: debouncedKeyword },
+      params: { keyword: debouncedKeyword, dptNm: dptNm || undefined },
     })
       .then((res) => {
         if (cancelled) return
@@ -66,7 +89,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword])
+  }, [debouncedKeyword, dptNm])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -83,7 +106,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -94,6 +117,34 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
             className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
           />
         </div>
+        {departments.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                { value: '', label: '전체' },
+                ...departments.map((name) => ({ value: name, label: name })),
+              ] as const
+            ).map((opt) => {
+              const active = dptNm === opt.value
+              return (
+                <button
+                  key={opt.value || '__all__'}
+                  type="button"
+                  onClick={() => setDptNm(opt.value)}
+                  title={opt.label}
+                  className={cn(
+                    'max-w-full truncate rounded border px-2 py-1 text-[11px] font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary/10 text-slate-800'
+                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

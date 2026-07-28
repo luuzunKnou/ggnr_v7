@@ -440,6 +440,7 @@ export function UsageDataAsDetailPanel({
               readOnlyFields={readOnlyFields}
               dateFields={dateFields}
               onDraftChange={handleDraftChange}
+              resetKey={detailId}
             />
 
             {(isEditing || !isCreateMode) && (
@@ -469,6 +470,17 @@ export function UsageDataAsDetailPanel({
                 emptyHintEdit="「추가」로 주소를 검색해 물건지를 등록합니다."
                 emptyHintView="등록된 물건지가 없습니다."
               />
+            )}
+
+            {!isCreateMode && (
+              <div className="mt-4">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  점사용료 이력
+                </div>
+                <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-4 text-center text-slate-500">
+                  연계된 점사용료가 없습니다.
+                </div>
+              </div>
             )}
           </>
         )}

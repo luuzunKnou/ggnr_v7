@@ -47,6 +47,8 @@ export type UsageDataAsDetailAttr = {
   field: string;
   label: string;
   value: string;
+  /** false면 기본 숨김(더보기로 표시) */
+  showDetail?: boolean;
 };
 
 function esc(value: string): string {
@@ -407,7 +409,8 @@ export async function getUsageDataAsDetailByKey(params: {
   const fieldDefs = await getEditableFieldDefinitionsForTable({
     table: MAIN_TABLE,
     schema: DEFAULT_SCHEMA,
-    excludeFields: ['ogc_fid', 'gkey_code'],
+    excludeFields: ['ogc_fid', 'gkey_code', 'river_code', 'mng_cde', 'user_name'],
+    includeHiddenDetail: true,
   });
   if (fieldDefs.error) {
     return { attributes: [], parcelItems: [], mgjItems: [], error: fieldDefs.error };
@@ -440,12 +443,16 @@ export async function getUsageDataAsDetailByKey(params: {
       return { attributes: [], parcelItems: [], mgjItems: [], error: '해당 건을 찾을 수 없습니다.' };
     }
 
-    const labelByField = new Map(fieldDefs.fields.map((f) => [f.field.toLowerCase(), f.label]));
-    const attributes: UsageDataAsDetailAttr[] = dataFields.map((field) => ({
-      field,
-      label: labelByField.get(field.toLowerCase()) ?? field,
-      value: String(row[field] ?? '').trim() || '—',
-    }));
+    const metaByField = new Map(fieldDefs.fields.map((f) => [f.field.toLowerCase(), f]));
+    const attributes: UsageDataAsDetailAttr[] = dataFields.map((field) => {
+      const def = metaByField.get(field.toLowerCase());
+      return {
+        field,
+        label: def?.label ?? field,
+        value: String(row[field] ?? '').trim() || '—',
+        showDetail: def?.showDetail !== false,
+      };
+    });
 
     const [parcelResult, mgjResult] = await Promise.all([
       getChildAddressItems({ childTableName: SOLO_TABLE, parentKey: keyRaw }),

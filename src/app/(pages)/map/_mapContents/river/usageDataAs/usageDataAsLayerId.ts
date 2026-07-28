@@ -9,3 +9,11 @@ export const USAGE_DATA_AS_WMS_LAYER_IDS = [
   USAGE_DATA_AS_SOLO_WMS_LAYER_ID,
   USAGE_DATA_AS_MGJ_WMS_LAYER_ID,
 ] as const;
+
+const USAGE_DATA_AS_WMS_LAYER_ID_SET = new Set(
+  USAGE_DATA_AS_WMS_LAYER_IDS.map((id) => id.toLowerCase())
+);
+
+export function isUsageDataAsWmsLayerId(tableName: string): boolean {
+  return USAGE_DATA_AS_WMS_LAYER_ID_SET.has(String(tableName ?? "").trim().toLowerCase());
+}

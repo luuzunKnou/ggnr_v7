@@ -31,6 +31,7 @@ export * from './ug';
 export * from './up_map';
 export * from './usr';
 export * from './usr_access_request';
+export * from './usr_biz_notif_state';
 export * from './usr_ser_grant';
 export * from './usr_sys_grant';
 export * from './ut';

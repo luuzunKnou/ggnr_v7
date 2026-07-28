@@ -3,15 +3,13 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { USAGE_EXPIRY_NOTIF_WITHIN_DAYS } from '../river/usageDataAs/usageDataAsExpiryNotifClient'
-import type { ProtoNotifItem } from './dummyData'
+import { BIZ_NOTIF_WITHIN_DAYS } from '../bizNotif/bizNotifClient'
+import type { ProtoNotifItem } from '../bizNotif/bizNotifStore'
 
 const NOTIF_ROW =
   'flex items-center gap-2 border-b border-slate-100/80 py-2 pl-4 pr-3 last:border-b-0 hover:bg-slate-50/50'
 const BTN_CLEAR =
   'shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] leading-none text-slate-400 hover:text-black'
-
-const NOTIF_CATEGORY = '만료임박' as const
 
 function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: string } {
   if (item.listKey) {
@@ -25,16 +23,13 @@ function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: str
   return { useName: item.name, key: '—' }
 }
 
-function groupSummary(count: number): string {
-  return `점용종료일이 ${USAGE_EXPIRY_NOTIF_WITHIN_DAYS}일 이내인 건이 ${count}건입니다`
-}
-
 type Props = {
   items: ProtoNotifItem[]
   onDismiss: (item: ProtoNotifItem) => void
   onDismissAll: () => void
   onMarkRead: (item: ProtoNotifItem) => void
   onOpenLedger: (ledgerId: string) => void
+  onOpenFee: (feeId: string) => void
   onClosePanel: () => void
 }
 
@@ -44,24 +39,32 @@ export function UserAccountProtoNotifTab({
   onDismissAll,
   onMarkRead,
   onOpenLedger,
+  onOpenFee,
   onClosePanel,
 }: Props) {
-  const [expanded, setExpanded] = useState(true)
+  const [expiryExpanded, setExpiryExpanded] = useState(true)
+  const [feeExpanded, setFeeExpanded] = useState(true)
 
-  const list = useMemo(
-    () => items.filter((item) => item.category === NOTIF_CATEGORY),
+  const expiryList = useMemo(
+    () => items.filter((item) => item.category === '만료임박'),
+    [items]
+  )
+  const feeList = useMemo(
+    () => items.filter((item) => item.category === '미납임박'),
     [items]
   )
 
-  const unreadCount = list.filter((n) => !n.read).length
+  const totalCount = expiryList.length + feeList.length
+  const unreadCount = items.filter((n) => !n.read).length
 
   const openItem = (item: ProtoNotifItem) => {
     onMarkRead(item)
-    onOpenLedger(item.targetId)
+    if (item.target === 'fee') onOpenFee(item.targetId)
+    else onOpenLedger(item.targetId)
     onClosePanel()
   }
 
-  if (list.length === 0) {
+  if (totalCount === 0) {
     return (
       <div className="flex min-h-[120px] flex-col items-center justify-center px-3 py-10 text-center text-xs text-slate-500">
         받은 알림이 없습니다.
@@ -73,7 +76,7 @@ export function UserAccountProtoNotifTab({
     <>
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 px-3 py-2">
         <span className="text-[11px] text-slate-500">
-          총 <span className="font-medium tabular-nums text-slate-700">{list.length}</span>건
+          총 <span className="font-medium tabular-nums text-slate-700">{totalCount}</span>건
           {unreadCount > 0 ? (
             <>
               {' '}
@@ -88,20 +91,39 @@ export function UserAccountProtoNotifTab({
       </div>
 
       <div className="scrollbar-thin min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overflow-x-hidden bg-white">
-        <NotifGroup
-          summary={groupSummary(list.length)}
-          expanded={expanded}
-          onToggle={() => setExpanded((prev) => !prev)}
-        >
-          {list.map((item) => (
-            <NotifListRow
-              key={item.id}
-              item={item}
-              onOpen={() => openItem(item)}
-              onDelete={() => onDismiss(item)}
-            />
-          ))}
-        </NotifGroup>
+        {expiryList.length > 0 ? (
+          <NotifGroup
+            summary={`점용종료일이 ${BIZ_NOTIF_WITHIN_DAYS}일 이내인 건이 ${expiryList.length}건입니다`}
+            expanded={expiryExpanded}
+            onToggle={() => setExpiryExpanded((prev) => !prev)}
+          >
+            {expiryList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
+
+        {feeList.length > 0 ? (
+          <NotifGroup
+            summary={`납기일이 ${BIZ_NOTIF_WITHIN_DAYS}일 이내인 미납이 ${feeList.length}건입니다`}
+            expanded={feeExpanded}
+            onToggle={() => setFeeExpanded((prev) => !prev)}
+          >
+            {feeList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
       </div>
     </>
   )

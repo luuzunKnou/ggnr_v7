@@ -68,12 +68,17 @@ import {
   ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
 } from '../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import { pickRoadLedgerField } from '../_mapContents/road/roadLedger/roadLedgerFormat';
+import {
+  USAGE_DATA_AS_WMS_LAYER_IDS,
+  isUsageDataAsWmsLayerId,
+} from '../_mapContents/river/usageDataAs/usageDataAsLayerId';
 import { Crosshair } from 'lucide-react';
 import './config/projections';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import WKT from 'ol/format/WKT';
+import GeoJSON from 'ol/format/GeoJSON';
 import { fromCircle } from 'ol/geom/Polygon';
 import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
@@ -102,6 +107,55 @@ function pickIdentifyOgcFid(data: Record<string, unknown> | undefined): number |
     data.FID;
   const n = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+function pickIdentifyConsCode(data: Record<string, unknown> | undefined): string | null {
+  if (!data) return null;
+  for (const [k, v] of Object.entries(data)) {
+    if (k.toLowerCase() === 'cons_code') {
+      const s = String(v ?? '').trim();
+      return s || null;
+    }
+  }
+  return null;
+}
+
+const IDENTIFY_GEOM_KEYS = ['geom', 'geometry', 'the_geom', 'wkb_geometry', 'shape'];
+
+/** identify 행의 WGS84 GeoJSON → EPSG:3857 extent (클릭 도형 중앙 맞춤용) */
+function pickIdentifyExtent3857(
+  data: Record<string, unknown> | undefined
+): [number, number, number, number] | null {
+  if (!data) return null;
+  const keys = Object.keys(data);
+  const byName = keys.find((k) => IDENTIFY_GEOM_KEYS.includes(k.toLowerCase()));
+  const key =
+    byName ??
+    keys.find((k) => {
+      const v = data[k];
+      return v && typeof v === 'object' && 'type' in (v as object) && 'coordinates' in (v as object);
+    });
+  if (!key) return null;
+  let geom: unknown = data[key];
+  if (typeof geom === 'string') {
+    try {
+      geom = JSON.parse(geom) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!geom || typeof geom !== 'object') return null;
+  try {
+    const features = new GeoJSON().readFeatures(
+      { type: 'Feature', geometry: geom, properties: {} },
+      { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
+    );
+    const ext = features[0]?.getGeometry()?.getExtent();
+    if (!ext || ext.length !== 4 || !ext.every((v) => Number.isFinite(v))) return null;
+    return [ext[0]!, ext[1]!, ext[2]!, ext[3]!];
+  } catch {
+    return null;
+  }
 }
 
 // 다중 선택 가능한 아이템 ID 목록
@@ -214,7 +268,10 @@ export default function OpenLayersMap({
       if (state.activeControls?.length) setActiveControls(state.activeControls);
       if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
       if (state.visibleLayerNames?.length && mapContext?.setVisibleLayerNames) {
-        mapContext.setVisibleLayerNames(new Set(state.visibleLayerNames));
+        // 하천점용 패널 전용 레이어는 복원하지 않음 (패널 없이 켜져 클릭 무반응 방지)
+        mapContext.setVisibleLayerNames(
+          new Set(state.visibleLayerNames.filter((n) => !isUsageDataAsWmsLayerId(n)))
+        );
       }
       const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
         JIMOK_LAYERS.some((l) => l.tableName === t)
@@ -849,6 +906,46 @@ export default function OpenLayersMap({
             if (cancelled) return;
             window.alert(e instanceof Error ? e.message : '도면 첨부 정보를 불러오지 못했습니다.');
           }
+          closePopup();
+          return;
+        }
+      }
+
+      /** 하천점용: usage_data_as / solo / mgj → 목록·상세 선택 */
+      if (
+        mapContext?.usageDataAsPanelOpen &&
+        mapContext.applyUsageDataAsMapPickRef
+      ) {
+        const usageLayerSet = new Set(
+          USAGE_DATA_AS_WMS_LAYER_IDS.map((id) => id.toLowerCase())
+        );
+        const ranked = withFeat
+          .map((r, wi) => {
+            const tn = String(r.tableName ?? '')
+              .trim()
+              .toLowerCase();
+            if (!usageLayerSet.has(tn) || r.features.length === 0) return null;
+            // 클릭 도형 중앙 맞춤: 필지·물건지(작은 도형)를 부모보다 우선
+            const rank = tn === 'usage_data_as_solo' ? 0 : tn === 'usage_data_as_mgj' ? 1 : 2;
+            return { wi, rank, layer: r };
+          })
+          .filter((x): x is NonNullable<typeof x> => x != null)
+          .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
+        const usageHit = ranked[0]?.layer;
+        if (usageHit) {
+          const hitData = usageHit.features[0]?.data;
+          const consCode = pickIdentifyConsCode(hitData);
+          if (!consCode) {
+            if (!cancelled) {
+              window.alert('클릭한 점용 도형의 대장번호(cons_code)를 읽을 수 없습니다.');
+            }
+            closePopup();
+            return;
+          }
+          mapContext.applyUsageDataAsMapPickRef.current?.({
+            consCode,
+            extent3857: pickIdentifyExtent3857(hitData),
+          });
           closePopup();
           return;
         }

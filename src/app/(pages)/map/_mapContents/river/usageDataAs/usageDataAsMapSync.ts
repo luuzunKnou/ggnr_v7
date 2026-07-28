@@ -23,6 +23,22 @@ export function ensureUsageDataAsWmsLayersVisible(
   });
 }
 
+/** 하천점용 패널 종료·시스템 이탈 시 — 점용 WMS 끄기 */
+export function clearUsageDataAsWmsLayers(
+  setVisibleLayerNames?: (updater: (prev: Set<string>) => Set<string>) => void
+): void {
+  if (!setVisibleLayerNames) return;
+  const ids = USAGE_DATA_AS_WMS_LAYER_IDS.map((id) => id.toLowerCase());
+  setVisibleLayerNames((prev) => {
+    let changed = false;
+    const next = new Set(prev);
+    for (const lid of ids) {
+      if (next.delete(lid)) changed = true;
+    }
+    return changed ? next : prev;
+  });
+}
+
 /** 저장·상세 갱신 후 WMS·뷰 동기화 */
 export async function refreshUsageDataAsMapView(opts: {
   map: Map | null | undefined;

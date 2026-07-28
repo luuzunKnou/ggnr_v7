@@ -171,7 +171,14 @@ async function fetchAndSave(params: {
   if (params.interfaceId === 'B-2') {
     for (const item of resVo1) await upsertReceiptRow(mapReceiptItem(item));
   } else {
-    for (const item of resVo1) await upsertArrearsRow(mapArrearsItem(item));
+    // 조회에 쓰는 특별회계사업코드를 미납 행에도 저장 → 이후 과세번호 매칭 키에 포함
+    for (const item of resVo1) {
+      const mapped = mapArrearsItem(item);
+      await upsertArrearsRow({
+        ...mapped,
+        spacBizCd: mapped.spacBizCd || params.spacBizCd || null,
+      });
+    }
   }
 
   if (config.filePath) {
