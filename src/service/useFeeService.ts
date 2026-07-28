@@ -13,6 +13,28 @@ import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
 
 const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
 
+/** 건설 시스템(build)에서만 노출하는 부서 */
+const BUILD_ONLY_DEPT_NM = '건설과';
+
+function normalizeSystemKey(system?: string): string {
+  return String(system ?? '').trim().toLowerCase();
+}
+
+/** 하천·도로 등 건설 외 시스템에서는 건설과 점사용료 제외 */
+function allowsBuildOnlyDept(system?: string): boolean {
+  return normalizeSystemKey(system) === 'build';
+}
+
+function isBuildOnlyDept(dptNm: string | null | undefined): boolean {
+  return String(dptNm ?? '').trim() === BUILD_ONLY_DEPT_NM;
+}
+
+/** 시스템별 부서 노출 SQL 조건 (건설 외: 건설과 제외) */
+function systemDeptScopeSql(system?: string) {
+  if (allowsBuildOnlyDept(system)) return undefined;
+  return sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ${BUILD_ONLY_DEPT_NM}`;
+}
+
 export type UseFeeListRow = {
   id: string;
   status: string;
@@ -99,6 +121,8 @@ export type UseFeeUnpaidDueNotifRow = {
   payer: string;
   dueDate: string;
   daysRemaining: number;
+  /** 알림 systemScope 판별용 */
+  dptNm: string;
 };
 
 /** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 */
@@ -134,6 +158,7 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
         payer: String(row.pyrNm ?? '').trim() || '—',
         dueDate: dueYmd,
         daysRemaining,
+        dptNm: String(row.dptNm ?? '').trim(),
       });
     }
 
@@ -149,16 +174,24 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
   }
 }
 
-/** 부서 필터용: 데이터에 있는 부서명 목록 */
-export async function getUseFeeDepartments(): Promise<{
+/** 부서 필터용: 데이터에 있는 부서명 목록 (system=build 외에는 건설과 제외) */
+export async function getUseFeeDepartments(params?: {
+  system?: string;
+}): Promise<{
   departments: string[];
   error?: string;
 }> {
+  const system = params?.system;
   try {
     const rows = await db
       .selectDistinct({ dptNm: nglFeeList.dptNm })
       .from(nglFeeList)
-      .where(sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ''`)
+      .where(
+        and(
+          sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ''`,
+          systemDeptScopeSql(system)
+        )
+      )
       .orderBy(asc(nglFeeList.dptNm));
     return {
       departments: rows.map((r) => String(r.dptNm ?? '').trim()).filter(Boolean),
@@ -173,13 +206,20 @@ export async function getUseFeeList(params?: {
   keyword?: string;
   /** 부서명 정확 일치. 비우면 전체 */
   dptNm?: string;
+  /** URL system= (build 외에는 건설과 행 제외) */
+  system?: string;
   limit?: number;
 }): Promise<{ rows: UseFeeListRow[]; total: number; error?: string }> {
   const keyword = String(params?.keyword ?? '').trim();
   const dptNm = String(params?.dptNm ?? '').trim();
+  const system = params?.system;
   const limit = Math.min(Math.max(Number(params?.limit) || 5000, 1), 10000);
 
   try {
+    if (dptNm && isBuildOnlyDept(dptNm) && !allowsBuildOnlyDept(system)) {
+      return { rows: [], total: 0 };
+    }
+
     const kw = keyword
       ? or(
           ilike(nglFeeList.lvyNo, `%${keyword}%`),
@@ -192,7 +232,7 @@ export async function getUseFeeList(params?: {
         )
       : undefined;
     const dpt = dptNm ? eq(nglFeeList.dptNm, dptNm) : undefined;
-    const where = and(kw, dpt);
+    const where = and(kw, dpt, systemDeptScopeSql(system));
 
     const countRes = await db
       .select({ c: sql<number>`count(*)::int` })
@@ -372,6 +412,8 @@ function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
 
 export async function getUseFeeDetail(params: {
   id?: string | number;
+  /** URL system= (build 외에는 건설과 상세 차단) */
+  system?: string;
 }): Promise<{ row: UseFeeListRow | null; attributes: UseFeeDetailAttr[]; error?: string }> {
   const idNum = Number(params?.id);
   if (!Number.isFinite(idNum) || idNum <= 0) {
@@ -382,6 +424,14 @@ export async function getUseFeeDetail(params: {
     const rows = await db.select().from(nglFeeList).where(eq(nglFeeList.id, idNum)).limit(1);
     const r = rows[0];
     if (!r) return { row: null, attributes: [], error: '선택한 점사용료를 찾을 수 없습니다.' };
+
+    if (isBuildOnlyDept(r.dptNm) && !allowsBuildOnlyDept(params?.system)) {
+      return {
+        row: null,
+        attributes: [],
+        error: '선택한 점사용료를 찾을 수 없습니다.',
+      };
+    }
 
     const amountRaw = listAmount(r);
     return {

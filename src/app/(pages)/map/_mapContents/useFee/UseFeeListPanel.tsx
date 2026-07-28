@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,8 @@ type ListProps = {
 }
 
 export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) {
+  const searchParams = useSearchParams()
+  const system = String(searchParams.get('system') ?? '').trim()
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
   /** 빈 문자열 = 전체 */
@@ -42,12 +45,14 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     void call('', 'POST', {
       service: 'useFeeService',
       action: 'getUseFeeDepartments',
-      params: {},
+      params: { system: system || undefined },
     })
       .then((res) => {
         if (cancelled) return
         const data = (res?.data ?? res) as { departments?: string[] }
-        setDepartments(Array.isArray(data?.departments) ? data.departments : [])
+        const next = Array.isArray(data?.departments) ? data.departments : []
+        setDepartments(next)
+        setDptNm((prev) => (prev && !next.includes(prev) ? '' : prev))
       })
       .catch(() => {
         if (!cancelled) setDepartments([])
@@ -55,7 +60,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [system])
 
   useEffect(() => {
     let cancelled = false
@@ -64,7 +69,11 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     void call('', 'POST', {
       service: 'useFeeService',
       action: 'getUseFeeList',
-      params: { keyword: debouncedKeyword, dptNm: dptNm || undefined },
+      params: {
+        keyword: debouncedKeyword,
+        dptNm: dptNm || undefined,
+        system: system || undefined,
+      },
     })
       .then((res) => {
         if (cancelled) return
@@ -89,7 +98,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword, dptNm])
+  }, [debouncedKeyword, dptNm, system])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">

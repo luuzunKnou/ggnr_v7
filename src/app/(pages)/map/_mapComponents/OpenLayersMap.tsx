@@ -56,6 +56,7 @@ import {
 import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMapVisualCenterPixel } from './hooks/useMapVisualCenterPixel';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
+import { useSlopeMeasure } from './hooks/useSlopeMeasure';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
@@ -1103,17 +1104,27 @@ export default function OpenLayersMap({
     }
   );
 
+  const { clearSlopeMeasurements } = useSlopeMeasure(
+    mapInstanceRef.current,
+    activeControls.includes('slope')
+  );
+
+  const clearAllMeasurements = useCallback(() => {
+    clearMeasurements();
+    clearSlopeMeasurements();
+  }, [clearMeasurements, clearSlopeMeasurements]);
+
   const clearMapDrawInteractions = useCallback(
     (except?: MapDrawInteractionKind) => {
       if (except !== 'measure') {
         setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
-        clearMeasurements();
+        clearAllMeasurements();
       }
       if (except !== 'spatialSearch') {
         setSpatialDrawRequest?.(null);
       }
     },
-    [clearMeasurements, setSpatialDrawRequest]
+    [clearAllMeasurements, setSpatialDrawRequest]
   );
 
   useEffect(() => {
@@ -1221,7 +1232,7 @@ export default function OpenLayersMap({
     // 초기화 버튼: 측정 관련 버튼 모두 선택 해제 및 측정 결과 초기화
     if (id === 'reset-measurements') {
       setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
-      clearMeasurements();
+      clearAllMeasurements();
       console.log(`[v0] Reset measurements triggered`);
       return;
     }

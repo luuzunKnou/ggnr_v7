@@ -145,7 +145,7 @@ export async function listMyBizNotifications(params?: {
       important: true,
       target: 'fee',
       targetId: row.id,
-      systemScope: 'river',
+      systemScope: String(row.dptNm ?? '').trim() === '건설과' ? 'build' : 'river',
     });
   }
 

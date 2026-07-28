@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
@@ -29,6 +30,8 @@ type DetailProps = {
 const FEE_DETAIL_INITIAL_COUNT = 20
 
 export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
+  const searchParams = useSearchParams()
+  const system = String(searchParams.get('system') ?? '').trim()
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +49,7 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
     void call('', 'POST', {
       service: 'useFeeService',
       action: 'getUseFeeDetail',
-      params: { id: detailId },
+      params: { id: detailId, system: system || undefined },
     })
       .then((res) => {
         if (cancelled) return
@@ -70,7 +73,7 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
     return () => {
       cancelled = true
     }
-  }, [detailId])
+  }, [detailId, system])
 
   const visibleAttributes = expanded
     ? attributes

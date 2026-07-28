@@ -43,6 +43,7 @@ import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
 import * as useFeeService from './useFeeService';
 import * as bizNotifService from './bizNotifService';
+import * as elevationService from './elevationService';
 
 export {
   configService,
@@ -86,4 +87,5 @@ export {
   mngVersionHistoryService,
   useFeeService,
   bizNotifService,
+  elevationService,
 };
