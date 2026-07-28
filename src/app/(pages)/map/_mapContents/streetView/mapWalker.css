@@ -1,0 +1,114 @@
+/* MapWalker — 시야 원 + #0051ff 부채꼴 + 아이콘 */
+
+.MapWalker {
+  position: relative;
+  width: 168px;
+  height: 168px;
+  pointer-events: auto;
+  --mw-sx: 0px;
+  --mw-sy: 4px;
+  --mw-sa: 0.16;
+  --mw-sr: 13px;
+  --mw-ss: 48%;
+  --mw-ex: 0px;
+  --mw-ey: 0px;
+  --mw-eye-vis: 0;
+  --mw-eye-scale: 1;
+  --mw-ring-scale: 1;
+  --mw-figure-scale: 1;
+  --mw-stroke: rgba(0, 0, 0, 0.22);
+  --mw-stroke-w: 1.5px;
+}
+
+.MapWalker .fovRing {
+  position: absolute;
+  inset: 0;
+  transform: translateY(-3px) scale(var(--mw-ring-scale, 1));
+  transform-origin: center center;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  box-shadow: none;
+  background:
+    conic-gradient(
+      from calc(var(--mw-pan, 0deg) - var(--mw-fov, 70deg) / 2),
+      rgba(0, 81, 255, 0.5) 0deg,
+      rgba(0, 81, 255, 0.55) var(--mw-fov, 70deg),
+      transparent var(--mw-fov, 70deg) 360deg
+    ),
+    rgba(255, 255, 255, 0.3);
+  cursor: grab;
+  touch-action: none;
+}
+
+.MapWalker .fovRing:active {
+  cursor: grabbing;
+}
+
+.MapWalker .figure {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 27px;
+  height: 46px;
+  transform: translate(-50%, -50%) scale(var(--mw-figure-scale, 1));
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.MapWalker .figure .head {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 2;
+  width: 27px;
+  height: 27px;
+  margin-left: -13.5px;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle var(--mw-sr) at calc(50% + var(--mw-sx)) calc(50% + var(--mw-sy)),
+      rgba(71, 85, 105, 0) var(--mw-ss),
+      rgba(71, 85, 105, var(--mw-sa)) 100%
+    ),
+    #fff;
+  border: var(--mw-stroke-w) solid var(--mw-stroke);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.MapWalker .figure .head .faceDot {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 3px);
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #3388ff;
+  box-shadow: none;
+  transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px)) scale(var(--mw-eye-scale, 1));
+  opacity: var(--mw-eye-vis, 0);
+  transition: opacity 50ms linear, transform 50ms linear;
+}
+
+.MapWalker .figure .body {
+  position: absolute;
+  left: 50%;
+  top: 23px;
+  z-index: 1;
+  width: 26px;
+  height: 20px;
+  margin-left: -13px;
+  overflow: visible;
+  pointer-events: none;
+  color: var(--mw-stroke);
+}
+
+.MapWalker .figure .body .bodyOutline {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  paint-order: stroke fill;
+}

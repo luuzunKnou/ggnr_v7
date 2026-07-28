@@ -57,6 +57,7 @@ import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMapVisualCenterPixel } from './hooks/useMapVisualCenterPixel';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { useAltitudeMeasure } from './hooks/useAltitudeMeasure';
+import { useForwardOverlayPointerMoveToMap } from './hooks/useForwardOverlayPointerMoveToMap';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
@@ -157,9 +158,20 @@ export default function OpenLayersMap({
   const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef;
 
   useEffect(() => {
+    mapContext?.setMapReady?.(mapReady);
+    return () => {
+      mapContext?.setMapReady?.(false);
+    };
+  }, [mapReady, mapContext]);
+
+  useEffect(() => {
     if (!mapReady) return;
     applyMapViewPaddingRef?.current?.();
   }, [applyMapViewPaddingRef, mapReady]);
+
+  // 배경지도 등 오버레이 위에서도 Draw/측정 고무줄이 pointermove를 받도록
+  useForwardOverlayPointerMoveToMap(mapReady ? mapInstanceRef.current : null, mapReady);
+
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState(FALLBACK_BACKGROUND_MAP_ID);
@@ -174,6 +186,15 @@ export default function OpenLayersMap({
     | 'thematic-map'
     | null
   >(null);
+
+  // 거리뷰(보조 칸) ↔ 우측 «거리뷰» 토글
+  useEffect(() => {
+    const setKind = mapContext?.setMapSplitSecondaryKind;
+    if (!setKind) return;
+    const on = activeControls.includes('street-view');
+    setKind(on ? 'streetView' : null);
+  }, [activeControls, mapContext?.setMapSplitSecondaryKind]);
+
   /** null = 전체 표시, 빈 Set = 전체 숨김 */
   const [visibleJimokLayerNames, setVisibleJimokLayerNames] = useState<Set<string> | null>(null);
   const [visibleLandownLayerNames, setVisibleLandownLayerNames] = useState<Set<string> | null>(null);
@@ -1178,13 +1199,20 @@ export default function OpenLayersMap({
     }
   };
 
+  /** 측정·도형 그리기 중에는 우측 목록 패널 호버/클릭 끄기 (지도 입력 우선) */
+  const overlayListPointerClass =
+    mapContext?.measurementActive || spatialDrawRequest || layerRowGeomEdit
+      ? 'pointer-events-none'
+      : 'pointer-events-auto';
+
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 
-      {/* 지도 중심점 마크 (view 중심 = padding 반영된 보이는 영역 중심에 배치) */}
+      {/* 지도 중심점 마크 — 거리뷰(로드뷰) ON 시 숨김 */}
+      {!activeControls.includes('street-view') && (
       <div
         className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
         style={
@@ -1199,18 +1227,24 @@ export default function OpenLayersMap({
           strokeWidth={2}
         />
       </div>
+      )}
 
-      {/* 오른쪽 맵 컨트롤 패널 */}
-      <div className="absolute right-4 z-10 flex flex-col items-end gap-3" style={{ top: '60px' }}>
-        <div className="flex items-start gap-3">
+      {/* 오른쪽 맵 컨트롤 패널 — 분할 시에도 화면 오른쪽 고정
+          래퍼는 pointer-events-none: 배경지도 등 하위 패널이 버튼열보다 짧을 때
+          flex 행의 빈 영역이 지도 클릭·측정·그리기를 가로채지 않도록 함 */}
+      <div
+        className="pointer-events-none fixed right-4 z-10 flex flex-col items-end gap-3"
+        style={{ top: '60px' }}
+      >
+        <div className="pointer-events-none flex items-start gap-3">
           {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
           {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
             <div
               ref={backgroundPanelRef}
               className={
                 isBackgroundPanelExiting
-                  ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                  : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+                  ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
+                  : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
               }
             >
               <BackgroundMapSelector
@@ -1222,7 +1256,7 @@ export default function OpenLayersMap({
           )}
 
           {openSubPanel === 'land-category' && (
-            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="지목"
                 contentSized
@@ -1245,7 +1279,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'ownership' && (
-            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="소유구분"
                 contentSized
@@ -1268,7 +1302,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'cadastral' && (
-            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="지적도"
                 contentSized
@@ -1292,7 +1326,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'building-road' && (
-            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="건물·도로"
                 contentSized
@@ -1316,7 +1350,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'thematic-map' && (
-            <div className="animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto">
+            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <div className="w-56 bg-white shadow-xl overflow-hidden flex flex-col rounded-[5px] opacity-90">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
                   <span className="text-[13px] font-medium">주제도</span>
@@ -1336,13 +1370,15 @@ export default function OpenLayersMap({
             </div>
           )}
 
-          <MapControlPanel
-            groups={defaultMapControlGroups}
-            activeIds={activeControls}
-            onItemClick={handleControlClick}
-            onItemRightClick={handleItemRightClick}
-            extraAfterFirstGroup={extraControls}
-          />
+          <div className="pointer-events-auto">
+            <MapControlPanel
+              groups={defaultMapControlGroups}
+              activeIds={activeControls}
+              onItemClick={handleControlClick}
+              onItemRightClick={handleItemRightClick}
+              extraAfterFirstGroup={extraControls}
+            />
+          </div>
         </div>
       </div>
 
