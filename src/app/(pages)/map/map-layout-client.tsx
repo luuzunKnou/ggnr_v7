@@ -47,11 +47,28 @@ import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/Riv
 import { RiverUseLedgerDetailPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerDetailPanel"
 import { RiverConstructionLedgerListPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerListPanel"
 import { RiverConstructionLedgerDetailPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerDetailPanel"
+import { UsageDataAsListPanel } from "./_mapContents/river/usageDataAs/UsageDataAsListPanel"
+import { UsageDataAsDetailPanel } from "./_mapContents/river/usageDataAs/UsageDataAsDetailPanel"
+import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usageDataAsMapSync"
+import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+// 점용대장(프) 더미 — 대장↔점사용료 실연동 전까지 비활성
+// import {
+//   UseLedgerProtoListPanel,
+//   UseLedgerProtoDetailPanel,
+//   UseLedgerProtoLinkedPanel,
+// } from "./_mapContents/prototypes/UseLedgerProtoPanels"
 import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
+import { UseFeeListPanel } from "./_mapContents/useFee/UseFeeListPanel"
+import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
+import {
+  UserAccountProtoPanel,
+} from "./_mapContents/prototypes/UserAccountProtoPanel"
+// import { PROTO_LEDGERS, type ProtoLedgerRow } from "./_mapContents/prototypes/dummyData"
+// import { flyToProtoLedger } from "./_mapContents/prototypes/protoMapNavigation"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
 import {
   clearServiceMenuLayerState,
@@ -187,6 +204,24 @@ const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
 const BUILD_PUBLIC_LAND_OPENED_KEY = "buildPublicLand"
 const RIVER_USE_LEDGER_OPENED_KEY = "riverUseLedger"
+const USAGE_DATA_AS_OPENED_KEY = "usageDataAs"
+// 점용대장(프) 더미 — 대장↔점사용료 실연동 전까지 비활성
+// const USE_LEDGER_PROTO_OPENED_KEY = "useLedgerProto"
+// const USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH = 466
+// const USE_LEDGER_PROTO_PANEL_MIN_WIDTH = 466
+// const USE_LEDGER_PROTO_PANEL_MAX_WIDTH = 960
+// const USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH = 340
+// const USE_LEDGER_PROTO_DETAIL_MIN_WIDTH = 340
+// const USE_LEDGER_PROTO_DETAIL_MAX_WIDTH = 480
+const USE_FEE_OPENED_KEY = "useFee"
+/** 점용상세(343)와 동일 기준 */
+const USE_FEE_DETAIL_DEFAULT_WIDTH = 343
+const USE_FEE_DETAIL_MIN_WIDTH = 343
+const USE_FEE_DETAIL_MAX_WIDTH = 480
+/** 하천점용 목록(466)과 동일 기준 */
+const USE_FEE_PANEL_DEFAULT_WIDTH = 466
+const USE_FEE_PANEL_MIN_WIDTH = 466
+const USE_FEE_PANEL_MAX_WIDTH = 960
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -201,6 +236,13 @@ const RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH = 900
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH = 640
+
+const USAGE_DATA_AS_PANEL_DEFAULT_WIDTH = 466
+const USAGE_DATA_AS_PANEL_MIN_WIDTH = 466
+const USAGE_DATA_AS_PANEL_MAX_WIDTH = 960
+const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
+const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
+const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
 
 function MapLayoutContent({
   children,
@@ -218,6 +260,7 @@ function MapLayoutContent({
   const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef
   const setRiverBasicPlanPanelOpen = mapContext?.setRiverBasicPlanPanelOpen
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
+  const setUsageDataAsPanelOpen = mapContext?.setUsageDataAsPanelOpen
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
   const setRoadLedgerIdentifyRow = mapContext?.setRoadLedgerIdentifyRow
   const setRoadLedgerFacilityModal = mapContext?.setRoadLedgerFacilityModal
@@ -301,6 +344,8 @@ function MapLayoutContent({
     ) ?? null
   const riverConstructionLedgerDetailOpen =
     riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
+  const usageDataAsOpen = openedWindows.includes(USAGE_DATA_AS_OPENED_KEY)
+  const useFeeOpen = openedWindows.includes(USE_FEE_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -310,6 +355,18 @@ function MapLayoutContent({
   const [riverUseLedgerDetailId, setRiverUseLedgerDetailId] = useState<string | null>(null)
   const [riverUseLedgerListRefreshKey, setRiverUseLedgerListRefreshKey] = useState(0)
   const riverUseLedgerDetailOpen = riverUseLedgerOpen && Boolean(riverUseLedgerDetailId)
+  const [usageDataAsDetailId, setUsageDataAsDetailId] = useState<string | null>(null)
+  const [usageDataAsListRefreshKey, setUsageDataAsListRefreshKey] = useState(0)
+  const usageDataAsDetailOpen = usageDataAsOpen && Boolean(usageDataAsDetailId)
+  // 점용대장(프) 더미 state 비활성
+  // const useLedgerProtoOpen = openedWindows.includes(USE_LEDGER_PROTO_OPENED_KEY)
+  // const [useLedgerProtoDetailId, setUseLedgerProtoDetailId] = useState<string | null>(null)
+  // const [useLedgerProtoFeeId, setUseLedgerProtoFeeId] = useState<string | null>(null)
+  // const [useLedgerProtoRows, setUseLedgerProtoRows] = useState<ProtoLedgerRow[]>(() => [...PROTO_LEDGERS])
+  const [useFeeDetailId, setUseFeeDetailId] = useState<string | null>(null)
+  const useFeeDetailOpen = useFeeOpen && Boolean(useFeeDetailId)
+  const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
+
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
   const memoDetailOpen = memoManagementOpen && Boolean(memoDetailId)
@@ -390,6 +447,13 @@ function MapLayoutContent({
   const [riverConstructionLedgerDetailWidth, setRiverConstructionLedgerDetailWidth] = useState(
     RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH
   )
+  const [usageDataAsPanelWidth, setUsageDataAsPanelWidth] = useState(USAGE_DATA_AS_PANEL_DEFAULT_WIDTH)
+  const [usageDataAsDetailWidth, setUsageDataAsDetailWidth] = useState(USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH)
+  // const [useLedgerProtoPanelWidth, setUseLedgerProtoPanelWidth] = useState(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
+  // const [useLedgerProtoDetailWidth, setUseLedgerProtoDetailWidth] = useState(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
+  // const [useLedgerProtoFeeWidth, setUseLedgerProtoFeeWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
+  const [useFeePanelWidth, setUseFeePanelWidth] = useState(USE_FEE_PANEL_DEFAULT_WIDTH)
+  const [useFeeDetailWidth, setUseFeeDetailWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -415,6 +479,8 @@ function MapLayoutContent({
     (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0) +
     (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0) +
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
+    (usageDataAsOpen ? usageDataAsPanelWidth : 0) +
+    (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -426,7 +492,12 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
-    (roadCctvOpen ? roadCctvPanelWidth : 0)
+    (roadCctvOpen ? roadCctvPanelWidth : 0) +
+    // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
+    // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
+    // (useLedgerProtoFeeDetailOpen ? useLedgerProtoFeeWidth : 0) +
+    (useFeeOpen ? useFeePanelWidth : 0) +
+    (useFeeDetailOpen ? useFeeDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -470,9 +541,13 @@ function MapLayoutContent({
   const riverConstructionLedgerDetailLeftPx =
     riverConstructionLedgerPanelLeftPx +
     (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0)
-  const memoPanelLeftPx =
+  const usageDataAsPanelLeftPx =
     riverConstructionLedgerDetailLeftPx +
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0)
+  const usageDataAsDetailLeftPx =
+    usageDataAsPanelLeftPx + (usageDataAsOpen ? usageDataAsPanelWidth : 0)
+  const memoPanelLeftPx =
+    usageDataAsDetailLeftPx + (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
@@ -487,6 +562,17 @@ function MapLayoutContent({
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
   const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
+  // const useLedgerProtoPanelLeftPx =
+  //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
+  // const useLedgerProtoDetailLeftPx =
+  //   useLedgerProtoPanelLeftPx + (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0)
+  // const useLedgerProtoFeeLeftPx =
+  //   useLedgerProtoDetailLeftPx + (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0)
+  const useFeePanelLeftPx =
+    roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
+  const useFeeDetailLeftPx =
+    useFeePanelLeftPx + (useFeeOpen ? useFeePanelWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함 */
@@ -510,6 +596,14 @@ function MapLayoutContent({
     setRiverBasicPlanPanelOpen?.(riverBasicPlanOpen)
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
+
+  useEffect(() => {
+    setUsageDataAsPanelOpen?.(usageDataAsOpen)
+    // 패널 닫힘·시스템(메인) 이탈 후 재진입 시 점용 레이어만 켜져 클릭 무반응 되는 것 방지
+    if (!usageDataAsOpen) {
+      clearUsageDataAsWmsLayers(setVisibleLayerNames)
+    }
+  }, [setUsageDataAsPanelOpen, usageDataAsOpen, setVisibleLayerNames])
 
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
@@ -733,6 +827,12 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseUsageDataAs = () => {
+    setUsageDataAsDetailId(null)
+    const next = openedWindows.filter((w) => w !== USAGE_DATA_AS_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
@@ -742,6 +842,14 @@ function MapLayoutContent({
   const handleCloseBuildPublicLand = () => {
     setBuildPublicLandSelectedId(null)
     const next = openedWindows.filter((w) => w !== BUILD_PUBLIC_LAND_OPENED_KEY)
+    setOpened(next)
+  }
+
+  // const handleCloseUseLedgerProto = () => { ... } // 점용대장(프) 더미 비활성
+
+  const handleCloseUseFee = () => {
+    setUseFeeDetailId(null)
+    const next = openedWindows.filter((w) => w !== USE_FEE_OPENED_KEY)
     setOpened(next)
   }
 
@@ -784,6 +892,46 @@ function MapLayoutContent({
     mapContext?.riverConstructionLedgerRows,
     setRiverConstructionLedgerSelectedId,
   ])
+
+  useEffect(() => {
+    if (!usageDataAsOpen) setUsageDataAsDetailId(null)
+  }, [usageDataAsOpen])
+
+  // 점용대장(프) 더미 effects 비활성
+  // useEffect(() => { if (!useLedgerProtoOpen) { setUseLedgerProtoDetailId(null); setUseLedgerProtoFeeId(null) } }, [useLedgerProtoOpen])
+  // useEffect(() => { if (useLedgerProtoOpen) setUseLedgerProtoPanelWidth(...) }, [useLedgerProtoOpen])
+  // useEffect(() => { if (useLedgerProtoDetailOpen) setUseLedgerProtoDetailWidth(...) }, [useLedgerProtoDetailOpen])
+  // useEffect(() => { if (useLedgerProtoFeeDetailOpen) setUseLedgerProtoFeeWidth(...) }, [useLedgerProtoFeeDetailOpen])
+  // useEffect(() => { ... map resize when proto fee open ... }, [...])
+
+  useEffect(() => {
+    if (!useFeeOpen) {
+      setUseFeeDetailId(null)
+      return
+    }
+    setUseFeePanelWidth(USE_FEE_PANEL_DEFAULT_WIDTH)
+  }, [useFeeOpen])
+
+  useEffect(() => {
+    if (useFeeDetailOpen) {
+      setUseFeeDetailWidth(USE_FEE_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [useFeeDetailOpen])
+
+  useEffect(() => {
+    const onToggle = () => {
+      setProtoUserAccountOpen((v) => !v)
+    }
+    const onOpenNotif = () => {
+      setProtoUserAccountOpen(true)
+    }
+    window.addEventListener('ggnr-proto-user-account-toggle', onToggle)
+    window.addEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    return () => {
+      window.removeEventListener('ggnr-proto-user-account-toggle', onToggle)
+      window.removeEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    }
+  }, [])
 
   useEffect(() => {
     if (!memoManagementOpen) setMemoDetailId(null)
@@ -888,6 +1036,7 @@ function MapLayoutContent({
         <div className="absolute inset-0 z-0">{children}</div>
 
         <MapSidebar indexLogoSrc={indexLogoSrc} />
+        <UsageDataAsNotifBootstrap />
         <RoadDataFlowAnalysisOrchestrator />
         <ParcelAnalysisOrchestrator />
 
@@ -1264,6 +1413,51 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {usageDataAsOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={usageDataAsPanelWidth}
+                minWidth={USAGE_DATA_AS_PANEL_MIN_WIDTH}
+                maxWidth={USAGE_DATA_AS_PANEL_MAX_WIDTH}
+                leftOffsetPx={usageDataAsPanelLeftPx}
+                onWidthChange={setUsageDataAsPanelWidth}
+              >
+                <UsageDataAsListPanel
+                  onClose={handleCloseUsageDataAs}
+                  selectedDetailId={usageDataAsDetailId}
+                  onSelectDetailId={setUsageDataAsDetailId}
+                  refreshKey={usageDataAsListRefreshKey}
+                  onAdd={() => setUsageDataAsDetailId(LAYER_ROW_NEW_ID)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {usageDataAsOpen && usageDataAsDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={usageDataAsDetailWidth}
+                minWidth={USAGE_DATA_AS_DETAIL_MIN_WIDTH}
+                maxWidth={USAGE_DATA_AS_DETAIL_MAX_WIDTH}
+                leftOffsetPx={usageDataAsDetailLeftPx}
+                onWidthChange={setUsageDataAsDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <UsageDataAsDetailPanel
+                  detailId={usageDataAsDetailId}
+                  onClose={() => setUsageDataAsDetailId(null)}
+                  onSaved={() => setUsageDataAsListRefreshKey((k) => k + 1)}
+                  onCreated={(newKey) => {
+                    setUsageDataAsListRefreshKey((k) => k + 1)
+                    setUsageDataAsDetailId(newKey)
+                  }}
+                  onDeleted={() => {
+                    setUsageDataAsDetailId(null)
+                    setUsageDataAsListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {memoManagementOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -1440,6 +1634,43 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {/* 점용대장(프) 더미 패널 비활성 — UseLedgerProtoList/Detail + 연계 점사용료 */}
+          {useFeeOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeePanelWidth}
+                minWidth={USE_FEE_PANEL_MIN_WIDTH}
+                maxWidth={USE_FEE_PANEL_MAX_WIDTH}
+                leftOffsetPx={useFeePanelLeftPx}
+                onWidthChange={setUseFeePanelWidth}
+              >
+                <UseFeeListPanel
+                  onClose={handleCloseUseFee}
+                  selectedId={useFeeDetailId}
+                  onSelectId={(id) => {
+                    setUseFeeDetailId((prev) => (prev === id ? null : id))
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useFeeOpen && useFeeDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeeDetailWidth}
+                minWidth={USE_FEE_DETAIL_MIN_WIDTH}
+                maxWidth={USE_FEE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={useFeeDetailLeftPx}
+                onWidthChange={setUseFeeDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <UseFeeDetailPanel
+                  detailId={useFeeDetailId}
+                  onClose={() => setUseFeeDetailId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -1461,6 +1692,20 @@ function MapLayoutContent({
                 onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
               />
               <AddressInfoDetail />
+            </div>
+            <div className="pointer-events-auto">
+              <UserAccountProtoPanel
+                open={protoUserAccountOpen}
+                onClose={() => setProtoUserAccountOpen(false)}
+                onOpenLedger={(ledgerId) => {
+                  setOpened([USAGE_DATA_AS_OPENED_KEY])
+                  setUsageDataAsDetailId(ledgerId)
+                }}
+                onOpenFee={(feeId) => {
+                  setOpened([USE_FEE_OPENED_KEY])
+                  setUseFeeDetailId(feeId)
+                }}
+              />
             </div>
           </div>
         </div>

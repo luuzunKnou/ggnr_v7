@@ -17,9 +17,20 @@ export type MapAutoNavOptions = {
 
 function parseExtent3857(raw: number[] | Extent3857 | null | undefined): Extent3857 | null {
   if (!raw || raw.length !== 4) return null;
-  const ext = raw.map((v) => Number(v)) as Extent3857;
-  if (!ext.every(Number.isFinite)) return null;
-  return ext;
+  const nums = raw.map((v) => Number(v));
+  if (!nums.every(Number.isFinite)) return null;
+  const xmin = Math.min(nums[0]!, nums[2]!);
+  const xmax = Math.max(nums[0]!, nums[2]!);
+  const ymin = Math.min(nums[1]!, nums[3]!);
+  const ymax = Math.max(nums[1]!, nums[3]!);
+  const w = xmax - xmin;
+  const h = ymax - ymin;
+  if (w > 5_000_000 || h > 5_000_000) return null;
+  const cx = (xmin + xmax) / 2;
+  const cy = (ymin + ymax) / 2;
+  // EPSG:3857 — 한국 주변 허용 (해외·오염 좌표 fit 방지)
+  if (cx < 10_000_000 || cx > 16_500_000 || cy < 2_000_000 || cy > 6_500_000) return null;
+  return [xmin, ymin, xmax, ymax];
 }
 
 /** 패널 view.padding 반영 후 map size 갱신 */

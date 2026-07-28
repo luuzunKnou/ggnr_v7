@@ -240,6 +240,30 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* 얇은 커스텀 스크롤바 — 넘칠 때만 표시(미리 공간 선점 안 함) */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225 / 0.85) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225 / 0.85);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(148 163 184 / 0.95);
+  }
+
+  /* 상세 속성 라벨·값 2열 (라벨 30%) */
+  .grid-cols-detail-30 {
+    grid-template-columns: minmax(0, 30%) 1fr;
+  }
 }
 
 /* date input 내부 달력 아이콘 primary 색상 (WebKit) */

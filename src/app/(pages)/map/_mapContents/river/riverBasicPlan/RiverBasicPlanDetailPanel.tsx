@@ -817,13 +817,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {plans.map((p) => {
+                {plans.map((p, idx) => {
                   const active =
                     selected?.planYear === p.planYear &&
-                    selected?.planName === p.planName;
+                    selected?.planName === p.planName &&
+                    selected?.planLen === p.planLen;
                   return (
                     <tr
-                      key={`${p.planYear}-${p.planName}`}
+                      key={`${p.planYear}|${p.planName}|${p.planLen}|${idx}`}
                       onClick={() => {
                         exitIndexAttributeView();
                         setSelected(p);

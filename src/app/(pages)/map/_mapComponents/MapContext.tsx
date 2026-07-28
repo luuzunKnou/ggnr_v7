@@ -168,6 +168,20 @@ export type MapContextValue = {
   /** 재난안전지도 패널 레이어 토글 (safemap WMS + GeoServer 연계 Polygon 등) */
   safetyMapLayerVisibility: Record<string, boolean>;
   setSafetyMapLayerVisibility: Dispatch<SetStateAction<Record<string, boolean>>>;
+  /** 하천점용 패널(URL opened) 열림 — 지도 식별 시 usage_data_as* → 목록·상세 선택 */
+  usageDataAsPanelOpen: boolean;
+  setUsageDataAsPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 점용 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (UsageDataAsListPanel이 등록). extent3857이 있으면 클릭 도형 기준으로 맞춤
+   */
+  applyUsageDataAsMapPickRef: MutableRefObject<
+    | ((pick: {
+        consCode: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -354,6 +368,10 @@ export type LayerRowGeomEditState = {
   keyField: string;
   keyValue: string;
   mode: 'draw' | 'modify';
+  /** DB 조회 대신 시드 WKT로 도형 표시 (프로토·메모리) */
+  seedWkt5181?: string | null;
+  /** true면 getTableRowGeomGeoJson3857 호출 생략 */
+  protoGeom?: boolean;
 } | null;
 
 const MapContext = createContext<MapContextValue | null>(null);
@@ -396,6 +414,14 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const riverBasicPlanMapDrawingPreviewControllerRef = useRef<{ close: () => void } | null>(null);
   const riverBasicPlanExitIndexViewToDetailRef = useRef<(() => void) | null>(null);
   const [safetyMapLayerVisibility, setSafetyMapLayerVisibility] = useState<Record<string, boolean>>({});
+  const [usageDataAsPanelOpen, setUsageDataAsPanelOpen] = useState(false);
+  const applyUsageDataAsMapPickRef = useRef<
+    | ((pick: {
+        consCode: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >(null);
   const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
   const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
   const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
@@ -538,6 +564,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         riverBasicPlanExitIndexViewToDetailRef,
         safetyMapLayerVisibility,
         setSafetyMapLayerVisibility,
+        usageDataAsPanelOpen,
+        setUsageDataAsPanelOpen,
+        applyUsageDataAsMapPickRef,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,

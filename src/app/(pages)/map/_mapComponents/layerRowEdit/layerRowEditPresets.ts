@@ -29,13 +29,20 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childTableName: "river_use_ledger_jijuk",
     childParentField: "parent_id",
   },
-  /** 울진 점용대장 (usage_data_as) */
-  riverUsageData: {
+  usageDataAs: {
     tableName: "usage_data_as",
     schema: "layer",
-    keyField: "ogc_fid",
-    excludeFields: [],
+    keyField: "cons_code",
+    /** cons_code는 defineLayer 읽기전용 — insert 시 서버 자동 채번 */
+    autoGenerateKeyOnCreate: true,
+    excludeFields: ["ogc_fid", "gkey_code", "river_code", "mng_cde", "user_name"],
+    /** show_detail=false 속성은 더보기로 표시 */
+    includeHiddenDetail: true,
     dateFields: [],
+    childTableName: "usage_data_as_solo",
+    additionalChildTableNames: ["usage_data_as_mgj"],
+    childParentField: "cons_code",
+    childAddressField: "usage_loc",
   },
 } as const satisfies Record<string, LayerRowEditPreset>;
 

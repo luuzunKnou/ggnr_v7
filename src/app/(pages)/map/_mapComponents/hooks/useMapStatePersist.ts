@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Map } from 'ol';
+import { isUsageDataAsWmsLayerId } from '../../_mapContents/river/usageDataAs/usageDataAsLayerId';
 
 const STORAGE_KEY = 'ggnr_map_state';
 const SAVE_DEBOUNCE_MS = 300;
@@ -123,7 +124,10 @@ export function useMapStatePersist(
         centerY: center[1],
         backgroundMap: latestRef.current.backgroundMap,
         activeControls: latestRef.current.activeControls,
-        visibleLayerNames: Array.from(latestRef.current.visibleLayerNames),
+        // 하천점용 패널 전용 레이어는 저장하지 않음 (시스템 재진입 시 잔상·클릭 무반응 방지)
+        visibleLayerNames: Array.from(latestRef.current.visibleLayerNames).filter(
+          (n) => !isUsageDataAsWmsLayerId(n)
+        ),
         ...(sel.visibleJimokLayerNames && { visibleJimokLayerNames: sel.visibleJimokLayerNames }),
         ...(sel.visibleLandownLayerNames && {
           visibleLandownLayerNames: sel.visibleLandownLayerNames,

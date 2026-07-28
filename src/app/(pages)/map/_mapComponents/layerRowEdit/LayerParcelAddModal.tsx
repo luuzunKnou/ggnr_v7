@@ -16,9 +16,17 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   vworldApiKey: string;
   onAdd: (item: LayerRowParcelItem) => void;
+  /** 모달 제목 (기본: 필지 추가) */
+  title?: string;
 };
 
-export function LayerParcelAddModal({ open, onOpenChange, vworldApiKey, onAdd }: Props) {
+export function LayerParcelAddModal({
+  open,
+  onOpenChange,
+  vworldApiKey,
+  onAdd,
+  title = "필지 추가",
+}: Props) {
   const handleSelect = (item: VWorldAddressItem) => {
     const parcel = vworldItemToParcelItem(item);
     if (!parcel) return;
@@ -30,7 +38,7 @@ export function LayerParcelAddModal({ open, onOpenChange, vworldApiKey, onAdd }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden rounded-[10px] border-slate-200/80 p-0 sm:max-w-[420px]">
         <DialogHeader className="border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white px-4 py-3">
-          <DialogTitle className="text-sm font-semibold text-slate-800">필지 추가</DialogTitle>
+          <DialogTitle className="text-sm font-semibold text-slate-800">{title}</DialogTitle>
         </DialogHeader>
         <div className="px-4 py-3">
           <AddressSearchPanel vworldApiKey={vworldApiKey} onSelect={handleSelect} />
