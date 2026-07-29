@@ -1,0 +1,16 @@
+<layer>
+  <name>usage_data_as_mgj</name>
+  <id>LayerInfoImpl--71188a54:19f7e56f171:-78ea</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--5417137b:19f83ba2858:142</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--71188a54:19f7e56f171:-78eb</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-28 05:38:26.105 UTC</dateCreated>
+</layer>

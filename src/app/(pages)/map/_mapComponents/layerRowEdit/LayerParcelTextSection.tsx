@@ -36,7 +36,12 @@ export function LayerParcelTextSection({
   return (
     <>
       <div className="mt-4 mb-1 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">필지목록</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          필지목록
+          {listItems.length > 0 ? (
+            <span className="ml-1 font-normal normal-case text-slate-400">({listItems.length})</span>
+          ) : null}
+        </div>
         {isEditing && (
           <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={() => setAddModalOpen(true)}>
             <Plus className="h-3 w-3 shrink-0" aria-hidden />
@@ -47,14 +52,16 @@ export function LayerParcelTextSection({
 
       {listItems.length === 0 ? (
         <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
-          {isEditing ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다." : "등록된 필지가 없습니다."}
+          {isEditing
+            ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다."
+            : "등록된 필지가 없습니다."}
         </div>
       ) : (
-        <ul className="list-none space-y-0 rounded border border-slate-200 bg-white">
+        <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide">
           {listItems.map((item, i) => (
             <li
               key={`${i}-${item.address.slice(0, 24)}`}
-              className="flex items-start gap-1 border-b border-slate-100 px-2 py-2 text-slate-800 last:border-b-0"
+              className="flex items-start gap-1 border-b border-slate-100 px-2 py-1.5 text-slate-800 last:border-b-0"
             >
               {isEditing ? (
                 <>

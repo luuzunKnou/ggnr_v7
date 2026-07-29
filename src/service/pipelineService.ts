@@ -19,8 +19,47 @@ function getPythonBin(): string {
 }
 const PYTHON_BIN = getPythonBin();
 
-const CONDA_EXE = process.env.CONDA_EXE || 'conda';
 const ENV_SETUP_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per step
+
+/** Windows 흔한 설치 경로 + CONDA_EXE / PATH 에서 conda 실행 파일 탐색 */
+function resolveCondaExe(): { exe: string } | { error: string } {
+  const fromEnv = process.env.CONDA_EXE?.trim();
+  if (fromEnv) {
+    if (fromEnv === 'conda' || fs.existsSync(fromEnv)) return { exe: fromEnv };
+    return {
+      error: `CONDA_EXE 경로를 찾을 수 없습니다: ${fromEnv}. Miniconda/Anaconda 설치 후 PATH에 넣거나 CONDA_EXE에 conda.exe 전체 경로를 지정하세요.`,
+    };
+  }
+
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const local = process.env.LOCALAPPDATA || '';
+  const candidates = [
+    path.join(home, 'miniconda3', 'Scripts', 'conda.exe'),
+    path.join(home, 'Miniconda3', 'Scripts', 'conda.exe'),
+    path.join(home, 'anaconda3', 'Scripts', 'conda.exe'),
+    path.join(home, 'Anaconda3', 'Scripts', 'conda.exe'),
+    path.join(local, 'miniconda3', 'Scripts', 'conda.exe'),
+    path.join(local, 'anaconda3', 'Scripts', 'conda.exe'),
+    'C:\\ProgramData\\miniconda3\\Scripts\\conda.exe',
+    'C:\\ProgramData\\Miniconda3\\Scripts\\conda.exe',
+    'C:\\ProgramData\\anaconda3\\Scripts\\conda.exe',
+    'C:\\tools\\miniconda3\\Scripts\\conda.exe',
+    'C:\\miniconda3\\Scripts\\conda.exe',
+    'D:\\miniconda3\\Scripts\\conda.exe',
+  ];
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) return { exe: c };
+  }
+
+  // PATH 상의 conda (where와 동일하게 이름만 — spawn이 PATH 검색)
+  return {
+    error:
+      '이 PC에 conda가 설치되어 있지 않거나 PATH에 없습니다. ' +
+      'Miniconda를 설치한 뒤 터미널을 다시 열고, 개발자 모드에서 «환경 생성 및 설치»를 다시 실행하세요. ' +
+      '(https://docs.conda.io/en/latest/miniconda.html) ' +
+      '이미 설치했다면 CONDA_EXE에 conda.exe 전체 경로를 넣으세요.',
+  };
+}
 
 /** Windows에서 한글 등 유니코드 경로/메시지 처리 시 코드 페이지 오류 방지 (Python UTF-8 모드) */
 const PYTHON_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
@@ -67,6 +106,12 @@ export async function runPipelineEnvSetup(): Promise<RunPipelineEnvSetupResult> 
   const envPath = path.join(pythonDir, 'env');
   const logLines: string[] = [];
 
+  const condaResolved = resolveCondaExe();
+  if ('error' in condaResolved) {
+    return { success: false, message: condaResolved.error, log: condaResolved.error };
+  }
+  const CONDA_EXE = condaResolved.exe;
+
   const run = async (cmd: string, args: string[], stepName: string) => {
     const { code, stdout, stderr } = await runCommand(cmd, args, pythonDir);
     const out = (stdout + '\n' + stderr).trim();
@@ -83,6 +128,16 @@ export async function runPipelineEnvSetup(): Promise<RunPipelineEnvSetupResult> 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     const log = logLines.join('\n\n');
+    const notFound = /not recognized|내부\s*또는\s*외부\s*명령|실행할 수 있는 프로그램/i.test(msg);
+    if (notFound) {
+      return {
+        success: false,
+        message:
+          'conda 명령을 찾을 수 없습니다. Miniconda를 설치하고 터미널을 다시 연 뒤 «환경 생성 및 설치»를 재실행하세요. ' +
+          '또는 CONDA_EXE에 conda.exe 전체 경로를 지정하세요.',
+        log,
+      };
+    }
     return { success: false, message: msg, log };
   }
 }

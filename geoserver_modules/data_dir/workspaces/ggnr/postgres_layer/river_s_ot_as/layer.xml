@@ -1,0 +1,19 @@
+<layer>
+  <name>river_s_ot_as</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-101a</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-1019</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-101b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 05:04:37.889 UTC</dateCreated>
+  <dateModified>2026-07-14 05:04:37.968 UTC</dateModified>
+</layer>

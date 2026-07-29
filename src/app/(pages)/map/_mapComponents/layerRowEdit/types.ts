@@ -14,14 +14,26 @@ export type LayerRowEditPreset = {
   dateFields?: string[];
   /** 삭제 시 함께 지울 자식 테이블 (예: public_land_jijuk) */
   childTableName?: string;
+  /** childTableName 외 삭제 시 함께 지울 자식 테이블 (예: usage_data_as_mgj) */
+  additionalChildTableNames?: string[];
   /** 자식 테이블의 부모 FK 컬럼 (기본 parent_id) */
   childParentField?: string;
+  /** 자식 테이블 주소 컬럼 (기본 parcel_address, 없으면 usage_loc) */
+  childAddressField?: string;
+  /** 신규 등록 시 PK(텍스트 키) 직접 입력 허용 */
+  keyFieldEditableOnCreate?: boolean;
+  /** 신규 등록 시 PK를 서버에서 자동 채번 (defineLayer 읽기전용 키) */
+  autoGenerateKeyOnCreate?: boolean;
+  /** show_detail=false 필드도 더보기로 표시·저장 */
+  includeHiddenDetail?: boolean;
 };
 
 export type LayerRowDetailAttr = {
   field: string;
   label: string;
   value: string;
+  /** false면 기본 숨김(더보기로 표시). 미지정은 기본 표시 */
+  showDetail?: boolean;
 };
 
 export type LayerRowParcelItem = {
@@ -35,4 +47,6 @@ export type LayerRowParcelItem = {
   point4326?: { x: number; y: number };
   /** false면 지도 파란 미리보기 생략 (필지목록 불러오기 등) */
   showMapGeom?: boolean;
+  /** WMS 레이어 개별 on/off — ogc_fid 등 */
+  wmsRowKey?: { keyField: string; keyValue: string };
 };

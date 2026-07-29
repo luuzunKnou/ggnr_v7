@@ -1,0 +1,19 @@
+<layer>
+  <name>usage_data_as_solo</name>
+  <id>LayerInfoImpl--5417137b:19f83ba2858:131</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--5417137b:19f83ba2858:132</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--5417137b:19f83ba2858:130</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-23 04:05:52.492 UTC</dateCreated>
+  <dateModified>2026-07-23 04:05:52.539 UTC</dateModified>
+</layer>

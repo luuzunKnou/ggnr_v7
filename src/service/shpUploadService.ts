@@ -877,7 +877,9 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
       geometryType,
       table: hasTable,
       layer: layerNames.includes(dbTableName) || layerNames.includes(basename),
-      style: styleNames.includes(dbTableName) || styleNames.includes(basename),
+      style: styleNames.some(
+        (s) => s.toLowerCase() === dbTableName || s.toLowerCase() === basename.toLowerCase()
+      ),
       define: inDefine && hasDefineFields,
     });
   }
@@ -925,7 +927,14 @@ function buildGdalEnv(envDir: string): NodeJS.ProcessEnv {
 /**
  * ogr2ogr 실행 방식: GGNR_GDAL_OGR2OGR → 프로젝트 python/env(직접 호출 + buildGdalEnv) → PATH
  */
-function resolveOgr2ogrRun(): { cmd: string; args: string[]; env?: NodeJS.ProcessEnv } {
+function resolveOgr2ogrRun(): {
+  cmd: string;
+  args: string[];
+  env?: NodeJS.ProcessEnv;
+  /** 파이프라인 env에 ogr2ogr가 없어 PATH 폴백을 쓰게 된 경우 */
+  pipelineOgrMissing?: boolean;
+  pipelineOgrExpected?: string;
+} {
   const root = process.cwd();
   if (process.env.GGNR_GDAL_OGR2OGR) {
     const custom = path.resolve(root, process.env.GGNR_GDAL_OGR2OGR);
@@ -942,6 +951,12 @@ function resolveOgr2ogrRun(): { cmd: string; args: string[]; env?: NodeJS.Proces
     if (fsSync.existsSync(candidate)) {
       return { cmd: candidate, args: [], env: buildGdalEnv(envDir) };
     }
+    return {
+      cmd: 'ogr2ogr',
+      args: [],
+      pipelineOgrMissing: true,
+      pipelineOgrExpected: candidate,
+    };
   }
   return { cmd: 'ogr2ogr', args: [] };
 }
@@ -1657,6 +1672,50 @@ export async function processShpBatch(params: {
   }
 
   const allSuccess = results.every((r) => r.table.success && r.layer.success && r.style.success && r.define.success);
+
+  // #region agent log
+  {
+    const failed = results.filter(
+      (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
+    );
+    const payload = {
+      sessionId: '1c82ab',
+      runId: 'post-fix',
+      hypothesisId: 'A-C',
+      location: 'shpUploadService.ts:processShpBatch',
+      message: 'processShpBatch done',
+      data: {
+        inputRowCount: rows.length,
+        resultCount: results.length,
+        allSuccess,
+        failCount: failed.length,
+        sample: results.slice(0, 5).map((r) => ({
+          file: r.file,
+          table: r.table,
+          layer: r.layer,
+          style: r.style,
+          define: r.define,
+        })),
+        failedSample: failed.slice(0, 5).map((r) => ({
+          file: r.file,
+          table: r.table,
+          layer: r.layer,
+          style: r.style,
+          define: r.define,
+        })),
+      },
+      timestamp: Date.now(),
+    };
+    try {
+      fsSync.appendFileSync(path.join(process.cwd(), 'debug-1c82ab.log'), `${JSON.stringify(payload)}\n`);
+    } catch { /* ignore */ }
+    fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+  // #endregion
 
   try {
     const { createLayerHistory, createLayerDetailHistoryBatch } = await import('./layerHistoryService');

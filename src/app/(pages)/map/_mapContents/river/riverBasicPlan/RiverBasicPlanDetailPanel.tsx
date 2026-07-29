@@ -13,9 +13,28 @@ import {
   Loader2,
   Images,
   MapPin,
+  ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDetailScalarValue } from "@/lib/formatDetailScalar";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
+
+/** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
+function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
+  if (/year|연도/i.test(key)) {
+    if (raw === null || raw === undefined) return "-";
+    const s = String(raw).trim().replace(/,/g, "");
+    return s === "" ? "-" : s;
+  }
+  return formatDetailScalarValue(raw);
+}
+import {
+  riverBasicPlanAsDefineTable,
+  riverBasicPlanGdParentDefineTable,
+  riverBasicPlanHdDefineTable,
+  riverBasicPlanIndexDefineTable,
+  riverBasicPlanJdDefineTable,
+} from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
@@ -59,23 +78,20 @@ type IndexListItem = {
   extent3857: [number, number, number, number] | null;
 };
 
-/** 데이터 조회(레이어 패널)와 동일한 define_table_name — WMS LAYERS/STYLES에 사용 */
-const RIVER_INDEX_LAYER = "river_d_index";
 /** 색인도 썸네일 프레임 비율 (가로 3 : 세로 2) */
 const INDEX_THUMB_FRAME = "relative w-full aspect-[3/2] overflow-hidden bg-slate-200";
-/** define_table_kor_name: 하천기본계획 */
-const RIVER_PLAN_AS_LAYER = "river_plan_as";
 
-/** 구조물도 부모 테이블명 — defineLayer 자식 매칭·레거시 부모 제거용(WMS에는 부모 미포함) */
-const RIVER_STRUCTURE_PARENT = "river_plan_gd_ps";
+type RiverType = "river" | "smallRiver";
 
-const RIVER_PLAN_LAYER_BY_LABEL: Record<string, string | undefined> = {
-  색인도: RIVER_INDEX_LAYER,
-  종단면도: "river_plan_jd_lm",
-  횡단면도: "river_plan_hd_lm",
-  /** 단일 레이어 토글이 아니라 구조물도 그룹(분할 자식만 WMS) */
-  구조물도: RIVER_STRUCTURE_PARENT,
-};
+function layerByLabelForTab(tab: RiverType): Record<string, string | undefined> {
+  return {
+    색인도: riverBasicPlanIndexDefineTable(tab),
+    종단면도: riverBasicPlanJdDefineTable(tab),
+    횡단면도: riverBasicPlanHdDefineTable(tab),
+    /** 단일 레이어 토글이 아니라 구조물도 그룹(분할 자식만 WMS, 소하천은 부모만) */
+    구조물도: riverBasicPlanGdParentDefineTable(tab),
+  };
+}
 
 function indexListDisplayLabel(river: string, indexNo: string) {
   const n = String(river ?? "").trim();
@@ -83,8 +99,6 @@ function indexListDisplayLabel(river: string, indexNo: string) {
   if (!n) return num ? `색인도 ${num}` : "";
   return num ? `${n} 색인도 ${num}` : "";
 }
-
-type RiverType = "river" | "smallRiver";
 
 type PlanItem = {
   planYear: string;
@@ -103,17 +117,24 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+  const indexLayer = riverBasicPlanIndexDefineTable(tab);
+  const planAsLayer = riverBasicPlanAsDefineTable(tab);
+  const structureParent = riverBasicPlanGdParentDefineTable(tab);
+  const layerByLabel = useMemo(() => layerByLabelForTab(tab), [tab]);
 
-  /** 하천 선택 시 색인도·기본계획(river_plan_as) 레이어는 항상 켜짐 */
+  /** 하천 선택 시 색인도·기본계획 레이어는 항상 켜짐 (탭 전환 시 상대 레이어 교체) */
   useEffect(() => {
     if (!riverName.trim() || !setVisibleLayerNames) return;
+    const otherTab: RiverType = tab === "smallRiver" ? "river" : "smallRiver";
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
-      next.add(RIVER_INDEX_LAYER);
-      next.add(RIVER_PLAN_AS_LAYER);
+      next.delete(riverBasicPlanIndexDefineTable(otherTab));
+      next.delete(riverBasicPlanAsDefineTable(otherTab));
+      next.add(indexLayer);
+      next.add(planAsLayer);
       return next;
     });
-  }, [riverName, setVisibleLayerNames]);
+  }, [riverName, setVisibleLayerNames, tab, indexLayer, planAsLayer]);
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const plansRef = useRef<PlanItem[]>([]);
@@ -153,7 +174,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/config/defineLayer/fields/${encodeURIComponent(RIVER_INDEX_LAYER)}`)
+    fetch(`/api/config/defineLayer/fields/${encodeURIComponent(indexLayer)}`)
       .then((r) => r.json())
       .then((body: { data?: unknown[] }) => {
         const rawFields = Array.isArray(body?.data) ? body.data : [];
@@ -172,9 +193,9 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [indexLayer]);
 
-  /** WMS에 올릴 구조물도 레이어: 분할 자식만(부모 river_plan_gd_ps 제외) */
+  /** WMS에 올릴 구조물도 레이어: 분할 자식만(부모 제외, 소하천은 자식 없음) */
   const structureWmsLayerNames = useMemo(
     () => [...structureChildLayerNames],
     [structureChildLayerNames]
@@ -189,7 +210,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         const children: string[] = [];
         for (const row of tables) {
           const r = row as Record<string, unknown>;
-          if (String(r.define_table_parents_layer ?? "").trim() !== RIVER_STRUCTURE_PARENT) continue;
+          if (String(r.define_table_parents_layer ?? "").trim() !== structureParent) continue;
           const n = String(r.define_table_name ?? "").trim();
           if (n) children.push(n);
         }
@@ -201,18 +222,18 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [structureParent]);
 
   /** 자식 목록이 생기면 WMS에서 부모만 켜져 있던 레거시 상태 정리 */
   useEffect(() => {
     if (!setVisibleLayerNames || structureChildLayerNames.length === 0) return;
     setVisibleLayerNames((prev) => {
-      if (!prev.has(RIVER_STRUCTURE_PARENT)) return prev;
+      if (!prev.has(structureParent)) return prev;
       const next = new Set(prev);
-      next.delete(RIVER_STRUCTURE_PARENT);
+      next.delete(structureParent);
       return next;
     });
-  }, [structureChildLayerNames, setVisibleLayerNames]);
+  }, [structureChildLayerNames, setVisibleLayerNames, structureParent]);
 
   /** 자식 목록이 늦게 도착했을 때, 켜기 대기 중이면 분할 자식만 추가·부모 제거 */
   useEffect(() => {
@@ -220,12 +241,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!pendingEnableStructureChildrenRef.current) return;
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
-      next.delete(RIVER_STRUCTURE_PARENT);
+      next.delete(structureParent);
       for (const c of structureChildLayerNames) next.add(c);
       pendingEnableStructureChildrenRef.current = false;
       return next;
     });
-  }, [structureChildLayerNames, setVisibleLayerNames]);
+  }, [structureChildLayerNames, setVisibleLayerNames, structureParent]);
 
   useEffect(() => {
     let alive = true;
@@ -296,6 +317,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             riverName,
             planYear: selected.planYear,
             planName: selected.planName,
+            planLen: selected.planLen,
           },
         });
         if (!alive) return;
@@ -387,6 +409,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             riverName,
             planYear: selected.planYear,
             planName: selected.planName,
+            planLen: selected.planLen,
             indexOgcFid: mapRequestedIndexOgcFid,
           },
         });
@@ -466,6 +489,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             riverName,
             planYear: selected.planYear,
             planName: selected.planName,
+            planLen: selected.planLen,
           },
         });
         if (!alive) return;
@@ -577,7 +601,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     enabled: Boolean(
       indexViewMode && indexBundle?.index && indexTableKeyFieldName && indexRowKeyForFiles != null
     ),
-    layerSegment: RIVER_INDEX_LAYER,
+    layerSegment: indexLayer,
     keyValue: indexRowKeyForFiles,
   });
 
@@ -599,14 +623,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       .map((f) => ({
         url: serviceFileDataDownloadUrl(
           SER_FILE_ENG.riverBasicPlan,
-          RIVER_INDEX_LAYER,
+          indexLayer,
           indexRowKeyForFiles,
           f.name
         ),
         fileName: f.name,
         kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
       }));
-  }, [indexFileQuery.files, indexRowKeyForFiles]);
+  }, [indexFileQuery.files, indexRowKeyForFiles, indexLayer]);
 
   const openIndexFullScreenPreview = useCallback(
     (fileName: string) => {
@@ -678,6 +702,21 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     { label: "횡단면도", icon: FlipVertical },
   ];
 
+  const indexSectionHeader = (
+    <div className="flex items-center justify-between gap-2 mb-2">
+      <p className="text-[11px] font-medium text-slate-600">색인도</p>
+      <button
+        type="button"
+        onClick={exitIndexAttributeView}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+        title="색인도 목록으로"
+        aria-label="색인도 목록으로"
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
+  );
+
   const toggleServiceLayer = (defineTableName: string) => {
     if (!setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
@@ -692,31 +731,33 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
+      if (structureChildLayerNames.length === 0) {
+        if (next.has(structureParent)) next.delete(structureParent);
+        else next.add(structureParent);
+        pendingEnableStructureChildrenRef.current = false;
+        return next;
+      }
       const anyChildOn = structureChildLayerNames.some((n) => next.has(n));
       if (anyChildOn) {
         pendingEnableStructureChildrenRef.current = false;
         for (const n of structureChildLayerNames) next.delete(n);
-        next.delete(RIVER_STRUCTURE_PARENT);
+        next.delete(structureParent);
         return next;
       }
-      next.delete(RIVER_STRUCTURE_PARENT);
-      if (structureChildLayerNames.length === 0) {
-        pendingEnableStructureChildrenRef.current = true;
-        return next;
-      }
+      next.delete(structureParent);
       pendingEnableStructureChildrenRef.current = false;
       for (const n of structureChildLayerNames) next.add(n);
       return next;
     });
-  }, [setVisibleLayerNames, structureChildLayerNames]);
+  }, [setVisibleLayerNames, structureChildLayerNames, structureParent]);
 
   /** 서버가 준 물리 테이블명·kind로 WMS define_table_name(종단/횡단/구조물 분할) 켜기 — 색인도 상세목록과 동일 목적 */
   const ensureRelatedItemLayerVisible = useCallback(
     (r: IndexBundle["related"][number]) => {
       if (!setVisibleLayerNames) return;
       const fl = (r.fileLayer || r.table || "").trim().toLowerCase();
-      const jd = RIVER_PLAN_LAYER_BY_LABEL["종단면도"];
-      const hd = RIVER_PLAN_LAYER_BY_LABEL["횡단면도"];
+      const jd = layerByLabel["종단면도"];
+      const hd = layerByLabel["횡단면도"];
       const isJd = r.kind === "종단면도" || (jd && fl.startsWith(String(jd).toLowerCase()));
       const isHd = r.kind === "횡단면도" || (hd && fl.startsWith(String(hd).toLowerCase()));
       if (isJd && jd) {
@@ -735,12 +776,17 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         });
         return;
       }
-      if (r.kind === "구조물" || fl.startsWith("river_plan_gd_ps")) {
+      if (
+        r.kind === "구조물" ||
+        fl.startsWith("river_plan_gd_ps") ||
+        fl.startsWith("river_plan_s_gd_ps")
+      ) {
         setVisibleLayerNames((prev) => {
           const next = new Set(prev);
-          next.delete(RIVER_STRUCTURE_PARENT);
+          next.delete(structureParent);
           if (structureChildLayerNames.length === 0) {
-            pendingEnableStructureChildrenRef.current = true;
+            next.add(structureParent);
+            pendingEnableStructureChildrenRef.current = false;
             return next;
           }
           pendingEnableStructureChildrenRef.current = false;
@@ -749,7 +795,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         });
       }
     },
-    [setVisibleLayerNames, structureChildLayerNames],
+    [setVisibleLayerNames, structureChildLayerNames, structureParent, layerByLabel],
   );
 
   return (
@@ -757,18 +803,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     <div className="flex flex-col min-h-0 h-full bg-white border-l border-slate-200">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 bg-white">
         <div className="min-w-0 flex-1">
-          {indexViewMode ? (
-            <button
-              type="button"
-              onClick={exitIndexAttributeView}
-              className="w-full text-left text-sm font-semibold text-slate-800 hover:underline"
-              title="색인도 목록으로"
-            >
-              {riverName || "기본계획 상세"}
-            </button>
-          ) : (
-            <p className="text-sm font-semibold text-slate-800">{riverName || "기본계획 상세"}</p>
-          )}
+          <p className="text-sm font-semibold text-slate-800">{riverName || "기본계획 상세"}</p>
           <p className="text-xs text-slate-500 mt-0.5">연도별 기본계획 및 속성정보</p>
         </div>
         {onClose && (
@@ -800,13 +835,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {plans.map((p) => {
+                {plans.map((p, idx) => {
                   const active =
                     selected?.planYear === p.planYear &&
-                    selected?.planName === p.planName;
+                    selected?.planName === p.planName &&
+                    selected?.planLen === p.planLen;
                   return (
                     <tr
-                      key={`${p.planYear}-${p.planName}`}
+                      key={`${p.planYear}|${p.planName}|${p.planLen}|${idx}`}
                       onClick={() => {
                         exitIndexAttributeView();
                         setSelected(p);
@@ -820,7 +856,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       <td className="px-2.5 py-1.5 border-t border-slate-200">{p.planYear || "-"}</td>
                       <td className="px-2.5 py-1.5 border-t border-slate-200">{p.planName || "-"}</td>
                       <td className="px-2.5 py-1.5 border-t border-slate-200">
-                        {p.planLen ? `${p.planLen} km` : "-"}
+                        {p.planLen ? `${formatDetailScalarValue(p.planLen)} km` : "-"}
                       </td>
                     </tr>
                   );
@@ -834,10 +870,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       <div className="shrink-0 border-b border-slate-200 px-3 py-2 bg-white">
         <div className="flex gap-1.5">
           {actionButtons.map(({ label, icon: Icon }) => {
-            const layerName = RIVER_PLAN_LAYER_BY_LABEL[label];
+            const layerName = layerByLabel[label];
             const isStructureGroup = label === "구조물도";
             const layerOn = isStructureGroup
-              ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
+              ? structureWmsLayerNames.length > 0
+                ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
+                : Boolean(layerName && visibleLayerNames.has(layerName))
               : layerName
                 ? visibleLayerNames.has(layerName)
                 : false;
@@ -881,16 +919,25 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         {indexViewMode ? (
           <>
             {indexError ? (
-              <p className="text-sm text-red-600 px-4 py-4">{indexError}</p>
+              <div className="p-3">
+                {indexSectionHeader}
+                <p className="text-sm text-red-600 py-1">{indexError}</p>
+              </div>
             ) : indexLoading ? (
-              <p className="text-sm text-slate-500 px-4 py-4">색인도 정보 불러오는 중...</p>
+              <div className="p-3">
+                {indexSectionHeader}
+                <p className="text-sm text-slate-500 py-1">색인도 정보 불러오는 중...</p>
+              </div>
             ) : !indexBundle?.index ? (
-              <p className="text-sm text-slate-500 px-4 py-4">
-                선택한 기본계획과 교차하는 색인도가 없습니다.
-              </p>
+              <div className="p-3">
+                {indexSectionHeader}
+                <p className="text-sm text-slate-500 py-1">
+                  선택한 기본계획과 교차하는 색인도가 없습니다.
+                </p>
+              </div>
             ) : (
               <div className="p-3 space-y-4">
-                <p className="text-[11px] font-medium text-slate-600 mb-2">색인도</p>
+                {indexSectionHeader}
                 <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-100">
                   <div
                     className={INDEX_THUMB_FRAME}
@@ -931,7 +978,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                         <img
                           src={serviceFileDataDownloadUrl(
                             SER_FILE_ENG.riverBasicPlan,
-                            RIVER_INDEX_LAYER,
+                            indexLayer,
                             indexRowKeyForFiles,
                             indexFilePreview.file.name
                           )}
@@ -948,7 +995,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       >
                         <ServiceFilePdfThumb
                           serEng={SER_FILE_ENG.riverBasicPlan}
-                          layerSegment={RIVER_INDEX_LAYER}
+                          layerSegment={indexLayer}
                           keyValue={indexRowKeyForFiles}
                           fileName={indexFilePreview.file.name}
                           thumbMaxPx={960}
@@ -963,7 +1010,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                           triggerServiceFileDownload(
                             serviceFileDataDownloadUrl(
                               SER_FILE_ENG.riverBasicPlan,
-                              RIVER_INDEX_LAYER,
+                              indexLayer,
                               indexRowKeyForFiles,
                               indexFilePreview.file.name
                             ),
@@ -1009,7 +1056,10 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                                       (r.kind === "구조물" ||
                                         (r.fileLayer || r.table || "")
                                           .toLowerCase()
-                                          .startsWith("river_plan_gd_ps")) &&
+                                          .startsWith("river_plan_gd_ps") ||
+                                        String(r.fileLayer ?? "")
+                                          .toLowerCase()
+                                          .startsWith("river_plan_s_gd_ps")) &&
                                       structureChildLayerNames.length === 0,
                                   });
                                 }}
@@ -1065,7 +1115,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                     >
                       <div className="w-[130px] shrink-0 bg-slate-100 px-2.5 py-1.5 text-[11px] text-[#666]">{k}</div>
                       <div className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] text-[#666] break-all">
-                        {v == null ? "-" : String(v)}
+                        {formatRiverBasicPlanAttrValue(k, v)}
                       </div>
                     </div>
                   ))}

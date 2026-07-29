@@ -1,0 +1,19 @@
+<layer>
+  <name>cons_data_as</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-110f</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-110e</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-1110</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 04:20:08.464 UTC</dateCreated>
+  <dateModified>2026-07-14 04:20:08.534 UTC</dateModified>
+</layer>

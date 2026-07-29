@@ -27,6 +27,10 @@ export function useShapeEditorOverlayControls() {
   const [visibleBuildingRoadLayerNames, setVisibleBuildingRoadLayerNames] = useState<
     Set<string> | null
   >(null);
+  /** null = 주제도 전체 (도형편집기는 선택 패널 없음) */
+  const [visibleThematicLayerNames, setVisibleThematicLayerNames] = useState<Set<string> | null>(
+    null
+  );
 
   const toggleControl = useCallback((id: ShapeEditorOverlayControlId) => {
     setActiveControls((prev) => {
@@ -45,6 +49,8 @@ export function useShapeEditorOverlayControls() {
         setVisibleBuildingRoadLayerNames((v) =>
           v != null && v.size > 0 ? v : new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName))
         );
+      } else if (id === 'thematic-map') {
+        setVisibleThematicLayerNames(null);
       }
 
       return [...prev, id];
@@ -61,6 +67,7 @@ export function useShapeEditorOverlayControls() {
     visibleJimokLayerNames,
     visibleLandownLayerNames,
     visibleBuildingRoadLayerNames,
+    visibleThematicLayerNames,
     toggleControl,
     isActive,
   };
