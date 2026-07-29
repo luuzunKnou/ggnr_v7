@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type KeyboardEvent } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SafetyWaterStationList } from './SafetyWaterStationList';
 import { useSafetyWater } from './safetyWaterContext';
@@ -99,28 +99,26 @@ export function SafetyWaterStationFloating({
   return (
     <div className="flex w-full flex-col" aria-label="관측소 목록">
       <div className="flex w-full flex-col gap-2 border-t border-border/80 px-4 py-2">
-        <div className="flex shrink-0 items-center gap-2">
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-border bg-background px-2 py-2">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-            <input
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
-              onKeyDown={onSearchKeyDown}
-              placeholder="관측소 이름 또는 주소 검색 (Enter)"
-              title="관측소 이름 또는 주소 검색 (Enter)"
-              className="w-full cursor-text bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </label>
+        <label className="relative flex w-full min-w-0 items-center gap-2 rounded border border-border bg-background px-2 py-2">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            placeholder="관측소 이름 또는 주소 검색 (Enter)"
+            title="관측소 이름 또는 주소 검색 (Enter)"
+            className="min-w-0 flex-1 cursor-text bg-transparent pr-7 text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
+          />
           <button
             type="button"
             title="초기화"
             aria-label="초기화"
             onClick={resetListControls}
-            className="cursor-pointer shrink-0 rounded border border-border bg-background px-2.5 py-2 text-[11px] font-medium text-foreground/90 transition-colors hover:bg-muted/50"
+            className="absolute right-2 inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-muted-foreground"
           >
-            초기화
+            <X className="h-4 w-4" aria-hidden />
           </button>
-        </div>
+        </label>
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <div className="flex flex-wrap gap-2" role="group" aria-label="관측소 필터">
             {FILTER_CHIPS.map((chip) => {

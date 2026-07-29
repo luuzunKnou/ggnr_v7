@@ -86,7 +86,7 @@ export function SafetyWaterStationList({
                 title="주변 도로 현황 있음"
                 aria-label="주변 도로 현황 있음"
               >
-                <Cctv className="block h-3 w-3" aria-hidden />
+                <Cctv className="block h-3.5 w-3.5" aria-hidden />
               </span>
             ) : null}
           </span>
@@ -153,7 +153,7 @@ export function SafetyWaterStationList({
                     title="주변 도로 현황 있음"
                     aria-label="주변 도로 현황 있음"
                   >
-                    <Cctv className="block h-3 w-3" aria-hidden />
+                    <Cctv className="block h-3.5 w-3.5" aria-hidden />
                   </span>
                 ) : null}
               </span>

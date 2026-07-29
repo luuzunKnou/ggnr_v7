@@ -1,17 +1,25 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import type Map from 'ol/Map';
+import type OlMap from 'ol/Map';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
-import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style';
+import { Style, Icon } from 'ol/style';
 import type { ItsCctvItem } from '../../road/roadCCTV/itsCctvTypes';
 import { SAFETY_WATER_LAYER_Z } from './useSafetyWaterMapLayer';
 
-/** 전체=기본 파랑, 관측소 목록=파랑·나머지 흐림, 선택=빨강 */
+const CCTV_ICON = '/symbol/cus_cctv_ps.svg';
+/** 침수/홍수 현황 전용 — 선택 시 바깥쪽 빨간 테두리(22px 캔버스) */
+const CCTV_ICON_SELECTED = '/symbol/cus_cctv_ps_selected.svg';
+const CCTV_BASE_PX = 18;
+const CCTV_SELECTED_PX = 22;
+/** 토글칩·목록에 안 맞는 CCTV 심볼 불투명도 */
+const FILTERED_OUT_OPACITY = 0.5;
+
+/** 전체=기본, 관측소 목록=선명·나머지 흐림, 선택=확대+바깥 빨간 테두리 */
 function cctvStyle(
   selectedKey: string | null,
   listKeys: Set<string>,
@@ -19,36 +27,20 @@ function cctvStyle(
 ) {
   const selected = selectedKey != null && selectedKey === featureKey;
   const inList = listKeys.has(featureKey);
-  if (selected) {
-    return new Style({
-      image: new CircleStyle({
-        radius: 10,
-        fill: new Fill({ color: 'rgba(239, 68, 68, 0.7)' }),
-        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.9)', width: 2 }),
-      }),
-    });
-  }
-  if (inList) {
-    return new Style({
-      image: new CircleStyle({
-        radius: 8,
-        fill: new Fill({ color: 'rgba(37, 99, 235, 0.75)' }),
-        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.9)', width: 2 }),
-      }),
-    });
-  }
+  const baseScale = selected ? (CCTV_BASE_PX * 1.15) / CCTV_SELECTED_PX : 1;
   return new Style({
-    image: new CircleStyle({
-      radius: 6,
-      fill: new Fill({ color: 'rgba(59, 130, 246, 0.28)' }),
-      stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.45)', width: 1.5 }),
+    image: new Icon({
+      src: selected ? CCTV_ICON_SELECTED : CCTV_ICON,
+      scale: baseScale,
+      anchor: [0.5, 0.5],
+      opacity: inList ? 1 : FILTERED_OUT_OPACITY,
     }),
   });
 }
 
 export function useSafetyWaterNearbyCctvLayer(
   mapReady: boolean,
-  map: Map | null,
+  map: OlMap | null,
   active: boolean,
   layerItems: ItsCctvItem[],
   listItems: ItsCctvItem[],

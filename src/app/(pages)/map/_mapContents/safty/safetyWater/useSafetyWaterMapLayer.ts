@@ -46,7 +46,7 @@ function arrowDataUri(delta: 'up' | 'down'): string {
     delta === 'up'
       ? 'M6 10V2M6 2L2.5 5.5M6 2l3.5 3.5'
       : 'M6 2v8M6 10L2.5 6.5M6 10l3.5-3.5';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="${path}" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="${path}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="${path}" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="${path}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
