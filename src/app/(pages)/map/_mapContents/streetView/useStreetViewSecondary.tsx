@@ -1,10 +1,9 @@
 'use client';
 
-import { StreetViewMockPanel } from './StreetViewMockPanel';
+import { StreetViewPanel } from './StreetViewPanel';
 import { StreetViewSplitterControls } from './StreetViewSplitterControls';
-import { useStreetViewMock } from './useStreetViewMock';
+import { useStreetView } from './useStreetView';
 import { useStreetViewSplitterPrefs } from './useStreetViewSplitterPrefs';
-import { USE_KAKAO_ROADVIEW } from './streetViewConfig';
 
 type StreetViewSecondaryProps = {
   active: boolean;
@@ -18,7 +17,7 @@ export function useStreetViewSecondary({
   mapSync,
   projectName,
 }: StreetViewSecondaryProps) {
-  const mock = useStreetViewMock({
+  const streetView = useStreetView({
     active,
     mapSync,
   });
@@ -26,15 +25,13 @@ export function useStreetViewSecondary({
   const splitterPrefs = useStreetViewSplitterPrefs(projectName);
 
   const panel = active ? (
-    <StreetViewMockPanel
-      useKakaoRoadview={USE_KAKAO_ROADVIEW}
-      panDeg={mock.panDeg}
-      tiltDeg={mock.tiltDeg}
-      onTiltChange={mock.onTiltChange}
-      lng={mock.lng}
-      lat={mock.lat}
-      onRoadviewPosition={USE_KAKAO_ROADVIEW ? mock.onRoadviewPosition : undefined}
-      onRoadviewPan={USE_KAKAO_ROADVIEW ? mock.onPanChange : undefined}
+    <StreetViewPanel
+      panDeg={streetView.panDeg}
+      lng={streetView.lng}
+      lat={streetView.lat}
+      onRoadviewPosition={streetView.onRoadviewPosition}
+      onRoadviewPan={streetView.onPanChange}
+      onRoadviewTilt={streetView.onTiltChange}
     />
   ) : null;
 

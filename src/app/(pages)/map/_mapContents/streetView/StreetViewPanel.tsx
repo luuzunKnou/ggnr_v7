@@ -17,14 +17,9 @@ const PANO_INIT_TIMEOUT_MS = 8000;
 const ROADVIEW_ZOOM_MIN = -3;
 const ROADVIEW_ZOOM_MAX = 3;
 
-type StreetViewMockPanelProps = {
-  /** true면 카카오 로드뷰, false면 기존 목업 */
-  useKakaoRoadview?: boolean;
+type StreetViewPanelProps = {
   /** 시야각(도) — 카카오 로드뷰 pan */
   panDeg: number;
-  /** 수직각(도) — 카카오 tilt (-90~90) */
-  tiltDeg?: number;
-  onTiltChange?: (tilt: number) => void;
   /** WGS84 경도 */
   lng: number | null;
   /** WGS84 위도 */
@@ -33,6 +28,8 @@ type StreetViewMockPanelProps = {
   onRoadviewPosition?: (lng: number, lat: number) => void;
   /** 로드뷰 시야 변경 → 워커 pan */
   onRoadviewPan?: (panDeg: number) => void;
+  /** 로드뷰 수직각 변경 → 워커 tilt */
+  onRoadviewTilt?: (tiltDeg: number) => void;
 };
 
 function normalizePan(pan: number): number {
@@ -102,111 +99,15 @@ function RoadviewAlertBox({ children }: { children: ReactNode }) {
   );
 }
 
-/** 기존 목업 — 카카오 SDK 없이 값만 표시 */
-function StreetViewPlaceholderMock({
-  panDeg,
-  tiltDeg,
-  onTiltChange,
-  lng,
-  lat,
-}: {
-  panDeg: number;
-  tiltDeg: number;
-  onTiltChange?: (tilt: number) => void;
-  lng: number | null;
-  lat: number | null;
-}) {
-  const lngLabel = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
-  const latLabel = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
-
-  return (
-    <div className="relative flex h-full w-full flex-col bg-slate-900 text-white">
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-4 overflow-hidden bg-gradient-to-b from-sky-800/40 to-slate-900">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-30"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(255,255,255,0.06) 40px, rgba(255,255,255,0.06) 41px)',
-            transform: `perspective(400px) rotateY(${(panDeg - 180) * 0.15}deg)`,
-          }}
-        />
-        <p className="relative z-[1] px-4 text-center text-sm text-white/80">
-          거리뷰 영역 (목업)
-          <br />
-          <span className="text-xs text-white/50">실제 로드뷰 SDK는 연동하지 않습니다</span>
-        </p>
-        <div className="relative z-[1] flex w-full max-w-xs flex-col items-stretch gap-3 px-4">
-          <div className="rounded-md bg-black/35 px-3 py-2 text-center text-xs tabular-nums text-white/70">
-            <p>수평각 {panDeg.toFixed(1)}°</p>
-            <p>수직각 {tiltDeg.toFixed(1)}°</p>
-            <p>경도 {lngLabel}</p>
-            <p>위도 {latLabel}</p>
-          </div>
-          <label className="flex flex-col gap-1.5 text-xs text-white/70">
-            <span className="text-center">수직각</span>
-            <input
-              type="range"
-              title="수직각"
-              min={-90}
-              max={90}
-              step={1}
-              value={Math.round(tiltDeg)}
-              className="h-2 w-full cursor-pointer accent-blue-500"
-              onChange={(e) => onTiltChange?.(Number(e.target.value))}
-            />
-            <span className="flex justify-between text-[10px] text-white/45 tabular-nums">
-              <span>-90°</span>
-              <span>0°</span>
-              <span>90°</span>
-            </span>
-          </label>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 로드뷰 패널 — useKakaoRoadview 로 목업/카카오 전환 */
-export function StreetViewMockPanel({
-  useKakaoRoadview = false,
-  panDeg,
-  tiltDeg = 0,
-  onTiltChange,
-  lng,
-  lat,
-  onRoadviewPosition,
-  onRoadviewPan,
-}: StreetViewMockPanelProps) {
-  if (!useKakaoRoadview) {
-    return (
-      <StreetViewPlaceholderMock
-        panDeg={panDeg}
-        tiltDeg={tiltDeg}
-        onTiltChange={onTiltChange}
-        lng={lng}
-        lat={lat}
-      />
-    );
-  }
-  return (
-    <StreetViewKakaoRoadviewPanel
-      panDeg={panDeg}
-      lng={lng}
-      lat={lat}
-      onRoadviewPosition={onRoadviewPosition}
-      onRoadviewPan={onRoadviewPan}
-    />
-  );
-}
-
-/** 카카오 Roadview SDK 패널 */
-function StreetViewKakaoRoadviewPanel({
+/** 카카오 로드뷰 패널 */
+export function StreetViewPanel({
   panDeg,
   lng,
   lat,
   onRoadviewPosition,
   onRoadviewPan,
-}: Omit<StreetViewMockPanelProps, 'useKakaoRoadview'>) {
+  onRoadviewTilt,
+}: StreetViewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const roadviewRef = useRef<KakaoRoadview | null>(null);
   const clientRef = useRef<KakaoRoadviewClient | null>(null);
@@ -218,13 +119,17 @@ function StreetViewKakaoRoadviewPanel({
   const initTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPosRef = useRef(onRoadviewPosition);
   const onPanRef = useRef(onRoadviewPan);
+  const onTiltRef = useRef(onRoadviewTilt);
   onPosRef.current = onRoadviewPosition;
   onPanRef.current = onRoadviewPan;
+  onTiltRef.current = onRoadviewTilt;
 
   const [sdkReady, setSdkReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noPano, setNoPano] = useState(false);
   const [panoReady, setPanoReady] = useState(false);
+  /** 첫 파노 연결 여부 — 이후 좌표 이동 시 init 미발화해도 컨트롤 유지 */
+  const everPanoReadyRef = useRef(false);
   /** 카카오 Viewpoint.tilt — 수직 각(-90~90) */
   const [tiltDeg, setTiltDeg] = useState(0);
 
@@ -339,11 +244,14 @@ function StreetViewKakaoRoadviewPanel({
         clearTimeout(initTimerRef.current);
         initTimerRef.current = null;
       }
+      everPanoReadyRef.current = true;
       setPanoReady(true);
       setNoPano(false);
       setError(null);
       try {
-        setTiltDeg(roadview.getViewpoint()?.tilt ?? 0);
+        const tilt = roadview.getViewpoint()?.tilt ?? 0;
+        setTiltDeg(tilt);
+        onTiltRef.current?.(tilt);
       } catch {
         /* ignore */
       }
@@ -362,7 +270,9 @@ function StreetViewKakaoRoadviewPanel({
     const onViewpointChanged = () => {
       try {
         const vp = roadview.getViewpoint();
-        setTiltDeg(vp.tilt ?? 0);
+        const tilt = vp.tilt ?? 0;
+        setTiltDeg(tilt);
+        onTiltRef.current?.(tilt);
         if (skipEchoRef.current) return;
         panFromRoadviewRef.current = true;
         onPanRef.current?.(normalizePan(vp.pan));
@@ -401,6 +311,7 @@ function StreetViewKakaoRoadviewPanel({
       roadviewRef.current = null;
       clientRef.current = null;
       lastFetchKeyRef.current = '';
+      everPanoReadyRef.current = false;
       setPanoReady(false);
       el.replaceChildren();
     };
@@ -426,10 +337,28 @@ function StreetViewKakaoRoadviewPanel({
 
     let cancelled = false;
     setNoPano(false);
-    setPanoReady(false);
+    // 좌표 이동 시 panoReady를 끄지 않음 — init이 재발화되지 않아 커스텀 UI가 사라지는 문제 방지
     if (initTimerRef.current) {
       clearTimeout(initTimerRef.current);
       initTimerRef.current = null;
+    }
+    // 첫 파노만 미표시 타임아웃
+    if (!everPanoReadyRef.current) {
+      initTimerRef.current = setTimeout(() => {
+        initTimerRef.current = null;
+        if (everPanoReadyRef.current) return;
+        setError((prev) => {
+          if (prev) return prev;
+          return [
+            '로드뷰를 표시하지 못했습니다.',
+            `현재 접속 주소: ${currentOrigin()}`,
+            '',
+            '도메인 미등록·앱키 오류일 수 있습니다.',
+            '카카오 디벨로퍼스 → 플랫폼 키 → JavaScript 키',
+            '→ JavaScript SDK 도메인을 확인하세요.',
+          ].join('\n');
+        });
+      }, PANO_INIT_TIMEOUT_MS);
     }
 
     const position = new window.kakao.maps.LatLng(lat, lng);
@@ -438,6 +367,7 @@ function StreetViewKakaoRoadviewPanel({
         if (cancelled) return;
         if (panoId == null) {
           setNoPano(true);
+          setPanoReady(false);
           return;
         }
         setNoPano(false);
@@ -451,20 +381,14 @@ function StreetViewKakaoRoadviewPanel({
             zoom: cur?.zoom ?? 0,
           });
           roadview.relayout();
-          initTimerRef.current = setTimeout(() => {
+          // setPanoId 후 init이 안 올 수 있음 — 즉시 ready 유지(좌표 이동 시 커스텀 UI 유지)
+          if (initTimerRef.current) {
+            clearTimeout(initTimerRef.current);
             initTimerRef.current = null;
-            setError((prev) => {
-              if (prev) return prev;
-              return [
-                '로드뷰를 표시하지 못했습니다.',
-                `현재 접속 주소: ${currentOrigin()}`,
-                '',
-                '도메인 미등록·앱키 오류일 수 있습니다.',
-                '카카오 디벨로퍼스 → 플랫폼 키 → JavaScript 키',
-                '→ JavaScript SDK 도메인을 확인하세요.',
-              ].join('\n');
-            });
-          }, PANO_INIT_TIMEOUT_MS);
+          }
+          everPanoReadyRef.current = true;
+          setPanoReady(true);
+          setError(null);
         } catch (e) {
           reportFailure(e, '로드뷰 파노라마를 열지 못했습니다.');
         } finally {
@@ -568,6 +492,7 @@ function StreetViewKakaoRoadviewPanel({
     (sdkReady && lng == null && lat == null ? '지도 위치를 확인할 수 없습니다.' : null);
 
   const controlsEnabled = panoReady && !error && !noPano;
+  const showControls = everPanoReadyRef.current || panoReady;
 
   return (
     <div className="relative flex h-full w-full flex-col bg-slate-900 text-white">
@@ -582,7 +507,7 @@ function StreetViewKakaoRoadviewPanel({
           {panoReady ? <p className="text-emerald-300/90">로드뷰 연결됨</p> : null}
         </div>
 
-        {panoReady ? (
+        {showControls && !noPano ? (
           <StreetViewRoadviewControls
             panDeg={panDeg}
             disabled={!controlsEnabled}

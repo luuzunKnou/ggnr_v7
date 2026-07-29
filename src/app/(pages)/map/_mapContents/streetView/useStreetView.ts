@@ -9,7 +9,7 @@ import { MAP_SPLIT_ANIM_MS } from '../../_mapComponents/mapSplit/mapSplitTypes';
 import { OlMapWalker } from './OlMapWalker';
 import { useMapContext } from '../../_mapComponents/MapContext';
 
-type UseStreetViewMockArgs = {
+type UseStreetViewArgs = {
   active: boolean;
   mapSync: boolean;
 };
@@ -28,7 +28,7 @@ function coordsNearlyEqual(a: Coordinate | null, b: Coordinate): boolean {
   return Math.abs(a[0] - b[0]) < COORD_EPS && Math.abs(a[1] - b[1]) < COORD_EPS;
 }
 
-export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
+export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   const mapContext = useMapContext();
   const map = mapContext?.mapInstanceRef?.current ?? null;
   const mapReady = mapContext?.mapReady ?? false;

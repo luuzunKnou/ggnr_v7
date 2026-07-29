@@ -85,7 +85,7 @@ function createBodySvg(): SVGSVGElement {
 }
 
 /**
- * OL Overlay 기반 MapWalker 목업.
+ * OL Overlay 기반 MapWalker.
  * 흰 원 + 시야 부채꼴. 원 위 드래그로 pan 변경.
  */
 export class OlMapWalker {
