@@ -23,8 +23,10 @@ export function StreetViewSecondaryHost({ active, mapSync }: StreetViewSecondary
         panDeg={streetView.panDeg}
         lng={streetView.lng}
         lat={streetView.lat}
+        getPanoSearchRadiusM={streetView.getPanoSearchRadiusM}
         onRoadviewPosition={streetView.onRoadviewPosition}
-        onRoadviewPan={streetView.onPanChange}
+        onRoadviewPan={streetView.onPanFromRoadview}
+        onRoadviewPanCommit={streetView.onPanChange}
         onRoadviewTilt={streetView.onTiltChange}
       />
     </div>

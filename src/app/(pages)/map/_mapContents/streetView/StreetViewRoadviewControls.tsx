@@ -1,7 +1,13 @@
 'use client';
 
 import { Minus, Plus } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import {
+  forwardRef,
+  memo,
+  useImperativeHandle,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { cn } from '@/lib/utils';
 
 /** 나침반 핀 — 북·남 동일 높이로 중심 = 버튼 중심 */
@@ -9,8 +15,11 @@ const COMPASS_BASE = 8;
 const COMPASS_HALF_H = 10;
 const COMPASS_TOTAL_H = COMPASS_HALF_H * 2;
 
+export type StreetViewCompassHandle = {
+  setPan: (panDeg: number) => void;
+};
+
 type StreetViewRoadviewControlsProps = {
-  panDeg: number;
   disabled?: boolean;
   onZoomOut: () => void;
   onZoomIn: () => void;
@@ -69,50 +78,57 @@ function CompassPin() {
   );
 }
 
-/** 로드뷰 하단 중앙 — 축소 / 정북 / 확대. pan은 DOM style로만 반영(리렌더 최소화) */
-export function StreetViewRoadviewControls({
-  panDeg,
-  disabled = false,
-  onZoomOut,
-  onZoomIn,
-  onResetNorth,
-}: StreetViewRoadviewControlsProps) {
-  const rotateRef = useRef<HTMLSpanElement>(null);
+/** 로드뷰 하단 — 축소 / 정북 / 확대. pan은 imperative handle로만 반영 */
+export const StreetViewRoadviewControls = memo(
+  forwardRef<StreetViewCompassHandle, StreetViewRoadviewControlsProps>(
+    function StreetViewRoadviewControls(
+      { disabled = false, onZoomOut, onZoomIn, onResetNorth },
+      ref
+    ) {
+      const rotateRef = useRef<HTMLSpanElement>(null);
 
-  useEffect(() => {
-    const el = rotateRef.current;
-    if (!el) return;
-    el.style.transform = `rotate(${panDeg}deg)`;
-  }, [panDeg]);
+      useImperativeHandle(
+        ref,
+        () => ({
+          setPan(panDeg: number) {
+            const el = rotateRef.current;
+            if (!el) return;
+            el.style.transform = `rotate(${panDeg}deg)`;
+          },
+        }),
+        []
+      );
 
-  return (
-    <div
-      className={cn(
-        'absolute bottom-3 left-1/2 z-[3] flex -translate-x-1/2 flex-row items-center gap-1.5 rounded-full bg-slate-800 p-1.5 shadow-md',
-        'opacity-90 transition-opacity hover:opacity-100',
-        'dark:bg-slate-900 dark:shadow-black/40'
-      )}
-    >
-      <ControlButton title="축소" disabled={disabled} onClick={onZoomOut}>
-        <Minus className="h-4 w-4" strokeWidth={2} aria-hidden />
-      </ControlButton>
-      <ControlButton
-        title="북쪽 보기"
-        disabled={disabled}
-        onClick={onResetNorth}
-        className="bg-slate-700 hover:bg-slate-700 disabled:hover:bg-slate-700"
-      >
-        <span
-          ref={rotateRef}
-          className="flex items-center justify-center origin-center"
-          style={{ transform: `rotate(${panDeg}deg)`, transformOrigin: 'center center' }}
+      return (
+        <div
+          className={cn(
+            'pointer-events-auto flex flex-row items-center gap-1.5 rounded-full bg-slate-800 p-1.5 shadow-md',
+            'opacity-90 transition-opacity hover:opacity-100',
+            'dark:bg-slate-900 dark:shadow-black/40'
+          )}
         >
-          <CompassPin />
-        </span>
-      </ControlButton>
-      <ControlButton title="확대" disabled={disabled} onClick={onZoomIn}>
-        <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
-      </ControlButton>
-    </div>
-  );
-}
+          <ControlButton title="축소" disabled={disabled} onClick={onZoomOut}>
+            <Minus className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </ControlButton>
+          <ControlButton
+            title="북쪽 보기"
+            disabled={disabled}
+            onClick={onResetNorth}
+            className="bg-slate-700 hover:bg-slate-700 disabled:hover:bg-slate-700"
+          >
+            <span
+              ref={rotateRef}
+              className="flex items-center justify-center origin-center"
+              style={{ transform: 'rotate(0deg)', transformOrigin: 'center center' }}
+            >
+              <CompassPin />
+            </span>
+          </ControlButton>
+          <ControlButton title="확대" disabled={disabled} onClick={onZoomIn}>
+            <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </ControlButton>
+        </div>
+      );
+    }
+  )
+);

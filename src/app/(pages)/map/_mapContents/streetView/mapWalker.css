@@ -4,7 +4,7 @@
   position: relative;
   width: 168px;
   height: 168px;
-  pointer-events: auto;
+  pointer-events: none;
   /* 좌표(오버레이)는 유지, 시각만 살짝 위로 */
   transform: translateY(-6px);
   --mw-sx: 0px;
@@ -16,7 +16,8 @@
   --mw-ex: 0px;
   --mw-ey: 0px;
   --mw-eye-vis: 0;
-  --mw-eye-scale: 1;
+  --mw-eye-sx: 1;
+  --mw-eye-sy: 1;
   --mw-ring-scale: 1;
   --mw-figure-scale: 1;
   --mw-stroke: rgba(0, 0, 0, 0.22);
@@ -42,25 +43,29 @@
   background: rgba(120, 190, 255, 0.32);
   cursor: grab;
   touch-action: none;
+  pointer-events: auto;
 }
 
 .MapWalker .fovRing:active {
   cursor: grabbing;
 }
 
-/* 원형 부채꼴 — 부모가 scaleY라 타원 시야로 보임 */
+/* 원형 부채꼴 — 부모가 scaleY라 타원 시야로 보임. 경계 페더+경미 blur로 계단 완화 */
 .MapWalker .fovWedge {
   position: absolute;
   inset: 0;
   border-radius: 50%;
   pointer-events: none;
-  transform: rotate(var(--mw-pan, 0deg));
+  transform: rotate(var(--mw-pan, 0deg)) translateZ(0);
   transform-origin: center center;
+  filter: blur(0.35px);
   background: conic-gradient(
     from calc(var(--mw-fov, 70deg) / -2),
-    rgba(0, 81, 255, 0.52) 0deg,
-    rgba(0, 81, 255, 0.58) var(--mw-fov, 70deg),
-    transparent var(--mw-fov, 70deg) 360deg
+    transparent 0deg,
+    rgba(0, 81, 255, 0.52) 1.2deg,
+    rgba(0, 81, 255, 0.58) calc(var(--mw-fov, 70deg) - 1.2deg),
+    transparent var(--mw-fov, 70deg),
+    transparent 360deg
   );
 }
 
@@ -112,7 +117,8 @@
   border: 1.5px solid #0051ff;
   box-shadow: none;
   box-sizing: border-box;
-  transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px)) scale(var(--mw-eye-scale, 1));
+  transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px))
+    scale(var(--mw-eye-sx, 1), var(--mw-eye-sy, 1));
   opacity: var(--mw-eye-vis, 0);
 }
 

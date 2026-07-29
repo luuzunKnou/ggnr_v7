@@ -1,19 +1,25 @@
 import Overlay from 'ol/Overlay';
 import type Map from 'ol/Map';
 import type { Coordinate } from 'ol/coordinate';
+import { getPointResolution } from 'ol/proj';
 import { getMapVisualCenterCoordinate } from '../../_mapComponents/config/mapVisualCenter';
 import './mapWalker.css';
 
 /** 시야 부채꼴 각도(도) */
 const FOV_DEG = 70;
+/** CSS 시야 원 지름(px) — mapWalker.css .fovRing 과 동일 */
+export const WALKER_FOV_RING_DIAMETER_PX = 168;
 /** 얼굴 시야점 — 호 반경(px), 좌우 극단 위로 꺾임(px) */
 const EYE_R = 10.5;
 const EYE_BEND_UP = 3.5;
 /** 시야점 수직 이동 상한(px) — 위 봄(음수, 길게) / 아래 봄(양수, 짧게) */
-const EYE_MAX_UP_PX = 8;
-const EYE_MAX_DOWN_PX = 3.5;
+const EYE_MAX_UP_PX = 11;
+const EYE_MAX_DOWN_PX = 5.5;
 /** 음수 수직각(위 봄): 이 각도에서 시야점 상단 상한 */
-const TILT_UP_CAP_DEG = -10;
+const TILT_UP_CAP_DEG = -18;
+
+const PANO_SEARCH_RADIUS_MIN_M = 50;
+const PANO_SEARCH_RADIUS_MAX_M = 2000;
 
 function interpolateByZoom(
   zoom: number,
@@ -46,16 +52,48 @@ function walkerFigureScaleFromZoom(zoom: number | undefined): number {
   ]);
 }
 
-/** 지도 줌 → 시야 원 배율 (11에서는 크게 줄이고, 13부터 서서히 확대) */
-function walkerRingScaleFromZoom(zoom: number | undefined): number {
+/** 지도 줌 → 시야 원 배율 (중줌·14 근처에서 검색 반경·시야가 너무 작지 않도록) */
+export function walkerRingScaleFromZoom(zoom: number | undefined): number {
   if (zoom == null || !Number.isFinite(zoom)) return 1;
   return interpolateByZoom(zoom, [
-    [11, 0.28],
-    [13, 0.28],
-    [15, 0.36],
-    [18, 0.92],
+    [11, 0.42],
+    [13, 0.58],
+    [14, 0.78],
+    [16, 0.98],
+    [18, 1.18],
     [20, 1.35],
   ]);
+}
+
+/**
+ * 시야원 화면 반지름 → 지상 거리(m). getNearestPanoId 검색 반경용.
+ * 시각 시야원보다 약간 넓게(1.35배) 잡아 중줌에서도 근처 파노라마를 잘 찾음.
+ */
+export function panoSearchRadiusMetersFromMap(map: Map): number {
+  const view = map.getView();
+  const zoom = view.getZoom();
+  const resolution = view.getResolution();
+  const center = view.getCenter();
+  const projection = view.getProjection();
+  if (resolution == null || !center || !projection) {
+    return PANO_SEARCH_RADIUS_MIN_M;
+  }
+  const diameterPx = WALKER_FOV_RING_DIAMETER_PX * walkerRingScaleFromZoom(zoom);
+  const radiusPx = diameterPx / 2;
+  const mPerPx = getPointResolution(projection, resolution, center);
+  const meters = radiusPx * mPerPx * 1.35;
+  if (!Number.isFinite(meters) || meters <= 0) return PANO_SEARCH_RADIUS_MIN_M;
+  return Math.min(
+    PANO_SEARCH_RADIUS_MAX_M,
+    Math.max(PANO_SEARCH_RADIUS_MIN_M, Math.round(meters))
+  );
+}
+
+/** 북쪽(315~47°) 구간 — 그림자 보강 가중치 0~1 */
+function northFacingWeight(panDeg: number): number {
+  if (panDeg >= 315) return (360 - panDeg) / 45;
+  if (panDeg <= 47) return 1 - panDeg / 47;
+  return 0;
 }
 
 function createBodySvg(): SVGSVGElement {
@@ -95,14 +133,18 @@ export class OlMapWalker {
   private fovRing: HTMLDivElement;
   private panDeg = 0;
   private tiltDeg = 0;
+  private mapRef: Map | null = null;
   private onPanChange: ((pan: number) => void) | null = null;
   private dragCleanup: (() => void) | null = null;
   private zoomCleanup: (() => void) | null = null;
+  private wheelCleanup: (() => void) | null = null;
   /** 마지막 적용 CSS 값 — 동일 시 setProperty 생략 */
   private cssVars: Record<string, string> = {};
   private lastFigureScale = '';
   private lastRingScale = '';
   private zoomRaf = 0;
+  /** pan/tilt DOM 갱신 프레임 합치기 */
+  private angleVisualRaf = 0;
 
   constructor(position: Coordinate) {
     this.content = document.createElement('div');
@@ -134,12 +176,14 @@ export class OlMapWalker {
     this.overlay = new Overlay({
       element: this.content,
       positioning: 'center-center',
-      stopEvent: true,
+      // 시야 원 밖은 pointer-events:none → 맵으로 통과. 원 위 휠은 직접 전달
+      stopEvent: false,
       insertFirst: false,
     });
     this.overlay.setPosition(position);
     this.applyAngleVisual();
     this.bindAngleDrag();
+    this.bindWheelForward();
   }
 
   /** 맵 시각 중심(센터마크와 동일 좌표) */
@@ -163,16 +207,24 @@ export class OlMapWalker {
     const next = ((pan % 360) + 360) % 360;
     if (next === this.panDeg) return;
     this.panDeg = next;
-    this.applyAngleVisual();
+    this.scheduleAngleVisual();
   }
 
-  /** 수직각(-90~90, 카카오와 동일: 음수=위·양수=아래). 시야점은 음수 시 위로(상한 -10°) */
+  /** 수직각(-90~90, 카카오와 동일: 음수=위·양수=아래). 시야점은 음수 시 위로(상한 -18°) */
   setTilt(tilt: number) {
     const n = Number.isFinite(tilt) ? tilt : 0;
     const next = Math.min(90, Math.max(-90, n));
     if (next === this.tiltDeg) return;
     this.tiltDeg = next;
-    this.applyAngleVisual();
+    this.scheduleAngleVisual();
+  }
+
+  private scheduleAngleVisual() {
+    if (this.angleVisualRaf) return;
+    this.angleVisualRaf = requestAnimationFrame(() => {
+      this.angleVisualRaf = 0;
+      this.applyAngleVisual();
+    });
   }
 
   setPosition(coord: Coordinate) {
@@ -188,9 +240,14 @@ export class OlMapWalker {
   setMap(map: Map | null) {
     this.zoomCleanup?.();
     this.zoomCleanup = null;
+    this.mapRef = map;
     if (this.zoomRaf) {
       cancelAnimationFrame(this.zoomRaf);
       this.zoomRaf = 0;
+    }
+    if (this.angleVisualRaf) {
+      cancelAnimationFrame(this.angleVisualRaf);
+      this.angleVisualRaf = 0;
     }
     this.overlay.setMap(map);
     if (!map) {
@@ -236,11 +293,18 @@ export class OlMapWalker {
   destroy() {
     this.dragCleanup?.();
     this.dragCleanup = null;
+    this.wheelCleanup?.();
+    this.wheelCleanup = null;
     this.zoomCleanup?.();
     this.zoomCleanup = null;
+    this.mapRef = null;
     if (this.zoomRaf) {
       cancelAnimationFrame(this.zoomRaf);
       this.zoomRaf = 0;
+    }
+    if (this.angleVisualRaf) {
+      cancelAnimationFrame(this.angleVisualRaf);
+      this.angleVisualRaf = 0;
     }
     this.overlay.setMap(null);
     this.cssVars = {};
@@ -253,54 +317,63 @@ export class OlMapWalker {
   }
 
   private applyAngleVisual() {
-    // pan은 transform rotate만 — conic-gradient 재계산 없음
-    this.setCss('--mw-pan', `${this.panDeg}deg`);
+    const pan = this.panDeg;
+    const tilt = this.tiltDeg;
 
-    const rad = (this.panDeg * Math.PI) / 180;
-    // 남쪽(180°)=정면(+), 북쪽(0°)=후면(-)
+    this.setCss('--mw-pan', `${pan}deg`);
+
+    const rad = (pan * Math.PI) / 180;
     const front = -Math.cos(rad);
     const sinR = Math.sin(rad);
-    // 카카오 tilt: 음수=위 봄 → 시야점 위, 양수=아래 봄 → 시야점 아래(짧게). 위는 -10° 상한
+
     const tiltForEye =
-      this.tiltDeg <= 0
-        ? Math.max(TILT_UP_CAP_DEG, this.tiltDeg)
-        : Math.min(90, this.tiltDeg);
-    const tiltNorm =
-      this.tiltDeg <= 0 ? tiltForEye / -TILT_UP_CAP_DEG : tiltForEye / 90;
+      tilt <= 0 ? Math.max(TILT_UP_CAP_DEG, tilt) : Math.min(90, tilt);
+    const tiltNorm = tilt <= 0 ? tiltForEye / -TILT_UP_CAP_DEG : tiltForEye / 90;
+    const tiltAmt = Math.abs(tiltNorm);
 
     const ex = sinR * EYE_R;
     const lateral = Math.min(1, Math.abs(sinR));
-    const eyeScale = 1 - lateral * 0.14;
+    // 좌우 극단 + 수직각 끝에서 시야점 축소 → 축소 시점부터 원→타원
+    const eyeScale =
+      (1 - lateral * 0.14) * (1 - tiltAmt * 0.1);
+    const shrinkAmt = 1 - eyeScale;
+    const ellipseT = shrinkAmt > 0.002 ? Math.min(1, shrinkAmt / 0.2) : 0;
+    const tiltEllipse = tiltAmt * ellipseT * (0.22 + tiltAmt * 0.38);
+    const eyeSx = eyeScale * (1 - lateral * ellipseT * 0.14);
+    const eyeSy = eyeScale * (1 - tiltEllipse);
     const eyPan = -(sinR * sinR) * EYE_BEND_UP;
-    const verticalAmp = this.tiltDeg <= 0 ? EYE_MAX_UP_PX : EYE_MAX_DOWN_PX;
-    // tiltNorm 음수 → ey 음수(위), 양수 → ey 양수(아래)
-    const vertical = tiltNorm * verticalAmp;
-    const eyRaw = eyPan + vertical;
+    const verticalAmp = tilt <= 0 ? EYE_MAX_UP_PX : EYE_MAX_DOWN_PX;
+    const eyRaw = eyPan + tiltNorm * verticalAmp;
     const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-EYE_MAX_UP_PX, eyRaw));
-    // 수평각 60~300°(남쪽 180 기준 대칭)에서 시야점 표시
-    const eyeVis =
-      this.panDeg >= 60 && this.panDeg <= 300 ? '1' : '0';
-    this.setCss('--mw-ex', `${ex.toFixed(2)}px`);
-    this.setCss('--mw-ey', `${ey.toFixed(2)}px`);
-    this.setCss('--mw-eye-scale', eyeScale.toFixed(3));
+    const eyeVis = pan >= 60 && pan <= 300 ? '1' : '0';
+
+    this.setCss('--mw-ex', `${ex.toFixed(1)}px`);
+    this.setCss('--mw-ey', `${ey.toFixed(1)}px`);
+    this.setCss('--mw-eye-sx', eyeSx.toFixed(2));
+    this.setCss('--mw-eye-sy', eyeSy.toFixed(2));
     this.setCss('--mw-eye-vis', eyeVis);
 
-    // 머리 음영 — 값 반올림 후 dirty set
-    const lightX = sinR;
-    const lightY = -front * 0.5 + 0.38 + tiltNorm * 0.5;
-    const llen = Math.hypot(lightX, lightY) || 1;
-    const reach = 4.4 + (1 - Math.abs(front)) * 0.6;
-    const sx = (-lightX / llen) * reach;
-    const sy = (-lightY / llen) * reach;
-    const tiltAmt = Math.abs(tiltNorm);
-    const alpha = 0.1 + (1 - front) * 0.025 + tiltAmt * 0.02;
-    const gradR = 15 - tiltAmt * 1.1;
-    const softCore = Math.max(28, 42 + front * 6 + tiltNorm * 5);
-    const softMid = Math.min(88, softCore + 28);
-    this.setCss('--mw-sx', `${sx.toFixed(2)}px`);
-    this.setCss('--mw-sy', `${sy.toFixed(2)}px`);
-    this.setCss('--mw-sa', Math.min(0.16, alpha).toFixed(3));
-    this.setCss('--mw-sr', `${gradR.toFixed(1)}px`);
+    // 머리 그림자 — 3D 정상단 광원: pitch·yaw에 따라 구 표면 어두운 영역 투영
+    const northW = northFacingWeight(pan);
+    const yawShade = sinR;
+    const pitchShade = tiltNorm; // 위 봄(음수) → 그림자 위, 아래 봄(양수) → 그림자 아래
+    const pitchGain = 5.8 + northW * 3.2;
+    const sx = yawShade * (3.2 + tiltAmt * 0.85);
+    const sy = 2.4 + pitchShade * pitchGain + (1 - Math.abs(front)) * 0.55;
+    const alpha =
+      0.09 +
+      tiltAmt * 0.058 +
+      Math.abs(yawShade) * 0.03 +
+      northW * tiltAmt * 0.04;
+    const alphaCap = 0.24;
+    const gradR = 14.5 - tiltAmt * 1.65 - northW * tiltAmt * 0.55;
+    const softCore = Math.max(32, 40 + tiltAmt * 10 + Math.abs(yawShade) * 5);
+    const softMid = Math.min(90, softCore + 26);
+
+    this.setCss('--mw-sx', `${sx.toFixed(1)}px`);
+    this.setCss('--mw-sy', `${sy.toFixed(1)}px`);
+    this.setCss('--mw-sa', Math.min(alphaCap, alpha).toFixed(2));
+    this.setCss('--mw-sr', `${gradR.toFixed(0)}px`);
     this.setCss('--mw-ss', `${softCore.toFixed(0)}%`);
     this.setCss('--mw-sm', `${softMid.toFixed(0)}%`);
   }
@@ -354,6 +427,38 @@ export class OlMapWalker {
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
+    };
+  }
+
+  /** 시야 원 위 휠 → 지도 뷰포트로 전달 (줌 잠김 방지) */
+  private bindWheelForward() {
+    const el = this.fovRing;
+    const onWheel = (e: WheelEvent) => {
+      const map = this.mapRef;
+      if (!map) return;
+      const viewport = map.getViewport();
+      if (!viewport) return;
+      const forwarded = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+        deltaZ: e.deltaZ,
+        deltaMode: e.deltaMode,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        screenX: e.screenX,
+        screenY: e.screenY,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        metaKey: e.metaKey,
+      });
+      viewport.dispatchEvent(forwarded);
+    };
+    el.addEventListener('wheel', onWheel, { passive: true });
+    this.wheelCleanup = () => {
+      el.removeEventListener('wheel', onWheel);
     };
   }
 }

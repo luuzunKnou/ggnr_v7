@@ -1,6 +1,7 @@
 'use client';
 
 import { SquareArrowOutUpRight } from 'lucide-react';
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
 type StreetViewKakaoMapLinkProps = {
@@ -33,8 +34,11 @@ function openKakaoRoadviewWindow(url: string) {
   if (win) win.opener = null;
 }
 
-/** 로드뷰 우측 하단 — 카카오맵에서 현재 위치 로드뷰 열기(새 창) */
-export function StreetViewKakaoMapLink({ lat, lng }: StreetViewKakaoMapLinkProps) {
+/** 카카오맵에서 현재 위치 로드뷰 열기(새 창) — 하단 flex 바용 */
+export const StreetViewKakaoMapLink = memo(function StreetViewKakaoMapLink({
+  lat,
+  lng,
+}: StreetViewKakaoMapLinkProps) {
   const href = buildKakaoRoadviewLink(lat, lng);
   const label = '카카오맵에서 보기';
 
@@ -43,7 +47,7 @@ export function StreetViewKakaoMapLink({ lat, lng }: StreetViewKakaoMapLinkProps
       href={href}
       title={label}
       className={cn(
-        'absolute bottom-3 right-3 z-[3] flex cursor-pointer items-center gap-1.5 rounded-full',
+        'pointer-events-auto flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full',
         'bg-slate-800 px-3 py-2 shadow-md',
         'opacity-90 transition-opacity hover:opacity-100',
         'dark:bg-slate-900 dark:shadow-black/40',
@@ -58,4 +62,4 @@ export function StreetViewKakaoMapLink({ lat, lng }: StreetViewKakaoMapLinkProps
       <span>{label}</span>
     </a>
   );
-}
+});

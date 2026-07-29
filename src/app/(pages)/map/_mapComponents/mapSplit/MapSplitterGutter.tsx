@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
+import { UnfoldHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   MAP_SPLIT_ANIM_MS,
@@ -27,6 +27,8 @@ type MapSplitterGutterProps = {
   ratioLocked: boolean;
   onRatioLockedChange: (locked: boolean) => void;
   onDragStart: (clientPos: number) => void;
+  /** 분할선에 포인터 진입 — 비율 드래그 직전 스냅샷 갱신용 */
+  onRatioDragApproach?: () => void;
   controlOffsetRatio?: number;
   onControlOffsetRatioChange?: (ratio: number) => void;
   /** false면 pill 위치 드래그 비활성·가운데(0.5) 고정. 기본 false */
@@ -166,6 +168,7 @@ export function MapSplitterGutter({
   ratioLocked,
   onRatioLockedChange,
   onDragStart,
+  onRatioDragApproach,
   controlOffsetRatio = 0.5,
   onControlOffsetRatioChange,
   controlOffsetDraggable = false,
@@ -348,6 +351,9 @@ export function MapSplitterGutter({
             ? 'cursor-col-resize hover:bg-slate-400 dark:hover:bg-slate-500'
             : 'cursor-row-resize hover:bg-slate-400 dark:hover:bg-slate-500'
       )}
+      onPointerEnter={() => {
+        if (!ratioLocked) onRatioDragApproach?.();
+      }}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest('[data-split-controls]')) return;
         if (ratioLocked) return;
@@ -409,15 +415,11 @@ export function MapSplitterGutter({
           >
             <MapSplitControlButton
               title={ratioLocked ? '분할선 이동 해제' : '분할선 이동 잠금'}
-              active={ratioLocked}
+              active={!ratioLocked}
               activeClassName="text-blue-400"
               onClick={() => onRatioLockedChange(!ratioLocked)}
             >
-              {ratioLocked ? (
-                <Lock className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              ) : (
-                <LockOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              )}
+              <UnfoldHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </MapSplitControlButton>
             <div
               className={expandedPanelClass}

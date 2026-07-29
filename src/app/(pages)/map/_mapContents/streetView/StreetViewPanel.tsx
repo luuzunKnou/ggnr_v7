@@ -7,16 +7,16 @@ import {
   type KakaoRoadview,
   type KakaoRoadviewClient,
 } from './loadKakaoMapsSdk';
-import { StreetViewRoadviewControls } from './StreetViewRoadviewControls';
+import { StreetViewRoadviewControls, type StreetViewCompassHandle } from './StreetViewRoadviewControls';
 import { StreetViewKakaoMapLink } from './StreetViewKakaoMapLink';
 
-/** 근처 파노라마 검색 반경(m) — 읍면 지역 여유 */
-const PANO_SEARCH_RADIUS_M = 100;
 /** setPanoId 후 init 대기 */
 const PANO_INIT_TIMEOUT_MS = 8000;
 /** 카카오 로드뷰 zoom 범위 */
 const ROADVIEW_ZOOM_MIN = -3;
 const ROADVIEW_ZOOM_MAX = 3;
+/** getNearestPanoId 폴백 반경(m) */
+const PANO_SEARCH_RADIUS_FALLBACK_M = 100;
 
 type StreetViewPanelProps = {
   /** 시야각(도) — 카카오 로드뷰 pan */
@@ -25,10 +25,14 @@ type StreetViewPanelProps = {
   lng: number | null;
   /** WGS84 위도 */
   lat: number | null;
+  /** 조회 시점 시야원→지상 거리(m). 없으면 폴백 */
+  getPanoSearchRadiusM?: () => number;
   /** 로드뷰 화살표 이동 등 → 지도/워커 반영 */
   onRoadviewPosition?: (lng: number, lat: number) => void;
-  /** 로드뷰 시야 변경 → 워커 pan */
+  /** 로드뷰 시야 변경 → 워커 pan (스트리밍, React 상태 생략) */
   onRoadviewPan?: (panDeg: number) => void;
+  /** 정북 등 확정 pan → React panDeg 동기화 */
+  onRoadviewPanCommit?: (panDeg: number) => void;
   /** 로드뷰 수직각 변경 → 워커 tilt */
   onRoadviewTilt?: (tiltDeg: number) => void;
 };
@@ -91,7 +95,7 @@ function RoadviewAlertBox({ children }: { children: ReactNode }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center px-4">
       <div
-        className="max-w-md rounded-xl border-2 border-dashed border-red-500 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-white shadow-lg whitespace-pre-line"
+        className="max-w-md rounded-3xl border-2 border-solid border-red-500 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-white shadow-lg whitespace-pre-line"
         role="alert"
       >
         {children}
@@ -105,8 +109,10 @@ export function StreetViewPanel({
   panDeg,
   lng,
   lat,
+  getPanoSearchRadiusM,
   onRoadviewPosition,
   onRoadviewPan,
+  onRoadviewPanCommit,
   onRoadviewTilt,
 }: StreetViewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,15 +125,17 @@ export function StreetViewPanel({
   const initTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPosRef = useRef(onRoadviewPosition);
   const onPanRef = useRef(onRoadviewPan);
+  const onPanCommitRef = useRef(onRoadviewPanCommit);
   const onTiltRef = useRef(onRoadviewTilt);
+  const getPanoSearchRadiusMRef = useRef(getPanoSearchRadiusM);
   onPosRef.current = onRoadviewPosition;
   onPanRef.current = onRoadviewPan;
+  onPanCommitRef.current = onRoadviewPanCommit;
   onTiltRef.current = onRoadviewTilt;
+  getPanoSearchRadiusMRef.current = getPanoSearchRadiusM;
 
-  const hudPanRef = useRef<HTMLParagraphElement>(null);
-  const hudTiltRef = useRef<HTMLParagraphElement>(null);
-  const hudLngRef = useRef<HTMLParagraphElement>(null);
-  const hudLatRef = useRef<HTMLParagraphElement>(null);
+  const compassRef = useRef<StreetViewCompassHandle>(null);
+  const lastPanRef = useRef(panDeg);
   const relayoutRafRef = useRef(0);
   const viewpointRafRef = useRef(0);
   const pendingVpRef = useRef<{ pan: number; tilt: number } | null>(null);
@@ -137,42 +145,20 @@ export function StreetViewPanel({
   const [noPano, setNoPano] = useState(false);
   const [panoReady, setPanoReady] = useState(false);
   const everPanoReadyRef = useRef(false);
-  /** HUD·컨트롤용 표시 pan (props와 로드뷰 드래그 병합) */
-  const [displayPan, setDisplayPan] = useState(panDeg);
 
   const reportFailure = (raw: unknown, fallback?: string) => {
     const explained = explainKakaoRoadviewFailure(raw);
     setError(explained ?? fallback ?? (raw instanceof Error ? raw.message : String(raw)));
   };
 
-  const writeHud = useCallback(
-    (opts: { pan?: number; tilt?: number; lngText?: string; latText?: string }) => {
-      if (opts.pan != null && hudPanRef.current) {
-        hudPanRef.current.textContent = `수평각 ${opts.pan.toFixed(1)}°`;
-      }
-      if (opts.tilt != null && hudTiltRef.current) {
-        hudTiltRef.current.textContent = `수직각 ${opts.tilt.toFixed(1)}°`;
-      }
-      if (opts.lngText != null && hudLngRef.current) {
-        hudLngRef.current.textContent = `경도 ${opts.lngText}`;
-      }
-      if (opts.latText != null && hudLatRef.current) {
-        hudLatRef.current.textContent = `위도 ${opts.latText}`;
-      }
-    },
-    []
-  );
+  const syncCompassPan = useCallback((pan: number) => {
+    lastPanRef.current = pan;
+    compassRef.current?.setPan(pan);
+  }, []);
 
   useEffect(() => {
-    setDisplayPan(panDeg);
-    writeHud({ pan: panDeg });
-  }, [panDeg, writeHud]);
-
-  useEffect(() => {
-    const lngText = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
-    const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
-    writeHud({ lngText, latText });
-  }, [lng, lat, writeHud]);
+    syncCompassPan(panDeg);
+  }, [panDeg, syncCompassPan]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,11 +216,9 @@ export function StreetViewPanel({
       const pending = pendingVpRef.current;
       if (!pending) return;
       pendingVpRef.current = null;
-      writeHud({ pan: pending.pan, tilt: pending.tilt });
+      syncCompassPan(pending.pan);
       onTiltRef.current?.(pending.tilt);
       if (skipEchoRef.current) return;
-      setDisplayPan(pending.pan);
-      panFromRoadviewRef.current = true;
       onPanRef.current?.(pending.pan);
     };
 
@@ -249,7 +233,6 @@ export function StreetViewPanel({
       setError(null);
       try {
         const tilt = roadview.getViewpoint()?.tilt ?? 0;
-        writeHud({ tilt });
         onTiltRef.current?.(tilt);
       } catch {
         /* ignore */
@@ -345,7 +328,7 @@ export function StreetViewPanel({
       el.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once per sdkReady
-  }, [sdkReady, writeHud]);
+  }, [sdkReady, syncCompassPan]);
 
   useEffect(() => {
     if (!sdkReady || !window.kakao?.maps) return;
@@ -390,7 +373,15 @@ export function StreetViewPanel({
 
     const position = new window.kakao.maps.LatLng(lat, lng);
     try {
-      client.getNearestPanoId(position, PANO_SEARCH_RADIUS_M, (panoId) => {
+      const radiusM = (() => {
+        try {
+          const n = getPanoSearchRadiusMRef.current?.();
+          return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
+        } catch {
+          return PANO_SEARCH_RADIUS_FALLBACK_M;
+        }
+      })();
+      client.getNearestPanoId(position, radiusM, (panoId) => {
         if (cancelled) return;
         if (panoId == null) {
           setNoPano(true);
@@ -403,7 +394,7 @@ export function StreetViewPanel({
           roadview.setPanoId(panoId, position);
           const cur = roadview.getViewpoint();
           roadview.setViewpoint({
-            pan: normalizePan(panDeg),
+            pan: normalizePan(lastPanRef.current),
             tilt: cur?.tilt ?? 0,
             zoom: cur?.zoom ?? 0,
           });
@@ -502,16 +493,15 @@ export function StreetViewPanel({
         tilt: cur.tilt,
         zoom: cur.zoom,
       });
-      writeHud({ pan: 0 });
-      setDisplayPan(0);
-      onPanRef.current?.(0);
+      syncCompassPan(0);
+      onPanCommitRef.current?.(0);
       queueMicrotask(() => {
         skipEchoRef.current = false;
       });
     } catch {
       /* ignore */
     }
-  }, [writeHud]);
+  }, [syncCompassPan]);
 
   const alertMessage =
     error ??
@@ -520,34 +510,37 @@ export function StreetViewPanel({
 
   const controlsEnabled = panoReady && !error && !noPano;
   const showControls = everPanoReadyRef.current || panoReady;
-  const lngText = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
-  const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
 
   return (
     <div className="relative flex h-full w-full flex-col bg-[#888888] text-white">
       <div className="relative min-h-0 flex-1 overflow-hidden bg-[#888888]">
         <div ref={containerRef} data-roadview-host className="absolute inset-0 h-full w-full bg-[#888888]" />
 
-        <div className="pointer-events-none absolute bottom-16 left-2 z-[2] rounded-md bg-black/45 px-2 py-1 text-[10px] tabular-nums text-white/75">
-          <p ref={hudPanRef}>수평각 {panDeg.toFixed(1)}°</p>
-          <p ref={hudTiltRef}>수직각 0.0°</p>
-          <p ref={hudLngRef}>경도 {lngText}</p>
-          <p ref={hudLatRef}>위도 {latText}</p>
-          {panoReady ? <p className="text-emerald-300/90">로드뷰 연결됨</p> : null}
-        </div>
-
         {showControls && !noPano ? (
-          <StreetViewRoadviewControls
-            panDeg={displayPan}
-            disabled={!controlsEnabled}
-            onZoomOut={onZoomOut}
-            onZoomIn={onZoomIn}
-            onResetNorth={onResetNorth}
-          />
-        ) : null}
-
-        {showControls && !noPano && lng != null && lat != null && Number.isFinite(lng) && Number.isFinite(lat) ? (
-          <StreetViewKakaoMapLink lat={lat} lng={lng} />
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container">
+            <div className="flex w-full flex-col items-center gap-1.5 @[26rem]:flex-row @[26rem]:items-center @[26rem]:justify-between">
+              <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:block" aria-hidden />
+              {lng != null && lat != null && Number.isFinite(lng) && Number.isFinite(lat) ? (
+                <div className="order-1 flex justify-center @[26rem]:order-3">
+                  <StreetViewKakaoMapLink lat={lat} lng={lng} />
+                </div>
+              ) : (
+                <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:order-3 @[26rem]:block" aria-hidden />
+              )}
+              <div className="order-2 flex justify-center">
+                <StreetViewRoadviewControls
+                  ref={(handle) => {
+                    compassRef.current = handle;
+                    handle?.setPan(lastPanRef.current);
+                  }}
+                  disabled={!controlsEnabled}
+                  onZoomOut={onZoomOut}
+                  onZoomIn={onZoomIn}
+                  onResetNorth={onResetNorth}
+                />
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {alertMessage ? <RoadviewAlertBox>{alertMessage}</RoadviewAlertBox> : null}

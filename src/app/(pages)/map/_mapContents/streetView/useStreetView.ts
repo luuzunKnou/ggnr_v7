@@ -6,7 +6,7 @@ import type Map from 'ol/Map';
 import type { ObjectEvent } from 'ol/Object';
 import { transform } from 'ol/proj';
 import { MAP_SPLIT_ANIM_MS } from '../../_mapComponents/mapSplit/mapSplitTypes';
-import { OlMapWalker } from './OlMapWalker';
+import { OlMapWalker, panoSearchRadiusMetersFromMap } from './OlMapWalker';
 import { useMapContext } from '../../_mapComponents/MapContext';
 
 type UseStreetViewArgs = {
@@ -44,24 +44,41 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   tiltDegRef.current = tiltDeg;
 
   const panRafRef = useRef(0);
+  const panThrottleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPanRef = useRef<number | null>(null);
+  const lastPanFlushAtRef = useRef(0);
   const centerRafRef = useRef(0);
   const reactPosRafRef = useRef(0);
   const pendingReactPosRef = useRef<Coordinate | null>(null);
 
   const flushPanToReact = useCallback(() => {
     panRafRef.current = 0;
+    if (panThrottleTimerRef.current) {
+      clearTimeout(panThrottleTimerRef.current);
+      panThrottleTimerRef.current = null;
+    }
     const pan = pendingPanRef.current;
     if (pan == null) return;
     pendingPanRef.current = null;
+    lastPanFlushAtRef.current = performance.now();
     setPanDeg(pan);
   }, []);
 
+  /** 워커 드래그 → 로드뷰 동기화용. 프레임마다 setState 하지 않고 스로틀 */
   const schedulePanToReact = useCallback(
     (pan: number) => {
       pendingPanRef.current = pan;
-      if (panRafRef.current) return;
-      panRafRef.current = requestAnimationFrame(flushPanToReact);
+      const elapsed = performance.now() - lastPanFlushAtRef.current;
+      if (elapsed >= 80) {
+        if (panRafRef.current) return;
+        panRafRef.current = requestAnimationFrame(flushPanToReact);
+        return;
+      }
+      if (panThrottleTimerRef.current) return;
+      panThrottleTimerRef.current = setTimeout(() => {
+        panThrottleTimerRef.current = null;
+        flushPanToReact();
+      }, 80 - elapsed);
     },
     [flushPanToReact]
   );
@@ -212,6 +229,10 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
         cancelAnimationFrame(panRafRef.current);
         panRafRef.current = 0;
       }
+      if (panThrottleTimerRef.current) {
+        clearTimeout(panThrottleTimerRef.current);
+        panThrottleTimerRef.current = null;
+      }
       if (reactPosRafRef.current) {
         cancelAnimationFrame(reactPosRafRef.current);
         reactPosRafRef.current = 0;
@@ -234,8 +255,15 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   const onPanChange = useCallback((pan: number) => {
     const next = ((pan % 360) + 360) % 360;
     walkerRef.current?.setAngle(next);
-    schedulePanToReact(next);
-  }, [schedulePanToReact]);
+    pendingPanRef.current = next;
+    flushPanToReact();
+  }, [flushPanToReact]);
+
+  /** 로드뷰 드래그 → 워커만 (React panDeg 생략 — 패널 리렌더 방지) */
+  const onPanFromRoadview = useCallback((pan: number) => {
+    const next = ((pan % 360) + 360) % 360;
+    walkerRef.current?.setAngle(next);
+  }, []);
 
   const onTiltChange = useCallback((tilt: number) => {
     const next = Math.min(90, Math.max(-90, tilt));
@@ -270,6 +298,11 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     [map, applyPosition]
   );
 
+  const getPanoSearchRadiusM = useCallback(() => {
+    if (!map) return 100;
+    return panoSearchRadiusMetersFromMap(map);
+  }, [map]);
+
   const wgs84 = useMemo(() => {
     if (!map || !position) return { lng: null as number | null, lat: null as number | null };
     try {
@@ -285,7 +318,9 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     tiltDeg,
     lng: wgs84.lng,
     lat: wgs84.lat,
+    getPanoSearchRadiusM,
     onPanChange,
+    onPanFromRoadview,
     onTiltChange,
     onNudgePosition,
     onRoadviewPosition,
