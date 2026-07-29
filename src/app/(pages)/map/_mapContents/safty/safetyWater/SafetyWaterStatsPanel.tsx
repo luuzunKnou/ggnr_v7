@@ -620,11 +620,11 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
   }
 
   const cell = (row: (typeof THRESHOLD_ROWS)[number] | null, splitLeft?: boolean) => {
-    const edge = splitLeft ? 'border-l border-border pl-2.5 ' : '';
+    const edge = splitLeft ? 'border-l border-border ' : '';
     if (!row) {
       return (
         <>
-          <td className={`${edge}overflow-hidden whitespace-nowrap px-2 py-1`} />
+          <td className={`${edge}relative overflow-hidden p-0`} />
           <td className="max-w-0 px-2 py-1" />
           <td className="px-2 py-1" />
         </>
@@ -637,13 +637,18 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
     const iconColor = row.level ? WATER_STATUS_HEX[row.level] : null;
     return (
       <>
-        <td className={`${edge}overflow-hidden whitespace-nowrap px-2 py-1`}>
+        <td className={`${edge}relative overflow-hidden p-0`}>
           {Icon && iconColor ? (
-            <span title={row.label} className="inline-flex">
-              <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: iconColor }} strokeWidth={2} aria-hidden />
+            <span
+              title={row.label}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <Icon className="h-[18px] w-[18px] shrink-0" style={{ color: iconColor }} strokeWidth={2} aria-hidden />
             </span>
           ) : (
-            <span className="text-[10px] text-muted-foreground/70">—</span>
+            <span className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground/70">
+              —
+            </span>
           )}
         </td>
         <td className="max-w-0 px-2 py-1 text-foreground/90">
@@ -679,15 +684,15 @@ function WaterThresholdLegendTable({ thresholds }: { thresholds: SafetyWaterLeve
         </colgroup>
         <thead>
           <tr className="text-muted-foreground">
-            <th className="overflow-hidden whitespace-nowrap px-2 py-1 text-left font-medium">
-              구분
+            <th className="relative overflow-hidden p-0 font-medium">
+              <span className="absolute inset-0 flex items-center justify-center">구분</span>
             </th>
             <th className="overflow-hidden px-2 py-1 text-left font-medium">
               <span className="block break-keep">항목</span>
             </th>
             <th className="whitespace-nowrap px-2 py-1 text-right font-medium">값</th>
-            <th className="overflow-hidden whitespace-nowrap border-l border-border px-2 py-1 pl-2.5 text-left font-medium">
-              구분
+            <th className="relative overflow-hidden border-l border-border p-0 font-medium">
+              <span className="absolute inset-0 flex items-center justify-center">구분</span>
             </th>
             <th className="overflow-hidden px-2 py-1 text-left font-medium">
               <span className="block break-keep">항목</span>
