@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { MapSplitControlItem } from './MapSplitterGutter';
 import { cn } from '@/lib/utils';
 import { MapSplitterGutter } from './MapSplitterGutter';
 import {
@@ -24,7 +25,7 @@ type MapSplitLayoutProps = {
   splitActive: boolean;
   primary: ReactNode;
   secondary: ReactNode;
-  gutterControls?: ReactNode | ((orientation: MapSplitOrientation) => ReactNode);
+  gutterControls?: MapSplitControlItem[] | ((orientation: MapSplitOrientation) => MapSplitControlItem[]);
   primaryRatio?: number;
   onPrimaryRatioChange?: (ratio: number) => void;
   onSizeTick?: () => void;

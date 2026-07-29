@@ -336,7 +336,7 @@ export default function MapViewModeWrapper({
 
   // 보조 칸 스위치 — 이후 map/panorama 등 확장
   let secondaryPanel = null as ReactNode;
-  let gutterControls: ReturnType<typeof useStreetViewSecondary>['controls'] = null;
+  let gutterControls: ReturnType<typeof useStreetViewSecondary>['controls'] = undefined;
   let splitControlOffsetRatio: number | undefined;
   let onSplitControlOffsetChange: ((ratio: number) => void) | undefined;
   let splitControlsExpanded: boolean | undefined;

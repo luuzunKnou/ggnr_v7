@@ -56,7 +56,7 @@ export const StreetViewKakaoMapLink = memo(function StreetViewKakaoMapLink({
         'dark:bg-slate-900 dark:shadow-black/40',
         'text-sm text-white/80',
         disabled
-          ? 'cursor-not-allowed opacity-40 hover:opacity-40'
+          ? '!cursor-not-allowed opacity-40 hover:opacity-40'
           : 'cursor-pointer hover:opacity-100 hover:text-white/90'
       )}
       onClick={(e) => {

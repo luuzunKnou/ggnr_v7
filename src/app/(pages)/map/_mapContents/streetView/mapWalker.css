@@ -18,6 +18,7 @@
   --mw-eye-vis: 0;
   --mw-eye-sx: 1;
   --mw-eye-sy: 1;
+  --mw-eye-rot: 0deg;
   --mw-ring-scale: 1;
   --mw-figure-scale: 1;
   --mw-stroke: rgba(0, 0, 0, 0.22);
@@ -118,6 +119,7 @@
   box-shadow: none;
   box-sizing: border-box;
   transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px))
+    rotate(var(--mw-eye-rot, 0deg))
     scale(var(--mw-eye-sx, 1), var(--mw-eye-sy, 1));
   opacity: var(--mw-eye-vis, 0);
 }

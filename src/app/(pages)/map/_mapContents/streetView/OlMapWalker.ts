@@ -346,11 +346,14 @@ export class OlMapWalker {
     const eyRaw = eyPan + tiltNorm * verticalAmp;
     const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-EYE_MAX_UP_PX, eyRaw));
     const eyeVis = pan >= 60 && pan <= 300 ? '1' : '0';
+    // 좌우 이동 방향에 따라 타원 기울기: 동쪽(sin>0) → 음수 회전, 서쪽(sin<0) → 양수 회전
+    const eyeRot = -(sinR * lateral * 32 * (eyeSx < eyeSy ? eyeSy - eyeSx : 0.18));
 
     this.setCss('--mw-ex', `${ex.toFixed(1)}px`);
     this.setCss('--mw-ey', `${ey.toFixed(1)}px`);
     this.setCss('--mw-eye-sx', eyeSx.toFixed(2));
     this.setCss('--mw-eye-sy', eyeSy.toFixed(2));
+    this.setCss('--mw-eye-rot', `${eyeRot.toFixed(1)}deg`);
     this.setCss('--mw-eye-vis', eyeVis);
 
     // 머리 그림자 — 3D 정상단 광원: pitch·yaw에 따라 구 표면 어두운 영역 투영

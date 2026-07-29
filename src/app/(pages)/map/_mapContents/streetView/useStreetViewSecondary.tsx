@@ -1,5 +1,7 @@
 'use client';
 
+import type { MapSplitControlItem } from '../../_mapComponents/mapSplit/MapSplitterGutter';
+import type { MapSplitOrientation } from '../../_mapComponents/mapSplit/mapSplitTypes';
 import { StreetViewSecondaryHost } from './StreetViewSecondaryHost';
 import { StreetViewSplitterControls } from './StreetViewSplitterControls';
 import { useStreetViewSplitterPrefs } from './useStreetViewSplitterPrefs';
@@ -22,7 +24,8 @@ export function useStreetViewSecondary({
     <StreetViewSecondaryHost active={active} mapSync={mapSync} />
   ) : null;
 
-  const controls = active ? () => StreetViewSplitterControls() : null;
+  const controls: ((orientation: MapSplitOrientation) => MapSplitControlItem[]) | undefined =
+    active ? (_orientation: MapSplitOrientation) => StreetViewSplitterControls() : undefined;
 
   return {
     panel,

@@ -95,7 +95,7 @@ function RoadviewAlertBox({ children }: { children: ReactNode }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center px-4">
       <div
-        className="max-w-md rounded-3xl border-2 border-solid border-red-500 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-white shadow-lg whitespace-pre-line"
+        className="max-w-md rounded-[12px] border-2 border-solid border-red-500 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-white shadow-lg whitespace-pre-line"
         role="alert"
       >
         {children}
@@ -509,8 +509,11 @@ export function StreetViewPanel({
     (sdkReady && lng == null && lat == null ? '지도 위치를 확인할 수 없습니다.' : null);
 
   const controlsEnabled = panoReady && !error && !noPano;
-  const showControls = everPanoReadyRef.current || panoReady;
+  const showControls = everPanoReadyRef.current || panoReady || noPano || !!error;
   const kakaoLinkDisabled =
+    !panoReady ||
+    !!error ||
+    noPano ||
     lng == null || lat == null || !Number.isFinite(lng) || !Number.isFinite(lat);
 
   return (
@@ -521,7 +524,7 @@ export function StreetViewPanel({
           {alertMessage ? <RoadviewAlertBox>{alertMessage}</RoadviewAlertBox> : null}
         </div>
 
-        {showControls && !noPano ? (
+        {showControls ? (
           <div
             data-roadview-controls
             className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container"
