@@ -29,6 +29,8 @@ type MapSplitterGutterProps = {
   onDragStart: (clientPos: number) => void;
   controlOffsetRatio?: number;
   onControlOffsetRatioChange?: (ratio: number) => void;
+  /** false면 pill 위치 드래그 비활성·가운데(0.5) 고정. 기본 false */
+  controlOffsetDraggable?: boolean;
   /** false면 Lock·기능 버튼 숨기고 controls(펼치기)만 */
   controlsExpanded?: boolean;
 };
@@ -166,9 +168,12 @@ export function MapSplitterGutter({
   onDragStart,
   controlOffsetRatio = 0.5,
   onControlOffsetRatioChange,
+  controlOffsetDraggable = false,
   controlsExpanded = true,
 }: MapSplitterGutterProps) {
   const isHorizontal = orientation === 'horizontal';
+  const offsetMoveEnabled = controlOffsetDraggable && Boolean(onControlOffsetRatioChange);
+  const effectiveOffsetRatio = offsetMoveEnabled ? controlOffsetRatio : 0.5;
   const gutterRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
   const offsetDragRef = useRef(false);
@@ -240,13 +245,25 @@ export function MapSplitterGutter({
   }, [isHorizontal, buttonCount, hasExtraControls, controlsExpanded]);
 
   useEffect(() => {
-    if (!onControlOffsetRatioChange || isOffsetDragging) return;
+    if (!offsetMoveEnabled || isOffsetDragging) return;
     const { min, max } = boundsRef.current;
     const next = clamp(controlOffsetRatio, min, max);
-    if (next !== controlOffsetRatio) onControlOffsetRatioChange(next);
-  }, [controlOffsetRatio, onControlOffsetRatioChange, bounds, isOffsetDragging]);
+    if (next !== controlOffsetRatio) onControlOffsetRatioChange?.(next);
+  }, [
+    controlOffsetRatio,
+    onControlOffsetRatioChange,
+    bounds,
+    isOffsetDragging,
+    offsetMoveEnabled,
+  ]);
 
   useEffect(() => {
+    if (!offsetMoveEnabled) {
+      offsetDragRef.current = false;
+      dragRatioRef.current = null;
+      setDragOffsetRatio(null);
+      return;
+    }
     const onMove = (e: PointerEvent) => {
       if (!offsetDragRef.current) return;
       const el = gutterRef.current;
@@ -282,7 +299,7 @@ export function MapSplitterGutter({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [isHorizontal]);
+  }, [isHorizontal, offsetMoveEnabled]);
 
   useEffect(() => {
     return () => {
@@ -291,9 +308,9 @@ export function MapSplitterGutter({
   }, []);
 
   const clampedOffset = clamp(
-    dragOffsetRatio ?? controlOffsetRatio,
-    bounds.min,
-    bounds.max
+    offsetMoveEnabled ? (dragOffsetRatio ?? effectiveOffsetRatio) : 0.5,
+    offsetMoveEnabled ? bounds.min : 0.5,
+    offsetMoveEnabled ? bounds.max : 0.5
   );
   const offsetPercent = `${clampedOffset * 100}%`;
   const oppositePercent = `${(1 - clampedOffset) * 100}%`;
@@ -344,13 +361,13 @@ export function MapSplitterGutter({
       <div
         ref={pillRef}
         data-split-controls
-        data-split-control-drag={onControlOffsetRatioChange ? 'true' : undefined}
-        title={onControlOffsetRatioChange ? PILL_DRAG_TITLE : undefined}
+        data-split-control-drag={offsetMoveEnabled ? 'true' : undefined}
+        title={offsetMoveEnabled ? PILL_DRAG_TITLE : undefined}
         className={cn(
           'absolute rounded-full bg-slate-700 shadow-md',
           'dark:bg-slate-800 dark:shadow-black/40',
           hasExtraControls ? 'p-1.5' : 'p-0.5',
-          onControlOffsetRatioChange && 'cursor-grab active:cursor-grabbing'
+          offsetMoveEnabled && 'cursor-grab active:cursor-grabbing'
         )}
         style={{
           ...(isHorizontal
@@ -371,11 +388,11 @@ export function MapSplitterGutter({
         }}
         onPointerDown={(e) => {
           e.stopPropagation();
-          e.preventDefault();
           if ((e.target as HTMLElement).closest('button')) return;
-          if (!onControlOffsetRatioChange) return;
+          if (!offsetMoveEnabled) return;
+          e.preventDefault();
           const { min, max } = boundsRef.current;
-          const startRatio = clamp(controlOffsetRatio, min, max);
+          const startRatio = clamp(effectiveOffsetRatio, min, max);
           offsetDragRef.current = true;
           edgeLatchRef.current = null;
           dragRatioRef.current = startRatio;

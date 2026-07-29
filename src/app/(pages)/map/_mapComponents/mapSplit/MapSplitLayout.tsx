@@ -34,6 +34,8 @@ type MapSplitLayoutProps = {
   /** 분할선 컨트롤 pill 위치 (0~1) */
   controlOffsetRatio?: number;
   onControlOffsetRatioChange?: (ratio: number) => void;
+  /** false면 pill 위치 드래그 비활성·가운데 고정. 기본 false */
+  controlOffsetDraggable?: boolean;
   /** false면 Lock·기능 버튼 숨김 */
   controlsExpanded?: boolean;
 };
@@ -67,6 +69,7 @@ export function MapSplitLayout({
   onOrientationChange,
   controlOffsetRatio,
   onControlOffsetRatioChange,
+  controlOffsetDraggable = false,
   controlsExpanded,
 }: MapSplitLayoutProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -235,8 +238,11 @@ export function MapSplitLayout({
             controls={gutterControls}
             ratioLocked={ratioLocked}
             onRatioLockedChange={setRatioLocked}
-            controlOffsetRatio={controlOffsetRatio}
-            onControlOffsetRatioChange={onControlOffsetRatioChange}
+            controlOffsetRatio={controlOffsetDraggable ? controlOffsetRatio : 0.5}
+            onControlOffsetRatioChange={
+              controlOffsetDraggable ? onControlOffsetRatioChange : undefined
+            }
+            controlOffsetDraggable={controlOffsetDraggable}
             controlsExpanded={controlsExpanded}
             onDragStart={(clientPos) => {
               if (ratioLocked) return;

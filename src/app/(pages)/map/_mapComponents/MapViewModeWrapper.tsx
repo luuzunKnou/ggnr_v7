@@ -398,6 +398,7 @@ export default function MapViewModeWrapper({
           gutterControls={gutterControls}
           controlOffsetRatio={splitControlOffsetRatio}
           onControlOffsetRatioChange={onSplitControlOffsetChange}
+          controlOffsetDraggable={false}
           controlsExpanded={splitControlsExpanded}
           onSizeTick={onSplitSizeTick}
           mapPaddingLeft={mapContext?.mapPaddingLeft ?? 0}
