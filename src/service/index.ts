@@ -40,6 +40,9 @@ import * as noticeService from './noticeService';
 import * as boardService from './boardService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
+import * as shootingRequestService from './shootingRequestService';
+import * as flightLogbookService from './flightLogbookService';
+import * as aerialUploadService from './aerialUploadService';
 
 export {
   configService,
@@ -80,4 +83,7 @@ export {
   noticeService,
   boardService,
   mngVersionHistoryService,
+  shootingRequestService,
+  flightLogbookService,
+  aerialUploadService,
 };

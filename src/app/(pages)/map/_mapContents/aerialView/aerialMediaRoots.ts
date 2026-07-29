@@ -1,11 +1,12 @@
 import type { AerialKind } from './aerialMediaTypes';
+import { aerialKindRelativeRoot } from '@/lib/aerialUploadPaths';
 
-/** 구분 → 저장 루트 (화면 안내·목업 파싱용) */
+/** 구분 → 저장 루트 (화면 안내·진행 표시 · GGNR_DATA_DIR/aerial/{kind}/) */
 export const AERIAL_KIND_ROOT: Record<AerialKind, string> = {
-  ortho: 'aerial_ortho/',
-  drone: 'aerial_media/',
-  panorama: 'aerial_panorama/',
-  satellite: 'aerial_satellite/',
+  ortho: aerialKindRelativeRoot('ortho'),
+  drone: aerialKindRelativeRoot('drone'),
+  panorama: aerialKindRelativeRoot('panorama'),
+  satellite: aerialKindRelativeRoot('satellite'),
 };
 
 export const FOLDER_KIND_TOKEN: Record<string, AerialKind> = {

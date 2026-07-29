@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
 import { mockUnitsForKind, subscribeMockWorkUnits } from './aerialMediaMockData';
 import type { AerialKind } from './aerialMediaTypes';
@@ -20,14 +19,12 @@ import {
 } from './WorkUnitDetailPanels';
 import { FolderBatchUploadDialog } from './FolderBatchUploadDialog';
 import { useAerialMediaMapFocus } from './useAerialMediaMapFocus';
-import { SHOOT_TYPE_LABEL } from '../shootingRequest/shootingRequestMockData';
 import {
   clearActiveRegistrationRequest,
-  getActiveRegistrationRequest,
+  findShootingRequest,
   getShootingRequests,
   subscribeShootingRequests,
 } from '../shootingRequest/shootingRequestMockStore';
-import { shootTypeToAerialKind } from '../shootingRequest/shootTypeToAerialKind';
 import {
   getUploadCompleteNotice,
   getUploadProgressUiVersion,
@@ -74,6 +71,8 @@ export function AerialMediaShell({
   const [checkedOrthoIds, setCheckedOrthoIds] = useState<Set<string>>(new Set());
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [uploadOpen, setUploadOpen] = useState(false);
+  /** 상세 «이 건으로 폴더 업로드»로 연 경우에만 설정 — 목록 일반 업로드는 null */
+  const [uploadLinkRequestId, setUploadLinkRequestId] = useState<string | null>(null);
   const [listTick, setListTick] = useState(0);
 
   /** 업로드·변환 목업이 목록 배열을 바꿀 때 리렌더 */
@@ -90,16 +89,16 @@ export function AerialMediaShell({
     setDateFrom('');
     setDateTo('');
     setUploadOpen(false);
+    setUploadLinkRequestId(null);
   }, [initialKind]);
 
   useSyncExternalStore(subscribeShootingRequests, getShootingRequests, getShootingRequests);
   useSyncExternalStore(subscribeUploadProgress, getUploadProgressUiVersion, getUploadProgressUiVersion);
   const uploadCompleteNotice = !viewOnly ? getUploadCompleteNotice() : null;
-  const activeRequest = !viewOnly ? getActiveRegistrationRequest() : null;
-  /** 촬영형태와 현재 메뉴가 같을 때만 «이 건으로 업로드» 표시 */
-  const linkedRequest =
-    activeRequest && shootTypeToAerialKind(activeRequest.shootType) === kind ? activeRequest : null;
   const uploadingJobs = !viewOnly ? getUploadingJobsForKind(kind) : [];
+  /** 일반 폴더 업로드가 아니라 «이 건으로»로 연 승인 건만 다이얼로그에 표시 */
+  const dialogLinkedRequest =
+    !viewOnly && uploadLinkRequestId != null ? findShootingRequest(uploadLinkRequestId) : null;
 
   useEffect(() => {
     if (viewOnly) return;
@@ -113,6 +112,11 @@ export function AerialMediaShell({
 
   const selectedUnit = units.find((u) => u.id === selectedUnitId) ?? null;
   const selectedFile = selectedUnit?.files.find((f) => f.id === selectedFileId) ?? null;
+  /** 선택한 작업단위에 붙은 승인 건 — 상세에서 폴더 업로드 */
+  const detailLinkedRequest =
+    !viewOnly && selectedUnit?.linkedRequestId
+      ? findShootingRequest(selectedUnit.linkedRequestId)
+      : null;
 
   useAerialMediaMapFocus({
     /** 항공영상은 geom 없음 · 단순 목록 조회만 — 지도 이동·마커 없음 */
@@ -136,6 +140,17 @@ export function AerialMediaShell({
     setSelectedUnitId(id);
     setSelectedFileId(null);
     setDetailTab('info');
+  };
+
+  const openLinkedFolderUpload = (requestId: string | undefined) => {
+    setUploadLinkRequestId(requestId ?? null);
+    setUploadOpen(true);
+  };
+
+  const openFreeFolderUpload = () => {
+    setUploadLinkRequestId(null);
+    clearActiveRegistrationRequest();
+    setUploadOpen(true);
   };
 
   const closeUnitDetail = () => {
@@ -289,7 +304,7 @@ export function AerialMediaShell({
           keyword={keyword}
           onKeywordChange={setKeyword}
           onRefresh={() => setListTick((t) => t + 1)}
-          onUpload={viewOnly ? undefined : () => setUploadOpen(true)}
+          onUpload={viewOnly ? undefined : openFreeFolderUpload}
           onClose={hideKindNav ? onClose : undefined}
           showStatus={kind === 'satellite'}
           showConvertStatus={kind === 'ortho'}
@@ -301,47 +316,14 @@ export function AerialMediaShell({
           banner={
             <div className="space-y-2">
               {uploadingJobs.length > 0 ? <UploadProgressBanner jobs={uploadingJobs} /> : null}
-              {linkedRequest ? (
-                <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-[10px] font-semibold text-sky-900">승인 건으로 자료 등록</p>
-                    <button
-                      type="button"
-                      className="shrink-0 text-[10px] text-sky-700 underline"
-                      onClick={() => clearActiveRegistrationRequest()}
-                    >
-                      연결 해제
-                    </button>
-                  </div>
-                  <p className="text-[11px] font-medium text-slate-800">
-                    {linkedRequest.purpose || '(목적 없음)'}
-                  </p>
-                  <p className="text-[10px] leading-relaxed text-slate-600">
-                    {SHOOT_TYPE_LABEL[linkedRequest.shootType]} · 촬영 {linkedRequest.shootDate || '—'} ·{' '}
-                    {linkedRequest.address || '지번 미입력'}
-                    {linkedRequest.status === 'registered' && linkedRequest.linkedWorkUnitLabel
-                      ? ` · 연결 ${linkedRequest.linkedWorkUnitLabel}`
-                      : null}
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 w-full text-[10px]"
-                    onClick={() => setUploadOpen(true)}
-                  >
-                    이 건으로 폴더 업로드
-                  </Button>
-                </div>
-              ) : null}
-              {!linkedRequest && kind === 'satellite' ? (
+              {kind === 'satellite' ? (
                 <p className="rounded-md border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900">
                   {viewOnly
                     ? '지도 표시는 배경지도 «자체항공영상»에서 on/off 합니다.'
                     : '변환 완료 시 배경지도 «자체항공영상»에 등록됩니다. on/off는 배경지도에서 합니다.'}
                 </p>
               ) : null}
-              {!linkedRequest &&
-              uploadingJobs.length === 0 &&
+              {uploadingJobs.length === 0 &&
               useRealMap &&
               kind === 'ortho' &&
               checkedOrthoIds.size > 0 ? (
@@ -366,6 +348,12 @@ export function AerialMediaShell({
             detailTab={detailTab}
             onDetailTabChange={setDetailTab}
             viewOnly={viewOnly}
+            linkedRequest={detailLinkedRequest}
+            onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onClearLink={() => {
+              setUploadLinkRequestId(null);
+              clearActiveRegistrationRequest();
+            }}
           />
         </div>
       ) : null}
@@ -380,6 +368,12 @@ export function AerialMediaShell({
             detailTab={detailTab}
             onDetailTabChange={setDetailTab}
             viewOnly={viewOnly}
+            linkedRequest={detailLinkedRequest}
+            onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onClearLink={() => {
+              setUploadLinkRequestId(null);
+              clearActiveRegistrationRequest();
+            }}
           />
         </div>
       ) : null}
@@ -394,6 +388,12 @@ export function AerialMediaShell({
             detailTab={detailTab}
             onDetailTabChange={setDetailTab}
             viewOnly={viewOnly}
+            linkedRequest={detailLinkedRequest}
+            onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onClearLink={() => {
+              setUploadLinkRequestId(null);
+              clearActiveRegistrationRequest();
+            }}
           />
         </div>
       ) : null}
@@ -406,6 +406,12 @@ export function AerialMediaShell({
             detailTab={detailTab}
             onDetailTabChange={setDetailTab}
             viewOnly={viewOnly}
+            linkedRequest={detailLinkedRequest}
+            onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onClearLink={() => {
+              setUploadLinkRequestId(null);
+              clearActiveRegistrationRequest();
+            }}
           />
         </div>
       ) : null}
@@ -525,9 +531,12 @@ export function AerialMediaShell({
 
       <FolderBatchUploadDialog
         open={!viewOnly && uploadOpen}
-        onOpenChange={setUploadOpen}
+        onOpenChange={(open) => {
+          setUploadOpen(open);
+          if (!open) setUploadLinkRequestId(null);
+        }}
         expectedKind={kind}
-        linkedRequest={linkedRequest}
+        linkedRequest={dialogLinkedRequest}
         onUploadMockComplete={() => setListTick((t) => t + 1)}
       />
       {!viewOnly ? <UploadCompleteDialog notice={uploadCompleteNotice} /> : null}

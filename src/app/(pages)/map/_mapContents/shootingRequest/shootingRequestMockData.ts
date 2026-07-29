@@ -1,13 +1,36 @@
 /** 촬영요청 UI 목업용 타입·샘플 (백엔드·DB 없음) */
 
-export type ShootType = 'birdsEye' | 'video' | 'aerialPhoto' | 'aerialOverlay';
+/** 촬영형태 — 영상관리 분류와 동일 */
+export type ShootType = 'ortho' | 'drone' | 'panorama' | 'satellite';
 
 export const SHOOT_TYPE_LABEL: Record<ShootType, string> = {
-  birdsEye: '조감도',
-  video: '영상',
-  aerialPhoto: '항공사진',
-  aerialOverlay: '항공사진+중첩',
+  ortho: '드론영상',
+  drone: '사진·동영상',
+  panorama: '파노라마',
+  satellite: '항공영상',
 };
+
+/** 예전 저장값 → 새 촬영형태 */
+export function normalizeShootType(raw: unknown): ShootType {
+  const v = String(raw ?? '').trim();
+  switch (v) {
+    case 'ortho':
+    case 'drone':
+    case 'panorama':
+    case 'satellite':
+      return v;
+    case 'birdsEye':
+      return 'ortho';
+    case 'video':
+      return 'drone';
+    case 'aerialOverlay':
+      return 'panorama';
+    case 'aerialPhoto':
+      return 'satellite';
+    default:
+      return 'drone';
+  }
+}
 
 /** 접수·승인·등록·반려 (등록중은 승인 후 내부 단계 — 화면 표시는 «승인»과 동일) */
 export type RequestStatus =
@@ -77,7 +100,7 @@ export const MOCK_MY_REQUESTS: ShootingRequestDraft[] = [
     scopeLabel: '다각형 범위 지정됨',
     shootDate: '2025-12-08',
     useDate: '2025-12-09',
-    shootType: 'aerialOverlay',
+    shootType: 'panorama',
     detailRequest: '건물 옥상 포함 촬영 요청',
     submittedAt: '2025-12-01',
     status: 'pending',
@@ -94,7 +117,7 @@ export const MOCK_MY_REQUESTS: ShootingRequestDraft[] = [
     scopeLabel: '사각형 범위 지정됨',
     shootDate: '2025-12-02',
     useDate: '2025-12-03',
-    shootType: 'video',
+    shootType: 'drone',
     detailRequest: '',
     submittedAt: '2025-11-28',
     status: 'approved',
@@ -112,7 +135,7 @@ export const MOCK_MY_REQUESTS: ShootingRequestDraft[] = [
     scopeLabel: '다각형 범위 지정됨',
     shootDate: '2025-11-20',
     useDate: '2025-11-21',
-    shootType: 'birdsEye',
+    shootType: 'ortho',
     detailRequest: '해안 일대 조감',
     submittedAt: '2025-11-15',
     status: 'rejected',
@@ -131,7 +154,7 @@ export const MOCK_MY_REQUESTS: ShootingRequestDraft[] = [
     scopeLabel: '사각형 범위 지정됨',
     shootDate: '2025-12-15',
     useDate: '2025-12-16',
-    shootType: 'aerialPhoto',
+    shootType: 'satellite',
     detailRequest: '식생 포함',
     submittedAt: '2025-12-05',
     status: 'pending',
@@ -151,7 +174,7 @@ export function emptyDraft(): Omit<ShootingRequestDraft, 'id' | 'submittedAt' | 
     scopeWkt: '',
     shootDate: '',
     useDate: '',
-    shootType: 'aerialOverlay',
+    shootType: 'drone',
     detailRequest: '',
   };
 }

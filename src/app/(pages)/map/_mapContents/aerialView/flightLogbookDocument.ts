@@ -33,9 +33,9 @@ function buildFlightLogbookHtml(v: FlightLogbookValues): string {
     v.cameraCondition === 'inspect'
   )} 점검 요망`;
   const safety = `${box(v.safetyDone)} 완료`;
-  const security = `${box(v.securityDone)} 완료${
-    v.securityDetail.trim() ? `<div style="margin-top:6px">${nl(v.securityDetail)}</div>` : ''
-  }`;
+  const security = v.securityDetail.trim()
+    ? nl(v.securityDetail)
+    : `${box(v.securityDone)} 완료`;
 
   return `
 <style>${formalDocSharedCss()}</style>

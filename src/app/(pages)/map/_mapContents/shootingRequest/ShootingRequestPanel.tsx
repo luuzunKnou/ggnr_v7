@@ -13,7 +13,10 @@ import {
 } from './shootingRequestMockData';
 import {
   countByStatus,
+  getShootingRequestLastError,
   getShootingRequests,
+  isShootingRequestsLoading,
+  refreshShootingRequests,
   SHOOTING_REQUEST_NEW_ID,
   subscribeShootingRequests,
 } from './shootingRequestMockStore';
@@ -60,17 +63,30 @@ export function ShootingRequestPanel({
   hideModeTabs = false,
 }: Props) {
   const [keyword, setKeyword] = useState('');
-  /** 승인관리: 대기 / 승인 / 반려 (기본 대기) */
-  const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  /** 승인관리: 전체 / 대기 / 승인 / 반려 (기본 대기) */
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>(
+    'pending'
+  );
   const myRequests = useSyncExternalStore(
     subscribeShootingRequests,
     getShootingRequests,
     getShootingRequests
   );
+  const loading = useSyncExternalStore(
+    subscribeShootingRequests,
+    isShootingRequestsLoading,
+    () => false
+  );
+  const loadError = useSyncExternalStore(
+    subscribeShootingRequests,
+    getShootingRequestLastError,
+    () => null
+  );
 
   useEffect(() => {
     if (listMode === 'approval') setStatusFilter('pending');
     setKeyword('');
+    void refreshShootingRequests(listMode).catch(() => undefined);
   }, [listMode]);
 
   const pendingCount = countByStatus('pending');
@@ -80,10 +96,14 @@ export function ShootingRequestPanel({
   const filtered = useMemo(() => {
     let rows = myRequests;
     if (listMode === 'approval') {
-      rows =
-        statusFilter === 'approved'
-          ? rows.filter((r) => isApprovedFamily(r.status))
-          : rows.filter((r) => r.status === statusFilter);
+      if (statusFilter === 'pending') {
+        rows = rows.filter((r) => r.status === 'pending');
+      } else if (statusFilter === 'approved') {
+        rows = rows.filter((r) => isApprovedFamily(r.status));
+      } else if (statusFilter === 'rejected') {
+        rows = rows.filter((r) => r.status === 'rejected');
+      }
+      // all: 필터 없음
     }
     const q = keyword.trim().toLowerCase();
     if (!q) return rows;
@@ -121,8 +141,12 @@ export function ShootingRequestPanel({
   const title = listMode === 'mine' ? '내 신청 목록' : '승인 관리';
   const subtitle =
     listMode === 'mine'
-      ? `${filtered.length}건${keyword.trim() ? ' · 검색' : ''} · 목업`
-      : `대기 ${pendingCount} · 승인 ${approvedCount} · 반려 ${rejectedCount}`;
+      ? loading
+        ? '불러오는 중…'
+        : `${filtered.length}건${keyword.trim() ? ' · 검색' : ''}`
+      : loading
+        ? '불러오는 중…'
+        : `대기 ${pendingCount} · 승인 ${approvedCount} · 반려 ${rejectedCount}`;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -191,6 +215,7 @@ export function ShootingRequestPanel({
           <div className="flex flex-wrap gap-1">
             {(
               [
+                { id: 'all' as const, label: '전체' },
                 { id: 'pending' as const, label: '대기' },
                 { id: 'approved' as const, label: '승인' },
                 { id: 'rejected' as const, label: '반려' },
@@ -218,7 +243,13 @@ export function ShootingRequestPanel({
 
         {listMode === 'approval' ? (
           <p className="rounded-md border border-sky-100 bg-sky-50/80 px-2.5 py-1.5 text-[10px] leading-relaxed text-sky-900">
-            대기 건을 승인하면 상세에서 비행기록부·파일 업로드를 바로 진행합니다. (목업)
+            대기 건을 승인하면 상세에서 비행기록부·파일 업로드를 바로 진행합니다.
+          </p>
+        ) : null}
+
+        {loadError ? (
+          <p className="rounded-md border border-rose-100 bg-rose-50/80 px-2.5 py-1.5 text-[10px] leading-relaxed text-rose-800">
+            {loadError}
           </p>
         ) : null}
       </div>
@@ -227,7 +258,11 @@ export function ShootingRequestPanel({
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-3 py-12 text-center">
             <p className="text-xs text-slate-400">
-              {myRequests.length === 0 ? '신청 내역이 없습니다.' : '검색 결과가 없습니다.'}
+              {loading
+                ? '목록을 불러오는 중…'
+                : myRequests.length === 0
+                  ? '신청 내역이 없습니다.'
+                  : '검색 결과가 없습니다.'}
             </p>
             {listMode === 'mine' && myRequests.length === 0 ? (
               <Button type="button" size="sm" className="mt-1 h-8 gap-1 text-[11px]" onClick={handleAdd}>

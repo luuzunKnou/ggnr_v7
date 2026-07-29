@@ -2,12 +2,16 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { X } from 'lucide-react';
+import { call } from '@/lib/api';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnComponents/ui/dialog';
 import type { AerialKind } from './aerialMediaTypes';
 import { buildWorkFolderName } from './parseWorkFolderName';
-import { SHOOT_TYPE_LABEL, type ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
-import { completeMediaRegistration } from '../shootingRequest/shootingRequestMockStore';
+import type { ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
+import {
+  beginMediaRegistration,
+  completeMediaRegistration,
+} from '../shootingRequest/shootingRequestMockStore';
 import {
   getJobByFolder,
   getUploadJobs,
@@ -24,7 +28,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** 현재 메뉴 종류 — 시스템에서 폴더명·저장 경로 구성에 사용 */
   expectedKind?: AerialKind;
-  /** 승인 건으로 올린 경우 */
+  /** 승인 건으로 올린 경우 (화면 카드 없음 · 완료 시 조인만) */
   linkedRequest?: ShootingRequestDraft | null;
   /** 목업 업로드 완료 후 (목록 갱신 등) */
   onUploadMockComplete?: () => void;
@@ -32,6 +36,10 @@ type Props = {
 
 function defaultWorkName(linkedRequest?: ShootingRequestDraft | null): string {
   return (linkedRequest?.purpose?.trim() || '').replace(/_/g, ' ');
+}
+
+function isLinkableRequest(req?: ShootingRequestDraft | null): req is ShootingRequestDraft {
+  return req != null && (req.status === 'approved' || req.status === 'registering');
 }
 
 export function FolderBatchUploadDialog({
@@ -42,6 +50,8 @@ export function FolderBatchUploadDialog({
   onUploadMockComplete,
 }: Props) {
   const [workName, setWorkName] = useState('');
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   useSyncExternalStore(subscribeUploadProgress, getUploadProgressUiVersion, getUploadProgressUiVersion);
 
@@ -60,51 +70,87 @@ export function FolderBatchUploadDialog({
       ? getJobByFolder(expectedKind, builtFolderName)
       : uploadingJob ?? null;
   const isUploading = activeJob?.status === 'uploading';
+  const linkable = isLinkableRequest(linkedRequest);
 
   useEffect(() => {
     if (!open) return;
+    setStartError(null);
+    setStarting(false);
     if (uploadingJob) {
       setWorkName(uploadingJob.workName);
       return;
     }
-    setWorkName(defaultWorkName(linkedRequest));
-  }, [open, expectedKind, linkedRequest?.id, linkedRequest?.purpose, uploadingJob?.id]);
+    setWorkName(linkable ? defaultWorkName(linkedRequest) : '');
+  }, [open, expectedKind, linkedRequest?.id, linkedRequest?.purpose, uploadingJob?.id, linkable]);
 
-  const canStart = Boolean(expectedKind && workName.trim() && !isUploading);
+  const canStart = Boolean(expectedKind && workName.trim() && !isUploading && !starting);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!canStart || !expectedKind) return;
     const name = workName.trim().replace(/_/g, ' ').replace(/\s+/g, ' ');
     const folderName = buildWorkFolderName({ kind: expectedKind, workName: name });
+    const linkId = linkable ? linkedRequest.id : undefined;
+    const srKey = linkId != null ? Number(linkId) : undefined;
 
-    startSerialUploadMock({
-      kind: expectedKind,
-      folderName,
-      workName: name,
-      onComplete: (job) => {
-        addWorkUnitFromUploadMock({
-          kind: job.kind,
-          workName: job.workName,
-          folderName: job.folderName,
-          fileTotal: job.fileTotal,
-        });
-        if (linkedRequest) {
-          completeMediaRegistration(linkedRequest.id, job.workName);
-        }
-        onUploadMockComplete?.();
-        onOpenChange(false);
-        window.setTimeout(() => {
-          setUploadCompleteNotice({
+    setStarting(true);
+    setStartError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'createWorkUnitFolder',
+        params: {
+          kind: expectedKind,
+          folderName,
+          workName: name,
+          ...(srKey != null && Number.isFinite(srKey) ? { srKey } : {}),
+        },
+      });
+      if (!res?.success) {
+        throw new Error(
+          typeof res?.error === 'string'
+            ? res.error
+            : (res?.error as { message?: string } | undefined)?.message || '폴더 생성에 실패했습니다.'
+        );
+      }
+
+      if (linkId) {
+        beginMediaRegistration(linkId, name);
+      }
+
+      startSerialUploadMock({
+        kind: expectedKind,
+        folderName,
+        workName: name,
+        onComplete: (job) => {
+          addWorkUnitFromUploadMock({
             kind: job.kind,
             workName: job.workName,
             folderName: job.folderName,
-            progressFilePath: job.progressFilePath,
             fileTotal: job.fileTotal,
-            linkedPurpose: linkedRequest?.purpose || undefined,
+            linkedRequestId: linkId,
           });
-        }, 200);
-      },
-    });
+          if (linkId) {
+            completeMediaRegistration(linkId, job.workName);
+          }
+          onUploadMockComplete?.();
+          onOpenChange(false);
+          window.setTimeout(() => {
+            setUploadCompleteNotice({
+              kind: job.kind,
+              workName: job.workName,
+              folderName: job.folderName,
+              progressFilePath: job.progressFilePath,
+              fileTotal: job.fileTotal,
+              linkedPurpose: linkable ? linkedRequest.purpose || undefined : undefined,
+            });
+          }, 200);
+        },
+      });
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : '폴더 생성에 실패했습니다.');
+    } finally {
+      setStarting(false);
+    }
   };
 
   return (
@@ -115,19 +161,6 @@ export function FolderBatchUploadDialog({
         </DialogHeader>
 
         <div className="space-y-3 px-4 py-3 text-xs">
-          {linkedRequest ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-[11px] leading-relaxed text-emerald-950">
-              <div className="font-semibold text-emerald-900">연결된 승인 신청</div>
-              <div className="mt-0.5">
-                {linkedRequest.purpose || '(목적 없음)'} · {SHOOT_TYPE_LABEL[linkedRequest.shootType]} · 촬영{' '}
-                {linkedRequest.shootDate || '—'}
-              </div>
-              <div className="mt-0.5 text-emerald-800/80">
-                {linkedRequest.department} · {linkedRequest.address || '지번 미입력'}
-              </div>
-            </div>
-          ) : null}
-
           {activeJob && (activeJob.status === 'uploading' || activeJob.status === 'done') ? (
             <UploadProgressBanner
               jobs={[activeJob]}
@@ -146,6 +179,12 @@ export function FolderBatchUploadDialog({
             />
           </div>
 
+          {startError ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] text-rose-800">
+              {startError}
+            </p>
+          ) : null}
+
           {isUploading ? (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-900">
               업로드가 진행 중입니다. 창을 닫아도 목록에서 진행률을 이어 볼 수 있습니다.
@@ -158,8 +197,8 @@ export function FolderBatchUploadDialog({
             <X className="h-3.5 w-3.5" />
             {isUploading ? '창만 닫기' : '닫기'}
           </Button>
-          <Button type="button" size="sm" className="h-8 text-xs" disabled={!canStart} onClick={handleStart}>
-            {isUploading ? '업로드 중…' : '업로드 시작'}
+          <Button type="button" size="sm" className="h-8 text-xs" disabled={!canStart} onClick={() => void handleStart()}>
+            {isUploading || starting ? '업로드 중…' : '업로드 시작'}
           </Button>
         </div>
       </DialogContent>

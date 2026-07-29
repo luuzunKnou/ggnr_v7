@@ -95,7 +95,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
         target: el,
         layers: [
           createVWorldLayer('base'),
-          new VectorLayer({ source, style: SCOPE_STYLE }),
+          new VectorLayer({ source, style: SCOPE_STYLE, zIndex: 10 }),
         ],
         view: new View({
           center,
@@ -148,8 +148,13 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
 
     const draw =
       tool === 'rect'
-        ? new Draw({ source, type: 'Circle', geometryFunction: createBox() })
-        : new Draw({ source, type: 'Polygon' });
+        ? new Draw({
+            source,
+            type: 'Circle',
+            geometryFunction: createBox(),
+            style: SCOPE_STYLE,
+          })
+        : new Draw({ source, type: 'Polygon', style: SCOPE_STYLE });
 
     draw.on('drawstart', () => source.clear());
     draw.on('drawend', () => setHasDrawn(true));

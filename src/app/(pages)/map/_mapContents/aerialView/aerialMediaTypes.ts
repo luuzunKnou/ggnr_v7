@@ -34,6 +34,8 @@ export type WorkUnitItem = {
   status?: ConvertStatus;
   /** 업로드일 (YYYY-MM-DD) — 항공영상 카드 등 */
   uploadedAt?: string;
+  /** 연결 촬영신청 id (목업 조인 키) */
+  linkedRequestId?: string;
   /** 작업단위 속성정보 (기본·상세 구분 없음) */
   attrs: AttrRow[];
   files: WorkFileItem[];

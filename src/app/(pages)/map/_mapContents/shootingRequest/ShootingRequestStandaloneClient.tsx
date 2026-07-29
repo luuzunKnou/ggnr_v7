@@ -46,12 +46,12 @@ export function ShootingRequestStandaloneClient({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-3 py-6">
-      <div className="flex h-[min(90vh,760px)] w-full max-w-[46rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+      <div className="flex h-[min(62vh,500px)] w-full max-w-[46rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
         <ShootingRequestForm
           closeLabel="닫기"
           onClose={goMap}
-          onSubmit={(draft) => {
-            const row = addShootingRequest(draft);
+          onSubmit={async (draft) => {
+            const row = await addShootingRequest(draft);
             setDoneId(row.id);
           }}
         />

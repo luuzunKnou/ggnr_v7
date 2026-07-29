@@ -5,7 +5,11 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, ClipboardList, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { REQUEST_STATUS_LABEL, type RequestStatus } from './shootingRequestMockData';
-import { getShootingRequests, subscribeShootingRequests } from './shootingRequestMockStore';
+import {
+  getShootingRequests,
+  refreshShootingRequests,
+  subscribeShootingRequests,
+} from './shootingRequestMockStore';
 
 type Props = {
   onSelectRequest: (id: string) => void;
@@ -112,6 +116,7 @@ export function MapMyInfoFab({ onSelectRequest }: Props) {
   useEffect(() => {
     if (!panelOpen) return;
     syncBottom();
+    void refreshShootingRequests('mine').catch(() => undefined);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPanelOpen(false);
     };

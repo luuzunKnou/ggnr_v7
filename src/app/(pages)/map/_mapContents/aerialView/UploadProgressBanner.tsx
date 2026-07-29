@@ -1,14 +1,12 @@
 'use client';
 
-import { UPLOAD_PROGRESS_FILE_NAME, type UploadProgressSnapshot } from './aerialUploadProgressStore';
+import type { UploadProgressSnapshot } from './aerialUploadProgressStore';
 
 type Props = {
   jobs: UploadProgressSnapshot[];
-  /** 배너 제목 */
   title?: string;
 };
 
-/** 영상관리 목록·업로드 창용 진행률 표시 */
 export function UploadProgressBanner({ jobs, title = '업로드 진행 중' }: Props) {
   if (jobs.length === 0) return null;
 
@@ -34,12 +32,6 @@ export function UploadProgressBanner({ jobs, title = '업로드 진행 중' }: P
               style={{ width: `${job.percent}%` }}
             />
           </div>
-          <p className="mt-1.5 truncate font-mono text-[9px] text-slate-500" title={job.progressFilePath}>
-            {job.progressFilePath}
-          </p>
-          <p className="mt-0.5 text-[9px] text-slate-400">
-            진행파일 {UPLOAD_PROGRESS_FILE_NAME} 을 읽어 표시 (탭·창과 무관 · 목업)
-          </p>
         </div>
       ))}
     </div>

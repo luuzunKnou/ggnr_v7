@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import {
   addShootingRequest,
   findShootingRequest,
   getShootingRequests,
+  loadShootingRequestDetail,
   SHOOTING_REQUEST_NEW_ID,
   subscribeShootingRequests,
 } from './shootingRequestMockStore';
@@ -42,11 +43,16 @@ export function ShootingRequestFormModal({
   const isNew = !detailId || detailId === SHOOTING_REQUEST_NEW_ID;
   const existing = isNew ? null : findShootingRequest(detailId);
 
+  useEffect(() => {
+    if (!open || isNew || !detailId) return;
+    void loadShootingRequestDetail(detailId).catch(() => undefined);
+  }, [open, isNew, detailId]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[min(90vh,760px)] w-[min(100vw-2rem,46rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
+        className="flex h-[min(62vh,500px)] w-[min(100vw-2rem,46rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{isNew ? '촬영요청 신청서' : '촬영요청 신청서 조회'}</DialogTitle>
@@ -115,8 +121,8 @@ export function ShootingRequestFormModal({
               onClose={() => onOpenChange(false)}
               onSubmit={
                 isNew
-                  ? (draft) => {
-                      const row = addShootingRequest(draft);
+                  ? async (draft) => {
+                      const row = await addShootingRequest(draft);
                       onCreated?.(row.id);
                     }
                   : undefined

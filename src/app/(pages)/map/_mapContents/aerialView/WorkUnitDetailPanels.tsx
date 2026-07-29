@@ -8,6 +8,7 @@ import type { AttrRow, WorkFileItem, WorkUnitItem } from './aerialMediaTypes';
 import { AttributeSection, SectionTitle, StatusBadge } from './AerialMediaUi';
 import { updateWorkUnitAttrs } from './aerialMediaMockData';
 import { FlightLogbookForm } from './FlightLogbookForm';
+import { SHOOT_TYPE_LABEL, type ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
 
 /** 속성정보 인라인 수정 상태 (목업 저장) */
 function useAttrEdit(unit: WorkUnitItem) {
@@ -171,15 +172,53 @@ function WorkUnitInfoBody({
   editing = false,
   attrRows,
   onChangeAttr,
+  linkedRequest,
+  onFolderUpload,
+  onClearLink,
 }: {
   unit: WorkUnitItem;
   fileSection: ReactNode;
   editing?: boolean;
   attrRows?: AttrRow[];
   onChangeAttr?: (index: number, value: string) => void;
+  linkedRequest?: ShootingRequestDraft | null;
+  onFolderUpload?: () => void;
+  onClearLink?: () => void;
 }) {
+  const showLinkedUpload =
+    Boolean(linkedRequest) &&
+    Boolean(onFolderUpload) &&
+    (linkedRequest?.status === 'approved' || linkedRequest?.status === 'registering');
+
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-auto px-3 py-3">
+      {showLinkedUpload && linkedRequest ? (
+        <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[10px] font-semibold text-sky-900">승인 건으로 자료 등록</p>
+            {onClearLink ? (
+              <button
+                type="button"
+                className="shrink-0 text-[10px] text-sky-700 underline"
+                onClick={onClearLink}
+              >
+                연결 해제
+              </button>
+            ) : null}
+          </div>
+          <p className="text-[11px] font-medium text-slate-800">
+            {linkedRequest.purpose || '목적 없음'}
+          </p>
+          <p className="text-[10px] leading-relaxed text-slate-600">
+            {SHOOT_TYPE_LABEL[linkedRequest.shootType]} · 촬영 {linkedRequest.shootDate || '—'} ·{' '}
+            {linkedRequest.address || '지번 미입력'}
+          </p>
+          <Button type="button" size="sm" className="h-7 w-full text-[10px]" onClick={onFolderUpload}>
+            이 건으로 폴더 업로드
+          </Button>
+        </div>
+      ) : null}
+
       <AttributeSection
         title="속성정보"
         rows={editing ? (attrRows ?? unit.attrs) : unit.attrs}
@@ -203,6 +242,9 @@ type OrthoDetailProps = {
   onDetailTabChange: (tab: DetailTab) => void;
   /** 조회전용: 비행기록부·삭제·추가 숨김 */
   viewOnly?: boolean;
+  linkedRequest?: ShootingRequestDraft | null;
+  onFolderUpload?: () => void;
+  onClearLink?: () => void;
 };
 
 export function OrthoWorkUnitDetailPanel({
@@ -215,6 +257,9 @@ export function OrthoWorkUnitDetailPanel({
   detailTab,
   onDetailTabChange,
   viewOnly = false,
+  linkedRequest,
+  onFolderUpload,
+  onClearLink,
 }: OrthoDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -233,8 +278,16 @@ export function OrthoWorkUnitDetailPanel({
         onClose={onClose}
       />
       {!viewOnly && detailTab === 'flight' ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <FlightLogbookForm workUnitLabel={workLabel} embedded />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <FlightLogbookForm
+            workUnitLabel={workLabel}
+            srKey={
+              linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
+                ? Number(linkedRequest.id)
+                : null
+            }
+            embedded
+          />
         </div>
       ) : (
         <WorkUnitInfoBody
@@ -242,6 +295,9 @@ export function OrthoWorkUnitDetailPanel({
           editing={edit.editing}
           attrRows={edit.attrs}
           onChangeAttr={edit.changeAttr}
+          linkedRequest={viewOnly ? null : linkedRequest}
+          onFolderUpload={viewOnly ? undefined : onFolderUpload}
+          onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
               <SectionTitle
@@ -303,6 +359,9 @@ type DroneDetailProps = {
   detailTab: DetailTab;
   onDetailTabChange: (tab: DetailTab) => void;
   viewOnly?: boolean;
+  linkedRequest?: ShootingRequestDraft | null;
+  onFolderUpload?: () => void;
+  onClearLink?: () => void;
 };
 
 export function DroneWorkUnitDetailPanel({
@@ -313,6 +372,9 @@ export function DroneWorkUnitDetailPanel({
   detailTab,
   onDetailTabChange,
   viewOnly = false,
+  linkedRequest,
+  onFolderUpload,
+  onClearLink,
 }: DroneDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -331,8 +393,16 @@ export function DroneWorkUnitDetailPanel({
         onClose={onClose}
       />
       {!viewOnly && detailTab === 'flight' ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <FlightLogbookForm workUnitLabel={workLabel} embedded />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <FlightLogbookForm
+            workUnitLabel={workLabel}
+            srKey={
+              linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
+                ? Number(linkedRequest.id)
+                : null
+            }
+            embedded
+          />
         </div>
       ) : (
         <WorkUnitInfoBody
@@ -340,6 +410,9 @@ export function DroneWorkUnitDetailPanel({
           editing={edit.editing}
           attrRows={edit.attrs}
           onChangeAttr={edit.changeAttr}
+          linkedRequest={viewOnly ? null : linkedRequest}
+          onFolderUpload={viewOnly ? undefined : onFolderUpload}
+          onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
               <SectionTitle>파일 목록</SectionTitle>
@@ -456,6 +529,9 @@ type PanoDetailProps = {
   detailTab: DetailTab;
   onDetailTabChange: (tab: DetailTab) => void;
   viewOnly?: boolean;
+  linkedRequest?: ShootingRequestDraft | null;
+  onFolderUpload?: () => void;
+  onClearLink?: () => void;
 };
 
 export function PanoramaWorkUnitDetailPanel({
@@ -466,6 +542,9 @@ export function PanoramaWorkUnitDetailPanel({
   detailTab,
   onDetailTabChange,
   viewOnly = false,
+  linkedRequest,
+  onFolderUpload,
+  onClearLink,
 }: PanoDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -484,8 +563,16 @@ export function PanoramaWorkUnitDetailPanel({
         onClose={onClose}
       />
       {!viewOnly && detailTab === 'flight' ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <FlightLogbookForm workUnitLabel={workLabel} embedded />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <FlightLogbookForm
+            workUnitLabel={workLabel}
+            srKey={
+              linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
+                ? Number(linkedRequest.id)
+                : null
+            }
+            embedded
+          />
         </div>
       ) : (
         <WorkUnitInfoBody
@@ -493,6 +580,9 @@ export function PanoramaWorkUnitDetailPanel({
           editing={edit.editing}
           attrRows={edit.attrs}
           onChangeAttr={edit.changeAttr}
+          linkedRequest={viewOnly ? null : linkedRequest}
+          onFolderUpload={viewOnly ? undefined : onFolderUpload}
+          onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
               <SectionTitle>파일 목록</SectionTitle>
@@ -529,6 +619,9 @@ type SatDetailProps = {
   detailTab: DetailTab;
   onDetailTabChange: (tab: DetailTab) => void;
   viewOnly?: boolean;
+  linkedRequest?: ShootingRequestDraft | null;
+  onFolderUpload?: () => void;
+  onClearLink?: () => void;
 };
 
 export function SatelliteWorkUnitDetailPanel({
@@ -537,6 +630,9 @@ export function SatelliteWorkUnitDetailPanel({
   detailTab,
   onDetailTabChange,
   viewOnly = false,
+  linkedRequest,
+  onFolderUpload,
+  onClearLink,
 }: SatDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -555,8 +651,16 @@ export function SatelliteWorkUnitDetailPanel({
         onClose={onClose}
       />
       {!viewOnly && detailTab === 'flight' ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <FlightLogbookForm workUnitLabel={workLabel} embedded />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <FlightLogbookForm
+            workUnitLabel={workLabel}
+            srKey={
+              linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
+                ? Number(linkedRequest.id)
+                : null
+            }
+            embedded
+          />
         </div>
       ) : (
         <WorkUnitInfoBody
@@ -564,6 +668,9 @@ export function SatelliteWorkUnitDetailPanel({
           editing={edit.editing}
           attrRows={edit.attrs}
           onChangeAttr={edit.changeAttr}
+          linkedRequest={viewOnly ? null : linkedRequest}
+          onFolderUpload={viewOnly ? undefined : onFolderUpload}
+          onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
               <SectionTitle>파일 목록</SectionTitle>

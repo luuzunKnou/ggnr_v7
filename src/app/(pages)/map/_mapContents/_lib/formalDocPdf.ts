@@ -76,12 +76,19 @@ export function formalDocSharedCss(): string {
 export async function downloadHtmlAsPdf(
   htmlInner: string,
   fileName: string,
-  opts?: { title?: string }
+  opts?: {
+    title?: string;
+    /** false면 A4 최소높이 강제 안 함(표 칸이 늘어나 글자가 아래로 밀리는 현상 방지) */
+    fillA4Height?: boolean;
+    letterRendering?: boolean;
+  }
 ): Promise<void> {
   await ensureFormalFonts();
 
   const { default: html2canvas } = await import('html2canvas');
   const { jsPDF } = await import('jspdf');
+  const fillA4Height = opts?.fillA4Height !== false;
+  const letterRendering = opts?.letterRendering !== false;
 
   const host = document.createElement('div');
   host.setAttribute('data-formal-pdf-root', '1');
@@ -101,7 +108,7 @@ export async function downloadHtmlAsPdf(
     <div class="formal-pdf-page fd-root" style="
       box-sizing:border-box;
       width:794px;
-      min-height:1123px;
+      ${fillA4Height ? 'min-height:1123px;' : 'min-height:0;height:auto;'}
       padding:52px 56px 48px;
       font-family:${FORMAL_SERIF};
       font-size:12.5px;
@@ -124,7 +131,7 @@ export async function downloadHtmlAsPdf(
       backgroundColor: '#ffffff',
       logging: false,
       windowWidth: 794,
-      letterRendering: true,
+      letterRendering,
       onclone: (doc) => {
         const cloned = doc.querySelector('.formal-pdf-page') as HTMLElement | null;
         if (cloned) {

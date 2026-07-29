@@ -1,17 +1,17 @@
 'use client';
 
-import { useRef, useState, useSyncExternalStore } from 'react';
-import { FileUp, FileText, Download, X } from 'lucide-react';
-import { Button } from '@/app/shadcnComponents/ui/button';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  FlightLogbookForm,
-  type FlightLogbookFormHandle,
-} from '../aerialView/FlightLogbookForm';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/shadcnComponents/ui/dialog';
+import { FlightLogbookForm } from '../aerialView/FlightLogbookForm';
 import { FolderBatchUploadDialog } from '../aerialView/FolderBatchUploadDialog';
-import { shootTypeToAerialKind } from './shootTypeToAerialKind';
 import { ShootingRequestForm } from './ShootingRequestForm';
-import { ShootingRequestFormModal } from './ShootingRequestFormModal';
 import { REQUEST_STATUS_LABEL, canStartMediaRegister } from './shootingRequestMockData';
 import {
   addShootingRequest,
@@ -20,10 +20,18 @@ import {
   decideShootingRequest,
   findShootingRequest,
   getShootingRequests,
+  loadShootingRequestDetail,
   SHOOTING_REQUEST_NEW_ID,
   subscribeShootingRequests,
 } from './shootingRequestMockStore';
+import { shootTypeToAerialKind } from './shootTypeToAerialKind';
 import type { ShootingListMode } from './ShootingRequestPanel';
+
+/** 작업단위 상세 하단과 동일 — 색 강조·아이콘 버튼 쓰지 않음 */
+const footerBtnClass =
+  'rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50';
+const footerBarClass =
+  'shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2';
 
 type Props = {
   detailId: string;
@@ -31,7 +39,7 @@ type Props = {
   onCreated?: (newId: string) => void;
   /** 승인관리 탭에서 열면 승인·반려 버튼 표시 */
   listMode?: ShootingListMode;
-  /** 레거시: 영상관리로 이동 (승인 후 인라인 등록 UI 우선) */
+  /** 레거시 — 승인 후 영상관리 이동 (모달 등록으로 대체) */
   onStartMediaRegister?: (requestId: string) => void;
 };
 
@@ -46,24 +54,33 @@ export function ShootingRequestDetailPanel({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
-  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [flightOpen, setFlightOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const flightFormRef = useRef<FlightLogbookFormHandle>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const isNew = detailId === SHOOTING_REQUEST_NEW_ID;
   const existing = isNew ? null : findShootingRequest(detailId);
   const isAdmin = listMode === 'approval';
-
-  /** 승인관리 · 승인/등록중 → 디테일을 자료등록 화면으로 전환 */
-  const showRegisterWorkspace =
-    isAdmin &&
+  const canRegisterMedia =
     existing != null &&
     (existing.status === 'approved' || existing.status === 'registering');
+
+  useEffect(() => {
+    if (isNew || !detailId) return;
+    setDetailLoading(true);
+    void loadShootingRequestDetail(detailId)
+      .catch(() => undefined)
+      .finally(() => setDetailLoading(false));
+  }, [detailId, isNew]);
 
   if (!isNew && !existing) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-white px-4 text-center">
-        <p className="text-xs text-slate-400">신청을 찾을 수 없습니다.</p>
+        <p className="text-xs text-slate-400">
+          {detailLoading ? '불러오는 중…' : '신청을 찾을 수 없습니다.'}
+        </p>
         <button type="button" className="text-[11px] text-sky-700 underline" onClick={onClose}>
           닫기
         </button>
@@ -71,43 +88,72 @@ export function ShootingRequestDetailPanel({
     );
   }
 
-  const handleApprove = () => {
-    if (!existing) return;
-    decideShootingRequest(existing.id, 'approved');
-    beginMediaRegistration(existing.id);
-    setRejectOpen(false);
-    setNotice('승인되었습니다. 아래에서 비행기록부·영상 자료를 등록하세요. (목업)');
+  const handleApprove = async () => {
+    if (!existing || busy) return;
+    setBusy(true);
+    try {
+      await decideShootingRequest(existing.id, 'approved');
+      setRejectOpen(false);
+      setNotice('승인되었습니다. 아래에서 파일 업로드·비행기록부를 진행할 수 있습니다.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : '승인에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleReject = () => {
-    if (!existing) return;
+  const handleReject = async () => {
+    if (!existing || busy) return;
     if (!rejectReason.trim()) {
       setNotice('반려 사유를 입력하세요.');
       return;
     }
-    decideShootingRequest(existing.id, 'rejected', rejectReason);
-    setRejectOpen(false);
-    setRejectReason('');
-    setNotice('반려 처리되었습니다. 신청자(내 신청)에서도 반려 사유를 볼 수 있습니다. (목업)');
+    setBusy(true);
+    try {
+      await decideShootingRequest(existing.id, 'rejected', rejectReason);
+      setRejectOpen(false);
+      setRejectReason('');
+      setNotice('반려 처리되었습니다. 신청자(내 신청)에서도 반려 사유를 볼 수 있습니다.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : '반려에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleCancelApproval = () => {
-    if (!existing) return;
-    if (!window.confirm('승인을 취소하고 대기 상태로 되돌릴까요?')) return;
-    cancelShootingApproval(existing.id);
+  const openCancelConfirm = () => {
+    if (!existing || busy) return;
+    setCancelConfirmOpen(true);
+  };
+
+  const handleCancelApproval = async () => {
+    if (!existing || busy) return;
+    setBusy(true);
+    setCancelConfirmOpen(false);
+    setFlightOpen(false);
     setUploadOpen(false);
-    setNotice('승인이 취소되어 대기 상태로 돌아갔습니다. (목업)');
+    try {
+      await cancelShootingApproval(existing.id);
+      setNotice('승인이 취소되어 대기로 돌아갔습니다.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : '승인 취소에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openUpload = () => {
+    if (!existing) return;
+    beginMediaRegistration(existing.id);
+    setUploadOpen(true);
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      {/* 상단: 제목 + 닫기 (다른 상세 패널과 동일) */}
-      {(isAdmin || showRegisterWorkspace) && existing && !isNew ? (
+      {isAdmin && existing && !isNew ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-slate-800">
-              {showRegisterWorkspace ? '자료 등록' : '신청 상세'}
-            </p>
+            <p className="truncate text-[13px] font-semibold text-slate-800">신청 상세</p>
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
               <span
                 className={cn(
@@ -164,132 +210,78 @@ export function ShootingRequestDetailPanel({
         </p>
       ) : null}
 
-      {/* 승인 후: 비행기록부 + 파일업로드 */}
-      {showRegisterWorkspace && existing ? (
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
-          <FlightLogbookForm
-            ref={flightFormRef}
-            embedded
-            hideActions
-            workUnitLabel={existing.purpose || existing.address || existing.id}
-            headerAction={
-              <button
-                type="button"
-                className="shrink-0 text-[10px] text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
-                onClick={() => flightFormRef.current?.reset()}
-              >
-                초기화
-              </button>
-            }
-          />
-
-          <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-3 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <FileUp className="h-4 w-4 shrink-0 text-sky-600" />
-                <h3 className="text-[12px] font-semibold text-slate-800">파일 업로드</h3>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1 px-2.5 text-[11px]"
-                onClick={() => setUploadOpen(true)}
-              >
-                <FileUp className="h-3.5 w-3.5" />
-                폴더 선택
-              </Button>
-            </div>
-          </section>
-
-          {notice ? (
-            <p className="rounded-md border border-sky-100 bg-sky-50 px-2.5 py-1.5 text-[10px] text-sky-900">
-              {notice}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1">
-          <ShootingRequestForm
-            key={detailId}
-            initial={existing}
-            readOnly={!isNew}
-            closeLabel="닫기"
-            onClose={onClose}
-            hideFooterActions={isAdmin && !isNew}
-            hideHeaderClose
-            onSubmit={
-              isNew
-                ? (draft) => {
-                    const row = addShootingRequest(draft);
-                    onCreated?.(row.id);
-                  }
-                : undefined
-            }
-          />
-        </div>
-      )}
+      <div className="min-h-0 flex-1">
+        <ShootingRequestForm
+          key={detailId}
+          initial={existing}
+          readOnly={!isNew}
+          closeLabel="닫기"
+          hideHeaderClose={isAdmin}
+          hideFooterActions={isAdmin && !isNew}
+          onClose={onClose}
+          onSubmit={async (draft) => {
+            const row = await addShootingRequest(draft);
+            onCreated?.(row.id);
+            onClose();
+          }}
+        />
+      </div>
 
       {/* 대기: 승인·반려 */}
       {isAdmin && existing && existing.status === 'pending' ? (
-        <div className="shrink-0 space-y-2 border-t border-slate-200 bg-white px-3 py-2.5">
+        <div className={cn(footerBarClass, 'space-y-2')}>
           {rejectOpen ? (
             <div className="space-y-2">
-              <label className="block text-[10px] font-medium text-slate-600">
-                반려 사유 <span className="text-rose-600">(필수)</span>
-              </label>
+              <label className="block text-[10px] font-medium text-slate-600">반려 사유</label>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                rows={2}
-                className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-sky-400"
-                placeholder="신청자에게 안내할 반려 사유를 입력하세요"
+                rows={3}
+                className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] outline-none focus:border-sky-400"
+                placeholder="반려 사유를 입력하세요"
               />
-              <div className="flex justify-end gap-1.5">
-                <Button
+              <div className="flex items-center justify-end gap-1.5">
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2.5 text-[11px]"
+                  className={footerBtnClass}
                   onClick={() => {
                     setRejectOpen(false);
                     setRejectReason('');
                   }}
                 >
                   취소
-                </Button>
-                <Button
+                </button>
+                <button
                   type="button"
-                  size="sm"
-                  className="h-8 bg-rose-600 px-3 text-[11px] hover:bg-rose-700"
-                  onClick={handleReject}
+                  className={footerBtnClass}
+                  disabled={busy}
+                  onClick={() => void handleReject()}
                 >
                   반려 확정
-                </Button>
+                </button>
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-end gap-1.5">
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 border-rose-200 px-3 text-[11px] text-rose-700 hover:bg-rose-50"
+                className={footerBtnClass}
+                disabled={busy}
                 onClick={() => {
                   setNotice(null);
                   setRejectOpen(true);
                 }}
               >
                 반려
-              </Button>
-              <Button
+              </button>
+              <button
                 type="button"
-                size="sm"
-                className="h-8 bg-emerald-600 px-3 text-[11px] hover:bg-emerald-700"
-                onClick={handleApprove}
+                className={footerBtnClass}
+                disabled={busy}
+                onClick={() => void handleApprove()}
               >
                 승인
-              </Button>
+              </button>
             </div>
           )}
           {notice ? (
@@ -300,54 +292,34 @@ export function ShootingRequestDetailPanel({
         </div>
       ) : null}
 
-      {/* 승인 후: 하단 핵심 액션만 (닫기는 상단) */}
-      {showRegisterWorkspace && existing ? (
-        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-slate-200 bg-slate-50/80 px-3 py-2.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1 px-2.5 text-[11px]"
-            onClick={() => void flightFormRef.current?.downloadDocument()}
-          >
-            <Download className="h-3.5 w-3.5" />
-            PDF 내려받기
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1 px-2.5 text-[11px]"
-            onClick={() => setFormModalOpen(true)}
-          >
-            <FileText className="h-3.5 w-3.5" />
-            신청서
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 border-amber-200 px-2.5 text-[11px] text-amber-800 hover:bg-amber-50"
-            onClick={handleCancelApproval}
-          >
-            승인 취소
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 px-3 text-[11px]"
-            onClick={() => flightFormRef.current?.submitMock()}
-          >
-            기록부 제출
-          </Button>
+      {/* 승인·등록중: 신청서와 동일 화면 + 파일업로드·비행기록부 모달 */}
+      {isAdmin && existing && canRegisterMedia ? (
+        <div className={cn(footerBarClass, 'space-y-2')}>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <button
+              type="button"
+              className={footerBtnClass}
+              disabled={busy}
+              onClick={openCancelConfirm}
+            >
+              승인 취소
+            </button>
+            <button type="button" className={footerBtnClass} onClick={openUpload}>
+              파일 업로드
+            </button>
+            <button type="button" className={footerBtnClass} onClick={() => setFlightOpen(true)}>
+              비행기록부 작성
+            </button>
+          </div>
+          {notice ? (
+            <p className="rounded-md border border-sky-100 bg-sky-50 px-2.5 py-1.5 text-[10px] text-sky-900">
+              {notice}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      {isAdmin &&
-      existing &&
-      existing.status !== 'pending' &&
-      !showRegisterWorkspace &&
-      notice ? (
+      {isAdmin && existing && existing.status === 'registered' && notice ? (
         <div className="shrink-0 border-t border-slate-100 px-3 py-2">
           <p className="rounded-md border border-sky-100 bg-sky-50 px-2.5 py-1.5 text-[10px] text-sky-900">
             {notice}
@@ -355,24 +327,74 @@ export function ShootingRequestDetailPanel({
         </div>
       ) : null}
 
-      {existing && showRegisterWorkspace ? (
-        <FolderBatchUploadDialog
-          open={uploadOpen}
-          onOpenChange={setUploadOpen}
-          expectedKind={shootTypeToAerialKind(existing.shootType)}
-          linkedRequest={existing}
-          onUploadMockComplete={() =>
-            setNotice('폴더 업로드가 시작·완료 처리되었습니다. (목업)')
-          }
-        />
-      ) : null}
+      <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(100vw-2rem,22rem)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
+        >
+          <DialogHeader className="space-y-0 border-b border-slate-200 px-4 py-3 text-left">
+            <DialogTitle className="text-[13px] font-semibold text-slate-800">
+              승인 취소
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-4 py-4">
+            <p className="text-[12px] leading-relaxed text-slate-600">
+              승인 취소하시겠습니까?
+              <br />
+              <span className="text-[11px] text-slate-400">취소하면 상태가 대기로 돌아갑니다.</span>
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-1.5 border-t border-slate-200 bg-slate-50/80 px-4 py-2.5">
+            <button
+              type="button"
+              className={cn(footerBtnClass, 'border-slate-300')}
+              disabled={busy}
+              onClick={() => void handleCancelApproval()}
+            >
+              {busy ? '처리 중…' : '승인 취소'}
+            </button>
+            <button
+              type="button"
+              className={footerBtnClass}
+              disabled={busy}
+              onClick={() => setCancelConfirmOpen(false)}
+            >
+              닫기
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      {existing ? (
-        <ShootingRequestFormModal
-          open={formModalOpen}
-          detailId={existing.id}
-          onOpenChange={setFormModalOpen}
-        />
+      {existing && canRegisterMedia ? (
+        <>
+          <Dialog open={flightOpen} onOpenChange={setFlightOpen}>
+            <DialogContent
+              showCloseButton={false}
+              className="flex h-[min(62vh,480px)] w-[min(100vw-2rem,40rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
+            >
+              <DialogHeader className="sr-only">
+                <DialogTitle>무인비행장치 비행기록부</DialogTitle>
+              </DialogHeader>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <FlightLogbookForm
+                  srKey={Number(existing.id)}
+                  workUnitLabel={existing.purpose || existing.address || existing.id}
+                  onClose={() => setFlightOpen(false)}
+                />
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <FolderBatchUploadDialog
+            open={uploadOpen}
+            onOpenChange={setUploadOpen}
+            expectedKind={shootTypeToAerialKind(existing.shootType)}
+            linkedRequest={existing}
+            onUploadMockComplete={() =>
+              setNotice('폴더 업로드가 반영되었습니다. 상태가 등록완료로 바뀔 수 있습니다.')
+            }
+          />
+        </>
       ) : null}
     </div>
   );

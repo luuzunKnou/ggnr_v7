@@ -497,8 +497,9 @@ export function addWorkUnitFromUploadMock(params: {
   workName: string;
   folderName: string;
   fileTotal: number;
+  linkedRequestId?: string;
 }): WorkUnitItem {
-  const { kind, workName, folderName, fileTotal } = params;
+  const { kind, workName, folderName, fileTotal, linkedRequestId } = params;
   const workDate = todayYmd();
   const id = `up-${kind}-${Date.now()}`;
   const n = Math.max(1, Math.min(fileTotal, 4));
@@ -537,7 +538,6 @@ export function addWorkUnitFromUploadMock(params: {
         status: 'done' as const,
       };
     }
-    // 사진·동영상
     const video = i % 2 === 1;
     return {
       id: `${id}-f${idx}`,
@@ -550,6 +550,52 @@ export function addWorkUnitFromUploadMock(params: {
     };
   });
 
+  const attrs: AttrRow[] =
+    kind === 'panorama'
+      ? [
+          { label: '작업단위 명', value: workName },
+          { label: '작업일', value: workDate },
+          { label: '작성자', value: '업로드(목업)' },
+          { label: '촬영자', value: '업로드(목업)' },
+          { label: '작업목적', value: workName },
+          { label: '메모', value: '—' },
+        ]
+      : kind === 'drone'
+        ? [
+            { label: '작업단위 명', value: workName },
+            { label: '작업일', value: workDate },
+            { label: '좌표계', value: 'EPSG:5181' },
+            { label: '임무/작업 목적', value: workName },
+            { label: '작성자', value: '업로드(목업)' },
+            { label: '촬영자', value: '업로드(목업)' },
+            { label: '상태', value: '업로드완료' },
+            { label: '메모', value: '—' },
+          ]
+        : kind === 'ortho'
+          ? [
+              { label: '작업단위', value: workName },
+              { label: '작업일', value: workDate },
+              { label: '좌표계', value: 'EPSG:5181' },
+              { label: '임무/작업 목적', value: workName },
+              { label: '작성자', value: '업로드(목업)' },
+              { label: '상태', value: '타일 변환 중' },
+              { label: '메모', value: '—' },
+            ]
+          : [
+              { label: '작업단위 파일명', value: folderName },
+              { label: '작업일', value: workDate },
+              { label: '업로드일', value: workDate },
+              { label: '구분', value: kindToken },
+              { label: '좌표계', value: 'EPSG:5181' },
+              { label: '임무/작업 목적', value: workName },
+              { label: '작성자', value: '업로드(목업)' },
+              { label: '상태', value: '업로드완료' },
+            ];
+
+  if (linkedRequestId) {
+    attrs.push({ label: '연결 신청', value: linkedRequestId });
+  }
+
   const unit: WorkUnitItem = {
     id,
     workDate,
@@ -559,47 +605,8 @@ export function addWorkUnitFromUploadMock(params: {
     crsHint: '5181',
     status: isOrtho ? 'converting' : kind === 'satellite' ? 'registered' : undefined,
     uploadedAt: workDate,
-    attrs:
-      kind === 'panorama'
-        ? [
-            { label: '작업단위 명', value: workName },
-            { label: '작업일', value: workDate },
-            { label: '작성자', value: '업로드(목업)' },
-            { label: '촬영자', value: '업로드(목업)' },
-            { label: '작업목적', value: workName },
-            { label: '메모', value: '—' },
-          ]
-        : kind === 'drone'
-          ? [
-              { label: '작업단위 명', value: workName },
-              { label: '작업일', value: workDate },
-              { label: '좌표계', value: 'EPSG:5181' },
-              { label: '임무/작업 목적', value: workName },
-              { label: '작성자', value: '업로드(목업)' },
-              { label: '촬영자', value: '업로드(목업)' },
-              { label: '상태', value: '업로드완료' },
-              { label: '메모', value: '—' },
-            ]
-          : kind === 'ortho'
-            ? [
-                { label: '작업단위', value: workName },
-                { label: '작업일', value: workDate },
-                { label: '좌표계', value: 'EPSG:5181' },
-                { label: '임무/작업 목적', value: workName },
-                { label: '작성자', value: '업로드(목업)' },
-                { label: '상태', value: '타일 변환 중' },
-                { label: '메모', value: '—' },
-              ]
-            : [
-                { label: '작업단위 파일명', value: folderName },
-                { label: '작업일', value: workDate },
-                { label: '업로드일', value: workDate },
-                { label: '구분', value: kindToken },
-                { label: '좌표계', value: 'EPSG:5181' },
-                { label: '임무/작업 목적', value: workName },
-                { label: '작성자', value: '업로드(목업)' },
-                { label: '상태', value: '업로드완료' },
-              ],
+    linkedRequestId,
+    attrs,
     files,
   };
 
