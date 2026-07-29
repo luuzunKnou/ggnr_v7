@@ -4,6 +4,7 @@ import { StreetViewMockPanel } from './StreetViewMockPanel';
 import { StreetViewSplitterControls } from './StreetViewSplitterControls';
 import { useStreetViewMock } from './useStreetViewMock';
 import { useStreetViewSplitterPrefs } from './useStreetViewSplitterPrefs';
+import { USE_KAKAO_ROADVIEW } from './streetViewConfig';
 
 type StreetViewSecondaryProps = {
   active: boolean;
@@ -26,10 +27,14 @@ export function useStreetViewSecondary({
 
   const panel = active ? (
     <StreetViewMockPanel
+      useKakaoRoadview={USE_KAKAO_ROADVIEW}
       panDeg={mock.panDeg}
+      tiltDeg={mock.tiltDeg}
+      onTiltChange={mock.onTiltChange}
       lng={mock.lng}
       lat={mock.lat}
-      relocating={mock.relocating}
+      onRoadviewPosition={USE_KAKAO_ROADVIEW ? mock.onRoadviewPosition : undefined}
+      onRoadviewPan={USE_KAKAO_ROADVIEW ? mock.onPanChange : undefined}
     />
   ) : null;
 

@@ -7,9 +7,10 @@
   pointer-events: auto;
   --mw-sx: 0px;
   --mw-sy: 4px;
-  --mw-sa: 0.16;
-  --mw-sr: 13px;
-  --mw-ss: 48%;
+  --mw-sa: 0.12;
+  --mw-sr: 15px;
+  --mw-ss: 40%;
+  --mw-sm: 72%;
   --mw-ex: 0px;
   --mw-ey: 0px;
   --mw-eye-vis: 0;
@@ -23,14 +24,15 @@
 .MapWalker .fovRing {
   position: absolute;
   inset: 0;
-  transform: translateY(-3px) scale(var(--mw-ring-scale, 1));
+  /* pan은 rotate만 — conic from 재계산(페인트) 방지 */
+  transform: translateY(-3px) rotate(var(--mw-pan, 0deg)) scale(var(--mw-ring-scale, 1));
   transform-origin: center center;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.95);
   box-shadow: none;
   background:
     conic-gradient(
-      from calc(var(--mw-pan, 0deg) - var(--mw-fov, 70deg) / 2),
+      from calc(var(--mw-fov, 70deg) / -2),
       rgba(0, 81, 255, 0.5) 0deg,
       rgba(0, 81, 255, 0.55) var(--mw-fov, 70deg),
       transparent var(--mw-fov, 70deg) 360deg
@@ -67,7 +69,9 @@
   background:
     radial-gradient(
       circle var(--mw-sr) at calc(50% + var(--mw-sx)) calc(50% + var(--mw-sy)),
+      rgba(71, 85, 105, 0) 0%,
       rgba(71, 85, 105, 0) var(--mw-ss),
+      rgba(71, 85, 105, calc(var(--mw-sa) * 0.45)) var(--mw-sm),
       rgba(71, 85, 105, var(--mw-sa)) 100%
     ),
     #fff;
@@ -89,7 +93,6 @@
   box-shadow: none;
   transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px)) scale(var(--mw-eye-scale, 1));
   opacity: var(--mw-eye-vis, 0);
-  transition: opacity 50ms linear, transform 50ms linear;
 }
 
 .MapWalker .figure .body {

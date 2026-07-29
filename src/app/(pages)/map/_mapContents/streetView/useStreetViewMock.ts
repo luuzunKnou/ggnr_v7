@@ -14,12 +14,18 @@ type UseStreetViewMockArgs = {
   mapSync: boolean;
 };
 
-const RELOCATING_MS = 450;
+/** 지도 좌표 동일 판정(맵 단위) — React setState 스킵용 */
+const COORD_EPS = 1e-4;
 
 function toWgs84(map: Map, coord: Coordinate): Coordinate {
   const code = map.getView().getProjection()?.getCode() ?? 'EPSG:3857';
   if (code === 'EPSG:4326') return [...coord];
   return transform(coord, code, 'EPSG:4326');
+}
+
+function coordsNearlyEqual(a: Coordinate | null, b: Coordinate): boolean {
+  if (!a) return false;
+  return Math.abs(a[0] - b[0]) < COORD_EPS && Math.abs(a[1] - b[1]) < COORD_EPS;
 }
 
 export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
@@ -28,46 +34,74 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
   const mapReady = mapContext?.mapReady ?? false;
   const walkerRef = useRef<OlMapWalker | null>(null);
   const [panDeg, setPanDeg] = useState(0);
+  const [tiltDeg, setTiltDeg] = useState(0);
   const [position, setPosition] = useState<Coordinate | null>(null);
-  const [relocating, setRelocating] = useState(false);
+  const positionRef = useRef<Coordinate | null>(null);
   const mapSyncRef = useRef(mapSync);
   mapSyncRef.current = mapSync;
   const skipCenterFollowRef = useRef(false);
-  const relocateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPosKeyRef = useRef<string>('');
+  const tiltDegRef = useRef(tiltDeg);
+  tiltDegRef.current = tiltDeg;
 
-  const flashRelocating = useCallback((coord: Coordinate) => {
-    const key = `${coord[0].toFixed(2)},${coord[1].toFixed(2)}`;
-    if (key === lastPosKeyRef.current) return;
-    lastPosKeyRef.current = key;
-    setRelocating(true);
-    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
-    relocateTimerRef.current = setTimeout(() => {
-      setRelocating(false);
-      relocateTimerRef.current = null;
-    }, RELOCATING_MS);
+  const panRafRef = useRef(0);
+  const pendingPanRef = useRef<number | null>(null);
+  const centerRafRef = useRef(0);
+  const reactPosRafRef = useRef(0);
+  const pendingReactPosRef = useRef<Coordinate | null>(null);
+
+  const flushPanToReact = useCallback(() => {
+    panRafRef.current = 0;
+    const pan = pendingPanRef.current;
+    if (pan == null) return;
+    pendingPanRef.current = null;
+    setPanDeg(pan);
   }, []);
 
-  /** silent: 분할 리사이즈 중 재배치 — «이동중» 플래시 생략 */
+  const schedulePanToReact = useCallback(
+    (pan: number) => {
+      pendingPanRef.current = pan;
+      if (panRafRef.current) return;
+      panRafRef.current = requestAnimationFrame(flushPanToReact);
+    },
+    [flushPanToReact]
+  );
+
+  const flushReactPosition = useCallback(() => {
+    reactPosRafRef.current = 0;
+    const coord = pendingReactPosRef.current;
+    if (!coord) return;
+    pendingReactPosRef.current = null;
+    if (coordsNearlyEqual(positionRef.current, coord)) return;
+    positionRef.current = coord;
+    setPosition(coord);
+  }, []);
+
+  const scheduleReactPosition = useCallback(
+    (coord: Coordinate) => {
+      pendingReactPosRef.current = coord;
+      if (reactPosRafRef.current) return;
+      reactPosRafRef.current = requestAnimationFrame(flushReactPosition);
+    },
+    [flushReactPosition]
+  );
+
   const snapWalkerToVisualCenter = useCallback(
-    (opts?: { silent?: boolean; refreshSize?: boolean }) => {
+    (opts?: { refreshSize?: boolean }) => {
       if (!map || !walkerRef.current) return;
       if (opts?.refreshSize) map.updateSize();
       const coord = OlMapWalker.positionAtVisualCenter(map);
       if (!coord) return;
-      setPosition(coord);
       walkerRef.current.setPosition(coord);
-      if (!opts?.silent) flashRelocating(coord);
-      else lastPosKeyRef.current = `${coord[0].toFixed(2)},${coord[1].toFixed(2)}`;
+      scheduleReactPosition(coord);
     },
-    [map, flashRelocating]
+    [map, scheduleReactPosition]
   );
 
   const applyPosition = useCallback(
     (coord: Coordinate, opts?: { fromMapClick?: boolean }) => {
-      setPosition(coord);
       walkerRef.current?.setPosition(coord);
-      flashRelocating(coord);
+      positionRef.current = coord;
+      setPosition(coord);
       if (map && (mapSyncRef.current || opts?.fromMapClick)) {
         skipCenterFollowRef.current = true;
         map.getView().setCenter(coord);
@@ -76,14 +110,13 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
         });
       }
     },
-    [map, flashRelocating]
+    [map]
   );
 
   useEffect(() => {
     if (!active || !map || !mapReady) {
       walkerRef.current?.destroy();
       walkerRef.current = null;
-      setRelocating(false);
       return;
     }
 
@@ -93,12 +126,14 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
     if (!start) return;
 
     const walker = new OlMapWalker(start);
-    walker.setOnPanChange((pan) => setPanDeg(pan));
+    walker.setOnPanChange((pan) => schedulePanToReact(pan));
+    walker.setTilt(tiltDegRef.current);
     walker.setMap(map);
     walkerRef.current = walker;
+    positionRef.current = start;
     setPosition(start);
-    lastPosKeyRef.current = `${start[0].toFixed(2)},${start[1].toFixed(2)}`;
     setPanDeg(walker.getPan());
+    setTiltDeg(walker.getTilt());
 
     const onClick = (evt: { coordinate: Coordinate }) => {
       applyPosition(evt.coordinate, { fromMapClick: true });
@@ -106,11 +141,15 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
 
     const onCenterChange = (_evt: ObjectEvent) => {
       if (skipCenterFollowRef.current) return;
-      snapWalkerToVisualCenter({ silent: true });
+      if (centerRafRef.current) return;
+      centerRafRef.current = requestAnimationFrame(() => {
+        centerRafRef.current = 0;
+        snapWalkerToVisualCenter();
+      });
     };
 
     const onSizeChange = () => {
-      snapWalkerToVisualCenter({ silent: true, refreshSize: true });
+      snapWalkerToVisualCenter({ refreshSize: true });
     };
 
     map.on('singleclick', onClick);
@@ -118,45 +157,74 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
     map.getView().on('change:center', onCenterChange);
 
     let raf1 = 0;
-    let raf2 = 0;
     raf1 = requestAnimationFrame(() => {
-      snapWalkerToVisualCenter({ silent: true, refreshSize: true });
-      raf2 = requestAnimationFrame(() =>
-        snapWalkerToVisualCenter({ silent: true, refreshSize: true })
-      );
+      snapWalkerToVisualCenter({ refreshSize: true });
     });
     const animDone = window.setTimeout(() => {
-      snapWalkerToVisualCenter({ silent: true, refreshSize: true });
+      snapWalkerToVisualCenter({ refreshSize: true });
     }, MAP_SPLIT_ANIM_MS + 50);
 
     return () => {
       cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
+      if (centerRafRef.current) {
+        cancelAnimationFrame(centerRafRef.current);
+        centerRafRef.current = 0;
+      }
+      if (panRafRef.current) {
+        cancelAnimationFrame(panRafRef.current);
+        panRafRef.current = 0;
+      }
+      if (reactPosRafRef.current) {
+        cancelAnimationFrame(reactPosRafRef.current);
+        reactPosRafRef.current = 0;
+      }
+      pendingPanRef.current = null;
+      pendingReactPosRef.current = null;
       window.clearTimeout(animDone);
       map.un('singleclick', onClick);
       map.un('change:size', onSizeChange);
       map.getView().un('change:center', onCenterChange);
       walker.destroy();
       if (walkerRef.current === walker) walkerRef.current = null;
-      if (relocateTimerRef.current) {
-        clearTimeout(relocateTimerRef.current);
-        relocateTimerRef.current = null;
-      }
     };
-  }, [active, map, mapReady, applyPosition, snapWalkerToVisualCenter]);
+  }, [active, map, mapReady, applyPosition, snapWalkerToVisualCenter, schedulePanToReact]);
 
   const onPanChange = useCallback((pan: number) => {
-    setPanDeg(pan);
-    walkerRef.current?.setAngle(pan);
+    const next = ((pan % 360) + 360) % 360;
+    walkerRef.current?.setAngle(next);
+    schedulePanToReact(next);
+  }, [schedulePanToReact]);
+
+  const onTiltChange = useCallback((tilt: number) => {
+    const next = Math.min(90, Math.max(-90, tilt));
+    setTiltDeg(next);
+    walkerRef.current?.setTilt(next);
   }, []);
 
   const onNudgePosition = useCallback(
     (dx: number, dy: number) => {
-      if (!map || !position) return;
-      const next: Coordinate = [position[0] + dx, position[1] + dy];
+      if (!map || !positionRef.current) return;
+      const cur = positionRef.current;
+      const next: Coordinate = [cur[0] + dx, cur[1] + dy];
       applyPosition(next);
     },
-    [map, position, applyPosition]
+    [map, applyPosition]
+  );
+
+  /** 로드뷰 화살표 이동 → 워커·(동기화 시) 지도 */
+  const onRoadviewPosition = useCallback(
+    (lng: number, lat: number) => {
+      if (!map || !Number.isFinite(lng) || !Number.isFinite(lat)) return;
+      try {
+        const code = map.getView().getProjection()?.getCode() ?? 'EPSG:3857';
+        const coord =
+          code === 'EPSG:4326' ? ([lng, lat] as Coordinate) : transform([lng, lat], 'EPSG:4326', code);
+        applyPosition(coord);
+      } catch {
+        /* ignore */
+      }
+    },
+    [map, applyPosition]
   );
 
   const wgs84 = useMemo(() => {
@@ -171,10 +239,12 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
 
   return {
     panDeg,
+    tiltDeg,
     lng: wgs84.lng,
     lat: wgs84.lat,
-    relocating,
     onPanChange,
+    onTiltChange,
     onNudgePosition,
+    onRoadviewPosition,
   };
 }

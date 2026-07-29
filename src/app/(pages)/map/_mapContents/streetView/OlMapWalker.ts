@@ -8,6 +8,12 @@ const FOV_DEG = 70;
 /** 얼굴 시야점 — 호 반경(px), 좌우 극단 위로 꺾임(px) */
 const EYE_R = 10.5;
 const EYE_BEND_UP = 3.5;
+/** 시야점 수직 이동 상한(px) — 양수(위) / 음수(아래, 짧게) */
+const EYE_MAX_UP_PX = 8;
+const EYE_MAX_DOWN_PX = 3.5;
+/** 음수 수직각: 이 각도에서 하단 상한 */
+const TILT_DOWN_CAP_DEG = -10;
+
 function interpolateByZoom(
   zoom: number,
   anchors: Array<[zoom: number, scale: number]>
@@ -87,9 +93,15 @@ export class OlMapWalker {
   private content: HTMLDivElement;
   private fovRing: HTMLDivElement;
   private panDeg = 0;
+  private tiltDeg = 0;
   private onPanChange: ((pan: number) => void) | null = null;
   private dragCleanup: (() => void) | null = null;
   private zoomCleanup: (() => void) | null = null;
+  /** 마지막 적용 CSS 값 — 동일 시 setProperty 생략 */
+  private cssVars: Record<string, string> = {};
+  private lastFigureScale = '';
+  private lastRingScale = '';
+  private zoomRaf = 0;
 
   constructor(position: Coordinate) {
     this.content = document.createElement('div');
@@ -150,12 +162,29 @@ export class OlMapWalker {
     return this.panDeg;
   }
 
+  getTilt() {
+    return this.tiltDeg;
+  }
+
   setAngle(pan: number) {
-    this.panDeg = ((pan % 360) + 360) % 360;
+    const next = ((pan % 360) + 360) % 360;
+    if (next === this.panDeg) return;
+    this.panDeg = next;
+    this.applyAngleVisual();
+  }
+
+  /** 수직각(-90~90). 시야점 이동은 음수 -10° 하단 상한·양수보다 짧은 이동 */
+  setTilt(tilt: number) {
+    const n = Number.isFinite(tilt) ? tilt : 0;
+    const next = Math.min(90, Math.max(-90, n));
+    if (next === this.tiltDeg) return;
+    this.tiltDeg = next;
     this.applyAngleVisual();
   }
 
   setPosition(coord: Coordinate) {
+    const prev = this.overlay.getPosition();
+    if (prev && prev[0] === coord[0] && prev[1] === coord[1]) return;
     this.overlay.setPosition(coord);
   }
 
@@ -166,24 +195,49 @@ export class OlMapWalker {
   setMap(map: Map | null) {
     this.zoomCleanup?.();
     this.zoomCleanup = null;
+    if (this.zoomRaf) {
+      cancelAnimationFrame(this.zoomRaf);
+      this.zoomRaf = 0;
+    }
     this.overlay.setMap(map);
     if (!map) {
-      this.content.style.setProperty('--mw-figure-scale', '1');
-      this.content.style.setProperty('--mw-ring-scale', '1');
+      this.setCss('--mw-figure-scale', '1');
+      this.setCss('--mw-ring-scale', '1');
+      this.lastFigureScale = '1';
+      this.lastRingScale = '1';
       return;
     }
 
     const view = map.getView();
     const updateScale = () => {
       const zoom = view.getZoom();
-      const figureScale = walkerFigureScaleFromZoom(zoom);
-      const ringScale = walkerRingScaleFromZoom(zoom);
-      this.content.style.setProperty('--mw-figure-scale', figureScale.toFixed(3));
-      this.content.style.setProperty('--mw-ring-scale', ringScale.toFixed(3));
+      const figureScale = walkerFigureScaleFromZoom(zoom).toFixed(3);
+      const ringScale = walkerRingScaleFromZoom(zoom).toFixed(3);
+      if (figureScale !== this.lastFigureScale) {
+        this.lastFigureScale = figureScale;
+        this.setCss('--mw-figure-scale', figureScale);
+      }
+      if (ringScale !== this.lastRingScale) {
+        this.lastRingScale = ringScale;
+        this.setCss('--mw-ring-scale', ringScale);
+      }
+    };
+    const scheduleScale = () => {
+      if (this.zoomRaf) return;
+      this.zoomRaf = requestAnimationFrame(() => {
+        this.zoomRaf = 0;
+        updateScale();
+      });
     };
     updateScale();
-    view.on('change:resolution', updateScale);
-    this.zoomCleanup = () => view.un('change:resolution', updateScale);
+    view.on('change:resolution', scheduleScale);
+    this.zoomCleanup = () => {
+      view.un('change:resolution', scheduleScale);
+      if (this.zoomRaf) {
+        cancelAnimationFrame(this.zoomRaf);
+        this.zoomRaf = 0;
+      }
+    };
   }
 
   destroy() {
@@ -191,53 +245,77 @@ export class OlMapWalker {
     this.dragCleanup = null;
     this.zoomCleanup?.();
     this.zoomCleanup = null;
+    if (this.zoomRaf) {
+      cancelAnimationFrame(this.zoomRaf);
+      this.zoomRaf = 0;
+    }
     this.overlay.setMap(null);
+    this.cssVars = {};
+  }
+
+  private setCss(name: string, value: string) {
+    if (this.cssVars[name] === value) return;
+    this.cssVars[name] = value;
+    this.content.style.setProperty(name, value);
   }
 
   private applyAngleVisual() {
-    this.content.style.setProperty('--mw-pan', `${this.panDeg}deg`);
+    // pan은 transform rotate만 — conic-gradient 재계산 없음
+    this.setCss('--mw-pan', `${this.panDeg}deg`);
 
     const rad = (this.panDeg * Math.PI) / 180;
-    // 남쪽(180°)=머리 정중앙, 좌우로 아래 호를 따라 이동, 북쪽 반구는 숨김
-    const front = -Math.cos(rad); // 남 +1, 북 -1
+    // 남쪽(180°)=정면(+), 북쪽(0°)=후면(-)
+    const front = -Math.cos(rad);
     const sinR = Math.sin(rad);
+    const tiltForEye =
+      this.tiltDeg >= 0
+        ? Math.min(90, this.tiltDeg)
+        : Math.max(TILT_DOWN_CAP_DEG, this.tiltDeg);
+    const tiltNorm =
+      this.tiltDeg >= 0 ? tiltForEye / 90 : tiltForEye / -TILT_DOWN_CAP_DEG;
+
     const ex = sinR * EYE_R;
     const lateral = Math.min(1, Math.abs(sinR));
     const eyeScale = 1 - lateral * 0.14;
-    const ey = -(sinR * sinR) * EYE_BEND_UP;
-    this.content.style.setProperty('--mw-ex', `${ex.toFixed(2)}px`);
-    this.content.style.setProperty('--mw-ey', `${ey.toFixed(2)}px`);
-    this.content.style.setProperty('--mw-eye-scale', eyeScale.toFixed(3));
-    this.content.style.setProperty('--mw-eye-vis', front > 0.1 ? '1' : '0');
+    const eyPan = -(sinR * sinR) * EYE_BEND_UP;
+    const verticalAmp = this.tiltDeg >= 0 ? EYE_R + 3 : EYE_MAX_DOWN_PX;
+    const vertical = -tiltNorm * verticalAmp;
+    const eyRaw = eyPan + vertical;
+    const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-EYE_MAX_UP_PX, eyRaw));
+    const eyeVis = front > 0.1 ? '1' : '0';
+    this.setCss('--mw-ex', `${ex.toFixed(2)}px`);
+    this.setCss('--mw-ey', `${ey.toFixed(2)}px`);
+    this.setCss('--mw-eye-scale', eyeScale.toFixed(3));
+    this.setCss('--mw-eye-vis', eyeVis);
 
-    // 머리 구면 음영 — 방향 정규화, 아래·시선 반대 대각선
-    const northness = (1 + Math.cos(rad)) / 2;
-    const dx = -Math.sin(rad);
-    const dy = Math.abs(Math.cos(rad)) * 0.3 + 0.7;
-    const len = Math.hypot(dx, dy) || 1;
-    const reach = 5 - northness * 1.1;
-    const sx = (dx / len) * reach;
-    const sy = (dy / len) * reach;
-    const alpha = 0.16 - northness * 0.05;
-    const gradR = 13 - northness * 1.8;
-    const innerStop = 48 + northness * 9;
-    this.content.style.setProperty('--mw-sx', `${sx.toFixed(2)}px`);
-    this.content.style.setProperty('--mw-sy', `${sy.toFixed(2)}px`);
-    this.content.style.setProperty('--mw-sa', alpha.toFixed(3));
-    this.content.style.setProperty('--mw-sr', `${gradR.toFixed(1)}px`);
-    this.content.style.setProperty('--mw-ss', `${innerStop.toFixed(0)}%`);
+    // 머리 음영 — 값 반올림 후 dirty set
+    const lightX = sinR;
+    const lightY = -front * 0.5 + 0.38 - tiltNorm * 0.5;
+    const llen = Math.hypot(lightX, lightY) || 1;
+    const reach = 4.4 + (1 - Math.abs(front)) * 0.6;
+    const sx = (-lightX / llen) * reach;
+    const sy = (-lightY / llen) * reach;
+    const tiltAmt = Math.abs(tiltNorm);
+    const alpha = 0.1 + (1 - front) * 0.025 + tiltAmt * 0.02;
+    const gradR = 15 - tiltAmt * 1.1;
+    const softCore = Math.max(28, 42 + front * 6 - tiltNorm * 5);
+    const softMid = Math.min(88, softCore + 28);
+    this.setCss('--mw-sx', `${sx.toFixed(2)}px`);
+    this.setCss('--mw-sy', `${sy.toFixed(2)}px`);
+    this.setCss('--mw-sa', Math.min(0.16, alpha).toFixed(3));
+    this.setCss('--mw-sr', `${gradR.toFixed(1)}px`);
+    this.setCss('--mw-ss', `${softCore.toFixed(0)}%`);
+    this.setCss('--mw-sm', `${softMid.toFixed(0)}%`);
   }
 
   private bindAngleDrag() {
     const el = this.fovRing;
     let dragging = false;
+    let ox = 0;
+    let oy = 0;
 
-    const panFromEvent = (e: PointerEvent) => {
-      const rect = el.getBoundingClientRect();
-      const ox = rect.left + rect.width / 2;
-      const oy = rect.top + rect.height / 2;
-      // 화면: 위쪽이 0°에 가깝게 (지도 북쪽 기준에 맞춤)
-      const rad = Math.atan2(e.clientX - ox, oy - e.clientY);
+    const panFromClient = (clientX: number, clientY: number) => {
+      const rad = Math.atan2(clientX - ox, oy - clientY);
       let deg = (rad * 180) / Math.PI;
       if (deg < 0) deg += 360;
       return deg;
@@ -247,14 +325,17 @@ export class OlMapWalker {
       e.preventDefault();
       e.stopPropagation();
       dragging = true;
+      const rect = el.getBoundingClientRect();
+      ox = rect.left + rect.width / 2;
+      oy = rect.top + rect.height / 2;
       el.setPointerCapture(e.pointerId);
-      this.setAngle(panFromEvent(e));
+      this.setAngle(panFromClient(e.clientX, e.clientY));
       this.onPanChange?.(this.panDeg);
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging) return;
       e.preventDefault();
-      this.setAngle(panFromEvent(e));
+      this.setAngle(panFromClient(e.clientX, e.clientY));
       this.onPanChange?.(this.panDeg);
     };
     const onUp = (e: PointerEvent) => {

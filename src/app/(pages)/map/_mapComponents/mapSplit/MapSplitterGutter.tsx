@@ -65,7 +65,7 @@ export function MapSplitControlButton({
       title={title}
       className={cn(
         'flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors',
-        'bg-slate-700/90 hover:bg-slate-600',
+        'bg-slate-800/90 hover:bg-slate-700',
         active ? activeClassName : 'text-slate-400'
       )}
       onClick={onClick}
@@ -364,8 +364,9 @@ export function MapSplitterGutter({
         data-split-control-drag={offsetMoveEnabled ? 'true' : undefined}
         title={offsetMoveEnabled ? PILL_DRAG_TITLE : undefined}
         className={cn(
-          'absolute rounded-full bg-slate-700 shadow-md',
-          'dark:bg-slate-800 dark:shadow-black/40',
+          'absolute rounded-full bg-slate-800 shadow-md',
+          'opacity-95 transition-opacity hover:opacity-100',
+          'dark:bg-slate-900 dark:shadow-black/40',
           hasExtraControls ? 'p-1.5' : 'p-0.5',
           offsetMoveEnabled && 'cursor-grab active:cursor-grabbing'
         )}
