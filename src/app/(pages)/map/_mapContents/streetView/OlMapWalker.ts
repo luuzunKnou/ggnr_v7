@@ -1,6 +1,7 @@
 import Overlay from 'ol/Overlay';
 import type Map from 'ol/Map';
 import type { Coordinate } from 'ol/coordinate';
+import { getMapVisualCenterCoordinate } from '../../_mapComponents/config/mapVisualCenter';
 import './mapWalker.css';
 
 /** 시야 부채꼴 각도(도) */
@@ -143,19 +144,7 @@ export class OlMapWalker {
 
   /** 맵 시각 중심(센터마크와 동일 좌표) */
   static positionAtVisualCenter(map: Map): Coordinate | null {
-    const size = map.getSize();
-    if (!size || size.length < 2) {
-      const c = map.getView().getCenter();
-      return c ? [...c] : null;
-    }
-    const padding = map.getView().padding ?? [0, 0, 0, 0];
-    const padLeft = padding[3] ?? 0;
-    const cx = (size[0] + padLeft) / 2;
-    const cy = size[1] / 2;
-    const coord = map.getCoordinateFromPixel([cx, cy]);
-    if (coord) return [...coord];
-    const c = map.getView().getCenter();
-    return c ? [...c] : null;
+    return getMapVisualCenterCoordinate(map);
   }
 
   setOnPanChange(cb: ((pan: number) => void) | null) {

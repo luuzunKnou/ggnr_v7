@@ -18,13 +18,15 @@ export function StreetViewSecondaryHost({ active, mapSync }: StreetViewSecondary
   if (!active) return null;
 
   return (
-    <StreetViewPanel
-      panDeg={streetView.panDeg}
-      lng={streetView.lng}
-      lat={streetView.lat}
-      onRoadviewPosition={streetView.onRoadviewPosition}
-      onRoadviewPan={streetView.onPanChange}
-      onRoadviewTilt={streetView.onTiltChange}
-    />
+    <div className="h-full w-full bg-[#888888]">
+      <StreetViewPanel
+        panDeg={streetView.panDeg}
+        lng={streetView.lng}
+        lat={streetView.lat}
+        onRoadviewPosition={streetView.onRoadviewPosition}
+        onRoadviewPan={streetView.onPanChange}
+        onRoadviewTilt={streetView.onTiltChange}
+      />
+    </div>
   );
 }

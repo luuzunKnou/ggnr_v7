@@ -97,7 +97,7 @@ export function StreetViewRoadviewControls({
         <Minus className="h-4 w-4" strokeWidth={2} aria-hidden />
       </ControlButton>
       <ControlButton
-        title="정북"
+        title="북쪽 보기"
         disabled={disabled}
         onClick={onResetNorth}
         className="bg-slate-700 hover:bg-slate-700 disabled:hover:bg-slate-700"

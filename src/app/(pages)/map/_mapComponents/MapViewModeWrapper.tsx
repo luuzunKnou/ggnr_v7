@@ -22,6 +22,7 @@ import {
 } from './mapControlPanel/backgroundMapSelector';
 import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
 import { DEFAULT_CAMERA_HEIGHT_3D, DEFAULT_ZOOM_2D } from './config/mapDefaults';
+import { getMapVisualCenterCoordinate } from './config/mapVisualCenter';
 import { MapSplitLayout } from './mapSplit/MapSplitLayout';
 import { useStreetViewSecondary } from '../_mapContents/streetView/useStreetViewSecondary';
 
@@ -362,16 +363,25 @@ export default function MapViewModeWrapper({
   }, [viewMode, mapContext]);
 
   // 상하 분할: 패널 제외 영역에만 배치하므로 view 왼쪽 패딩 해제 (이중 여백·비침 방지)
+  // 패딩·크기 변경 전후 시각 중심 좌표를 유지해 상하↔좌우 전환 시 지도가 밀리지 않게 함
   useLayoutEffect(() => {
     const map = mapContext?.mapInstanceRef?.current;
     if (!map || viewMode !== '2d') return;
+    const view = map.getView();
+    const preserved =
+      getMapVisualCenterCoordinate(map) ??
+      (view.getCenter() ? [...view.getCenter()!] : null);
+
     const verticalInset = secondaryKind != null && splitOrientation === 'vertical';
     if (verticalInset) {
-      map.getView().padding = [0, 0, 0, 0];
-      map.updateSize();
+      view.padding = [0, 0, 0, 0];
     } else {
       mapContext?.applyMapViewPaddingRef?.current?.();
-      map.updateSize();
+    }
+    map.updateSize();
+
+    if (preserved) {
+      view.setCenter(preserved);
     }
   }, [
     secondaryKind,

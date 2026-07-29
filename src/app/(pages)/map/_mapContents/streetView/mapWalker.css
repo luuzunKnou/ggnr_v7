@@ -5,6 +5,8 @@
   width: 168px;
   height: 168px;
   pointer-events: auto;
+  /* 좌표(오버레이)는 유지, 시각만 살짝 위로 */
+  transform: translateY(-6px);
   --mw-sx: 0px;
   --mw-sy: 4px;
   --mw-sa: 0.12;
@@ -107,7 +109,9 @@
   margin-top: -6px;
   border-radius: 50%;
   background: #3388ff;
+  border: 1.5px solid #0051ff;
   box-shadow: none;
+  box-sizing: border-box;
   transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px)) scale(var(--mw-eye-scale, 1));
   opacity: var(--mw-eye-vis, 0);
 }

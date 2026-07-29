@@ -302,11 +302,24 @@ export function StreetViewPanel({
         }
       });
     };
+    const forceRelayout = () => {
+      if (relayoutRafRef.current) {
+        cancelAnimationFrame(relayoutRafRef.current);
+        relayoutRafRef.current = 0;
+      }
+      try {
+        roadview.relayout();
+      } catch {
+        /* ignore */
+      }
+    };
     const ro = new ResizeObserver(scheduleRelayout);
     ro.observe(el);
+    el.addEventListener('roadview-relayout', forceRelayout);
 
     return () => {
       ro.disconnect();
+      el.removeEventListener('roadview-relayout', forceRelayout);
       if (relayoutRafRef.current) {
         cancelAnimationFrame(relayoutRafRef.current);
         relayoutRafRef.current = 0;
@@ -511,9 +524,9 @@ export function StreetViewPanel({
   const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
 
   return (
-    <div className="relative flex h-full w-full flex-col bg-slate-900 text-white">
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
-        <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+    <div className="relative flex h-full w-full flex-col bg-[#888888] text-white">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-[#888888]">
+        <div ref={containerRef} data-roadview-host className="absolute inset-0 h-full w-full bg-[#888888]" />
 
         <div className="pointer-events-none absolute bottom-16 left-2 z-[2] rounded-md bg-black/45 px-2 py-1 text-[10px] tabular-nums text-white/75">
           <p ref={hudPanRef}>수평각 {panDeg.toFixed(1)}°</p>

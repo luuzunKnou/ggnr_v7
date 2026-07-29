@@ -83,10 +83,12 @@ export function MapSplitLayout({
   const draggingRef = useRef(false);
   const pendingRatioRef = useRef<number | null>(null);
   const sizeTickAtRef = useRef(0);
+  const roadviewRelayoutRafRef = useRef(0);
   const onSizeTickRef = useRef(onSizeTick);
   onSizeTickRef.current = onSizeTick;
   const primaryPaneRef = useRef<HTMLDivElement>(null);
   const secondaryPaneRef = useRef<HTMLDivElement>(null);
+  const secondaryContentRef = useRef<HTMLDivElement>(null);
   const mapPaddingLeftRef = useRef(mapPaddingLeft);
   mapPaddingLeftRef.current = mapPaddingLeft;
   const orientationRef = useRef(orientation);
@@ -130,6 +132,20 @@ export function MapSplitLayout({
       secondary.style.flex = `${1 - next} 1 0%`;
     }
   }, []);
+
+  const syncRoadviewLayout = useCallback(() => {
+    const host = secondaryContentRef.current?.querySelector('[data-roadview-host]');
+    host?.dispatchEvent(new Event('roadview-relayout'));
+  }, []);
+
+  /** 드래그 중에도 프레임마다 로드뷰 맞춤 */
+  const scheduleRoadviewRelayout = useCallback(() => {
+    if (roadviewRelayoutRafRef.current) return;
+    roadviewRelayoutRafRef.current = requestAnimationFrame(() => {
+      roadviewRelayoutRafRef.current = 0;
+      syncRoadviewLayout();
+    });
+  }, [syncRoadviewLayout]);
 
   const scheduleSizeTick = useCallback((force = false) => {
     const tick = onSizeTickRef.current;
@@ -225,6 +241,7 @@ export function MapSplitLayout({
       pendingRatioRef.current = next;
       applyPaneFlex(next);
       scheduleSizeTick(false);
+      scheduleRoadviewRelayout();
     };
     const onUp = () => {
       if (!dragRef.current && !draggingRef.current) return;
@@ -236,14 +253,26 @@ export function MapSplitLayout({
         setRatio(pending);
       }
       scheduleSizeTick(true);
+      if (roadviewRelayoutRafRef.current) {
+        cancelAnimationFrame(roadviewRelayoutRafRef.current);
+        roadviewRelayoutRafRef.current = 0;
+      }
+      syncRoadviewLayout();
+      requestAnimationFrame(() => syncRoadviewLayout());
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (roadviewRelayoutRafRef.current) {
+        cancelAnimationFrame(roadviewRelayoutRafRef.current);
+        roadviewRelayoutRafRef.current = 0;
+      }
     };
-  }, [setRatio, applyPaneFlex, scheduleSizeTick]);
+  }, [setRatio, applyPaneFlex, scheduleSizeTick, scheduleRoadviewRelayout, syncRoadviewLayout]);
 
   const isH = orientation === 'horizontal';
   const primaryFlex = splitActive ? primaryRatio : 1;
@@ -306,7 +335,7 @@ export function MapSplitLayout({
         <div
           ref={secondaryPaneRef}
           className={cn(
-            'relative min-h-0 min-w-0 overflow-hidden',
+            'relative min-h-0 min-w-0 overflow-hidden bg-[#888888]',
             animReady && 'transition-[flex] ease-out',
             !splitActive && 'pointer-events-none'
           )}
@@ -317,7 +346,11 @@ export function MapSplitLayout({
           }}
           aria-hidden={!splitActive}
         >
-          {splitActive ? secondary : null}
+          {splitActive ? (
+            <div ref={secondaryContentRef} className="h-full w-full min-h-0 min-w-0">
+              {secondary}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
