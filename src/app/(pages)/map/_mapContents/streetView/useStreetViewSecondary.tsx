@@ -27,7 +27,8 @@ export function useStreetViewSecondary({
   const panel = active ? (
     <StreetViewMockPanel
       panDeg={mock.panDeg}
-      mapScale={mock.mapScale}
+      lng={mock.lng}
+      lat={mock.lat}
       relocating={mock.relocating}
     />
   ) : null;

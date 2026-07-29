@@ -46,18 +46,10 @@ function walkerRingScaleFromZoom(zoom: number | undefined): number {
     [11, 0.28],
     [13, 0.28],
     [15, 0.36],
-    [18, 0.5],
-    [20, 0.72],
+    [18, 0.92],
+    [20, 1.35],
   ]);
 }
-
-export type WalkerScaleInfo = {
-  walkerScale: number;
-  ringScale: number;
-  resolution: number;
-  zoom: number | undefined;
-  referenceResolution: number;
-};
 
 function createBodySvg(): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -96,7 +88,6 @@ export class OlMapWalker {
   private fovRing: HTMLDivElement;
   private panDeg = 0;
   private onPanChange: ((pan: number) => void) | null = null;
-  private onScaleChange: ((info: WalkerScaleInfo) => void) | null = null;
   private dragCleanup: (() => void) | null = null;
   private zoomCleanup: (() => void) | null = null;
 
@@ -155,10 +146,6 @@ export class OlMapWalker {
     this.onPanChange = cb;
   }
 
-  setOnScaleChange(cb: ((info: WalkerScaleInfo) => void) | null) {
-    this.onScaleChange = cb;
-  }
-
   getPan() {
     return this.panDeg;
   }
@@ -181,25 +168,18 @@ export class OlMapWalker {
     this.zoomCleanup = null;
     this.overlay.setMap(map);
     if (!map) {
-      this.content.style.setProperty('--mw-scale', '1');
+      this.content.style.setProperty('--mw-figure-scale', '1');
+      this.content.style.setProperty('--mw-ring-scale', '1');
       return;
     }
 
     const view = map.getView();
     const updateScale = () => {
-      const res = view.getResolution();
       const zoom = view.getZoom();
       const figureScale = walkerFigureScaleFromZoom(zoom);
       const ringScale = walkerRingScaleFromZoom(zoom);
       this.content.style.setProperty('--mw-figure-scale', figureScale.toFixed(3));
       this.content.style.setProperty('--mw-ring-scale', ringScale.toFixed(3));
-      this.onScaleChange?.({
-        walkerScale: figureScale,
-        ringScale,
-        resolution: res ?? NaN,
-        zoom,
-        referenceResolution: res ?? NaN,
-      });
     };
     updateScale();
     view.on('change:resolution', updateScale);

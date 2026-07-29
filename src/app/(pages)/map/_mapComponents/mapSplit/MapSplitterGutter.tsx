@@ -5,17 +5,21 @@ import { Lock, LockOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   MAP_SPLIT_ANIM_MS,
+  MAP_SPLIT_CONTROL_BTN_GAP_PX,
+  MAP_SPLIT_CONTROL_BTN_PX,
+  MAP_SPLIT_CONTROL_EDGE_SHAKE_MS,
   MAP_SPLIT_CONTROL_OFFSET_MAX,
   MAP_SPLIT_CONTROL_OFFSET_MIN,
-  MAP_SPLIT_CONTROL_PILL_EXPANDED_WIDTH_PX,
   MAP_SPLIT_CONTROL_RIGHT_EXTEND_PX,
   MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
-  MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
   type MapSplitOrientation,
 } from './mapSplitTypes';
+import './mapSplitControl.css';
 
 const PILL_DRAG_TITLE = '버튼 위치 조절';
 const ANCHOR_SWITCH_RATIO = 0.71;
+/** lock 버튼 1개 + 기능 버튼 */
+const LOCK_BUTTON_COUNT = 1;
 
 type MapSplitterGutterProps = {
   orientation: MapSplitOrientation;
@@ -69,66 +73,85 @@ export function MapSplitControlButton({
   );
 }
 
-function clampOffsetRatio(r: number, max = MAP_SPLIT_CONTROL_OFFSET_MAX) {
-  return Math.min(max, Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, r));
-}
-
-function resolveControls(
-  controls: MapSplitterGutterProps['controls'],
-  orientation: MapSplitOrientation
-) {
-  if (!controls) return [];
-  return typeof controls === 'function' ? controls(orientation) : controls;
-}
-
-type VerticalOffsetMetrics = {
+type OffsetBounds = {
+  min: number;
+  max: number;
+  /** 상하 분할: 우측 앵커 전환 기준 (메뉴 침범 전) */
   baseMax: number;
-  extendedMax: number;
 };
 
-function computeVerticalOffsetMetrics(gutterEl: HTMLElement | null): VerticalOffsetMetrics {
-  if (!gutterEl) {
-    return {
-      baseMax: MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
-      extendedMax: MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
-    };
-  }
-  const rect = gutterEl.getBoundingClientRect();
-  const w = rect.width;
-  if (w <= 0) {
-    return {
-      baseMax: MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
-      extendedMax: MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
-    };
-  }
-
-  const pillFull = MAP_SPLIT_CONTROL_PILL_EXPANDED_WIDTH_PX;
-  const menuLeft = window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
-  const maxForLeftAnchor = (menuLeft - rect.left - pillFull) / w;
-  const maxForRightAnchor = (menuLeft - rect.left) / w;
-  const byViewport = Math.min(maxForLeftAnchor, maxForRightAnchor);
-  const byGutter = (w - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX - pillFull) / w;
-  const baseRaw = Math.min(byViewport, byGutter);
-  const baseMax = Math.min(
-    MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
-    Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, baseRaw)
-  );
-  const extendRatio = MAP_SPLIT_CONTROL_RIGHT_EXTEND_PX / w;
-  const extendedRaw = baseMax + extendRatio;
-  const extendedMax = Math.min(
-    MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO,
-    Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, Math.min(maxForRightAnchor, extendedRaw))
-  );
-
-  return { baseMax, extendedMax };
+function visibleControlButtonCount(
+  extraCount: number,
+  controlsExpanded: boolean
+): number {
+  if (extraCount <= 0) return LOCK_BUTTON_COUNT;
+  if (extraCount === 1) return LOCK_BUTTON_COUNT + 1;
+  if (controlsExpanded) return LOCK_BUTTON_COUNT + extraCount;
+  return LOCK_BUTTON_COUNT + 1;
 }
 
-function computeOffsetMaxRatio(
+function estimatePillSizePx(buttonCount: number, hasExtra: boolean) {
+  const pad = hasExtra ? 6 : 2;
+  const count = Math.max(1, buttonCount);
+  const width =
+    pad * 2 +
+    count * MAP_SPLIT_CONTROL_BTN_PX +
+    Math.max(0, count - 1) * MAP_SPLIT_CONTROL_BTN_GAP_PX;
+  const height = pad * 2 + MAP_SPLIT_CONTROL_BTN_PX;
+  return { width, height };
+}
+
+function clamp(r: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, r));
+}
+
+function computeOffsetBounds(
   gutterEl: HTMLElement | null,
+  pillSize: { width: number; height: number },
   isHorizontal: boolean
-): number {
-  if (isHorizontal) return MAP_SPLIT_CONTROL_OFFSET_MAX;
-  return computeVerticalOffsetMetrics(gutterEl).extendedMax;
+): OffsetBounds {
+  const fallback: OffsetBounds = {
+    min: MAP_SPLIT_CONTROL_OFFSET_MIN,
+    max: MAP_SPLIT_CONTROL_OFFSET_MAX,
+    baseMax: MAP_SPLIT_CONTROL_OFFSET_MAX,
+  };
+  if (!gutterEl) return fallback;
+
+  const rect = gutterEl.getBoundingClientRect();
+  const travel = isHorizontal ? rect.height : rect.width;
+  if (travel <= 0) return fallback;
+
+  if (isHorizontal) {
+    const half = pillSize.height / 2;
+    const edge = Math.min(0.45, Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, half / travel));
+    return {
+      min: edge,
+      max: 1 - edge,
+      baseMax: 1 - edge,
+    };
+  }
+
+  const pillFull = pillSize.width;
+  const pillHalf = pillFull / 2;
+  const menuLeft = window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
+  const edgeByHalf = pillHalf / travel;
+  const min = Math.min(0.45, Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, edgeByHalf));
+
+  const maxForLeftAnchor = (menuLeft - rect.left - pillFull) / travel;
+  const maxForRightAnchor = (menuLeft - rect.left - Math.min(pillHalf, 8)) / travel;
+  const byGutter = (travel - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX - pillFull) / travel;
+  const baseRaw = Math.min(maxForLeftAnchor, byGutter, MAP_SPLIT_CONTROL_OFFSET_MAX);
+  const baseMax = Math.max(min, Math.min(MAP_SPLIT_CONTROL_OFFSET_MAX, baseRaw));
+  const extendRatio = MAP_SPLIT_CONTROL_RIGHT_EXTEND_PX / travel;
+  const extendedMax = Math.max(
+    min,
+    Math.min(
+      MAP_SPLIT_CONTROL_OFFSET_MAX,
+      Math.min(maxForRightAnchor, baseMax + extendRatio)
+    )
+  );
+
+  return { min, max: extendedMax, baseMax };
 }
 
 /**
@@ -147,52 +170,85 @@ export function MapSplitterGutter({
 }: MapSplitterGutterProps) {
   const isHorizontal = orientation === 'horizontal';
   const gutterRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLDivElement>(null);
   const offsetDragRef = useRef(false);
-  const offsetMaxRef = useRef(MAP_SPLIT_CONTROL_OFFSET_MAX);
-  const offsetBaseMaxRef = useRef(MAP_SPLIT_CONTROL_OFFSET_MAX);
-  const [offsetMax, setOffsetMax] = useState(MAP_SPLIT_CONTROL_OFFSET_MAX);
-  const resolvedControls = resolveControls(controls, orientation);
+  const dragRatioRef = useRef<number | null>(null);
+  const boundsRef = useRef<OffsetBounds>({
+    min: MAP_SPLIT_CONTROL_OFFSET_MIN,
+    max: MAP_SPLIT_CONTROL_OFFSET_MAX,
+    baseMax: MAP_SPLIT_CONTROL_OFFSET_MAX,
+  });
+  const edgeLatchRef = useRef<'min' | 'max' | null>(null);
+  const onOffsetChangeRef = useRef(onControlOffsetRatioChange);
+  onOffsetChangeRef.current = onControlOffsetRatioChange;
+
+  const resolvedControls =
+    !controls ? [] : typeof controls === 'function' ? controls(orientation) : controls;
   const hasExtraControls = resolvedControls.length > 0;
   const hasManyExtraControls = resolvedControls.length > 1;
+  const buttonCount = visibleControlButtonCount(
+    resolvedControls.length,
+    controlsExpanded
+  );
+  const estimatedPill = estimatePillSizePx(buttonCount, hasExtraControls);
+
+  const [bounds, setBounds] = useState<OffsetBounds>(boundsRef.current);
+  const [dragOffsetRatio, setDragOffsetRatio] = useState<number | null>(null);
+  const [edgeShake, setEdgeShake] = useState(false);
+  const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const animMs = MAP_SPLIT_ANIM_MS;
+  const isOffsetDragging = dragOffsetRatio != null;
+
+  const triggerEdgeShake = (edge: 'min' | 'max') => {
+    if (edgeLatchRef.current === edge) return;
+    edgeLatchRef.current = edge;
+    setEdgeShake(false);
+    requestAnimationFrame(() => setEdgeShake(true));
+    if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+    shakeTimerRef.current = setTimeout(() => {
+      setEdgeShake(false);
+      shakeTimerRef.current = null;
+    }, MAP_SPLIT_CONTROL_EDGE_SHAKE_MS);
+  };
+
+  const refreshBounds = () => {
+    const measured = pillRef.current?.getBoundingClientRect();
+    const pillSize =
+      measured && measured.width > 0 && measured.height > 0
+        ? { width: measured.width, height: measured.height }
+        : estimatedPill;
+    const next = computeOffsetBounds(gutterRef.current, pillSize, isHorizontal);
+    boundsRef.current = next;
+    setBounds(next);
+  };
 
   useEffect(() => {
-    const updateMax = () => {
-      if (isHorizontal) {
-        offsetMaxRef.current = MAP_SPLIT_CONTROL_OFFSET_MAX;
-        offsetBaseMaxRef.current = MAP_SPLIT_CONTROL_OFFSET_MAX;
-        setOffsetMax(MAP_SPLIT_CONTROL_OFFSET_MAX);
-        return;
-      }
-      const metrics = computeVerticalOffsetMetrics(gutterRef.current);
-      offsetBaseMaxRef.current = metrics.baseMax;
-      offsetMaxRef.current = metrics.extendedMax;
-      setOffsetMax(metrics.extendedMax);
-    };
-    updateMax();
-    const el = gutterRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(updateMax);
-    ro.observe(el);
-    window.addEventListener('resize', updateMax);
+    refreshBounds();
+    const gutter = gutterRef.current;
+    const pill = pillRef.current;
+    if (!gutter) return;
+    const ro = new ResizeObserver(() => refreshBounds());
+    ro.observe(gutter);
+    if (pill) ro.observe(pill);
+    window.addEventListener('resize', refreshBounds);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', updateMax);
+      window.removeEventListener('resize', refreshBounds);
     };
-  }, [isHorizontal]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buttonCount/expanded로 재측정
+  }, [isHorizontal, buttonCount, hasExtraControls, controlsExpanded]);
 
   useEffect(() => {
-    if (isHorizontal || !onControlOffsetRatioChange) return;
-    const max = computeOffsetMaxRatio(gutterRef.current, false);
-    if (controlOffsetRatio > max) {
-      onControlOffsetRatioChange(max);
-    }
-  }, [isHorizontal, controlOffsetRatio, onControlOffsetRatioChange, offsetMax]);
+    if (!onControlOffsetRatioChange || isOffsetDragging) return;
+    const { min, max } = boundsRef.current;
+    const next = clamp(controlOffsetRatio, min, max);
+    if (next !== controlOffsetRatio) onControlOffsetRatioChange(next);
+  }, [controlOffsetRatio, onControlOffsetRatioChange, bounds, isOffsetDragging]);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
-      if (!offsetDragRef.current || !onControlOffsetRatioChange) return;
+      if (!offsetDragRef.current) return;
       const el = gutterRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
@@ -200,28 +256,56 @@ export function MapSplitterGutter({
       if (size <= 0) return;
       const start = isHorizontal ? rect.top : rect.left;
       const pos = isHorizontal ? e.clientY : e.clientX;
-      const max = offsetMaxRef.current;
-      onControlOffsetRatioChange(clampOffsetRatio((pos - start) / size, max));
+      const raw = (pos - start) / size;
+      const { min, max } = boundsRef.current;
+      const next = clamp(raw, min, max);
+      if (raw < min) triggerEdgeShake('min');
+      else if (raw > max) triggerEdgeShake('max');
+      else edgeLatchRef.current = null;
+      dragRatioRef.current = next;
+      setDragOffsetRatio(next);
     };
     const onUp = () => {
+      if (!offsetDragRef.current) return;
       offsetDragRef.current = false;
+      edgeLatchRef.current = null;
+      const next = dragRatioRef.current;
+      dragRatioRef.current = null;
+      setDragOffsetRatio(null);
+      if (next != null) onOffsetChangeRef.current?.(next);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
-  }, [isHorizontal, onControlOffsetRatioChange]);
+  }, [isHorizontal]);
 
-  const clampedOffset = clampOffsetRatio(controlOffsetRatio, offsetMax);
+  useEffect(() => {
+    return () => {
+      if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+    };
+  }, []);
+
+  const clampedOffset = clamp(
+    dragOffsetRatio ?? controlOffsetRatio,
+    bounds.min,
+    bounds.max
+  );
   const offsetPercent = `${clampedOffset * 100}%`;
   const oppositePercent = `${(1 - clampedOffset) * 100}%`;
   const useOppositeAnchor = isHorizontal
     ? clampedOffset > ANCHOR_SWITCH_RATIO
-    : clampedOffset > offsetBaseMaxRef.current || clampedOffset > ANCHOR_SWITCH_RATIO;
+    : clampedOffset > bounds.baseMax || clampedOffset > ANCHOR_SWITCH_RATIO;
 
   const expandOriginClass = useOppositeAnchor ? 'origin-right' : 'origin-left';
+  /** 좌우 분할(가로 배치) → 좌우 진동, 상하 분할 → 세로 진동 */
+  const shakeAxisClass = isHorizontal
+    ? 'map-split-control-shake-x'
+    : 'map-split-control-shake-y';
 
   const expandedPanelClass = cn(
     'flex flex-row items-center gap-1 overflow-hidden ease-out max-w-0 opacity-0',
@@ -258,6 +342,7 @@ export function MapSplitterGutter({
       title={ratioLocked ? '분할 비율 고정됨' : '분할 비율 조절'}
     >
       <div
+        ref={pillRef}
         data-split-controls
         data-split-control-drag={onControlOffsetRatioChange ? 'true' : undefined}
         title={onControlOffsetRatioChange ? PILL_DRAG_TITLE : undefined}
@@ -268,7 +353,6 @@ export function MapSplitterGutter({
           onControlOffsetRatioChange && 'cursor-grab active:cursor-grabbing'
         )}
         style={{
-          transitionDuration: `${animMs}ms`,
           ...(isHorizontal
             ? useOppositeAnchor
               ? {
@@ -287,12 +371,18 @@ export function MapSplitterGutter({
         }}
         onPointerDown={(e) => {
           e.stopPropagation();
+          e.preventDefault();
           if ((e.target as HTMLElement).closest('button')) return;
           if (!onControlOffsetRatioChange) return;
+          const { min, max } = boundsRef.current;
+          const startRatio = clamp(controlOffsetRatio, min, max);
           offsetDragRef.current = true;
+          edgeLatchRef.current = null;
+          dragRatioRef.current = startRatio;
+          setDragOffsetRatio(startRatio);
         }}
       >
-        <div className="inline-grid items-center">
+        <div className={cn('inline-grid items-center', edgeShake && shakeAxisClass)}>
           <div
             className={cn(
               'col-start-1 row-start-1 flex flex-row items-center',
@@ -300,7 +390,7 @@ export function MapSplitterGutter({
             )}
           >
             <MapSplitControlButton
-              title={ratioLocked ? '비율 고정 해제' : '비율 고정'}
+              title={ratioLocked ? '분할선 이동 해제' : '분할선 이동 잠금'}
               active={ratioLocked}
               activeClassName="text-blue-400"
               onClick={() => onRatioLockedChange(!ratioLocked)}

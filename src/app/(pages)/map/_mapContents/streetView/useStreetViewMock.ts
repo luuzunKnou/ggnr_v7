@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Coordinate } from 'ol/coordinate';
+import type Map from 'ol/Map';
 import type { ObjectEvent } from 'ol/Object';
+import { transform } from 'ol/proj';
 import { MAP_SPLIT_ANIM_MS } from '../../_mapComponents/mapSplit/mapSplitTypes';
-import { OlMapWalker, type WalkerScaleInfo } from './OlMapWalker';
+import { OlMapWalker } from './OlMapWalker';
 import { useMapContext } from '../../_mapComponents/MapContext';
 
 type UseStreetViewMockArgs = {
@@ -14,13 +16,18 @@ type UseStreetViewMockArgs = {
 
 const RELOCATING_MS = 450;
 
+function toWgs84(map: Map, coord: Coordinate): Coordinate {
+  const code = map.getView().getProjection()?.getCode() ?? 'EPSG:3857';
+  if (code === 'EPSG:4326') return [...coord];
+  return transform(coord, code, 'EPSG:4326');
+}
+
 export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
   const mapContext = useMapContext();
   const map = mapContext?.mapInstanceRef?.current ?? null;
   const mapReady = mapContext?.mapReady ?? false;
   const walkerRef = useRef<OlMapWalker | null>(null);
   const [panDeg, setPanDeg] = useState(0);
-  const [mapScale, setMapScale] = useState<WalkerScaleInfo | null>(null);
   const [position, setPosition] = useState<Coordinate | null>(null);
   const [relocating, setRelocating] = useState(false);
   const mapSyncRef = useRef(mapSync);
@@ -28,7 +35,6 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
   const skipCenterFollowRef = useRef(false);
   const relocateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPosKeyRef = useRef<string>('');
-  const lastScaleKeyRef = useRef('');
 
   const flashRelocating = useCallback((coord: Coordinate) => {
     const key = `${coord[0].toFixed(2)},${coord[1].toFixed(2)}`;
@@ -40,16 +46,6 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
       setRelocating(false);
       relocateTimerRef.current = null;
     }, RELOCATING_MS);
-  }, []);
-
-  const applyScaleInfo = useCallback((info: WalkerScaleInfo) => {
-    const zoomLabel =
-      info.zoom != null && Number.isFinite(info.zoom) ? info.zoom.toFixed(2) : 'x';
-    const resolutionLabel = Number.isFinite(info.resolution) ? info.resolution.toFixed(2) : 'x';
-    const nextKey = `${zoomLabel}|${resolutionLabel}`;
-    if (nextKey === lastScaleKeyRef.current) return;
-    lastScaleKeyRef.current = nextKey;
-    setMapScale(info);
   }, []);
 
   /** silent: 분할 리사이즈 중 재배치 — «이동중» 플래시 생략 */
@@ -88,7 +84,6 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
       walkerRef.current?.destroy();
       walkerRef.current = null;
       setRelocating(false);
-      setMapScale(null);
       return;
     }
 
@@ -99,7 +94,6 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
 
     const walker = new OlMapWalker(start);
     walker.setOnPanChange((pan) => setPanDeg(pan));
-    walker.setOnScaleChange((info) => applyScaleInfo(info));
     walker.setMap(map);
     walkerRef.current = walker;
     setPosition(start);
@@ -123,7 +117,6 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
     map.on('change:size', onSizeChange);
     map.getView().on('change:center', onCenterChange);
 
-    // 분할 flex 애니메이션·첫 프레임 전 좌표 변환 실패 대비
     let raf1 = 0;
     let raf2 = 0;
     raf1 = requestAnimationFrame(() => {
@@ -150,7 +143,7 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
         relocateTimerRef.current = null;
       }
     };
-  }, [active, map, mapReady, applyPosition, snapWalkerToVisualCenter, applyScaleInfo]);
+  }, [active, map, mapReady, applyPosition, snapWalkerToVisualCenter]);
 
   const onPanChange = useCallback((pan: number) => {
     setPanDeg(pan);
@@ -166,9 +159,20 @@ export function useStreetViewMock({ active, mapSync }: UseStreetViewMockArgs) {
     [map, position, applyPosition]
   );
 
+  const wgs84 = useMemo(() => {
+    if (!map || !position) return { lng: null as number | null, lat: null as number | null };
+    try {
+      const [lng, lat] = toWgs84(map, position);
+      return { lng, lat };
+    } catch {
+      return { lng: null, lat: null };
+    }
+  }, [map, position]);
+
   return {
     panDeg,
-    mapScale,
+    lng: wgs84.lng,
+    lat: wgs84.lat,
     relocating,
     onPanChange,
     onNudgePosition,
