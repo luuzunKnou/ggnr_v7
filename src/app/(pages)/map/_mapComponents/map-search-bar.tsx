@@ -98,8 +98,12 @@ export function MapSearchBar({
   useEffect(() => {
     const el = addressSearchWrapperRef.current;
     if (!el || !onInputBottomChange) return;
+    let last = Number.NaN;
     const report = () => {
-      onInputBottomChange(el.getBoundingClientRect().bottom);
+      const next = Math.round(el.getBoundingClientRect().bottom);
+      if (next === last) return;
+      last = next;
+      onInputBottomChange(next);
     };
     report();
     const ro = new ResizeObserver(report);

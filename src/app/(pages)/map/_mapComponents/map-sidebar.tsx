@@ -12,6 +12,7 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
+import { MapMyInfoFab } from '@/app/(pages)/map/_mapContents/shootingRequest/MapMyInfoFab';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -55,7 +56,13 @@ function SidebarButton({ icon, label, onClick, isActive, disabled }: SidebarButt
 const CONSECUTIVE_CLICKS_TO_TOGGLE_DEBUG = 5;
 const CLICK_RESET_MS = 800;
 
-export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
+export function MapSidebar({
+  indexLogoSrc,
+  onSelectMyShootingRequest,
+}: {
+  indexLogoSrc: string;
+  onSelectMyShootingRequest?: (id: string) => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
@@ -259,6 +266,9 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           );
         })}
       </nav>
+      {onSelectMyShootingRequest ? (
+        <MapMyInfoFab onSelectRequest={onSelectMyShootingRequest} />
+      ) : null}
       <button
         type="button"
         onClick={handleDebugZoneClick}
