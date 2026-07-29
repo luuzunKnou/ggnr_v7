@@ -89,13 +89,23 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     (opts?: { refreshSize?: boolean; syncRoadview?: boolean }) => {
       if (!map || !walkerRef.current) return;
       if (opts?.refreshSize) map.updateSize();
-      const coord = OlMapWalker.positionAtVisualCenter(map);
+      // 맵 중심(A) = 센터마크/패딩된 뷰 정중앙에 그려지는 지점. 픽셀 재환산은 오차·점프 유발.
+      const center = map.getView().getCenter();
+      const coord = center ? [...center] : OlMapWalker.positionAtVisualCenter(map);
       if (!coord) return;
       walkerRef.current.setPosition(coord);
-      // 지도 드래그 중에는 워커만 이동 — React lng/lat(로드뷰 파노 조회)는 최종(moveend)에만
-      if (opts?.syncRoadview !== false) {
-        scheduleReactPosition(coord);
+      // 팬·줌 중에는 워커만. 로드뷰 좌표 반영은 moveend / 줌 종료 후
+      if (opts?.syncRoadview === false) return;
+      const prev = positionRef.current;
+      if (
+        prev &&
+        Math.abs(prev[0] - coord[0]) < 1e-4 &&
+        Math.abs(prev[1] - coord[1]) < 1e-4
+      ) {
+        positionRef.current = coord;
+        return;
       }
+      scheduleReactPosition(coord);
     },
     [map, scheduleReactPosition]
   );
@@ -138,7 +148,8 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     setPanDeg(walker.getPan());
     setTiltDeg(walker.getTilt());
 
-    const mapInteractingRef = { current: false };
+    /** 휠 줌은 movestart가 안 올 수 있어 resolution으로 줌 종료 디바운스 */
+    let zoomEndTimer = 0;
 
     const onClick = (evt: { coordinate: Coordinate }) => {
       applyPosition(evt.coordinate, { fromMapClick: true });
@@ -149,40 +160,47 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
       if (centerRafRef.current) return;
       centerRafRef.current = requestAnimationFrame(() => {
         centerRafRef.current = 0;
-        // 드래그·관성 이동 중: 워커만. 로드뷰는 moveend에서 최종 좌표로
-        snapWalkerToVisualCenter({
-          syncRoadview: !mapInteractingRef.current,
-        });
+        // 팬·휠 줌 중 중심이 매 프레임 바뀜 — 워커만 따라가고 로드뷰는 끝에서
+        snapWalkerToVisualCenter({ syncRoadview: false });
       });
     };
 
-    const onMoveStart = () => {
-      mapInteractingRef.current = true;
-    };
-
     const onMoveEnd = () => {
-      mapInteractingRef.current = false;
       if (skipCenterFollowRef.current) return;
       snapWalkerToVisualCenter({ syncRoadview: true });
     };
 
+    const onResolutionChange = () => {
+      if (zoomEndTimer) window.clearTimeout(zoomEndTimer);
+      zoomEndTimer = window.setTimeout(() => {
+        zoomEndTimer = 0;
+        if (skipCenterFollowRef.current) return;
+        snapWalkerToVisualCenter({ syncRoadview: true });
+      }, 140);
+    };
+
     const onSizeChange = () => {
-      snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
+      // 줌 중 size는 안 바뀜. 분할·패딩 변경 시에만
+      snapWalkerToVisualCenter({ refreshSize: false, syncRoadview: true });
     };
 
     map.on('singleclick', onClick);
     map.on('change:size', onSizeChange);
-    map.on('movestart', onMoveStart);
     map.on('moveend', onMoveEnd);
     map.getView().on('change:center', onCenterChange);
+    map.getView().on('change:resolution', onResolutionChange);
 
     let raf1 = 0;
     raf1 = requestAnimationFrame(() => {
       snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
     });
+    // 상하 분할 직후·애니메이션 중 맵 크기/패딩이 여러 번 바뀌므로 종료 후에도 재배치
     const animDone = window.setTimeout(() => {
       snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
     }, MAP_SPLIT_ANIM_MS + 50);
+    const animDone2 = window.setTimeout(() => {
+      snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
+    }, MAP_SPLIT_ANIM_MS + 200);
 
     return () => {
       cancelAnimationFrame(raf1);
@@ -201,11 +219,13 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
       pendingPanRef.current = null;
       pendingReactPosRef.current = null;
       window.clearTimeout(animDone);
+      window.clearTimeout(animDone2);
+      if (zoomEndTimer) window.clearTimeout(zoomEndTimer);
       map.un('singleclick', onClick);
       map.un('change:size', onSizeChange);
-      map.un('movestart', onMoveStart);
       map.un('moveend', onMoveEnd);
       map.getView().un('change:center', onCenterChange);
+      map.getView().un('change:resolution', onResolutionChange);
       walker.destroy();
       if (walkerRef.current === walker) walkerRef.current = null;
     };

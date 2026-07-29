@@ -122,6 +122,11 @@ export type MapContextValue = {
   setMapPaddingLeft: Dispatch<SetStateAction<number>>;
   /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
   applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
+  /**
+   * view.padding 덮어쓰기. null이면 기본(왼쪽 패널 폭).
+   * 상하 분할 시 [0,0,0,0] — 레이아웃 왼쪽 스페이서와 이중 패딩되어 워커가 사라지지 않게 함
+   */
+  mapViewPaddingOverrideRef: MutableRefObject<[number, number, number, number] | null>;
   /** OpenLayers 맵 인스턴스 준비 여부 */
   mapReady: boolean;
   setMapReady: Dispatch<SetStateAction<boolean>>;
@@ -313,6 +318,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
+  const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapSplitSecondaryKind, setMapSplitSecondaryKind] = useState<MapSplitSecondaryKind>(null);
   const [mapSplitMapSync, setMapSplitMapSync] = useState(true);
@@ -421,6 +427,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapPaddingLeft,
         setMapPaddingLeft,
         applyMapViewPaddingRef,
+        mapViewPaddingOverrideRef,
         mapReady,
         setMapReady,
         mapSplitSecondaryKind,

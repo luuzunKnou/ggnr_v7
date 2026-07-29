@@ -57,6 +57,7 @@ import {
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
+import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
 
@@ -201,6 +202,8 @@ function MapLayoutContent({
   const mapInstanceRef = mapContext?.mapInstanceRef
   const setMapPaddingLeft = mapContext?.setMapPaddingLeft
   const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef
+  const mapViewPaddingOverrideRef = mapContext?.mapViewPaddingOverrideRef
+  const mapSplitSecondaryKind = mapContext?.mapSplitSecondaryKind
   const setRiverBasicPlanPanelOpen = mapContext?.setRiverBasicPlanPanelOpen
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
@@ -430,12 +433,21 @@ function MapLayoutContent({
   const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
-  /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함 */
+  /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
+   * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
+   * 상하 분할 override([0,0,0,0])가 있으면 왼쪽 패딩을 넣지 않음(스페이서와 이중 패딩 방지). */
   useLayoutEffect(() => {
     const apply = () => {
       const map = mapInstanceRef?.current
       if (!map) return
-      map.getView().padding = [0, 0, 0, mapPaddingLeft]
+      const override = mapViewPaddingOverrideRef?.current
+      const padding: [number, number, number, number] =
+        override ?? [0, 0, 0, mapPaddingLeft]
+      if (mapSplitSecondaryKind === "streetView") {
+        applyViewPaddingPreservingVisualCenter(map, padding)
+      } else {
+        map.getView().padding = padding
+      }
       setMapPaddingLeft?.(mapPaddingLeft)
     }
     if (applyMapViewPaddingRef) {
@@ -445,7 +457,14 @@ function MapLayoutContent({
     return () => {
       if (applyMapViewPaddingRef) applyMapViewPaddingRef.current = null
     }
-  }, [applyMapViewPaddingRef, mapPaddingLeft, mapInstanceRef, setMapPaddingLeft])
+  }, [
+    applyMapViewPaddingRef,
+    mapViewPaddingOverrideRef,
+    mapPaddingLeft,
+    mapInstanceRef,
+    setMapPaddingLeft,
+    mapSplitSecondaryKind,
+  ])
 
   useEffect(() => {
     setRiverBasicPlanPanelOpen?.(riverBasicPlanOpen)
