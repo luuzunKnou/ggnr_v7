@@ -8,11 +8,11 @@ const FOV_DEG = 70;
 /** 얼굴 시야점 — 호 반경(px), 좌우 극단 위로 꺾임(px) */
 const EYE_R = 10.5;
 const EYE_BEND_UP = 3.5;
-/** 시야점 수직 이동 상한(px) — 양수(위) / 음수(아래, 짧게) */
+/** 시야점 수직 이동 상한(px) — 위 봄(음수, 길게) / 아래 봄(양수, 짧게) */
 const EYE_MAX_UP_PX = 8;
 const EYE_MAX_DOWN_PX = 3.5;
-/** 음수 수직각: 이 각도에서 하단 상한 */
-const TILT_DOWN_CAP_DEG = -10;
+/** 음수 수직각(위 봄): 이 각도에서 시야점 상단 상한 */
+const TILT_UP_CAP_DEG = -10;
 
 function interpolateByZoom(
   zoom: number,
@@ -86,7 +86,7 @@ function createBodySvg(): SVGSVGElement {
 
 /**
  * OL Overlay 기반 MapWalker.
- * 흰 원 + 시야 부채꼴. 원 위 드래그로 pan 변경.
+ * 지면 투시 타원 + 시야 부채꼴. 원 위 드래그로 pan 변경.
  */
 export class OlMapWalker {
   private overlay: Overlay;
@@ -111,6 +111,10 @@ export class OlMapWalker {
     this.fovRing = document.createElement('div');
     this.fovRing.className = 'fovRing';
     this.fovRing.title = '시야 회전';
+    const fovWedge = document.createElement('div');
+    fovWedge.className = 'fovWedge';
+    fovWedge.setAttribute('aria-hidden', 'true');
+    this.fovRing.appendChild(fovWedge);
 
     const figure = document.createElement('div');
     figure.className = 'figure';
@@ -173,7 +177,7 @@ export class OlMapWalker {
     this.applyAngleVisual();
   }
 
-  /** 수직각(-90~90). 시야점 이동은 음수 -10° 하단 상한·양수보다 짧은 이동 */
+  /** 수직각(-90~90, 카카오와 동일: 음수=위·양수=아래). 시야점은 음수 시 위로(상한 -10°) */
   setTilt(tilt: number) {
     const n = Number.isFinite(tilt) ? tilt : 0;
     const next = Math.min(90, Math.max(-90, n));
@@ -267,22 +271,26 @@ export class OlMapWalker {
     // 남쪽(180°)=정면(+), 북쪽(0°)=후면(-)
     const front = -Math.cos(rad);
     const sinR = Math.sin(rad);
+    // 카카오 tilt: 음수=위 봄 → 시야점 위, 양수=아래 봄 → 시야점 아래(짧게). 위는 -10° 상한
     const tiltForEye =
-      this.tiltDeg >= 0
-        ? Math.min(90, this.tiltDeg)
-        : Math.max(TILT_DOWN_CAP_DEG, this.tiltDeg);
+      this.tiltDeg <= 0
+        ? Math.max(TILT_UP_CAP_DEG, this.tiltDeg)
+        : Math.min(90, this.tiltDeg);
     const tiltNorm =
-      this.tiltDeg >= 0 ? tiltForEye / 90 : tiltForEye / -TILT_DOWN_CAP_DEG;
+      this.tiltDeg <= 0 ? tiltForEye / -TILT_UP_CAP_DEG : tiltForEye / 90;
 
     const ex = sinR * EYE_R;
     const lateral = Math.min(1, Math.abs(sinR));
     const eyeScale = 1 - lateral * 0.14;
     const eyPan = -(sinR * sinR) * EYE_BEND_UP;
-    const verticalAmp = this.tiltDeg >= 0 ? EYE_R + 3 : EYE_MAX_DOWN_PX;
-    const vertical = -tiltNorm * verticalAmp;
+    const verticalAmp = this.tiltDeg <= 0 ? EYE_MAX_UP_PX : EYE_MAX_DOWN_PX;
+    // tiltNorm 음수 → ey 음수(위), 양수 → ey 양수(아래)
+    const vertical = tiltNorm * verticalAmp;
     const eyRaw = eyPan + vertical;
     const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-EYE_MAX_UP_PX, eyRaw));
-    const eyeVis = front > 0.1 ? '1' : '0';
+    // 수평각 60~300°(남쪽 180 기준 대칭)에서 시야점 표시
+    const eyeVis =
+      this.panDeg >= 60 && this.panDeg <= 300 ? '1' : '0';
     this.setCss('--mw-ex', `${ex.toFixed(2)}px`);
     this.setCss('--mw-ey', `${ey.toFixed(2)}px`);
     this.setCss('--mw-eye-scale', eyeScale.toFixed(3));
@@ -290,7 +298,7 @@ export class OlMapWalker {
 
     // 머리 음영 — 값 반올림 후 dirty set
     const lightX = sinR;
-    const lightY = -front * 0.5 + 0.38 - tiltNorm * 0.5;
+    const lightY = -front * 0.5 + 0.38 + tiltNorm * 0.5;
     const llen = Math.hypot(lightX, lightY) || 1;
     const reach = 4.4 + (1 - Math.abs(front)) * 0.6;
     const sx = (-lightX / llen) * reach;
@@ -298,7 +306,7 @@ export class OlMapWalker {
     const tiltAmt = Math.abs(tiltNorm);
     const alpha = 0.1 + (1 - front) * 0.025 + tiltAmt * 0.02;
     const gradR = 15 - tiltAmt * 1.1;
-    const softCore = Math.max(28, 42 + front * 6 - tiltNorm * 5);
+    const softCore = Math.max(28, 42 + front * 6 + tiltNorm * 5);
     const softMid = Math.min(88, softCore + 28);
     this.setCss('--mw-sx', `${sx.toFixed(2)}px`);
     this.setCss('--mw-sy', `${sy.toFixed(2)}px`);

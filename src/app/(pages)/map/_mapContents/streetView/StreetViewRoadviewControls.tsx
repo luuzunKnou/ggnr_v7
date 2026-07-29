@@ -1,18 +1,13 @@
 'use client';
 
 import { Minus, Plus } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-/**
- * 나침반 핀 기준 지름(px).
- * 빨간 높이 = 지름-3, 흰 높이 = 지름 → 합이 버튼(h-8) 안에 들어가게 설정.
- */
-const COMPASS_D = 17;
+/** 나침반 핀 — 북·남 동일 높이로 중심 = 버튼 중심 */
 const COMPASS_BASE = 8;
-const COMPASS_RED_H = COMPASS_D - 5;
-const COMPASS_WHITE_H = COMPASS_D;
-const COMPASS_TOTAL_H = COMPASS_RED_H + COMPASS_WHITE_H;
+const COMPASS_HALF_H = 10;
+const COMPASS_TOTAL_H = COMPASS_HALF_H * 2;
 
 type StreetViewRoadviewControlsProps = {
   panDeg: number;
@@ -53,10 +48,10 @@ function ControlButton({
   );
 }
 
-/** 북쪽 빨간·남쪽 흰 삼각형 (아랫변 8px, 빨강 높이 지름-5, 흰색 지름) */
+/** 북쪽 빨간·남쪽 흰 삼각형 (대칭 다이아몬드) */
 function CompassPin() {
   const cx = COMPASS_BASE / 2;
-  const midY = COMPASS_RED_H;
+  const midY = COMPASS_HALF_H;
 
   return (
     <svg
@@ -74,7 +69,7 @@ function CompassPin() {
   );
 }
 
-/** 로드뷰 하단 중앙 — 축소 / 정북 / 확대 */
+/** 로드뷰 하단 중앙 — 축소 / 정북 / 확대. pan은 DOM style로만 반영(리렌더 최소화) */
 export function StreetViewRoadviewControls({
   panDeg,
   disabled = false,
@@ -82,11 +77,19 @@ export function StreetViewRoadviewControls({
   onZoomIn,
   onResetNorth,
 }: StreetViewRoadviewControlsProps) {
+  const rotateRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const el = rotateRef.current;
+    if (!el) return;
+    el.style.transform = `rotate(${panDeg}deg)`;
+  }, [panDeg]);
+
   return (
     <div
       className={cn(
         'absolute bottom-3 left-1/2 z-[3] flex -translate-x-1/2 flex-row items-center gap-1.5 rounded-full bg-slate-800 p-1.5 shadow-md',
-        'opacity-95 transition-opacity hover:opacity-100',
+        'opacity-90 transition-opacity hover:opacity-100',
         'dark:bg-slate-900 dark:shadow-black/40'
       )}
     >
@@ -100,8 +103,9 @@ export function StreetViewRoadviewControls({
         className="bg-slate-700 hover:bg-slate-700 disabled:hover:bg-slate-700"
       >
         <span
-          className="flex items-center justify-center"
-          style={{ transform: `rotate(${panDeg}deg)` }}
+          ref={rotateRef}
+          className="flex items-center justify-center origin-center"
+          style={{ transform: `rotate(${panDeg}deg)`, transformOrigin: 'center center' }}
         >
           <CompassPin />
         </span>

@@ -8,6 +8,7 @@ import {
   type KakaoRoadviewClient,
 } from './loadKakaoMapsSdk';
 import { StreetViewRoadviewControls } from './StreetViewRoadviewControls';
+import { StreetViewKakaoMapLink } from './StreetViewKakaoMapLink';
 
 /** 근처 파노라마 검색 반경(m) — 읍면 지역 여유 */
 const PANO_SEARCH_RADIUS_M = 100;
@@ -113,7 +114,6 @@ export function StreetViewPanel({
   const clientRef = useRef<KakaoRoadviewClient | null>(null);
   const skipEchoRef = useRef(false);
   const panFromRoadviewRef = useRef(false);
-  /** 로드뷰→지도 반영 후 props 좌표가 돌아와도 파노 재조회 생략 */
   const ignoreNextPropPosRef = useRef(false);
   const lastFetchKeyRef = useRef('');
   const initTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,69 +124,55 @@ export function StreetViewPanel({
   onPanRef.current = onRoadviewPan;
   onTiltRef.current = onRoadviewTilt;
 
+  const hudPanRef = useRef<HTMLParagraphElement>(null);
+  const hudTiltRef = useRef<HTMLParagraphElement>(null);
+  const hudLngRef = useRef<HTMLParagraphElement>(null);
+  const hudLatRef = useRef<HTMLParagraphElement>(null);
+  const relayoutRafRef = useRef(0);
+  const viewpointRafRef = useRef(0);
+  const pendingVpRef = useRef<{ pan: number; tilt: number } | null>(null);
+
   const [sdkReady, setSdkReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noPano, setNoPano] = useState(false);
   const [panoReady, setPanoReady] = useState(false);
-  /** 첫 파노 연결 여부 — 이후 좌표 이동 시 init 미발화해도 컨트롤 유지 */
   const everPanoReadyRef = useRef(false);
-  /** 카카오 Viewpoint.tilt — 수직 각(-90~90) */
-  const [tiltDeg, setTiltDeg] = useState(0);
-
-  const lngLabel = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
-  const latLabel = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
+  /** HUD·컨트롤용 표시 pan (props와 로드뷰 드래그 병합) */
+  const [displayPan, setDisplayPan] = useState(panDeg);
 
   const reportFailure = (raw: unknown, fallback?: string) => {
     const explained = explainKakaoRoadviewFailure(raw);
     setError(explained ?? fallback ?? (raw instanceof Error ? raw.message : String(raw)));
   };
 
-  /** 콘솔·전역 오류·카카오 fetch 응답에서 도메인 미등록 등 감지 */
-  useEffect(() => {
-    const onMsg = (raw: unknown) => {
-      const explained = explainKakaoRoadviewFailure(raw);
-      if (explained) setError(explained);
-    };
-
-    const origError = console.error.bind(console);
-    console.error = (...args: unknown[]) => {
-      origError(...args);
-      for (const a of args) onMsg(a);
-    };
-
-    const onWindowError = (e: ErrorEvent) => onMsg(e.message || e.error);
-    const onRejection = (e: PromiseRejectionEvent) => onMsg(e.reason);
-
-    const origFetch = window.fetch.bind(window);
-    window.fetch = async (input, init) => {
-      const res = await origFetch(input, init);
-      try {
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        if (/dapi\.kakao\.com|map\.kakao\.com/i.test(url) && !res.ok) {
-          const clone = res.clone();
-          const body = await clone.text().catch(() => '');
-          onMsg(body || `HTTP ${res.status} ${url}`);
-        } else if (/dapi\.kakao\.com|map\.kakao\.com/i.test(url)) {
-          const clone = res.clone();
-          const body = await clone.text().catch(() => '');
-          if (body && /domain mismatched|-401|AccessDenied/i.test(body)) onMsg(body);
-        }
-      } catch {
-        /* ignore sniff errors */
+  const writeHud = useCallback(
+    (opts: { pan?: number; tilt?: number; lngText?: string; latText?: string }) => {
+      if (opts.pan != null && hudPanRef.current) {
+        hudPanRef.current.textContent = `수평각 ${opts.pan.toFixed(1)}°`;
       }
-      return res;
-    };
+      if (opts.tilt != null && hudTiltRef.current) {
+        hudTiltRef.current.textContent = `수직각 ${opts.tilt.toFixed(1)}°`;
+      }
+      if (opts.lngText != null && hudLngRef.current) {
+        hudLngRef.current.textContent = `경도 ${opts.lngText}`;
+      }
+      if (opts.latText != null && hudLatRef.current) {
+        hudLatRef.current.textContent = `위도 ${opts.latText}`;
+      }
+    },
+    []
+  );
 
-    window.addEventListener('error', onWindowError);
-    window.addEventListener('unhandledrejection', onRejection);
+  useEffect(() => {
+    setDisplayPan(panDeg);
+    writeHud({ pan: panDeg });
+  }, [panDeg, writeHud]);
 
-    return () => {
-      console.error = origError;
-      window.fetch = origFetch;
-      window.removeEventListener('error', onWindowError);
-      window.removeEventListener('unhandledrejection', onRejection);
-    };
-  }, []);
+  useEffect(() => {
+    const lngText = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
+    const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
+    writeHud({ lngText, latText });
+  }, [lng, lat, writeHud]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,6 +225,19 @@ export function StreetViewPanel({
     roadviewRef.current = roadview;
     clientRef.current = client;
 
+    const flushViewpoint = () => {
+      viewpointRafRef.current = 0;
+      const pending = pendingVpRef.current;
+      if (!pending) return;
+      pendingVpRef.current = null;
+      writeHud({ pan: pending.pan, tilt: pending.tilt });
+      onTiltRef.current?.(pending.tilt);
+      if (skipEchoRef.current) return;
+      setDisplayPan(pending.pan);
+      panFromRoadviewRef.current = true;
+      onPanRef.current?.(pending.pan);
+    };
+
     const onInit = () => {
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
@@ -250,7 +249,7 @@ export function StreetViewPanel({
       setError(null);
       try {
         const tilt = roadview.getViewpoint()?.tilt ?? 0;
-        setTiltDeg(tilt);
+        writeHud({ tilt });
         onTiltRef.current?.(tilt);
       } catch {
         /* ignore */
@@ -267,19 +266,22 @@ export function StreetViewPanel({
         /* ignore */
       }
     };
+
     const onViewpointChanged = () => {
       try {
         const vp = roadview.getViewpoint();
-        const tilt = vp.tilt ?? 0;
-        setTiltDeg(tilt);
-        onTiltRef.current?.(tilt);
-        if (skipEchoRef.current) return;
-        panFromRoadviewRef.current = true;
-        onPanRef.current?.(normalizePan(vp.pan));
+        pendingVpRef.current = {
+          pan: normalizePan(vp.pan),
+          tilt: vp.tilt ?? 0,
+        };
+        if (!viewpointRafRef.current) {
+          viewpointRafRef.current = requestAnimationFrame(flushViewpoint);
+        }
       } catch {
         /* ignore */
       }
     };
+
     const onError = (...args: unknown[]) => {
       reportFailure(args[0] ?? args, '로드뷰 오류가 발생했습니다.');
     };
@@ -289,17 +291,31 @@ export function StreetViewPanel({
     maps.event.addListener(roadview, 'viewpoint_changed', onViewpointChanged);
     maps.event.addListener(roadview, 'error', onError);
 
-    const ro = new ResizeObserver(() => {
-      try {
-        roadview.relayout();
-      } catch {
-        /* ignore */
-      }
-    });
+    const scheduleRelayout = () => {
+      if (relayoutRafRef.current) return;
+      relayoutRafRef.current = requestAnimationFrame(() => {
+        relayoutRafRef.current = 0;
+        try {
+          roadview.relayout();
+        } catch {
+          /* ignore */
+        }
+      });
+    };
+    const ro = new ResizeObserver(scheduleRelayout);
     ro.observe(el);
 
     return () => {
       ro.disconnect();
+      if (relayoutRafRef.current) {
+        cancelAnimationFrame(relayoutRafRef.current);
+        relayoutRafRef.current = 0;
+      }
+      if (viewpointRafRef.current) {
+        cancelAnimationFrame(viewpointRafRef.current);
+        viewpointRafRef.current = 0;
+      }
+      pendingVpRef.current = null;
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
         initTimerRef.current = null;
@@ -315,8 +331,8 @@ export function StreetViewPanel({
       setPanoReady(false);
       el.replaceChildren();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reportFailure stable enough
-  }, [sdkReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once per sdkReady
+  }, [sdkReady, writeHud]);
 
   useEffect(() => {
     if (!sdkReady || !window.kakao?.maps) return;
@@ -337,12 +353,10 @@ export function StreetViewPanel({
 
     let cancelled = false;
     setNoPano(false);
-    // 좌표 이동 시 panoReady를 끄지 않음 — init이 재발화되지 않아 커스텀 UI가 사라지는 문제 방지
     if (initTimerRef.current) {
       clearTimeout(initTimerRef.current);
       initTimerRef.current = null;
     }
-    // 첫 파노만 미표시 타임아웃
     if (!everPanoReadyRef.current) {
       initTimerRef.current = setTimeout(() => {
         initTimerRef.current = null;
@@ -381,7 +395,6 @@ export function StreetViewPanel({
             zoom: cur?.zoom ?? 0,
           });
           roadview.relayout();
-          // setPanoId 후 init이 안 올 수 있음 — 즉시 ready 유지(좌표 이동 시 커스텀 UI 유지)
           if (initTimerRef.current) {
             clearTimeout(initTimerRef.current);
             initTimerRef.current = null;
@@ -408,7 +421,6 @@ export function StreetViewPanel({
         initTimerRef.current = null;
       }
     };
-    // panDeg는 시점만 별도 effect — 좌표 변경 시에만 파노 재조회
     // eslint-disable-next-line react-hooks/exhaustive-deps -- panDeg intentionally omitted
   }, [sdkReady, lng, lat]);
 
@@ -477,6 +489,8 @@ export function StreetViewPanel({
         tilt: cur.tilt,
         zoom: cur.zoom,
       });
+      writeHud({ pan: 0 });
+      setDisplayPan(0);
       onPanRef.current?.(0);
       queueMicrotask(() => {
         skipEchoRef.current = false;
@@ -484,7 +498,7 @@ export function StreetViewPanel({
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [writeHud]);
 
   const alertMessage =
     error ??
@@ -493,6 +507,8 @@ export function StreetViewPanel({
 
   const controlsEnabled = panoReady && !error && !noPano;
   const showControls = everPanoReadyRef.current || panoReady;
+  const lngText = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
+  const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
 
   return (
     <div className="relative flex h-full w-full flex-col bg-slate-900 text-white">
@@ -500,21 +516,25 @@ export function StreetViewPanel({
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
 
         <div className="pointer-events-none absolute bottom-16 left-2 z-[2] rounded-md bg-black/45 px-2 py-1 text-[10px] tabular-nums text-white/75">
-          <p>수평각 {panDeg.toFixed(1)}°</p>
-          <p>수직각 {tiltDeg.toFixed(1)}°</p>
-          <p>경도 {lngLabel}</p>
-          <p>위도 {latLabel}</p>
+          <p ref={hudPanRef}>수평각 {panDeg.toFixed(1)}°</p>
+          <p ref={hudTiltRef}>수직각 0.0°</p>
+          <p ref={hudLngRef}>경도 {lngText}</p>
+          <p ref={hudLatRef}>위도 {latText}</p>
           {panoReady ? <p className="text-emerald-300/90">로드뷰 연결됨</p> : null}
         </div>
 
         {showControls && !noPano ? (
           <StreetViewRoadviewControls
-            panDeg={panDeg}
+            panDeg={displayPan}
             disabled={!controlsEnabled}
             onZoomOut={onZoomOut}
             onZoomIn={onZoomIn}
             onResetNorth={onResetNorth}
           />
+        ) : null}
+
+        {showControls && !noPano && lng != null && lat != null && Number.isFinite(lng) && Number.isFinite(lat) ? (
+          <StreetViewKakaoMapLink lat={lat} lng={lng} />
         ) : null}
 
         {alertMessage ? <RoadviewAlertBox>{alertMessage}</RoadviewAlertBox> : null}

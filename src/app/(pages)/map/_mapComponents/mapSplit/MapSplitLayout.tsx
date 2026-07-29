@@ -80,6 +80,13 @@ export function MapSplitLayout({
   const [animReady, setAnimReady] = useState(false);
   const [ratioLocked, setRatioLocked] = useState(false);
   const dragRef = useRef<{ startPos: number; startRatio: number } | null>(null);
+  const draggingRef = useRef(false);
+  const pendingRatioRef = useRef<number | null>(null);
+  const sizeTickAtRef = useRef(0);
+  const onSizeTickRef = useRef(onSizeTick);
+  onSizeTickRef.current = onSizeTick;
+  const primaryPaneRef = useRef<HTMLDivElement>(null);
+  const secondaryPaneRef = useRef<HTMLDivElement>(null);
   const mapPaddingLeftRef = useRef(mapPaddingLeft);
   mapPaddingLeftRef.current = mapPaddingLeft;
   const orientationRef = useRef(orientation);
@@ -109,6 +116,53 @@ export function MapSplitLayout({
     setPrimaryRatio(next);
     onPrimaryRatioChangeRef.current?.(next);
   }, []);
+
+  const applyPaneFlex = useCallback((ratio: number) => {
+    const next = clampRatio(ratio);
+    const primary = primaryPaneRef.current;
+    const secondary = secondaryPaneRef.current;
+    if (primary) {
+      primary.style.transitionDuration = '0ms';
+      primary.style.flex = `${next} 1 0%`;
+    }
+    if (secondary) {
+      secondary.style.transitionDuration = '0ms';
+      secondary.style.flex = `${1 - next} 1 0%`;
+    }
+  }, []);
+
+  const scheduleSizeTick = useCallback((force = false) => {
+    const tick = onSizeTickRef.current;
+    if (!tick) return;
+    const now = performance.now();
+    if (!force && now - sizeTickAtRef.current < 80) return;
+    sizeTickAtRef.current = now;
+    tick();
+  }, []);
+
+  // 분할 ON/OFF·방향·패딩 변경 시에만 애니메이션 구간 updateSize 루프
+  useLayoutEffect(() => {
+    if (!onSizeTick) return;
+    if (draggingRef.current) return;
+    onSizeTick();
+    let raf = 0;
+    const start = performance.now();
+    const tick = (t: number) => {
+      if (draggingRef.current) return;
+      onSizeTick();
+      if (t - start < MAP_SPLIT_ANIM_MS + 40) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [splitActive, orientation, mapPaddingLeft, onSizeTick]);
+
+  // 비율 변경(드래그 종료 등) 시 1회 size tick — 드래그 중 primaryRatio 연쇄 루프 방지
+  useLayoutEffect(() => {
+    if (!onSizeTick || draggingRef.current) return;
+    scheduleSizeTick(true);
+  }, [primaryRatio, onSizeTick, scheduleSizeTick]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -152,21 +206,6 @@ export function MapSplitLayout({
     applyHorizontalInitialRatio();
   }, [splitActive, orientation, applyHorizontalInitialRatio]);
 
-  useLayoutEffect(() => {
-    if (!onSizeTick) return;
-    onSizeTick();
-    let raf = 0;
-    const start = performance.now();
-    const tick = (t: number) => {
-      onSizeTick();
-      if (t - start < MAP_SPLIT_ANIM_MS + 40) {
-        raf = requestAnimationFrame(tick);
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [splitActive, orientation, primaryRatio, mapPaddingLeft, onSizeTick]);
-
   useEffect(() => {
     const id = requestAnimationFrame(() => setAnimReady(true));
     return () => cancelAnimationFrame(id);
@@ -182,10 +221,21 @@ export function MapSplitLayout({
       const size = isH ? rect.width : rect.height;
       if (size <= 0) return;
       const pos = isH ? e.clientX : e.clientY;
-      setRatio(drag.startRatio + (pos - drag.startPos) / size);
+      const next = clampRatio(drag.startRatio + (pos - drag.startPos) / size);
+      pendingRatioRef.current = next;
+      applyPaneFlex(next);
+      scheduleSizeTick(false);
     };
     const onUp = () => {
+      if (!dragRef.current && !draggingRef.current) return;
       dragRef.current = null;
+      draggingRef.current = false;
+      const pending = pendingRatioRef.current;
+      if (pending != null) {
+        pendingRatioRef.current = null;
+        setRatio(pending);
+      }
+      scheduleSizeTick(true);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -193,7 +243,7 @@ export function MapSplitLayout({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [setRatio]);
+  }, [setRatio, applyPaneFlex, scheduleSizeTick]);
 
   const isH = orientation === 'horizontal';
   const primaryFlex = splitActive ? primaryRatio : 1;
@@ -220,6 +270,7 @@ export function MapSplitLayout({
         )}
       >
         <div
+          ref={primaryPaneRef}
           className={cn(
             'relative min-h-0 min-w-0 overflow-hidden',
             animReady && 'transition-[flex] ease-out'
@@ -246,12 +297,14 @@ export function MapSplitLayout({
             controlsExpanded={controlsExpanded}
             onDragStart={(clientPos) => {
               if (ratioLocked) return;
+              draggingRef.current = true;
               dragRef.current = { startPos: clientPos, startRatio: primaryRatio };
             }}
           />
         )}
 
         <div
+          ref={secondaryPaneRef}
           className={cn(
             'relative min-h-0 min-w-0 overflow-hidden',
             animReady && 'transition-[flex] ease-out',

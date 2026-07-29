@@ -1,4 +1,4 @@
-/* MapWalker — 시야 원 + #0051ff 부채꼴 + 아이콘 */
+/* MapWalker — 지면 타원 시야 + #0051ff 부채꼴 + 3D 아이콘 */
 
 .MapWalker {
   position: relative;
@@ -19,25 +19,25 @@
   --mw-figure-scale: 1;
   --mw-stroke: rgba(0, 0, 0, 0.22);
   --mw-stroke-w: 1.5px;
+  /* 지면 투시 — Y 압축으로 원→타원, 부채꼴도 함께 납작해짐 */
+  --mw-ground-sy: 0.52;
 }
 
+/* 외곽: 고정 축 타원(회전 없음). 내부 wedge만 pan 회전 */
 .MapWalker .fovRing {
   position: absolute;
-  inset: 0;
-  /* pan은 rotate만 — conic from 재계산(페인트) 방지 */
-  transform: translateY(-3px) rotate(var(--mw-pan, 0deg)) scale(var(--mw-ring-scale, 1));
+  left: 50%;
+  top: 50%;
+  width: 168px;
+  height: 168px;
+  margin-left: -84px;
+  margin-top: -84px;
+  transform: translateY(10px) scale(var(--mw-ring-scale, 1)) scaleY(var(--mw-ground-sy));
   transform-origin: center center;
   border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.95);
+  border: 2px solid rgba(0, 120, 255, 0.5);
   box-shadow: none;
-  background:
-    conic-gradient(
-      from calc(var(--mw-fov, 70deg) / -2),
-      rgba(0, 81, 255, 0.5) 0deg,
-      rgba(0, 81, 255, 0.55) var(--mw-fov, 70deg),
-      transparent var(--mw-fov, 70deg) 360deg
-    ),
-    rgba(255, 255, 255, 0.3);
+  background: rgba(120, 190, 255, 0.32);
   cursor: grab;
   touch-action: none;
 }
@@ -46,13 +46,30 @@
   cursor: grabbing;
 }
 
+/* 원형 부채꼴 — 부모가 scaleY라 타원 시야로 보임 */
+.MapWalker .fovWedge {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: rotate(var(--mw-pan, 0deg));
+  transform-origin: center center;
+  background: conic-gradient(
+    from calc(var(--mw-fov, 70deg) / -2),
+    rgba(0, 81, 255, 0.52) 0deg,
+    rgba(0, 81, 255, 0.58) var(--mw-fov, 70deg),
+    transparent var(--mw-fov, 70deg) 360deg
+  );
+}
+
 .MapWalker .figure {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 27px;
   height: 46px;
-  transform: translate(-50%, -50%) scale(var(--mw-figure-scale, 1));
+  /* 발끝≈타원 중심 — 레퍼런스 핀 팁과 동일 */
+  transform: translate(-50%, calc(-50% - 5px)) scale(var(--mw-figure-scale, 1));
   transform-origin: center center;
   pointer-events: none;
 }

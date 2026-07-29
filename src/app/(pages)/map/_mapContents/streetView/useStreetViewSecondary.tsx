@@ -1,8 +1,7 @@
 'use client';
 
-import { StreetViewPanel } from './StreetViewPanel';
+import { StreetViewSecondaryHost } from './StreetViewSecondaryHost';
 import { StreetViewSplitterControls } from './StreetViewSplitterControls';
-import { useStreetView } from './useStreetView';
 import { useStreetViewSplitterPrefs } from './useStreetViewSplitterPrefs';
 
 type StreetViewSecondaryProps = {
@@ -11,33 +10,19 @@ type StreetViewSecondaryProps = {
   projectName?: string;
 };
 
-/** 보조 칸 + 컨트롤 슬롯 내용 (거리뷰) */
+/** 보조 칸 + 컨트롤 슬롯 (거리뷰) — pan/tilt state는 Host 내부 */
 export function useStreetViewSecondary({
   active,
   mapSync,
   projectName,
 }: StreetViewSecondaryProps) {
-  const streetView = useStreetView({
-    active,
-    mapSync,
-  });
-
   const splitterPrefs = useStreetViewSplitterPrefs(projectName);
 
   const panel = active ? (
-    <StreetViewPanel
-      panDeg={streetView.panDeg}
-      lng={streetView.lng}
-      lat={streetView.lat}
-      onRoadviewPosition={streetView.onRoadviewPosition}
-      onRoadviewPan={streetView.onPanChange}
-      onRoadviewTilt={streetView.onTiltChange}
-    />
+    <StreetViewSecondaryHost active={active} mapSync={mapSync} />
   ) : null;
 
-  const controls = active
-    ? () => StreetViewSplitterControls()
-    : null;
+  const controls = active ? () => StreetViewSplitterControls() : null;
 
   return {
     panel,

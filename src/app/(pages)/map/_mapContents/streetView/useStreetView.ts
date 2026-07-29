@@ -86,13 +86,16 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   );
 
   const snapWalkerToVisualCenter = useCallback(
-    (opts?: { refreshSize?: boolean }) => {
+    (opts?: { refreshSize?: boolean; syncRoadview?: boolean }) => {
       if (!map || !walkerRef.current) return;
       if (opts?.refreshSize) map.updateSize();
       const coord = OlMapWalker.positionAtVisualCenter(map);
       if (!coord) return;
       walkerRef.current.setPosition(coord);
-      scheduleReactPosition(coord);
+      // 지도 드래그 중에는 워커만 이동 — React lng/lat(로드뷰 파노 조회)는 최종(moveend)에만
+      if (opts?.syncRoadview !== false) {
+        scheduleReactPosition(coord);
+      }
     },
     [map, scheduleReactPosition]
   );
@@ -135,6 +138,8 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     setPanDeg(walker.getPan());
     setTiltDeg(walker.getTilt());
 
+    const mapInteractingRef = { current: false };
+
     const onClick = (evt: { coordinate: Coordinate }) => {
       applyPosition(evt.coordinate, { fromMapClick: true });
     };
@@ -144,24 +149,39 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
       if (centerRafRef.current) return;
       centerRafRef.current = requestAnimationFrame(() => {
         centerRafRef.current = 0;
-        snapWalkerToVisualCenter();
+        // 드래그·관성 이동 중: 워커만. 로드뷰는 moveend에서 최종 좌표로
+        snapWalkerToVisualCenter({
+          syncRoadview: !mapInteractingRef.current,
+        });
       });
     };
 
+    const onMoveStart = () => {
+      mapInteractingRef.current = true;
+    };
+
+    const onMoveEnd = () => {
+      mapInteractingRef.current = false;
+      if (skipCenterFollowRef.current) return;
+      snapWalkerToVisualCenter({ syncRoadview: true });
+    };
+
     const onSizeChange = () => {
-      snapWalkerToVisualCenter({ refreshSize: true });
+      snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
     };
 
     map.on('singleclick', onClick);
     map.on('change:size', onSizeChange);
+    map.on('movestart', onMoveStart);
+    map.on('moveend', onMoveEnd);
     map.getView().on('change:center', onCenterChange);
 
     let raf1 = 0;
     raf1 = requestAnimationFrame(() => {
-      snapWalkerToVisualCenter({ refreshSize: true });
+      snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
     });
     const animDone = window.setTimeout(() => {
-      snapWalkerToVisualCenter({ refreshSize: true });
+      snapWalkerToVisualCenter({ refreshSize: true, syncRoadview: true });
     }, MAP_SPLIT_ANIM_MS + 50);
 
     return () => {
@@ -183,6 +203,8 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
       window.clearTimeout(animDone);
       map.un('singleclick', onClick);
       map.un('change:size', onSizeChange);
+      map.un('movestart', onMoveStart);
+      map.un('moveend', onMoveEnd);
       map.getView().un('change:center', onCenterChange);
       walker.destroy();
       if (walkerRef.current === walker) walkerRef.current = null;
@@ -197,7 +219,8 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
 
   const onTiltChange = useCallback((tilt: number) => {
     const next = Math.min(90, Math.max(-90, tilt));
-    setTiltDeg(next);
+    tiltDegRef.current = next;
+    // React setState 생략 — 워커 DOM만 갱신(패널 HUD는 StreetViewPanel ref)
     walkerRef.current?.setTilt(next);
   }, []);
 
