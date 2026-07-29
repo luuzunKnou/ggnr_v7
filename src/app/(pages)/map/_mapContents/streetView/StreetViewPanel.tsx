@@ -510,23 +510,31 @@ export function StreetViewPanel({
 
   const controlsEnabled = panoReady && !error && !noPano;
   const showControls = everPanoReadyRef.current || panoReady;
+  const kakaoLinkDisabled =
+    lng == null || lat == null || !Number.isFinite(lng) || !Number.isFinite(lat);
 
   return (
     <div className="relative flex h-full w-full flex-col bg-[#888888] text-white">
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-[#888888]">
-        <div ref={containerRef} data-roadview-host className="absolute inset-0 h-full w-full bg-[#888888]" />
+      <div data-roadview-stage className="relative min-h-0 flex-1 overflow-hidden bg-[#888888]">
+        <div data-roadview-frame className="absolute inset-0 z-0">
+          <div ref={containerRef} data-roadview-host className="absolute inset-0 h-full w-full bg-[#888888]" />
+          {alertMessage ? <RoadviewAlertBox>{alertMessage}</RoadviewAlertBox> : null}
+        </div>
 
         {showControls && !noPano ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container">
+          <div
+            data-roadview-controls
+            className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container"
+          >
             <div className="flex w-full flex-col items-center gap-1.5 @[26rem]:flex-row @[26rem]:items-center @[26rem]:justify-between">
               <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:block" aria-hidden />
-              {lng != null && lat != null && Number.isFinite(lng) && Number.isFinite(lat) ? (
-                <div className="order-1 flex justify-center @[26rem]:order-3">
-                  <StreetViewKakaoMapLink lat={lat} lng={lng} />
-                </div>
-              ) : (
-                <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:order-3 @[26rem]:block" aria-hidden />
-              )}
+              <div className="order-1 flex justify-center @[26rem]:order-3">
+                <StreetViewKakaoMapLink
+                  lat={lat ?? 0}
+                  lng={lng ?? 0}
+                  disabled={kakaoLinkDisabled}
+                />
+              </div>
               <div className="order-2 flex justify-center">
                 <StreetViewRoadviewControls
                   ref={(handle) => {
@@ -542,8 +550,6 @@ export function StreetViewPanel({
             </div>
           </div>
         ) : null}
-
-        {alertMessage ? <RoadviewAlertBox>{alertMessage}</RoadviewAlertBox> : null}
       </div>
     </div>
   );

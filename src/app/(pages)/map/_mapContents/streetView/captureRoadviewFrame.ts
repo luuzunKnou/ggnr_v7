@@ -1,35 +1,44 @@
 /**
- * `[data-roadview-host]` 전체 표시 영역 캡처 (컨트롤러·링크 제외).
- * canvas/img는 호스트 전체를 cover로 채워 좌우·상하 회색 여백 없음.
+ * `[data-roadview-stage]` 전체 크기로 로드뷰 canvas만 cover 합성.
+ * 캡처 순간에만 `[data-roadview-controls]`를 숨겨 UI가 비트맵에 섞이지 않게 함.
  */
-export function captureRoadviewFrame(host: HTMLElement): {
+export function captureRoadviewFrame(stageEl: HTMLElement): {
   url: string;
   w: number;
   h: number;
 } | null {
-  const w = Math.round(host.clientWidth);
-  const h = Math.round(host.clientHeight);
+  const w = Math.round(stageEl.clientWidth);
+  const h = Math.round(stageEl.clientHeight);
   if (w <= 0 || h <= 0) return null;
 
-  const canvas = host.querySelector('canvas');
-  if (canvas && canvas.width > 0 && canvas.height > 0) {
-    try {
-      return compositeFrame(host, w, h, canvas);
-    } catch {
-      /* tainted canvas 등 */
-    }
-  }
+  const controls = stageEl.querySelector('[data-roadview-controls]') as HTMLElement | null;
+  const prevControlsVis = controls?.style.visibility ?? '';
+  if (controls) controls.style.visibility = 'hidden';
 
-  const img = host.querySelector('img');
-  if (img && img.naturalWidth > 0) {
-    try {
-      return compositeFrame(host, w, h, img);
-    } catch {
-      return null;
+  try {
+    const host = stageEl.querySelector('[data-roadview-host]');
+    const canvas = host?.querySelector('canvas') ?? stageEl.querySelector('canvas');
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      try {
+        return compositeCover(stageEl, w, h, canvas);
+      } catch {
+        /* tainted canvas 등 */
+      }
     }
-  }
 
-  return null;
+    const img = host?.querySelector('img') ?? stageEl.querySelector('img');
+    if (img && img.naturalWidth > 0) {
+      try {
+        return compositeCover(stageEl, w, h, img);
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  } finally {
+    if (controls) controls.style.visibility = prevControlsVis;
+  }
 }
 
 function sourcePixelSize(source: CanvasImageSource & Element): { sw: number; sh: number } {
@@ -43,8 +52,8 @@ function sourcePixelSize(source: CanvasImageSource & Element): { sw: number; sh:
   return { sw: r.width, sh: r.height };
 }
 
-function compositeFrame(
-  host: HTMLElement,
+function compositeCover(
+  stageEl: HTMLElement,
   w: number,
   h: number,
   source: CanvasImageSource & Element
@@ -55,7 +64,7 @@ function compositeFrame(
   const ctx = off.getContext('2d');
   if (!ctx) throw new Error('no 2d context');
 
-  const bg = getComputedStyle(host).backgroundColor;
+  const bg = getComputedStyle(stageEl).backgroundColor;
   ctx.fillStyle = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#888888';
   ctx.fillRect(0, 0, w, h);
 

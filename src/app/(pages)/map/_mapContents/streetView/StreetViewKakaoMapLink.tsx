@@ -9,6 +9,7 @@ type StreetViewKakaoMapLinkProps = {
   lat: number;
   /** WGS84 경도 */
   lng: number;
+  disabled?: boolean;
 };
 
 /** 카카오맵 로드뷰 바로가기 — map.kakao.com/link/roadview/위도,경도 (방향·시야 파라미터 미지원) */
@@ -38,6 +39,7 @@ function openKakaoRoadviewWindow(url: string) {
 export const StreetViewKakaoMapLink = memo(function StreetViewKakaoMapLink({
   lat,
   lng,
+  disabled = false,
 }: StreetViewKakaoMapLinkProps) {
   const href = buildKakaoRoadviewLink(lat, lng);
   const label = '카카오맵에서 보기';
@@ -46,15 +48,20 @@ export const StreetViewKakaoMapLink = memo(function StreetViewKakaoMapLink({
     <a
       href={href}
       title={label}
+      aria-disabled={disabled}
       className={cn(
-        'pointer-events-auto flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full',
+        'pointer-events-auto flex shrink-0 items-center gap-1.5 rounded-full',
         'bg-slate-800 px-3 py-2 shadow-md',
-        'opacity-90 transition-opacity hover:opacity-100',
+        'opacity-90 transition-opacity',
         'dark:bg-slate-900 dark:shadow-black/40',
-        'text-sm text-white/80 hover:text-white/90'
+        'text-sm text-white/80',
+        disabled
+          ? 'cursor-not-allowed opacity-40 hover:opacity-40'
+          : 'cursor-pointer hover:opacity-100 hover:text-white/90'
       )}
       onClick={(e) => {
         e.preventDefault();
+        if (disabled) return;
         openKakaoRoadviewWindow(href);
       }}
     >

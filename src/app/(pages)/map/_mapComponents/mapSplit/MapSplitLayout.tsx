@@ -45,6 +45,14 @@ function clampRatio(r: number) {
   return Math.min(MAP_SPLIT_MAX_RATIO, Math.max(MAP_SPLIT_MIN_RATIO, r));
 }
 
+function queryRoadviewStage(content: HTMLElement | null): HTMLElement | null {
+  return content?.querySelector('[data-roadview-stage]') as HTMLElement | null;
+}
+
+function queryRoadviewFrame(content: HTMLElement | null): HTMLElement | null {
+  return content?.querySelector('[data-roadview-frame]') as HTMLElement | null;
+}
+
 /**
  * 좌우 분할: 좌측 메뉴·패널(mapPaddingLeft)을 제외한 가용 너비의 정중앙에 분할선.
  * primaryRatio = (containerW + paddingLeft) / (2 × containerW)
@@ -92,8 +100,9 @@ export function MapSplitLayout({
     wrap: HTMLDivElement;
     objectUrl: string | null;
     host: HTMLElement;
-    panelRoot: HTMLElement | null;
+    stageEl: HTMLElement;
   } | null>(null);
+  const stretchFrameFallbackRef = useRef<HTMLElement | null>(null);
   /** 드래그 전에 미리 캡처 — 드래그 시작 시점에는 scrape 하지 않음 */
   const roadviewSnapCacheRef = useRef<{ url: string; w: number; h: number } | null>(null);
   const snapRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,11 +169,12 @@ export function MapSplitLayout({
   const refreshRoadviewSnapCache = useCallback(() => {
     if (draggingRef.current || !splitActiveRef.current) return;
     const content = secondaryContentRef.current;
-    const host = content?.querySelector('[data-roadview-host]') as HTMLElement | null;
-    if (!host || host.clientWidth <= 0 || host.clientHeight <= 0) return;
-    const canvas = host.querySelector('canvas');
+    const stageEl = queryRoadviewStage(content);
+    if (!stageEl || stageEl.clientWidth <= 0 || stageEl.clientHeight <= 0) return;
+    const host = stageEl.querySelector('[data-roadview-host]');
+    const canvas = host?.querySelector('canvas');
     if (!canvas || canvas.width <= 0 || canvas.height <= 0) return;
-    const frame = captureRoadviewFrame(host);
+    const frame = captureRoadviewFrame(stageEl);
     if (frame) roadviewSnapCacheRef.current = frame;
   }, []);
 
@@ -180,45 +190,28 @@ export function MapSplitLayout({
     [refreshRoadviewSnapCache]
   );
 
-  const pickRoadviewSnapFrame = useCallback(
-    (host: HTMLElement | null) => {
-      const cache = roadviewSnapCacheRef.current;
-      if (cache && host) {
-        const dw = Math.abs(cache.w - host.clientWidth);
-        const dh = Math.abs(cache.h - host.clientHeight);
-        if (dw <= 2 && dh <= 2) return cache;
-      }
-      return null;
-    },
-    []
-  );
+  const pickRoadviewSnapFrame = useCallback((_stageEl: HTMLElement | null) => {
+    return roadviewSnapCacheRef.current;
+  }, []);
 
   const updateSecondaryStretch = useCallback(() => {
     const base = stretchBaseRef.current;
-    const pane = secondaryPaneRef.current;
-    const content = secondaryContentRef.current;
-    if (!base || !pane) return;
-    const pw = pane.clientWidth;
-    const ph = pane.clientHeight;
-    if (pw <= 0 || ph <= 0 || base.w <= 0 || base.h <= 0) return;
-    const sx = pw / base.w;
-    const sy = ph / base.h;
+    if (!base || base.w <= 0 || base.h <= 0) return;
     const snap = stretchSnapshotRef.current;
     if (snap) {
-      snap.wrap.style.transform = `scale(${sx}, ${sy})`;
-      if (content) {
-        content.style.boxSizing = 'border-box';
-        content.style.width = `${pw}px`;
-        content.style.height = `${ph}px`;
-        content.style.flex = 'none';
-      }
-      if (snap.panelRoot) {
-        snap.panelRoot.style.width = `${pw}px`;
-        snap.panelRoot.style.height = `${ph}px`;
-      }
+      const sw = snap.stageEl.clientWidth;
+      const sh = snap.stageEl.clientHeight;
+      if (sw <= 0 || sh <= 0) return;
+      snap.wrap.style.transform = `scale(${sw / base.w}, ${sh / base.h})`;
       return;
     }
-    if (content) content.style.transform = `scale(${sx}, ${sy})`;
+    const frameEl = stretchFrameFallbackRef.current;
+    if (!frameEl) return;
+    const stageEl = frameEl.parentElement as HTMLElement | null;
+    const sw = stageEl?.clientWidth ?? frameEl.clientWidth;
+    const sh = stageEl?.clientHeight ?? frameEl.clientHeight;
+    if (sw <= 0 || sh <= 0) return;
+    frameEl.style.transform = `scale(${sw / base.w}, ${sh / base.h})`;
   }, []);
 
   const scheduleStretch = useCallback(() => {
@@ -230,16 +223,20 @@ export function MapSplitLayout({
   }, [updateSecondaryStretch]);
 
   const beginSecondaryStretch = useCallback(() => {
-    const pane = secondaryPaneRef.current;
     const content = secondaryContentRef.current;
-    if (!pane || !content) return;
-    const w = content.offsetWidth;
-    const h = content.offsetHeight;
+    const stageEl = queryRoadviewStage(content);
+    if (!stageEl) return;
+    const w = stageEl.offsetWidth;
+    const h = stageEl.offsetHeight;
     if (w <= 0 || h <= 0) return;
     stretchBaseRef.current = { w, h };
 
-    const host = content.querySelector('[data-roadview-host]') as HTMLElement | null;
-    const frame = pickRoadviewSnapFrame(host) ?? null;
+    const host = stageEl.querySelector('[data-roadview-host]') as HTMLElement | null;
+    let frame = pickRoadviewSnapFrame(stageEl);
+    if (!frame && host) {
+      frame = captureRoadviewFrame(stageEl);
+      if (frame) roadviewSnapCacheRef.current = frame;
+    }
 
     if (host && frame) {
       stretchBaseRef.current = { w: frame.w, h: frame.h };
@@ -254,7 +251,7 @@ export function MapSplitLayout({
         'overflow:hidden',
         'transform-origin:left top',
         'will-change:transform',
-        'z-index:1',
+        'z-index:2',
         'pointer-events:none',
         'background:#888888',
       ].join(';');
@@ -262,64 +259,58 @@ export function MapSplitLayout({
       img.src = frame.url;
       img.alt = '';
       img.draggable = false;
-      img.style.cssText = 'display:block;width:100%;height:100%;object-fit:fill;';
+      img.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;';
       wrap.appendChild(img);
-      content.style.position = 'relative';
-      content.insertBefore(wrap, content.firstChild);
-      host.style.visibility = 'hidden';
-      // 스냅샷(z-1) 위에 로드뷰 패널·컨트롤(z-3) 유지 — 컨트롤은 스냅샷에 포함되지 않음
-      content.style.background = 'transparent';
-      const panelRoot = Array.from(content.children).find(
-        (el) => !el.hasAttribute('data-roadview-stretch-snap')
-      ) as HTMLElement | undefined;
-      if (panelRoot) {
-        panelRoot.dataset.stretchBg = panelRoot.style.background || '';
-        panelRoot.style.background = 'transparent';
+      if (getComputedStyle(stageEl).position === 'static') {
+        stageEl.style.position = 'relative';
       }
-      stretchSnapshotRef.current = { wrap, objectUrl: null, host, panelRoot: panelRoot ?? null };
+      stageEl.insertBefore(wrap, stageEl.firstChild);
+      host.style.visibility = 'hidden';
+      stretchSnapshotRef.current = { wrap, objectUrl: null, host, stageEl };
       updateSecondaryStretch();
       return;
     }
 
-    // 폴백: content 전체 CSS scale
-    content.style.boxSizing = 'border-box';
-    content.style.width = `${w}px`;
-    content.style.height = `${h}px`;
-    content.style.flex = 'none';
-    content.style.transformOrigin = 'left top';
-    content.style.willChange = 'transform';
-    content.style.transform = 'scale(1, 1)';
+    // 폴백: 로드뷰 프레임만 CSS scale (컨트롤 제외)
+    const frameEl = queryRoadviewFrame(content);
+    if (!frameEl) return;
+    const fw = frameEl.offsetWidth;
+    const fh = frameEl.offsetHeight;
+    if (fw <= 0 || fh <= 0) return;
+    stretchBaseRef.current = { w: fw, h: fh };
+    stretchFrameFallbackRef.current = frameEl;
+    frameEl.style.boxSizing = 'border-box';
+    frameEl.style.width = `${fw}px`;
+    frameEl.style.height = `${fh}px`;
+    frameEl.style.minHeight = '0';
+    frameEl.style.flex = 'none';
+    frameEl.style.transformOrigin = 'left top';
+    frameEl.style.willChange = 'transform';
+    frameEl.style.transform = 'scale(1, 1)';
     updateSecondaryStretch();
   }, [pickRoadviewSnapFrame, updateSecondaryStretch]);
 
   const endSecondaryStretch = useCallback(() => {
     const snap = stretchSnapshotRef.current;
-    const content = secondaryContentRef.current;
     if (snap) {
       snap.host.style.visibility = '';
       snap.wrap.remove();
       if (snap.objectUrl) URL.revokeObjectURL(snap.objectUrl);
       stretchSnapshotRef.current = null;
-      if (content) {
-        if (snap.panelRoot) {
-          snap.panelRoot.style.background = snap.panelRoot.dataset.stretchBg ?? '';
-          snap.panelRoot.style.width = '';
-          snap.panelRoot.style.height = '';
-          delete snap.panelRoot.dataset.stretchBg;
-        }
-        content.style.background = '';
-        content.style.position = '';
-      }
+    }
+    const frameEl = stretchFrameFallbackRef.current;
+    if (frameEl) {
+      frameEl.style.boxSizing = '';
+      frameEl.style.width = '';
+      frameEl.style.height = '';
+      frameEl.style.minHeight = '';
+      frameEl.style.flex = '';
+      frameEl.style.transformOrigin = '';
+      frameEl.style.willChange = '';
+      frameEl.style.transform = '';
+      stretchFrameFallbackRef.current = null;
     }
     stretchBaseRef.current = null;
-    if (!content) return;
-    content.style.boxSizing = '';
-    content.style.width = '';
-    content.style.height = '';
-    content.style.flex = '';
-    content.style.transformOrigin = '';
-    content.style.willChange = '';
-    content.style.transform = '';
   }, []);
 
   const scheduleSizeTick = useCallback((force = false) => {
@@ -474,7 +465,8 @@ export function MapSplitLayout({
 
     const content = secondaryContentRef.current;
     const pane = secondaryPaneRef.current;
-    const host = content?.querySelector('[data-roadview-host]');
+    const frameEl = queryRoadviewFrame(content);
+    const host = frameEl?.querySelector('[data-roadview-host]');
     if (!pane || !host) return;
 
     const onRelayout = () => scheduleRoadviewSnapRefresh(280);
