@@ -14,11 +14,11 @@ export function SafetyWaterMapBindings() {
     stations,
     selectedStationId,
     focusStation,
+    focusCctvFromMap,
     setListOpen,
     cctvLayerItems,
     cctvListItems,
     selectedCctvKey,
-    setSelectedCctvKey,
     cctvOpen,
     riskAreas,
     waterDeltaById,
@@ -52,10 +52,7 @@ export function SafetyWaterMapBindings() {
     cctvLayerItems,
     cctvListItems,
     cctvOpen ? selectedCctvKey : null,
-    (key) => {
-      if (!cctvOpen) return;
-      setSelectedCctvKey(key);
-    }
+    focusCctvFromMap
   );
 
   return null;

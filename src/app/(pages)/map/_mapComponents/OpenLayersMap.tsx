@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import 'ol/ol.css';
+import { fromLonLat } from 'ol/proj';
 import { call } from '@/lib/api';
 import {
   MapControlPanel,
@@ -581,9 +582,20 @@ export default function OpenLayersMap({
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? 'traffic';
   const onRoadCctvSelectKey = useCallback(
     (key: string) => {
+      const items = roadCctvOverlay?.items ?? [];
+      const it = items.find((x) => x.key === key);
       setRoadCctvOverlay?.((prev) => (prev ? { ...prev, selectedKey: key } : null));
+      const map = mapInstanceRef.current;
+      if (map && it) {
+        const c = fromLonLat([it.coordx, it.coordy]);
+        map.getView().animate({
+          center: c,
+          zoom: Math.max(map.getView().getZoom() ?? 14, 14),
+          duration: 350,
+        });
+      }
     },
-    [setRoadCctvOverlay]
+    [setRoadCctvOverlay, roadCctvOverlay?.items]
   );
   useRoadCctvMapLayer(
     mapReady,

@@ -19,6 +19,7 @@ import {
   SAFETY_WATER_CCTV_NEAR_M,
   buildStationIdsWithCctv,
   fetchMergedCctvList,
+  haversineM,
   withinStation,
 } from './safetyWaterCctv';
 import { resolveWaterStatusLevel, type WaterStatusLevel } from './safetyWaterStatus';
@@ -174,6 +175,8 @@ type SafetyWaterContextValue = {
   setSelectedStationId: (id: string | null) => void;
   /** 관측소 선택 + 지도 이동(동일 id 재클릭에도 이동) */
   focusStation: (id: string) => void;
+  /** 지도 CCTV 클릭: 관련 수위 관측소 선택·주변 도로 모달·CCTV 재생·지도는 CCTV로 이동 */
+  focusCctvFromMap: (key: string) => void;
   /** 전체 선택 + 초기와 동일한 관측소 overview fit */
   focusAllStations: () => void;
   selectedStation: SafetyWaterStation | null;
@@ -859,6 +862,42 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
     [stations, map, mapReady, mapRef, onStatsKindsChange]
   );
 
+  const focusCctvFromMap = useCallback(
+    (key: string) => {
+      const item = cctvLayerItems.find((it) => it.key === key);
+      if (!item) return;
+
+      let nearest: SafetyWaterStation | null = null;
+      let nearestDist = Infinity;
+      for (const st of stations) {
+        if (st.kind !== 'water') continue;
+        if (!withinStation(item, st, SAFETY_WATER_CCTV_NEAR_M)) continue;
+        const d = haversineM(item.coordx, item.coordy, st.lon, st.lat);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = st;
+        }
+      }
+      if (nearest) {
+        setSelectedStationId(nearest.id);
+        onStatsKindsChange(['rain', 'water']);
+      }
+
+      setListOpen(false);
+      setSelectedCctvKey(key);
+      setCctvOpen(true);
+
+      const instance = mapRef?.current ?? map;
+      if (!instance || !mapReady) return;
+      instance.getView().animate({
+        center: fromLonLat([item.coordx, item.coordy]),
+        zoom: Math.max(instance.getView().getZoom() ?? 14, 14),
+        duration: 350,
+      });
+    },
+    [cctvLayerItems, stations, map, mapReady, mapRef, onStatsKindsChange]
+  );
+
   const focusAllStations = useCallback(() => {
     setSelectedStationId(null);
     onStatsKindsChange(['rain', 'water']);
@@ -933,6 +972,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       selectedStationId,
       setSelectedStationId,
       focusStation,
+      focusCctvFromMap,
       focusAllStations,
       selectedStation,
       timeType,
@@ -1003,6 +1043,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       selectedStationId,
       selectedStation,
       focusStation,
+      focusCctvFromMap,
       focusAllStations,
       timeType,
       statsKinds,
