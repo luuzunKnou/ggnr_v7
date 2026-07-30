@@ -11,7 +11,8 @@ import MultiPolygon from 'ol/geom/MultiPolygon';
 import ImageLayer from 'ol/layer/Image';
 import TileLayer from 'ol/layer/Tile';
 import type BaseLayer from 'ol/layer/Base';
-import { ImageWMS } from 'ol/source';
+import { ImageWMS, type XYZ } from 'ol/source';
+import { PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS } from '@/lib/parcelAnalysisTheme';
 import { fromString } from 'ol/transform';
 import { isCanvas } from 'ol/dom';
 import { getCenter } from 'ol/extent';
@@ -368,8 +369,64 @@ type MapCaptureProps = {
 
 const WMS_EXCEPTIONS = 'application/vnd.ogc.se_xml';
 const WMS_VIEWPORT_RATIO = 1;
-/** WMS 없으면 타일 렌더만 기다림 / WMS 있으면 이미지 로드 후 합성 */
-const CAPTURE_FALLBACK_MS = 6000;
+/** 타일 단색 폴백(8s) 이후 여유를 두고 최종 합성 */
+const CAPTURE_FALLBACK_MS = PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS + 3_000;
+const BASEMAP_TILE_IDLE_MS = 200;
+
+/**
+ * 배경 타일 로드가 끝난 뒤 합성한다.
+ * WMS만 기다리면 rendercomplete가 타일보다 먼저 올라 빈 canvas가 고정될 수 있다.
+ */
+function waitForBasemapTiles(
+  source: XYZ | null,
+  map: OlMap,
+  onReady: () => void,
+  maxWaitMs: number
+): () => void {
+  if (!source) {
+    onReady();
+    return () => {};
+  }
+
+  let pending = 0;
+  let done = false;
+  let idleTimer = 0;
+  const maxTimer = window.setTimeout(finish, maxWaitMs);
+
+  function finish() {
+    if (done) return;
+    done = true;
+    if (idleTimer) window.clearTimeout(idleTimer);
+    window.clearTimeout(maxTimer);
+    source.un('tileloadstart', onStart);
+    source.un('tileloadend', onEnd);
+    source.un('tileloaderror', onEnd);
+    onReady();
+  }
+
+  function onStart() {
+    pending += 1;
+  }
+
+  function onEnd() {
+    pending = Math.max(0, pending - 1);
+    if (idleTimer) window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => {
+      if (pending <= 0) finish();
+    }, BASEMAP_TILE_IDLE_MS);
+  }
+
+  source.on('tileloadstart', onStart);
+  source.on('tileloadend', onEnd);
+  source.on('tileloaderror', onEnd);
+
+  map.renderSync();
+  idleTimer = window.setTimeout(() => {
+    if (pending <= 0) finish();
+  }, BASEMAP_TILE_IDLE_MS);
+
+  return finish;
+}
 
 function resolveGeoServerBase(configUrl: string): string {
   if (typeof window !== 'undefined') {
@@ -450,11 +507,11 @@ function ParcelAnalysisMapCaptureInner({
     const mapContainer = document.createElement('div');
     mapContainer.style.width = `${PARCEL_ANALYSIS_CAPTURE_SIZE[0]}px`;
     mapContainer.style.height = `${PARCEL_ANALYSIS_CAPTURE_SIZE[1]}px`;
-    // fixed + 화면 밖 — body document 높이를 늘리지 않음 (절대배치·visibility만 쓰면 세로 스크롤 깜빡임)
+    // fixed + 화면 밖 — visibility:hidden은 canvas 미렌더 원인 → opacity만 사용
     mapContainer.style.position = 'fixed';
     mapContainer.style.left = '-10000px';
     mapContainer.style.top = '0';
-    mapContainer.style.visibility = 'hidden';
+    mapContainer.style.opacity = '0';
     mapContainer.style.pointerEvents = 'none';
     mapContainer.style.zIndex = '-1';
     mapContainer.setAttribute('data-parcel-map-capture', 'true');
@@ -464,6 +521,9 @@ function ParcelAnalysisMapCaptureInner({
     let cancelled = false;
     let composed = false;
     let fallbackTimer = 0;
+    let disposeTileWait: (() => void) | null = null;
+    let wmsReady = false;
+    let tilesReady = false;
     let wmsFailed = false;
     let failedWmsKeys: string[] = [];
 
@@ -511,8 +571,8 @@ function ParcelAnalysisMapCaptureInner({
       teardownMap();
     };
 
-    const scheduleCompose = () => {
-      if (cancelled || composed || !map) return;
+    const tryScheduleCompose = () => {
+      if (cancelled || composed || !map || !wmsReady || !tilesReady) return;
       map.once('rendercomplete', finishCapture);
       map.renderSync();
     };
@@ -525,13 +585,10 @@ function ParcelAnalysisMapCaptureInner({
         resolution: home.resolution,
       });
 
-      const layers: BaseLayer[] = [
-        new TileLayer({
-          source: createParcelAnalysisBasemapSource(
-            useSatellite ? PARCEL_ANALYSIS_VWORLD_SATELLITE_URL : PARCEL_ANALYSIS_VWORLD_BASE_URL
-          ),
-        }),
-      ];
+      const basemapSource = createParcelAnalysisBasemapSource(
+        useSatellite ? PARCEL_ANALYSIS_VWORLD_SATELLITE_URL : PARCEL_ANALYSIS_VWORLD_BASE_URL
+      );
+      const layers: BaseLayer[] = [new TileLayer({ source: basemapSource })];
 
       let wmsLayer: ImageLayer<ImageWMS> | null = null;
       if (wmsKeys.length > 0) {
@@ -556,7 +613,8 @@ function ParcelAnalysisMapCaptureInner({
                 wmsFailed = true;
                 failedWmsKeys = wmsKeys;
                 // 실패해도 항공·노란영역은 보여야 하므로 합성 진행 (안내는 합성 완료 후)
-                scheduleCompose();
+                wmsReady = true;
+                tryScheduleCompose();
               });
             },
           }),
@@ -573,14 +631,29 @@ function ParcelAnalysisMapCaptureInner({
       });
       map.updateSize();
 
+      wmsReady = !wmsLayer;
+      disposeTileWait = waitForBasemapTiles(
+        basemapSource,
+        map,
+        () => {
+          if (cancelled) return;
+          tilesReady = true;
+          tryScheduleCompose();
+        },
+        PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS + 2_000
+      );
+
       const wmsSource = wmsLayer?.getSource() ?? null;
       if (wmsSource) {
-        // WMS 이미지가 올라온 뒤 합성 — 너무 이른 rendercomplete로 레이어 누락 방지
-        wmsSource.once('imageloadend', scheduleCompose);
-        wmsSource.once('imageloaderror', scheduleCompose);
+        wmsSource.once('imageloadend', () => {
+          wmsReady = true;
+          tryScheduleCompose();
+        });
+        wmsSource.once('imageloaderror', () => {
+          wmsReady = true;
+          tryScheduleCompose();
+        });
         map.renderSync();
-      } else {
-        scheduleCompose();
       }
 
       fallbackTimer = window.setTimeout(finishCapture, CAPTURE_FALLBACK_MS);
@@ -596,6 +669,7 @@ function ParcelAnalysisMapCaptureInner({
 
     return () => {
       cancelled = true;
+      disposeTileWait?.();
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
       teardownMap();
     };
@@ -611,7 +685,7 @@ function ParcelAnalysisMapCaptureInner({
     >
       <canvas
         ref={canvasRef}
-        className="my-2 max-w-full rounded border border-slate-200 bg-slate-50"
+        className="my-2 max-w-full rounded border border-border bg-muted"
         style={{
           width: '100%',
           height: 'auto',
@@ -619,9 +693,9 @@ function ParcelAnalysisMapCaptureInner({
         }}
       />
       {visible && preparing ? (
-        <p className="mb-2 text-[11px] text-slate-400">지도 캡처 준비 중…</p>
+        <p className="mb-2 text-[11px] text-muted-foreground">지도 캡처 준비 중…</p>
       ) : !preparing && wmsNotice ? (
-        <p className="mb-2 text-[11px] text-amber-700">{wmsNotice}</p>
+        <p className="mb-2 text-[11px] text-amber-700 dark:text-amber-300">{wmsNotice}</p>
       ) : null}
     </div>
   );

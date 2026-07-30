@@ -39,14 +39,15 @@ export function Switch({
         'inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        on || indeterminate ? 'bg-blue-600' : 'bg-slate-300/90',
+        on || indeterminate ? 'bg-blue-600' : 'bg-slate-300/90 dark:bg-input',
         className
       )}
     >
       <span
         aria-hidden
         className={cn(
-          'pointer-events-none block size-3.5 rounded-full bg-white shadow-sm transition-transform',
+          'pointer-events-none block size-3.5 rounded-full shadow-sm transition-[transform,background-color]',
+          on || indeterminate ? 'bg-white' : 'bg-white dark:bg-muted-foreground',
           indeterminate ? 'translate-x-[7px]' : on ? 'translate-x-[14px]' : 'translate-x-0'
         )}
       />
