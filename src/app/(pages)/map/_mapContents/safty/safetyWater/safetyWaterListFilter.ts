@@ -1,6 +1,6 @@
 import type { SafetyWaterStation, SafetyWaterStationKind } from './safetyWaterTypes';
 
-/** 필터 칩 — 다중 선택 (빈 배열 = 전체) */
+/** 필터 칩 — 단일 선택 (빈 배열 = 전체) */
 export type StationListFilterChip = 'water' | 'rain' | 'cctv';
 
 export function deriveStationListFilter(chips: readonly StationListFilterChip[]) {

@@ -235,7 +235,7 @@ type SafetyWaterContextValue = {
   waterStatusById: Record<string, WaterStatusLevel>;
   /** 수위 관측소 id → 기간 통계 최신 vs 직전 증감 */
   waterDeltaById: Record<string, WaterLevelDelta>;
-  /** 관측소 목록 토글칩 (빈 배열 = 전체). 지도 불투명도 연동 */
+  /** 관측소 목록 필터 칩 — 단일 선택(빈 배열 = 전체). 지도 불투명도 연동 */
   stationListFilterChips: StationListFilterChip[];
   setStationListFilterChips: (chips: StationListFilterChip[]) => void;
   /** 관측소 목록 검색어 (Enter로 적용). 지도 불투명도 연동 */

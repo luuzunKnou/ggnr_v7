@@ -202,7 +202,9 @@ export function SafetyWaterPanel({ onClose }: Props) {
             새로고침
           </button>
         </div>
+      </div>
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-primary/5 to-background">
         <SafetyWaterStationFloating
           stations={stations}
           selectedId={selectedStationId}
@@ -212,50 +214,50 @@ export function SafetyWaterPanel({ onClose }: Props) {
           }}
           cctvStationIds={stationIdsWithCctv}
         />
+      </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2 border-t-[3px] border-double border-border/80 px-4 py-2">
-          <TimeChipGroup value={timeType} onChange={setTimeType} />
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              title="홍수 예보"
-              aria-label="홍수 예보"
-              aria-pressed={forecastOpen}
-              onClick={toggleForecastOpen}
-              className={cn(
-                'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
-                forecastOpen
-                  ? 'border-rose-400 bg-rose-500/15 text-rose-700 dark:text-rose-300'
+      <div className="flex w-full shrink-0 flex-wrap items-center gap-2 border-t-[3px] border-double border-border/80 bg-gradient-to-b from-primary/5 to-background px-4 py-2">
+        <TimeChipGroup value={timeType} onChange={setTimeType} />
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            title="홍수 예보"
+            aria-label="홍수 예보"
+            aria-pressed={forecastOpen}
+            onClick={toggleForecastOpen}
+            className={cn(
+              'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
+              forecastOpen
+                ? 'border-rose-400 bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                : 'border-border text-foreground/90 hover:bg-muted/50'
+            )}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+            홍수 예보
+          </button>
+          <button
+            type="button"
+            title="주변 도로 현황"
+            aria-label="주변 도로 현황"
+            aria-pressed={cctvOpen}
+            disabled={!hasCctvForSelection}
+            onClick={toggleCctvOpen}
+            className={cn(
+              'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
+              !hasCctvForSelection
+                ? 'cursor-not-allowed border-border text-muted-foreground/70'
+                : cctvOpen
+                  ? 'border-sky-400 bg-sky-500/15 text-sky-700 dark:text-sky-300'
                   : 'border-border text-foreground/90 hover:bg-muted/50'
-              )}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-              홍수 예보
-            </button>
-            <button
-              type="button"
-              title="주변 도로 현황"
-              aria-label="주변 도로 현황"
-              aria-pressed={cctvOpen}
-              disabled={!hasCctvForSelection}
-              onClick={toggleCctvOpen}
-              className={cn(
-                'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
-                !hasCctvForSelection
-                  ? 'cursor-not-allowed border-border text-muted-foreground/70'
-                  : cctvOpen
-                    ? 'border-sky-400 bg-sky-500/15 text-sky-700 dark:text-sky-300'
-                    : 'border-border text-foreground/90 hover:bg-muted/50'
-              )}
-            >
-              <Cctv className="h-3.5 w-3.5" aria-hidden />
-              주변 도로
-            </button>
-          </div>
+            )}
+          >
+            <Cctv className="h-3.5 w-3.5" aria-hidden />
+            주변 도로
+          </button>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-muted/30 p-3">
+      <div className="flex shrink-0 flex-col gap-3 overflow-y-auto bg-muted/30 p-3">
         {(uiError || obsError) && (
           <div
             className={cn(

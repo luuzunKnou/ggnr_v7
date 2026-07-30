@@ -11,9 +11,6 @@ import {
 } from './safetyWaterListFilter';
 import type { SafetyWaterStation } from './safetyWaterTypes';
 
-/** 목록 행 ~3~4개 분량 (전체 포함) */
-const LIST_MAX_H_CLASS = 'max-h-[200px]';
-
 export type StationListFilter = 'all' | StationListFilterChip;
 
 type Props = {
@@ -62,15 +59,13 @@ export function SafetyWaterStationFloating({
   const { isAll, selectedKinds, cctvOnly } = deriveStationListFilter(stationListFilterChips);
   const activeSet = useMemo(() => new Set(stationListFilterChips), [stationListFilterChips]);
 
-  const toggleChip = (id: StationListFilter) => {
+  /** 라디오: 전체=[] / 그 외=[단일 칩]. 같은 칩 재클릭은 유지 */
+  const selectChip = (id: StationListFilter) => {
     if (id === 'all') {
       setStationListFilterChips([]);
       return;
     }
-    const next = new Set(activeSet);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setStationListFilterChips([...next]);
+    setStationListFilterChips([id]);
   };
 
   const isChipActive = (id: StationListFilter) => {
@@ -97,8 +92,8 @@ export function SafetyWaterStationFloating({
   };
 
   return (
-    <div className="flex w-full flex-col" aria-label="관측소 목록">
-      <div className="flex w-full flex-col gap-2 border-t border-border/80 px-4 py-2">
+    <div className="flex min-h-0 w-full flex-1 flex-col" aria-label="관측소 목록">
+      <div className="flex w-full shrink-0 flex-col gap-2 border-t border-border/80 px-4 py-2">
         <label className="relative flex w-full min-w-0 items-center gap-2 rounded border border-border bg-background px-2 py-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <input
@@ -120,16 +115,17 @@ export function SafetyWaterStationFloating({
           </button>
         </label>
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="관측소 필터">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="관측소 필터">
             {FILTER_CHIPS.map((chip) => {
               const active = isChipActive(chip.id);
               return (
                 <button
                   key={chip.id}
                   type="button"
+                  role="radio"
                   title={chip.title}
-                  aria-pressed={active}
-                  onClick={() => toggleChip(chip.id)}
+                  aria-checked={active}
+                  onClick={() => selectChip(chip.id)}
                   className={cn(
                     'cursor-pointer rounded-full px-3.5 py-1.5 text-[11px] font-medium transition-colors',
                     active ? chipActiveClass(chip.id) : 'bg-muted text-muted-foreground'
@@ -146,7 +142,7 @@ export function SafetyWaterStationFloating({
         </div>
       </div>
 
-      <div className={`w-full overflow-y-auto border-t border-border/80 ${LIST_MAX_H_CLASS}`}>
+      <div className="min-h-0 w-full flex-1 overflow-y-auto border-t border-border/80">
         <SafetyWaterStationList
           stations={stations}
           selectedId={selectedId}
