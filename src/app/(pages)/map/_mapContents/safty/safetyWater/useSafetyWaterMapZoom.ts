@@ -73,8 +73,15 @@ export function useSafetyWaterMapZoom(
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
 
-    const ok = fitStationsOverview(map, stations, () =>
-      mapContext?.applyMapViewPaddingRef?.current?.()
+    // 거리뷰 등 분할 ON 상태에서는 applyMapViewPadding을 호출하지 않는다.
+    // 분할 시 applyViewPaddingPreservingVisualCenter가 지도 중심을 이동시키고,
+    // 그 직후 view.fit이 줄어든 뷰 기준으로 extent를 맞추려다 과도하게 줌 아웃된다.
+    // view.padding은 이미 올바르게 적용되어 있으므로 fit만 호출하면 충분하다.
+    const splitActive = mapContext?.mapSplitSecondaryKind != null;
+    const ok = fitStationsOverview(
+      map,
+      stations,
+      splitActive ? null : () => mapContext?.applyMapViewPaddingRef?.current?.()
     );
     if (ok) fittedRef.current = true;
   }, [
@@ -83,5 +90,6 @@ export function useSafetyWaterMapZoom(
     stations,
     mapContext?.mapInstanceRef,
     mapContext?.applyMapViewPaddingRef,
+    mapContext?.mapSplitSecondaryKind,
   ]);
 }

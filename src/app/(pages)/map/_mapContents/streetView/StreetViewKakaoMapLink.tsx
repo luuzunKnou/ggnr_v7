@@ -1,20 +1,51 @@
 'use client';
 
 import { SquareArrowOutUpRight } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
+/** 카카오맵 URL zoom 허용 범위 (SDK와 동일 상한) */
+const LINK_ZOOM_MIN = -3;
+const LINK_ZOOM_MAX = 3;
+
+export type KakaoRoadviewLinkViewpoint = {
+  panoId: number;
+  pan: number;
+  tilt: number;
+  zoom: number;
+};
+
 type StreetViewKakaoMapLinkProps = {
-  /** WGS84 위도 */
-  lat: number;
-  /** WGS84 경도 */
-  lng: number;
+  /** 클릭 시 현재 로드뷰 시점으로 URL 생성. null이면 열지 않음 */
+  getHref: () => string | null;
   disabled?: boolean;
 };
 
-/** 카카오맵 로드뷰 바로가기 — map.kakao.com/link/roadview/위도,경도 (방향·시야 파라미터 미지원) */
-export function buildKakaoRoadviewLink(lat: number, lng: number): string {
-  return `https://map.kakao.com/link/roadview/${lat},${lng}`;
+function normalizePan(pan: number): number {
+  return ((pan % 360) + 360) % 360;
+}
+
+function clampTilt(tilt: number): number {
+  return Math.min(90, Math.max(-90, tilt));
+}
+
+function clampZoom(zoom: number): number {
+  const z = Math.round(zoom);
+  return Math.min(LINK_ZOOM_MAX, Math.max(LINK_ZOOM_MIN, z));
+}
+
+/** 카카오맵 로드뷰 바로가기 — panoid + pan/tilt/zoom (공식 샘플과 동일) */
+export function buildKakaoRoadviewLink(vp: KakaoRoadviewLinkViewpoint): string {
+  const pan = normalizePan(vp.pan);
+  const tilt = clampTilt(vp.tilt);
+  const zoom = clampZoom(vp.zoom);
+  const params = new URLSearchParams({
+    panoid: String(vp.panoId),
+    pan: String(pan),
+    tilt: String(tilt),
+    zoom: String(zoom),
+  });
+  return `https://map.kakao.com/?${params.toString()}`;
 }
 
 function openKakaoRoadviewWindow(url: string) {
@@ -35,18 +66,17 @@ function openKakaoRoadviewWindow(url: string) {
   if (win) win.opener = null;
 }
 
-/** 카카오맵에서 현재 위치 로드뷰 열기(새 창) — 하단 flex 바용 */
+/** 카카오맵에서 현재 시점 로드뷰 열기(새 창) — 하단 flex 바용 */
 export const StreetViewKakaoMapLink = memo(function StreetViewKakaoMapLink({
-  lat,
-  lng,
+  getHref,
   disabled = false,
 }: StreetViewKakaoMapLinkProps) {
-  const href = buildKakaoRoadviewLink(lat, lng);
+  const lastHrefRef = useRef('#');
   const label = '카카오맵에서 보기';
 
   return (
     <a
-      href={href}
+      href={lastHrefRef.current}
       title={label}
       aria-disabled={disabled}
       className={cn(
@@ -62,6 +92,9 @@ export const StreetViewKakaoMapLink = memo(function StreetViewKakaoMapLink({
       onClick={(e) => {
         e.preventDefault();
         if (disabled) return;
+        const href = getHref();
+        if (!href) return;
+        lastHrefRef.current = href;
         openKakaoRoadviewWindow(href);
       }}
     >

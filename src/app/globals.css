@@ -116,7 +116,7 @@
 
 :root {
   --font-score-dream: "S-Core Dream", sans-serif;
-  --radius: 0rem;
+  --radius: 0;
   --background: #ffffff;
   --foreground: #1a1a1a;
   --card: #ffffff;

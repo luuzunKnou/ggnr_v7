@@ -19,8 +19,6 @@ import {
   MAP_SPLIT_VERTICAL_PRIMARY_RATIO,
   type MapSplitOrientation,
 } from './mapSplitTypes';
-import { captureRoadviewFrame } from '../../_mapContents/streetView/captureRoadviewFrame';
-
 type MapSplitLayoutProps = {
   splitActive: boolean;
   primary: ReactNode;
@@ -48,10 +46,6 @@ function clampRatio(r: number) {
 
 function queryRoadviewStage(content: HTMLElement | null): HTMLElement | null {
   return content?.querySelector('[data-roadview-stage]') as HTMLElement | null;
-}
-
-function queryRoadviewFrame(content: HTMLElement | null): HTMLElement | null {
-  return content?.querySelector('[data-roadview-frame]') as HTMLElement | null;
 }
 
 /**
@@ -94,19 +88,22 @@ export function MapSplitLayout({
   const pendingRatioRef = useRef<number | null>(null);
   const sizeTickAtRef = useRef(0);
   const stretchRafRef = useRef(0);
-  /** 드래그 시작 시 보조칸 콘텐츠 픽셀 크기 — CSS scale로 잡아당김 */
+  /** 맞춤 대기 실패 시 덮개 해제 상한 */
+  const layoutCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stretchEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 손 뗀 직후 unlock 전 표시용 (동기 commit 중 플래그) */
+  const stretchEndWaitRef = useRef(false);
+  /** unlock 후 · 로드뷰 재생성(init) 대기 */
+  const waitingRevealRef = useRef(false);
+  /** 드래그 시작 시 stage 픽셀 크기 — CSS scale로 잡아당김 */
   const stretchBaseRef = useRef<{ w: number; h: number } | null>(null);
-  /** host 스냅샷 모드이면 true — content 전체가 아닌 오버레이만 scale */
-  const stretchSnapshotRef = useRef<{
+  const stretchStageRef = useRef<HTMLElement | null>(null);
+  /** stage 위 시각 스냅샷(재생성 중 이전 화면 유지). 컨트롤은 stage 밖 */
+  const layoutCoverRef = useRef<{
     wrap: HTMLDivElement;
-    objectUrl: string | null;
-    host: HTMLElement;
     stageEl: HTMLElement;
   } | null>(null);
-  const stretchFrameFallbackRef = useRef<HTMLElement | null>(null);
-  /** 드래그 전에 미리 캡처 — 드래그 시작 시점에는 scrape 하지 않음 */
-  const roadviewSnapCacheRef = useRef<{ url: string; w: number; h: number } | null>(null);
-  const snapRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const splitActiveRef = useRef(splitActive);
   splitActiveRef.current = splitActive;
   const onSizeTickRef = useRef(onSizeTick);
@@ -163,56 +160,126 @@ export function MapSplitLayout({
     host?.dispatchEvent(new Event('roadview-relayout'));
   }, []);
 
-  const clearRoadviewSnapCache = useCallback(() => {
-    roadviewSnapCacheRef.current = null;
+  /** 분할선 손 뗌: 로드뷰 teardown / mount (unlock 사이에 끼움) */
+  const syncRoadviewRecreateTeardown = useCallback(() => {
+    const host = secondaryContentRef.current?.querySelector('[data-roadview-host]');
+    host?.dispatchEvent(new Event('roadview-recreate-teardown'));
   }, []);
 
-  const refreshRoadviewSnapCache = useCallback(() => {
-    if (draggingRef.current || !splitActiveRef.current) return;
+  const syncRoadviewRecreateMount = useCallback(() => {
+    const host = secondaryContentRef.current?.querySelector('[data-roadview-host]');
+    host?.dispatchEvent(new Event('roadview-recreate-mount'));
+  }, []);
+
+  const cancelLayoutCoverTimer = useCallback(() => {
+    if (layoutCoverTimerRef.current) {
+      clearTimeout(layoutCoverTimerRef.current);
+      layoutCoverTimerRef.current = null;
+    }
+  }, []);
+
+  const cancelStretchEndTimer = useCallback(() => {
+    if (stretchEndTimerRef.current) {
+      clearTimeout(stretchEndTimerRef.current);
+      stretchEndTimerRef.current = null;
+    }
+  }, []);
+
+  const cancelRevealTimer = useCallback(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+  }, []);
+
+  const endLayoutCover = useCallback(() => {
+    cancelLayoutCoverTimer();
+    const cover = layoutCoverRef.current;
+    if (!cover) return;
+    cover.wrap.remove();
+    layoutCoverRef.current = null;
+  }, [cancelLayoutCoverTimer]);
+
+  /**
+   * css-fill 상태의 stage 안 프레임을 복제해 덮개로 고정.
+   * teardown 이후에도 이전 화면을 유지하고, init/ready 때 제거.
+   */
+  const beginFreezeSnapshot = useCallback(() => {
     const content = secondaryContentRef.current;
-    const stageEl = queryRoadviewStage(content);
-    if (!stageEl || stageEl.clientWidth <= 0 || stageEl.clientHeight <= 0) return;
-    const host = stageEl.querySelector('[data-roadview-host]');
-    const canvas = host?.querySelector('canvas');
-    if (!canvas || canvas.width <= 0 || canvas.height <= 0) return;
-    const frame = captureRoadviewFrame(stageEl);
-    if (frame) roadviewSnapCacheRef.current = frame;
-  }, []);
+    const stageEl = stretchStageRef.current ?? queryRoadviewStage(content);
+    if (!stageEl) return;
 
-  const scheduleRoadviewSnapRefresh = useCallback(
-    (delayMs = 200) => {
-      if (!splitActiveRef.current || draggingRef.current) return;
-      if (snapRefreshTimerRef.current) clearTimeout(snapRefreshTimerRef.current);
-      snapRefreshTimerRef.current = setTimeout(() => {
-        snapRefreshTimerRef.current = null;
-        refreshRoadviewSnapCache();
-      }, delayMs);
-    },
-    [refreshRoadviewSnapCache]
-  );
+    endLayoutCover();
 
-  const pickRoadviewSnapFrame = useCallback((_stageEl: HTMLElement | null) => {
-    return roadviewSnapCacheRef.current;
-  }, []);
+    const frame = stageEl.querySelector('[data-roadview-frame]') as HTMLElement | null;
+    const host = stageEl.querySelector('[data-roadview-host]') as HTMLElement | null;
+    const source = frame ?? host;
+    if (!source) return;
+
+    const baseW = stretchBaseRef.current?.w ?? stageEl.offsetWidth;
+    const baseH = stretchBaseRef.current?.h ?? stageEl.offsetHeight;
+    if (baseW <= 0 || baseH <= 0) return;
+
+    const wrap = document.createElement('div');
+    wrap.setAttribute('data-roadview-freeze', '');
+    wrap.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'z-index:2',
+      'overflow:hidden',
+      'pointer-events:none',
+    ].join(';');
+
+    const holder = document.createElement('div');
+    holder.style.cssText = [
+      'position:absolute',
+      'left:0',
+      'top:0',
+      `width:${baseW}px`,
+      `height:${baseH}px`,
+      `transform:${stageEl.style.transform || 'none'}`,
+      'transform-origin:left top',
+      'overflow:hidden',
+      'background:#888888',
+    ].join(';');
+
+    const clone = source.cloneNode(true) as HTMLElement;
+    clone.setAttribute('data-roadview-freeze-clone', '');
+    clone.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'width:100%',
+      'height:100%',
+      'margin:0',
+      'pointer-events:none',
+    ].join(';');
+    holder.appendChild(clone);
+    wrap.appendChild(holder);
+
+    if (getComputedStyle(stageEl).position === 'static') {
+      stageEl.style.position = 'relative';
+    }
+    stageEl.appendChild(wrap);
+    layoutCoverRef.current = { wrap, stageEl };
+
+    cancelLayoutCoverTimer();
+    layoutCoverTimerRef.current = setTimeout(() => {
+      layoutCoverTimerRef.current = null;
+      if (draggingRef.current) return;
+      endLayoutCover();
+    }, 8000);
+  }, [cancelLayoutCoverTimer, endLayoutCover]);
 
   const updateSecondaryStretch = useCallback(() => {
     const base = stretchBaseRef.current;
-    if (!base || base.w <= 0 || base.h <= 0) return;
-    const snap = stretchSnapshotRef.current;
-    if (snap) {
-      const sw = snap.stageEl.clientWidth;
-      const sh = snap.stageEl.clientHeight;
-      if (sw <= 0 || sh <= 0) return;
-      snap.wrap.style.transform = `scale(${sw / base.w}, ${sh / base.h})`;
-      return;
-    }
-    const frameEl = stretchFrameFallbackRef.current;
-    if (!frameEl) return;
-    const stageEl = frameEl.parentElement as HTMLElement | null;
-    const sw = stageEl?.clientWidth ?? frameEl.clientWidth;
-    const sh = stageEl?.clientHeight ?? frameEl.clientHeight;
+    const stageEl = stretchStageRef.current;
+    if (!base || !stageEl || base.w <= 0 || base.h <= 0) return;
+    // stage 부모가 아닌 분할 칸(실제 보이는 영역) 기준으로 scale — 가로 fill 누락 방지
+    const shell = secondaryContentRef.current ?? secondaryPaneRef.current;
+    const sw = shell?.clientWidth ?? 0;
+    const sh = shell?.clientHeight ?? 0;
     if (sw <= 0 || sh <= 0) return;
-    frameEl.style.transform = `scale(${sw / base.w}, ${sh / base.h})`;
+    stageEl.style.transform = `scale(${sw / base.w}, ${sh / base.h})`;
   }, []);
 
   const scheduleStretch = useCallback(() => {
@@ -223,96 +290,62 @@ export function MapSplitLayout({
     });
   }, [updateSecondaryStretch]);
 
+  const endSecondaryStretch = useCallback(() => {
+    const stageEl = stretchStageRef.current;
+    if (stageEl) {
+      stageEl.style.boxSizing = '';
+      stageEl.style.width = '';
+      stageEl.style.height = '';
+      stageEl.style.minHeight = '';
+      stageEl.style.flex = '';
+      stageEl.style.transformOrigin = '';
+      stageEl.style.willChange = '';
+      stageEl.style.transform = '';
+      stageEl.removeAttribute('data-roadview-css-fill');
+      stretchStageRef.current = null;
+    }
+    stretchBaseRef.current = null;
+    const content = secondaryContentRef.current;
+    if (content) content.style.overflow = '';
+  }, []);
+
+  /** 분할선 드래그: stage CSS scale (컨트롤은 stage 밖 — 숨기지 않음) */
   const beginSecondaryStretch = useCallback(() => {
+    cancelStretchEndTimer();
+    cancelRevealTimer();
+    cancelLayoutCoverTimer();
+    stretchEndWaitRef.current = false;
+    waitingRevealRef.current = false;
+    endLayoutCover();
+    endSecondaryStretch();
     const content = secondaryContentRef.current;
     const stageEl = queryRoadviewStage(content);
     if (!stageEl) return;
-    const w = stageEl.offsetWidth;
-    const h = stageEl.offsetHeight;
-    if (w <= 0 || h <= 0) return;
-    stretchBaseRef.current = { w, h };
-
-    const host = stageEl.querySelector('[data-roadview-host]') as HTMLElement | null;
-    let frame = pickRoadviewSnapFrame(stageEl);
-    if (!frame && host) {
-      frame = captureRoadviewFrame(stageEl);
-      if (frame) roadviewSnapCacheRef.current = frame;
-    }
-
-    if (host && frame) {
-      stretchBaseRef.current = { w: frame.w, h: frame.h };
-      const wrap = document.createElement('div');
-      wrap.setAttribute('data-roadview-stretch-snap', '');
-      wrap.style.cssText = [
-        'position:absolute',
-        'left:0',
-        'top:0',
-        `width:${frame.w}px`,
-        `height:${frame.h}px`,
-        'overflow:hidden',
-        'transform-origin:left top',
-        'will-change:transform',
-        'z-index:2',
-        'pointer-events:none',
-        'background:#888888',
-      ].join(';');
-      const img = document.createElement('img');
-      img.src = frame.url;
-      img.alt = '';
-      img.draggable = false;
-      img.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;';
-      wrap.appendChild(img);
-      if (getComputedStyle(stageEl).position === 'static') {
-        stageEl.style.position = 'relative';
-      }
-      stageEl.insertBefore(wrap, stageEl.firstChild);
-      host.style.visibility = 'hidden';
-      stretchSnapshotRef.current = { wrap, objectUrl: null, host, stageEl };
-      updateSecondaryStretch();
-      return;
-    }
-
-    // 폴백: 로드뷰 프레임만 CSS scale (컨트롤 제외)
-    const frameEl = queryRoadviewFrame(content);
-    if (!frameEl) return;
-    const fw = frameEl.offsetWidth;
-    const fh = frameEl.offsetHeight;
-    if (fw <= 0 || fh <= 0) return;
-    stretchBaseRef.current = { w: fw, h: fh };
-    stretchFrameFallbackRef.current = frameEl;
-    frameEl.style.boxSizing = 'border-box';
-    frameEl.style.width = `${fw}px`;
-    frameEl.style.height = `${fh}px`;
-    frameEl.style.minHeight = '0';
-    frameEl.style.flex = 'none';
-    frameEl.style.transformOrigin = 'left top';
-    frameEl.style.willChange = 'transform';
-    frameEl.style.transform = 'scale(1, 1)';
+    const sw = stageEl.offsetWidth;
+    const sh = stageEl.offsetHeight;
+    if (sw <= 0 || sh <= 0) return;
+    stretchBaseRef.current = { w: sw, h: sh };
+    stretchStageRef.current = stageEl;
+    // 스케일된 그림이 칸 밖으로 새지 않게 shell clip
+    if (content) content.style.overflow = 'hidden';
+    stageEl.style.boxSizing = 'border-box';
+    stageEl.style.width = `${sw}px`;
+    stageEl.style.height = `${sh}px`;
+    stageEl.style.minHeight = '0';
+    stageEl.style.flex = 'none';
+    stageEl.style.transformOrigin = 'left top';
+    stageEl.style.willChange = 'transform';
+    stageEl.style.transform = 'scale(1, 1)';
+    stageEl.setAttribute('data-roadview-css-fill', '1');
     updateSecondaryStretch();
-  }, [pickRoadviewSnapFrame, updateSecondaryStretch]);
-
-  const endSecondaryStretch = useCallback(() => {
-    const snap = stretchSnapshotRef.current;
-    if (snap) {
-      snap.host.style.visibility = '';
-      snap.wrap.remove();
-      if (snap.objectUrl) URL.revokeObjectURL(snap.objectUrl);
-      stretchSnapshotRef.current = null;
-    }
-    const frameEl = stretchFrameFallbackRef.current;
-    if (frameEl) {
-      frameEl.style.boxSizing = '';
-      frameEl.style.width = '';
-      frameEl.style.height = '';
-      frameEl.style.minHeight = '';
-      frameEl.style.flex = '';
-      frameEl.style.transformOrigin = '';
-      frameEl.style.willChange = '';
-      frameEl.style.transform = '';
-      stretchFrameFallbackRef.current = null;
-    }
-    stretchBaseRef.current = null;
-  }, []);
+  }, [
+    cancelStretchEndTimer,
+    cancelRevealTimer,
+    cancelLayoutCoverTimer,
+    endLayoutCover,
+    endSecondaryStretch,
+    updateSecondaryStretch,
+  ]);
 
   const scheduleSizeTick = useCallback((force = false) => {
     const tick = onSizeTickRef.current;
@@ -322,6 +355,83 @@ export function MapSplitLayout({
     sizeTickAtRef.current = now;
     tick();
   }, []);
+
+  /**
+   * 스냅샷 고정 → teardown → unlock → mount.
+   * 분할선 경로에서는 relayout 을 쓰지 않는다.
+   */
+  const finishCssFillAndRecreate = useCallback(() => {
+    if (draggingRef.current) return;
+    if (!stretchStageRef.current && !stretchEndWaitRef.current) return;
+
+    cancelStretchEndTimer();
+    stretchEndWaitRef.current = false;
+
+    updateSecondaryStretch();
+    // unlock·teardown 전에 이전 화면 고정 (회색 깜빡임 방지)
+    beginFreezeSnapshot();
+    // unlock 전 teardown — 옛 인스턴스가 새 칸 크기로 relayout 되지 않게
+    syncRoadviewRecreateTeardown();
+    endSecondaryStretch();
+    waitingRevealRef.current = true;
+
+    scheduleSizeTick(true);
+    void secondaryPaneRef.current?.offsetWidth;
+    syncRoadviewRecreateMount();
+
+    // init 미수신 시 스냅샷·대기 해제
+    stretchEndTimerRef.current = setTimeout(() => {
+      stretchEndTimerRef.current = null;
+      if (draggingRef.current) return;
+      waitingRevealRef.current = false;
+      endLayoutCover();
+    }, 8000);
+  }, [
+    cancelStretchEndTimer,
+    updateSecondaryStretch,
+    beginFreezeSnapshot,
+    endSecondaryStretch,
+    scheduleSizeTick,
+    syncRoadviewRecreateTeardown,
+    syncRoadviewRecreateMount,
+    endLayoutCover,
+  ]);
+
+  /**
+   * 손 뗌: flex 반영 후 unlock → 재생성.
+   */
+  const scheduleEndSecondaryStretch = useCallback(() => {
+    cancelStretchEndTimer();
+    cancelRevealTimer();
+    stretchEndWaitRef.current = true;
+    waitingRevealRef.current = true;
+    updateSecondaryStretch();
+    scheduleSizeTick(true);
+
+    stretchEndTimerRef.current = setTimeout(() => {
+      stretchEndTimerRef.current = null;
+      if (draggingRef.current) return;
+      finishCssFillAndRecreate();
+    }, 120);
+  }, [
+    cancelStretchEndTimer,
+    cancelRevealTimer,
+    updateSecondaryStretch,
+    scheduleSizeTick,
+    finishCssFillAndRecreate,
+  ]);
+
+  /** unlock·재생성 후 ready → 스냅샷 제거 */
+  const scheduleRevealAfterReady = useCallback(() => {
+    if (!waitingRevealRef.current) return;
+    if (draggingRef.current) return;
+    if (stretchStageRef.current || stretchEndWaitRef.current) return;
+
+    cancelRevealTimer();
+    cancelStretchEndTimer();
+    waitingRevealRef.current = false;
+    endLayoutCover();
+  }, [cancelRevealTimer, cancelStretchEndTimer, endLayoutCover]);
 
   // 분할 ON/OFF·방향·패딩 변경 시에만 애니메이션 구간 updateSize 루프
   useLayoutEffect(() => {
@@ -423,13 +533,7 @@ export function MapSplitLayout({
         cancelAnimationFrame(stretchRafRef.current);
         stretchRafRef.current = 0;
       }
-      endSecondaryStretch();
-      scheduleSizeTick(true);
-      syncRoadviewLayout();
-      requestAnimationFrame(() => {
-        syncRoadviewLayout();
-        scheduleRoadviewSnapRefresh(350);
-      });
+      scheduleEndSecondaryStretch();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -442,56 +546,74 @@ export function MapSplitLayout({
         cancelAnimationFrame(stretchRafRef.current);
         stretchRafRef.current = 0;
       }
+      cancelStretchEndTimer();
+      cancelRevealTimer();
+      stretchEndWaitRef.current = false;
+      waitingRevealRef.current = false;
       endSecondaryStretch();
+      endLayoutCover();
     };
   }, [
     setRatio,
     applyPaneFlex,
     scheduleSizeTick,
     scheduleStretch,
+    scheduleEndSecondaryStretch,
+    cancelStretchEndTimer,
+    cancelRevealTimer,
     endSecondaryStretch,
-    syncRoadviewLayout,
-    scheduleRoadviewSnapRefresh,
+    endLayoutCover,
   ]);
 
   useEffect(() => {
     if (!splitActive) {
-      clearRoadviewSnapCache();
-      if (snapRefreshTimerRef.current) {
-        clearTimeout(snapRefreshTimerRef.current);
-        snapRefreshTimerRef.current = null;
-      }
+      cancelStretchEndTimer();
+      cancelRevealTimer();
+      stretchEndWaitRef.current = false;
+      waitingRevealRef.current = false;
+      endSecondaryStretch();
+      endLayoutCover();
       return;
     }
 
     const content = secondaryContentRef.current;
     const pane = secondaryPaneRef.current;
-    const frameEl = queryRoadviewFrame(content);
-    const host = frameEl?.querySelector('[data-roadview-host]');
+    const stageEl = queryRoadviewStage(content);
+    const host = stageEl?.querySelector('[data-roadview-host]');
     if (!pane || !host) return;
 
-    const onRelayout = () => scheduleRoadviewSnapRefresh(280);
+    const onSnapInvalidate = () => {
+      /* 재생성 중 invalidate — cover 없음 */
+    };
+    const onSnapReady = () => {
+      if (draggingRef.current) return;
+      scheduleRevealAfterReady();
+    };
     const ro = new ResizeObserver(() => {
       if (draggingRef.current) return;
-      scheduleRoadviewSnapRefresh(320);
+      if (stretchStageRef.current || stretchEndWaitRef.current) return;
+      if (layoutCoverRef.current) return;
+      if (waitingRevealRef.current) return;
+      syncRoadviewLayout();
     });
     ro.observe(pane);
-    host.addEventListener('roadview-relayout', onRelayout);
+    host.addEventListener('roadview-snap-invalidate', onSnapInvalidate);
+    host.addEventListener('roadview-snap-ready', onSnapReady);
 
     return () => {
       ro.disconnect();
-      host.removeEventListener('roadview-relayout', onRelayout);
-      if (snapRefreshTimerRef.current) {
-        clearTimeout(snapRefreshTimerRef.current);
-        snapRefreshTimerRef.current = null;
-      }
+      host.removeEventListener('roadview-snap-invalidate', onSnapInvalidate);
+      host.removeEventListener('roadview-snap-ready', onSnapReady);
     };
-  }, [splitActive, clearRoadviewSnapCache, scheduleRoadviewSnapRefresh]);
-
-  useLayoutEffect(() => {
-    if (!splitActive || draggingRef.current) return;
-    scheduleRoadviewSnapRefresh(MAP_SPLIT_ANIM_MS + 80);
-  }, [primaryRatio, splitActive, scheduleRoadviewSnapRefresh]);
+  }, [
+    splitActive,
+    cancelStretchEndTimer,
+    cancelRevealTimer,
+    endSecondaryStretch,
+    endLayoutCover,
+    syncRoadviewLayout,
+    scheduleRevealAfterReady,
+  ]);
 
   const isH = orientation === 'horizontal';
   const primaryFlex = splitActive ? primaryRatio : 1;
@@ -543,10 +665,8 @@ export function MapSplitLayout({
             }
             controlOffsetDraggable={controlOffsetDraggable}
             controlsExpanded={controlsExpanded}
-            onRatioDragApproach={() => scheduleRoadviewSnapRefresh(0)}
             onDragStart={(clientPos) => {
               if (ratioLocked) return;
-              if (!roadviewSnapCacheRef.current) refreshRoadviewSnapCache();
               draggingRef.current = true;
               dragRef.current = { startPos: clientPos, startRatio: primaryRatio };
               beginSecondaryStretch();

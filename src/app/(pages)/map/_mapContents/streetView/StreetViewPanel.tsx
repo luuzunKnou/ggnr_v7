@@ -8,7 +8,10 @@ import {
   type KakaoRoadviewClient,
 } from './loadKakaoMapsSdk';
 import { StreetViewRoadviewControls, type StreetViewCompassHandle } from './StreetViewRoadviewControls';
-import { StreetViewKakaoMapLink } from './StreetViewKakaoMapLink';
+import {
+  buildKakaoRoadviewLink,
+  StreetViewKakaoMapLink,
+} from './StreetViewKakaoMapLink';
 
 /** setPanoId 후 init 대기 */
 const PANO_INIT_TIMEOUT_MS = 8000;
@@ -41,9 +44,23 @@ function normalizePan(pan: number): number {
   return ((pan % 360) + 360) % 360;
 }
 
+function posKey(lng: number, lat: number): string {
+  return `${lng.toFixed(5)},${lat.toFixed(5)}`;
+}
+
 function currentOrigin(): string {
   if (typeof window === 'undefined') return '';
   return window.location.origin;
+}
+
+/** 분할선 스트레치용 스냅샷 캐시 — 내용이 바뀌면 무효화 */
+function emitRoadviewSnapInvalidate(host: HTMLElement | null) {
+  host?.dispatchEvent(new Event('roadview-snap-invalidate'));
+}
+
+/** 로드뷰 화면이 안정화된 뒤 스냅샷 재캡처 요청 */
+function emitRoadviewSnapReady(host: HTMLElement | null) {
+  host?.dispatchEvent(new Event('roadview-snap-ready'));
 }
 
 /** 카카오 오류 문구 → 사용자 안내 */
@@ -91,14 +108,31 @@ export function explainKakaoRoadviewFailure(raw: unknown): string | null {
   return null;
 }
 
-function RoadviewAlertBox({ children }: { children: ReactNode }) {
+function RoadviewAlertBox({
+  children,
+  onRestore,
+}: {
+  children: ReactNode;
+  onRestore?: () => void;
+}) {
+  const restoreLabel = '이전 위치로 돌아가기';
   return (
     <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center px-4">
       <div
-        className="max-w-md rounded-[12px] border-2 border-solid border-red-500 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-white shadow-lg whitespace-pre-line"
+        className="flex max-w-md flex-col items-center gap-3 rounded-[12px] border-2 border-solid border-red-500 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-white shadow-lg"
         role="alert"
       >
-        {children}
+        <div className="whitespace-pre-line">{children}</div>
+        {onRestore ? (
+          <button
+            type="button"
+            title={restoreLabel}
+            className="pointer-events-auto cursor-pointer rounded-md border border-white/40 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/25"
+            onClick={onRestore}
+          >
+            {restoreLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -122,6 +156,17 @@ export function StreetViewPanel({
   const panFromRoadviewRef = useRef(false);
   const ignoreNextPropPosRef = useRef(false);
   const lastFetchKeyRef = useRef('');
+  /** setPanoId 성공 시 보관 — 분할선 후 재생성 복원용 */
+  const lastPanoIdRef = useRef<number | null>(null);
+  /** teardown→mount 사이 복원 스냅샷 */
+  const pendingRecreateRef = useRef<{
+    panoId: number;
+    lat: number;
+    lng: number;
+    pan: number;
+    tilt: number;
+    zoom: number;
+  } | null>(null);
   const initTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPosRef = useRef(onRoadviewPosition);
   const onPanRef = useRef(onRoadviewPan);
@@ -144,11 +189,42 @@ export function StreetViewPanel({
   const [error, setError] = useState<string | null>(null);
   const [noPano, setNoPano] = useState(false);
   const [panoReady, setPanoReady] = useState(false);
+  /** 이전 파노라마가 실제로 열린 좌표 — 알림 시 복귀용 (호출 좌표 아님) */
+  const [lastSuccessPos, setLastSuccessPos] = useState<{ lng: number; lat: number } | null>(null);
   const everPanoReadyRef = useRef(false);
+  const snapReadyRaf1Ref = useRef(0);
+  const snapReadyRaf2Ref = useRef(0);
+  const viewpointDirtyRef = useRef(false);
+  /** 재생성 직전·직후 ResizeObserver relayout 억제 */
+  const skipRelayoutUntilRef = useRef(0);
+
+  /** 이벤트 트리거 → 페인트 2프레임 후 ready-emit (지연 ms 없음) */
+  const scheduleSnapReady = useCallback(() => {
+    const host = containerRef.current;
+    if (snapReadyRaf1Ref.current) {
+      cancelAnimationFrame(snapReadyRaf1Ref.current);
+      snapReadyRaf1Ref.current = 0;
+    }
+    if (snapReadyRaf2Ref.current) {
+      cancelAnimationFrame(snapReadyRaf2Ref.current);
+      snapReadyRaf2Ref.current = 0;
+    }
+    snapReadyRaf1Ref.current = requestAnimationFrame(() => {
+      snapReadyRaf1Ref.current = 0;
+      snapReadyRaf2Ref.current = requestAnimationFrame(() => {
+        snapReadyRaf2Ref.current = 0;
+        emitRoadviewSnapReady(host);
+      });
+    });
+  }, []);
+  const scheduleSnapReadyRef = useRef(scheduleSnapReady);
+  scheduleSnapReadyRef.current = scheduleSnapReady;
 
   const reportFailure = (raw: unknown, fallback?: string) => {
     const explained = explainKakaoRoadviewFailure(raw);
     setError(explained ?? fallback ?? (raw instanceof Error ? raw.message : String(raw)));
+    emitRoadviewSnapInvalidate(containerRef.current);
+    scheduleSnapReadyRef.current();
   };
 
   const syncCompassPan = useCallback((pan: number) => {
@@ -200,16 +276,6 @@ export function StreetViewPanel({
     if (!sdkReady || !containerRef.current || !window.kakao?.maps) return;
     const maps = window.kakao.maps;
     const el = containerRef.current;
-    let roadview: KakaoRoadview;
-    try {
-      roadview = new maps.Roadview(el, { disableZoomControl: true });
-    } catch (e) {
-      reportFailure(e, '로드뷰 객체를 생성하지 못했습니다.');
-      return;
-    }
-    const client = new maps.RoadviewClient();
-    roadviewRef.current = roadview;
-    clientRef.current = client;
 
     const flushViewpoint = () => {
       viewpointRafRef.current = 0;
@@ -222,6 +288,19 @@ export function StreetViewPanel({
       onPanRef.current?.(pending.pan);
     };
 
+    const rememberLoadedRoadviewPos = () => {
+      try {
+        const pos = roadviewRef.current?.getPosition();
+        if (!pos) return;
+        const nextLng = pos.getLng();
+        const nextLat = pos.getLat();
+        if (!Number.isFinite(nextLng) || !Number.isFinite(nextLat)) return;
+        setLastSuccessPos({ lng: nextLng, lat: nextLat });
+      } catch {
+        /* ignore */
+      }
+    };
+
     const onInit = () => {
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
@@ -231,28 +310,36 @@ export function StreetViewPanel({
       setPanoReady(true);
       setNoPano(false);
       setError(null);
+      // 호출 좌표가 아니라 실제로 열린 파노 위치
+      rememberLoadedRoadviewPos();
       try {
-        const tilt = roadview.getViewpoint()?.tilt ?? 0;
+        const tilt = roadviewRef.current?.getViewpoint()?.tilt ?? 0;
         onTiltRef.current?.(tilt);
       } catch {
         /* ignore */
       }
+      scheduleSnapReadyRef.current();
     };
 
     const onPositionChanged = () => {
+      // 화살표 이동 등으로 열린 파노 위치가 바뀌면 복귀 기준도 갱신
+      rememberLoadedRoadviewPos();
       if (skipEchoRef.current) return;
       try {
-        const pos = roadview.getPosition();
+        const pos = roadviewRef.current?.getPosition();
+        if (!pos) return;
         ignoreNextPropPosRef.current = true;
         onPosRef.current?.(pos.getLng(), pos.getLat());
       } catch {
         /* ignore */
       }
+      scheduleSnapReadyRef.current();
     };
 
     const onViewpointChanged = () => {
       try {
-        const vp = roadview.getViewpoint();
+        const vp = roadviewRef.current?.getViewpoint();
+        if (!vp) return;
         pendingVpRef.current = {
           pan: normalizePan(vp.pan),
           tilt: vp.tilt ?? 0,
@@ -263,46 +350,209 @@ export function StreetViewPanel({
       } catch {
         /* ignore */
       }
+      // 드래그 중에는 스케줄하지 않음 — pointerup에서만 최종 캡처
+      viewpointDirtyRef.current = true;
+    };
+
+    const onViewpointPointerUp = () => {
+      if (!viewpointDirtyRef.current) return;
+      viewpointDirtyRef.current = false;
+      scheduleSnapReadyRef.current();
     };
 
     const onError = (...args: unknown[]) => {
       reportFailure(args[0] ?? args, '로드뷰 오류가 발생했습니다.');
     };
 
-    maps.event.addListener(roadview, 'init', onInit);
-    maps.event.addListener(roadview, 'position_changed', onPositionChanged);
-    maps.event.addListener(roadview, 'viewpoint_changed', onViewpointChanged);
-    maps.event.addListener(roadview, 'error', onError);
-
-    const scheduleRelayout = () => {
-      if (relayoutRafRef.current) return;
-      relayoutRafRef.current = requestAnimationFrame(() => {
-        relayoutRafRef.current = 0;
-        try {
-          roadview.relayout();
-        } catch {
-          /* ignore */
-        }
-      });
+    const bindRoadview = (rv: KakaoRoadview) => {
+      maps.event.addListener(rv, 'init', onInit);
+      maps.event.addListener(rv, 'position_changed', onPositionChanged);
+      maps.event.addListener(rv, 'viewpoint_changed', onViewpointChanged);
+      maps.event.addListener(rv, 'error', onError);
     };
-    const forceRelayout = () => {
+
+    const unbindRoadview = (rv: KakaoRoadview) => {
+      maps.event.removeListener(rv, 'init', onInit);
+      maps.event.removeListener(rv, 'position_changed', onPositionChanged);
+      maps.event.removeListener(rv, 'viewpoint_changed', onViewpointChanged);
+      maps.event.removeListener(rv, 'error', onError);
+    };
+
+    const createRoadview = (): KakaoRoadview | null => {
+      try {
+        const rv = new maps.Roadview(el, { disableZoomControl: true });
+        bindRoadview(rv);
+        roadviewRef.current = rv;
+        return rv;
+      } catch (e) {
+        reportFailure(e, '로드뷰 객체를 생성하지 못했습니다.');
+        roadviewRef.current = null;
+        return null;
+      }
+    };
+
+    /** unlock 전: 파노·시점 보관 후 인스턴스 제거 */
+    const recreateTeardown = () => {
+      const old = roadviewRef.current;
+      if (!old) {
+        pendingRecreateRef.current = null;
+        return;
+      }
+
       if (relayoutRafRef.current) {
         cancelAnimationFrame(relayoutRafRef.current);
         relayoutRafRef.current = 0;
       }
+      skipRelayoutUntilRef.current = performance.now() + 800;
+
+      let panoId: number | null = lastPanoIdRef.current;
+      let lat = 0;
+      let lng = 0;
+      let hasPos = false;
+      let vp = {
+        pan: normalizePan(lastPanRef.current),
+        tilt: 0,
+        zoom: 0,
+      };
       try {
-        roadview.relayout();
+        const id = old.getPanoId();
+        if (id != null && Number.isFinite(id)) panoId = id;
       } catch {
         /* ignore */
       }
+      try {
+        const position = old.getPosition();
+        lat = position.getLat();
+        lng = position.getLng();
+        hasPos = Number.isFinite(lat) && Number.isFinite(lng);
+      } catch {
+        /* ignore */
+      }
+      try {
+        const cur = old.getViewpoint();
+        vp = {
+          pan: normalizePan(cur.pan),
+          tilt: cur.tilt ?? 0,
+          zoom: cur.zoom ?? 0,
+        };
+      } catch {
+        /* ignore */
+      }
+
+      pendingRecreateRef.current =
+        panoId != null && hasPos
+          ? {
+              panoId,
+              lat,
+              lng,
+              pan: vp.pan,
+              tilt: vp.tilt,
+              zoom: vp.zoom,
+            }
+          : null;
+
+      unbindRoadview(old);
+      emitRoadviewSnapInvalidate(el);
+      setPanoReady(false);
+      el.replaceChildren();
+      roadviewRef.current = null;
+    };
+
+    /** unlock 후: 새 칸 크기로 인스턴스 생성·복원 */
+    const recreateMount = () => {
+      skipRelayoutUntilRef.current = performance.now() + 400;
+      if (roadviewRef.current) return;
+
+      const snap = pendingRecreateRef.current;
+      pendingRecreateRef.current = null;
+      const next = createRoadview();
+      if (!next) return;
+
+      if (!snap || !window.kakao?.maps) {
+        lastFetchKeyRef.current = '';
+        scheduleSnapReadyRef.current();
+        return;
+      }
+
+      lastPanoIdRef.current = snap.panoId;
+      const position = new window.kakao.maps.LatLng(snap.lat, snap.lng);
+      skipEchoRef.current = true;
+      try {
+        next.setPanoId(snap.panoId, position);
+        next.setViewpoint({
+          pan: snap.pan,
+          tilt: snap.tilt,
+          zoom: snap.zoom,
+        });
+        syncCompassPan(snap.pan);
+        if (initTimerRef.current) {
+          clearTimeout(initTimerRef.current);
+          initTimerRef.current = null;
+        }
+        initTimerRef.current = setTimeout(() => {
+          initTimerRef.current = null;
+          scheduleSnapReadyRef.current();
+        }, PANO_INIT_TIMEOUT_MS);
+      } catch (e) {
+        reportFailure(e, '로드뷰 파노라마를 다시 열지 못했습니다.');
+      } finally {
+        queueMicrotask(() => {
+          skipEchoRef.current = false;
+        });
+      }
+    };
+
+    if (!createRoadview()) return;
+    const client = new maps.RoadviewClient();
+    clientRef.current = client;
+
+    const scheduleRelayout = () => {
+      if (performance.now() < skipRelayoutUntilRef.current) return;
+      if (relayoutRafRef.current) return;
+      relayoutRafRef.current = requestAnimationFrame(() => {
+        relayoutRafRef.current = 0;
+        if (performance.now() < skipRelayoutUntilRef.current) return;
+        const rv = roadviewRef.current;
+        if (!rv) return;
+        try {
+          rv.relayout();
+        } catch {
+          /* ignore */
+        }
+        scheduleSnapReadyRef.current();
+      });
+    };
+    const forceRelayout = () => {
+      if (performance.now() < skipRelayoutUntilRef.current) return;
+      if (relayoutRafRef.current) {
+        cancelAnimationFrame(relayoutRafRef.current);
+        relayoutRafRef.current = 0;
+      }
+      const rv = roadviewRef.current;
+      if (!rv) return;
+      try {
+        rv.relayout();
+      } catch {
+        /* ignore */
+      }
+      scheduleSnapReadyRef.current();
     };
     const ro = new ResizeObserver(scheduleRelayout);
     ro.observe(el);
     el.addEventListener('roadview-relayout', forceRelayout);
+    el.addEventListener('roadview-recreate-teardown', recreateTeardown);
+    el.addEventListener('roadview-recreate-mount', recreateMount);
+    // 캡처 단계에서 수신 — 카카오가 host에서 bubble을 막아도 드래그 종료 감지
+    window.addEventListener('pointerup', onViewpointPointerUp, true);
+    window.addEventListener('pointercancel', onViewpointPointerUp, true);
 
     return () => {
       ro.disconnect();
       el.removeEventListener('roadview-relayout', forceRelayout);
+      el.removeEventListener('roadview-recreate-teardown', recreateTeardown);
+      el.removeEventListener('roadview-recreate-mount', recreateMount);
+      window.removeEventListener('pointerup', onViewpointPointerUp, true);
+      window.removeEventListener('pointercancel', onViewpointPointerUp, true);
       if (relayoutRafRef.current) {
         cancelAnimationFrame(relayoutRafRef.current);
         relayoutRafRef.current = 0;
@@ -312,19 +562,30 @@ export function StreetViewPanel({
         viewpointRafRef.current = 0;
       }
       pendingVpRef.current = null;
+      viewpointDirtyRef.current = false;
+      pendingRecreateRef.current = null;
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
         initTimerRef.current = null;
       }
-      maps.event.removeListener(roadview, 'init', onInit);
-      maps.event.removeListener(roadview, 'position_changed', onPositionChanged);
-      maps.event.removeListener(roadview, 'viewpoint_changed', onViewpointChanged);
-      maps.event.removeListener(roadview, 'error', onError);
+      if (snapReadyRaf1Ref.current) {
+        cancelAnimationFrame(snapReadyRaf1Ref.current);
+        snapReadyRaf1Ref.current = 0;
+      }
+      if (snapReadyRaf2Ref.current) {
+        cancelAnimationFrame(snapReadyRaf2Ref.current);
+        snapReadyRaf2Ref.current = 0;
+      }
+      emitRoadviewSnapInvalidate(el);
+      const current = roadviewRef.current;
+      if (current) unbindRoadview(current);
       roadviewRef.current = null;
       clientRef.current = null;
       lastFetchKeyRef.current = '';
+      lastPanoIdRef.current = null;
       everPanoReadyRef.current = false;
       setPanoReady(false);
+      setLastSuccessPos(null);
       el.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once per sdkReady
@@ -349,6 +610,7 @@ export function StreetViewPanel({
 
     let cancelled = false;
     setNoPano(false);
+    emitRoadviewSnapInvalidate(containerRef.current);
     if (initTimerRef.current) {
       clearTimeout(initTimerRef.current);
       initTimerRef.current = null;
@@ -368,6 +630,8 @@ export function StreetViewPanel({
             '→ JavaScript SDK 도메인을 확인하세요.',
           ].join('\n');
         });
+        emitRoadviewSnapInvalidate(containerRef.current);
+        scheduleSnapReadyRef.current();
       }, PANO_INIT_TIMEOUT_MS);
     }
 
@@ -382,23 +646,33 @@ export function StreetViewPanel({
         }
       })();
       client.getNearestPanoId(position, radiusM, (panoId) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (panoId == null) {
           setNoPano(true);
           setPanoReady(false);
+          lastPanoIdRef.current = null;
+          emitRoadviewSnapInvalidate(containerRef.current);
+          scheduleSnapReadyRef.current();
           return;
         }
         setNoPano(false);
         skipEchoRef.current = true;
         try {
           roadview.setPanoId(panoId, position);
+          lastPanoIdRef.current = panoId;
           const cur = roadview.getViewpoint();
           roadview.setViewpoint({
             pan: normalizePan(lastPanRef.current),
             tilt: cur?.tilt ?? 0,
             zoom: cur?.zoom ?? 0,
           });
-          roadview.relayout();
+          try {
+            roadview.relayout();
+          } catch {
+            /* ignore */
+          }
           if (initTimerRef.current) {
             clearTimeout(initTimerRef.current);
             initTimerRef.current = null;
@@ -406,6 +680,8 @@ export function StreetViewPanel({
           everPanoReadyRef.current = true;
           setPanoReady(true);
           setError(null);
+          scheduleSnapReadyRef.current();
+          // lastSuccessPos는 init의 getPosition(실제 파노 좌표)에서 갱신
         } catch (e) {
           reportFailure(e, '로드뷰 파노라마를 열지 못했습니다.');
         } finally {
@@ -473,6 +749,7 @@ export function StreetViewPanel({
       queueMicrotask(() => {
         skipEchoRef.current = false;
       });
+      scheduleSnapReadyRef.current();
     } catch {
       /* ignore */
     }
@@ -503,57 +780,93 @@ export function StreetViewPanel({
     }
   }, [syncCompassPan]);
 
+  /** 클릭 시점의 panoid·pan·tilt·zoom으로 카카오맵 URL 생성 */
+  const getKakaoMapHref = useCallback(() => {
+    const roadview = roadviewRef.current;
+    if (!roadview) return null;
+    try {
+      let panoId: number | null = lastPanoIdRef.current;
+      try {
+        const id = roadview.getPanoId();
+        if (id != null && Number.isFinite(id)) panoId = id;
+      } catch {
+        /* lastPanoId 폴백 */
+      }
+      if (panoId == null || !Number.isFinite(panoId)) return null;
+      const vp = roadview.getViewpoint();
+      return buildKakaoRoadviewLink({
+        panoId,
+        pan: normalizePan(vp.pan),
+        tilt: vp.tilt ?? 0,
+        zoom: vp.zoom ?? 0,
+      });
+    } catch {
+      return null;
+    }
+  }, []);
+
   const alertMessage =
     error ??
     (noPano ? '이 위치 근처에는 로드뷰가 없습니다.' : null) ??
     (sdkReady && lng == null && lat == null ? '지도 위치를 확인할 수 없습니다.' : null);
 
+  const canRestoreLastSuccess =
+    !!alertMessage &&
+    !!lastSuccessPos &&
+    !!onRoadviewPosition &&
+    (lng == null ||
+      lat == null ||
+      !Number.isFinite(lng) ||
+      !Number.isFinite(lat) ||
+      posKey(lng, lat) !== posKey(lastSuccessPos.lng, lastSuccessPos.lat));
+
+  const onRestoreLastSuccess = useCallback(() => {
+    if (!lastSuccessPos || !onRoadviewPosition) return;
+    onRoadviewPosition(lastSuccessPos.lng, lastSuccessPos.lat);
+  }, [lastSuccessPos, onRoadviewPosition]);
+
   const controlsEnabled = panoReady && !error && !noPano;
   const showControls = everPanoReadyRef.current || panoReady || noPano || !!error;
-  const kakaoLinkDisabled =
-    !panoReady ||
-    !!error ||
-    noPano ||
-    lng == null || lat == null || !Number.isFinite(lng) || !Number.isFinite(lat);
+  const kakaoLinkDisabled = !panoReady || !!error || noPano;
 
   return (
-    <div className="relative flex h-full w-full flex-col bg-[#888888] text-white">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#888888] text-white">
       <div data-roadview-stage className="relative min-h-0 flex-1 overflow-hidden bg-[#888888]">
         <div data-roadview-frame className="absolute inset-0 z-0">
           <div ref={containerRef} data-roadview-host className="absolute inset-0 h-full w-full bg-[#888888]" />
-          {alertMessage ? <RoadviewAlertBox>{alertMessage}</RoadviewAlertBox> : null}
+          {alertMessage ? (
+            <RoadviewAlertBox onRestore={canRestoreLastSuccess ? onRestoreLastSuccess : undefined}>
+              {alertMessage}
+            </RoadviewAlertBox>
+          ) : null}
         </div>
+      </div>
 
-        {showControls ? (
-          <div
-            data-roadview-controls
-            className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container"
-          >
-            <div className="flex w-full flex-col items-center gap-1.5 @[26rem]:flex-row @[26rem]:items-center @[26rem]:justify-between">
-              <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:block" aria-hidden />
-              <div className="order-1 flex justify-center @[26rem]:order-3">
-                <StreetViewKakaoMapLink
-                  lat={lat ?? 0}
-                  lng={lng ?? 0}
-                  disabled={kakaoLinkDisabled}
-                />
-              </div>
-              <div className="order-2 flex justify-center">
-                <StreetViewRoadviewControls
-                  ref={(handle) => {
-                    compassRef.current = handle;
-                    handle?.setPan(lastPanRef.current);
-                  }}
-                  disabled={!controlsEnabled}
-                  onZoomOut={onZoomOut}
-                  onZoomIn={onZoomIn}
-                  onResetNorth={onResetNorth}
-                />
-              </div>
+      {showControls ? (
+        <div
+          data-roadview-controls
+          className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container"
+        >
+          <div className="flex w-full flex-col items-center gap-1.5 @[26rem]:flex-row @[26rem]:items-center @[26rem]:justify-between">
+            <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:block" aria-hidden />
+            <div className="order-1 flex justify-center @[26rem]:order-3">
+              <StreetViewKakaoMapLink getHref={getKakaoMapHref} disabled={kakaoLinkDisabled} />
+            </div>
+            <div className="order-2 flex justify-center">
+              <StreetViewRoadviewControls
+                ref={(handle) => {
+                  compassRef.current = handle;
+                  handle?.setPan(lastPanRef.current);
+                }}
+                disabled={!controlsEnabled}
+                onZoomOut={onZoomOut}
+                onZoomIn={onZoomIn}
+                onResetNorth={onResetNorth}
+              />
             </div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

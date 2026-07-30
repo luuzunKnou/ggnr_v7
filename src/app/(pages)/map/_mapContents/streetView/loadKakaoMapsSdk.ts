@@ -34,6 +34,7 @@ export type KakaoViewpoint = {
 
 export type KakaoRoadview = {
   setPanoId: (panoId: number, position: KakaoLatLng) => void;
+  getPanoId: () => number;
   getPosition: () => KakaoLatLng;
   getViewpoint: () => KakaoViewpoint;
   setViewpoint: (viewpoint: KakaoViewpoint) => void;
