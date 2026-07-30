@@ -117,6 +117,7 @@
 :root {
   --font-score-dream: "S-Core Dream", sans-serif;
   --radius: 0;
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #1a1a1a;
   --card: #ffffff;
@@ -148,9 +149,13 @@
   --sidebar-accent-foreground: #1a1a1a;
   --sidebar-border: #e5e5e5;
   --sidebar-ring: #b3b3b3;
+  --scrollbar-thumb: #c4c4c4;
+  --scrollbar-thumb-hover: #a3a3a3;
+  --scrollbar-track: transparent;
 }
 
 .dark {
+  color-scheme: dark;
   --background: #1a1a1a;
   --foreground: #fafafa;
   --card: #2a2a2a;
@@ -182,14 +187,48 @@
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: #8a8a8a;
+  --scrollbar-thumb: #5a5a5a;
+  --scrollbar-thumb-hover: #737373;
+  --scrollbar-track: transparent;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
   }
   body {
     @apply bg-background text-foreground;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--primary);
+  }
+  .dark input[type="checkbox"],
+  .dark input[type="radio"] {
+    color-scheme: dark;
+  }
+  .dark input[type="checkbox"]:disabled,
+  .dark input[type="radio"]:disabled {
+    opacity: 0.55;
+    filter: none;
   }
   button:not(:disabled),
   input[type="button"]:not(:disabled),

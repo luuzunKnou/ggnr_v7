@@ -576,27 +576,27 @@ export function ParcelAnalysisAreaSummary({
   const rows = area ? buildRows(area) : [];
 
   return (
-    <div className="border-b border-slate-200">
+    <div className="border-b border-border">
       <div className="px-4 py-2">
-        <span className="text-[12px] font-semibold text-[#666]">분석 영역</span>
+        <span className="text-[12px] font-semibold text-muted-foreground">분석 영역</span>
       </div>
 
       <div className="px-3 pb-3">
         {area ? (
-          <div className="overflow-hidden rounded border border-slate-200">
+          <div className="overflow-hidden rounded border border-border">
             {rows.map((row, index) => (
               <div
                 key={row.label}
-                className={cn('flex items-stretch', index !== rows.length - 1 && 'border-b border-slate-200')}
+                className={cn('flex items-stretch', index !== rows.length - 1 && 'border-b border-border')}
               >
-                <div className="flex w-[64px] shrink-0 items-start bg-slate-100 px-2.5 py-1.5">
-                  <span className="text-[11px] leading-snug text-[#666]">{row.label}</span>
+                <div className="flex w-[64px] shrink-0 items-start bg-muted px-2.5 py-1.5">
+                  <span className="text-[11px] leading-snug text-muted-foreground">{row.label}</span>
                 </div>
                 <div className="flex min-w-0 flex-1 items-start px-2.5 py-1.5">
                   <span
                     className={cn(
                       'break-words text-[11px] leading-snug',
-                      row.highlight ? 'font-medium text-primary' : 'text-[#666]'
+                      row.highlight ? 'font-medium text-primary' : 'text-muted-foreground'
                     )}
                   >
                     {row.value}
@@ -606,9 +606,9 @@ export function ParcelAnalysisAreaSummary({
             ))}
           </div>
         ) : areaCleared ? (
-          <p className="text-[11px] text-slate-500">분석 영역이 초기화되었습니다. 다시 지정해 주세요.</p>
+          <p className="text-[11px] text-muted-foreground">분석 영역이 초기화되었습니다. 다시 지정해 주세요.</p>
         ) : (
-          <p className="text-[11px] text-amber-700">분석 영역을 먼저 지정하세요.</p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">분석 영역을 먼저 지정하세요.</p>
         )}
 
         {area ? (
@@ -627,7 +627,7 @@ export function ParcelAnalysisAreaSummary({
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 flex-1 gap-1 border-amber-300/80 bg-amber-50 px-2 text-[11px] font-medium text-amber-900 hover:bg-amber-100 hover:text-amber-950"
+              className="h-7 flex-1 gap-1 border-amber-300/80 bg-amber-50 px-2 text-[11px] font-medium text-amber-900 hover:bg-amber-100 hover:text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60 dark:hover:text-amber-100"
               onClick={onClearClick}
             >
               <RotateCcw className="size-3 shrink-0" aria-hidden />

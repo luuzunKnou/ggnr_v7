@@ -141,8 +141,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
   });
 
-  const roadDataFlowSidebarLock = openedWindows.includes('roadDataFlow');
-
   const handleDebugZoneClick = useCallback(() => {
     if (debugClickTimeoutRef.current) {
       clearTimeout(debugClickTimeoutRef.current);
@@ -241,8 +239,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                 : serEng === 'parcelAnalysis'
                   ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
                   : () => toggleWindow(openedKey);
-          const svcDisabled =
-            policy !== 'block' && roadDataFlowSidebarLock && openedKey !== 'roadDataFlow';
           return (
             <SidebarButton
               key={serEng}
@@ -254,7 +250,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                 serEng !== 'shapeEditor' &&
                 openedWindows.includes(openedKey)
               }
-              disabled={policy === 'block' ? false : svcDisabled}
+              disabled={false}
             />
           );
         })}

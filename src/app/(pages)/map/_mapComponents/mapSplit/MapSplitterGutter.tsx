@@ -343,13 +343,13 @@ export function MapSplitterGutter({
     <div
       ref={gutterRef}
       className={cn(
-        'relative z-[5] shrink-0 bg-slate-500 dark:bg-slate-600',
+        'group relative z-[5] shrink-0',
         isHorizontal ? 'w-[3px] self-stretch' : 'h-[3px] w-full self-center',
         ratioLocked
           ? 'cursor-default'
           : isHorizontal
-            ? 'cursor-col-resize hover:bg-slate-400 dark:hover:bg-slate-500'
-            : 'cursor-row-resize hover:bg-slate-400 dark:hover:bg-slate-500'
+            ? 'cursor-col-resize'
+            : 'cursor-row-resize'
       )}
       onPointerEnter={() => {
         if (!ratioLocked) onRatioDragApproach?.();
@@ -364,6 +364,19 @@ export function MapSplitterGutter({
       aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
       title={ratioLocked ? '분할 비율 고정됨' : '분할 비율 조절'}
     >
+      <div
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute bg-slate-500 dark:bg-slate-600',
+          isHorizontal
+            ? 'inset-y-0 left-1/2 w-[3px] -translate-x-1/2'
+            : 'inset-x-0 top-1/2 h-[3px] -translate-y-1/2',
+          !ratioLocked &&
+            (isHorizontal
+              ? 'group-hover:w-2 group-hover:bg-slate-400 dark:group-hover:bg-slate-500'
+              : 'group-hover:h-2 group-hover:bg-slate-400 dark:group-hover:bg-slate-500')
+        )}
+      />
       <div
         ref={pillRef}
         data-split-controls
