@@ -16,7 +16,6 @@ import {
   MAP_SPLIT_DEFAULT_PRIMARY_RATIO,
   MAP_SPLIT_MAX_RATIO,
   MAP_SPLIT_MIN_RATIO,
-  MAP_SPLIT_VERTICAL_PRIMARY_RATIO,
   type MapSplitOrientation,
 } from './mapSplitTypes';
 type MapSplitLayoutProps = {
@@ -121,12 +120,16 @@ export function MapSplitLayout({
   onPrimaryRatioChangeRef.current = onPrimaryRatioChange;
   const onOrientationChangeRef = useRef(onOrientationChange);
   onOrientationChangeRef.current = onOrientationChange;
+  /** 한 번 시드(최초 가로 중앙) 또는 사용자 드래그 후 — 방향 전환·패널 폭 변경 시 비율 유지 */
+  const ratioSettledRef = useRef(false);
 
   const applyHorizontalInitialRatio = useCallback(() => {
     if (primaryRatioPropRef.current != null) return;
+    if (ratioSettledRef.current) return;
     const el = containerRef.current;
     if (!el || orientationRef.current !== 'horizontal') return;
     const ratio = computeHorizontalPrimaryRatio(el.clientWidth, mapPaddingLeftRef.current);
+    ratioSettledRef.current = true;
     setPrimaryRatio(ratio);
     onPrimaryRatioChangeRef.current?.(ratio);
   }, []);
@@ -137,6 +140,7 @@ export function MapSplitLayout({
 
   const setRatio = useCallback((r: number) => {
     const next = clampRatio(r);
+    ratioSettledRef.current = true;
     setPrimaryRatio(next);
     onPrimaryRatioChangeRef.current?.(next);
   }, []);
@@ -357,8 +361,49 @@ export function MapSplitLayout({
   }, []);
 
   /**
-   * 스냅샷 고정 → teardown → unlock → mount.
-   * 분할선 경로에서는 relayout 을 쓰지 않는다.
+   * 고정 덮개 → teardown → (css-fill 해제) → 새 칸 크기로 mount.
+   * 분할선 손 뗌·상하↔좌우 전환 공통.
+   */
+  const runRoadviewRecreateCycle = useCallback(
+    (opts?: { refreshFreeze?: boolean }) => {
+      if (draggingRef.current) return;
+
+      if (opts?.refreshFreeze || !layoutCoverRef.current) {
+        if (stretchStageRef.current) updateSecondaryStretch();
+        beginFreezeSnapshot();
+      }
+
+      syncRoadviewRecreateTeardown();
+      endSecondaryStretch();
+      waitingRevealRef.current = true;
+      stretchEndWaitRef.current = false;
+
+      scheduleSizeTick(true);
+      void secondaryPaneRef.current?.offsetWidth;
+      syncRoadviewRecreateMount();
+
+      cancelStretchEndTimer();
+      stretchEndTimerRef.current = setTimeout(() => {
+        stretchEndTimerRef.current = null;
+        if (draggingRef.current) return;
+        waitingRevealRef.current = false;
+        endLayoutCover();
+      }, 8000);
+    },
+    [
+      updateSecondaryStretch,
+      beginFreezeSnapshot,
+      syncRoadviewRecreateTeardown,
+      endSecondaryStretch,
+      scheduleSizeTick,
+      syncRoadviewRecreateMount,
+      cancelStretchEndTimer,
+      endLayoutCover,
+    ]
+  );
+
+  /**
+   * 분할선 손 뗌: css-fill 유지 직후 재생성.
    */
   const finishCssFillAndRecreate = useCallback(() => {
     if (draggingRef.current) return;
@@ -366,36 +411,58 @@ export function MapSplitLayout({
 
     cancelStretchEndTimer();
     stretchEndWaitRef.current = false;
+    runRoadviewRecreateCycle({ refreshFreeze: true });
+  }, [cancelStretchEndTimer, runRoadviewRecreateCycle]);
 
-    updateSecondaryStretch();
-    // unlock·teardown 전에 이전 화면 고정 (회색 깜빡임 방지)
-    beginFreezeSnapshot();
-    // unlock 전 teardown — 옛 인스턴스가 새 칸 크기로 relayout 되지 않게
-    syncRoadviewRecreateTeardown();
-    endSecondaryStretch();
+  /**
+   * 상하↔좌우: 전환 전 css-fill을 켠 뒤, 칸 애니메이션 동안 scale로 따라가고
+   * 끝나면 분할선 손 뗌과 같이 고정→재생성.
+   * (호출 전에 beginSecondaryStretch 로 기준 크기를 잡아 둘 것)
+   */
+  const scheduleOrientationRoadviewRecreate = useCallback(() => {
+    if (!splitActiveRef.current) return;
+    if (draggingRef.current) return;
+
+    cancelStretchEndTimer();
+    cancelRevealTimer();
+    if (!stretchStageRef.current) beginSecondaryStretch();
     waitingRevealRef.current = true;
+    stretchEndWaitRef.current = true;
 
-    scheduleSizeTick(true);
-    void secondaryPaneRef.current?.offsetWidth;
-    syncRoadviewRecreateMount();
+    if (stretchRafRef.current) {
+      cancelAnimationFrame(stretchRafRef.current);
+      stretchRafRef.current = 0;
+    }
 
-    // init 미수신 시 스냅샷·대기 해제
-    stretchEndTimerRef.current = setTimeout(() => {
-      stretchEndTimerRef.current = null;
-      if (draggingRef.current) return;
-      waitingRevealRef.current = false;
-      endLayoutCover();
-    }, 8000);
+    const start = performance.now();
+    const tick = (t: number) => {
+      if (draggingRef.current) {
+        stretchRafRef.current = 0;
+        return;
+      }
+      updateSecondaryStretch();
+      scheduleSizeTick(false);
+      if (t - start < MAP_SPLIT_ANIM_MS + 40) {
+        stretchRafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      stretchRafRef.current = 0;
+      stretchEndWaitRef.current = false;
+      runRoadviewRecreateCycle({ refreshFreeze: true });
+    };
+    stretchRafRef.current = requestAnimationFrame(tick);
   }, [
     cancelStretchEndTimer,
+    cancelRevealTimer,
+    beginSecondaryStretch,
     updateSecondaryStretch,
-    beginFreezeSnapshot,
-    endSecondaryStretch,
     scheduleSizeTick,
-    syncRoadviewRecreateTeardown,
-    syncRoadviewRecreateMount,
-    endLayoutCover,
+    runRoadviewRecreateCycle,
   ]);
+  const scheduleOrientationRoadviewRecreateRef = useRef(scheduleOrientationRoadviewRecreate);
+  scheduleOrientationRoadviewRecreateRef.current = scheduleOrientationRoadviewRecreate;
+  const beginSecondaryStretchRef = useRef(beginSecondaryStretch);
+  beginSecondaryStretchRef.current = beginSecondaryStretch;
 
   /**
    * 손 뗌: flex 반영 후 unlock → 재생성.
@@ -466,17 +533,16 @@ export function MapSplitLayout({
         usableW < window.innerWidth / 2 ? 'vertical' : 'horizontal';
 
       if (orientationRef.current !== next) {
-        const ratio =
-          next === 'vertical'
-            ? MAP_SPLIT_VERTICAL_PRIMARY_RATIO
-            : computeHorizontalPrimaryRatio(el.clientWidth, mapPaddingLeftRef.current);
+        // 방향 전환 전 css-fill 기준 크기 확보 → 전환 중 scale → 재생성
+        if (splitActiveRef.current) {
+          beginSecondaryStretchRef.current();
+        }
         orientationRef.current = next;
         setOrientation(next);
-        if (primaryRatioPropRef.current == null) {
-          setPrimaryRatio(ratio);
-          onPrimaryRatioChangeRef.current?.(ratio);
-        }
         onOrientationChangeRef.current?.(next);
+        if (splitActiveRef.current) {
+          scheduleOrientationRoadviewRecreateRef.current();
+        }
         return;
       }
     };
