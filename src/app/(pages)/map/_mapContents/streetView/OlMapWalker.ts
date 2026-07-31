@@ -3,7 +3,18 @@ import type Map from 'ol/Map';
 import type { Coordinate } from 'ol/coordinate';
 import { getPointResolution } from 'ol/proj';
 import { getMapVisualCenterCoordinate } from '../../_mapComponents/config/mapVisualCenter';
+import {
+  applyHatCylinder,
+  computeHatCylinder,
+  computeWalkerViewBasis,
+  createHatCylinder,
+} from './mapWalkerHatCylinder';
 import './mapWalker.css';
+
+/** 원기둥 SVG 화면 표시 — false면 미부착(파일·모듈 유지) */
+const SHOW_HAT_CYLINDER = true;
+/** 뒤통수 GGNR 문구 — false면 비가시(DOM·로직 유지) */
+const SHOW_HEAD_MARK = false;
 
 /** 시야 부채꼴 각도(도) */
 const FOV_DEG = 70;
@@ -15,8 +26,6 @@ const EYE_BEND_UP = 3.5;
 /** 시야점 수직 이동 상한(px) — 위 봄(음수, 길게) / 아래 봄(양수, 짧게) */
 const EYE_MAX_UP_PX = 11;
 const EYE_MAX_DOWN_PX = 5.5;
-/** 음수 수직각(위 봄): 이 각도에서 시야점 상단 상한 */
-const TILT_UP_CAP_DEG = -18;
 
 const PANO_SEARCH_RADIUS_MIN_M = 50;
 const PANO_SEARCH_RADIUS_MAX_M = 2000;
@@ -131,6 +140,7 @@ export class OlMapWalker {
   private overlay: Overlay;
   private content: HTMLDivElement;
   private fovRing: HTMLDivElement;
+  private hatCylinder: SVGSVGElement | null = null;
   private panDeg = 0;
   private tiltDeg = 0;
   private mapRef: Map | null = null;
@@ -167,8 +177,17 @@ export class OlMapWalker {
     faceDot.className = 'faceDot';
     faceDot.setAttribute('aria-hidden', 'true');
     head.appendChild(faceDot);
+    const headMark = document.createElement('div');
+    headMark.className = 'headMark';
+    headMark.setAttribute('aria-hidden', 'true');
+    headMark.textContent = 'GGNR';
+    head.appendChild(headMark);
     figure.appendChild(createBodySvg());
     figure.appendChild(head);
+    if (SHOW_HAT_CYLINDER) {
+      this.hatCylinder = createHatCylinder();
+      figure.appendChild(this.hatCylinder);
+    }
 
     this.content.appendChild(this.fovRing);
     this.content.appendChild(figure);
@@ -322,17 +341,11 @@ export class OlMapWalker {
 
     this.setCss('--mw-pan', `${pan}deg`);
 
-    const rad = (pan * Math.PI) / 180;
-    const front = -Math.cos(rad);
-    const sinR = Math.sin(rad);
-
-    const tiltForEye =
-      tilt <= 0 ? Math.max(TILT_UP_CAP_DEG, tilt) : Math.min(90, tilt);
-    const tiltNorm = tilt <= 0 ? tiltForEye / -TILT_UP_CAP_DEG : tiltForEye / 90;
-    const tiltAmt = Math.abs(tiltNorm);
+    // 원기둥과 동일 시선 기저 (투시·단축 연동)
+    const basis = computeWalkerViewBasis(pan, tilt);
+    const { front, sinR, lateral, tiltNorm, tiltAmt } = basis;
 
     const ex = sinR * EYE_R;
-    const lateral = Math.min(1, Math.abs(sinR));
     // 좌우 극단 + 수직각 끝에서 시야점 축소 → 축소 시점부터 원→타원
     const eyeScale =
       (1 - lateral * 0.14) * (1 - tiltAmt * 0.1);
@@ -342,7 +355,7 @@ export class OlMapWalker {
     const eyeSx = eyeScale * (1 - lateral * ellipseT * 0.14);
     const eyeSy = eyeScale * (1 - tiltEllipse);
     const eyPan = -(sinR * sinR) * EYE_BEND_UP;
-    const verticalAmp = tilt <= 0 ? EYE_MAX_UP_PX : EYE_MAX_DOWN_PX;
+    const verticalAmp = tiltNorm <= 0 ? EYE_MAX_UP_PX : EYE_MAX_DOWN_PX;
     const eyRaw = eyPan + tiltNorm * verticalAmp;
     const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-EYE_MAX_UP_PX, eyRaw));
     const eyeVis = pan >= 60 && pan <= 300 ? '1' : '0';
@@ -356,10 +369,19 @@ export class OlMapWalker {
     this.setCss('--mw-eye-rot', `${eyeRot.toFixed(1)}deg`);
     this.setCss('--mw-eye-vis', eyeVis);
 
+    // 뒤통수 GGNR — 시야점 구면 대척 (수평·수직 부호 반전, 가시 배타)
+    const markVis = SHOW_HEAD_MARK && eyeVis !== '1' ? '1' : '0';
+    this.setCss('--mw-mx', `${(-ex).toFixed(1)}px`);
+    this.setCss('--mw-my', `${(-ey).toFixed(1)}px`);
+    this.setCss('--mw-m-sx', eyeSx.toFixed(2));
+    this.setCss('--mw-m-sy', eyeSy.toFixed(2));
+    this.setCss('--mw-m-rot', `${(-eyeRot).toFixed(1)}deg`);
+    this.setCss('--mw-m-vis', markVis);
+
     // 머리 그림자 — 3D 정상단 광원: pitch·yaw에 따라 구 표면 어두운 영역 투영
     const northW = northFacingWeight(pan);
     const yawShade = sinR;
-    const pitchShade = tiltNorm; // 위 봄(음수) → 그림자 위, 아래 봄(양수) → 그림자 아래
+    const pitchShade = tiltNorm;
     const pitchGain = 5.8 + northW * 3.2;
     const sx = yawShade * (3.2 + tiltAmt * 0.85);
     const sy = 2.4 + pitchShade * pitchGain + (1 - Math.abs(front)) * 0.55;
@@ -379,6 +401,10 @@ export class OlMapWalker {
     this.setCss('--mw-sr', `${gradR.toFixed(0)}px`);
     this.setCss('--mw-ss', `${softCore.toFixed(0)}%`);
     this.setCss('--mw-sm', `${softMid.toFixed(0)}%`);
+
+    if (SHOW_HAT_CYLINDER && this.hatCylinder) {
+      applyHatCylinder(this.hatCylinder, computeHatCylinder(basis));
+    }
   }
 
   private bindAngleDrag() {

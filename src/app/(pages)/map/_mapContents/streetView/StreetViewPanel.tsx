@@ -181,6 +181,10 @@ export function StreetViewPanel({
 
   const compassRef = useRef<StreetViewCompassHandle>(null);
   const lastPanRef = useRef(panDeg);
+  const hudPanRef = useRef<HTMLParagraphElement>(null);
+  const hudTiltRef = useRef<HTMLParagraphElement>(null);
+  const hudLngRef = useRef<HTMLParagraphElement>(null);
+  const hudLatRef = useRef<HTMLParagraphElement>(null);
   const relayoutRafRef = useRef(0);
   const viewpointRafRef = useRef(0);
   const pendingVpRef = useRef<{ pan: number; tilt: number } | null>(null);
@@ -232,9 +236,36 @@ export function StreetViewPanel({
     compassRef.current?.setPan(pan);
   }, []);
 
+  const writeHud = useCallback(
+    (opts: { pan?: number; tilt?: number; lngText?: string; latText?: string }) => {
+      if (opts.pan != null && hudPanRef.current) {
+        hudPanRef.current.textContent = `수평각 ${opts.pan.toFixed(1)}°`;
+      }
+      if (opts.tilt != null && hudTiltRef.current) {
+        hudTiltRef.current.textContent = `수직각 ${opts.tilt.toFixed(1)}°`;
+      }
+      if (opts.lngText != null && hudLngRef.current) {
+        hudLngRef.current.textContent = `경도 ${opts.lngText}`;
+      }
+      if (opts.latText != null && hudLatRef.current) {
+        hudLatRef.current.textContent = `위도 ${opts.latText}`;
+      }
+    },
+    []
+  );
+  const writeHudRef = useRef(writeHud);
+  writeHudRef.current = writeHud;
+
   useEffect(() => {
     syncCompassPan(panDeg);
-  }, [panDeg, syncCompassPan]);
+    writeHud({ pan: panDeg });
+  }, [panDeg, syncCompassPan, writeHud]);
+
+  useEffect(() => {
+    const lngText = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
+    const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
+    writeHud({ lngText, latText });
+  }, [lng, lat, writeHud]);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,6 +313,7 @@ export function StreetViewPanel({
       const pending = pendingVpRef.current;
       if (!pending) return;
       pendingVpRef.current = null;
+      writeHudRef.current({ pan: pending.pan, tilt: pending.tilt });
       syncCompassPan(pending.pan);
       onTiltRef.current?.(pending.tilt);
       if (skipEchoRef.current) return;
@@ -314,6 +346,7 @@ export function StreetViewPanel({
       rememberLoadedRoadviewPos();
       try {
         const tilt = roadviewRef.current?.getViewpoint()?.tilt ?? 0;
+        writeHudRef.current({ tilt });
         onTiltRef.current?.(tilt);
       } catch {
         /* ignore */
@@ -771,6 +804,7 @@ export function StreetViewPanel({
         zoom: cur.zoom,
       });
       syncCompassPan(0);
+      writeHudRef.current({ pan: 0 });
       onPanCommitRef.current?.(0);
       queueMicrotask(() => {
         skipEchoRef.current = false;
@@ -828,6 +862,8 @@ export function StreetViewPanel({
   const controlsEnabled = panoReady && !error && !noPano;
   const showControls = everPanoReadyRef.current || panoReady || noPano || !!error;
   const kakaoLinkDisabled = !panoReady || !!error || noPano;
+  const lngText = lng != null && Number.isFinite(lng) ? lng.toFixed(6) : '—';
+  const latText = lat != null && Number.isFinite(lat) ? lat.toFixed(6) : '—';
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#888888] text-white">
@@ -839,6 +875,13 @@ export function StreetViewPanel({
               {alertMessage}
             </RoadviewAlertBox>
           ) : null}
+          <div className="pointer-events-none absolute bottom-16 left-2 z-[2] rounded-md bg-black/45 px-2 py-1 text-[10px] tabular-nums text-white/75">
+            <p ref={hudPanRef}>수평각 {panDeg.toFixed(1)}°</p>
+            <p ref={hudTiltRef}>수직각 0.0°</p>
+            <p ref={hudLngRef}>경도 {lngText}</p>
+            <p ref={hudLatRef}>위도 {latText}</p>
+            {panoReady ? <p className="text-emerald-300/90">로드뷰 연결됨</p> : null}
+          </div>
         </div>
       </div>
 

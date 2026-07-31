@@ -19,6 +19,12 @@
   --mw-eye-sx: 1;
   --mw-eye-sy: 1;
   --mw-eye-rot: 0deg;
+  --mw-mx: 0px;
+  --mw-my: 0px;
+  --mw-m-vis: 0;
+  --mw-m-sx: 1;
+  --mw-m-sy: 1;
+  --mw-m-rot: 0deg;
   --mw-ring-scale: 1;
   --mw-figure-scale: 1;
   --mw-stroke: rgba(0, 0, 0, 0.22);
@@ -122,6 +128,36 @@
     rotate(var(--mw-eye-rot, 0deg))
     scale(var(--mw-eye-sx, 1), var(--mw-eye-sy, 1));
   opacity: var(--mw-eye-vis, 0);
+}
+
+/* 뒤통수 문구 — 시야점(+3px)과 대칭으로 기본 앵커 -3px */
+.MapWalker .figure .head .headMark {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - 3px);
+  width: 24px;
+  height: 11px;
+  margin-left: -12px;
+  margin-top: -5.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6.5px;
+  font-weight: 600;
+  font-family: ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  text-shadow: none;
+  pointer-events: none;
+  user-select: none;
+  box-sizing: border-box;
+  transform: translate(var(--mw-mx, 0px), var(--mw-my, 0px))
+    rotate(var(--mw-m-rot, 0deg))
+    scale(var(--mw-m-sx, 1), var(--mw-m-sy, 1));
+  opacity: var(--mw-m-vis, 0);
 }
 
 .MapWalker .figure .body {
