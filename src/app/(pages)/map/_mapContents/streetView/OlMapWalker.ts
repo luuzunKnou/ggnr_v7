@@ -8,13 +8,12 @@ import {
   computeHatCylinder,
   computeWalkerViewBasis,
   createHatCylinder,
+  WALKER_TILT_UP_CAP_DEG,
 } from './mapWalkerHatCylinder';
 import './mapWalker.css';
 
-/** 원기둥 SVG 화면 표시 — false면 미부착(파일·모듈 유지) */
-const SHOW_HAT_CYLINDER = true;
-/** 뒤통수 GGNR 문구 — false면 비가시(DOM·로직 유지) */
-const SHOW_HEAD_MARK = false;
+/** 로드뷰 HUD 라디오 — 워커 아이콘 형태 */
+export type WalkerIconMode = 'default' | 'hat' | 'ggnr';
 
 /** 시야 부채꼴 각도(도) */
 const FOV_DEG = 70;
@@ -26,6 +25,72 @@ const EYE_BEND_UP = 3.5;
 /** 시야점 수직 이동 상한(px) — 위 봄(음수, 길게) / 아래 봄(양수, 짧게) */
 const EYE_MAX_UP_PX = 11;
 const EYE_MAX_DOWN_PX = 5.5;
+/** mapWalker.css .faceDot `top: calc(50% + Npx)` 와 동일 — 머리 중심 대비 시야점 기본 Y */
+const EYE_BASE_OY_PX = 3;
+/**
+ * 좌우 극단에서 세로 단축 완화 시작 각도.
+ * 위 봄(음수) / 아래 봄(양수) — «감은 눈»처럼 보이는 납작 타원을 막는다.
+ */
+const EYE_UP_ELLIPSE_SOFT_DEG = -12.5;
+const EYE_DOWN_ELLIPSE_SOFT_DEG = 12.1;
+/** 아래 봄 완화 상한(로드뷰 tilt 최대에 맞춤) */
+const EYE_DOWN_ELLIPSE_SOFT_END_DEG = 90;
+
+/**
+ * 구면 시야점 — 정면(180) 기준. 구 표면의 한 점처럼 투영.
+ * fromFront 0→90: 정면→동·서 측면
+ * fromFront 90→126: 측면→후면 — 윤곽에 붙어 상승·좌우로 납작/잘림 (중심으로 돌아오지 않음)
+ */
+const EYE_SIDE_FROM_FRONT_DEG = 90;
+const EYE_HIDE_FROM_FRONT_DEG = 126;
+/** 측면 지나 후면: 구면 따라 위로 (px) */
+const EYE_PAST_SIDE_CLIMB_PX = 2.5;
+/** 측면 지나 후면: 머리 밖으로 밀어 overflow로 잘리게 (px) */
+const EYE_PAST_SIDE_OUT_PX = 5;
+/** 측면 지나 후면: 가로(깊이) 단축 강도 0~1 */
+const EYE_PAST_SIDE_SX_SQUASH = 0.9;
+
+/**
+ * 뒤통수 GGNR — 정후면(0°) 기준 이 각도까지 표시(opacity 페이드 없음).
+ * 측면은 머리 overflow로 일부만 잘려 보임.
+ */
+const GGNR_MARK_VISIBLE_UNTIL_DEG = 90;
+
+/** pan → 정후면으로부터의 최소 각(0=등, 180=정면) */
+function panFromBackDeg(panDeg: number): number {
+  const pan = ((panDeg % 360) + 360) % 360;
+  return Math.min(pan, 360 - pan);
+}
+
+/** pan → 정면(180°)으로부터의 최소 각(0=정면, 90=동·서, 180=등) */
+function panFromFrontDeg(panDeg: number): number {
+  const pan = ((panDeg % 360) + 360) % 360;
+  const d = Math.abs(pan - 180);
+  return Math.min(d, 360 - d);
+}
+
+/**
+ * 정면→측면 단축량 0~1 (fromFront / 90, 상한 1).
+ * 측면 이후에도 1 유지 — |sin|처럼 90° 지나 다시 커지지 않음.
+ */
+function eyeForeshortenFromFront(fromFrontDeg: number): number {
+  return Math.min(1, fromFrontDeg / EYE_SIDE_FROM_FRONT_DEG);
+}
+
+/**
+ * 측면(90°)을 지나 후면으로 가는 진행도 0~1.
+ * 270→306 / 90→54 등에서 Y 상승에 사용.
+ */
+function eyePastSideT(fromFrontDeg: number): number {
+  const span = EYE_HIDE_FROM_FRONT_DEG - EYE_SIDE_FROM_FRONT_DEG;
+  if (span <= 1e-6 || fromFrontDeg <= EYE_SIDE_FROM_FRONT_DEG) return 0;
+  return Math.min(1, (fromFrontDeg - EYE_SIDE_FROM_FRONT_DEG) / span);
+}
+
+/** 뒤통수 문구 표시 여부 (이진, 페이드 없음) */
+function ggnrMarkVisible(panDeg: number): boolean {
+  return panFromBackDeg(panDeg) <= GGNR_MARK_VISIBLE_UNTIL_DEG;
+}
 
 const PANO_SEARCH_RADIUS_MIN_M = 50;
 const PANO_SEARCH_RADIUS_MAX_M = 2000;
@@ -141,6 +206,7 @@ export class OlMapWalker {
   private content: HTMLDivElement;
   private fovRing: HTMLDivElement;
   private hatCylinder: SVGSVGElement | null = null;
+  private iconMode: WalkerIconMode = 'hat';
   private panDeg = 0;
   private tiltDeg = 0;
   private mapRef: Map | null = null;
@@ -184,10 +250,8 @@ export class OlMapWalker {
     head.appendChild(headMark);
     figure.appendChild(createBodySvg());
     figure.appendChild(head);
-    if (SHOW_HAT_CYLINDER) {
-      this.hatCylinder = createHatCylinder();
-      figure.appendChild(this.hatCylinder);
-    }
+    this.hatCylinder = createHatCylinder();
+    figure.appendChild(this.hatCylinder);
 
     this.content.appendChild(this.fovRing);
     this.content.appendChild(figure);
@@ -212,6 +276,16 @@ export class OlMapWalker {
 
   setOnPanChange(cb: ((pan: number) => void) | null) {
     this.onPanChange = cb;
+  }
+
+  setIconMode(mode: WalkerIconMode) {
+    if (mode === this.iconMode) return;
+    this.iconMode = mode;
+    this.applyAngleVisual();
+  }
+
+  getIconMode(): WalkerIconMode {
+    return this.iconMode;
   }
 
   getPan() {
@@ -343,39 +417,103 @@ export class OlMapWalker {
 
     // 원기둥과 동일 시선 기저 (투시·단축 연동)
     const basis = computeWalkerViewBasis(pan, tilt);
-    const { front, sinR, lateral, tiltNorm, tiltAmt } = basis;
+    const { front, sinR, tiltNorm, tiltAmt } = basis;
 
-    const ex = sinR * EYE_R;
-    // 좌우 극단 + 수직각 끝에서 시야점 축소 → 축소 시점부터 원→타원
+    // 구면 한 점: 정면→측면은 sin 궤도, 측면 이후는 윤곽에 붙어 뒤쪽으로(중심으로 복귀 금지)
+    const fromFront = panFromFrontDeg(pan);
+    const sideAmt = eyeForeshortenFromFront(fromFront);
+    const pastSide = eyePastSideT(fromFront);
+    const orbitSign = pan >= 180 ? -1 : 1;
+    const ex =
+      pastSide > 0
+        ? orbitSign * (EYE_R + pastSide * EYE_PAST_SIDE_OUT_PX)
+        : sinR * EYE_R;
+    // 정면→측면 단축
     const eyeScale =
-      (1 - lateral * 0.14) * (1 - tiltAmt * 0.1);
+      (1 - sideAmt * 0.14) * (1 - tiltAmt * 0.1);
     const shrinkAmt = 1 - eyeScale;
     const ellipseT = shrinkAmt > 0.002 ? Math.min(1, shrinkAmt / 0.2) : 0;
-    const tiltEllipse = tiltAmt * ellipseT * (0.22 + tiltAmt * 0.38);
-    const eyeSx = eyeScale * (1 - lateral * ellipseT * 0.14);
-    const eyeSy = eyeScale * (1 - tiltEllipse);
-    const eyPan = -(sinR * sinR) * EYE_BEND_UP;
+    let tiltEllipse = tiltAmt * ellipseT * (0.22 + tiltAmt * 0.38);
+    // 위 봄 −12.5°·아래 봄 +12.1° 이상: 세로 단축 완화 + 스케일 원점 아래로
+    let eyeOriginY = 50;
+    if (ellipseT > 0) {
+      let soft = 0;
+      if (tilt < EYE_UP_ELLIPSE_SOFT_DEG) {
+        const span = EYE_UP_ELLIPSE_SOFT_DEG - WALKER_TILT_UP_CAP_DEG;
+        soft =
+          span > 1e-6
+            ? Math.min(1, Math.max(0, (EYE_UP_ELLIPSE_SOFT_DEG - tilt) / span))
+            : 0;
+      } else if (tilt > EYE_DOWN_ELLIPSE_SOFT_DEG) {
+        const span = EYE_DOWN_ELLIPSE_SOFT_END_DEG - EYE_DOWN_ELLIPSE_SOFT_DEG;
+        soft =
+          span > 1e-6
+            ? Math.min(1, Math.max(0, (tilt - EYE_DOWN_ELLIPSE_SOFT_DEG) / span))
+            : 0;
+      }
+      if (soft > 0) {
+        tiltEllipse *= 1 - soft * 0.62;
+        eyeOriginY = 50 + soft * 18;
+      }
+    }
+    // 측면 이후: 깊이축(가로) 강하게 납작 — 온전한 원으로 남지 않음
+    const pastSx = Math.max(0.1, 1 - pastSide * EYE_PAST_SIDE_SX_SQUASH);
+    const pastSy = Math.max(0.35, 1 - pastSide * 0.4);
+    const eyeSx =
+      eyeScale * (1 - sideAmt * ellipseT * 0.14) * pastSx;
+    const eyeSy = Math.max(
+      eyeScale * (1 - tiltEllipse) * pastSy,
+      eyeSx * 0.58
+    );
+    // 측면까지 위 꺾임 + 측면 이후 윤곽을 따라 소폭 상승
+    const eyPan =
+      -(sideAmt * sideAmt) * EYE_BEND_UP - pastSide * EYE_PAST_SIDE_CLIMB_PX;
     const verticalAmp = tiltNorm <= 0 ? EYE_MAX_UP_PX : EYE_MAX_DOWN_PX;
     const eyRaw = eyPan + tiltNorm * verticalAmp;
-    const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-EYE_MAX_UP_PX, eyRaw));
-    const eyeVis = pan >= 60 && pan <= 300 ? '1' : '0';
-    // 좌우 이동 방향에 따라 타원 기울기: 동쪽(sin>0) → 음수 회전, 서쪽(sin<0) → 양수 회전
-    const eyeRot = -(sinR * lateral * 32 * (eyeSx < eyeSy ? eyeSy - eyeSx : 0.18));
+    const eyUpCap = EYE_MAX_UP_PX + EYE_PAST_SIDE_CLIMB_PX;
+    const ey = Math.min(EYE_MAX_DOWN_PX, Math.max(-eyUpCap, eyRaw));
+    // 페이드 없음 — 숨김 각도 전까지 1, 이후 0
+    const eyeVis = fromFront < EYE_HIDE_FROM_FRONT_DEG ? '1' : '0';
+    const eyeRot = -(
+      (pastSide > 0 ? orbitSign : Math.sign(sinR || 1)) *
+      sideAmt *
+      32 *
+      0.18
+    );
 
     this.setCss('--mw-ex', `${ex.toFixed(1)}px`);
     this.setCss('--mw-ey', `${ey.toFixed(1)}px`);
     this.setCss('--mw-eye-sx', eyeSx.toFixed(2));
     this.setCss('--mw-eye-sy', eyeSy.toFixed(2));
     this.setCss('--mw-eye-rot', `${eyeRot.toFixed(1)}deg`);
+    this.setCss('--mw-eye-oy', `${eyeOriginY.toFixed(0)}%`);
     this.setCss('--mw-eye-vis', eyeVis);
 
-    // 뒤통수 GGNR — 시야점 구면 대척 (수평·수직 부호 반전, 가시 배타)
-    const markVis = SHOW_HEAD_MARK && eyeVis !== '1' ? '1' : '0';
-    this.setCss('--mw-mx', `${(-ex).toFixed(1)}px`);
-    this.setCss('--mw-my', `${(-ey).toFixed(1)}px`);
-    this.setCss('--mw-m-sx', eyeSx.toFixed(2));
-    this.setCss('--mw-m-sy', eyeSy.toFixed(2));
-    this.setCss('--mw-m-rot', `${(-eyeRot).toFixed(1)}deg`);
+    // GGNR: 시야점 pastSide(윤곽 밀기·납작)와 분리 — 구 뒷면 자체 궤도(sin + fromBack)
+    const markVis =
+      this.iconMode === 'ggnr' && ggnrMarkVisible(pan) ? '1' : '0';
+    const fromBack = panFromBackDeg(pan);
+    const markAmt = Math.min(1, fromBack / 90);
+    const mx = -sinR * EYE_R;
+    const eyPanMark = -(markAmt * markAmt) * EYE_BEND_UP;
+    const eyMarkRaw = eyPanMark + tiltNorm * verticalAmp;
+    const eyMark = Math.min(
+      EYE_MAX_DOWN_PX,
+      Math.max(-EYE_MAX_UP_PX, eyMarkRaw)
+    );
+    const my = -(eyMark + EYE_BASE_OY_PX);
+    const markScale = (1 - markAmt * 0.14) * (1 - tiltAmt * 0.1);
+    const markShrink = 1 - markScale;
+    const markEllipseT =
+      markShrink > 0.002 ? Math.min(1, markShrink / 0.2) : 0;
+    const markSx = markScale * (1 - markAmt * markEllipseT * 0.14);
+    const markSy = Math.max(markScale * (1 - tiltAmt * markEllipseT * 0.3), markSx * 0.58);
+    const markRot = Math.sign(sinR || 1) * markAmt * 32 * 0.18;
+    this.setCss('--mw-mx', `${mx.toFixed(1)}px`);
+    this.setCss('--mw-my', `${my.toFixed(1)}px`);
+    this.setCss('--mw-m-sx', markSx.toFixed(2));
+    this.setCss('--mw-m-sy', markSy.toFixed(2));
+    this.setCss('--mw-m-rot', `${markRot.toFixed(1)}deg`);
     this.setCss('--mw-m-vis', markVis);
 
     // 머리 그림자 — 3D 정상단 광원: pitch·yaw에 따라 구 표면 어두운 영역 투영
@@ -402,8 +540,12 @@ export class OlMapWalker {
     this.setCss('--mw-ss', `${softCore.toFixed(0)}%`);
     this.setCss('--mw-sm', `${softMid.toFixed(0)}%`);
 
-    if (SHOW_HAT_CYLINDER && this.hatCylinder) {
-      applyHatCylinder(this.hatCylinder, computeHatCylinder(basis));
+    if (this.hatCylinder) {
+      const showHat = this.iconMode === 'hat';
+      this.hatCylinder.style.display = showHat ? '' : 'none';
+      if (showHat) {
+        applyHatCylinder(this.hatCylinder, computeHatCylinder(basis));
+      }
     }
   }
 

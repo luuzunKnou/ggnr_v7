@@ -12,6 +12,7 @@ import {
   buildKakaoRoadviewLink,
   StreetViewKakaoMapLink,
 } from './StreetViewKakaoMapLink';
+import type { WalkerIconMode } from './OlMapWalker';
 
 /** setPanoId 후 init 대기 */
 const PANO_INIT_TIMEOUT_MS = 8000;
@@ -38,6 +39,9 @@ type StreetViewPanelProps = {
   onRoadviewPanCommit?: (panDeg: number) => void;
   /** 로드뷰 수직각 변경 → 워커 tilt */
   onRoadviewTilt?: (tiltDeg: number) => void;
+  /** 워커 아이콘 형태 (디폴트 / 모자 / GGNR) */
+  walkerIconMode?: WalkerIconMode;
+  onWalkerIconModeChange?: (mode: WalkerIconMode) => void;
 };
 
 function normalizePan(pan: number): number {
@@ -148,6 +152,8 @@ export function StreetViewPanel({
   onRoadviewPan,
   onRoadviewPanCommit,
   onRoadviewTilt,
+  walkerIconMode = 'hat',
+  onWalkerIconModeChange,
 }: StreetViewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const roadviewRef = useRef<KakaoRoadview | null>(null);
@@ -875,7 +881,35 @@ export function StreetViewPanel({
               {alertMessage}
             </RoadviewAlertBox>
           ) : null}
-          <div className="pointer-events-none absolute bottom-16 left-2 z-[2] rounded-md bg-black/45 px-2 py-1 text-[10px] tabular-nums text-white/75">
+          <div className="pointer-events-none absolute bottom-16 left-2 z-[2] rounded-md bg-black/45 px-2 py-1.5 text-[10px] tabular-nums text-white/75">
+            <div className="pointer-events-auto mb-1.5 select-none">
+              <p className="mb-0.5 font-semibold text-white/90">워커 아이콘</p>
+              <div className="flex flex-col gap-0.5" role="radiogroup" aria-label="워커 아이콘">
+                {(
+                  [
+                    { value: 'default' as const, label: '디폴트' },
+                    { value: 'hat' as const, label: '모자' },
+                    { value: 'ggnr' as const, label: 'GGNR 문구' },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <label
+                    key={value}
+                    title={label}
+                    className="flex cursor-pointer items-center gap-1.5 text-white/80 hover:text-white"
+                  >
+                    <input
+                      type="radio"
+                      name="walker-icon-mode"
+                      value={value}
+                      checked={walkerIconMode === value}
+                      onChange={() => onWalkerIconModeChange?.(value)}
+                      className="cursor-pointer accent-sky-400"
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <p ref={hudPanRef}>수평각 {panDeg.toFixed(1)}°</p>
             <p ref={hudTiltRef}>수직각 0.0°</p>
             <p ref={hudLngRef}>경도 {lngText}</p>

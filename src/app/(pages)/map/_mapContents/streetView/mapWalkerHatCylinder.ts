@@ -1,7 +1,7 @@
 import './mapWalkerHatCylinder.css';
 
 /* ============================================================================
- * MapWalker 머리 위 원기둥 — 단축법(foreshortening) / 투시도법(perspective)
+ * MapWalker 머리 위 빵모자 — 단축법(foreshortening) / 투시도법(perspective)
  * ----------------------------------------------------------------------------
  * [좌표계]
  *   월드 : X = 동(+), Y = 북(+), Z = 위(+)   (오른손 좌표계)
@@ -20,13 +20,18 @@ import './mapWalkerHatCylinder.css';
  *        장축 방향 = 화면에 투영된 n 에 수직
  *   별도의 보정 상수가 필요 없다.
  *
- * [기존 구현이 틀렸던 지점]
- *   윗면 단축률을 open0 = (1 + front)/2, 즉 "워커가 향한 방향(pan)" 으로 잡았다.
- *   원기둥은 축 대칭이라 고개를 안 숙이면(tilt = 0) pan 이 아무리 변해도
- *   모양이 변하면 안 된다. 실제로 단축률을 정하는 건 카메라 고도각뿐이고,
- *   pan 은 "고개를 숙였을 때 축이 기우는 방향" 으로만 개입한다.
- *   그래서 pan 구간별 leanSign / dropPan / BACK_PULL 같은 부호 뒤집기가
- *   필요했던 것이고, 구간 경계마다 형태가 튀었다.
+ * [렌더] 빵모자 — 가로 중심선(챙 원의 장축)을 경계로 위아래를 따로 성형한다.
+ *        위   : 돔     = 반타원 (rx × domeH)
+ *        아래 : 아랫변 = 챙 원 정사영의 반쪽 (rx × brim)
+ *
+ *        brim = rx · |vis| 이며 이것이 단축법 그 자체다. 챙은 반지름 rx 인
+ *        원이고 그 정사영은 장반경 rx / 단반경 rx·|축·시선| 인 타원이므로,
+ *        아랫변의 깊이는 각도만으로 정해진다. 보정 상수가 없다.
+ *          |vis| → 0 (정측면)   : 아랫변이 직선
+ *          |vis| → 1 (챙이 정면): 아랫변이 반원에 가까움
+ *        두 반타원은 장축 양 끝에서 접선이 축과 나란해 이음매가 매끄럽다.
+ *
+ *        domeH + brim = 2·ry 로 묶어 전체 높이(세로비율)는 원본 그대로 둔다.
  * ========================================================================== */
 
 /** 음수 수직각(위 봄) 상한 — OlMapWalker TILT_UP_CAP_DEG 와 동일 */
@@ -48,10 +53,10 @@ const CAM_COS = Math.sqrt(Math.max(1e-6, 1 - CAM_SIN * CAM_SIN));
 const HEAD_CX = 20;
 const HEAD_CY = 22.5;
 
-/** 원기둥 실제 3D 치수(px) */
+/** 모자 실제 3D 치수(px) — 앞·뒤 높이 동일 */
 export const HAT_R = 11;
 export const HAT_H0 = 5;
-/** 머리 중심 → 원기둥 밑면 중심 거리(3D). 크면 모자가 더 위로 얹힌다 */
+/** 머리 중심 → 모자 밑면 중심 거리(3D). 크면 모자가 더 위로 얹힌다 */
 const HAT_SEAT_R = 11.1;
 
 /**
@@ -66,12 +71,25 @@ const HEAD_PITCH_DOWN_DEG = 24;
 /**
  * 약한 투시(weak perspective) 가상 카메라 거리(px).
  * 카메라에 가까운 면이 살짝 커진다. 0 이하로 두면 순수 정사영.
- * 워커 아이콘은 카메라 대비 매우 작아 실제 원근은 미미하므로 값이 크다.
  */
 const CAM_DIST_PX = 420;
 
 const perspScale = (depth: number) =>
   CAM_DIST_PX > 0 ? CAM_DIST_PX / Math.max(1, CAM_DIST_PX + depth) : 1;
+
+/* ---------------------------------------------------------------------------
+ * 외곽 성형 — 원본 튜닝값 그대로
+ * ------------------------------------------------------------------------- */
+/** 캡 중심을 밑면→윗면 축의 어디에 둘지 (0 = 밑면, 1 = 윗면) */
+const HAT_CAP_CENTER = 0.58;
+/** 가로 반경 여유 */
+const HAT_CAP_RX_GAIN = 1.06;
+/** 세로 반경 산식 — 전체 높이 = 2 · ry */
+const HAT_CAP_RY_DISC = 1.2;
+const HAT_CAP_RY_SIDE = 0.5;
+const HAT_CAP_RY_FLOOR = 0.4;
+/** 아랫변이 깊어져도 돔은 이 아래로 낮아지지 않는다 (rx 배수) */
+const HAT_DOME_FLOOR = 0.35;
 
 /* ========================================================================== */
 
@@ -150,45 +168,35 @@ export type HatCylinderState = {
 };
 
 /**
- * 워커 시선 기저 → 원기둥 정사영 + 약한 투시.
+ * 워커 시선 기저 → 모자 정사영 + 약한 투시.
  * 보정 상수 없이 3D 축을 직접 세우고 투영한다.
  */
 export function computeHatCylinder(basis: WalkerViewBasis): HatCylinderState {
   const { sinR, cosR, headPitchDeg } = basis;
 
-  // 1) 머리 pitch
   const th = (headPitchDeg * Math.PI) / 180;
   const st = Math.sin(th);
   const ct = Math.cos(th);
 
-  // 2) 원기둥 축 = 머리의 up 벡터 (월드 단위벡터)
-  //    정면 f = (sinψ, cosψ, 0),  up = f·sinθ + ẑ·cosθ
-  //    (θ>0 = 아래 봄 → 축이 정면 쪽으로 기운다)
   const ax = sinR * st;
   const ay = cosR * st;
   const az = ct;
 
-  // 3) 단축률 = 축·카메라방향.  tilt=0 이면 pan 과 무관하게 항상 CAM_SIN
   const vis = -CAM_COS * ay + CAM_SIN * az;
 
-  // 4) 축의 화면 투영 m — 옆면이 뻗어 나가는 방향 (밑면 → 윗면)
   const mx = ax;
   const my = -(CAM_SIN * ay + CAM_COS * az);
-  const mLen = Math.hypot(mx, my); // === sqrt(1 - vis²)
+  const mLen = Math.hypot(mx, my);
 
-  // 5) 타원 기저.  단축(e_min)을 m̂ 에 맞춰야 파라미터 t∈(0,π) 가
-  //    "윗면 쪽 반원" 이 되어 실루엣 경로가 항상 올바르게 이어진다.
   const minX = mLen > 1e-6 ? mx / mLen : 0;
   const minY = mLen > 1e-6 ? my / mLen : -1;
   const majX = minY;
   const majY = -minX;
   const rot = (Math.atan2(majY, majX) * 180) / Math.PI;
 
-  // 6) 투시도법 — 깊이(카메라에서 먼 쪽이 +)에 따른 스케일
   const kBot = perspScale(-HAT_SEAT_R * vis);
   const kTop = perspScale(-(HAT_SEAT_R + HAT_H0) * vis);
 
-  // 7) 중심 — 머리 구 위 축 방향으로 얹은 뒤 투영
   const bx = HEAD_CX + mx * HAT_SEAT_R * kBot;
   const by = HEAD_CY + my * HAT_SEAT_R * kBot;
   const tx = HEAD_CX + mx * (HAT_SEAT_R + HAT_H0) * kTop;
@@ -235,6 +243,32 @@ export function computeHatCylinderFromAngles(
 const NS = 'http://www.w3.org/2000/svg';
 let uidSeq = 0;
 
+/** 워커 head/body 와 동일 slate (71 85 105) — 옆면 배럴 음영 */
+const SIDE_SHADE_STOPS: Array<[string, string]> = [
+  ['0%', 'rgb(71 85 105 / 0.2)'],
+  ['28%', 'rgb(71 85 105 / 0.05)'],
+  ['50%', 'rgb(71 85 105 / 0)'],
+  ['72%', 'rgb(71 85 105 / 0.05)'],
+  ['100%', 'rgb(71 85 105 / 0.2)'],
+];
+
+/** 워커 .head radial 과 비슷한 가장 — 가장자리만 살짝 어둡게 */
+const RIM_SHADE_STOPS: Array<[string, string]> = [
+  ['0%', 'rgb(71 85 105 / 0)'],
+  ['40%', 'rgb(71 85 105 / 0)'],
+  ['72%', 'rgb(71 85 105 / 0.05)'],
+  ['100%', 'rgb(71 85 105 / 0.16)'],
+];
+
+function appendStops(grad: SVGElement, stops: Array<[string, string]>) {
+  for (const [offset, color] of stops) {
+    const st = document.createElementNS(NS, 'stop');
+    st.setAttribute('offset', offset);
+    st.setAttribute('stop-color', color);
+    grad.appendChild(st);
+  }
+}
+
 export function createHatCylinder(): SVGSVGElement {
   const uid = `mwHat${(uidSeq += 1)}`;
   const svg = document.createElementNS(NS, 'svg');
@@ -245,48 +279,59 @@ export function createHatCylinder(): SVGSVGElement {
   svg.setAttribute('aria-hidden', 'true');
 
   const defs = document.createElementNS(NS, 'defs');
-  // 배럴 음영 — 장축 방향으로 좌→우. 좌표는 매 프레임 갱신
-  const grad = document.createElementNS(NS, 'linearGradient');
-  grad.setAttribute('id', `${uid}-side`);
-  grad.setAttribute('gradientUnits', 'userSpaceOnUse');
-  const stops: Array<[string, string]> = [
-    ['0%', '#8e1c1c'],
-    ['34%', '#d13a3a'],
-    ['62%', '#c62828'],
-    ['100%', '#7d1616'],
-  ];
-  for (const [offset, color] of stops) {
-    const st = document.createElementNS(NS, 'stop');
-    st.setAttribute('offset', offset);
-    st.setAttribute('stop-color', color);
-    grad.appendChild(st);
-  }
-  defs.appendChild(grad);
+
+  const sideGrad = document.createElementNS(NS, 'linearGradient');
+  sideGrad.setAttribute('id', `${uid}-side`);
+  sideGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
+  appendStops(sideGrad, SIDE_SHADE_STOPS);
+  defs.appendChild(sideGrad);
+
+  const rimGrad = document.createElementNS(NS, 'radialGradient');
+  rimGrad.setAttribute('id', `${uid}-rim`);
+  rimGrad.setAttribute('gradientUnits', 'objectBoundingBox');
+  rimGrad.setAttribute('cx', '0.42');
+  rimGrad.setAttribute('cy', '0.38');
+  rimGrad.setAttribute('r', '0.72');
+  appendStops(rimGrad, RIM_SHADE_STOPS);
+  defs.appendChild(rimGrad);
+
   svg.appendChild(defs);
 
   const side = document.createElementNS(NS, 'path');
   side.setAttribute('class', 'hatSide');
-  side.setAttribute('fill', `url(#${uid}-side)`);
+  side.setAttribute('fill', '#ffffff');
+  side.setAttribute('stroke', 'none');
 
-  // 윗면(밝음) / 밑면 안쪽(어두움) — 한 번에 하나만 보인다
+  const sideShade = document.createElementNS(NS, 'path');
+  sideShade.setAttribute('class', 'hatSideShade');
+  sideShade.setAttribute('fill', `url(#${uid}-side)`);
+  sideShade.setAttribute('stroke', 'none');
+
   const top = document.createElementNS(NS, 'ellipse');
   top.setAttribute('class', 'hatTop');
-  top.setAttribute('fill', '#ef5350');
+  top.setAttribute('fill', '#ffffff');
+  top.setAttribute('stroke', 'none');
+
+  const topShade = document.createElementNS(NS, 'ellipse');
+  topShade.setAttribute('class', 'hatTopShade');
+  topShade.setAttribute('fill', `url(#${uid}-rim)`);
+  topShade.setAttribute('stroke', 'none');
+
+  const outerStroke = document.createElementNS(NS, 'path');
+  outerStroke.setAttribute('class', 'hatOuterStroke');
+  outerStroke.setAttribute('fill', 'none');
 
   const inner = document.createElementNS(NS, 'ellipse');
   inner.setAttribute('class', 'hatInner');
-  inner.setAttribute('fill', '#6d1212');
-
-  const innerRim = document.createElementNS(NS, 'ellipse');
-  innerRim.setAttribute('class', 'hatInnerRim');
-  innerRim.setAttribute('fill', 'none');
-  innerRim.setAttribute('stroke', '#4a0c0c');
-  innerRim.setAttribute('stroke-width', '0.9');
+  inner.setAttribute('fill', '#f1f5f9');
+  inner.setAttribute('stroke', 'none');
 
   svg.appendChild(side);
+  svg.appendChild(sideShade);
   svg.appendChild(top);
+  svg.appendChild(topShade);
   svg.appendChild(inner);
-  svg.appendChild(innerRim);
+  svg.appendChild(outerStroke);
   return svg;
 }
 
@@ -307,29 +352,93 @@ function setEll(
   el.setAttribute('transform', `rotate(${f(rot)} ${f(cx)} ${f(cy)})`);
 }
 
+type CapFrame = {
+  cx: number;
+  cy: number;
+  /** 가로 반경(장축) */
+  rx: number;
+  /** 세로 반경 — 전체 높이는 2·ry 로 유지된다 */
+  ry: number;
+  rot: number;
+  /** 국소 기저: u = 장축(가로), v = 축 방향(+ 가 윗면 쪽) */
+  ux: number;
+  uy: number;
+  vx: number;
+  vy: number;
+  /** 밑면→윗면 화면 거리 */
+  H: number;
+};
+
+/** 모자 외곽 기준 프레임 (세로 비율은 납작화 이전값 유지). */
+function capFrame(s: HatCylinderState): CapFrame {
+  // e_min = 밑면→윗면. rot 이 어떤 값이든 안정적으로 얻는다.
+  const vx = -s.majY;
+  const vy = s.majX;
+  const H = Math.hypot(s.tx - s.bx, s.ty - s.by);
+
+  const cx = s.bx + vx * H * HAT_CAP_CENTER;
+  const cy = s.by + vy * H * HAT_CAP_CENTER;
+
+  const discR = Math.max(s.rxTop, s.rxBot);
+  const discRy = Math.max(s.ryTop, s.ryBot);
+  const rx = discR * HAT_CAP_RX_GAIN;
+  const ry = Math.max(
+    discRy * HAT_CAP_RY_DISC + H * HAT_CAP_RY_SIDE,
+    rx * HAT_CAP_RY_FLOOR
+  );
+
+  return { cx, cy, rx, ry, rot: s.rot, ux: s.majX, uy: s.majY, vx, vy, H };
+}
+
+type CapSplit = {
+  /** 가로 중심선 아래 = 챙 원 정사영의 단반경 */
+  brim: number;
+  /** 가로 중심선 위 = 돔 반타원의 높이 */
+  dome: number;
+  /** 캡 중심 기준, 가로 중심선의 축방향 위치 */
+  v0: number;
+};
+
 /**
- * 옆면 실루엣.
- * 정사영에서 원기둥 옆면의 윤곽 = 두 타원의 볼록 껍질(민코프스키 합).
- * 접선이 축 투영 m 과 평행해지는 지점 = 장축의 양 끝(장축 ⊥ m 이므로).
- * 따라서 "윗면의 +m 쪽 반원 → 직선 → 밑면의 −m 쪽 반원 → 직선" 으로 닫힌다.
- * sweep-flag 는 cross(e_maj, e_min) = +1 이므로 항상 1.
+ * 가로 중심선 위/아래 분할.
+ *
+ *   brim = rx · |vis|
+ *     아랫변은 챙(밑면) 원의 정사영이다. 정사영에서 원은
+ *     장반경 = 반지름, 단반경 = 반지름 · |법선·시선| 인 타원이 되므로
+ *     깊이가 각도만으로 결정된다. 튜닝 상수가 붙지 않는다.
+ *
+ *   dome = 2·ry − brim
+ *     전체 높이를 원본(2·ry)에 묶어 세로비율을 보존한다.
+ *     아랫변이 깊어진 만큼 돔이 낮아지고, 그 반대도 같다.
+ *
+ *   v0 = −(ry − brim)
+ *     가로 중심선 위치. 아래 끝 = −ry, 위 끝 = +ry 로 원본과 정확히 일치.
  */
-function sidePath(s: HatCylinderState): string {
-  const { majX, majY } = s;
-  const p1x = s.tx + majX * s.rxTop;
-  const p1y = s.ty + majY * s.rxTop;
-  const p2x = s.tx - majX * s.rxTop;
-  const p2y = s.ty - majY * s.rxTop;
-  const p3x = s.bx - majX * s.rxBot;
-  const p3y = s.by - majY * s.rxBot;
-  const p4x = s.bx + majX * s.rxBot;
-  const p4y = s.by + majY * s.rxBot;
+function capSplit(s: HatCylinderState, c: CapFrame): CapSplit {
+  const brim = Math.max(0.05, c.rx * Math.abs(s.vis));
+  const dome = Math.max(c.rx * HAT_DOME_FLOOR, c.ry * 2 - brim);
+  return { brim, dome, v0: -(c.ry - brim) };
+}
+
+/**
+ * 빵모자 외곽선 — 반타원 두 개.
+ * 장축 양 끝에서 두 반타원 모두 접선이 축과 나란하므로 이음매가 매끄럽고,
+ * 아랫변은 얕은 타원 호(◟___◞)로 떨어진다.
+ * 진행 방향이 한쪽이라 두 호 모두 sweep-flag = 0.
+ */
+function capOutlinePath(s: HatCylinderState, c: CapFrame): string {
+  const { brim, dome, v0 } = capSplit(s, c);
+  const L = (u: number, v: number): [number, number] => [
+    c.cx + u * c.ux + v * c.vx,
+    c.cy + u * c.uy + v * c.vy,
+  ];
+  const a = L(-c.rx, v0);
+  const b = L(c.rx, v0);
 
   return (
-    `M ${f(p1x)} ${f(p1y)}` +
-    ` A ${f(s.rxTop)} ${f(s.ryTop)} ${f(s.rot)} 0 1 ${f(p2x)} ${f(p2y)}` +
-    ` L ${f(p3x)} ${f(p3y)}` +
-    ` A ${f(s.rxBot)} ${f(s.ryBot)} ${f(s.rot)} 0 1 ${f(p4x)} ${f(p4y)}` +
+    `M ${f(a[0])} ${f(a[1])}` +
+    ` A ${f(c.rx)} ${f(dome)} ${f(c.rot)} 0 0 ${f(b[0])} ${f(b[1])}` +
+    ` A ${f(c.rx)} ${f(brim)} ${f(c.rot)} 0 0 ${f(a[0])} ${f(a[1])}` +
     ' Z'
   );
 }
@@ -338,37 +447,44 @@ export function applyHatCylinder(svg: SVGSVGElement, s: HatCylinderState) {
   svg.classList.toggle('underHead', s.underHead);
 
   const side = svg.querySelector('.hatSide');
+  const sideShade = svg.querySelector('.hatSideShade');
   const top = svg.querySelector('.hatTop');
+  const topShade = svg.querySelector('.hatTopShade');
   const inner = svg.querySelector('.hatInner');
-  const innerRim = svg.querySelector('.hatInnerRim');
-  const grad = svg.querySelector('linearGradient');
-  if (!side || !top || !inner || !innerRim) return;
+  const outerStroke = svg.querySelector('.hatOuterStroke');
+  const sideGrad = svg.querySelector('linearGradient');
+  if (!side || !sideShade || !top || !topShade || !inner || !outerStroke) return;
 
-  side.setAttribute('d', sidePath(s));
+  const cap = capFrame(s);
+  const d = capOutlinePath(s, cap);
+  side.setAttribute('d', d);
+  sideShade.setAttribute('d', d);
+  outerStroke.setAttribute('d', d);
+  side.setAttribute('stroke', 'none');
 
-  // 배럴 음영: 장축 방향을 따라 왼쪽 실루엣 → 오른쪽 실루엣
-  if (grad) {
-    const cx = (s.bx + s.tx) / 2;
-    const cy = (s.by + s.ty) / 2;
-    const r = (s.rxTop + s.rxBot) / 2;
-    grad.setAttribute('x1', f(cx - s.majX * r));
-    grad.setAttribute('y1', f(cy - s.majY * r));
-    grad.setAttribute('x2', f(cx + s.majX * r));
-    grad.setAttribute('y2', f(cy + s.majY * r));
+  // 원기둥 배럴과 동일: 장축 방향으로 좌↔우 음영 (워커 slate 톤)
+  if (sideGrad) {
+    sideGrad.setAttribute('x1', f(cap.cx - s.majX * cap.rx));
+    sideGrad.setAttribute('y1', f(cap.cy - s.majY * cap.rx));
+    sideGrad.setAttribute('x2', f(cap.cx + s.majX * cap.rx));
+    sideGrad.setAttribute('y2', f(cap.cy + s.majY * cap.rx));
   }
 
   if (s.vis >= 0) {
-    // 윗면이 보임 — 밑면은 옆면에 완전히 가려진다
     top.setAttribute('visibility', 'visible');
+    topShade.setAttribute('visibility', 'visible');
     inner.setAttribute('visibility', 'hidden');
-    innerRim.setAttribute('visibility', 'hidden');
-    setEll(top, s.tx, s.ty, s.rxTop, s.ryTop, s.rot);
+    const lift = cap.H * 0.12;
+    const tcx = cap.cx + cap.vx * lift;
+    const tcy = cap.cy + cap.vy * lift;
+    const topRx = Math.min(cap.rx * 0.92, s.rxTop * 1.08);
+    const topRy = Math.min(cap.ry * 0.72, Math.max(s.ryTop * 1.2, cap.ry * 0.45));
+    setEll(top, tcx, tcy, topRx, topRy, s.rot);
+    setEll(topShade, tcx, tcy, topRx, topRy, s.rot);
   } else {
-    // 밑면(모자 안쪽)이 보임
     top.setAttribute('visibility', 'hidden');
+    topShade.setAttribute('visibility', 'hidden');
     inner.setAttribute('visibility', 'visible');
-    innerRim.setAttribute('visibility', 'visible');
     setEll(inner, s.bx, s.by, s.rxBot, s.ryBot, s.rot);
-    setEll(innerRim, s.bx, s.by, s.rxBot * 0.93, s.ryBot * 0.93, s.rot);
   }
 }

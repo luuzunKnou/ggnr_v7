@@ -6,13 +6,15 @@ import type Map from 'ol/Map';
 import type { ObjectEvent } from 'ol/Object';
 import { transform } from 'ol/proj';
 import { MAP_SPLIT_ANIM_MS } from '../../_mapComponents/mapSplit/mapSplitTypes';
-import { OlMapWalker, panoSearchRadiusMetersFromMap } from './OlMapWalker';
+import { OlMapWalker, panoSearchRadiusMetersFromMap, type WalkerIconMode } from './OlMapWalker';
 import { useMapContext } from '../../_mapComponents/MapContext';
 
 type UseStreetViewArgs = {
   active: boolean;
   mapSync: boolean;
 };
+
+export type { WalkerIconMode };
 
 /** 지도 좌표 동일 판정(맵 단위) — React setState 스킵용 */
 const COORD_EPS = 1e-4;
@@ -35,6 +37,9 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   const walkerRef = useRef<OlMapWalker | null>(null);
   const [panDeg, setPanDeg] = useState(0);
   const [tiltDeg, setTiltDeg] = useState(0);
+  const [walkerIconMode, setWalkerIconMode] = useState<WalkerIconMode>('hat');
+  const walkerIconModeRef = useRef(walkerIconMode);
+  walkerIconModeRef.current = walkerIconMode;
   const [position, setPosition] = useState<Coordinate | null>(null);
   const positionRef = useRef<Coordinate | null>(null);
   const mapSyncRef = useRef(mapSync);
@@ -158,6 +163,7 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     const walker = new OlMapWalker(start);
     walker.setOnPanChange((pan) => schedulePanToReact(pan));
     walker.setTilt(tiltDegRef.current);
+    walker.setIconMode(walkerIconModeRef.current);
     walker.setMap(map);
     walkerRef.current = walker;
     positionRef.current = start;
@@ -298,6 +304,11 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
     [map, applyPosition]
   );
 
+  const onWalkerIconModeChange = useCallback((mode: WalkerIconMode) => {
+    setWalkerIconMode(mode);
+    walkerRef.current?.setIconMode(mode);
+  }, []);
+
   const getPanoSearchRadiusM = useCallback(() => {
     if (!map) return 100;
     return panoSearchRadiusMetersFromMap(map);
@@ -316,6 +327,8 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   return {
     panDeg,
     tiltDeg,
+    walkerIconMode,
+    onWalkerIconModeChange,
     lng: wgs84.lng,
     lat: wgs84.lat,
     getPanoSearchRadiusM,

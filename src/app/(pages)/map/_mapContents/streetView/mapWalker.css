@@ -19,6 +19,7 @@
   --mw-eye-sx: 1;
   --mw-eye-sy: 1;
   --mw-eye-rot: 0deg;
+  --mw-eye-oy: 50%;
   --mw-mx: 0px;
   --mw-my: 0px;
   --mw-m-vis: 0;
@@ -127,14 +128,15 @@
   transform: translate(var(--mw-ex, 0px), var(--mw-ey, 0px))
     rotate(var(--mw-eye-rot, 0deg))
     scale(var(--mw-eye-sx, 1), var(--mw-eye-sy, 1));
+  transform-origin: 50% var(--mw-eye-oy, 50%);
   opacity: var(--mw-eye-vis, 0);
 }
 
-/* 뒤통수 문구 — 시야점(+3px)과 대칭으로 기본 앵커 -3px */
+/* 뒤통수 문구 — 좌우는 시야점 반대, 세로 이동 곡선은 시야점 Y 대척 */
 .MapWalker .figure .head .headMark {
   position: absolute;
   left: 50%;
-  top: calc(50% - 3px);
+  top: 50%;
   width: 24px;
   height: 11px;
   margin-left: -12px;
