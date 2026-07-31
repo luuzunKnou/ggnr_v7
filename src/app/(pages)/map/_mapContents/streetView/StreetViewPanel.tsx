@@ -152,7 +152,7 @@ export function StreetViewPanel({
   onRoadviewPan,
   onRoadviewPanCommit,
   onRoadviewTilt,
-  walkerIconMode = 'hat',
+  walkerIconMode = 'default',
   onWalkerIconModeChange,
 }: StreetViewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -890,6 +890,8 @@ export function StreetViewPanel({
                     { value: 'default' as const, label: '디폴트' },
                     { value: 'hat' as const, label: '모자' },
                     { value: 'ggnr' as const, label: 'GGNR 문구' },
+                    { value: 'cat' as const, label: '고양이' },
+                    { value: 'ggnrCat' as const, label: 'GGNR 문구 + 고양이' },
                   ] as const
                 ).map(({ value, label }) => (
                   <label

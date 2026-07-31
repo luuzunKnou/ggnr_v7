@@ -1,0 +1,48 @@
+/* MapWalker 고양이 귀 — 원본 head/body와 분리 */
+
+/*
+ * 앵커 규칙 (mapWalkerCatEars.ts 의 HEAD_CX / HEAD_CY 와 한 세트)
+ * mapWalkerHatCylinder.css 와 완전히 같은 박스를 쓴다.
+ *   viewBox "minX minY W H" + width/height = W×H  → 1 user unit = 1px
+ *   유저좌표 (x, y) 의 화면 위치
+ *     = figure중앙 - W/2 + (x - minX),  top + (y - minY)
+ *   머리 중심은 figure 기준 (중앙, 13.5px) 이므로
+ *     margin-left = -W/2,  minX = 20 - W/2,  top = minY - 9
+ *   현재: W=56, H=64, minX=-8, minY=-12 → margin-left:-28px, top:-21px
+ */
+.MapWalker .figure .catEar {
+  position: absolute;
+  left: 50%;
+  top: -21px;
+  z-index: 3;
+  width: 56px;
+  height: 64px;
+  margin-left: -28px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/*
+ * z-index 는 mapWalkerCatEars.ts 가 인라인으로 덮어쓴다 (머리 2 · 몸통 1 기준).
+ *   뒤로 간 귀 : 먼 쪽 0, 가까운 쪽 1  → 머리 아래
+ *   앞의 귀    : 먼 쪽 3, 가까운 쪽 4  → 머리 위
+ * 아래 규칙은 인라인 값이 아직 없을 때의 초기값이다.
+ */
+.MapWalker .figure .catEar.underHead {
+  z-index: 1;
+}
+
+.MapWalker .figure .catEar .catEarFill,
+.MapWalker .figure .catEar .catEarInner {
+  stroke: none;
+}
+
+/* 귀 외곽 — 워커 head/body 와 동일 stroke */
+.MapWalker .figure .catEar .catEarStroke {
+  stroke: var(--mw-stroke);
+  stroke-width: var(--mw-stroke-w);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}

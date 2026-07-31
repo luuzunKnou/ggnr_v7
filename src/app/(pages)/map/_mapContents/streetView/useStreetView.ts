@@ -37,7 +37,7 @@ export function useStreetView({ active, mapSync }: UseStreetViewArgs) {
   const walkerRef = useRef<OlMapWalker | null>(null);
   const [panDeg, setPanDeg] = useState(0);
   const [tiltDeg, setTiltDeg] = useState(0);
-  const [walkerIconMode, setWalkerIconMode] = useState<WalkerIconMode>('hat');
+  const [walkerIconMode, setWalkerIconMode] = useState<WalkerIconMode>('default');
   const walkerIconModeRef = useRef(walkerIconMode);
   walkerIconModeRef.current = walkerIconMode;
   const [position, setPosition] = useState<Coordinate | null>(null);

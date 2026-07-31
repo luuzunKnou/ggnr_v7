@@ -10,10 +10,17 @@ import {
   createHatCylinder,
   WALKER_TILT_UP_CAP_DEG,
 } from './mapWalkerHatCylinder';
+import {
+  applyCatEars,
+  computeCatEars,
+  createCatEars,
+  setCatEarsVisible,
+  type CatEarsElements,
+} from './mapWalkerCatEars';
 import './mapWalker.css';
 
 /** 로드뷰 HUD 라디오 — 워커 아이콘 형태 */
-export type WalkerIconMode = 'default' | 'hat' | 'ggnr';
+export type WalkerIconMode = 'default' | 'hat' | 'ggnr' | 'cat' | 'ggnrCat';
 
 /** 시야 부채꼴 각도(도) */
 const FOV_DEG = 70;
@@ -55,6 +62,13 @@ const EYE_PAST_SIDE_SX_SQUASH = 0.9;
  * 측면은 머리 overflow로 일부만 잘려 보임.
  */
 const GGNR_MARK_VISIBLE_UNTIL_DEG = 90;
+
+/**
+ * 뒤통수 문구 세로 보정(px, + 가 아래).
+ * 문구는 시야점의 대척점을 그대로 따라가는데, 그대로 두면 머리 위쪽에
+ * 치우쳐 보인다. 아래로 조금 내려 머리 한가운데에 얹는다.
+ */
+const GGNR_MARK_OY_PX = 3;
 
 /** pan → 정후면으로부터의 최소 각(0=등, 180=정면) */
 function panFromBackDeg(panDeg: number): number {
@@ -206,7 +220,8 @@ export class OlMapWalker {
   private content: HTMLDivElement;
   private fovRing: HTMLDivElement;
   private hatCylinder: SVGSVGElement | null = null;
-  private iconMode: WalkerIconMode = 'hat';
+  private catEars: CatEarsElements | null = null;
+  private iconMode: WalkerIconMode = 'default';
   private panDeg = 0;
   private tiltDeg = 0;
   private mapRef: Map | null = null;
@@ -252,6 +267,9 @@ export class OlMapWalker {
     figure.appendChild(head);
     this.hatCylinder = createHatCylinder();
     figure.appendChild(this.hatCylinder);
+    this.catEars = createCatEars();
+    figure.appendChild(this.catEars.far);
+    figure.appendChild(this.catEars.near);
 
     this.content.appendChild(this.fovRing);
     this.content.appendChild(figure);
@@ -490,8 +508,8 @@ export class OlMapWalker {
     this.setCss('--mw-eye-vis', eyeVis);
 
     // GGNR: 시야점 pastSide(윤곽 밀기·납작)와 분리 — 구 뒷면 자체 궤도(sin + fromBack)
-    const markVis =
-      this.iconMode === 'ggnr' && ggnrMarkVisible(pan) ? '1' : '0';
+    const showMark = this.iconMode === 'ggnr' || this.iconMode === 'ggnrCat';
+    const markVis = showMark && ggnrMarkVisible(pan) ? '1' : '0';
     const fromBack = panFromBackDeg(pan);
     const markAmt = Math.min(1, fromBack / 90);
     const mx = -sinR * EYE_R;
@@ -501,7 +519,7 @@ export class OlMapWalker {
       EYE_MAX_DOWN_PX,
       Math.max(-EYE_MAX_UP_PX, eyMarkRaw)
     );
-    const my = -(eyMark + EYE_BASE_OY_PX);
+    const my = -(eyMark + EYE_BASE_OY_PX) + GGNR_MARK_OY_PX;
     const markScale = (1 - markAmt * 0.14) * (1 - tiltAmt * 0.1);
     const markShrink = 1 - markScale;
     const markEllipseT =
@@ -545,6 +563,14 @@ export class OlMapWalker {
       this.hatCylinder.style.display = showHat ? '' : 'none';
       if (showHat) {
         applyHatCylinder(this.hatCylinder, computeHatCylinder(basis));
+      }
+    }
+
+    if (this.catEars) {
+      const showCat = this.iconMode === 'cat' || this.iconMode === 'ggnrCat';
+      setCatEarsVisible(this.catEars, showCat);
+      if (showCat) {
+        applyCatEars(this.catEars, computeCatEars(basis));
       }
     }
   }
