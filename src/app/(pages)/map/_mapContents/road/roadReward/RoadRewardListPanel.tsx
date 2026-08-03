@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Search, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
@@ -33,9 +33,12 @@ export function RoadRewardListPanel({
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+  const initialLoadDoneRef = useRef(false);
+  const selectSeqRef = useRef(0);
 
-  const loadRows = useCallback(async () => {
-    setLoading(true);
+  const loadRows = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) setLoading(true);
     setListError(null);
     try {
       const res = await call("", "POST", {
@@ -50,31 +53,18 @@ export function RoadRewardListPanel({
       }
       const raw = Array.isArray(data?.rows) ? (data.rows as RoadRewardCaseDtoClient[]) : [];
       const mapped = raw.map(mapRoadRewardDtoToCase);
-      onCasesChange((prev) => {
-        const byId = new Map(mapped.map((r) => [r.id, r]));
-        for (const p of prev) {
-          if (isNewRoadRewardCaseId(p.id)) continue;
-          const next = byId.get(p.id);
-          if (!next) continue;
-          if (p.id === selectedId && p.parcels.length > 0) {
-            byId.set(p.id, {
-              ...next,
-              geometry3857: p.geometry3857 ?? next.geometry3857,
-              extent3857: p.extent3857 ?? next.extent3857,
-              parcels: p.parcels,
-            });
-          }
-        }
-        return [...byId.values()];
-      });
+      // 서버 목록이 기준. 선택 행의 예전 도형·필지를 덮어쓰지 않음(깜빡·이전 도형 잔존 방지)
+      onCasesChange(mapped);
     } catch (e: unknown) {
       setListError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [onCasesChange, selectedId]);
+  }, [onCasesChange]);
 
   useEffect(() => {
+    if (initialLoadDoneRef.current) return;
+    initialLoadDoneRef.current = true;
     void loadRows();
   }, [loadRows]);
 
@@ -95,16 +85,22 @@ export function RoadRewardListPanel({
   const handleSelect = async (id: string) => {
     onSelectId(id);
     if (isNewRoadRewardCaseId(id)) return;
+    const seq = ++selectSeqRef.current;
     try {
       const res = await call("", "POST", {
         service: "roadRewardService",
         action: "getDetailByOgcFid",
         params: { ogcFid: Number(id), fillPnuGeom: true },
       });
+      if (seq !== selectSeqRef.current) return;
       const data = res?.data ?? res;
       if (data?.error || !data?.row) return;
       const mapped = mapRoadRewardDtoToCase(data.row as RoadRewardCaseDtoClient);
-      onCasesChange((prev) => prev.map((c) => (c.id === id ? mapped : c)));
+      onCasesChange((prev) => {
+        const idx = prev.findIndex((c) => c.id === id);
+        if (idx < 0) return [...prev, mapped];
+        return prev.map((c) => (c.id === id ? mapped : c));
+      });
     } catch {
       /* 상세 보강 실패 시 목록 행으로 표시 */
     }

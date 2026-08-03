@@ -571,9 +571,11 @@ export async function fillMissingParcelPnuGeom(params?: {
     }
 
     if (updated > 0) {
-      await recomputeMainGeomFromParcels(
-        Number.isFinite(rewardFid) && rewardFid > 0 ? { rewardOgcFid: rewardFid } : undefined
-      );
+      const scope =
+        Number.isFinite(rewardFid) && rewardFid > 0 ? { rewardOgcFid: rewardFid } : undefined;
+      await recomputeMainGeomFromParcels(scope);
+      // 필지 도형만 고쳐지고 부모에 옛 필지 도형이 남은 경우 복구
+      await repairStaleParentGeomVsParcels(scope);
     }
     return { updated };
   } catch (e: unknown) {
@@ -591,6 +593,8 @@ export async function listRows(params?: {
     if (params?.fillPnuGeom !== false) {
       await fillMissingParcelPnuGeom();
     }
+    // 목록 로드 시 부모에 남은 옛 필지 도형 교정 (직접 그린 넓은 편입범위는 유지)
+    await repairStaleParentGeomVsParcels();
 
     const meta = await resolveTableWithSchema(MAIN_TABLE);
     if (!meta) return { rows: [], error: `${MAIN_TABLE} 테이블이 없습니다.` };
@@ -733,6 +737,8 @@ export async function getDetailByOgcFid(params: {
   if (params?.fillPnuGeom !== false) {
     await fillMissingParcelPnuGeom({ rewardOgcFid: ogcFid });
   }
+  // 선택 시에도 부모↔필지 불일치(옛 필지 도형)면 교정
+  await repairStaleParentGeomVsParcels({ rewardOgcFid: ogcFid });
 
   const meta = await resolveTableWithSchema(MAIN_TABLE);
   if (!meta) return { row: null, error: `${MAIN_TABLE} 테이블이 없습니다.` };
@@ -894,6 +900,81 @@ export async function recomputeMainGeomFromParcels(params?: {
       )
     );
     const updated = Number((res as { rowCount?: number }).rowCount ?? 0);
+    return { updated };
+  } catch (e: unknown) {
+    return { updated: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 필지 geom 교정 후에도 부모에 «옛 필지 도형»이 남은 경우 복구.
+ * 필지 합이 부모와 거의 안 겹치면(직접 그린 넓은 편입범위는 필지를 포함하므로 제외)
+ * 부모 geom 을 필지 합집합으로 강제 교체한다.
+ */
+async function repairStaleParentGeomVsParcels(params?: {
+  rewardOgcFid?: number | string;
+}): Promise<{ updated: number; error?: string }> {
+  try {
+    const mainMeta = await resolveTableWithSchema(MAIN_TABLE);
+    const parcelMeta = await resolveTableWithSchema(PARCEL_TABLE);
+    if (!mainMeta || !parcelMeta) {
+      return { updated: 0, error: 'road_reward / road_reward_parcel 테이블이 없습니다.' };
+    }
+    const mainCols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
+    const parcelCols = await getTableColumns(parcelMeta.schema, parcelMeta.tableName);
+    const mainGeomCol = findColumn(mainCols, 'geom');
+    const mainKeyCol = findColumn(mainCols, 'ogc_fid');
+    const parentCol = findParentKeyCol(parcelCols);
+    const parcelGeomCol = findColumn(parcelCols, 'geom');
+    if (!mainGeomCol || !mainKeyCol || !parentCol || !parcelGeomCol) {
+      return { updated: 0, error: 'geom/키 컬럼이 없습니다.' };
+    }
+
+    const ms = mainMeta.schema.replace(/"/g, '""');
+    const mt = mainMeta.tableName.replace(/"/g, '""');
+    const ps = parcelMeta.schema.replace(/"/g, '""');
+    const pt = parcelMeta.tableName.replace(/"/g, '""');
+    const rewardFid = Number(params?.rewardOgcFid);
+    const fidFilter =
+      Number.isFinite(rewardFid) && rewardFid > 0
+        ? `AND m.${quoteIdent(mainKeyCol)} = ${Math.floor(rewardFid)}`
+        : '';
+
+    const stale = await db.execute(
+      sql.raw(
+        `SELECT m.${quoteIdent(mainKeyCol)} AS fid
+         FROM "${ms}"."${mt}" m
+         INNER JOIN (
+           SELECT
+             p.${quoteIdent(parentCol)} AS reward_fid,
+             ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_MakeValid(p.${quoteIdent(parcelGeomCol)})))) AS union_geom
+           FROM "${ps}"."${pt}" p
+           WHERE p.${quoteIdent(parcelGeomCol)} IS NOT NULL
+           GROUP BY p.${quoteIdent(parentCol)}
+         ) sub ON m.${quoteIdent(mainKeyCol)} = sub.reward_fid
+         WHERE m.${quoteIdent(mainGeomCol)} IS NOT NULL
+           AND ST_Area(ST_Transform(sub.union_geom, 5181)) > 0
+           AND (
+             ST_Area(
+               ST_Intersection(
+                 ST_MakeValid(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181)),
+                 ST_MakeValid(ST_Transform(sub.union_geom, 5181))
+               )
+             )
+             / ST_Area(ST_Transform(sub.union_geom, 5181))
+           ) < 0.5
+         ${fidFilter}`
+      )
+    );
+
+    let updated = 0;
+    for (const raw of stale.rows ?? []) {
+      const fid = Number((raw as { fid?: unknown }).fid);
+      if (!Number.isFinite(fid) || fid <= 0) continue;
+      const r = await recomputeMainGeomFromParcels({ rewardOgcFid: fid, force: true });
+      if (r.error) return { updated, error: r.error };
+      updated += r.updated;
+    }
     return { updated };
   } catch (e: unknown) {
     return { updated: 0, error: e instanceof Error ? e.message : String(e) };
