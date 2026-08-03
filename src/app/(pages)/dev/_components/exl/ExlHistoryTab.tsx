@@ -10,23 +10,83 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/app/shadcnComponents/ui/dialog';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Search, FileText, Check, X, Loader2, RotateCcw } from 'lucide-react';
 import { registerExcelHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ExcelProcessLogLines } from './ExcelProcessLogLines';
+import { SyncDetailModal } from '../shp/SyncDetailModal';
 
 type HistoryRow = {
   ehKey: number;
   ehSourcePath: string | null;
   ehTableName: string | null;
   ehTableKorName: string | null;
+  ehOldRowCount: number | null;
   ehRowCount: number | null;
   ehResult: string | null;
   ehContents: string | null;
   ehCreateDate: string | null;
   ehCreateUser: number | null;
+  appendCount?: number | null;
+  conflictCount?: number | null;
+  removeCount?: number | null;
+  keptCount?: number | null;
 };
 
 const PAGE_SIZE = 20;
+
+function formatCount(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('ko-KR');
+}
+
+function formatUpdateContents(r: HistoryRow): string {
+  const raw = (r.ehContents ?? '').trim();
+  if (raw && !raw.includes('\n') && raw.length <= 200) {
+    // 예전 «신규 적재» 문구도 목록에서 통일 표기
+    if (raw.startsWith('신규 적재 ')) return raw.replace(/^신규 적재 /, '신규 ');
+    return raw;
+  }
+  const oldN = r.ehOldRowCount;
+  const newN = r.ehRowCount;
+  if (oldN == null && newN == null) return '—';
+  if (oldN == null || oldN === 0) {
+    if (newN == null) return '신규';
+    return `신규 ${formatCount(newN)}건`;
+  }
+  if (newN == null) return `전체 교체 (이전 ${formatCount(oldN)})`;
+  return `전체 교체 (이전 ${formatCount(oldN)} → 현재 ${formatCount(newN)})`;
+}
+
+function showHistoryBtn(r: HistoryRow): boolean {
+  if (!r.ehTableName?.trim()) return false;
+  const a = r.appendCount ?? 0;
+  const c = r.conflictCount ?? 0;
+  const rm = r.removeCount ?? 0;
+  const k = r.keptCount ?? 0;
+  if (a + c + rm + k > 0) return true;
+  const contents = (r.ehContents ?? '').trim();
+  if (/추가|변경|삭제|유지|정합성|신규|전체 교체/.test(contents)) return true;
+  // 기존 테이블 갱신 완료 건 — 로그 연결 누락이어도 조회 시도
+  if (r.ehResult === '성공' && r.ehOldRowCount != null && r.ehOldRowCount > 0) return true;
+  return false;
+}
+
+function ResultBadge({ result }: { result: string | null }) {
+  switch (result) {
+    case '성공':
+      return <Check className="w-3.5 h-3.5 text-green-600 mx-auto" />;
+    case '대기':
+      return <span className="text-[10px] text-orange-500 font-medium">대기</span>;
+    case '롤백':
+      return <RotateCcw className="w-3.5 h-3.5 text-muted-foreground mx-auto" />;
+    case '부분롤백':
+      return <span className="text-[10px] text-yellow-600 font-medium">부분롤백</span>;
+    case '진행중':
+      return <Loader2 className="w-3.5 h-3.5 text-muted-foreground mx-auto animate-spin" />;
+    default:
+      return <X className="w-3.5 h-3.5 text-red-500 mx-auto" />;
+  }
+}
 
 export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [rows, setRows] = useState<HistoryRow[]>([]);
@@ -43,10 +103,21 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
   const [logError, setLogError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<number | null>(null);
 
+  const [syncModal, setSyncModal] = useState<{ ehKey: number; tableName: string } | null>(null);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      try {
+        await call('', 'POST', {
+          service: 'excelHistoryService',
+          action: 'repairExcelHistoryIntegrityContents',
+          params: { limit: 50 },
+        });
+      } catch {
+        /* ignore */
+      }
       const res = await call('', 'POST', {
         service: 'excelHistoryService',
         action: 'getExcelHistoryList',
@@ -121,6 +192,22 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
     }
   }, []);
 
+  const openHistory = useCallback(async (row: HistoryRow) => {
+    const tableName = row.ehTableName?.trim();
+    if (!tableName) return;
+    // 완료 건 중 로그·이력 번호 미연결이 있으면 조회 직전에 한 번 보정
+    try {
+      await call('', 'POST', {
+        service: 'excelHistoryService',
+        action: 'attachExcelIntegritySyncToHistory',
+        params: { ehKey: row.ehKey, tableName },
+      });
+    } catch {
+      /* ignore */
+    }
+    setSyncModal({ ehKey: row.ehKey, tableName });
+  }, []);
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -130,7 +217,7 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
           <span className="text-sm font-medium whitespace-nowrap">Excel 업로드 이력</span>
         )}
         <span className="text-xs text-muted-foreground flex-1">
-          총 {total}건 · 행 클릭 시 처리 로그 보기
+          총 {total}건 · «이력 조회»로 행 변경 확인 · «처리 로그»로 업로드 로그 확인
         </span>
         <Button variant="outline" size="sm" onClick={fetchList} className="gap-1">
           <RefreshCw className="w-3.5 h-3.5" /> 새로고침
@@ -148,30 +235,71 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="text-left">
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-40">업로드 날짜</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-40">테이블명</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-40">한글명</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-18 text-right">행 수</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-18 text-center">결과</th>
-                <th className="py-1 px-2 text-xs font-medium bg-muted">파일 경로</th>
+                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-14 text-center">결과</th>
+                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-36 whitespace-nowrap">업로드 날짜</th>
+                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-44">테이블명</th>
+                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-48">한글명</th>
+                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-20 text-right" title="TRUNCATE 직전 행 수">이전</th>
+                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-20 text-right" title="삽입 후 행 수">현재</th>
+                <th className="py-1 px-2 text-xs font-medium border-r bg-muted min-w-[12rem]">업데이트 내용</th>
+                <th className="py-1 px-2 text-xs font-medium bg-muted w-36 text-center">액션</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr
                   key={r.ehKey}
-                  className={`border-t hover:bg-muted/40 cursor-pointer ${
+                  className={`border-t hover:bg-muted/40 ${
                     selectedKey === r.ehKey && logOpen ? 'bg-muted/60' : ''
                   }`}
-                  onClick={() => void openLog(r)}
                 >
-                  <td className="h-[28px] px-2 align-middle whitespace-nowrap">{r.ehCreateDate ? new Date(r.ehCreateDate).toLocaleString() : '—'}</td>
-                  <td className="h-[28px] px-2 align-middle font-mono truncate max-w-[7rem]" title={r.ehTableName ?? ''}>{r.ehTableName ?? '—'}</td>
-                  <td className="h-[28px] px-2 align-middle truncate max-w-[14rem]" title={r.ehTableKorName ?? ''}>{r.ehTableKorName ?? '—'}</td>
-                  <td className="h-[28px] px-2 align-middle text-right">{r.ehRowCount != null ? r.ehRowCount.toLocaleString('ko-KR') : '—'}</td>
-                  <td className="h-[28px] px-2 align-middle text-center">{r.ehResult ?? '—'}</td>
-                  <td className="h-[28px] px-2 align-middle text-muted-foreground truncate max-w-[20rem]" title={r.ehSourcePath ?? ''}>
-                    {r.ehSourcePath ?? '—'}
+                  <td className="h-[28px] px-2 align-middle text-center">
+                    <ResultBadge result={r.ehResult} />
+                  </td>
+                  <td className="h-[28px] px-2 align-middle whitespace-nowrap">
+                    {r.ehCreateDate ? String(r.ehCreateDate) : '—'}
+                  </td>
+                  <td className="h-[28px] px-2 align-middle font-mono truncate max-w-[11rem]" title={r.ehTableName ?? ''}>
+                    {r.ehTableName ?? '—'}
+                  </td>
+                  <td className="h-[28px] px-2 align-middle truncate max-w-[12rem]" title={r.ehTableKorName ?? ''}>
+                    {r.ehTableKorName ?? '—'}
+                  </td>
+                  <td className="h-[28px] px-2 align-middle text-right tabular-nums">
+                    {formatCount(r.ehOldRowCount)}
+                  </td>
+                  <td className="h-[28px] px-2 align-middle text-right tabular-nums">
+                    {formatCount(r.ehRowCount)}
+                  </td>
+                  <td
+                    className="h-[28px] px-2 align-middle truncate max-w-[20rem]"
+                    title={formatUpdateContents(r)}
+                  >
+                    {formatUpdateContents(r)}
+                  </td>
+                  <td className="h-[28px] px-2 align-middle text-center">
+                    <div className="inline-flex items-center gap-1.5">
+                      {showHistoryBtn(r) ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:underline font-medium"
+                          onClick={() => {
+                            void openHistory(r);
+                          }}
+                        >
+                          <Search className="w-3 h-3" />
+                          이력 조회
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:underline font-medium"
+                        onClick={() => void openLog(r)}
+                      >
+                        <FileText className="w-3 h-3" />
+                        처리 로그
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -222,6 +350,19 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
           </div>
         </DialogContent>
       </Dialog>
+
+      {syncModal ? (
+        <SyncDetailModal
+          source="excel"
+          ehKey={syncModal.ehKey}
+          tableName={syncModal.tableName}
+          readOnly
+          onClose={() => {
+            setSyncModal(null);
+            void fetchList();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -13,12 +13,21 @@ import { sql } from 'drizzle-orm';
 import { db, pool } from '@/database/db';
 import { getLayerTableList, getDefineLayerTables, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
-import { getLatestExcelHistoryByTables } from './excelHistoryService';
+import { discardExcelIntegrityReview, getLatestExcelHistoryByTables } from './excelHistoryService';
 import {
   parseExcelMatrix,
   coerceExcelDateCellsInAoa,
   SHEET_TO_JSON_HEADER1_DISPLAY,
 } from '@/lib/excelSheetParse';
+import {
+  insertExcelSyncLogGeomFromLayer,
+  insertExcelSyncLogGeomFromLonLat,
+  insertExcelSyncLogGeomFromWkt,
+  fillPendingExcelSyncLogOldGeoms,
+  fillPendingExcelSyncLogNewGeomsFromCoords,
+  syncExcelSyncLogJsonGeomFromSideTable,
+  excelLayerRowJsonbSql,
+} from '@/lib/syncLogGeom';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
@@ -616,8 +625,8 @@ export async function createTableFromExcel(params: {
     const quotedTable = `"${tableName.replace(/"/g, '""')}"`;
     const quotedJijuk = jijukTableName ? `"${jijukTableName.replace(/"/g, '""')}"` : '';
     const quotedMulgunji = mulgunjiTableName ? `"${mulgunjiTableName.replace(/"/g, '""')}"` : '';
-    /** 자식 합집합·복수 필지를 허용하려면 Geometry 컬럼 사용 */
-    const geomType = separateJijukTable ? 'Geometry' : geometryType === 'Point' ? 'Point' : 'Geometry';
+    /** Point↔Polygon 재업로드를 위해 부모 geom은 항상 Geometry(제한 없음) */
+    const geomType = 'Geometry';
     // 엑셀 업로드 결과 테이블은 jijuk과 동일하게 EPSG:5181(Korea 2000) 저장
     const geomSrid = 5181;
     const createParts = ['id SERIAL PRIMARY KEY', `geom geometry(${geomType}, ${geomSrid})`, `${PARCEL_ADDRESS_COL} text`];
@@ -633,6 +642,36 @@ export async function createTableFromExcel(params: {
     await db.execute(sql.raw(createSql));
 
     const fqTable = `layer.${quotedTable}`;
+    // 기존 Point(또는 특정 타입) 컬럼이면 Geometry로 승격 — CREATE IF NOT EXISTS로는 타입이 안 바뀜
+    try {
+      const typRes = await db.execute(sql.raw(
+        `SELECT UPPER(COALESCE(gc.type, '')) AS gtype
+         FROM geometry_columns gc
+         WHERE gc.f_table_schema = 'layer'
+           AND gc.f_table_name = '${tableName.replace(/'/g, "''")}'
+           AND gc.f_geometry_column = 'geom'
+         LIMIT 1`
+      ));
+      const gtype = String((typRes.rows as Array<{ gtype?: string }>)?.[0]?.gtype ?? '').trim();
+      if (gtype && gtype !== 'GEOMETRY') {
+        await db.execute(sql.raw(
+          `ALTER TABLE ${fqTable}
+           ALTER COLUMN geom TYPE geometry(Geometry, ${geomSrid})
+           USING CASE
+             WHEN geom IS NULL THEN NULL
+             ELSE ST_SetSRID(geom::geometry, ${geomSrid})
+           END`
+        ));
+      }
+    } catch {
+      /* geometry_columns 없거나 ALTER 실패 시 INSERT에서 노출 */
+    }
+    // 기존 테이블(IF NOT EXISTS no-op)에도 columns에 있는 필드가 있도록 보장 (신규 키 등)
+    for (const col of columns) {
+      const cname = safeColumnName(col.define_field_name);
+      if (!cname || cname === 'id' || cname === 'geom' || cname === PARCEL_ADDRESS_COL) continue;
+      await db.execute(sql.raw(`ALTER TABLE ${fqTable} ADD COLUMN IF NOT EXISTS ${cname} text`));
+    }
     const setColumnComment = async (colIdent: string, korLabel: string) => {
       const body = escapePostgresStringLiteral(korLabel);
       await db.execute(sql.raw(`COMMENT ON COLUMN ${fqTable}.${colIdent} IS '${body}'`));
@@ -998,6 +1037,8 @@ export async function createDefineTableAndFieldsForExcel(params: {
   tableKorName: string;
   geometryType: 'Point' | 'Polygon';
   columns: ExcelColumnDef[];
+  /** 레이어 그룹명 (tables.json define_table_group) */
+  group?: string;
   /** 부모와 함께 등록할 지적 자식 테이블 (layer.{parent}_jijuk) */
   jijukChild?: { tableName: string; tableKorName: string };
   /** 부모와 함께 등록할 물건지 자식 테이블 (layer.{parent}_mulgunji) */
@@ -1005,6 +1046,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
 }): Promise<{ success: boolean; error?: string }> {
   const tableName = safeTableName(params.tableName);
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  const groupVal = String(params.group ?? '').trim();
 
   try {
     let tables: Record<string, unknown>[] = [];
@@ -1026,7 +1068,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
           define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
           define_table_read_share: 'P',
           define_table_write_share: 'P',
-          define_table_group: '',
+          define_table_group: groupVal,
           define_table_idx: '0',
           define_table_etc: '',
           define_table_schema: 'layer',
@@ -1041,6 +1083,14 @@ export async function createDefineTableAndFieldsForExcel(params: {
       );
     } else {
       (existing as Record<string, unknown>).define_table_source = 'excel';
+      (existing as Record<string, unknown>).define_table_shp_type =
+        params.geometryType === 'Point' ? 'POINT' : 'POLYGON';
+      if (params.tableKorName?.trim()) {
+        (existing as Record<string, unknown>).define_table_kor_name = params.tableKorName.trim();
+      }
+      if (groupVal && !String((existing as Record<string, unknown>).define_table_group ?? '').trim()) {
+        (existing as Record<string, unknown>).define_table_group = groupVal;
+      }
       await fs.writeFile(
         DEFINE_LAYER_TABLES_PATH,
         JSON.stringify(reorderDefineLayerTablesArray(tables), null, 2),
@@ -1180,7 +1230,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
               define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
               define_table_read_share: 'P',
               define_table_write_share: 'P',
-              define_table_group: '',
+              define_table_group: groupVal,
               define_table_idx: '0',
               define_table_etc: '',
               define_table_schema: 'layer',
@@ -1326,7 +1376,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
               define_table_shp_type: params.geometryType === 'Point' ? 'POINT' : 'POLYGON',
               define_table_read_share: 'P',
               define_table_write_share: 'P',
-              define_table_group: '',
+              define_table_group: groupVal,
               define_table_idx: '0',
               define_table_etc: '',
               define_table_schema: 'layer',
@@ -1585,16 +1635,34 @@ export async function compareExcelWithTable(params: {
     if (removeCount > 0) {
       for (const kv of removeKeys) {
         const safeKv = kv.replace(/'/g, "''");
-        await db.execute(sql.raw(
+        const ins = await db.execute(sql.raw(
           `INSERT INTO excel_sync_log (esl_eh_key, esl_table_name, esl_key_field, esl_key_value, esl_old_data, esl_new_data)
-           SELECT ${ehKeyVal}, '${tableName}', '${keyField}', '${safeKv}', row_to_json(t.*)::jsonb, NULL
-           FROM layer."${tableName}" t WHERE t."${keyField}"::text = '${safeKv}' LIMIT 1`
+           SELECT ${ehKeyVal}, '${tableName}', '${keyField}', '${safeKv}',
+             ${excelLayerRowJsonbSql('t')}, NULL
+           FROM layer."${tableName}" t WHERE t."${keyField}"::text = '${safeKv}' LIMIT 1
+           RETURNING esl_key`
         ));
+        const eslKey = (ins.rows as Array<{ esl_key: number }>)[0]?.esl_key;
+        if (eslKey != null) {
+          await insertExcelSyncLogGeomFromLayer({
+            eslKey,
+            tableName,
+            keyField,
+            keyValue: kv,
+            side: 'old',
+          });
+        }
       }
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ...empty, error: msg };
+  }
+
+  try {
+    await syncExcelSyncLogJsonGeomFromSideTable({ tableName, ehKey: ehKey ?? null });
+  } catch {
+    /* JSON 보강 실패는 비교 결과와 분리 */
   }
 
   return {
@@ -1607,5 +1675,568 @@ export async function compareExcelWithTable(params: {
     unchangedCount,
     conflicts: [],
     removes: removeKeys.slice(0, 500).map((key) => ({ key, values: {} })),
+  };
+}
+
+const INTEGRITY_SKIP_ATTR_KEYS = new Set(['id', 'geom', 'ogc_fid', 'parcel_address']);
+const EXCEL_GEOM_COMPARE_GRID_M = 0.05;
+
+function normalizeAttrMap(raw: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [k, v] of Object.entries(raw)) {
+    const key = String(k);
+    if (INTEGRITY_SKIP_ATTR_KEYS.has(key.toLowerCase())) continue;
+    out[key] = v == null ? '' : String(v);
+  }
+  return out;
+}
+
+function diffAttrFields(
+  dbAttrs: Record<string, unknown>,
+  excelAttrs: Record<string, unknown>
+): string[] {
+  const keys = new Set([...Object.keys(dbAttrs), ...Object.keys(excelAttrs)]);
+  const diffs: string[] = [];
+  for (const k of keys) {
+    if (INTEGRITY_SKIP_ATTR_KEYS.has(k.toLowerCase())) continue;
+    const a = String(dbAttrs[k] ?? '');
+    const b = String(excelAttrs[k] ?? '');
+    if (a !== b) diffs.push(k);
+  }
+  return diffs;
+}
+
+type ExcelGeomFamily = 'point' | 'polygon' | 'line' | 'empty' | 'other';
+
+function geomFamilyFromDbType(gtype: string | null | undefined): ExcelGeomFamily {
+  if (!gtype?.trim()) return 'empty';
+  const u = gtype.toUpperCase();
+  if (u.includes('POINT')) return 'point';
+  if (u.includes('POLYGON')) return 'polygon';
+  if (u.includes('LINE')) return 'line';
+  return 'other';
+}
+
+function geomFamilyFromUpload(gt: 'Point' | 'Polygon' | undefined): 'point' | 'polygon' | null {
+  if (gt === 'Point') return 'point';
+  if (gt === 'Polygon') return 'polygon';
+  return null;
+}
+
+/** 좌표 없이 타입만 남길 때 — coordinates:[] 로 메타(_meta/hash)와 구분, 이력 상세에 표시됨 */
+function geomTypeOnlyPlaceholder(typeLabel: string): Record<string, unknown> {
+  return { type: typeLabel, coordinates: [] };
+}
+
+function uploadGeomTypeLabel(uploadFam: 'point' | 'polygon' | null): string | null {
+  if (uploadFam === 'polygon') return 'Polygon';
+  if (uploadFam === 'point') return 'Point';
+  return null;
+}
+
+async function resolveJijukWktFromLonLat(lon: number, lat: number): Promise<string | null> {
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  try {
+    const point5181 = `ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), 5181)`;
+    const res = await db.execute(sql.raw(
+      `SELECT ST_AsText(geom) AS wkt
+       FROM public_layer.jijuk
+       WHERE ST_Intersects(ST_SetSRID(geom, 5181), ${point5181})
+       LIMIT 1`
+    ));
+    const wkt = (res.rows as Array<{ wkt?: string }>)[0]?.wkt;
+    return wkt ? String(wkt) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function hashLonLatPoint5181(lon: number, lat: number): Promise<string | null> {
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  try {
+    const res = await pool.query(
+      `SELECT md5(encode(ST_AsBinary(ST_SnapToGrid(
+         ST_Transform(ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326), 5181),
+         $3::float8
+       )), 'hex')) AS h`,
+      [lon, lat, EXCEL_GEOM_COMPARE_GRID_M]
+    );
+    const h = (res.rows as Array<{ h?: string }>)[0]?.h;
+    return h ? String(h) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function hashWkt5181(wkt: string): Promise<string | null> {
+  const w = String(wkt ?? '').trim();
+  if (!w) return null;
+  try {
+    const res = await pool.query(
+      `SELECT md5(encode(ST_AsBinary(ST_SnapToGrid(ST_GeomFromText($1::text, 5181), $2::float8)), 'hex')) AS h`,
+      [w, EXCEL_GEOM_COMPARE_GRID_M]
+    );
+    const h = (res.rows as Array<{ h?: string }>)[0]?.h;
+    return h ? String(h) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 기존 테이블 정합성: 엑셀(지오코딩 완료) 행과 DB를 키·속성·도형으로 비교해 pending excel_sync_log 작성.
+ * 본테이블은 변경하지 않는다.
+ */
+export async function prepareExcelIntegritySync(params: {
+  tableName: string;
+  keyField: string;
+  rows: ExcelRowInput[];
+  /** 이번 업로드 도형 모드 — Point↔Polygon 등 도형 타입 변경 감지에 사용 */
+  geometryType?: 'Point' | 'Polygon';
+}): Promise<
+  CompareExcelResult & {
+    columns: string[];
+    appendKeys: string[];
+  }
+> {
+  const empty = {
+    success: false as const,
+    appendCount: 0,
+    conflictCount: 0,
+    removeCount: 0,
+    unchangedCount: 0,
+    conflicts: [] as CompareExcelResult['conflicts'],
+    removes: [] as CompareExcelResult['removes'],
+    columns: [] as string[],
+    appendKeys: [] as string[],
+  };
+  const tableName = safeTableName(params.tableName ?? '');
+  const keyField = safeColumnName(params.keyField ?? '');
+  const rows = params.rows ?? [];
+  const geometryType = params.geometryType;
+  if (!tableName || !keyField) {
+    return { ...empty, error: 'tableName과 keyField가 필요합니다.' };
+  }
+  if (rows.length === 0) {
+    return { ...empty, error: '비교할 엑셀 행이 없습니다.' };
+  }
+
+  try {
+    // 이전 위저드 미결·미반영 의도 제거 (과거 이력에 묶인 확정 로그는 유지)
+    await discardExcelIntegrityReview({ tableName });
+
+    const dbRes = await db.execute(sql.raw(
+      `SELECT (COALESCE(row_to_json(t.*)::jsonb, '{}'::jsonb) - 'geom') AS j
+       FROM layer."${tableName}" t`
+    ));
+    const dbMap = new Map<string, Record<string, unknown>>();
+    for (const row of dbRes.rows as Array<{ j: Record<string, unknown> }>) {
+      const attrs = normalizeAttrMap(row.j);
+      const kv = String(attrs[keyField] ?? '').trim();
+      if (!kv) continue;
+      if (!dbMap.has(kv)) dbMap.set(kv, attrs);
+    }
+
+    const dbGeomMeta = new Map<string, { gtype: string | null; ghash: string | null }>();
+    try {
+      const gRes = await db.execute(sql.raw(
+        `SELECT t."${keyField}"::text AS k,
+                CASE WHEN t.geom IS NULL THEN NULL ELSE GeometryType(t.geom) END AS gtype,
+                CASE WHEN t.geom IS NULL THEN NULL
+                     ELSE md5(encode(ST_AsBinary(ST_SnapToGrid(t.geom, ${EXCEL_GEOM_COMPARE_GRID_M})), 'hex'))
+                END AS ghash
+         FROM layer."${tableName}" t
+         WHERE t."${keyField}" IS NOT NULL AND btrim(t."${keyField}"::text) <> ''`
+      ));
+      for (const r of gRes.rows as Array<{ k?: string; gtype?: string | null; ghash?: string | null }>) {
+        const kv = String(r.k ?? '').trim();
+        if (!kv || dbGeomMeta.has(kv)) continue;
+        dbGeomMeta.set(kv, {
+          gtype: r.gtype != null ? String(r.gtype) : null,
+          ghash: r.ghash != null ? String(r.ghash) : null,
+        });
+      }
+    } catch {
+      /* geom 메타 조회 실패 시 속성 비교만 */
+    }
+
+    const excelMap = new Map<string, Record<string, unknown>>();
+    for (const row of rows) {
+      const attrs = normalizeAttrMap((row.attrs ?? {}) as Record<string, unknown>);
+      const kv = String(attrs[keyField] ?? '').trim();
+      if (!kv) continue;
+      if (!excelMap.has(kv)) excelMap.set(kv, attrs);
+    }
+
+    const excelKeys = [...excelMap.keys()];
+    const dbKeys = [...dbMap.keys()];
+    const excelSet = new Set(excelKeys);
+    const dbSet = new Set(dbKeys);
+
+    const appendKeys = excelKeys.filter((k) => !dbSet.has(k));
+    const removeKeys = dbKeys.filter((k) => !excelSet.has(k));
+    const bothKeys = excelKeys.filter((k) => dbSet.has(k));
+
+    const excelCoordsByKey = new Map<string, { x: number; y: number } | { wkt: string; srid?: number }>();
+    for (const row of rows) {
+      const attrs = normalizeAttrMap((row.attrs ?? {}) as Record<string, unknown>);
+      const kv = String(attrs[keyField] ?? '').trim();
+      if (!kv || excelCoordsByKey.has(kv)) continue;
+      const parcels = Array.isArray(row.parcels) ? row.parcels : [];
+      const mulgunjis = Array.isArray(row.mulgunjis) ? row.mulgunjis : [];
+      const candidates = [...parcels, ...mulgunjis];
+      const withGeom = candidates.find((p) => p?.geom && String(p.geom).trim());
+      if (withGeom?.geom) {
+        const g = String(withGeom.geom).trim();
+        if (/^(POINT|POLYGON|MULTI|LINESTRING)/i.test(g)) {
+          excelCoordsByKey.set(kv, { wkt: g, srid: 5181 });
+          continue;
+        }
+      }
+      const withXy = candidates.find(
+        (p) => p != null && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))
+      );
+      if (withXy) {
+        excelCoordsByKey.set(kv, { x: Number(withXy.x), y: Number(withXy.y) });
+      }
+    }
+
+    const ensurePolygonPreviewWkt = async (kv: string) => {
+      const coord = excelCoordsByKey.get(kv);
+      if (!coord) return;
+      if ('wkt' in coord && coord.wkt) return;
+      if (!('x' in coord)) return;
+      const wkt = await resolveJijukWktFromLonLat(coord.x, coord.y);
+      if (wkt) excelCoordsByKey.set(kv, { wkt, srid: 5181 });
+    };
+
+    const attachNewGeom = async (eslKey: number, kv: string) => {
+      if (geometryType === 'Polygon') {
+        await ensurePolygonPreviewWkt(kv);
+      }
+      const coord = excelCoordsByKey.get(kv);
+      if (!coord) return;
+      if ('wkt' in coord && coord.wkt) {
+        await insertExcelSyncLogGeomFromWkt({ eslKey, wkt: coord.wkt, srid: coord.srid });
+      } else if ('x' in coord && 'y' in coord) {
+        await insertExcelSyncLogGeomFromLonLat({ eslKey, lon: coord.x, lat: coord.y });
+      }
+    };
+
+    const uploadFam = geomFamilyFromUpload(geometryType);
+
+    const conflicts: CompareExcelResult['conflicts'] = [];
+    let unchangedCount = 0;
+    for (const kv of bothKeys) {
+      const dbAttrs = dbMap.get(kv)!;
+      const excelAttrs = excelMap.get(kv)!;
+      const diffFields = diffAttrFields(dbAttrs, excelAttrs);
+      const meta = dbGeomMeta.get(kv);
+      const dbFam = geomFamilyFromDbType(meta?.gtype);
+      let geomChanged = false;
+
+      if (uploadFam && dbFam !== 'empty' && dbFam !== 'other' && uploadFam !== dbFam) {
+        geomChanged = true;
+      } else if (uploadFam === 'point' && dbFam === 'point') {
+        const coord = excelCoordsByKey.get(kv);
+        if (coord && 'x' in coord) {
+          const nh = await hashLonLatPoint5181(coord.x, coord.y);
+          if (nh && meta?.ghash && nh !== meta.ghash) geomChanged = true;
+          else if (nh && !meta?.ghash) geomChanged = true;
+        } else if (meta?.gtype) {
+          /* 엑셀 좌표 없음 — 도형 비교 생략 */
+        }
+      } else if (uploadFam === 'polygon' && dbFam === 'polygon') {
+        await ensurePolygonPreviewWkt(kv);
+        const coord = excelCoordsByKey.get(kv);
+        if (coord && 'wkt' in coord && coord.wkt) {
+          const nh = await hashWkt5181(coord.wkt);
+          if (nh && meta?.ghash && nh !== meta.ghash) geomChanged = true;
+          else if (nh && !meta?.ghash) geomChanged = true;
+        }
+      } else if (dbFam === 'empty' && uploadFam) {
+        // DB 무도형 + Point/Polygon 재업로드 → 좌표 유무와 관계없이 미결(타입 부여)
+        geomChanged = true;
+      }
+
+      if (diffFields.length === 0 && !geomChanged) {
+        unchangedCount += 1;
+        continue;
+      }
+
+      const fields = [...diffFields];
+      if (geomChanged && !fields.includes('geom')) fields.push('geom');
+
+      const newTypeLabel = uploadGeomTypeLabel(uploadFam);
+      const oldTypeLabel =
+        dbFam === 'point'
+          ? 'Point'
+          : dbFam === 'polygon'
+            ? 'Polygon'
+            : dbFam === 'line'
+              ? 'LineString'
+              : dbFam === 'empty'
+                ? null
+                : (meta?.gtype ? String(meta.gtype).replace(/^ST_/i, '') : null);
+
+      // 사이드 테이블에 실좌표가 있으면 이후 GeoJSON으로 덮어씀. 없으면 타입만 자리표시.
+      const dbValues: Record<string, unknown> = { ...dbAttrs };
+      const excelValues: Record<string, unknown> = { ...excelAttrs };
+      if (geomChanged) {
+        if (oldTypeLabel) {
+          dbValues.geom = geomTypeOnlyPlaceholder(oldTypeLabel);
+        } else if (dbFam === 'empty') {
+          dbValues.geom = geomTypeOnlyPlaceholder('Geometry');
+        }
+        if (newTypeLabel) {
+          excelValues.geom = geomTypeOnlyPlaceholder(newTypeLabel);
+        }
+      }
+
+      conflicts.push({
+        key: kv,
+        diffFields: fields,
+        dbValues,
+        excelValues,
+      });
+      const ins = await pool.query(
+        `INSERT INTO excel_sync_log (esl_table_name, esl_key_field, esl_key_value, esl_old_data, esl_new_data)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
+         RETURNING esl_key`,
+        [tableName, keyField, kv, JSON.stringify(dbValues), JSON.stringify(excelValues)]
+      );
+      const eslKey = Number((ins.rows as Array<{ esl_key: number }>)[0]?.esl_key);
+      if (Number.isFinite(eslKey) && eslKey > 0) {
+        await insertExcelSyncLogGeomFromLayer({ eslKey, tableName, keyField, keyValue: kv, side: 'old' });
+        await attachNewGeom(eslKey, kv);
+      }
+    }
+
+    for (const kv of appendKeys) {
+      const excelAttrs = excelMap.get(kv)!;
+      const newTypeLabel = uploadGeomTypeLabel(uploadFam);
+      const excelValues: Record<string, unknown> = { ...excelAttrs };
+      if (newTypeLabel) {
+        excelValues.geom = geomTypeOnlyPlaceholder(newTypeLabel);
+      }
+      const ins = await pool.query(
+        `INSERT INTO excel_sync_log (esl_table_name, esl_key_field, esl_key_value, esl_old_data, esl_new_data)
+         VALUES ($1, $2, $3, NULL, $4::jsonb)
+         RETURNING esl_key`,
+        [tableName, keyField, kv, JSON.stringify(excelValues)]
+      );
+      const eslKey = Number((ins.rows as Array<{ esl_key: number }>)[0]?.esl_key);
+      if (Number.isFinite(eslKey) && eslKey > 0) {
+        await attachNewGeom(eslKey, kv);
+      }
+    }
+
+    const removes: CompareExcelResult['removes'] = [];
+    for (const kv of removeKeys) {
+      const dbAttrs = dbMap.get(kv)!;
+      const meta = dbGeomMeta.get(kv);
+      const dbFam = geomFamilyFromDbType(meta?.gtype);
+      const hasOldGeom = !!(meta?.gtype || meta?.ghash);
+      const dbValues: Record<string, unknown> = { ...dbAttrs };
+      if (hasOldGeom) {
+        const oldTypeLabel =
+          dbFam === 'point'
+            ? 'Point'
+            : dbFam === 'polygon'
+              ? 'Polygon'
+              : dbFam === 'line'
+                ? 'LineString'
+                : (meta?.gtype ? String(meta.gtype).replace(/^ST_/i, '') : 'Geometry');
+        dbValues.geom = geomTypeOnlyPlaceholder(oldTypeLabel);
+      }
+      removes.push({ key: kv, values: dbValues });
+      const ins = await pool.query(
+        `INSERT INTO excel_sync_log (esl_table_name, esl_key_field, esl_key_value, esl_old_data, esl_new_data)
+         VALUES ($1, $2, $3, $4::jsonb, NULL)
+         RETURNING esl_key`,
+        [tableName, keyField, kv, JSON.stringify(dbValues)]
+      );
+      const eslKey = Number((ins.rows as Array<{ esl_key: number }>)[0]?.esl_key);
+      if (Number.isFinite(eslKey) && eslKey > 0 && hasOldGeom) {
+        await insertExcelSyncLogGeomFromLayer({ eslKey, tableName, keyField, keyValue: kv, side: 'old' });
+      }
+    }
+
+    const colSet = new Set<string>();
+    for (const a of excelMap.values()) Object.keys(a).forEach((k) => colSet.add(k));
+    for (const a of dbMap.values()) Object.keys(a).forEach((k) => colSet.add(k));
+    const columns = [keyField, ...[...colSet].filter((c) => c !== keyField)].slice(0, 40);
+
+    // 누락 보강 (의도 표시 후 재조회 포함) + JSON에 GeoJSON 반영
+    await fillPendingExcelSyncLogOldGeoms({ tableName, keyField });
+    await fillPendingExcelSyncLogNewGeomsFromCoords({
+      tableName,
+      coordsByKey: Object.fromEntries(excelCoordsByKey),
+    });
+    await syncExcelSyncLogJsonGeomFromSideTable({ tableName });
+
+    return {
+      success: true,
+      tableName,
+      keyField,
+      appendCount: appendKeys.length,
+      conflictCount: conflicts.length,
+      removeCount: removeKeys.length,
+      unchangedCount,
+      conflicts: conflicts.slice(0, 500),
+      removes: removes.slice(0, 500),
+      columns,
+      appendKeys,
+    };
+  } catch (e: unknown) {
+    return { ...empty, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 정합성 모달 선택 반영: 삭제 → 충돌(엑셀) 재삽입 → 신규 삽입. 전체 TRUNCATE 없음.
+ */
+export async function applyExcelIntegritySync(params: {
+  tableName: string;
+  tableKorName: string;
+  keyField: string;
+  columns: ExcelColumnDef[];
+  rows: ExcelRowInput[];
+  geometryType: 'Point' | 'Polygon';
+  conflictKeysUseExcel: string[];
+  removeKeys: string[];
+  conflictKeysKeepDb: string[];
+  appendKeys?: string[];
+  separateJijukTable?: boolean;
+  separateMulgunjiTable?: boolean;
+  jijukTableComment?: string;
+  mulgunjiTableComment?: string;
+  ehKey?: number;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  insertedCount?: number;
+  deletedCount?: number;
+  updatedCount?: number;
+  keptCount?: number;
+}> {
+  const tableName = safeTableName(params.tableName ?? '');
+  const keyField = safeColumnName(params.keyField ?? '');
+  if (!tableName || !keyField) {
+    return { success: false, error: 'tableName과 keyField가 필요합니다.' };
+  }
+
+  const conflictUse = new Set((params.conflictKeysUseExcel ?? []).map(String));
+  const removeSet = new Set((params.removeKeys ?? []).map(String));
+  const keepDb = new Set((params.conflictKeysKeepDb ?? []).map(String));
+  const appendSet = new Set((params.appendKeys ?? []).map(String));
+
+  const rowByKey = new Map<string, ExcelRowInput>();
+  for (const row of params.rows ?? []) {
+    const kv = String((row.attrs ?? {})[keyField] ?? '').trim();
+    if (kv && !rowByKey.has(kv)) rowByKey.set(kv, row);
+  }
+
+  // appendKeys 미전달 시: DB에 없는 키를 신규로 간주
+  if (appendSet.size === 0) {
+    try {
+      const dbRes = await db.execute(sql.raw(
+        `SELECT DISTINCT "${keyField}"::text AS k FROM layer."${tableName}"
+         WHERE "${keyField}" IS NOT NULL AND btrim("${keyField}"::text) <> ''`
+      ));
+      const dbKeys = new Set(
+        (dbRes.rows as Array<{ k: string }>).map((r) => String(r.k ?? '').trim()).filter(Boolean)
+      );
+      for (const k of rowByKey.keys()) {
+        if (!dbKeys.has(k) && !conflictUse.has(k)) appendSet.add(k);
+      }
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  const deleteKeys = [...removeSet, ...conflictUse];
+  let deletedCount = 0;
+  try {
+    for (const kv of deleteKeys) {
+      const safeKv = kv.replace(/'/g, "''");
+      const del = await db.execute(sql.raw(
+        `DELETE FROM layer."${tableName}" WHERE "${keyField}"::text = '${safeKv}'`
+      ));
+      deletedCount += Number((del as { rowCount?: number }).rowCount ?? 0);
+    }
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const upsertKeys = [...appendSet, ...conflictUse];
+  const upsertRows = upsertKeys.map((k) => rowByKey.get(k)).filter(Boolean) as ExcelRowInput[];
+
+  let insertedCount = 0;
+  if (upsertRows.length > 0) {
+    // 배치로 appendOnly 삽입 (첫 호출도 truncate 없이)
+    const BATCH = 20;
+    for (let i = 0; i < upsertRows.length; i += BATCH) {
+      const chunk = upsertRows.slice(i, i + BATCH);
+      const res = await createTableFromExcel({
+        tableName,
+        tableKorName: params.tableKorName,
+        keyField,
+        columns: params.columns,
+        geometryType: params.geometryType,
+        rows: chunk,
+        appendOnly: true,
+        separateJijukTable: params.separateJijukTable,
+        separateMulgunjiTable: params.separateMulgunjiTable,
+        jijukTableComment: params.jijukTableComment,
+        mulgunjiTableComment: params.mulgunjiTableComment,
+      });
+      if (!res.success) {
+        return { success: false, error: res.error ?? '정합성 반영 삽입 실패' };
+      }
+      insertedCount += res.rowCount ?? 0;
+    }
+  }
+
+  const ehKey = params.ehKey != null && Number.isFinite(params.ehKey) ? Math.trunc(params.ehKey) : null;
+  const ehSql = ehKey != null ? String(ehKey) : 'NULL';
+  const mark = async (keys: string[], op: string) => {
+    for (const kv of keys) {
+      const safeKv = kv.replace(/'/g, "''");
+      await db.execute(sql.raw(
+        `UPDATE excel_sync_log
+         SET esl_operation = '${op}',
+             esl_applied_at = NOW(),
+             esl_eh_key = COALESCE(esl_eh_key, ${ehSql})
+         WHERE esl_table_name = '${tableName}'
+           AND esl_key_value = '${safeKv}'
+           AND (
+             esl_operation IS NULL
+             OR (esl_operation IS NOT NULL AND esl_applied_at IS NULL)
+           )`
+      ));
+    }
+  };
+  try {
+    await mark([...appendSet], 'append');
+    await mark([...conflictUse], 'conflict');
+    await mark([...removeSet], 'remove');
+    await mark([...keepDb], 'kept');
+    // 남은 미결(동일·미선택 삭제 등) 정리
+    await db.execute(sql.raw(
+      `DELETE FROM excel_sync_log
+       WHERE esl_table_name = '${tableName}' AND esl_operation IS NULL`
+    ));
+  } catch {
+    /* 로그 마킹 실패는 본 반영과 분리 */
+  }
+
+  return {
+    success: true,
+    insertedCount,
+    deletedCount,
+    updatedCount: conflictUse.size,
+    keptCount: keepDb.size,
   };
 }
