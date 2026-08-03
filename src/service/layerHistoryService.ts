@@ -158,14 +158,19 @@ export async function createLayerHistory(params: {
   contents: string;
   successCount: number;
   failCount: number;
-  createUser?: number;
+  /** 작업자 — `usrId(usrName)` 또는 표시 문자열 */
+  createUser?: string | number | null;
 }): Promise<{ success: boolean; lhKey?: number; error?: string }> {
   try {
+    const createUser =
+      params.createUser == null || params.createUser === ''
+        ? null
+        : String(params.createUser).trim() || null;
     const rows = await db.insert(lh).values({
       lhContents: params.contents,
       lhSuccessCount: params.successCount,
       lhFailCount: params.failCount,
-      lhCreateUser: params.createUser ?? null,
+      lhCreateUser: createUser,
       lhCreateDate: todayWorkDateString(),
     }).returning({ lhKey: lh.lhKey });
     return { success: true, lhKey: rows[0]?.lhKey };

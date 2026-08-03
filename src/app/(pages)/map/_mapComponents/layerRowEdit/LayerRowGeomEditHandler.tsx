@@ -196,6 +196,7 @@ export function LayerRowGeomEditHandler({
   const edit = mapContext?.layerRowGeomEdit ?? null;
   const setEdit = mapContext?.setLayerRowGeomEdit;
   const wktRef = mapContext?.layerRowGeomEditWktRef;
+  const dirtyRef = mapContext?.layerRowGeomEditDirtyRef;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const setLayerRowDraftParcels = mapContext?.setLayerRowDraftParcels;
   const layerRowParcelRemoveRef = mapContext?.layerRowParcelRemoveRef;
@@ -336,13 +337,14 @@ export function LayerRowGeomEditHandler({
     let cancelled = false;
     let loadSeq = 0;
 
-    const syncFromSource = () => {
+    const syncFromSource = (opts?: { markDirty?: boolean }) => {
       const wkt = writeCombinedWkt5181FromParentFeatures(source);
       if (wkt) {
         wktRef.current = wkt;
       } else if (wktRef.current !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
         wktRef.current = null;
       }
+      if (opts?.markDirty && dirtyRef) dirtyRef.current = true;
       setHasParentGeom(getParentFeatures(source).length > 0);
       syncDraftParcelsFromSource(source, setLayerRowDraftParcels);
     };
@@ -380,7 +382,7 @@ export function LayerRowGeomEditHandler({
           wktRef.current = String(data.wkt5181);
           setHasParentGeom(true);
         }
-        syncFromSource();
+        syncFromSource({ markDirty: true });
         attachModifyRef.current?.();
       } catch {
         // 필지 목록 삭제는 유지, 도형 갱신만 생략
@@ -412,7 +414,7 @@ export function LayerRowGeomEditHandler({
       detachModify();
       modify = new Modify({ source });
       modify.on("modifyend", () => {
-        syncFromSource();
+        syncFromSource({ markDirty: true });
         void loadParcelsRef.current?.({ silent: true });
       });
       map.addInteraction(modify);
@@ -431,7 +433,7 @@ export function LayerRowGeomEditHandler({
       draw = new Draw({ source, type: "Polygon", stopClick: true });
       draw.on("drawend", (e) => {
         markAsParentFeature(e.feature);
-        syncFromSource();
+        syncFromSource({ markDirty: true });
         detachDraw();
         attachModify();
         void loadParcelsRef.current?.({ silent: true });
@@ -490,6 +492,7 @@ export function LayerRowGeomEditHandler({
         for (const f of features) markAsParentFeature(f);
         source.addFeatures(features);
         syncFromSource();
+        if (dirtyRef) dirtyRef.current = false;
         attachModify();
         void loadParcelsRef.current?.({ silent: true });
         return true;
@@ -508,6 +511,7 @@ export function LayerRowGeomEditHandler({
         detachDraw();
         removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
         wktRef.current = null;
+        if (dirtyRef) dirtyRef.current = false;
         await loadModifyGeom();
       },
       deleteGeom: () => {
@@ -517,6 +521,7 @@ export function LayerRowGeomEditHandler({
         setHasParentGeom(false);
         wktRef.current =
           edit.mode === "modify" ? LAYER_ROW_GEOM_CLEAR_SENTINEL : null;
+        if (dirtyRef) dirtyRef.current = true;
         mapContext?.layerRowParcelApplyRef?.current?.([], { replaceAuto: true });
         attachModify();
       },
