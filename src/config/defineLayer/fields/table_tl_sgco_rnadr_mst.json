@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "etc_bul_nm",
-    "define_field_kor_name": "etc_bul_nm",
+    "define_field_kor_name": "기타상세건물명",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "zip_bul_nm",
-    "define_field_kor_name": "zip_bul_nm",
+    "define_field_kor_name": "다량배달처건물명",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "zip_no",
-    "define_field_kor_name": "zip_no",
+    "define_field_kor_name": "우편번호일련번호",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "rds_sig_cd",
-    "define_field_kor_name": "rds_sig_cd",
+    "define_field_kor_name": "도로구간시군구코드",
     "define_field_type": "text",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "bul_man_no",
-    "define_field_kor_name": "bul_man_no",
+    "define_field_kor_name": "건물일련번호",
     "define_field_type": "number",
     "define_field_idx": 10,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "sig_cd",
-    "define_field_kor_name": "sig_cd",
+    "define_field_kor_name": "시군구코드",
     "define_field_type": "text",
     "define_field_idx": 11,
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "rn_cd",
-    "define_field_kor_name": "rn_cd",
+    "define_field_kor_name": "도로명코드",
     "define_field_type": "text",
     "define_field_idx": 12,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "rds_man_no",
-    "define_field_kor_name": "rds_man_no",
+    "define_field_kor_name": "도로구간일련번호",
     "define_field_type": "number",
     "define_field_idx": 13,
     "define_field_is_required": false,
@@ -326,7 +326,7 @@
   },
   {
     "define_field_name": "bsi_int_sn",
-    "define_field_kor_name": "bsi_int_sn",
+    "define_field_kor_name": "기초구간일련번호",
     "define_field_type": "number",
     "define_field_idx": 14,
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "eqb_man_sn",
-    "define_field_kor_name": "eqb_man_sn",
+    "define_field_kor_name": "건물군일련번호",
     "define_field_type": "number",
     "define_field_idx": 15,
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "buld_se_cd",
-    "define_field_kor_name": "buld_se_cd",
+    "define_field_kor_name": "건물구분코드",
     "define_field_type": "text",
     "define_field_idx": 16,
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "buld_mnnm",
-    "define_field_kor_name": "buld_mnnm",
+    "define_field_kor_name": "건물본번",
     "define_field_type": "number",
     "define_field_idx": 17,
     "define_field_is_required": false,
@@ -426,7 +426,7 @@
   },
   {
     "define_field_name": "buld_slno",
-    "define_field_kor_name": "buld_slno",
+    "define_field_kor_name": "건물부번",
     "define_field_type": "number",
     "define_field_idx": 18,
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "buld_nm",
-    "define_field_kor_name": "buld_nm",
+    "define_field_kor_name": "건축물대장건물명",
     "define_field_type": "text",
     "define_field_idx": 19,
     "define_field_is_required": false,
@@ -476,7 +476,7 @@
   },
   {
     "define_field_name": "bul_eng_nm",
-    "define_field_kor_name": "bul_eng_nm",
+    "define_field_kor_name": "건물영문명",
     "define_field_type": "text",
     "define_field_idx": 20,
     "define_field_is_required": false,
@@ -501,7 +501,7 @@
   },
   {
     "define_field_name": "buld_nm_dc",
-    "define_field_kor_name": "buld_nm_dc",
+    "define_field_kor_name": "상세건물명",
     "define_field_type": "text",
     "define_field_idx": 21,
     "define_field_is_required": false,
@@ -526,7 +526,7 @@
   },
   {
     "define_field_name": "buld_sttus",
-    "define_field_kor_name": "buld_sttus",
+    "define_field_kor_name": "건물상태코드",
     "define_field_type": "text",
     "define_field_idx": 22,
     "define_field_is_required": false,
@@ -551,7 +551,7 @@
   },
   {
     "define_field_name": "bdtyp_cd",
-    "define_field_kor_name": "bdtyp_cd",
+    "define_field_kor_name": "건물용도코드",
     "define_field_type": "text",
     "define_field_idx": 23,
     "define_field_is_required": false,
@@ -576,7 +576,7 @@
   },
   {
     "define_field_name": "bul_dpn_se",
-    "define_field_kor_name": "bul_dpn_se",
+    "define_field_kor_name": "건물종속구분",
     "define_field_type": "text",
     "define_field_idx": 24,
     "define_field_is_required": false,
@@ -601,7 +601,7 @@
   },
   {
     "define_field_name": "gro_flo_co",
-    "define_field_kor_name": "gro_flo_co",
+    "define_field_kor_name": "지상층수",
     "define_field_type": "number",
     "define_field_idx": 25,
     "define_field_is_required": false,
@@ -626,7 +626,7 @@
   },
   {
     "define_field_name": "und_flo_co",
-    "define_field_kor_name": "und_flo_co",
+    "define_field_kor_name": "지하층수",
     "define_field_type": "number",
     "define_field_idx": 26,
     "define_field_is_required": false,
@@ -651,7 +651,7 @@
   },
   {
     "define_field_name": "zip",
-    "define_field_kor_name": "zip",
+    "define_field_kor_name": "우편번호",
     "define_field_type": "text",
     "define_field_idx": 27,
     "define_field_is_required": false,
@@ -676,7 +676,7 @@
   },
   {
     "define_field_name": "pos_bul_nm",
-    "define_field_kor_name": "pos_bul_nm",
+    "define_field_kor_name": "건물명",
     "define_field_type": "text",
     "define_field_idx": 28,
     "define_field_is_required": false,
@@ -701,7 +701,7 @@
   },
   {
     "define_field_name": "reg_pub_nm",
-    "define_field_kor_name": "reg_pub_nm",
+    "define_field_kor_name": "등록공공문서명",
     "define_field_type": "text",
     "define_field_idx": 29,
     "define_field_is_required": false,
@@ -726,7 +726,7 @@
   },
   {
     "define_field_name": "emd_cd",
-    "define_field_kor_name": "emd_cd",
+    "define_field_kor_name": "읍면동코드",
     "define_field_type": "text",
     "define_field_idx": 30,
     "define_field_is_required": false,
@@ -751,7 +751,7 @@
   },
   {
     "define_field_name": "li_cd",
-    "define_field_kor_name": "li_cd",
+    "define_field_kor_name": "리코드",
     "define_field_type": "text",
     "define_field_idx": 31,
     "define_field_is_required": false,
@@ -776,7 +776,7 @@
   },
   {
     "define_field_name": "mntn_yn",
-    "define_field_kor_name": "mntn_yn",
+    "define_field_kor_name": "산여부",
     "define_field_type": "text",
     "define_field_idx": 32,
     "define_field_is_required": false,
@@ -801,7 +801,7 @@
   },
   {
     "define_field_name": "lnbr_mnnm",
-    "define_field_kor_name": "lnbr_mnnm",
+    "define_field_kor_name": "지번본번",
     "define_field_type": "number",
     "define_field_idx": 33,
     "define_field_is_required": false,
@@ -826,7 +826,7 @@
   },
   {
     "define_field_name": "lnbr_slno",
-    "define_field_kor_name": "lnbr_slno",
+    "define_field_kor_name": "지번부번",
     "define_field_type": "number",
     "define_field_idx": 34,
     "define_field_is_required": false,
@@ -851,7 +851,7 @@
   },
   {
     "define_field_name": "compet_de",
-    "define_field_kor_name": "compet_de",
+    "define_field_kor_name": "완료일자",
     "define_field_type": "text",
     "define_field_idx": 35,
     "define_field_is_required": false,
@@ -876,7 +876,7 @@
   },
   {
     "define_field_name": "ntfc_de",
-    "define_field_kor_name": "ntfc_de",
+    "define_field_kor_name": "고시일자",
     "define_field_type": "text",
     "define_field_idx": 36,
     "define_field_is_required": false,
@@ -901,7 +901,7 @@
   },
   {
     "define_field_name": "mvm_res_cd",
-    "define_field_kor_name": "mvm_res_cd",
+    "define_field_kor_name": "이동사유코드",
     "define_field_type": "text",
     "define_field_idx": 37,
     "define_field_is_required": false,
@@ -926,7 +926,7 @@
   },
   {
     "define_field_name": "mvmn_resn",
-    "define_field_kor_name": "mvmn_resn",
+    "define_field_kor_name": "이동사유",
     "define_field_type": "text",
     "define_field_idx": 38,
     "define_field_is_required": false,
@@ -951,7 +951,7 @@
   },
   {
     "define_field_name": "mvmn_de",
-    "define_field_kor_name": "mvmn_de",
+    "define_field_kor_name": "이동일자",
     "define_field_type": "text",
     "define_field_idx": 39,
     "define_field_is_required": false,
@@ -976,7 +976,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 40,
     "define_field_is_required": false,
@@ -1001,7 +1001,7 @@
   },
   {
     "define_field_name": "opert_de",
-    "define_field_kor_name": "opert_de",
+    "define_field_kor_name": "작업일시",
     "define_field_type": "text",
     "define_field_idx": 41,
     "define_field_is_required": false,
@@ -1026,7 +1026,7 @@
   },
   {
     "define_field_name": "ima_fil_sn",
-    "define_field_kor_name": "ima_fil_sn",
+    "define_field_kor_name": "이미지파일일련번호",
     "define_field_type": "number",
     "define_field_idx": 42,
     "define_field_is_required": false,
@@ -1051,7 +1051,7 @@
   },
   {
     "define_field_name": "bsi_zon_no",
-    "define_field_kor_name": "bsi_zon_no",
+    "define_field_kor_name": "기초구역번호",
     "define_field_type": "text",
     "define_field_idx": 43,
     "define_field_is_required": false,
@@ -1076,7 +1076,7 @@
   },
   {
     "define_field_name": "nti_trg_yn",
-    "define_field_kor_name": "nti_trg_yn",
+    "define_field_kor_name": "고지대상여부",
     "define_field_type": "text",
     "define_field_idx": 44,
     "define_field_is_required": false,
@@ -1101,7 +1101,7 @@
   },
   {
     "define_field_name": "input_mthd",
-    "define_field_kor_name": "input_mthd",
+    "define_field_kor_name": "입력방법",
     "define_field_type": "text",
     "define_field_idx": 45,
     "define_field_is_required": false,
@@ -1126,7 +1126,7 @@
   },
   {
     "define_field_name": "bd_mgt_sn",
-    "define_field_kor_name": "bd_mgt_sn",
+    "define_field_kor_name": "이전건물관리번호",
     "define_field_type": "text",
     "define_field_idx": 46,
     "define_field_is_required": false,
@@ -1151,7 +1151,7 @@
   },
   {
     "define_field_name": "issu_yn",
-    "define_field_kor_name": "issu_yn",
+    "define_field_kor_name": "발급여부",
     "define_field_type": "text",
     "define_field_idx": 47,
     "define_field_is_required": false,
@@ -1176,7 +1176,7 @@
   },
   {
     "define_field_name": "pos_bul_yn",
-    "define_field_kor_name": "pos_bul_yn",
+    "define_field_kor_name": "다량배달처여부",
     "define_field_type": "text",
     "define_field_idx": 48,
     "define_field_is_required": false,

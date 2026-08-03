@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "lght_cd",
-    "define_field_kor_name": "lght_cd",
+    "define_field_kor_name": "LGHT_CD",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "advrts_cd",
-    "define_field_kor_name": "advrts_cd",
+    "define_field_kor_name": "ADVRTS_CD",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "ins_plc",
-    "define_field_kor_name": "ins_plc",
+    "define_field_kor_name": "INS_PLC",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "stt_ch_de",
-    "define_field_kor_name": "stt_ch_de",
+    "define_field_kor_name": "STT_CH_DE",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "adv_beg_de",
-    "define_field_kor_name": "adv_beg_de",
+    "define_field_kor_name": "광고기간_시작일",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "adv_end_de",
-    "define_field_kor_name": "adv_end_de",
+    "define_field_kor_name": "광고기간_종료일",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "sig_cd",
-    "define_field_kor_name": "sig_cd",
+    "define_field_kor_name": "시군구코드",
     "define_field_type": "text",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "rdftylc_sn",
-    "define_field_kor_name": "rdftylc_sn",
+    "define_field_kor_name": "도로시설물위치일련번호",
     "define_field_type": "number",
     "define_field_idx": 10,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "rdfty_se",
-    "define_field_kor_name": "rdfty_se",
+    "define_field_kor_name": "도로시설물구분",
     "define_field_type": "text",
     "define_field_idx": 11,
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "rds_sig_cd",
-    "define_field_kor_name": "rds_sig_cd",
+    "define_field_kor_name": "도로구간시군구코드",
     "define_field_type": "text",
     "define_field_idx": 12,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "rn_cd",
-    "define_field_kor_name": "rn_cd",
+    "define_field_kor_name": "도로명코드",
     "define_field_type": "text",
     "define_field_idx": 13,
     "define_field_is_required": false,
@@ -326,7 +326,7 @@
   },
   {
     "define_field_name": "bsis_mnnm",
-    "define_field_kor_name": "bsis_mnnm",
+    "define_field_kor_name": "기초번호본번",
     "define_field_type": "number",
     "define_field_idx": 14,
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "bsis_slno",
-    "define_field_kor_name": "bsis_slno",
+    "define_field_kor_name": "기초번호부번",
     "define_field_type": "number",
     "define_field_idx": 15,
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "pil_man_no",
-    "define_field_kor_name": "pil_man_no",
+    "define_field_kor_name": "지주관리번호",
     "define_field_type": "text",
     "define_field_idx": 16,
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "crd_sig_cd",
-    "define_field_kor_name": "crd_sig_cd",
+    "define_field_kor_name": "교차로시군구코드",
     "define_field_type": "text",
     "define_field_idx": 17,
     "define_field_is_required": false,
@@ -426,7 +426,7 @@
   },
   {
     "define_field_name": "crsrd_sn",
-    "define_field_kor_name": "crsrd_sn",
+    "define_field_kor_name": "교차로일련번호",
     "define_field_type": "number",
     "define_field_idx": 18,
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "lbl",
-    "define_field_kor_name": "lbl",
+    "define_field_kor_name": "대표라벨",
     "define_field_type": "text",
     "define_field_idx": 19,
     "define_field_is_required": false,
@@ -476,7 +476,7 @@
   },
   {
     "define_field_name": "symbol_se",
-    "define_field_kor_name": "symbol_se",
+    "define_field_kor_name": "심볼구분",
     "define_field_type": "text",
     "define_field_idx": 20,
     "define_field_is_required": false,
@@ -501,7 +501,7 @@
   },
   {
     "define_field_name": "rd_gdfty_s",
-    "define_field_kor_name": "rd_gdfty_s",
+    "define_field_kor_name": "RD_GDFTY_S",
     "define_field_type": "number",
     "define_field_idx": 21,
     "define_field_is_required": false,
@@ -526,7 +526,7 @@
   },
   {
     "define_field_name": "rd_gdft_01",
-    "define_field_kor_name": "rd_gdft_01",
+    "define_field_kor_name": "RD_GDFTY_S1",
     "define_field_type": "text",
     "define_field_idx": 22,
     "define_field_is_required": false,
@@ -551,7 +551,7 @@
   },
   {
     "define_field_name": "instl_se",
-    "define_field_kor_name": "instl_se",
+    "define_field_kor_name": "도로안내시설 설치유형",
     "define_field_type": "text",
     "define_field_idx": 23,
     "define_field_is_required": false,
@@ -576,7 +576,7 @@
   },
   {
     "define_field_name": "fty_man_no",
-    "define_field_kor_name": "fty_man_no",
+    "define_field_kor_name": "FTY_MAN_NO",
     "define_field_type": "text",
     "define_field_idx": 24,
     "define_field_is_required": false,
@@ -601,7 +601,7 @@
   },
   {
     "define_field_name": "use_trget",
-    "define_field_kor_name": "use_trget",
+    "define_field_kor_name": "사용대상",
     "define_field_type": "text",
     "define_field_idx": 25,
     "define_field_is_required": false,
@@ -626,7 +626,7 @@
   },
   {
     "define_field_name": "gdfty_fom",
-    "define_field_kor_name": "gdfty_fom",
+    "define_field_kor_name": "안내시설형식",
     "define_field_type": "text",
     "define_field_idx": 26,
     "define_field_is_required": false,
@@ -651,7 +651,7 @@
   },
   {
     "define_field_name": "gdfty_mnf",
-    "define_field_kor_name": "gdfty_mnf",
+    "define_field_kor_name": "안내시설제작형식",
     "define_field_type": "text",
     "define_field_idx": 27,
     "define_field_is_required": false,
@@ -676,7 +676,7 @@
   },
   {
     "define_field_name": "gdfty_qlt",
-    "define_field_kor_name": "gdfty_qlt",
+    "define_field_kor_name": "안내시설재질",
     "define_field_type": "text",
     "define_field_idx": 28,
     "define_field_is_required": false,
@@ -701,7 +701,7 @@
   },
   {
     "define_field_name": "gdfty_wid",
-    "define_field_kor_name": "gdfty_wid",
+    "define_field_kor_name": "안내시설물가로",
     "define_field_type": "number",
     "define_field_idx": 29,
     "define_field_is_required": false,
@@ -726,7 +726,7 @@
   },
   {
     "define_field_name": "gdfty_vel",
-    "define_field_kor_name": "gdfty_vel",
+    "define_field_kor_name": "안내시설물세로",
     "define_field_type": "number",
     "define_field_idx": 30,
     "define_field_is_required": false,
@@ -751,7 +751,7 @@
   },
   {
     "define_field_name": "gdfty_thi",
-    "define_field_kor_name": "gdfty_thi",
+    "define_field_kor_name": "안내시설물두께",
     "define_field_type": "number",
     "define_field_idx": 31,
     "define_field_is_required": false,
@@ -776,7 +776,7 @@
   },
   {
     "define_field_name": "gdfty_unpc",
-    "define_field_kor_name": "gdfty_unpc",
+    "define_field_kor_name": "안내시설단가",
     "define_field_type": "number",
     "define_field_idx": 32,
     "define_field_is_required": false,
@@ -801,7 +801,7 @@
   },
   {
     "define_field_name": "ins_spo_cd",
-    "define_field_kor_name": "ins_spo_cd",
+    "define_field_kor_name": "설치지점코드",
     "define_field_type": "text",
     "define_field_idx": 33,
     "define_field_is_required": false,
@@ -826,7 +826,7 @@
   },
   {
     "define_field_name": "ins_crs_cd",
-    "define_field_kor_name": "ins_crs_cd",
+    "define_field_kor_name": "INS_CRS_CD",
     "define_field_type": "text",
     "define_field_idx": 34,
     "define_field_is_required": false,
@@ -851,7 +851,7 @@
   },
   {
     "define_field_name": "ins_spo_dc",
-    "define_field_kor_name": "ins_spo_dc",
+    "define_field_kor_name": "설치지점설명",
     "define_field_type": "text",
     "define_field_idx": 35,
     "define_field_is_required": false,
@@ -876,7 +876,7 @@
   },
   {
     "define_field_name": "instl_de",
-    "define_field_kor_name": "instl_de",
+    "define_field_kor_name": "설치일자",
     "define_field_type": "text",
     "define_field_idx": 36,
     "define_field_is_required": false,
@@ -901,7 +901,7 @@
   },
   {
     "define_field_name": "regist_de",
-    "define_field_kor_name": "regist_de",
+    "define_field_kor_name": "등록일자",
     "define_field_type": "text",
     "define_field_idx": 37,
     "define_field_is_required": false,
@@ -926,7 +926,7 @@
   },
   {
     "define_field_name": "islgn_yn",
-    "define_field_kor_name": "islgn_yn",
+    "define_field_kor_name": "설치/재설치여부",
     "define_field_type": "text",
     "define_field_idx": 38,
     "define_field_is_required": false,
@@ -951,7 +951,7 @@
   },
   {
     "define_field_name": "ins_ins",
-    "define_field_kor_name": "ins_ins",
+    "define_field_kor_name": "설치기관",
     "define_field_type": "text",
     "define_field_idx": 39,
     "define_field_is_required": false,
@@ -976,7 +976,7 @@
   },
   {
     "define_field_name": "ins_ins_dc",
-    "define_field_kor_name": "ins_ins_dc",
+    "define_field_kor_name": "설치기관상세설명",
     "define_field_type": "text",
     "define_field_idx": 40,
     "define_field_is_required": false,
@@ -1001,7 +1001,7 @@
   },
   {
     "define_field_name": "man_ins",
-    "define_field_kor_name": "man_ins",
+    "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 41,
     "define_field_is_required": false,
@@ -1026,7 +1026,7 @@
   },
   {
     "define_field_name": "man_ins_dc",
-    "define_field_kor_name": "man_ins_dc",
+    "define_field_kor_name": "관리기관상세설명",
     "define_field_type": "text",
     "define_field_idx": 42,
     "define_field_is_required": false,
@@ -1051,7 +1051,7 @@
   },
   {
     "define_field_name": "scfgg_mkty",
-    "define_field_kor_name": "scfgg_mkty",
+    "define_field_kor_name": "제2외국어표기유형",
     "define_field_type": "text",
     "define_field_idx": 43,
     "define_field_is_required": false,
@@ -1076,7 +1076,7 @@
   },
   {
     "define_field_name": "scfgg_ula1",
-    "define_field_kor_name": "scfgg_ula1",
+    "define_field_kor_name": "제2외국어사용언어1",
     "define_field_type": "text",
     "define_field_idx": 44,
     "define_field_is_required": false,
@@ -1101,7 +1101,7 @@
   },
   {
     "define_field_name": "scfgg_ula2",
-    "define_field_kor_name": "scfgg_ula2",
+    "define_field_kor_name": "제2외국어사용언어2",
     "define_field_type": "text",
     "define_field_idx": 45,
     "define_field_is_required": false,
@@ -1126,7 +1126,7 @@
   },
   {
     "define_field_name": "bdrcl_at",
-    "define_field_kor_name": "bdrcl_at",
+    "define_field_kor_name": "양면여부",
     "define_field_type": "text",
     "define_field_idx": 46,
     "define_field_is_required": false,
@@ -1151,7 +1151,7 @@
   },
   {
     "define_field_name": "loss_at",
-    "define_field_kor_name": "loss_at",
+    "define_field_kor_name": "망실여부",
     "define_field_type": "text",
     "define_field_idx": 47,
     "define_field_is_required": false,
@@ -1176,7 +1176,7 @@
   },
   {
     "define_field_name": "lt_chc_stt",
-    "define_field_kor_name": "lt_chc_stt",
+    "define_field_kor_name": "최종점검상태",
     "define_field_type": "text",
     "define_field_idx": 48,
     "define_field_is_required": false,
@@ -1201,7 +1201,7 @@
   },
   {
     "define_field_name": "lt_chc_de",
-    "define_field_kor_name": "lt_chc_de",
+    "define_field_kor_name": "최종점검일자",
     "define_field_type": "text",
     "define_field_idx": 49,
     "define_field_is_required": false,
@@ -1226,7 +1226,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 50,
     "define_field_is_required": false,
@@ -1251,7 +1251,7 @@
   },
   {
     "define_field_name": "opert_de",
-    "define_field_kor_name": "opert_de",
+    "define_field_kor_name": "작업일시",
     "define_field_type": "text",
     "define_field_idx": 51,
     "define_field_is_required": false,
@@ -1276,7 +1276,7 @@
   },
   {
     "define_field_name": "area_gd_sd",
-    "define_field_kor_name": "area_gd_sd",
+    "define_field_kor_name": "지역안내판규격",
     "define_field_type": "text",
     "define_field_idx": 52,
     "define_field_is_required": false,
@@ -1301,7 +1301,7 @@
   },
   {
     "define_field_name": "kor_rn",
-    "define_field_kor_name": "kor_rn",
+    "define_field_kor_name": "한글도로명",
     "define_field_type": "text",
     "define_field_idx": 53,
     "define_field_is_required": false,
@@ -1326,7 +1326,7 @@
   },
   {
     "define_field_name": "rom_rn",
-    "define_field_kor_name": "rom_rn",
+    "define_field_kor_name": "로마자도로명",
     "define_field_type": "text",
     "define_field_idx": 54,
     "define_field_is_required": false,
@@ -1351,7 +1351,7 @@
   },
   {
     "define_field_name": "stbs_mn",
-    "define_field_kor_name": "stbs_mn",
+    "define_field_kor_name": "시작기초번호본번",
     "define_field_type": "number",
     "define_field_idx": 55,
     "define_field_is_required": false,
@@ -1376,7 +1376,7 @@
   },
   {
     "define_field_name": "stbs_sn",
-    "define_field_kor_name": "stbs_sn",
+    "define_field_kor_name": "시작기초번호부번",
     "define_field_type": "number",
     "define_field_idx": 56,
     "define_field_is_required": false,
@@ -1401,7 +1401,7 @@
   },
   {
     "define_field_name": "edbs_mn",
-    "define_field_kor_name": "edbs_mn",
+    "define_field_kor_name": "종료기초번호본번",
     "define_field_type": "number",
     "define_field_idx": 57,
     "define_field_is_required": false,
@@ -1426,7 +1426,7 @@
   },
   {
     "define_field_name": "edbs_sn",
-    "define_field_kor_name": "edbs_sn",
+    "define_field_kor_name": "종료기초번호부번",
     "define_field_type": "number",
     "define_field_idx": 58,
     "define_field_is_required": false,
@@ -1451,7 +1451,7 @@
   },
   {
     "define_field_name": "adv_cn",
-    "define_field_kor_name": "adv_cn",
+    "define_field_kor_name": "광고내용",
     "define_field_type": "text",
     "define_field_idx": 59,
     "define_field_is_required": false,
@@ -1476,7 +1476,7 @@
   },
   {
     "define_field_name": "etc_cn",
-    "define_field_kor_name": "etc_cn",
+    "define_field_kor_name": "기타내용",
     "define_field_type": "text",
     "define_field_idx": 60,
     "define_field_is_required": false,
@@ -1501,7 +1501,7 @@
   },
   {
     "define_field_name": "ima_fil_sn",
-    "define_field_kor_name": "ima_fil_sn",
+    "define_field_kor_name": "이미지파일일련번호",
     "define_field_type": "number",
     "define_field_idx": 61,
     "define_field_is_required": false,

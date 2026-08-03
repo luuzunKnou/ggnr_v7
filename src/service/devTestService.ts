@@ -1960,20 +1960,51 @@ function sqlExprsGeometryTo5181Wkt(geomColEscaped: string, catalogSrid: unknown)
 
 export type EmdRiOption = { code: string; name: string };
 
+/** 테이블에 실제 존재하는 컬럼명 집합 (information_schema 기준) */
+async function getExistingColumns(schema: string, table: string): Promise<Set<string>> {
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(table)}'`
+    )
+  );
+  return new Set(
+    (res.rows as Array<{ column_name?: string }>).map((r) => String(r.column_name ?? ''))
+  );
+}
+
+/** ORDER BY 용 정렬 컬럼 — gid/ogc_fid 계열이 있으면 우선, 없으면 nameCol로 대체(하드코딩 "gid" 부재 시 전체 실패 방지) */
+function pickOrderColumn(cols: Set<string>, nameCol: string): string {
+  const candidates = ['gid', 'ogc_fid', 'objectid', 'fid'];
+  const found = candidates.find((c) => cols.has(c));
+  return found ?? nameCol;
+}
+
 /**
- * 읍면동(emd) 목록 조회. emd_cd, 이름 반환. ORDER BY gid 만 적용.
+ * 읍면동(emd) 목록 조회. emd_cd, 이름 반환.
  */
 export async function getEmdRiOptions(params: { schema?: string } = {}) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
   const result: { emd: EmdRiOption[]; error?: string } = { emd: [] };
 
+  let cols: Set<string>;
+  try {
+    cols = await getExistingColumns(schema, 'emd');
+  } catch (e: unknown) {
+    result.error = e instanceof Error ? e.message : String(e);
+    return result;
+  }
+
   for (const nameCol of EMD_LIST_NAME_COLUMNS) {
+    if (!cols.has(nameCol)) continue;
+    const orderCol = pickOrderColumn(cols, nameCol);
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT "emd_cd" AS code, "${nameCol}" AS name FROM "${schema}"."emd"
            WHERE "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
-           ORDER BY "gid"`
+           ORDER BY "${orderCol}"`
         )
       );
       const rows = (res.rows as { code: string; name: string }[]).map((r) => ({
@@ -1987,7 +2018,8 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
         return true;
       });
       if (result.emd.length > 0) break;
-    } catch {
+    } catch (e: unknown) {
+      result.error = e instanceof Error ? e.message : String(e);
       continue;
     }
   }
@@ -2000,7 +2032,7 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
 
 /**
  * 선택한 읍면동(emd_cd) 하위 리(ri) 목록 조회.
- * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%'), ORDER BY gid.
+ * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%').
  */
 export async function getRiOptionsByEmd(params: { schema?: string; emdCode: string } = { emdCode: '' }) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
@@ -2011,15 +2043,29 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
     return result;
   }
 
+  let cols: Set<string>;
+  try {
+    cols = await getExistingColumns(schema, 'ri');
+  } catch (e: unknown) {
+    result.error = e instanceof Error ? e.message : String(e);
+    return result;
+  }
+  if (cols.size === 0) {
+    result.error = `"${schema}"."ri" 테이블을 찾을 수 없습니다.`;
+    return result;
+  }
+
   const safeEmdCode = emdCode.replace(/'/g, "''");
   for (const nameCol of RI_LIST_NAME_COLUMNS) {
+    if (!cols.has(nameCol)) continue;
+    const orderCol = pickOrderColumn(cols, nameCol);
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT "ri_cd" AS code, "${nameCol}" AS name FROM "${schema}"."ri"
            WHERE "ri_cd" LIKE '${safeEmdCode}' || '%'
              AND "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
-           ORDER BY "gid"`
+           ORDER BY "${orderCol}"`
         )
       );
       const rows = (res.rows as { code: string; name: string }[]).map((r) => ({

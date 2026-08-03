@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "rds_sig_cd",
-    "define_field_kor_name": "rds_sig_cd",
+    "define_field_kor_name": "도로구간시군구코드",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "sig_cd",
-    "define_field_kor_name": "sig_cd",
+    "define_field_kor_name": "시군구코드",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "ent_man_no",
-    "define_field_kor_name": "ent_man_no",
+    "define_field_kor_name": "출입구일련번호",
     "define_field_type": "number",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "rds_man_no",
-    "define_field_kor_name": "rds_man_no",
+    "define_field_kor_name": "도로구간일련번호",
     "define_field_type": "number",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "bsi_int_sn",
-    "define_field_kor_name": "bsi_int_sn",
+    "define_field_kor_name": "기초구간일련번호",
     "define_field_type": "number",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "cnt_drc_ln",
-    "define_field_kor_name": "cnt_drc_ln",
+    "define_field_kor_name": "연결선방향",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "cnt_dst_ln",
-    "define_field_kor_name": "cnt_dst_ln",
+    "define_field_kor_name": "연결선거리",
     "define_field_type": "text",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 10,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "opert_de",
-    "define_field_kor_name": "opert_de",
+    "define_field_kor_name": "작업일시",
     "define_field_type": "text",
     "define_field_idx": 11,
     "define_field_is_required": false,

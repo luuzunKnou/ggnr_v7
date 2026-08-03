@@ -26,7 +26,7 @@
   },
   {
     "define_field_name": "rdid",
-    "define_field_kor_name": "rdid",
+    "define_field_kor_name": "관리번호",
     "define_field_type": "text",
     "define_field_idx": 2,
     "define_field_is_required": false,
@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "ufid",
-    "define_field_kor_name": "ufid",
+    "define_field_kor_name": "일련번호",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "road_name",
-    "define_field_kor_name": "road_name",
+    "define_field_kor_name": "노선명",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "road_no",
-    "define_field_kor_name": "road_no",
+    "define_field_kor_name": "노선번호",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "sect",
-    "define_field_kor_name": "sect",
+    "define_field_kor_name": "구간",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "sect_st",
-    "define_field_kor_name": "sect_st",
+    "define_field_kor_name": "위치",
     "define_field_type": "number",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "hor",
-    "define_field_kor_name": "hor",
+    "define_field_kor_name": "규격 가로",
     "define_field_type": "number",
     "define_field_idx": 10,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "ver",
-    "define_field_kor_name": "ver",
+    "define_field_kor_name": "규격 세로",
     "define_field_type": "number",
     "define_field_idx": 11,
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "dia",
-    "define_field_kor_name": "dia",
+    "define_field_kor_name": "규격 직경",
     "define_field_type": "number",
     "define_field_idx": 12,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "eqp_len",
-    "define_field_kor_name": "eqp_len",
+    "define_field_kor_name": "연장",
     "define_field_type": "number",
     "define_field_idx": 13,
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "nal_l",
-    "define_field_kor_name": "nal_l",
+    "define_field_kor_name": "날개벽 좌",
     "define_field_type": "number",
     "define_field_idx": 16,
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "nal_r",
-    "define_field_kor_name": "nal_r",
+    "define_field_kor_name": "날개벽 우",
     "define_field_type": "number",
     "define_field_idx": 17,
     "define_field_is_required": false,
@@ -426,7 +426,7 @@
   },
   {
     "define_field_name": "jip_l",
-    "define_field_kor_name": "jip_l",
+    "define_field_kor_name": "집수정 좌",
     "define_field_type": "number",
     "define_field_idx": 18,
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "jip_r",
-    "define_field_kor_name": "jip_r",
+    "define_field_kor_name": "집수정 우",
     "define_field_type": "number",
     "define_field_idx": 19,
     "define_field_is_required": false,
@@ -476,7 +476,7 @@
   },
   {
     "define_field_name": "remark",
-    "define_field_kor_name": "remark",
+    "define_field_kor_name": "비고",
     "define_field_type": "text",
     "define_field_idx": 20,
     "define_field_is_required": false,
@@ -651,7 +651,7 @@
   },
   {
     "define_field_name": "sern",
-    "define_field_kor_name": "sern",
+    "define_field_kor_name": "시스템관리ID",
     "define_field_type": "text",
     "define_field_idx": 27,
     "define_field_is_required": false,

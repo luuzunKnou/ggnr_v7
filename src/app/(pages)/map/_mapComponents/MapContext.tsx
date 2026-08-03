@@ -8,7 +8,6 @@ import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import { cloneRoadNetworkRows } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
-import { cloneRiverConstructionLedgerRows } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
 
 export type RoadCctvOverlayState = {
   items: ItsCctvItem[];
@@ -453,7 +452,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   >(null);
   const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
     RiverConstructionLedgerRow[]
-  >(() => cloneRiverConstructionLedgerRows());
+  >([]);
   const [riverConstructionLedgerSelectedId, setRiverConstructionLedgerSelectedId] = useState<
     string | null
   >(null);

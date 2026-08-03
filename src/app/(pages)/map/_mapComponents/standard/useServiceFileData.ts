@@ -19,9 +19,14 @@ export function serviceFileDataDownloadUrl(
   serEng: ServiceFileDataSerEng,
   layerSegment: string,
   keyValue: string | number,
-  fileName: string
+  fileName: string,
+  options?: { subfolder?: string | null }
 ): string {
-  const rel = `file_data/${layerSegment}/${keyValue}/${fileName}`;
+  const sub = String(options?.subfolder ?? '').trim();
+  const rel =
+    sub && sub !== '기타'
+      ? `file_data/${layerSegment}/${keyValue}/${sub}/${fileName}`
+      : `file_data/${layerSegment}/${keyValue}/${fileName}`;
   const qs = new URLSearchParams({
     serEng: serEng.trim(),
     path: rel,
@@ -63,7 +68,9 @@ export async function requestServiceFileDataDelete(params: {
   layerSegment: string;
   keyValue: string | number;
   fileName: string;
+  subfolder?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sub = String(params.subfolder ?? '').trim();
   const res = await fetch('/api/service-files/delete', {
     method: 'POST',
     credentials: 'include',
@@ -73,6 +80,7 @@ export async function requestServiceFileDataDelete(params: {
       layer: params.layerSegment.trim(),
       key: String(params.keyValue),
       fileName: params.fileName,
+      ...(sub && sub !== '기타' ? { subfolder: sub } : {}),
     }),
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -91,6 +99,8 @@ export function useServiceFileData(params: {
   enabled: boolean;
   layerSegment: string | null;
   keyValue: string | number | null;
+  /** 하위 폴더 (루트·«기타»면 생략) */
+  subfolder?: string | null;
   /** 업로드 완료 등 목록 재조회용 */
   refreshNonce?: number;
 }): { files: ServiceFileDataRow[]; loading: boolean; error: string | null } {
@@ -114,6 +124,7 @@ export function useServiceFileData(params: {
     }
     const layer = params.layerSegment.trim();
     const key = String(params.keyValue);
+    const sub = String(params.subfolder ?? '').trim();
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -122,6 +133,7 @@ export function useServiceFileData(params: {
       layer,
       key,
     });
+    if (sub && sub !== '기타') qs.set('subfolder', sub);
     fetch(`/api/service-files?${qs.toString()}`, { credentials: 'include' })
       .then(async (r) => {
         if (!r.ok) {
@@ -145,7 +157,14 @@ export function useServiceFileData(params: {
     return () => {
       cancelled = true;
     };
-  }, [params.enabled, params.serEng, params.layerSegment, params.keyValue, params.refreshNonce ?? 0]);
+  }, [
+    params.enabled,
+    params.serEng,
+    params.layerSegment,
+    params.keyValue,
+    params.subfolder,
+    params.refreshNonce ?? 0,
+  ]);
 
   return { files, loading, error };
 }
@@ -176,6 +195,7 @@ export function useServiceFileChunkedUpload(): {
     serEng: ServiceFileDataSerEng;
     layerSegment: string;
     keyValue: string | number;
+    subfolder?: string | null;
   }) => Promise<{ savedPath?: string; size?: number; error?: string } | void>;
   cancel: () => void;
   reset: () => void;
@@ -199,6 +219,7 @@ export function useServiceFileChunkedUpload(): {
       serEng: ServiceFileDataSerEng;
       layerSegment: string;
       keyValue: string | number;
+      subfolder?: string | null;
     }) => {
       cancel();
       abortRef.current = new AbortController();
@@ -213,6 +234,7 @@ export function useServiceFileChunkedUpload(): {
       const ser = params.serEng.trim();
       const layer = params.layerSegment.trim();
       const key = String(params.keyValue);
+      const sub = String(params.subfolder ?? '').trim();
       try {
         const initRes = await fetch('/api/service-files/upload/init', {
           method: 'POST',
@@ -224,6 +246,7 @@ export function useServiceFileChunkedUpload(): {
             key,
             fileName: params.file.name,
             totalSize: params.file.size,
+            ...(sub && sub !== '기타' ? { subfolder: sub } : {}),
           }),
           signal,
         });

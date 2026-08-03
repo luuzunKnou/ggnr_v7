@@ -52,6 +52,11 @@ import {
   formatRoadLedgerFacilityCellValue,
   getRoadLedgerFacilityColumnKeys,
 } from '../../_mapContents/road/roadLedger/roadLedgerTableDisplayFields';
+import type { DataQueryHistoryType } from '@/lib/dataQueryHistoryTypes';
+import {
+  DataQueryHistoryAddDialog,
+  type DataQueryHistoryAddFormData,
+} from './DataQueryHistoryAddDialog';
 
 type DefineFieldRow = {
   define_field_name?: string;
@@ -60,23 +65,23 @@ type DefineFieldRow = {
   define_field_show_list?: string;
   define_field_show_detail?: string;
   define_field_is_key?: string;
+  define_field_read_only?: string | boolean;
   [key: string]: unknown;
 };
 
 type DetailTab = 'basic' | 'history' | 'attach';
-type HistoryEventType = '점검' | '보수' | '이상발생' | '준공';
 
-interface TimelineEvent {
+type TimelineEvent = {
   id: number;
   date: string;
-  type: HistoryEventType;
+  type: DataQueryHistoryType;
   title: string;
   description: string;
   author: string;
-}
+};
 
 const HISTORY_TYPE_CONFIG: Record<
-  HistoryEventType,
+  DataQueryHistoryType,
   { icon: React.ElementType; color: string; bg: string }
 > = {
   점검: { icon: FileText, color: 'text-sky-600', bg: 'bg-sky-100' },
@@ -85,13 +90,6 @@ const HISTORY_TYPE_CONFIG: Record<
   준공: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-100' },
 };
 
-const SAMPLE_HISTORY: TimelineEvent[] = [
-  { id: 1, date: '2025-12-15', type: '점검', title: '정기 점검 완료', description: '외관 상태 양호, 누수 징후 없음', author: '김상수' },
-  { id: 2, date: '2025-09-03', type: '보수', title: '밸브 교체 작업', description: '노후 밸브 2개소 교체 완료', author: '박정비' },
-  { id: 3, date: '2025-06-20', type: '이상발생', title: '미세 누수 발견', description: '연결부 미세 누수 확인, 긴급 보수 필요', author: '이점검' },
-  { id: 4, date: '2024-03-10', type: '준공', title: '시설물 설치 준공', description: '안동 광역상수도 1구간 관로 설치 완료', author: '최공사' },
-];
-
 interface InfoField {
   /** 고유 키 (define_field_name 등). label은 한글명이라 중복 가능 */
   fieldKey: string;
@@ -99,9 +97,25 @@ interface InfoField {
   value: string | number;
   unit?: string;
   highlight?: boolean;
+  /** 편집 모드에서도 인풋 대신 값을 고정 표시 (읽기전용 필드·키 필드) */
+  readOnly?: boolean;
 }
 
-function InfoSection({ title, fields, defaultOpen = true }: { title: string; fields: InfoField[]; defaultOpen?: boolean }) {
+function InfoSection({
+  title,
+  fields,
+  defaultOpen = true,
+  editing = false,
+  editValues,
+  onFieldChange,
+}: {
+  title: string;
+  fields: InfoField[];
+  defaultOpen?: boolean;
+  editing?: boolean;
+  editValues?: Record<string, string>;
+  onFieldChange?: (fieldKey: string, value: string) => void;
+}) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   if (fields.length === 0) return null;
   return (
@@ -127,11 +141,19 @@ function InfoSection({ title, fields, defaultOpen = true }: { title: string; fie
                     {field.label}
                   </span>
                 </div>
-                <div className="flex min-w-0 flex-1 items-start px-2.5 py-1.5">
-                  <span className={cn('text-[11px]', field.highlight ? 'font-medium text-primary' : 'text-[#666]')}>
-                    {field.value}
-                    {field.unit != null && field.unit !== '' && <span className="ml-0.5 text-slate-500">{field.unit}</span>}
-                  </span>
+                <div className="flex min-w-0 flex-1 items-center px-2.5 py-1">
+                  {editing && !field.readOnly ? (
+                    <input
+                      className="h-6 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25"
+                      value={editValues?.[field.fieldKey] ?? ''}
+                      onChange={(e) => onFieldChange?.(field.fieldKey, e.target.value)}
+                    />
+                  ) : (
+                    <span className={cn('text-[11px]', field.highlight ? 'font-medium text-primary' : 'text-[#666]')}>
+                      {field.value}
+                      {field.unit != null && field.unit !== '' && <span className="ml-0.5 text-slate-500">{field.unit}</span>}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
@@ -140,10 +162,6 @@ function InfoSection({ title, fields, defaultOpen = true }: { title: string; fie
       )}
     </div>
   );
-}
-
-function isDefineShowDetail(f: DefineFieldRow): boolean {
-  return String(f.define_field_show_detail ?? '').toLowerCase() === 'true';
 }
 
 const PAGE_SIZE_LIST = 30;
@@ -254,6 +272,18 @@ export function LayerDataPanel({
     items: ServiceFilePreviewItem[];
     initialIndex: number;
   } | null>(null);
+  const [historyEvents, setHistoryEvents] = useState<TimelineEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAddOpen, setHistoryAddOpen] = useState(false);
+  const [historyEditId, setHistoryEditId] = useState<number | null>(null);
+  const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0);
+
+  /** 기본정보 탭 — 수정 모드(제자리 인풋 편집) */
+  const [editingBasic, setEditingBasic] = useState(false);
+  const [basicDraft, setBasicDraft] = useState<Record<string, string>>({});
+  const [basicSaving, setBasicSaving] = useState(false);
+  const [basicError, setBasicError] = useState<string | null>(null);
 
   /** 식별 목록에서 다른 레이어를 선택하면 URL의 dataTable은 그대로일 수 있음 → 필드/헤더는 선택 항목의 테이블 기준 */
   const tableForLayerConfig =
@@ -347,6 +377,160 @@ export function LayerDataPanel({
       }));
   }, [attachmentQuery.files, activeLayer, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
+
+  const rowKeyForHistory =
+    selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
+
+  /** 기본정보 수정에 쓰는 행 키 — 위 첨부·이력용과 동일 계산 */
+  const currentRowKey = selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
+
+  /** 선택된 행이 바뀌거나 탭을 벗어나면 기본정보 수정 모드 자동 해제 */
+  useEffect(() => {
+    setEditingBasic(false);
+    setBasicDraft({});
+    setBasicError(null);
+  }, [selectedRowData, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'history') return;
+    if (!activeLayer?.physicalTableName || rowKeyForHistory == null) {
+      setHistoryEvents([]);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    void call('', 'POST', {
+      service: 'dataQueryHistoryService',
+      action: 'listByRow',
+      params: {
+        table: activeLayer.physicalTableName,
+        rowKey: String(rowKeyForHistory),
+      },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        if (data?.error || data?.success === false) {
+          setHistoryError(String(data?.error ?? '이력을 불러오지 못했습니다.'));
+          setHistoryEvents([]);
+          return;
+        }
+        const list = Array.isArray(data?.data) ? data.data : [];
+        setHistoryEvents(
+          list.map((item: TimelineEvent) => ({
+            id: Number(item.id),
+            date: String(item.date ?? ''),
+            type: item.type,
+            title: String(item.title ?? ''),
+            description: String(item.description ?? ''),
+            author: String(item.author ?? ''),
+          }))
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHistoryError('이력을 불러오지 못했습니다.');
+          setHistoryEvents([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    activeLayer?.physicalTableName,
+    rowKeyForHistory,
+    historyRefreshNonce,
+  ]);
+
+  const handleHistorySave = useCallback(
+    async (form: DataQueryHistoryAddFormData, editId?: number) => {
+      if (editId != null && editId > 0) {
+        const res = await call('', 'POST', {
+          service: 'dataQueryHistoryService',
+          action: 'update',
+          params: {
+            id: editId,
+            date: form.date,
+            type: form.type,
+            title: form.title,
+            contents: form.contents,
+            author: form.author,
+          },
+        });
+        const data = res?.data ?? res;
+        if (data?.error || data?.success === false) {
+          throw new Error(String(data?.error ?? '수정에 실패했습니다.'));
+        }
+        setHistoryRefreshNonce((n) => n + 1);
+        return;
+      }
+      if (!activeLayer?.physicalTableName || rowKeyForHistory == null) {
+        throw new Error('행 키를 확인할 수 없습니다.');
+      }
+      const res = await call('', 'POST', {
+        service: 'dataQueryHistoryService',
+        action: 'create',
+        params: {
+          table: activeLayer.physicalTableName,
+          rowKey: String(rowKeyForHistory),
+          date: form.date,
+          type: form.type,
+          title: form.title,
+          contents: form.contents,
+          author: form.author,
+        },
+      });
+      const data = res?.data ?? res;
+      if (data?.error || data?.success === false) {
+        throw new Error(String(data?.error ?? '등록에 실패했습니다.'));
+      }
+      setHistoryRefreshNonce((n) => n + 1);
+    },
+    [activeLayer?.physicalTableName, rowKeyForHistory]
+  );
+
+  const handleHistoryDelete = useCallback(async (editId: number) => {
+    const res = await call('', 'POST', {
+      service: 'dataQueryHistoryService',
+      action: 'remove',
+      params: { id: editId },
+    });
+    const data = res?.data ?? res;
+    if (data?.error || data?.success === false) {
+      throw new Error(String(data?.error ?? '삭제에 실패했습니다.'));
+    }
+    setHistoryRefreshNonce((n) => n + 1);
+  }, []);
+
+  const historyEditInitial = useMemo((): DataQueryHistoryAddFormData | null => {
+    if (historyEditId == null) return null;
+    const event = historyEvents.find((e) => e.id === historyEditId);
+    if (!event) return null;
+    return {
+      date: event.date,
+      type: event.type,
+      title: event.title,
+      contents: event.description,
+      author: event.author,
+    };
+  }, [historyEditId, historyEvents]);
+
+  const openHistoryCreate = useCallback(() => {
+    setHistoryEditId(null);
+    setHistoryAddOpen(true);
+  }, []);
+
+  const openHistoryEdit = useCallback((event: TimelineEvent) => {
+    setHistoryEditId(event.id);
+    setHistoryAddOpen(true);
+  }, []);
 
   const map = mapContext?.mapInstanceRef?.current;
 
@@ -478,6 +662,36 @@ export function LayerDataPanel({
     },
     [mapContext]
   );
+
+  /** 상세 하단 「지도보기」 — 현재 선택된 행 도형으로 지도 이동·확대 (목록 클릭 자동이동과 별개로 수동 재이동) */
+  const handleShowSelectedOnMap = useCallback(() => {
+    const mapInstance = mapContext?.mapInstanceRef?.current;
+    const source = selectionSourceRef.current;
+    if (!mapInstance || !source || !selectedRowData) return;
+    const g = (selectedRowData as Record<string, unknown>).geom;
+    const geom = g == null ? null : typeof g === 'string' ? (JSON.parse(g) as unknown) : g;
+    if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) {
+      window.alert('도형 정보가 없어 지도로 이동할 수 없습니다.');
+      return;
+    }
+    const geojson = { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, geometry: geom, properties: {} }] };
+    const format = new GeoJSON();
+    const viewProj = mapInstance.getView().getProjection()?.getCode() || 'EPSG:3857';
+    const features = format.readFeatures(geojson, { dataProjection: 'EPSG:4326', featureProjection: viewProj });
+    source.clear();
+    if (features.length === 0) return;
+    const geomType = features[0].getGeometry()?.getType();
+    if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
+    source.addFeatures(features);
+    const ext = source.getExtent();
+    if (ext.every((v) => isFinite(v))) {
+      scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+        maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
+    }
+    setRadarActive(true);
+  }, [mapContext, selectedRowData]);
 
   useEffect(() => {
     if (highlightedRow == null) {
@@ -751,6 +965,63 @@ export function LayerDataPanel({
     }
   };
 
+  /** 기본정보 인풋 초기값용 — 화면 표시 포맷이 아닌 원본 값 문자열 */
+  const handleBeginBasicEdit = () => {
+    if (!selectedRow) return;
+    const draft: Record<string, string> = {};
+    for (const f of basicInfoFields) {
+      if (f.readOnly) continue;
+      const raw = getRowValueByField(selectedRow, f.fieldKey);
+      draft[f.fieldKey] = raw == null ? '' : String(raw);
+    }
+    setBasicDraft(draft);
+    setBasicError(null);
+    setEditingBasic(true);
+  };
+
+  const handleCancelBasicEdit = () => {
+    setEditingBasic(false);
+    setBasicDraft({});
+    setBasicError(null);
+  };
+
+  const handleSaveBasicEdit = async () => {
+    if (!activeLayer || keyFieldName == null || currentRowKey == null || selectedRow == null) return;
+    setBasicSaving(true);
+    setBasicError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'layerRowService',
+        action: 'updateTableRowByKey',
+        params: {
+          table: activeLayer.physicalTableName,
+          schema: activeLayer.schema,
+          keyValue: String(currentRowKey),
+          keyField: keyFieldName,
+          changes: basicDraft,
+          // 기본정보 탭은 show_detail=false 필드도 함께 노출·편집하므로 서버에서도 동일하게 허용
+          includeHiddenDetail: true,
+        },
+      });
+      const data = res?.data ?? res;
+      if (data?.error || data?.success === false) {
+        setBasicError(String(data?.error ?? '수정에 실패했습니다.'));
+        return;
+      }
+      const updatedRow: Record<string, unknown> = { ...selectedRow, ...basicDraft };
+      setSelectedRowData(updatedRow);
+      setRows((prev) =>
+        prev.map((r) => (getRowKey(r, keyFieldName) === currentRowKey ? updatedRow : r))
+      );
+      setEditingBasic(false);
+      setBasicDraft({});
+    } catch (e: unknown) {
+      setBasicError(e instanceof Error ? e.message : '수정에 실패했습니다.');
+    } finally {
+      setBasicSaving(false);
+    }
+  };
+
   const roadLedgerFacilityTableSet = useMemo(
     () => new Set(getAllRoadLedgerDocLayerIds().map((x) => String(x).trim().toLowerCase())),
     []
@@ -791,6 +1062,41 @@ export function LayerDataPanel({
         define_field_kor_name: k,
       }))
     : listFieldsAll.slice(0, 5);
+
+  const isKeyField = (name: string) =>
+    keyFieldName != null && name.trim().toLowerCase() === keyFieldName.trim().toLowerCase();
+
+  /** 기본정보 표시·편집 공용 필드 목록 — 키 필드·읽기전용 필드는 편집모드에서도 인풋 대신 값만 표시 */
+  const basicInfoFields: InfoField[] =
+    selectedRow == null
+      ? []
+      : detailFields.length === 0
+      ? Object.entries(selectedRow)
+          .filter(([k]) => {
+            const n = k.toLowerCase();
+            return n !== 'gid' && n !== 'geom';
+          })
+          .map(([k, v], i) => ({
+            fieldKey: k || `auto-${i}`,
+            label: k,
+            value: formatDetailScalarValue(v),
+            highlight: i === 0,
+            readOnly: isKeyField(k),
+          }))
+      : detailFields.map((f, i) => {
+          const key = String(f.define_field_name ?? '');
+          const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
+          const raw = getRowValueByField(selectedRow, key);
+          const readOnly =
+            String(f.define_field_read_only ?? '').toLowerCase() === 'true' || isKeyField(key);
+          return {
+            fieldKey: key || `basic-${i}`,
+            label,
+            value: formatDetailScalarValue(raw),
+            highlight: i === 0,
+            readOnly,
+          };
+        });
 
   const detailTabs: { id: DetailTab; label: string; icon: React.ElementType }[] = [
     { id: 'basic', label: '기본정보', icon: FileText },
@@ -988,62 +1294,57 @@ export function LayerDataPanel({
           <div className="flex-1 min-h-0 overflow-y-auto">
             {activeTab === 'basic' && (
               <div>
-                {detailFields.length === 0 ? (
-                  <InfoSection
-                    title="기본정보"
-                    fields={Object.entries((selectedRow ?? {}) as Record<string, unknown>)
-                      .filter(([k]) => { const n = k.toLowerCase(); return n !== 'gid' && n !== 'geom'; })
-                      .map(([k, v], i) => ({
-                        fieldKey: k || `auto-${i}`,
-                        label: k,
-                        value: formatDetailScalarValue(v),
-                        highlight: i === 0,
-                      }))}
-                    defaultOpen={true}
-                  />
-                ) : (
-                  (() => {
-                    // define_field_show_detail=true → 기본 표시, false → 상세(추가). 기본이 없으면 전부 기본으로.
-                    const primary = detailFields.filter(isDefineShowDetail);
-                    const secondary = detailFields.filter((f) => !isDefineShowDetail(f));
-                    const basicList = primary.length > 0 ? primary : detailFields;
-                    const moreList = primary.length > 0 ? secondary : [];
-                    const toFields = (list: DefineFieldRow[], prefix: string, highlightFirst: boolean) =>
-                      list.map((f, i) => {
-                        const key = String(f.define_field_name ?? '');
-                        const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
-                        const raw = getRowValueByField(selectedRow, key);
-                        return {
-                          fieldKey: key || `${prefix}-${i}`,
-                          label,
-                          value: formatDetailScalarValue(raw),
-                          highlight: highlightFirst && i === 0,
-                        };
-                      });
-                    return (
-                      <>
-                        <InfoSection title="기본정보" fields={toFields(basicList, 'basic', true)} defaultOpen={true} />
-                        <InfoSection title="상세정보" fields={toFields(moreList, 'detail', false)} defaultOpen={true} />
-                      </>
-                    );
-                  })()
+                <InfoSection
+                  title="기본정보"
+                  fields={basicInfoFields}
+                  defaultOpen={true}
+                  editing={editingBasic}
+                  editValues={basicDraft}
+                  onFieldChange={(fieldKey, value) =>
+                    setBasicDraft((prev) => ({ ...prev, [fieldKey]: value }))
+                  }
+                />
+                {editingBasic && basicError && (
+                  <div className="px-4 py-2 text-[11px] text-red-600">{basicError}</div>
                 )}
               </div>
             )}
 
             {activeTab === 'history' && (
               <div className="px-3 py-2">
-                {SAMPLE_HISTORY.length === 0 ? (
+                {keyFieldName == null ? (
+                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                    레이어 속성관리에서 키(행 식별 컬럼)를 지정해야 이력을 조회할 수 있습니다.
+                  </div>
+                ) : selectedRow == null ? (
+                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                    목록에서 행을 선택하세요.
+                  </div>
+                ) : rowKeyForHistory == null ? (
+                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                    키 컬럼({keyFieldName}) 값이 비어 있어 이력을 조회할 수 없습니다.
+                  </div>
+                ) : historyLoading ? (
+                  <div className="py-4 text-[11px] text-slate-500 text-center">로딩 중...</div>
+                ) : historyError ? (
+                  <div className="py-4 text-[11px] text-red-600 text-center">{historyError}</div>
+                ) : historyEvents.length === 0 ? (
                   <div className="py-4 text-[11px] text-slate-500 text-center">이력 없음</div>
                 ) : (
                   <div className="relative space-y-0">
-                    {SAMPLE_HISTORY.map((event, index) => {
+                    {historyEvents.map((event, index) => {
                       const config = HISTORY_TYPE_CONFIG[event.type];
+                      if (!config) return null;
                       const EventIcon = config.icon;
                       return (
-                        <div key={event.id} className="relative flex gap-2.5 pb-4">
-                          {index < SAMPLE_HISTORY.length - 1 && (
-                            <div className="absolute left-[13px] top-7 h-[calc(100%-14px)] w-px bg-slate-200" aria-hidden />
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => openHistoryEdit(event)}
+                          className="relative flex w-full gap-2.5 pb-4 text-left transition-colors hover:bg-slate-50/80 rounded-sm -mx-1 px-1"
+                        >
+                          {index < historyEvents.length - 1 && (
+                            <div className="absolute left-[17px] top-7 h-[calc(100%-14px)] w-px bg-slate-200" aria-hidden />
                           )}
                           <div className={cn('relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full', config.bg)}>
                             <EventIcon className={cn('h-3.5 w-3.5', config.color)} />
@@ -1054,10 +1355,14 @@ export function LayerDataPanel({
                               <span className="text-[10px] text-[#666]">{event.date}</span>
                             </div>
                             <p className="mt-0.5 text-[11px] font-medium text-[#666]">{event.title}</p>
-                            <p className="mt-0.5 text-[10px] leading-relaxed text-[#666]">{event.description}</p>
-                            <p className="mt-0.5 text-[10px] text-[#666]">담당: {event.author}</p>
+                            {event.description ? (
+                              <p className="mt-0.5 text-[10px] leading-relaxed text-[#666]">{event.description}</p>
+                            ) : null}
+                            {event.author ? (
+                              <p className="mt-0.5 text-[10px] text-[#666]">담당: {event.author}</p>
+                            ) : null}
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -1089,9 +1394,17 @@ export function LayerDataPanel({
                       });
                   }}
                 />
-                {keyFieldName == null || rowKeyForAttachments == null ? (
+                {keyFieldName == null ? (
                   <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
-                    레이어 데이터 설정에서 키 필드(define_field_is_key)가 지정되어 있어야 첨부폴더를 조회할 수 있습니다.
+                    레이어 속성관리에서 키(행 식별 컬럼)를 지정해야 첨부폴더를 조회할 수 있습니다.
+                  </div>
+                ) : selectedRow == null ? (
+                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                    목록에서 행을 선택하세요.
+                  </div>
+                ) : rowKeyForAttachments == null ? (
+                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                    키 컬럼({keyFieldName}) 값이 비어 있어 첨부폴더를 조회할 수 없습니다.
                   </div>
                 ) : (
                   <>
@@ -1259,17 +1572,63 @@ export function LayerDataPanel({
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] text-[#666]">기본정보</span>
                 <div className="flex gap-1.5">
-                  <button type="button" className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">수정</button>
-                  <button type="button" className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">지도보기</button>
-                  <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
+                  {editingBasic ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={basicSaving}
+                        onClick={handleCancelBasicEdit}
+                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        disabled={basicSaving}
+                        onClick={() => void handleSaveBasicEdit()}
+                        className="rounded border border-primary bg-primary px-2.5 py-1 text-[11px] text-white transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        {basicSaving ? '저장 중…' : '저장'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={keyFieldName == null || currentRowKey == null}
+                        onClick={handleBeginBasicEdit}
+                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShowSelectedOnMap}
+                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50"
+                      >
+                        지도보기
+                      </button>
+                      <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
             {activeTab === 'history' && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-[#666]">이력 {SAMPLE_HISTORY.length}건</span>
+                <span className="text-[10px] text-[#666]">
+                  이력{' '}
+                  {keyFieldName != null && rowKeyForHistory != null ? `${historyEvents.length}건` : '—'}
+                </span>
                 <div className="flex gap-1.5">
-                  <button type="button" className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">이력 추가</button>
+                  <button
+                    type="button"
+                    disabled={keyFieldName == null || rowKeyForHistory == null}
+                    onClick={openHistoryCreate}
+                    className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    이력 추가
+                  </button>
                   <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
                 </div>
               </div>
@@ -1332,6 +1691,17 @@ export function LayerDataPanel({
         onClose={() => setAttachmentImagePreview(null)}
       />
     )}
+    <DataQueryHistoryAddDialog
+      open={historyAddOpen}
+      onOpenChange={(open) => {
+        setHistoryAddOpen(open);
+        if (!open) setHistoryEditId(null);
+      }}
+      onConfirm={handleHistorySave}
+      onDelete={handleHistoryDelete}
+      initialData={historyEditInitial}
+      editId={historyEditId}
+    />
     </>
   );
 }

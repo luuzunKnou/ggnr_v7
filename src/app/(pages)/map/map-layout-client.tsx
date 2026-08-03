@@ -50,6 +50,9 @@ import { RiverConstructionLedgerDetailPanel } from "./_mapContents/river/riverCo
 import { UsageDataAsListPanel } from "./_mapContents/river/usageDataAs/UsageDataAsListPanel"
 import { UsageDataAsDetailPanel } from "./_mapContents/river/usageDataAs/UsageDataAsDetailPanel"
 import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usageDataAsMapSync"
+import { RoadRewardListPanel } from "./_mapContents/road/roadReward/RoadRewardListPanel"
+import { RoadRewardDetailPanel } from "./_mapContents/road/roadReward/RoadRewardDetailPanel"
+import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMock"
 import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
@@ -244,6 +247,15 @@ const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
 const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
 const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
 
+/** serviceList `ser_eng`: roadReward — 보상편입용지 */
+const ROAD_REWARD_OPENED_KEY = "roadReward"
+const ROAD_REWARD_PANEL_DEFAULT_WIDTH = 320
+const ROAD_REWARD_PANEL_MIN_WIDTH = 260
+const ROAD_REWARD_PANEL_MAX_WIDTH = 480
+const ROAD_REWARD_DETAIL_DEFAULT_WIDTH = 480
+const ROAD_REWARD_DETAIL_MIN_WIDTH = 380
+const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
+
 function MapLayoutContent({
   children,
   indexLogoSrc,
@@ -345,6 +357,7 @@ function MapLayoutContent({
   const riverConstructionLedgerDetailOpen =
     riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
   const usageDataAsOpen = openedWindows.includes(USAGE_DATA_AS_OPENED_KEY)
+  const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
   const useFeeOpen = openedWindows.includes(USE_FEE_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
@@ -358,6 +371,10 @@ function MapLayoutContent({
   const [usageDataAsDetailId, setUsageDataAsDetailId] = useState<string | null>(null)
   const [usageDataAsListRefreshKey, setUsageDataAsListRefreshKey] = useState(0)
   const usageDataAsDetailOpen = usageDataAsOpen && Boolean(usageDataAsDetailId)
+  /** 보상편입용지 — DB(road_reward) 조회·저장 */
+  const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
+  const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
+  const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
   // 점용대장(프) 더미 state 비활성
   // const useLedgerProtoOpen = openedWindows.includes(USE_LEDGER_PROTO_OPENED_KEY)
   // const [useLedgerProtoDetailId, setUseLedgerProtoDetailId] = useState<string | null>(null)
@@ -449,6 +466,8 @@ function MapLayoutContent({
   )
   const [usageDataAsPanelWidth, setUsageDataAsPanelWidth] = useState(USAGE_DATA_AS_PANEL_DEFAULT_WIDTH)
   const [usageDataAsDetailWidth, setUsageDataAsDetailWidth] = useState(USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH)
+  const [roadRewardPanelWidth, setRoadRewardPanelWidth] = useState(ROAD_REWARD_PANEL_DEFAULT_WIDTH)
+  const [roadRewardDetailWidth, setRoadRewardDetailWidth] = useState(ROAD_REWARD_DETAIL_DEFAULT_WIDTH)
   // const [useLedgerProtoPanelWidth, setUseLedgerProtoPanelWidth] = useState(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
   // const [useLedgerProtoDetailWidth, setUseLedgerProtoDetailWidth] = useState(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
   // const [useLedgerProtoFeeWidth, setUseLedgerProtoFeeWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
@@ -481,6 +500,8 @@ function MapLayoutContent({
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
     (usageDataAsOpen ? usageDataAsPanelWidth : 0) +
     (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0) +
+    (roadRewardOpen ? roadRewardPanelWidth : 0) +
+    (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -546,8 +567,12 @@ function MapLayoutContent({
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0)
   const usageDataAsDetailLeftPx =
     usageDataAsPanelLeftPx + (usageDataAsOpen ? usageDataAsPanelWidth : 0)
-  const memoPanelLeftPx =
+  const roadRewardPanelLeftPx =
     usageDataAsDetailLeftPx + (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0)
+  const roadRewardDetailLeftPx =
+    roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
+  const memoPanelLeftPx =
+    roadRewardDetailLeftPx + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
@@ -833,6 +858,12 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseRoadReward = () => {
+    setRoadRewardSelectedId(null)
+    const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
@@ -896,6 +927,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!usageDataAsOpen) setUsageDataAsDetailId(null)
   }, [usageDataAsOpen])
+
+  useEffect(() => {
+    if (!roadRewardOpen) setRoadRewardSelectedId(null)
+  }, [roadRewardOpen])
 
   // 점용대장(프) 더미 effects 비활성
   // useEffect(() => { if (!useLedgerProtoOpen) { setUseLedgerProtoDetailId(null); setUseLedgerProtoFeeId(null) } }, [useLedgerProtoOpen])
@@ -1454,6 +1489,50 @@ function MapLayoutContent({
                     setUsageDataAsDetailId(null)
                     setUsageDataAsListRefreshKey((k) => k + 1)
                   }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadRewardOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadRewardPanelWidth}
+                minWidth={ROAD_REWARD_PANEL_MIN_WIDTH}
+                maxWidth={ROAD_REWARD_PANEL_MAX_WIDTH}
+                leftOffsetPx={roadRewardPanelLeftPx}
+                onWidthChange={setRoadRewardPanelWidth}
+              >
+                <RoadRewardListPanel
+                  cases={roadRewardCases}
+                  selectedId={roadRewardSelectedId}
+                  onCasesChange={setRoadRewardCases}
+                  onSelectId={setRoadRewardSelectedId}
+                  onClose={handleCloseRoadReward}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadRewardOpen && roadRewardSelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadRewardDetailWidth}
+                minWidth={ROAD_REWARD_DETAIL_MIN_WIDTH}
+                maxWidth={ROAD_REWARD_DETAIL_MAX_WIDTH}
+                leftOffsetPx={roadRewardDetailLeftPx}
+                onWidthChange={setRoadRewardDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <RoadRewardDetailPanel
+                  caseId={roadRewardSelectedId}
+                  cases={roadRewardCases}
+                  onCasesChange={setRoadRewardCases}
+                  onClose={() => setRoadRewardSelectedId(null)}
+                  onDeleted={() => setRoadRewardSelectedId(null)}
+                  onCaseIdChange={setRoadRewardSelectedId}
+                  overlayLeftPx={roadRewardPanelLeftPx}
+                  overlayWidthPx={
+                    roadRewardPanelWidth + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+                  }
                 />
               </MapSideListPanel>
             </div>

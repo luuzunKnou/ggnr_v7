@@ -609,13 +609,22 @@ export async function insertTableRow(params: {
   if (keyCol && !insertedColSet.has(keyCol.toLowerCase())) {
     let keyRaw = values[keyField] ?? values[keyCol];
     let keyVal = normalizeChangeValue(keyRaw);
-    if ((keyVal == null || !String(keyVal).trim()) && tableGuess === 'usage_data_as') {
-      const { getNextUsageDataAsConsCode } = await import('./usageDataAsService');
-      const generated = await getNextUsageDataAsConsCode();
-      if (!String(generated.consCode ?? '').trim()) {
-        return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+    if ((keyVal == null || !String(keyVal).trim()) && (tableGuess === 'usage_data_as' || tableGuess === 'cons_data_as')) {
+      if (tableGuess === 'usage_data_as') {
+        const { getNextUsageDataAsConsCode } = await import('./usageDataAsService');
+        const generated = await getNextUsageDataAsConsCode();
+        if (!String(generated.consCode ?? '').trim()) {
+          return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+        }
+        keyVal = generated.consCode;
+      } else {
+        const { getNextConsCode } = await import('./consDataAsService');
+        const generated = await getNextConsCode();
+        if (!String(generated.consCode ?? '').trim()) {
+          return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+        }
+        keyVal = generated.consCode;
       }
-      keyVal = generated.consCode;
       values[keyField] = keyVal;
     }
     if (keyVal != null && String(keyVal).trim()) {
@@ -669,11 +678,24 @@ type JijukParcelGeomRow = {
   jibun?: unknown;
   emd_name?: unknown;
   ri_name?: unknown;
+  jimok?: unknown;
+  area_sqm?: unknown;
   geometry?: unknown;
   xmin?: unknown;
   ymin?: unknown;
   xmax?: unknown;
   ymax?: unknown;
+};
+
+export type JijukParcelGeomDto = {
+  address: string;
+  pnu: string;
+  /** 지목 — jijuk.jibun 끝 한글(예: 240답 → 답) */
+  jimok?: string;
+  /** 당초면적(㎡) — 필지 도형 ST_Area(5181) */
+  areaSqm?: number;
+  extent3857: [number, number, number, number] | null;
+  geometry3857: Record<string, unknown> | null;
 };
 
 function pnuDigitsOnly(pnu: unknown): string {
@@ -709,9 +731,23 @@ function extractLotLabelFromJibun(jibunRaw: string, pnu: unknown): string {
   if (fromPnu) return fromPnu;
   const stripped = formatAddressStripSidoSigungu(String(jibunRaw ?? '').trim());
   if (!stripped) return '';
+  // «240답», «산7임», «1-1 답» → 지번만
+  const lotJimok = stripped.match(/^(산?\d+(?:-\d+)?)[\s]*[가-힣]+$/u);
+  if (lotJimok?.[1]) return lotJimok[1];
   const tokens = stripped.split(/\s+/).filter(Boolean);
   const lot = tokens[tokens.length - 1] ?? '';
   return lot && /[\d-]/.test(lot) ? lot : stripped;
+}
+
+/**
+ * public_layer.jijuk.jibun 은 지번+지목 결합 값이다.
+ * 예: «240답», «산7임», «1-1 답», «0-22 구»
+ */
+function extractJimokFromJijukJibun(jibunRaw: unknown): string {
+  const s = String(jibunRaw ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^(?:산?\d+(?:-\d+)?)[\s]*([가-힣]+)$/u);
+  return m?.[1]?.trim() ?? '';
 }
 
 function extractRiNameFromJibun(strippedJibun: string, emdName: string, lotPart: string): string {
@@ -1218,6 +1254,9 @@ const jijukParcelSelectSql = (geomCol: string, fromQualified: string) => `
   SELECT
     j.pnu::text AS pnu,
     j.jibun::text AS jibun,
+    -- jibun = 지번+지목(예: 240답, 산7임, 1-1 답). 지목은 끝 한글
+    NULLIF(TRIM(SUBSTRING(j.jibun::text FROM '(?:산?[0-9]+(?:-[0-9]+)?)[[:space:]]*([가-힣]+)$')), '') AS jimok,
+    ROUND(ST_Area(${jijukGeom5181Sql(geomCol)})::numeric, 2)::float8 AS area_sqm,
     ST_AsGeoJSON(${jijukGeom3857Sql(geomCol)})::json AS geometry,
     ST_XMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmin,
     ST_YMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymin,
@@ -1247,12 +1286,7 @@ async function resolvePnuDigitsFromInput(address: string, explicitPnu?: string):
   return pnu ? pnuDigitsOnly(pnu) : null;
 }
 
-function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
-  address: string;
-  pnu: string;
-  extent3857: [number, number, number, number] | null;
-  geometry3857: Record<string, unknown> | null;
-} | null {
+function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): JijukParcelGeomDto | null {
   const address = buildParcelAddressFromJijukRow(row);
   const pnu = pnuDigitsOnly(row.pnu);
   if (!address && !pnu) return null;
@@ -1265,7 +1299,19 @@ function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
   const geometry = row.geometry;
   const geometry3857 =
     geometry != null && typeof geometry === 'object' ? (geometry as Record<string, unknown>) : null;
-  return { address: address || pnu, pnu, extent3857, geometry3857 };
+  // SQL 파싱 실패·구형 응답 대비 — jibun에서 지목 재추출
+  const jimok =
+    String(row.jimok ?? '').trim() || extractJimokFromJijukJibun(row.jibun);
+  const areaSqmRaw = Number(row.area_sqm);
+  const areaSqm = Number.isFinite(areaSqmRaw) && areaSqmRaw > 0 ? areaSqmRaw : undefined;
+  return {
+    address: address || pnu,
+    pnu,
+    ...(jimok ? { jimok } : {}),
+    ...(areaSqm != null ? { areaSqm } : {}),
+    extent3857,
+    geometry3857,
+  };
 }
 
 /** PNU상 리 구역인데 주소에 리명이 빠진 경우 (예: 북면 360-1 vs 북면 사계리 360-1) */
@@ -1280,8 +1326,8 @@ function parcelAddressMissingRiName(row: JijukParcelGeomRow, address: string): b
 /** jijuk 필지 주소 — DB 보강 후에도 리명 누락 시 VWorld 역지오코딩으로 주소검색과 동일 형식 보강 */
 async function finalizeJijukParcelGeom(
   row: JijukParcelGeomRow,
-  mapped: NonNullable<ReturnType<typeof mapJijukRowToParcelGeom>>
-): Promise<NonNullable<ReturnType<typeof mapJijukRowToParcelGeom>>> {
+  mapped: JijukParcelGeomDto
+): Promise<JijukParcelGeomDto> {
   if (!parcelAddressMissingRiName(row, mapped.address)) return mapped;
 
   const coord = extent3857CenterTo4326(mapped.extent3857);
@@ -1296,20 +1342,8 @@ async function finalizeJijukParcelGeom(
   return { ...mapped, address: normalized };
 }
 
-async function mapJijukRowsToParcelGeoms(rows: JijukParcelGeomRow[]): Promise<
-  Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }>
-> {
-  const out: Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }> = [];
+async function mapJijukRowsToParcelGeoms(rows: JijukParcelGeomRow[]): Promise<JijukParcelGeomDto[]> {
+  const out: JijukParcelGeomDto[] = [];
   for (const row of rows) {
     const mapped = mapJijukRowToParcelGeom(row);
     if (!mapped) continue;
@@ -1403,12 +1437,7 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   wkt5181: string;
   limit?: number;
 }): Promise<{
-  parcels: Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }>;
+  parcels: JijukParcelGeomDto[];
   error?: string;
 }> {
   const wkt = String(params?.wkt5181 ?? '').trim();

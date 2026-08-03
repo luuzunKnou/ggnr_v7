@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Circle,
   Landmark,
@@ -14,16 +14,27 @@ import {
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
-import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import {
+  scheduleAnimateMapToCenter3857,
+  scheduleFitMapToExtent3857,
+} from "../../../_mapComponents/config/mapAutoNavigation";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
+import { CONS_DATA_AS_WMS_LAYER_IDS } from "./consDataAsLayerId";
 import {
   createEmptyRiverConstructionLedgerRow,
   formatRiverNamesLabel,
   formatRiverNamesShort,
+  isNewRiverConstructionLedgerRow,
+  mapConsDataAsApiToLedgerRow,
+  type ConsDataAsApiRow,
 } from "./riverConstructionLedgerMock";
 import { filterRiverConstructionLedgerRowsByWkt5181 } from "./riverConstructionLedgerSpatial";
 
+function lowerLayerIds(ids: readonly string[]): string[] {
+  return ids.map((id) => id.toLowerCase());
+}
 type SpatialTool = "rectangle" | "polygon" | "circle";
 type SearchTab = "keyword" | "shape" | "boundary";
 
@@ -40,6 +51,8 @@ type Props = {
 
 export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const rows = mapContext?.riverConstructionLedgerRows ?? [];
   const selectedId = mapContext?.riverConstructionLedgerSelectedId ?? null;
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
@@ -51,6 +64,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   const setRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus;
 
   const [keyword, setKeyword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const [spatialWkt, setSpatialWkt] = useState<string | null>(null);
   const [activeSpatialTool, setActiveSpatialTool] = useState<SpatialTool | null>(null);
   const [mapSearchTab, setMapSearchTab] = useState<SearchTab>("keyword");
@@ -63,6 +78,153 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   const isSpatialActive = !!(spatialWkt || spatialDrawRequest);
+
+  /** 패널 진입 시 공사대장 레이어 켜고 전체 extent로 지도 이동 */
+  useEffect(() => {
+    const ctx = mapContextRef.current;
+    const layerIds = lowerLayerIds(CONS_DATA_AS_WMS_LAYER_IDS);
+    if (!ctx?.setVisibleLayerNames) return;
+
+    ctx.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const lid of layerIds) {
+        if (!next.has(lid)) {
+          next.add(lid);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    let cancelled = false;
+    void call("", "POST", {
+      service: "consDataAsService",
+      action: "getLayerExtent3857",
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const extent = data?.extent3857 as number[] | null | undefined;
+        const map = mapContextRef.current?.mapInstanceRef?.current;
+        if (
+          !map ||
+          !Array.isArray(extent) ||
+          extent.length !== 4 ||
+          !extent.every((v) => Number.isFinite(Number(v)))
+        ) {
+          return;
+        }
+        window.setTimeout(() => {
+          if (cancelled) return;
+          scheduleFitMapToExtent3857(map, extent.map(Number), {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () =>
+              mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+          });
+        }, 80);
+      })
+      .catch(() => {
+        /* extent 없으면 레이어만 켠 상태 유지 */
+      });
+
+    return () => {
+      cancelled = true;
+      const c = mapContextRef.current;
+      if (!c?.setVisibleLayerNames) return;
+      c.setVisibleLayerNames((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const lid of layerIds) {
+          if (next.delete(lid)) changed = true;
+        }
+        return changed ? next : prev;
+      });
+    };
+  }, []);
+
+  const loadRows = useCallback(async () => {
+    setLoading(true);
+    setListError(null);
+    try {
+      const res = await call("", "POST", {
+        service: "consDataAsService",
+        action: "listRows",
+        params: {},
+      });
+      const data = res?.data ?? res;
+      if (data?.error) {
+        setListError(String(data.error));
+        return;
+      }
+      const raw = Array.isArray(data?.rows) ? (data.rows as ConsDataAsApiRow[]) : [];
+      const mapped = raw.map(mapConsDataAsApiToLedgerRow);
+      setRows?.((prev) => {
+        const drafts = prev.filter(isNewRiverConstructionLedgerRow);
+        const byId = new Map(mapped.map((r) => [r.id, r]));
+        for (const p of prev) {
+          if (isNewRiverConstructionLedgerRow(p)) continue;
+          const next = byId.get(p.id);
+          if (!next) continue;
+          if (p.id === selectedId) {
+            byId.set(p.id, {
+              ...next,
+              geom: p.geom ?? next.geom,
+              parcels: p.parcels?.length ? p.parcels : next.parcels,
+            });
+          }
+        }
+        return [...drafts, ...byId.values()];
+      });
+    } catch (e: unknown) {
+      setListError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedId, setRows]);
+
+  useEffect(() => {
+    void loadRows();
+  }, [loadRows]);
+
+  const selectRow = useCallback(
+    async (rowId: string) => {
+      setSelectedId?.(rowId);
+      setRiverFocus?.(null);
+      if (isNewRiverConstructionLedgerRow({ id: rowId })) return;
+      try {
+        const res = await call("", "POST", {
+          service: "consDataAsService",
+          action: "getDetailByConsCode",
+          params: { consCode: rowId },
+        });
+        const data = res?.data ?? res;
+        if (data?.error || !data?.row) return;
+        const mapped = mapConsDataAsApiToLedgerRow(data.row as ConsDataAsApiRow);
+        setRows?.((prev) => prev.map((r) => (r.id === rowId ? { ...mapped, geom: r.geom ?? mapped.geom } : r)));
+
+        const map = mapContext?.mapInstanceRef?.current;
+        if (!map) return;
+        const extRes = await call("", "POST", {
+          service: "consDataAsService",
+          action: "getExtent3857ByConsCode",
+          params: { consCode: rowId },
+        });
+        const extData = extRes?.data ?? extRes;
+        const extent = extData?.extent3857 as number[] | null | undefined;
+        if (Array.isArray(extent) && extent.length === 4 && extent.every((v) => Number.isFinite(Number(v)))) {
+          scheduleFitMapToExtent3857(map, extent.map(Number), {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          });
+        }
+      } catch {
+        /* 상세 보강 실패 시 목록 행으로 표시 */
+      }
+    },
+    [mapContext, setRiverFocus, setRows, setSelectedId]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -258,17 +420,9 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       if (!q) return true;
       const hay = [
         row.name,
-        row.location,
-        row.quantity,
         formatRiverNamesLabel(row.riverNames),
         row.companyName,
-        row.representative,
-        row.phone,
-        row.companyAddress,
-        row.supervisor,
-        row.supervisorName,
-        row.changeReason,
-        row.remark,
+        row.startDate,
       ]
         .join(" ")
         .toLowerCase();
@@ -379,7 +533,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="공사명·하천명·공사번호·상태·시공자"
+              placeholder="공사명·하천·업체명·착수일자"
               className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
@@ -525,7 +679,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         ) : null}
 
         <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-          <span>목록 {items.length}건 · 임시 데이터</span>
+          <span>목록 {items.length}건</span>
           {isSpatialActive ? (
             <button
               type="button"
@@ -540,7 +694,12 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
-        {items.length === 0 ? (
+        {listError ? (
+          <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
+        ) : null}
+        {loading && items.length === 0 ? (
+          <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중…</p>
+        ) : items.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
         ) : (
           <table className="w-full min-w-[420px] border-collapse text-left text-xs">
@@ -567,14 +726,12 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                     role="button"
                     tabIndex={0}
                     onClick={() => {
-                      setRiverFocus?.(null);
-                      setSelectedId?.(row.id);
+                      void selectRow(row.id);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setRiverFocus?.(null);
-                        setSelectedId?.(row.id);
+                        void selectRow(row.id);
                       }
                     }}
                     className={cn(

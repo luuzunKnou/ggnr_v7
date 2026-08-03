@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "river_type",
-    "define_field_kor_name": "river_type",
+    "define_field_kor_name": "하천유형",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "river_code",
-    "define_field_kor_name": "river_code",
+    "define_field_kor_name": "하천코드",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "river_name",
-    "define_field_kor_name": "river_name",
+    "define_field_kor_name": "하천명",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,

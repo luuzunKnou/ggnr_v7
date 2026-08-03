@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "mvm_res_cd",
-    "define_field_kor_name": "mvm_res_cd",
+    "define_field_kor_name": "이동사유코드",
     "define_field_type": "text",
     "define_field_idx": 2,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "mvmn_resn",
-    "define_field_kor_name": "mvmn_resn",
+    "define_field_kor_name": "이동사유",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -326,7 +326,7 @@
   },
   {
     "define_field_name": "mvmn_de",
-    "define_field_kor_name": "mvmn_de",
+    "define_field_kor_name": "이동일자",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,

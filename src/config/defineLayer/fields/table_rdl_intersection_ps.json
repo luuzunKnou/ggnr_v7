@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "sig_cd",
-    "define_field_kor_name": "sig_cd",
+    "define_field_kor_name": "시군구코드",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "crsrd_sn",
-    "define_field_kor_name": "crsrd_sn",
+    "define_field_kor_name": "교차로일련번호",
     "define_field_type": "number",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "kor_crsrd",
-    "define_field_kor_name": "kor_crsrd",
+    "define_field_kor_name": "교차로_한글",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "eng_crsrd",
-    "define_field_kor_name": "eng_crsrd",
+    "define_field_kor_name": "교차로_영문",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "crsrd_se",
-    "define_field_kor_name": "crsrd_se",
+    "define_field_kor_name": "교차로구분",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "opert_de",
-    "define_field_kor_name": "opert_de",
+    "define_field_kor_name": "작업일시",
     "define_field_type": "text",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "crsrd_tycd",
-    "define_field_kor_name": "crsrd_tycd",
+    "define_field_kor_name": "CRSRD_TYCD",
     "define_field_type": "text",
     "define_field_idx": 10,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "crsrd_auto",
-    "define_field_kor_name": "crsrd_auto",
+    "define_field_kor_name": "CRSRD_AUTO",
     "define_field_type": "text",
     "define_field_idx": 11,
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "reqamt_p",
-    "define_field_kor_name": "reqamt_p",
+    "define_field_kor_name": "REQAMT_P",
     "define_field_type": "number",
     "define_field_idx": 12,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "reqamt_c",
-    "define_field_kor_name": "reqamt_c",
+    "define_field_kor_name": "REQAMT_C",
     "define_field_type": "number",
     "define_field_idx": 13,
     "define_field_is_required": false,
@@ -326,7 +326,7 @@
   },
   {
     "define_field_name": "reqamt_prn",
-    "define_field_kor_name": "reqamt_prn",
+    "define_field_kor_name": "REQAMT_PRN",
     "define_field_type": "text",
     "define_field_idx": 14,
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "reqamt_crn",
-    "define_field_kor_name": "reqamt_crn",
+    "define_field_kor_name": "REQAMT_CRN",
     "define_field_type": "text",
     "define_field_idx": 15,
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "crs_use_yn",
-    "define_field_kor_name": "crs_use_yn",
+    "define_field_kor_name": "CRS_USE_YN",
     "define_field_type": "text",
     "define_field_idx": 16,
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "use_resn",
-    "define_field_kor_name": "use_resn",
+    "define_field_kor_name": "USE_RESN",
     "define_field_type": "text",
     "define_field_idx": 17,
     "define_field_is_required": false,
@@ -426,7 +426,7 @@
   },
   {
     "define_field_name": "cre_cd",
-    "define_field_kor_name": "cre_cd",
+    "define_field_kor_name": "CRE_CD",
     "define_field_type": "text",
     "define_field_idx": 18,
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "atc_file_s",
-    "define_field_kor_name": "atc_file_s",
+    "define_field_kor_name": "ATC_FILE_S",
     "define_field_type": "number",
     "define_field_idx": 19,
     "define_field_is_required": false,
@@ -476,7 +476,7 @@
   },
   {
     "define_field_name": "not_use_cd",
-    "define_field_kor_name": "not_use_cd",
+    "define_field_kor_name": "NOT_USE_CD",
     "define_field_type": "text",
     "define_field_idx": 20,
     "define_field_is_required": false,
@@ -501,7 +501,7 @@
   },
   {
     "define_field_name": "first_tycd",
-    "define_field_kor_name": "first_tycd",
+    "define_field_kor_name": "FIRST_TYCD",
     "define_field_type": "text",
     "define_field_idx": 21,
     "define_field_is_required": false,
@@ -526,7 +526,7 @@
   },
   {
     "define_field_name": "b_r_sig_cd",
-    "define_field_kor_name": "b_r_sig_cd",
+    "define_field_kor_name": "B_R_SIG_CD",
     "define_field_type": "text",
     "define_field_idx": 22,
     "define_field_is_required": false,
@@ -551,7 +551,7 @@
   },
   {
     "define_field_name": "b_r_man_no",
-    "define_field_kor_name": "b_r_man_no",
+    "define_field_kor_name": "B_R_MAN_NO",
     "define_field_type": "number",
     "define_field_idx": 23,
     "define_field_is_required": false,
@@ -576,7 +576,7 @@
   },
   {
     "define_field_name": "e_r_sig_cd",
-    "define_field_kor_name": "e_r_sig_cd",
+    "define_field_kor_name": "E_R_SIG_CD",
     "define_field_type": "text",
     "define_field_idx": 24,
     "define_field_is_required": false,
@@ -601,7 +601,7 @@
   },
   {
     "define_field_name": "e_r_man_no",
-    "define_field_kor_name": "e_r_man_no",
+    "define_field_kor_name": "E_R_MAN_NO",
     "define_field_type": "number",
     "define_field_idx": 25,
     "define_field_is_required": false,

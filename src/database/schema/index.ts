@@ -4,6 +4,7 @@
 export * from './board';
 export * from './comp';
 export * from './compd';
+export * from './data_query_history';
 export * from './excel_sync_log';
 export * from './excel_upload_history';
 export * from './gp_map';
@@ -18,6 +19,7 @@ export * from './ngl_fee_list';
 export * from './ngl_query_table';
 export * from './notice';
 export * from './perm';
+export * from './road_reward';
 export * from './road_use_ledger';
 export * from './ser';
 export * from './serd';

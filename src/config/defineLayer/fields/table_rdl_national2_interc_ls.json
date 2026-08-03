@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "name",
-    "define_field_kor_name": "name",
+    "define_field_kor_name": "도로명",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "length",
-    "define_field_kor_name": "length",
+    "define_field_kor_name": "길이",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "defense",
-    "define_field_kor_name": "defense",
+    "define_field_kor_name": "방위",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "sinuosity",
-    "define_field_kor_name": "sinuosity",
+    "define_field_kor_name": "굴곡도",
     "define_field_type": "number",
     "define_field_idx": 8,
     "define_field_is_required": false,

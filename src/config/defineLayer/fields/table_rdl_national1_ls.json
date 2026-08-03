@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "road_type",
-    "define_field_kor_name": "road_type",
+    "define_field_kor_name": "도로분류",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "road_no",
-    "define_field_kor_name": "road_no",
+    "define_field_kor_name": "도로번호",
     "define_field_type": "number",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "road_name",
-    "define_field_kor_name": "road_name",
+    "define_field_kor_name": "도로명",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
