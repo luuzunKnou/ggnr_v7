@@ -435,10 +435,11 @@ export function LayerManagerListTab() {
 
   useEffect(() => {
     return registerLayerManagerListRefresh(() => {
+      void loadData()
       void loadRowMeta()
       void loadStyleInfo()
     })
-  }, [loadRowMeta, loadStyleInfo])
+  }, [loadData, loadRowMeta, loadStyleInfo])
 
   const filteredRows = useMemo(() => {
     let list = rows
