@@ -937,28 +937,32 @@ export function RoadRewardDetailPanel({
             <div className="overflow-hidden rounded border border-slate-200">
               <table className="w-full table-fixed border-collapse text-[11px]">
                 <colgroup>
-                  <col className={isEditing ? "w-[24%]" : "w-[28%]"} />
-                  <col className={isEditing ? "w-[18%]" : "w-[22%]"} />
-                  <col className={isEditing ? "w-[18%]" : "w-[25%]"} />
-                  <col className={isEditing ? "w-[22%]" : "w-[25%]"} />
-                  {isEditing ? <col className="w-[18%]" /> : null}
+                  <col className="w-[4.5rem]" />
+                  <col className="w-14" />
+                  <col className="w-10" />
+                  <col className="w-[4.5rem]" />
+                  <col />
+                  {isEditing ? <col className="w-14" /> : null}
                 </colgroup>
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-700">
+                    <th className="truncate border-b border-slate-200 px-1.5 py-1.5 text-left font-semibold text-slate-700">
                       읍면동
                     </th>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-700">
-                      지번(편입)
+                    <th className="truncate border-b border-slate-200 px-1.5 py-1.5 text-left font-semibold text-slate-700">
+                      편입지번
                     </th>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-right font-semibold text-slate-700">
+                    <th className="truncate border-b border-slate-200 px-1.5 py-1.5 text-left font-semibold text-slate-700">
+                      지목
+                    </th>
+                    <th className="truncate border-b border-slate-200 px-1.5 py-1.5 text-right font-semibold text-slate-700">
                       편입면적(㎡)
                     </th>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-right font-semibold text-slate-700">
+                    <th className="truncate border-b border-slate-200 px-1.5 py-1.5 text-right font-semibold text-slate-700">
                       보상금액(원)
                     </th>
                     {isEditing ? (
-                      <th className="border-b border-slate-200 px-2 py-1.5" aria-label="필지 편집" />
+                      <th className="w-14 border-b border-slate-200 px-0 py-1.5" aria-label="필지 편집" />
                     ) : null}
                   </tr>
                 </thead>
@@ -979,32 +983,35 @@ export function RoadRewardDetailPanel({
                           isSelected && "bg-primary/5"
                         )}
                       >
-                        <td className="truncate px-2 py-1.5 text-slate-800" title={p.eupmyeonDong}>
+                        <td className="truncate px-1.5 py-1.5 text-slate-800" title={p.eupmyeonDong}>
                           {formatCell(p.eupmyeonDong)}
                         </td>
-                        <td className="truncate px-2 py-1.5 text-slate-800" title={p.jibunIncluded}>
+                        <td className="truncate px-1.5 py-1.5 text-slate-800" title={p.jibunIncluded}>
                           {formatCell(p.jibunIncluded)}
                         </td>
-                        <td className="px-2 py-1.5 text-right text-slate-800">
+                        <td className="truncate px-1.5 py-1.5 text-slate-800" title={p.jimok}>
+                          {formatCell(p.jimok)}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-right tabular-nums text-slate-800">
                           {formatCell(p.areaIncluded, true)}
                         </td>
-                        <td className="px-2 py-1.5 text-right text-slate-800">
+                        <td className="px-1.5 py-1.5 text-right tabular-nums text-slate-800">
                           {formatCell(p.compensationAmount, true)}
                         </td>
                         {isEditing ? (
-                          <td className="px-2 py-1.5">
-                            <div className="flex items-center justify-center gap-0.5">
+                          <td className="w-14 px-0 py-1.5">
+                            <div className="flex items-center justify-end gap-0">
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleOpenEditParcel(p);
                                 }}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
+                                className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
                                 aria-label="필지 수정"
                                 title="수정"
                               >
-                                <Pencil className="h-3.5 w-3.5" />
+                                <Pencil className="h-3 w-3" />
                               </button>
                               <button
                                 type="button"
@@ -1012,11 +1019,11 @@ export function RoadRewardDetailPanel({
                                   e.stopPropagation();
                                   handleDeleteParcelFromList(p.id);
                                 }}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
                                 aria-label="필지 삭제"
                                 title="삭제"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3 w-3" />
                               </button>
                             </div>
                           </td>
