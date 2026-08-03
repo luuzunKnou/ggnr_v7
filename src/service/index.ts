@@ -45,6 +45,7 @@ import * as shootingRequestService from './shootingRequestService';
 import * as flightLogbookService from './flightLogbookService';
 import * as aerialUploadService from './aerialUploadService';
 import * as useFeeService from './useFeeService';
+import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as elevationService from './elevationService';
 
@@ -92,6 +93,7 @@ export {
   flightLogbookService,
   aerialUploadService,
   useFeeService,
+  groundwaterPermitService,
   bizNotifService,
   elevationService,
 };

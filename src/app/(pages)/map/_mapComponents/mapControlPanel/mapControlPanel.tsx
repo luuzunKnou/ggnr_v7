@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SHOOTING_REQUEST_UI_ENABLED } from "@/app/(pages)/map/_mapContents/shootingRequest/shootingRequestUiFlag"
 
 // 패널 아이템 타입 정의
 export interface MapControlItem {
@@ -106,7 +107,12 @@ export function MapControlPanel({
             className="flex flex-col bg-white/95 text-foreground backdrop-blur-sm rounded-[5px] shadow-lg border border-slate-200 overflow-hidden shrink-0 dark:bg-black/55 dark:text-white/90 dark:border-white/10"
             style={{ width: 45, minWidth: 45, maxWidth: 45 }}
           >
-            {group.items.map((item) => {
+            {group.items
+              .filter(
+                (item) =>
+                  SHOOTING_REQUEST_UI_ENABLED || item.id !== "shooting-request"
+              )
+              .map((item) => {
               const isActive = activeIds.includes(item.id)
               return (
                 <MapControlButton

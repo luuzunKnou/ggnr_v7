@@ -13,7 +13,6 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
-import { MapMyInfoFab } from '@/app/(pages)/map/_mapContents/shootingRequest/MapMyInfoFab';
 import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
@@ -88,13 +87,7 @@ function renderMaskIcon(iconFile: string) {
   );
 }
 
-export function MapSidebar({
-  indexLogoSrc,
-  onSelectMyShootingRequest,
-}: {
-  indexLogoSrc: string;
-  onSelectMyShootingRequest?: (id: string) => void;
-}) {
+export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
@@ -229,6 +222,8 @@ export function MapSidebar({
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
+      // 촬영요청·승인 — 개발 중, 오픈 전까지 비노출
+      if (item.ser_eng === 'shootingRequest' || item.ser_eng === 'shootingApproval') return false;
       return true;
     });
 
@@ -450,7 +445,6 @@ export function MapSidebar({
           <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
         </div>
       </div>
-      {onSelectMyShootingRequest ? <MapMyInfoFab onSelectRequest={onSelectMyShootingRequest} /> : null}
       <button
         type="button"
         onClick={handleDebugZoneClick}

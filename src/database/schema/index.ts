@@ -24,6 +24,7 @@ export * from './ser';
 export * from './serd';
 export * from './serp_map';
 export * from './shooting_request';
+export * from './soinn00001';
 export * from './sync_log';
 export * from './sys';
 export * from './sysp_map';

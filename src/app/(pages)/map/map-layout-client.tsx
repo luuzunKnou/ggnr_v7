@@ -55,6 +55,7 @@ import {
   beginMediaRegistration,
   findShootingRequest,
 } from "./_mapContents/shootingRequest/shootingRequestMockStore"
+import { SHOOTING_REQUEST_UI_ENABLED } from "./_mapContents/shootingRequest/shootingRequestUiFlag"
 import {
   aerialKindToOpenedKey,
   shootTypeToAerialKind,
@@ -78,6 +79,8 @@ import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
 import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
 import { UseFeeListPanel } from "./_mapContents/useFee/UseFeeListPanel"
 import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
+import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
+import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
 import {
   UserAccountProtoPanel,
 } from "./_mapContents/prototypes/UserAccountProtoPanel"
@@ -254,6 +257,15 @@ const USE_FEE_PANEL_DEFAULT_WIDTH = 466
 const USE_FEE_PANEL_MIN_WIDTH = 466
 const USE_FEE_PANEL_MAX_WIDTH = 960
 
+/** serviceList.ser_eng / systemList 메뉴 키와 동일 */
+const GROUNDWATER_PERMIT_OPENED_KEY = "underWaterUse"
+const GROUNDWATER_PERMIT_PANEL_DEFAULT_WIDTH = 720
+const GROUNDWATER_PERMIT_PANEL_MIN_WIDTH = 560
+const GROUNDWATER_PERMIT_PANEL_MAX_WIDTH = 960
+const GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH = 400
+const GROUNDWATER_PERMIT_DETAIL_MIN_WIDTH = 320
+const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
+
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
 const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
@@ -390,8 +402,10 @@ function MapLayoutContent({
           : aerialManageOpenedKey === AERIAL_SATELLITE_OPENED_KEY
             ? "satellite"
             : undefined
-  const shootingApprovalOpen = openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
-  const shootingRequestOpen = openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
+  const shootingApprovalOpen =
+    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
+  const shootingRequestOpen =
+    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
   const shootingListOpen = shootingApprovalOpen
   const shootingPanelOpen = shootingApprovalOpen || shootingRequestOpen
   const [shootingRequestDetailId, setShootingRequestDetailId] = useState<string | null>(null)
@@ -411,6 +425,7 @@ function MapLayoutContent({
     riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
   const usageDataAsOpen = openedWindows.includes(USAGE_DATA_AS_OPENED_KEY)
   const useFeeOpen = openedWindows.includes(USE_FEE_OPENED_KEY)
+  const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -430,6 +445,9 @@ function MapLayoutContent({
   // const [useLedgerProtoRows, setUseLedgerProtoRows] = useState<ProtoLedgerRow[]>(() => [...PROTO_LEDGERS])
   const [useFeeDetailId, setUseFeeDetailId] = useState<string | null>(null)
   const useFeeDetailOpen = useFeeOpen && Boolean(useFeeDetailId)
+  const [groundwaterPermitDetailId, setGroundwaterPermitDetailId] = useState<string | null>(null)
+  const groundwaterPermitDetailOpen =
+    groundwaterPermitOpen && Boolean(groundwaterPermitDetailId)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
@@ -526,6 +544,12 @@ function MapLayoutContent({
   // const [useLedgerProtoFeeWidth, setUseLedgerProtoFeeWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
   const [useFeePanelWidth, setUseFeePanelWidth] = useState(USE_FEE_PANEL_DEFAULT_WIDTH)
   const [useFeeDetailWidth, setUseFeeDetailWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
+  const [groundwaterPermitPanelWidth, setGroundwaterPermitPanelWidth] = useState(
+    GROUNDWATER_PERMIT_PANEL_DEFAULT_WIDTH
+  )
+  const [groundwaterPermitDetailWidth, setGroundwaterPermitDetailWidth] = useState(
+    GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH
+  )
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -572,7 +596,9 @@ function MapLayoutContent({
     // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
     // (useLedgerProtoFeeDetailOpen ? useLedgerProtoFeeWidth : 0) +
     (useFeeOpen ? useFeePanelWidth : 0) +
-    (useFeeDetailOpen ? useFeeDetailWidth : 0)
+    (useFeeDetailOpen ? useFeeDetailWidth : 0) +
+    (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
+    (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -654,6 +680,11 @@ function MapLayoutContent({
     roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
   const useFeeDetailLeftPx =
     useFeePanelLeftPx + (useFeeOpen ? useFeePanelWidth : 0)
+  const groundwaterPermitPanelLeftPx =
+    useFeeDetailLeftPx + (useFeeDetailOpen ? useFeeDetailWidth : 0)
+  const groundwaterPermitDetailLeftPx =
+    groundwaterPermitPanelLeftPx +
+    (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함 */
@@ -950,6 +981,12 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseGroundwaterPermit = () => {
+    setGroundwaterPermitDetailId(null)
+    const next = openedWindows.filter((w) => w !== GROUNDWATER_PERMIT_OPENED_KEY)
+    setOpened(next)
+  }
+
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
@@ -1014,6 +1051,10 @@ function MapLayoutContent({
       setUseFeeDetailWidth(USE_FEE_DETAIL_DEFAULT_WIDTH)
     }
   }, [useFeeDetailOpen])
+
+  useEffect(() => {
+    if (!groundwaterPermitOpen) setGroundwaterPermitDetailId(null)
+  }, [groundwaterPermitOpen])
 
   useEffect(() => {
     const onToggle = () => {
@@ -1185,10 +1226,7 @@ function MapLayoutContent({
         )}
         <div className="absolute inset-0 z-0">{children}</div>
 
-        <MapSidebar
-          indexLogoSrc={indexLogoSrc}
-          onSelectMyShootingRequest={(id) => setMyInfoShootingModalId(id)}
-        />
+        <MapSidebar indexLogoSrc={indexLogoSrc} />
         <UsageDataAsNotifBootstrap />
         <RoadDataFlowAnalysisOrchestrator />
         <ParcelAnalysisOrchestrator />
@@ -1690,8 +1728,9 @@ function MapLayoutContent({
           )}
           <ShootingRequestFormModal
             open={
-              myInfoShootingModalId != null ||
-              (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID)
+              SHOOTING_REQUEST_UI_ENABLED &&
+              (myInfoShootingModalId != null ||
+                (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
             }
             detailId={
               myInfoShootingModalId ??
@@ -1926,6 +1965,40 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {groundwaterPermitOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={groundwaterPermitPanelWidth}
+                minWidth={GROUNDWATER_PERMIT_PANEL_MIN_WIDTH}
+                maxWidth={GROUNDWATER_PERMIT_PANEL_MAX_WIDTH}
+                leftOffsetPx={groundwaterPermitPanelLeftPx}
+                onWidthChange={setGroundwaterPermitPanelWidth}
+              >
+                <GroundwaterPermitListPanel
+                  onClose={handleCloseGroundwaterPermit}
+                  selectedDetailId={groundwaterPermitDetailId}
+                  onSelectDetailId={setGroundwaterPermitDetailId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {groundwaterPermitOpen && groundwaterPermitDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={groundwaterPermitDetailWidth}
+                minWidth={GROUNDWATER_PERMIT_DETAIL_MIN_WIDTH}
+                maxWidth={GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={groundwaterPermitDetailLeftPx}
+                onWidthChange={setGroundwaterPermitDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <GroundwaterPermitDetailPanel
+                  detailId={groundwaterPermitDetailId}
+                  onClose={() => setGroundwaterPermitDetailId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -1952,6 +2025,7 @@ function MapLayoutContent({
               <UserAccountProtoPanel
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
+                onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
                 onOpenLedger={(ledgerId) => {
                   setOpened([USAGE_DATA_AS_OPENED_KEY])
                   setUsageDataAsDetailId(ledgerId)
