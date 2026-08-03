@@ -88,26 +88,49 @@ export function AdminConsoleLayout({
   const validDefault = pickDefaultMenu(
     menus.some((m) => m.id === defaultMenuId) ? defaultMenuId : menus[0]?.id ?? ""
   )
-  const [selectedMenu, setSelectedMenu] = useState(validDefault)
-  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>(() => {
-    const first = menuGroups?.[0]?.id ?? null
-    return first ? [first] : []
-  })
   const expandedGroupStorageKey = stateStorageKey ? `${stateStorageKey}:expandedGroupIds` : null
   const selectedMenuStorageKey = stateStorageKey ? `${stateStorageKey}:selectedMenu` : null
   const collapsedStorageKey = stateStorageKey ? `${stateStorageKey}:sidebarCollapsed` : null
-  const [collapsed, setCollapsed] = useState(false)
+
+  // localStorage는 useState lazy init에서 동기 복원.
+  // effect 복원+저장 조합은 마운트 시 기본값으로 저장값을 덮어쓰는 레이스가 난다.
+  const [selectedMenu, setSelectedMenu] = useState(() => {
+    if (typeof window === "undefined" || !selectedMenuStorageKey) return validDefault
+    const savedMenu = window.localStorage.getItem(selectedMenuStorageKey)
+    if (savedMenu && menus.some((menu) => menu.id === savedMenu)) return savedMenu
+    return validDefault
+  })
+  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>(() => {
+    const firstDefault = (): string[] => {
+      const first = menuGroups?.[0]?.id ?? null
+      return first ? [first] : []
+    }
+    if (typeof window === "undefined" || !expandedGroupStorageKey || !menuGroups?.length) {
+      return firstDefault()
+    }
+    const saved = window.localStorage.getItem(expandedGroupStorageKey)
+    if (!saved) return firstDefault()
+    try {
+      const parsed = JSON.parse(saved) as unknown
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((value): value is string => typeof value === "string")
+          .filter((id) => menuGroups.some((group) => group.id === id))
+      }
+    } catch {
+      // Backward compatibility: older value was a single group id string.
+      if (menuGroups.some((group) => group.id === saved)) return [saved]
+      if (saved === "") return []
+    }
+    return firstDefault()
+  })
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined" || !collapsedStorageKey) return false
+    return window.localStorage.getItem(collapsedStorageKey) === "1"
+  })
 
   const currentLabel = menus.find((m) => m.id === selectedMenu)?.label ?? selectedMenu
   const menuById = new Map(menus.map((m) => [m.id, m]))
-
-  useEffect(() => {
-    if (!selectedMenuStorageKey || typeof window === "undefined") return
-    const savedMenu = window.localStorage.getItem(selectedMenuStorageKey)
-    if (savedMenu && menus.some((menu) => menu.id === savedMenu)) {
-      setSelectedMenu(savedMenu)
-    }
-  }, [menus, selectedMenuStorageKey])
 
   useEffect(() => {
     if (!selectedMenuStorageKey || typeof window === "undefined") return
@@ -118,43 +141,8 @@ export function AdminConsoleLayout({
   useEffect(() => {
     if (!menuGroups || menuGroups.length === 0) return
     if (!expandedGroupStorageKey || typeof window === "undefined") return
-
-    const saved = window.localStorage.getItem(expandedGroupStorageKey)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as unknown
-        if (Array.isArray(parsed)) {
-          const validIds = parsed
-            .filter((value): value is string => typeof value === "string")
-            .filter((id) => menuGroups.some((group) => group.id === id))
-          setExpandedGroupIds(validIds)
-          return
-        }
-      } catch {
-        // Backward compatibility: older value was a single group id string.
-        if (menuGroups.some((group) => group.id === saved)) {
-          setExpandedGroupIds([saved])
-          return
-        }
-        if (saved === "") {
-          setExpandedGroupIds([])
-          return
-        }
-      }
-    }
-  }, [menuGroups, expandedGroupStorageKey])
-
-  useEffect(() => {
-    if (!menuGroups || menuGroups.length === 0) return
-    if (!expandedGroupStorageKey || typeof window === "undefined") return
     window.localStorage.setItem(expandedGroupStorageKey, JSON.stringify(expandedGroupIds))
   }, [expandedGroupIds, menuGroups, expandedGroupStorageKey])
-
-  useEffect(() => {
-    if (!collapsedStorageKey || typeof window === "undefined") return
-    const saved = window.localStorage.getItem(collapsedStorageKey)
-    if (saved !== null) setCollapsed(saved === "1")
-  }, [collapsedStorageKey])
 
   useEffect(() => {
     if (!collapsedStorageKey || typeof window === "undefined") return
@@ -324,7 +312,7 @@ export function AdminConsoleLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <header className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
         <h1 className="text-lg font-semibold text-foreground">{title}</h1>
         <div className="flex items-center gap-2">
@@ -341,14 +329,14 @@ export function AdminConsoleLayout({
       <div className="flex flex-1 min-h-0 overflow-visible">
         {collapsed ? (
           <aside className="shrink-0 w-12 border-r bg-muted/30 flex flex-col min-h-0 overflow-visible">
-            <div className="flex-1 min-h-0 overflow-x-visible py-2">
+            <div className="flex-1 min-h-0 overflow-x-visible pt-0 pb-0">
               {renderCollapsedIconRail()}
             </div>
             {renderSidebarToggle(true)}
           </aside>
         ) : (
         <aside className="shrink-0 border-r bg-muted/30 flex flex-col w-64 min-h-0">
-          <div className="flex-1 min-h-0 overflow-auto py-2">
+          <div className="flex-1 min-h-0 overflow-auto pt-0 pb-0">
           {menuGroups && menuGroups.length > 0 ? (
             menuGroups.map((group) => {
               const visibleGroupMenuIds = group.menuIds.filter((id) => visibleMenuIds.includes(id))
@@ -430,9 +418,9 @@ export function AdminConsoleLayout({
         </aside>
         )}
 
-        <main className="flex-1 overflow-auto p-4">
-          <Card className="rounded-none min-h-full">
-            <CardHeader>
+        <main className="flex flex-1 min-h-0 flex-col overflow-hidden p-4">
+          <Card className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-none pt-6 pb-3">
+            <CardHeader className="shrink-0">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <CardTitle>{currentLabel}</CardTitle>
@@ -442,7 +430,7 @@ export function AdminConsoleLayout({
               </div>
               <CardDescription>{getDescription(selectedMenu)}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-auto">
               {consoleArea && accessLoading ? (
                 <p className="text-sm text-muted-foreground py-4">권한 정보를 불러오는 중…</p>
               ) : consoleArea && currentPolicy === "block" ? (
@@ -453,10 +441,10 @@ export function AdminConsoleLayout({
                 <ConsoleMenuAccessContext.Provider value={contextValue}>
                   <fieldset
                     disabled={currentPolicy === "read"}
-                    className="min-w-0 border-0 p-0 m-0 disabled:opacity-100 [&_button:not([type='button'])]:disabled:opacity-60"
+                    className="flex min-h-0 min-w-0 flex-1 flex-col border-0 p-0 m-0 disabled:opacity-100 [&_button:not([type='button'])]:disabled:opacity-60"
                   >
                     {currentPolicy === "read" ? (
-                      <p className="mb-3 text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800">
+                      <p className="mb-3 shrink-0 text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200 px-3 py-2 rounded border border-amber-200 dark:border-amber-800">
                         읽기 권한만 있습니다. 저장·추가·삭제는 할 수 없습니다.
                       </p>
                     ) : null}

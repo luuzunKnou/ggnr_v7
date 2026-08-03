@@ -22,7 +22,7 @@ export const LAYER_ROW_EDIT_PRESETS = {
   },
   riverUseLedger: {
     tableName: "river_use_ledger",
-    schema: "public",
+    schema: "layer",
     keyField: "id",
     excludeFields: ["parcel_address", "ledger_row_key"],
     dateFields: [],

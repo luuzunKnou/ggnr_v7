@@ -12,7 +12,7 @@ import {
   LayerManagerUploadDialogs,
   type LayerUploadDialogKind,
 } from "./layerManager/LayerManagerUploadDialogs"
-import { registerLayerManagerUploadOpener, requestLayerManagerListRefresh } from "./layerManager/layerManagerUploadBridge"
+import { registerLayerManagerUploadOpener, requestLayerManagerAfterUploadRefresh } from "./layerManager/layerManagerUploadBridge"
 import { LayerInfoManager } from "./LayerInfoManager"
 import { LayerAttrManager } from "./LayerAttrManager"
 import { LayerCodeManager } from "./LayerCodeManager"
@@ -71,7 +71,7 @@ export function LayerManagerContent() {
         setActiveTab("historyExcel")
       }
       void refreshAutoSetupIssueCount()
-      requestLayerManagerListRefresh()
+      requestLayerManagerAfterUploadRefresh(kind)
     },
     [refreshAutoSetupIssueCount]
   )
@@ -150,7 +150,7 @@ export function LayerManagerContent() {
           <LayerCodeManager />
         </div>
         <div
-          className="absolute inset-0 flex flex-col"
+          className="absolute inset-0 flex flex-col overflow-hidden"
           style={{ display: activeTab === "autoSetup" ? "flex" : "none" }}
         >
           <LayerManagerAutoSetupTab onIssueCountChange={handleAutoSetupIssueCountChange} />

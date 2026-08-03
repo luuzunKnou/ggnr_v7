@@ -8,7 +8,7 @@ import { ShpCrsPreviewMap } from './ShpCrsPreviewMap';
 import { cn } from '@/lib/utils';
 
 /** 이 미만이면 후보의 일치율을 신뢰하기 어렵다고 보고 경고를 띄운다 */
-const LOW_RATIO_THRESHOLD = 0.3;
+export const LOW_RATIO_THRESHOLD = 0.3;
 /** 1·2순위 일치율 차이가 이 미만이면 자동 판별이 애매하다고 보고 경고를 띄운다 */
 const AMBIGUOUS_GAP_THRESHOLD = 0.05;
 

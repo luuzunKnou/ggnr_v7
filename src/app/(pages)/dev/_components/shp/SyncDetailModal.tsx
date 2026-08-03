@@ -30,6 +30,10 @@ type SyncLogRow = {
 type Props = {
   /** 이력 상세 키. 없으면 tableName만으로 sync_log 조회·의도 기록 */
   dhKey?: number;
+  /** Excel 업로드 이력 키 (source=excel) */
+  ehKey?: number;
+  /** 기본 shp. excel이면 excelHistoryService + excel_sync_log */
+  source?: 'shp' | 'excel';
   tableName: string;
   shpPath?: string | null;
   /** 비교 시 사용한 소스 좌표계 (예: EPSG:5181). .prj 없는 SHP 상세 지도용 */
@@ -69,20 +73,54 @@ function opCategory(row: SyncLogRow): string {
   return row.sl_operation;
 }
 
-const OP_LABEL: Record<string, { label: string; color: string; icon: typeof AlertTriangle; badge?: string; hoverBg: string }> = {
+type OpLabelInfo = { label: string; color: string; icon: typeof AlertTriangle; badge?: string; hoverBg: string };
+type KeptOrigin = 'new' | 'conflict' | 'delete';
+
+const OP_LABEL: Record<string, OpLabelInfo> = {
   new: { label: '신규', color: 'text-emerald-600', icon: Plus, badge: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300', hoverBg: 'bg-emerald-50 dark:bg-emerald-900/20' },
   conflict: { label: '충돌', color: 'text-amber-700', icon: AlertTriangle, badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300', hoverBg: 'bg-amber-50 dark:bg-amber-900/20' },
   delete: { label: '삭제', color: 'text-rose-600', icon: Trash2, badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300', hoverBg: 'bg-rose-50 dark:bg-rose-900/20' },
   append: { label: '신규', color: 'text-green-600', icon: Plus, badge: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300', hoverBg: 'bg-green-50 dark:bg-green-900/20' },
-  kept: { label: '기존유지', color: 'text-blue-600', icon: ShieldCheck, hoverBg: 'bg-blue-50 dark:bg-blue-900/20' },
+  kept: { label: '유지', color: 'text-blue-600', icon: ShieldCheck, badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300', hoverBg: 'bg-blue-50 dark:bg-blue-900/20' },
   remove: { label: '삭제', color: 'text-red-600', icon: Trash2, badge: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300', hoverBg: 'bg-red-50 dark:bg-red-900/20' },
+};
+
+/** 유지(kept) 확정 행 — old/new 유무로 원래 구분 복원 */
+const KEPT_ORIGIN_LABEL: Record<KeptOrigin, OpLabelInfo> = {
+  new: {
+    label: '미추가',
+    color: 'text-blue-600',
+    icon: ShieldCheck,
+    badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
+    hoverBg: 'bg-blue-50 dark:bg-blue-900/20',
+  },
+  delete: {
+    label: '미삭제',
+    color: 'text-blue-600',
+    icon: ShieldCheck,
+    badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
+    hoverBg: 'bg-blue-50 dark:bg-blue-900/20',
+  },
+  conflict: OP_LABEL.kept,
 };
 
 const PENDING_HOVER_BG = 'bg-amber-100/60 dark:bg-amber-900/20';
 
-function getOpLabelInfo(operation: string, isPending: boolean) {
+function keptOriginFromData(oldData: unknown, newData: unknown): KeptOrigin | null {
+  const hasOld = hasSyncData(oldData);
+  const hasNew = hasSyncData(newData);
+  if (!hasOld && hasNew) return 'new';
+  if (hasOld && hasNew) return 'conflict';
+  if (hasOld && !hasNew) return 'delete';
+  return null;
+}
+
+function getOpLabelInfo(operation: string, isPending: boolean, keptOrigin?: KeptOrigin | null) {
   if (operation === 'conflict' && !isPending) {
     return { label: '변경', color: 'text-orange-600', icon: RefreshCw, hoverBg: 'bg-orange-50 dark:bg-orange-900/20' };
+  }
+  if (operation === 'kept' && keptOrigin) {
+    return KEPT_ORIGIN_LABEL[keptOrigin];
   }
   return OP_LABEL[operation] ?? OP_LABEL['conflict'];
 }
@@ -129,6 +167,7 @@ type FlatRow = {
   slKey: number;
   operation: string;
   isPending: boolean;
+  keptOrigin: KeptOrigin | null;
   keyValue: string;
   titleValue: string;
   isRolledBack: boolean;
@@ -147,7 +186,16 @@ function buildFlatRows(rows: SyncLogRow[], titleField: string | null = null): Fl
     const old = asDataRecord(r.sl_old_data);
     const nw = asDataRecord(r.sl_new_data);
     const titleVal = titleField ? String(old[titleField] ?? nw[titleField] ?? '') : '';
-    const base = { slKey: r.sl_key, operation: op, isPending, keyValue: r.sl_key_value ?? '', titleValue: titleVal, isRolledBack: r.sl_rolled_back };
+    const keptOrigin = op === 'kept' ? keptOriginFromData(r.sl_old_data, r.sl_new_data) : null;
+    const base = {
+      slKey: r.sl_key,
+      operation: op,
+      isPending,
+      keptOrigin,
+      keyValue: r.sl_key_value ?? '',
+      titleValue: titleVal,
+      isRolledBack: r.sl_rolled_back,
+    };
 
     if (op === 'conflict' || op === 'kept') {
       // 상세와 동일: old∪new 키 전부 비교 (old만 보면 new에만 있는 변경이 누락됨)
@@ -207,15 +255,48 @@ function buildFlatRows(rows: SyncLogRow[], titleField: string | null = null): Fl
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
 
-type OpFilterId = 'new' | 'conflict' | 'delete' | 'kept';
-const OP_FILTER_OPTIONS: { id: OpFilterId; label: string }[] = [
-  { id: 'new', label: '신규' },
-  { id: 'conflict', label: '충돌·변경' },
-  { id: 'delete', label: '삭제' },
-  { id: 'kept', label: '기존유지' },
-];
+type OpFilterId =
+  | 'new'
+  | 'pending_conflict'
+  | 'changed'
+  | 'delete'
+  | 'kept_new'
+  | 'kept_conflict'
+  | 'kept_delete';
 
-export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, pendingOnly, readOnly, deferDbWrite, onClose, onRollbackDone }: Props) {
+export function SyncDetailModal({
+  dhKey,
+  ehKey,
+  source = 'shp',
+  tableName,
+  shpPath,
+  sourceSrsOverride,
+  pendingOnly,
+  readOnly,
+  deferDbWrite,
+  onClose,
+  onRollbackDone,
+}: Props) {
+  const isExcel = source === 'excel';
+  const syncService = isExcel ? 'excelHistoryService' : 'shpUploadService';
+  const historyKey = isExcel ? ehKey : dhKey;
+  const changeValueLabel = isExcel ? '변경값 (Excel)' : '변경값 (SHP)';
+  const mapProjection = 'EPSG:5181';
+
+  const attachHistoryKey = useCallback(
+    (p: Record<string, unknown>, opts?: { strict?: boolean }) => {
+      if (historyKey == null) return p;
+      if (isExcel) {
+        p.ehKey = historyKey;
+        if (opts?.strict) p.strictEhKey = true;
+      } else {
+        p.dhKey = historyKey;
+        if (opts?.strict) p.strictDhKey = true;
+      }
+      return p;
+    },
+    [historyKey, isExcel]
+  );
   const [rows, setRows] = useState<SyncLogRow[]>([]);
   const [titleField, setTitleField] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -237,6 +318,8 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
   const [opFilters, setOpFilters] = useState<OpFilterId[]>([]);
   const [fieldOptions, setFieldOptions] = useState<string[]>([]);
   const [fieldOptionsLoading, setFieldOptionsLoading] = useState(false);
+  const [opOptions, setOpOptions] = useState<Array<{ id: OpFilterId; label: string }>>([]);
+  const [opOptionsLoading, setOpOptionsLoading] = useState(false);
   const [fieldFilterOpen, setFieldFilterOpen] = useState(false);
   const [opFilterOpen, setOpFilterOpen] = useState(false);
   /** 구분·변경 필드 필터가 있을 때 «전체 반영/유지» 대상 미결 건수 (미결 탭이 아닐 때) */
@@ -279,13 +362,14 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
         page: pageNum,
         limit: size,
       };
-      if (dhKey) p.dhKey = dhKey;
-      // 이력 조회(readOnly): 해당 dhKey만. 위저드 중에는 미배정(NULL)도 포함
-      if (dhKey && readOnly) p.strictDhKey = true;
+      if (historyKey != null) {
+        attachHistoryKey(p, { strict: Boolean(historyKey && readOnly) });
+      }
+      // 이력 조회(readOnly): 해당 이력 키만. 위저드 중에는 미배정(NULL)도 포함
       if (fields.length > 0) p.fieldFilters = fields;
       if (ops.length > 0) p.opFilters = ops;
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'getSyncLogs',
         params: p,
       });
@@ -334,7 +418,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
       if (hasRemoveOrDelete) {
         try {
           const tr = await call('', 'POST', {
-            service: 'shpUploadService',
+            service: syncService,
             action: 'getTitleFieldName',
             params: { tableName },
           });
@@ -357,15 +441,17 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false);
     }
-  }, [dhKey, tableName, page, activeTab, pageSize, fieldFilters, opFilters, readOnly]);
+  }, [attachHistoryKey, historyKey, tableName, page, activeTab, pageSize, fieldFilters, opFilters, readOnly, syncService]);
 
   const loadFieldOptions = useCallback(async () => {
     setFieldOptionsLoading(true);
     try {
+      const p: Record<string, unknown> = { tableName };
+      attachHistoryKey(p);
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'getSyncLogFieldNames',
-        params: { tableName, ...(dhKey ? { dhKey } : {}) },
+        params: p,
       });
       const d = res?.data ?? res;
       setFieldOptions(d?.success ? (d.fields ?? []) : []);
@@ -374,7 +460,31 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     } finally {
       setFieldOptionsLoading(false);
     }
-  }, [dhKey, tableName]);
+  }, [attachHistoryKey, historyKey, tableName, syncService]);
+
+  const loadOpOptions = useCallback(async () => {
+    setOpOptionsLoading(true);
+    try {
+      const p: Record<string, unknown> = { tableName };
+      attachHistoryKey(p, { strict: Boolean(historyKey && readOnly) });
+      const res = await call('', 'POST', {
+        service: syncService,
+        action: 'getSyncLogOpOptions',
+        params: p,
+      });
+      const d = res?.data ?? res;
+      const next: Array<{ id: OpFilterId; label: string }> = d?.success
+        ? ((d.options ?? []) as Array<{ id: OpFilterId; label: string }>)
+        : [];
+      setOpOptions(next);
+      return next;
+    } catch {
+      setOpOptions([]);
+      return [] as Array<{ id: OpFilterId; label: string }>;
+    } finally {
+      setOpOptionsLoading(false);
+    }
+  }, [attachHistoryKey, historyKey, tableName, readOnly, syncService]);
 
   // 초기·탭·페이지·크기 변경 (필터는 applyFieldFilters에서 단독 조회)
   const prevFetchRef = useRef({
@@ -405,7 +515,8 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
 
   useEffect(() => {
     void loadFieldOptions();
-  }, [loadFieldOptions]);
+    void loadOpOptions();
+  }, [loadFieldOptions, loadOpOptions]);
 
   useEffect(() => {
     setPageInput(String(page));
@@ -469,9 +580,9 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
         fieldFilters: fields,
         opFilters: ops,
       };
-      if (dhKey) p.dhKey = dhKey;
+      if (historyKey != null) attachHistoryKey(p);
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'getSyncLogs',
         params: p,
       });
@@ -481,7 +592,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     } catch {
       setFilterPendingTotal(null);
     }
-  }, [activeTab, dhKey, tableName, fieldFilters, opFilters]);
+  }, [activeTab, attachHistoryKey, historyKey, tableName, fieldFilters, opFilters, syncService]);
 
   /** 필드·구분 필터를 서버에 반영하고 1페이지·총 건수 재계산 */
   const applyListFilters = useCallback((next: {
@@ -586,7 +697,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
   const afterAction = useCallback(async (opts?: { clearFilters?: boolean }) => {
     const clearFilters = !!opts?.clearFilters;
     const nextFields = clearFilters ? [] : fieldFilters;
-    const nextOps = clearFilters ? [] : opFilters;
+    let nextOps = clearFilters ? [] : opFilters;
     if (clearFilters) {
       setFieldFilters([]);
       setOpFilters([]);
@@ -602,6 +713,14 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
       refreshCounts: true,
       includeTotal: true,
     });
+    const available = await loadOpOptions();
+    if (!clearFilters) {
+      const allowed = new Set(available.map((o) => o.id));
+      if (nextOps.some((id) => !allowed.has(id))) {
+        nextOps = nextOps.filter((id) => allowed.has(id));
+        applyListFilters({ opFilters: nextOps });
+      }
+    }
     const c = fresh.counts ?? counts;
     await updateHistoryResult(c.pending ?? 0, {
       all: c.all ?? 0,
@@ -616,24 +735,28 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
       await refreshFilterPendingTotal(nextFields, nextOps);
     }
     onRollbackDone?.();
-  }, [fetchLogs, page, activeTab, counts, updateHistoryResult, onRollbackDone, fieldFilters, opFilters, refreshFilterPendingTotal]);
+  }, [fetchLogs, page, activeTab, counts, updateHistoryResult, onRollbackDone, fieldFilters, opFilters, refreshFilterPendingTotal, loadOpOptions, applyListFilters]);
 
   const handleApplyOne = async (slKey: number) => {
     if (!confirm(
       deferDbWrite
-        ? 'SHP 값으로 반영하도록 선택합니다. 실제 DB 반영은 위저드 완료 시 이루어집니다. 계속할까요?'
-        : 'SHP 값으로 DB에 반영하시겠습니까?'
+        ? `${isExcel ? 'Excel' : 'SHP'} 값으로 반영하도록 선택합니다. 실제 DB 반영은 위저드 완료 시 이루어집니다. 계속할까요?`
+        : `${isExcel ? 'Excel' : 'SHP'} 값으로 DB에 반영하시겠습니까?`
     )) return;
     setBusyKey(slKey);
     try {
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'applySyncEntries',
         params: {
           slKeys: [slKey],
-          dhKey: dhKey || undefined,
-          shpPath: shpPath || undefined,
-          sourceSrsOverride: sourceSrsOverride || undefined,
+          ...(isExcel
+            ? { ehKey: ehKey || undefined }
+            : {
+                dhKey: dhKey || undefined,
+                shpPath: shpPath || undefined,
+                sourceSrsOverride: sourceSrsOverride || undefined,
+              }),
           ...(deferDbWrite ? { intentOnly: true } : {}),
         },
       });
@@ -659,11 +782,11 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     setBusyKey(slKey);
     try {
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'keepSyncEntries',
         params: {
           slKeys: [slKey],
-          dhKey: dhKey || undefined,
+          ...(isExcel ? { ehKey: ehKey || undefined } : { dhKey: dhKey || undefined }),
           ...(deferDbWrite ? { intentOnly: true } : {}),
         },
       });
@@ -687,7 +810,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     setBusyKey(slKey);
     try {
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: isIntentOnly ? 'clearSyncIntents' : 'rollbackSyncRows',
         params: { slKeys: [slKey] },
       });
@@ -710,7 +833,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     setBusyKey(slKey);
     try {
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'reapplySyncRows',
         params: { slKeys: [slKey], shpPath: shpPath || undefined, sourceSrsOverride: sourceSrsOverride || undefined },
       });
@@ -737,11 +860,15 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
 
   const pendingKeysParams = useCallback(() => {
     const p: Record<string, unknown> = { tableName };
-    if (dhKey) p.dhKey = dhKey;
+    if (isExcel) {
+      if (ehKey) p.ehKey = ehKey;
+    } else if (dhKey) {
+      p.dhKey = dhKey;
+    }
     if (fieldFilters.length > 0) p.fieldFilters = fieldFilters;
     if (opFilters.length > 0) p.opFilters = opFilters;
     return p;
-  }, [tableName, dhKey, fieldFilters, opFilters]);
+  }, [tableName, dhKey, ehKey, isExcel, fieldFilters, opFilters]);
 
   const handleApplyAll = async () => {
     if (bulkPendingCount <= 0) {
@@ -750,13 +877,13 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     }
     if (!confirm(
       deferDbWrite
-        ? `${bulkScopeLabel}을 모두 SHP 반영으로 선택합니다. 실제 DB 반영은 위저드 완료 시 이루어집니다. 계속할까요?`
-        : `${bulkScopeLabel}을 모두 SHP 값으로 반영하시겠습니까?`
+        ? `${bulkScopeLabel}을 모두 ${isExcel ? 'Excel' : 'SHP'} 반영으로 선택합니다. 실제 DB 반영은 위저드 완료 시 이루어집니다. 계속할까요?`
+        : `${bulkScopeLabel}을 모두 ${isExcel ? 'Excel' : 'SHP'} 값으로 반영하시겠습니까?`
     )) return;
     setBulkBusy(true);
     try {
       const keysRes = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'getSyncLogPendingKeys',
         params: pendingKeysParams(),
       });
@@ -767,13 +894,17 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
         return;
       }
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'applySyncEntries',
         params: {
           slKeys: keys,
-          dhKey: dhKey || undefined,
-          shpPath: shpPath || undefined,
-          sourceSrsOverride: sourceSrsOverride || undefined,
+          ...(isExcel
+            ? { ehKey: ehKey || undefined }
+            : {
+                dhKey: dhKey || undefined,
+                shpPath: shpPath || undefined,
+                sourceSrsOverride: sourceSrsOverride || undefined,
+              }),
           ...(deferDbWrite ? { intentOnly: true } : {}),
         },
       });
@@ -803,7 +934,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     setBulkBusy(true);
     try {
       const keysRes = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'getSyncLogPendingKeys',
         params: pendingKeysParams(),
       });
@@ -814,11 +945,11 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
         return;
       }
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'keepSyncEntries',
         params: {
           slKeys: keys,
-          dhKey: dhKey || undefined,
+          ...(isExcel ? { ehKey: ehKey || undefined } : { dhKey: dhKey || undefined }),
           ...(deferDbWrite ? { intentOnly: true } : {}),
         },
       });
@@ -847,7 +978,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
     setDetailLoading(true);
     try {
       const res = await call('', 'POST', {
-        service: 'shpUploadService',
+        service: syncService,
         action: 'getSyncLogDetail',
         params: {
           slKey,
@@ -1045,23 +1176,29 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
                             </button>
                           </div>
                           <div className="space-y-0.5">
-                            {OP_FILTER_OPTIONS.map((opt) => {
-                              const checked = opFilters.includes(opt.id);
-                              return (
-                                <label
-                                  key={opt.id}
-                                  className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 hover:bg-muted/60"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="h-3.5 w-3.5"
-                                    checked={checked}
-                                    onChange={() => toggleOpFilter(opt.id)}
-                                  />
-                                  <span className="text-[11px]">{opt.label}</span>
-                                </label>
-                              );
-                            })}
+                            {opOptionsLoading ? (
+                              <p className="px-1.5 py-2 text-[11px] text-muted-foreground">불러오는 중…</p>
+                            ) : opOptions.length === 0 ? (
+                              <p className="px-1.5 py-2 text-[11px] text-muted-foreground">선택 가능한 구분이 없습니다</p>
+                            ) : (
+                              opOptions.map((opt) => {
+                                const checked = opFilters.includes(opt.id);
+                                return (
+                                  <label
+                                    key={opt.id}
+                                    className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 hover:bg-muted/60"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5"
+                                      checked={checked}
+                                      onChange={() => toggleOpFilter(opt.id)}
+                                    />
+                                    <span className="text-[11px]">{opt.label}</span>
+                                  </label>
+                                );
+                              })
+                            )}
                           </div>
                         </div>
                       )}
@@ -1158,7 +1295,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
                     </td>
                   </tr>
                 ) : flatRows.map((fr, idx) => {
-                  const opInfo = getOpLabelInfo(fr.operation, fr.isPending);
+                  const opInfo = getOpLabelInfo(fr.operation, fr.isPending, fr.keptOrigin);
                   const Icon = opInfo?.icon ?? AlertTriangle;
                   const isBusy = busyKey === fr.slKey;
 
@@ -1190,15 +1327,21 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
                             )}
                           </td>
                           <td className="py-1.5 px-2 text-center align-top" rowSpan={fr.rowSpan}>
-                            <span
-                              className={cn(
-                                'inline-flex items-center justify-center gap-0.5 text-xs font-medium whitespace-nowrap',
-                                opInfo?.badge ? `rounded-full px-1.5 py-0.5 ${opInfo.badge}` : opInfo?.color ?? ''
-                              )}
-                            >
-                              <Icon className="w-3 h-3 shrink-0" />
-                              {opInfo?.label ?? fr.operation}
-                            </span>
+                            {readOnly ? (
+                              <span className="text-xs text-black dark:text-foreground whitespace-nowrap">
+                                {opInfo?.label ?? fr.operation}
+                              </span>
+                            ) : (
+                              <span
+                                className={cn(
+                                  'inline-flex items-center justify-center gap-0.5 text-xs font-medium whitespace-nowrap',
+                                  opInfo?.badge ? `rounded-full px-1.5 py-0.5 ${opInfo.badge}` : opInfo?.color ?? ''
+                                )}
+                              >
+                                <Icon className="w-3 h-3 shrink-0" />
+                                {opInfo?.label ?? fr.operation}
+                              </span>
+                            )}
                           </td>
                           {!readOnly && (
                           <td className="py-1.5 px-2 text-center align-top" rowSpan={fr.rowSpan} onClick={(e) => e.stopPropagation()}>
@@ -1438,7 +1581,8 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
       {detailLog && (() => {
         const op = opCategory(detailLog);
         const isPending = !detailLog.sl_operation;
-        const opInfo = getOpLabelInfo(op, isPending);
+        const keptOrigin = op === 'kept' ? keptOriginFromData(detailLog.sl_old_data, detailLog.sl_new_data) : null;
+        const opInfo = getOpLabelInfo(op, isPending, keptOrigin);
         const Icon = opInfo?.icon ?? AlertTriangle;
         const oldData = detailLog.sl_old_data ?? {};
         const newData = detailLog.sl_new_data ?? {};
@@ -1492,10 +1636,16 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">구분</span>
-                    <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium', opInfo?.badge ?? opInfo?.color)}>
-                      <Icon className="w-3 h-3" />
-                      {opInfo?.label ?? op}
-                    </span>
+                    {readOnly ? (
+                      <span className="text-xs text-black dark:text-foreground">
+                        {opInfo?.label ?? op}
+                      </span>
+                    ) : (
+                      <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium', opInfo?.badge ?? opInfo?.color)}>
+                        <Icon className="w-3 h-3" />
+                        {opInfo?.label ?? op}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Key</span>
@@ -1542,10 +1692,10 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
                         </tbody>
                       </table>
                     </div>
-                    <GeoJsonMiniMap geometry={oldGeom} dataProjection="EPSG:5181" className="mt-2" />
+                    <GeoJsonMiniMap geometry={oldGeom} dataProjection={mapProjection} className="mt-2" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">변경값 (SHP)</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">{changeValueLabel}</h4>
                     <div className="border rounded overflow-hidden">
                       <table className="w-full text-xs">
                         <tbody>
@@ -1576,7 +1726,7 @@ export function SyncDetailModal({ dhKey, tableName, shpPath, sourceSrsOverride, 
                         </tbody>
                       </table>
                     </div>
-                    <GeoJsonMiniMap geometry={newGeom} dataProjection="EPSG:5181" className="mt-2" />
+                    <GeoJsonMiniMap geometry={newGeom} dataProjection={mapProjection} className="mt-2" />
                   </div>
                 </div>
               </div>

@@ -15,6 +15,11 @@ import iconv from 'iconv-lite';
 import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, getTableColumnInfo, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 import { matchEpsgFromLooseText } from '@/lib/matchCoordinateSystemText';
+import {
+  fetchSyncLogGeomAsGeoJson,
+  fillPendingSyncLogGeoms,
+  shouldStoreFullHistoryGeom,
+} from '@/lib/syncLogGeom';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const GEOSERVER_DEFAULT_URL = 'http://localhost:8080/geoserver';
@@ -531,34 +536,39 @@ export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatur
   geojson?: Record<string, unknown>;
   error?: string;
 }> {
+  let tmpOut: string | null = null;
   try {
     const pathOrResult = params?.pathOrResult?.trim();
     if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
     const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
     if (!fsSync.existsSync(absolutePath)) return { success: false, error: '파일을 찾을 수 없습니다.' };
 
+    // 미리보기만 필요하므로 변환 단계에서부터 feature 수 제한 (대용량 SHP 전체 GeoJSON화 방지)
+    const maxFeatures = Math.max(1, Math.min(params?.maxFeatures ?? 2000, 5000));
+
     const tmpDir = path.join(GGNR_DATA_DIR, 'tmp');
     await fs.mkdir(tmpDir, { recursive: true });
-    const tmpOut = path.join(tmpDir, `shp_raw_preview_${Date.now()}_${Math.random().toString(36).slice(2)}.geojson`);
+    tmpOut = path.join(tmpDir, `shp_raw_preview_${Date.now()}_${Math.random().toString(36).slice(2)}.geojson`);
 
     const result = await runOgr2ogr([
       '-f', 'GeoJSON', tmpOut, absolutePath,
       '-a_srs', 'EPSG:4326',
+      '-limit', String(maxFeatures),
     ]);
     if (result.code !== 0) {
       return { success: false, error: result.stderr || 'ogr2ogr 실패' };
     }
 
     const raw = await fs.readFile(tmpOut, 'utf-8');
-    await fs.unlink(tmpOut).catch(() => {});
     const geojson = JSON.parse(raw) as { features?: unknown[] };
-    const maxFeatures = Math.max(1, Math.min(params?.maxFeatures ?? 2000, 5000));
     if (Array.isArray(geojson.features) && geojson.features.length > maxFeatures) {
       geojson.features = geojson.features.slice(0, maxFeatures);
     }
     return { success: true, geojson: geojson as Record<string, unknown> };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    if (tmpOut) await fs.unlink(tmpOut).catch(() => {});
   }
 }
 
@@ -1016,6 +1026,8 @@ export async function getShpGeometryType(absoluteShpPath: string): Promise<ShpGe
 export async function createTableFromShp(params: {
   pathOrResult: string;
   sourceSrsOverride?: string;
+  /** 업로드 모달에서 선택한 스키마. 없으면 defineLayer 기준 */
+  dbSchema?: 'layer' | 'public_layer';
 }): Promise<{ success: boolean; error?: string }> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
@@ -1038,7 +1050,10 @@ export async function createTableFromShp(params: {
 
   const db = getDbConfig();
   const pgConnection = `PG:host=${db.host} port=${db.port} dbname=${db.database} user=${db.user} password=${db.password}`;
-  const dbSchema = await resolveDefineTableSchema(tableName);
+  const dbSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer'
+      ? params.dbSchema
+      : await resolveDefineTableSchema(tableName);
   const layerTable = `${dbSchema}.${tableName}`;
 
   const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv } = resolveOgr2ogrRun();
@@ -1119,6 +1134,17 @@ export async function createTableFromShp(params: {
   if (result.code !== 0) {
     return { success: false, error: mapOgrError(result.code, result.stderr) };
   }
+
+  // 업로드에서 스키마를 명시했으면 defineLayer에 반영 (신규·기존 빈 값·강제 갱신)
+  if (params.dbSchema === 'public_layer' || params.dbSchema === 'layer') {
+    try {
+      const geometryType = await getShpGeometryType(absolutePath).catch(() => null);
+      await ensureDefineLayerEntry(tableName, geometryType ?? 'POLYGON', undefined, params.dbSchema, true);
+    } catch {
+      // define 반영 실패해도 테이블 생성은 성공으로 둠
+    }
+  }
+
   return { success: true };
 }
 
@@ -1154,7 +1180,9 @@ function ensureDefineLayerEntry(
   layerName: string,
   geometryType?: ShpGeometryType,
   group?: string,
-  dbSchema: 'layer' | 'public_layer' = 'layer'
+  dbSchema: 'layer' | 'public_layer' = 'layer',
+  /** true면 기존 행의 define_table_schema도 덮어씀 (업로드 모달 명시 선택) */
+  forceSchema = false,
 ): Promise<void> {
   const shpType = geometryType ?? 'POLYGON';
   const groupVal = group ?? '';
@@ -1199,7 +1227,13 @@ function ensureDefineLayerEntry(
       row.define_table_source = 'shp';
       mutated = true;
     }
-    if (!String(row.define_table_schema ?? '').trim()) {
+    const curSchema = String(row.define_table_schema ?? '').trim();
+    if (forceSchema) {
+      if (curSchema !== dbSchema) {
+        row.define_table_schema = dbSchema;
+        mutated = true;
+      }
+    } else if (!curSchema) {
       row.define_table_schema = dbSchema;
       mutated = true;
     }
@@ -1262,6 +1296,8 @@ async function createDefineTableAndFieldsCore(params: {
   dbSchema: 'layer' | 'public_layer';
   geometryType?: ShpGeometryType;
   group?: string;
+  /** 업로드 모달에서 스키마를 명시한 경우 define도 덮어씀 */
+  forceSchema?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   const rawName = params.layerName?.trim();
   if (!rawName) return { success: false, error: 'layerName(테이블명)이 필요합니다.' };
@@ -1294,7 +1330,13 @@ async function createDefineTableAndFieldsCore(params: {
   }
 
   try {
-    await ensureDefineLayerEntry(dbLayerTableName, geometryType ?? 'POLYGON', params.group, dbSchema);
+    await ensureDefineLayerEntry(
+      dbLayerTableName,
+      geometryType ?? 'POLYGON',
+      params.group,
+      dbSchema,
+      !!params.forceSchema,
+    );
 
     const colRes = await getTableColumnInfo({ schema: dbSchema, table: dbLayerTableName });
     if (!colRes.success || !colRes.columns?.length) {
@@ -1338,18 +1380,23 @@ export async function createDefineTableAndFields(params: {
   pathOrResult: string;
   geometryType?: ShpGeometryType;
   group?: string;
+  dbSchema?: 'layer' | 'public_layer';
 }): Promise<{ success: boolean; error?: string }> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
   const basename = path.basename(pathOrResult, '.shp');
   const layerName = safeTableName(basename);
-  const dbSchema = await resolveDefineTableSchema(layerName);
+  const dbSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer'
+      ? params.dbSchema
+      : await resolveDefineTableSchema(layerName);
   return createDefineTableAndFieldsCore({
     layerName,
     dbSchema,
     geometryType: params.geometryType,
     group: params.group,
+    forceSchema: params.dbSchema === 'public_layer' || params.dbSchema === 'layer',
   });
 }
 
@@ -1563,6 +1610,10 @@ export async function processShpBatch(params: {
   shpPaths?: string[];
   /** pathOrResult 별 프런트에서 확정한 EPSG override (예: {'shp_data/.../a.shp': 'EPSG:5186'}) */
   sourceSrsByPath?: Record<string, string>;
+  /** 업로드 모달에서 선택한 DB 스키마 (테이블 생성·define 반영) */
+  dbSchema?: 'layer' | 'public_layer';
+  /** 폴더명·위저드에서 지정한 그룹명 (define·이력) */
+  group?: string;
 }): Promise<{ success: boolean; results: ShpBatchResultItem[]; error?: string }> {
   let rows: ShpStatusRow[];
 
@@ -1587,6 +1638,9 @@ export async function processShpBatch(params: {
   if (rows.length === 0) return { success: true, results: [] };
 
   const results: ShpBatchResultItem[] = [];
+  const batchSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer' ? params.dbSchema : undefined;
+  const batchGroup = String(params.group ?? '').trim() || undefined;
 
   for (const row of rows) {
     const item: ShpBatchResultItem = {
@@ -1598,12 +1652,31 @@ export async function processShpBatch(params: {
       define: { success: false },
     };
 
+    const rowGroup =
+      batchGroup ||
+      (() => {
+        const parts = row.pathOrResult.replace(/\\/g, '/').split('/');
+        const idx = parts.indexOf('shp_data');
+        if (idx >= 0 && idx + 1 < parts.length) {
+          const segs = parts[idx + 1].split('_');
+          if (segs.length >= 3) {
+            const g = String(segs[2] ?? '').trim();
+            return g || undefined;
+          }
+        }
+        return undefined;
+      })();
+
     // 1. Table
     if (row.table) {
       item.table = { success: true, skipped: true };
     } else {
       const sourceSrsOverride = params.sourceSrsByPath?.[row.pathOrResult.replace(/\\/g, '/')];
-      const res = await createTableFromShp({ pathOrResult: row.pathOrResult, sourceSrsOverride });
+      const res = await createTableFromShp({
+        pathOrResult: row.pathOrResult,
+        sourceSrsOverride,
+        ...(batchSchema ? { dbSchema: batchSchema } : {}),
+      });
       item.table = { success: res.success, error: res.error };
       if (!res.success) {
         results.push(item);
@@ -1615,7 +1688,8 @@ export async function processShpBatch(params: {
     let geometryType: ShpGeometryType | undefined;
     try {
       const layerName = safeTableName(path.basename(row.sourceFile, '.shp'));
-      const typeRes = await getLayerTableGeometryTypes({ schema: await resolveDefineTableSchema(layerName) });
+      const schemaForType = batchSchema ?? (await resolveDefineTableSchema(layerName));
+      const typeRes = await getLayerTableGeometryTypes({ schema: schemaForType });
       if (typeRes.success) {
         geometryType =
           typeRes.types[layerName] ??
@@ -1628,14 +1702,23 @@ export async function processShpBatch(params: {
     if (row.layer) {
       item.layer = { success: true, skipped: true };
     } else {
-      const res = await createGeoServerLayer({ pathOrResult: row.pathOrResult, geometryType });
+      const res = await createGeoServerLayer({
+        pathOrResult: row.pathOrResult,
+        geometryType,
+        group: rowGroup,
+      });
       item.layer = { success: res.success, error: res.error };
     }
 
     // 레이어 실패 시 이후 GeoServer 단계는 건너뜀 (순차 파이프라인 보장)
     if (!item.layer.success) {
       item.style = { success: false, skipped: true, error: '레이어 생성 실패로 스타일 단계를 건너뜀' };
-      const defRes = await createDefineTableAndFields({ pathOrResult: row.pathOrResult, geometryType });
+      const defRes = await createDefineTableAndFields({
+        pathOrResult: row.pathOrResult,
+        geometryType,
+        group: rowGroup,
+        ...(batchSchema ? { dbSchema: batchSchema } : {}),
+      });
       item.define = { success: defRes.success, skipped: row.define, error: defRes.error };
       results.push(item);
       continue;
@@ -1645,12 +1728,21 @@ export async function processShpBatch(params: {
     if (row.style) {
       item.style = { success: true, skipped: true };
     } else {
-      const res = await createGeoServerStyleForShp({ pathOrResult: row.pathOrResult, geometryType });
+      const res = await createGeoServerStyleForShp({
+        pathOrResult: row.pathOrResult,
+        geometryType,
+        group: rowGroup,
+      });
       item.style = { success: res.success, error: res.error };
     }
 
     // 4. Define (table + field upsert)
-    const res = await createDefineTableAndFields({ pathOrResult: row.pathOrResult, geometryType });
+    const res = await createDefineTableAndFields({
+      pathOrResult: row.pathOrResult,
+      geometryType,
+      group: rowGroup,
+      ...(batchSchema ? { dbSchema: batchSchema } : {}),
+    });
     item.define = { success: res.success, skipped: row.define, error: res.error };
 
     results.push(item);
@@ -1677,6 +1769,15 @@ export async function processShpBatch(params: {
         if (!r.style.success && !r.style.skipped) errors.push(`Style: ${r.style.error ?? '실패'}`);
         if (!r.define.success && !r.define.skipped) errors.push(`Define: ${r.define.error ?? '실패'}`);
         const basename = path.basename(r.file, '.shp');
+        const pathGroup = (() => {
+          const parts = String(r.pathOrResult ?? '').replace(/\\/g, '/').split('/');
+          const idx = parts.indexOf('shp_data');
+          if (idx >= 0 && idx + 1 < parts.length) {
+            const segs = parts[idx + 1].split('_');
+            if (segs.length >= 3) return String(segs[2] ?? '').trim() || undefined;
+          }
+          return undefined;
+        })();
         return {
           name: basename,
           korName: basename,
@@ -1684,6 +1785,7 @@ export async function processShpBatch(params: {
           contents: allOk ? '모두 완료' : errors.join(' / '),
           result: allOk ? '성공' : '실패',
           shpPath: r.pathOrResult ?? undefined,
+          group: batchGroup || pathGroup,
         };
       });
       await createLayerDetailHistoryBatch({ lhKey: histRes.lhKey, details });
@@ -2390,7 +2492,7 @@ function syncLogJsonAttrHashSql(jsonExpr: string, dbCols: string[]): string {
 
 /**
  * sync_log JSONB 내용 해시 — PostgreSQL jsonb canonical ::text 기준.
- * 미결 중복/대체 판정에서 JSONB 통째 IS DISTINCT FROM 대신 사용 (의미≈jsonb 동등).
+ * 미결 중복 판정에서 JSONB 통째 IS DISTINCT FROM 대신 사용 (의미≈jsonb 동등).
  */
 function syncLogJsonbContentHashSql(jsonExpr: string): string {
   return `md5(COALESCE((${jsonExpr})::text, ''))`;
@@ -2455,10 +2557,9 @@ function syncKeptGeomMatchSql(
 
 /**
  * sync_log 저장용 행 JSON.
- * - geom: type+hash 메타만 (목록 «좌표 변경»·kept 매칭용). 대량 GeoJSON 직렬화 회피
- * - hash: SnapToGrid(1mm) 후 WKB — 재투영 미세 오차는 동일 hash
- * - sourceSrs: SHP 소스 좌표계를 geom 메타에 기록 (상세·재반영 시 동일 CRS로 복원)
- * - includeRollbackGeom: old 스냅샷에 __rollback_geom(GeoJSON) 추가 — 반영 롤백/재삽입용
+ * - geom: ST_AsGeoJSON 통째 (이력·data_log 상세용). sync_log_geom은 공간 조인용으로 병행 가능
+ * - includeRollbackGeom: 레거시 호환(미사용에 가깝음). geom에 이미 좌표가 있으면 중복
+ * - sourceSrs: 있으면 geom JSON에 srs 키로 부가 (좌표와 함께)
  */
 function syncLogRowJsonSqlFromPairs(
   alias: string,
@@ -2484,25 +2585,21 @@ function syncLogRowJsonSqlFromPairs(
   const { db, sync } = geomPair;
   const geomCol = alias === 'e' ? db : sync;
   const g = `${alias}."${geomCol}"`;
-  const srsSql =
+  const srsPatch =
     opts?.sourceSrs && /^EPSG:\d{3,5}$/i.test(opts.sourceSrs.trim())
-      ? `, 'srs', '${opts.sourceSrs.trim().toUpperCase().replace(/'/g, "''")}'`
+      ? ` || jsonb_build_object('srs', '${opts.sourceSrs.trim().toUpperCase().replace(/'/g, "''")}')`
       : '';
-  const metaGeom = `CASE
+  const fullGeom = `CASE
     WHEN ${g} IS NULL THEN '{}'::jsonb
     ELSE jsonb_build_object(
       '${db}',
-      jsonb_build_object(
-        'type', GeometryType(${g}::geometry),
-        'hash', ${geomCompareHashSql(g)},
-        '_meta', true${srsSql}
-      )
+      (ST_AsGeoJSON(${g})::jsonb${srsPatch})
     )
   END`;
   if (!opts?.includeRollbackGeom) {
-    return `(${baseJson} || ${metaGeom})`;
+    return `(${baseJson} || ${fullGeom})`;
   }
-  return `(${baseJson} || ${metaGeom} || CASE
+  return `(${baseJson} || ${fullGeom} || CASE
     WHEN ${g} IS NULL THEN '{}'::jsonb
     ELSE jsonb_build_object('__rollback_geom', ST_AsGeoJSON(${g})::jsonb)
   END)`;
@@ -2516,6 +2613,43 @@ async function dropShpSyncTempTable(dbSchema: string, syncTableName: string): Pr
     await db.execute(sql.raw(`DROP TABLE IF EXISTS ${dbSchema}."${syncTableName}"`));
   } catch {
     // cleanup best-effort
+  }
+}
+
+/**
+ * 위저드 중단·이전 단계 복귀 시 비교용 임시 테이블 일괄 삭제.
+ * `_sync_` / `_sync_match_` / `_sync_shpread_` 접두 테이블을 대상 스키마에서 DROP.
+ */
+export async function dropShpSyncTempTablesForNames(params: {
+  tableNames: string[];
+}): Promise<{ success: boolean; dropped: string[]; error?: string }> {
+  const tableNames = [
+    ...new Set((params?.tableNames ?? []).map((n) => String(n ?? '').trim()).filter(Boolean)),
+  ];
+  if (tableNames.length === 0) return { success: true, dropped: [] };
+  const dropped: string[] = [];
+  try {
+    for (const raw of tableNames) {
+      const tableName = safeTableName(raw.replace(/\.shp$/i, ''));
+      if (!tableName) continue;
+      const dbSchema = await resolveDefineTableSchema(tableName);
+      const candidates = [
+        `_sync_${tableName}`,
+        `_sync_match_${tableName}`,
+        `_sync_shpread_${tableName}`,
+      ];
+      for (const syncName of candidates) {
+        await dropShpSyncTempTable(dbSchema, syncName);
+        dropped.push(`${dbSchema}.${syncName}`);
+      }
+    }
+    return { success: true, dropped };
+  } catch (e: unknown) {
+    return {
+      success: false,
+      dropped,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
@@ -2869,6 +3003,7 @@ async function fetchGeoJsonByOgcFid(params: {
 
 /**
  * DB 쓰기 직전: 메타 geom은 좌표로 치환.
+ * - sync_log_geom(전용 테이블) 우선
  * - __rollback_geom 있으면 그걸 geom으로 사용 (old 롤백)
  * - new 메타는 syncTemp에서 조회
  * - 공간 매칭 메타(__match_*)가 있으면 ogc_fid로 조회 (비유일 key 대응)
@@ -2881,6 +3016,8 @@ async function prepareSyncDataForDbWrite(params: {
   liveFq?: string;
   liveGeomCol?: string;
   liveKeyCol?: string;
+  /** sync_log.sl_key — 전용 geometry 테이블 조회용 */
+  slKey?: number | null;
 }): Promise<{ data: Record<string, unknown> | null; error?: string }> {
   if (!params.data) return { data: null };
   const matchDbFid = readSyncMatchOgcFid(params.data);
@@ -2894,6 +3031,14 @@ async function prepareSyncDataForDbWrite(params: {
   if (!isSyncGeomMeta(out.geom)) {
     if (rollback != null && out.geom == null) out.geom = rollback;
     return { data: out };
+  }
+
+  if (params.slKey != null && Number.isFinite(params.slKey)) {
+    const stored = await fetchSyncLogGeomAsGeoJson(Number(params.slKey), params.side);
+    if (stored != null) {
+      out.geom = stored;
+      return { data: out };
+    }
   }
 
   if (rollback != null) {
@@ -2946,9 +3091,8 @@ async function prepareSyncDataForDbWrite(params: {
   return { data: out, error: 'geom 메타만 있어 좌표를 복원할 수 없습니다.' };
 }
 
-/** 상세 미니맵용: old/new geom 메타를 GeoJSON으로 채움.
- * sync_log 저장(메타 only)은 유지. 상세 조회 시에만 좌표 복원.
- * new(SHP) 실패해도 old(__rollback_geom/DB)는 row에 반영해 partial 반환. */
+/** 상세 미니맵용: old/new geom을 GeoJSON으로 맞춤.
+ * JSON에 이미 좌표가 있으면 유지. 메타만 있으면 sync_log_geom → rollback → SHP/DB 순으로 복원. */
 async function hydrateSyncLogRowForDetail(params: {
   row: Record<string, unknown>;
   shpPathHint?: string | null;
@@ -2961,12 +3105,35 @@ async function hydrateSyncLogRowForDetail(params: {
   const keyValue = String(row.sl_key_value ?? '');
   if (!tableName || !keyField) return { row };
 
+  const slKeyRaw = row.sl_key;
+  const slKey =
+    slKeyRaw != null && Number.isFinite(Number(slKeyRaw)) ? Math.trunc(Number(slKeyRaw)) : null;
+
   let oldData = (row.sl_old_data && typeof row.sl_old_data === 'object' && !Array.isArray(row.sl_old_data))
     ? { ...(row.sl_old_data as Record<string, unknown>) }
     : null;
   let newData = (row.sl_new_data && typeof row.sl_new_data === 'object' && !Array.isArray(row.sl_new_data))
     ? { ...(row.sl_new_data as Record<string, unknown>) }
     : null;
+
+  // 전용 geometry 테이블 우선 적용
+  if (slKey != null) {
+    if (oldData && isSyncGeomMeta(oldData.geom)) {
+      const g = await fetchSyncLogGeomAsGeoJson(slKey, 'old');
+      if (g != null) {
+        oldData = { ...oldData, geom: g };
+        delete oldData.__rollback_geom;
+      }
+    }
+    if (newData && isSyncGeomMeta(newData.geom)) {
+      const g = await fetchSyncLogGeomAsGeoJson(slKey, 'new');
+      if (g != null) {
+        newData = { ...newData, geom: g };
+      }
+    }
+    row.sl_old_data = oldData;
+    row.sl_new_data = newData;
+  }
 
   const needNew = !!(newData && isSyncGeomMeta(newData.geom));
   const needOld = !!(oldData && isSyncGeomMeta(oldData.geom) && oldData.__rollback_geom == null);
@@ -3010,6 +3177,7 @@ async function hydrateSyncLogRowForDetail(params: {
         liveFq,
         liveGeomCol,
         liveKeyCol,
+        slKey,
       });
       if (prepared.error && isSyncGeomMeta(oldData.geom) && oldData.__rollback_geom == null) {
         oldError = prepared.error;
@@ -3062,6 +3230,7 @@ async function hydrateSyncLogRowForDetail(params: {
               side: 'new',
               keyValue,
               syncTemp,
+              slKey,
             });
             if (prepared.error) {
               newError = prepared.error;
@@ -3078,6 +3247,7 @@ async function hydrateSyncLogRowForDetail(params: {
         side: 'new',
         keyValue,
         syncTemp: null,
+        slKey,
       });
       if (prepared.error) {
         newError = prepared.error;
@@ -3401,14 +3571,14 @@ export async function compareShpWithTable(params: {
       ? `jsonb_build_object('${SYNC_MATCH_OGC_FID}', e."${fidDb}")`
       : null;
 
-    // geom은 type+hash 메타만 저장. new 쪽은 비교에 쓴 소스 CRS(srs)도 함께 기록.
-    // old 쪽만 롤백용 GeoJSON(__rollback_geom) 유지
+    // geom은 JSON에 GeoJSON 통째 저장. layer는 sync_log_geom에도 병행 적재(공간 조인·폴백).
+    const storeFullGeom = shouldStoreFullHistoryGeom(dbSchema);
     const tRowJson = syncLogRowJsonSqlFromPairs('t', attrComparePairs, geomPair, {
       sourceSrs,
       extraJsonbSql: tExtra,
     });
     const eRowJson = syncLogRowJsonSqlFromPairs('e', attrComparePairs, geomPair, {
-      includeRollbackGeom: true,
+      sourceSrs,
       extraJsonbSql: eExtra,
     });
 
@@ -3573,12 +3743,11 @@ export async function compareShpWithTable(params: {
     timing.mark('removeFetch');
 
     // --- sync_log에 미결(operation=NULL) 상태로 저장 ---
-    // 기존 미결 건은 삭제하지 않고 대체됨(superseded) 표시만 남겨 이력을 보존 (중복 업로드 대응).
-    // 단, 직전 미결 건과 데이터가 완전히 동일하면 재삽입하지 않고 그대로 둔다 — 매번 재검증할 때마다
-    // 변경 없는 후보까지 통째로 superseded 처리 후 재삽입하면 sync_log가 무의미하게 계속 불어난다.
+    // 재비교 시 달라진·사라진 미결은 삭제하고, 내용이 동일하면 재삽입하지 않는다.
+    // 변경 없는 후보까지 통째로 지운 뒤 재삽입하면 sync_log가 무의미하게 계속 불어난다.
 
     // append: old=NULL, new=SHP (단, 이미 "유지"로 검토 끝난 동일 SHP 값은 재등록하지 않음)
-    // 미결 중복/대체 판정은 JSONB 통째 비교 대신 content_hash(md5 of jsonb::text) 사용 — 저장 값은 그대로.
+    // 미결 중복 판정은 JSONB 통째 비교 대신 content_hash(md5 of jsonb::text) 사용 — 저장 값은 그대로.
     const newHash = syncLogJsonbContentHashSql('new_data');
     const oldHash = syncLogJsonbContentHashSql('old_data');
     const slNewHash = syncLogJsonbContentHashSql('sl.sl_new_data');
@@ -3596,12 +3765,10 @@ export async function compareShpWithTable(params: {
            SELECT key_val, new_data, ${newHash} AS content_hash
            FROM candidate_rows
          ),
-         superseded AS (
-           UPDATE sync_log sl
-           SET sl_superseded_at = NOW()
+         deleted AS (
+           DELETE FROM sync_log sl
            WHERE sl.sl_table_name = '${tableName}'
              AND sl.sl_operation IS NULL
-             AND sl.sl_superseded_at IS NULL
              AND sl.sl_old_data IS NULL
              AND (
                NOT EXISTS (SELECT 1 FROM candidates c WHERE c.key_val = sl.sl_key_value)
@@ -3618,16 +3785,16 @@ export async function compareShpWithTable(params: {
          FROM candidates c
          WHERE NOT EXISTS (
            SELECT 1 FROM sync_log sl2
-           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL AND sl2.sl_superseded_at IS NULL
+           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL
              AND sl2.sl_old_data IS NULL AND sl2.sl_key_value = c.key_val
              AND ${sl2NewHash} = c.content_hash
          )`
       ));
     } else {
-      // 이번 회차에 append 후보가 하나도 없으면, 이전 append 미결 건들은 전부 해소된 것이므로 superseded 처리만 한다.
+      // 이번 회차에 append 후보가 하나도 없으면, 이전 append 미결 건들은 전부 해소된 것이므로 삭제한다.
       await db.execute(sql.raw(
-        `UPDATE sync_log SET sl_superseded_at = NOW()
-         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL AND sl_superseded_at IS NULL
+        `DELETE FROM sync_log
+         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL
            AND sl_old_data IS NULL`
       ));
     }
@@ -3645,12 +3812,10 @@ export async function compareShpWithTable(params: {
              ${newHash} AS new_content_hash
            FROM candidate_rows
          ),
-         superseded AS (
-           UPDATE sync_log sl
-           SET sl_superseded_at = NOW()
+         deleted AS (
+           DELETE FROM sync_log sl
            WHERE sl.sl_table_name = '${tableName}'
              AND sl.sl_operation IS NULL
-             AND sl.sl_superseded_at IS NULL
              AND sl.sl_old_data IS NOT NULL AND sl.sl_new_data IS NOT NULL
              AND (
                NOT EXISTS (SELECT 1 FROM candidates c WHERE c.key_val = sl.sl_key_value)
@@ -3670,17 +3835,17 @@ export async function compareShpWithTable(params: {
          FROM candidates c
          WHERE NOT EXISTS (
            SELECT 1 FROM sync_log sl2
-           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL AND sl2.sl_superseded_at IS NULL
+           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL
              AND sl2.sl_old_data IS NOT NULL AND sl2.sl_new_data IS NOT NULL AND sl2.sl_key_value = c.key_val
              AND ${sl2OldHash} = c.old_content_hash
              AND ${sl2NewHash} = c.new_content_hash
          )`
       ));
     } else {
-      // 이번 회차에 conflict 후보가 하나도 없으면, 이전 conflict 미결 건들은 전부 해소된 것이므로 superseded 처리만 한다.
+      // 이번 회차에 conflict 후보가 하나도 없으면, 이전 conflict 미결 건들은 전부 해소된 것이므로 삭제한다.
       await db.execute(sql.raw(
-        `UPDATE sync_log SET sl_superseded_at = NOW()
-         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL AND sl_superseded_at IS NULL
+        `DELETE FROM sync_log
+         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL
            AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL`
       ));
     }
@@ -3695,12 +3860,10 @@ export async function compareShpWithTable(params: {
            SELECT key_val, old_data, ${oldHash} AS content_hash
            FROM candidate_rows
          ),
-         superseded AS (
-           UPDATE sync_log sl
-           SET sl_superseded_at = NOW()
+         deleted AS (
+           DELETE FROM sync_log sl
            WHERE sl.sl_table_name = '${tableName}'
              AND sl.sl_operation IS NULL
-             AND sl.sl_superseded_at IS NULL
              AND sl.sl_new_data IS NULL
              AND (
                NOT EXISTS (SELECT 1 FROM candidates c WHERE c.key_val = sl.sl_key_value)
@@ -3717,20 +3880,37 @@ export async function compareShpWithTable(params: {
          FROM candidates c
          WHERE NOT EXISTS (
            SELECT 1 FROM sync_log sl2
-           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL AND sl2.sl_superseded_at IS NULL
+           WHERE sl2.sl_table_name = '${tableName}' AND sl2.sl_operation IS NULL
              AND sl2.sl_new_data IS NULL AND sl2.sl_key_value = c.key_val
              AND ${sl2OldHash} = c.content_hash
          )`
       ));
     } else {
-      // 이번 회차에 remove 후보가 하나도 없으면, 이전 remove 미결 건들은 전부 해소된 것이므로 superseded 처리만 한다.
+      // 이번 회차에 remove 후보가 하나도 없으면, 이전 remove 미결 건들은 전부 해소된 것이므로 삭제한다.
       await db.execute(sql.raw(
-        `UPDATE sync_log SET sl_superseded_at = NOW()
-         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL AND sl_superseded_at IS NULL
+        `DELETE FROM sync_log
+         WHERE sl_table_name = '${tableName}' AND sl_operation IS NULL
            AND sl_new_data IS NULL AND sl_old_data IS NOT NULL`
       ));
     }
     timing.mark('syncLogWrite');
+
+    if (storeFullGeom && geomPair) {
+      await fillPendingSyncLogGeoms({
+        tableName,
+        dbSchema,
+        syncTableName,
+        matchTableName,
+        useSpatialMatch,
+        keyDb: resolvedKeyDb,
+        keySync: resolvedKeySync,
+        geomDb: geomPair.db,
+        geomSync: geomPair.sync,
+        fidDb: fidDb ?? 'ogc_fid',
+        fidSync: fidSync ?? 'ogc_fid',
+      });
+      timing.mark('syncLogGeomFill');
+    }
 
     timing.flush({
       success: true,
@@ -3740,6 +3920,7 @@ export async function compareShpWithTable(params: {
       conflictCount,
       removeCount,
       unchangedCount,
+      storeFullGeom,
     });
     flushed = true;
 
@@ -3871,7 +4052,7 @@ export async function applySyncEntries(params: {
     const keyList = slKeys.join(', ');
     const logRes = await db.execute(sql.raw(
       `SELECT sl_key, sl_table_name, sl_key_field, sl_key_value, sl_old_data, sl_new_data
-       FROM sync_log WHERE sl_key IN (${keyList}) AND sl_operation IS NULL AND sl_superseded_at IS NULL ORDER BY sl_key`
+       FROM sync_log WHERE sl_key IN (${keyList}) AND sl_operation IS NULL ORDER BY sl_key`
     ));
     const logs = logRes.rows as Array<{
       sl_key: number; sl_table_name: string; sl_key_field: string;
@@ -3973,12 +4154,14 @@ export async function applySyncEntries(params: {
         liveFq: fq,
         liveGeomCol: colMap.get('geom') ?? 'geom',
         liveKeyCol: keyCol,
+        slKey: log.sl_key,
       });
       const newPrepared = await prepareSyncDataForDbWrite({
         data: log.sl_new_data,
         side: 'new',
         keyValue: kv,
         syncTemp,
+        slKey: log.sl_key,
       });
       if (newPrepared.error && log.sl_new_data && isSyncGeomMeta(log.sl_new_data.geom)) {
         return { success: false, appendedCount: 0, updatedCount: 0, removedCount: 0, error: newPrepared.error };
@@ -4071,7 +4254,7 @@ export async function keepSyncEntries(params: {
     const appliedSql = params.intentOnly ? 'NULL' : 'NOW()';
     const res = await db.execute(sql.raw(
       `UPDATE sync_log SET sl_operation = 'kept', sl_applied_at = ${appliedSql}, sl_dh_key = ${dhKeyVal}
-       WHERE sl_key IN (${keyList}) AND sl_operation IS NULL AND sl_superseded_at IS NULL
+       WHERE sl_key IN (${keyList}) AND sl_operation IS NULL
        RETURNING sl_key`
     ));
     const keptCount = (res.rows as Array<{ sl_key: number }>).length;
@@ -4096,8 +4279,7 @@ export async function clearSyncIntents(params: {
        SET sl_operation = NULL, sl_applied_at = NULL, sl_dh_key = NULL
        WHERE sl_key IN (${keyList})
          AND sl_operation IS NOT NULL
-         AND sl_applied_at IS NULL
-         AND sl_superseded_at IS NULL`
+         AND sl_applied_at IS NULL`
     ));
     return { success: true, clearedCount: (res as { rowCount?: number }).rowCount ?? 0 };
   } catch (e: unknown) {
@@ -4109,12 +4291,147 @@ export async function clearSyncIntents(params: {
  * 위저드 4단계 완료: 테이블의 미반영 의도(applied_at IS NULL)를 실제 DB에 확정한다.
  * - kept: applied_at·dh_key만 확정
  * - append/conflict/remove: 의도를 미결로 되돌린 뒤 applySyncEntries로 실제 반영
+ * - 확정 후 통합 data_log 에 미러 (마지막 완료 시점만)
  */
+/** sync_log JSON geom — 이미 GeoJSON이면 유지, 메타만 있으면 sync_log_geom/rollback으로 치환 */
+async function hydrateSyncRowFullGeom(params: {
+  slKey: number;
+  oldData: Record<string, unknown> | null;
+  newData: Record<string, unknown> | null;
+}): Promise<{
+  oldData: Record<string, unknown> | null;
+  newData: Record<string, unknown> | null;
+}> {
+  const oldData = params.oldData && typeof params.oldData === 'object'
+    ? { ...params.oldData }
+    : null;
+  const newData = params.newData && typeof params.newData === 'object'
+    ? { ...params.newData }
+    : null;
+
+  const [oldG, newG] = await Promise.all([
+    fetchSyncLogGeomAsGeoJson(params.slKey, 'old'),
+    fetchSyncLogGeomAsGeoJson(params.slKey, 'new'),
+  ]);
+
+  if (oldData) {
+    if (oldG != null) oldData.geom = oldG;
+    else if (oldData.__rollback_geom != null) oldData.geom = oldData.__rollback_geom;
+    else if (isSyncGeomMeta(oldData.geom)) delete oldData.geom;
+    delete oldData.__rollback_geom;
+  }
+  if (newData) {
+    if (newG != null) newData.geom = newG;
+    else if (newData.__rollback_geom != null) newData.geom = newData.__rollback_geom;
+    else if (isSyncGeomMeta(newData.geom)) delete newData.geom;
+    delete newData.__rollback_geom;
+  }
+  return { oldData, newData };
+}
+
+async function mirrorShpDhKeyToDataLog(params: {
+  dhKey: number;
+  tableName: string;
+  /** usrId(usrName) 형식 */
+  logUser?: string | null;
+  group?: string | null;
+  tableKorName?: string | null;
+}): Promise<void> {
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const { recordDataLogsFromSyncStyleRows } = await import('./dataLogService');
+    const batchKey = `shp:dh:${params.dhKey}`;
+    const already = await db.execute(sql.raw(
+      `SELECT 1 AS ok FROM data_log WHERE dl_batch_key = '${batchKey.replace(/'/g, "''")}' LIMIT 1`
+    ));
+    if ((already.rows as unknown[])?.length) return;
+
+    let logUser = String(params.logUser ?? '').trim() || null;
+    let group = String(params.group ?? '').trim() || null;
+    let tableKorName = String(params.tableKorName ?? '').trim() || null;
+    {
+      const metaRes = await db.execute(sql.raw(
+        `SELECT
+           NULLIF(btrim(lh.lh_create_user), '') AS lh_user,
+           NULLIF(btrim(dh.dh_group), '') AS dh_group,
+           NULLIF(btrim(dh.dh_kor_name), '') AS dh_kor_name
+         FROM layer_detail_history dh
+         LEFT JOIN layer_history lh ON lh.lh_key = dh.dh_lh_key
+         WHERE dh.dh_key = ${Math.trunc(params.dhKey)}
+         LIMIT 1`
+      ));
+      const meta = (metaRes.rows as Array<{
+        lh_user?: string | null;
+        dh_group?: string | null;
+        dh_kor_name?: string | null;
+      }>)?.[0];
+      if (!logUser) {
+        const u = String(meta?.lh_user ?? '').trim();
+        if (u) logUser = u;
+      }
+      if (!group) group = String(meta?.dh_group ?? '').trim() || null;
+      if (!tableKorName) tableKorName = String(meta?.dh_kor_name ?? '').trim() || null;
+    }
+
+    const safeTbl = params.tableName.replace(/'/g, "''");
+    const res = await db.execute(sql.raw(
+      `SELECT sl_key, sl_key_field, sl_key_value, sl_operation, sl_old_data, sl_new_data
+       FROM sync_log
+       WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
+         AND LOWER(sl_table_name) = LOWER('${safeTbl}')
+         AND sl_operation IS NOT NULL
+         AND sl_operation <> 'kept'
+         AND sl_applied_at IS NOT NULL`
+    ));
+    const rawRows = res.rows as Array<{
+      sl_key: number;
+      sl_key_field: string;
+      sl_key_value: string;
+      sl_operation: string;
+      sl_old_data: Record<string, unknown> | null;
+      sl_new_data: Record<string, unknown> | null;
+    }>;
+    const rows = [];
+    for (const r of rawRows) {
+      const hydrated = await hydrateSyncRowFullGeom({
+        slKey: r.sl_key,
+        oldData: r.sl_old_data,
+        newData: r.sl_new_data,
+      });
+      rows.push({
+        keyField: r.sl_key_field,
+        keyValue: r.sl_key_value,
+        operation: r.sl_operation,
+        oldData: hydrated.oldData,
+        newData: hydrated.newData,
+      });
+    }
+    if (rows.length === 0) return;
+    await recordDataLogsFromSyncStyleRows({
+      source: 'SHP 업로드',
+      tableName: params.tableName,
+      tableKorName,
+      group,
+      batchKey,
+      serviceName: 'SHP 업로드',
+      user: logUser,
+      rows,
+    });
+  } catch (e) {
+    console.warn('[mirrorShpDhKeyToDataLog]', e instanceof Error ? e.message : e);
+  }
+}
+
 export async function commitSyncIntents(params: {
   tableName: string;
   dhKey: number;
   shpPath?: string;
   sourceSrsOverride?: string;
+  /** usrId(usrName) — 통합 data_log 작업자 */
+  logUser?: string | null;
+  group?: string | null;
+  tableKorName?: string | null;
 }): Promise<{
   success: boolean;
   appendedCount: number;
@@ -4140,7 +4457,6 @@ export async function commitSyncIntents(params: {
        WHERE LOWER(sl_table_name) = LOWER('${safeTbl}')
          AND sl_operation = 'kept'
          AND sl_applied_at IS NULL
-         AND sl_superseded_at IS NULL
          AND (sl_dh_key IS NULL OR sl_dh_key = ${dhKey})
        RETURNING sl_key`
     ));
@@ -4151,7 +4467,6 @@ export async function commitSyncIntents(params: {
        WHERE LOWER(sl_table_name) = LOWER('${safeTbl}')
          AND sl_operation IN ('append', 'conflict', 'remove')
          AND sl_applied_at IS NULL
-         AND sl_superseded_at IS NULL
          AND (sl_dh_key IS NULL OR sl_dh_key = ${dhKey})
        ORDER BY sl_key`
     ));
@@ -4185,6 +4500,14 @@ export async function commitSyncIntents(params: {
       updatedCount = applied.updatedCount;
       removedCount = applied.removedCount;
     }
+
+    await mirrorShpDhKeyToDataLog({
+      dhKey,
+      tableName,
+      logUser: params.logUser,
+      group: params.group,
+      tableKorName: params.tableKorName,
+    });
 
     return { success: true, appendedCount, updatedCount, removedCount, keptCount };
   } catch (e: unknown) {
@@ -4251,13 +4574,33 @@ function buildSyncLogFilterClauses(fieldFilters?: string[]): string {
   return ` AND (${parts.join(' OR ')})`;
 }
 
-/** 구분 필터 (목록 열 기준). 탭 조건과 AND. */
-type SyncLogOpFilter = 'new' | 'conflict' | 'delete' | 'kept';
+/** 구분 필터 (목록 열 표시값 기준). 탭 조건과 AND. */
+type SyncLogOpFilter =
+  | 'new'
+  | 'conflict' // 호환: 미결 충돌 + 반영 변경
+  | 'pending_conflict'
+  | 'changed'
+  | 'delete'
+  | 'kept' // 호환: kept 전체
+  | 'kept_new'
+  | 'kept_conflict'
+  | 'kept_delete';
+
+const SYNC_LOG_OP_FILTER_IDS = new Set<SyncLogOpFilter>([
+  'new',
+  'conflict',
+  'pending_conflict',
+  'changed',
+  'delete',
+  'kept',
+  'kept_new',
+  'kept_conflict',
+  'kept_delete',
+]);
 
 function buildSyncLogOpFilterClauses(opFilters?: string[]): string {
-  const ops = [...new Set((opFilters ?? []).map((o) => String(o).trim()).filter(Boolean))] as SyncLogOpFilter[];
-  const allowed = new Set<SyncLogOpFilter>(['new', 'conflict', 'delete', 'kept']);
-  const selected = ops.filter((o): o is SyncLogOpFilter => allowed.has(o as SyncLogOpFilter));
+  const ops = [...new Set((opFilters ?? []).map((o) => String(o).trim()).filter(Boolean))];
+  const selected = ops.filter((o): o is SyncLogOpFilter => SYNC_LOG_OP_FILTER_IDS.has(o as SyncLogOpFilter));
   if (selected.length === 0) return '';
 
   const parts: string[] = [];
@@ -4267,11 +4610,26 @@ function buildSyncLogOpFilterClauses(opFilters?: string[]): string {
   if (selected.includes('conflict')) {
     parts.push(`(sl_operation = 'conflict' OR (sl_operation IS NULL AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL))`);
   }
+  if (selected.includes('pending_conflict')) {
+    parts.push(`(sl_operation IS NULL AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL)`);
+  }
+  if (selected.includes('changed')) {
+    parts.push(`(sl_operation = 'conflict')`);
+  }
   if (selected.includes('delete')) {
     parts.push(`(sl_operation = 'remove' OR (sl_operation IS NULL AND sl_old_data IS NOT NULL AND sl_new_data IS NULL))`);
   }
   if (selected.includes('kept')) {
     parts.push(`(sl_operation = 'kept')`);
+  }
+  if (selected.includes('kept_new')) {
+    parts.push(`(sl_operation = 'kept' AND sl_old_data IS NULL AND sl_new_data IS NOT NULL)`);
+  }
+  if (selected.includes('kept_conflict')) {
+    parts.push(`(sl_operation = 'kept' AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL)`);
+  }
+  if (selected.includes('kept_delete')) {
+    parts.push(`(sl_operation = 'kept' AND sl_old_data IS NOT NULL AND sl_new_data IS NULL)`);
   }
   return ` AND (${parts.join(' OR ')})`;
 }
@@ -4308,7 +4666,6 @@ function buildSyncLogWhere(params: {
     if (currentSessionOnly) where += ` AND sl_dh_key IS NULL`;
   }
   if (pendingOnly) where += ` AND sl_operation IS NULL`;
-  where += ` AND sl_superseded_at IS NULL`;
 
   if (tab && tab !== 'all') {
     if (tab === 'pending') where += ` AND sl_operation IS NULL`;
@@ -4354,7 +4711,148 @@ function enrichLightSyncLogRow(row: Record<string, unknown>): Record<string, unk
   return row;
 }
 
-/** sync_log 조회 (page/limit 있으면 페이징, light면 geom 제외) */
+/**
+ * 신규 레이어 일괄 import 후 — 현재 테이블 행을 sync_log에 append(반영 완료)로 남긴다.
+ * 이력 탭 «이력 조회»에서 신규 import 내용을 볼 수 있게 한다.
+ * 동일 dhKey에 이미 로그가 있으면 재삽입하지 않는다.
+ */
+export async function recordNewLayerImportLogs(params: {
+  tableName: string;
+  dhKey: number;
+  sourceSrs?: string | null;
+  /** usrId(usrName) — 통합 data_log 작업자 */
+  logUser?: string | null;
+  group?: string | null;
+  tableKorName?: string | null;
+}): Promise<{ success: boolean; appendedCount?: number; error?: string }> {
+  const tableName = safeTableName(params?.tableName ?? '');
+  const dhKey = Math.floor(Number(params?.dhKey));
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  if (!Number.isFinite(dhKey) || dhKey <= 0) return { success: false, error: 'dhKey가 필요합니다.' };
+
+  const keyField = getKeyFieldName(tableName);
+  if (!keyField) {
+    return {
+      success: false,
+      error: `key 필드가 설정되어 있지 않습니다. 레이어 속성정보에서 key를 설정하세요. (${tableName})`,
+    };
+  }
+
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const dbSchema = await resolveDefineTableSchema(tableName);
+
+    const existing = await db.execute(sql.raw(
+      `SELECT count(*)::int AS cnt FROM sync_log
+       WHERE sl_dh_key = ${dhKey}`
+    ));
+    const existingCnt = (existing.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
+    if (existingCnt > 0) {
+      await mirrorShpDhKeyToDataLog({
+        dhKey,
+        tableName,
+        logUser: params.logUser,
+        group: params.group,
+        tableKorName: params.tableKorName,
+      });
+      return { success: true, appendedCount: existingCnt };
+    }
+
+    const dbColumns = await fetchInfoSchemaColumns(dbSchema, tableName);
+    const resolvedKeyDb = resolveSyncedColumn(dbColumns, keyField);
+    if (!resolvedKeyDb) {
+      return { success: false, error: `key 필드 '${keyField}'가 테이블에 존재하지 않습니다.` };
+    }
+
+    let geometryDb: string | null = null;
+    try {
+      const gCol = await db.execute(sql.raw(
+        `SELECT f_geometry_column::text AS col FROM geometry_columns
+         WHERE f_table_schema = '${dbSchema}' AND f_table_name = '${tableName}' LIMIT 1`
+      ));
+      const c = (gCol.rows as Array<{ col: string }>)[0]?.col;
+      if (c?.trim()) geometryDb = c.trim();
+    } catch {
+      geometryDb = null;
+    }
+    if (!geometryDb && dbColumns.includes('geom')) geometryDb = 'geom';
+
+    const geomPair: SyncColPair | null = geometryDb
+      ? { db: geometryDb, sync: geometryDb }
+      : null;
+    const attrPairs: SyncColPair[] = dbColumns
+      .filter(
+        (c) =>
+          c !== resolvedKeyDb
+          && (!geometryDb || c !== geometryDb)
+          && c.toLowerCase() !== 'ogc_fid',
+      )
+      .map((c) => ({ db: c, sync: c }));
+
+    const storeFullGeom = shouldStoreFullHistoryGeom(dbSchema);
+    const rowJson = syncLogRowJsonSqlFromPairs('e', attrPairs, geomPair, {
+      sourceSrs: params.sourceSrs ?? null,
+    });
+    const safeKeyField = resolvedKeyDb.replace(/'/g, "''");
+
+    const inserted = await db.execute(sql.raw(
+      `INSERT INTO sync_log (
+         sl_dh_key, sl_table_name, sl_key_field, sl_key_value,
+         sl_operation, sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back
+       )
+       SELECT
+         ${dhKey},
+         '${tableName.replace(/'/g, "''")}',
+         '${safeKeyField}',
+         btrim(e."${resolvedKeyDb}"::text),
+         'append',
+         NULL,
+         (${rowJson}),
+         NOW(),
+         false
+       FROM ${dbSchema}."${tableName}" e
+       WHERE e."${resolvedKeyDb}" IS NOT NULL
+         AND btrim(e."${resolvedKeyDb}"::text) <> ''
+       RETURNING sl_key`
+    ));
+
+    if (storeFullGeom && geomPair && inserted.rows?.length) {
+      try {
+        await db.execute(sql.raw(
+          `INSERT INTO sync_log_geom (slg_sl_key, slg_side, slg_geom)
+           SELECT sl.sl_key, 'new', e."${geomPair.db}"
+           FROM sync_log sl
+           JOIN ${dbSchema}."${tableName}" e
+             ON e."${resolvedKeyDb}"::text = sl.sl_key_value
+           WHERE sl.sl_dh_key = ${dhKey}
+             AND sl.sl_table_name = '${tableName.replace(/'/g, "''")}'
+             AND sl.sl_operation = 'append'
+             AND e."${geomPair.db}" IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM sync_log_geom g
+               WHERE g.slg_sl_key = sl.sl_key AND g.slg_side = 'new'
+             )
+           ON CONFLICT DO NOTHING`
+        ));
+      } catch (e) {
+        console.warn('[seedAppendSyncLogs geom]', e instanceof Error ? e.message : e);
+      }
+    }
+
+    await mirrorShpDhKeyToDataLog({
+      dhKey,
+      tableName,
+      logUser: params.logUser,
+      group: params.group,
+      tableKorName: params.tableKorName,
+    });
+    return { success: true, appendedCount: inserted.rows?.length ?? 0 };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 function normalizeSyncLogFieldFilters(raw: unknown): string[] | undefined {
   if (raw == null) return undefined;
   if (Array.isArray(raw)) {
@@ -4394,7 +4892,7 @@ export async function getSyncLogs(params: {
   /** true면 목록 SELECT 생략, total COUNT만 (푸터 후속 갱신) */
   countOnly?: boolean;
   fieldFilters?: string[];
-  /** 구분 필터: new | conflict | delete | kept */
+  /** 구분 필터: new | pending_conflict | changed | delete | kept_new | kept_conflict | kept_delete (+ 호환 conflict | kept) */
   opFilters?: string[];
 }): Promise<{
   success: boolean;
@@ -4480,9 +4978,9 @@ export async function getSyncLogs(params: {
          (${syncLogGeomMetaComparableSql(`sl_old_data -> 'geom'`)} IS DISTINCT FROM ${syncLogGeomMetaComparableSql(`sl_new_data -> 'geom'`)}) AS geom_changed,
          sl_old_data -> 'geom' ->> 'type' AS old_geom_type,
          sl_new_data -> 'geom' ->> 'type' AS new_geom_type,
-         sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at, sl_superseded_at`
+         sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at`
       : `sl_key, sl_dh_key, sl_table_name, sl_key_field, sl_key_value, sl_operation,
-         sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at, sl_superseded_at`;
+         sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at`;
 
     const limitSql = usePaging ? ` LIMIT ${pageSize} OFFSET ${offset}` : '';
     // 목록을 COUNT보다 먼저 — 필터 시 1페이지 데이터를 건수 집계보다 먼저 확보
@@ -4593,7 +5091,7 @@ export async function getSyncLogDetail(params: {
     const { sql } = await import('drizzle-orm');
     const res = await db.execute(sql.raw(
       `SELECT sl_key, sl_dh_key, sl_table_name, sl_key_field, sl_key_value, sl_operation,
-              sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at, sl_superseded_at
+              sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back, sl_rolled_back_at, sl_created_at
        FROM sync_log WHERE sl_key = ${slKey} LIMIT 1`
     ));
     const row = (res.rows as Array<Record<string, unknown>>)[0];
@@ -4643,6 +5141,68 @@ export async function getSyncLogDetail(params: {
     return { success: true, row: hydrated.row };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 동기화 범위에 실제로 존재하는 구분(표시값)만 반환 — 구분 필터 옵션 */
+export async function getSyncLogOpOptions(params: {
+  dhKey?: number;
+  tableName?: string;
+  strictDhKey?: boolean;
+  currentSessionOnly?: boolean;
+}): Promise<{ success: boolean; options: Array<{ id: string; label: string }>; error?: string }> {
+  const built = buildSyncLogWhere({
+    dhKey: params?.dhKey,
+    tableName: params?.tableName,
+    strictDhKey: params?.strictDhKey,
+    currentSessionOnly: params?.currentSessionOnly,
+  });
+  if (built.error) return { success: false, options: [], error: built.error };
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const res = await db.execute(sql.raw(
+      `SELECT
+         count(*) FILTER (
+           WHERE sl_operation = 'append'
+              OR (sl_operation IS NULL AND sl_old_data IS NULL AND sl_new_data IS NOT NULL)
+         )::int AS n_new,
+         count(*) FILTER (
+           WHERE sl_operation IS NULL AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL
+         )::int AS n_pending_conflict,
+         count(*) FILTER (WHERE sl_operation = 'conflict')::int AS n_changed,
+         count(*) FILTER (
+           WHERE sl_operation = 'remove'
+              OR (sl_operation IS NULL AND sl_old_data IS NOT NULL AND sl_new_data IS NULL)
+         )::int AS n_delete,
+         count(*) FILTER (
+           WHERE sl_operation = 'kept' AND sl_old_data IS NULL AND sl_new_data IS NOT NULL
+         )::int AS n_kept_new,
+         count(*) FILTER (
+           WHERE sl_operation = 'kept' AND sl_old_data IS NOT NULL AND sl_new_data IS NOT NULL
+         )::int AS n_kept_conflict,
+         count(*) FILTER (
+           WHERE sl_operation = 'kept' AND sl_old_data IS NOT NULL AND sl_new_data IS NULL
+         )::int AS n_kept_delete
+       FROM sync_log
+       WHERE ${built.where}`
+    ));
+    const row = (res.rows as Array<Record<string, number>>)[0] ?? {};
+    const candidates: Array<{ id: SyncLogOpFilter; label: string; count: number }> = [
+      { id: 'new', label: '신규', count: Number(row.n_new ?? 0) },
+      { id: 'pending_conflict', label: '충돌', count: Number(row.n_pending_conflict ?? 0) },
+      { id: 'changed', label: '변경', count: Number(row.n_changed ?? 0) },
+      { id: 'delete', label: '삭제', count: Number(row.n_delete ?? 0) },
+      { id: 'kept_new', label: '미추가', count: Number(row.n_kept_new ?? 0) },
+      { id: 'kept_conflict', label: '유지', count: Number(row.n_kept_conflict ?? 0) },
+      { id: 'kept_delete', label: '미삭제', count: Number(row.n_kept_delete ?? 0) },
+    ];
+    return {
+      success: true,
+      options: candidates.filter((c) => c.count > 0).map(({ id, label }) => ({ id, label })),
+    };
+  } catch (e: unknown) {
+    return { success: false, options: [], error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -4795,6 +5355,7 @@ export async function rollbackSyncRows(params: {
         liveFq: fq,
         liveGeomCol: colMap.get('geom') ?? 'geom',
         liveKeyCol: keyCol,
+        slKey: log.sl_key,
       });
       if (oldPrepared.error && log.sl_old_data && isSyncGeomMeta(log.sl_old_data.geom)
         && log.sl_old_data.__rollback_geom == null) {
@@ -4926,6 +5487,7 @@ export async function reapplySyncRows(params: {
         side: 'new',
         keyValue: kv,
         syncTemp,
+        slKey: log.sl_key,
       });
       if (newPrepared.error && log.sl_new_data && isSyncGeomMeta(log.sl_new_data.geom)) {
         return { success: false, reappliedCount: 0, error: newPrepared.error };
