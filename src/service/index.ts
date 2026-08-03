@@ -44,7 +44,11 @@ import * as noticeService from './noticeService';
 import * as boardService from './boardService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
+import * as shootingRequestService from './shootingRequestService';
+import * as flightLogbookService from './flightLogbookService';
+import * as aerialUploadService from './aerialUploadService';
 import * as useFeeService from './useFeeService';
+import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as elevationService from './elevationService';
 
@@ -91,7 +95,11 @@ export {
   noticeService,
   boardService,
   mngVersionHistoryService,
+  shootingRequestService,
+  flightLogbookService,
+  aerialUploadService,
   useFeeService,
+  groundwaterPermitService,
   bizNotifService,
   elevationService,
 };
