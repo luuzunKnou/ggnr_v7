@@ -287,11 +287,6 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     router.push(`/map?${current.toString()}`);
   }, [router, searchParams]);
 
-  const closeAreaModal = useCallback(() => {
-    setModalOpen(false);
-    setModalStep('choose');
-  }, []);
-
   // 편집 단계 도형의 구역 이탈·대상 미리 조회 (최신 요청만 반영)
   const clearDrawPreview = useCallback(() => {
     drawPreviewSeqRef.current += 1;
@@ -444,7 +439,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setEnriching(false);
   }, []);
 
-  // 재설정: 확정 영역을 비우고 곧바로 영역 지정 모달을 다시 연다.
+  // 재설정: 영역만 비우고 모드는 유지. 모달은 닫아 두고 패널 «영역 지정»으로 다시 연다.
   const resetArea = useCallback(() => {
     cancelAnalyze();
     clearArea();
@@ -452,11 +447,29 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setBoundarySessionDraft([]);
     setDrawerOpen(false);
     setDrawTool(null);
+    setDrawPhase('drawing');
     drawWktRef.current = null;
+    clearDrawPreview();
+    clearDrawToolbarAnchor();
+    setPanelEngaged(true);
     setModalStep('choose');
-    setModalOpen(true);
+    setModalOpen(false);
     syncBoundaryEmdFromCache();
-  }, [clearArea, setBoundaryDraft, setBoundarySessionDraft, cancelAnalyze, syncBoundaryEmdFromCache]);
+  }, [
+    clearArea,
+    setBoundaryDraft,
+    setBoundarySessionDraft,
+    cancelAnalyze,
+    syncBoundaryEmdFromCache,
+    clearDrawPreview,
+    clearDrawToolbarAnchor,
+  ]);
+
+  const closeAreaModal = useCallback(() => {
+    setPanelEngaged(true);
+    setModalOpen(false);
+    setModalStep('choose');
+  }, []);
 
   const handleAnalyze = useCallback(async () => {
     if (drawTool != null) {

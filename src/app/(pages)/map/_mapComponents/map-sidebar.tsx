@@ -231,7 +231,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
   });
 
-  const roadDataFlowSidebarLock = openedWindows.includes('roadDataFlow');
+  // master(jdong): roadDataFlow 열림 시 다른 메뉴 잠금 제거
   const hasUseFeeInList = sidebarItems.some((s) => s.ser_eng === 'useFee');
 
   useEffect(() => {
@@ -369,8 +369,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                     : serEng === 'parcelAnalysis'
                       ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
                       : () => toggleWindow(openedKey);
-              const svcDisabled =
-                policy !== 'block' && roadDataFlowSidebarLock && openedKey !== 'roadDataFlow';
               return (
                 <React.Fragment key={serEng}>
                   <SidebarButton
@@ -382,7 +380,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                       serEng !== 'shapeEditor' &&
                       openedWindows.includes(openedKey)
                     }
-                    disabled={policy === 'block' ? false : svcDisabled}
+                    disabled={false}
                   />
                   {serEng === 'usageDataAs' &&
                     bootProject === 'build_uj' &&
@@ -392,7 +390,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                         label="점사용료"
                         onClick={() => toggleWindow('useFee')}
                         isActive={openedWindows.includes('useFee')}
-                        disabled={roadDataFlowSidebarLock}
                       />
                     )}
                 </React.Fragment>
@@ -406,7 +403,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                   label="점사용료"
                   onClick={() => toggleWindow('useFee')}
                   isActive={openedWindows.includes('useFee')}
-                  disabled={roadDataFlowSidebarLock}
                 />
               )}
           </div>
