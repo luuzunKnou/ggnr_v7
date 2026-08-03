@@ -48,7 +48,7 @@ export function SignUpApplyForm({
   onRequestLogin,
   onClose,
 }: SignUpApplyFormProps = {}) {
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm());
   const [ugList, setUgList] = useState<UgRow[]>([]);
   const [utList, setUtList] = useState<UtRow[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
