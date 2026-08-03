@@ -75,8 +75,10 @@ type Props = {
   overlayWidthPx: number;
 };
 
+/** 조회·수정 공통 행 높이 — 수정 시 input 때문에 속성 영역이 늘어나지 않게 고정 */
+const ATTR_ROW_H = "h-7";
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "h-full w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 
 type ParcelModalState = { mode: "new" | "edit" | "view"; draft: RoadRewardParcel };
 
@@ -101,17 +103,19 @@ function formatCell(value: unknown, numeric?: boolean): string {
 
 function AttrRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-start">
-      <div className="flex w-16 shrink-0 items-center self-stretch bg-slate-100 px-1.5 py-1">
-        <span className="min-w-0 w-full whitespace-normal break-keep text-[11px] leading-snug text-[#666]">
+    <div className={cn("flex items-stretch", ATTR_ROW_H)}>
+      <div className="flex w-16 shrink-0 items-center bg-slate-100 px-1.5">
+        <span className="min-w-0 w-full truncate text-[11px] leading-none text-[#666]" title={label}>
           {label}
         </span>
       </div>
-      <div className="min-w-0 flex-1 px-1.5 py-1">
+      <div className="flex min-w-0 flex-1 items-center px-1.5 py-0.5">
         {typeof value === "string" ? (
-          <span className="break-all text-[11px] leading-snug text-[#666]">{value}</span>
+          <span className="truncate text-[11px] leading-none text-[#666]" title={value}>
+            {value}
+          </span>
         ) : (
-          value
+          <div className="h-full min-h-0 w-full min-w-0">{value}</div>
         )}
       </div>
     </div>
@@ -236,9 +240,9 @@ export function RoadRewardDetailPanel({
   );
 
   const displayParcels = isEditing ? draftParcels : caseItem?.parcels ?? [];
-  const parcelGridCols = isEditing
-    ? "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)_max-content_minmax(max-content,1fr)_minmax(max-content,1fr)_auto]"
-    : "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)_max-content_minmax(max-content,1fr)_minmax(max-content,1fr)]";
+  /** 패널 전체폭. 헤더 안 잘리게 열 폭 복구. 액션 열은 조회/수정 공통 확보 */
+  const parcelGridCols =
+    "grid-cols-[minmax(0,1.3fr)_5rem_2.75rem_6.5rem_minmax(0,1.5fr)_2.75rem]";
   const displayGeom = isEditing
     ? draftGeom
     : {
@@ -937,31 +941,29 @@ export function RoadRewardDetailPanel({
                 : "등록된 필지가 없습니다."}
             </div>
           ) : (
-            <div className="overflow-x-auto rounded border border-slate-200 text-[11px]">
+            <div className="w-full overflow-hidden rounded border border-slate-200 text-[11px]">
               <div
                 className={cn(
-                  "grid items-center border-b border-slate-200 bg-slate-50",
+                  "grid h-7 items-center border-b border-slate-200 bg-slate-50",
                   parcelGridCols
                 )}
               >
-                <div className="px-2.5 py-1.5 text-left font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 px-1.5 font-semibold text-slate-700 whitespace-nowrap">
                   읍면동
                 </div>
-                <div className="px-2.5 py-1.5 text-left font-semibold text-slate-700 whitespace-nowrap">
-                  지번(편입)
+                <div className="min-w-0 px-1.5 font-semibold text-slate-700 whitespace-nowrap">
+                  편입지번
                 </div>
-                <div className="px-2.5 py-1.5 text-center font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 px-1.5 text-center font-semibold text-slate-700 whitespace-nowrap">
                   지목
                 </div>
-                <div className="px-2.5 py-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 px-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
                   편입면적(㎡)
                 </div>
-                <div className="px-2.5 py-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 px-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
                   보상금액(원)
                 </div>
-                {isEditing ? (
-                  <div className="px-2.5 py-1.5" aria-label="필지 편집" />
-                ) : null}
+                <div aria-hidden />
               </div>
               {displayParcels.map((p) => {
                 const isSelected = p.id === selectedParcelId;
@@ -983,49 +985,40 @@ export function RoadRewardDetailPanel({
                         : "클릭하면 필지 상세를 봅니다"
                     }
                     className={cn(
-                      "grid cursor-pointer items-center border-b border-slate-100 last:border-b-0 hover:bg-slate-50",
+                      "grid h-7 cursor-pointer items-center border-b border-slate-100 last:border-b-0 hover:bg-slate-50",
                       parcelGridCols,
                       isSelected && "bg-primary/5"
                     )}
                   >
-                    <div
-                      className="truncate px-2.5 py-1.5 text-left text-slate-800"
-                      title={p.eupmyeonDong}
-                    >
+                    <div className="min-w-0 truncate px-1.5 text-slate-800" title={p.eupmyeonDong}>
                       {formatCell(p.eupmyeonDong)}
                     </div>
-                    <div
-                      className="truncate px-2.5 py-1.5 text-left text-slate-800"
-                      title={p.jibunIncluded}
-                    >
+                    <div className="min-w-0 truncate px-1.5 text-slate-800" title={p.jibunIncluded}>
                       {formatCell(p.jibunIncluded)}
                     </div>
-                    <div
-                      className="truncate px-2.5 py-1.5 text-center text-slate-800"
-                      title={p.jimok}
-                    >
+                    <div className="min-w-0 truncate px-1.5 text-center text-slate-800" title={p.jimok}>
                       {formatCell(p.jimok)}
                     </div>
-                    <div className="px-2.5 py-1.5 text-right tabular-nums text-slate-800 whitespace-nowrap">
+                    <div className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800">
                       {formatCell(p.areaIncluded, true)}
                     </div>
-                    <div className="px-2.5 py-1.5 text-right tabular-nums text-slate-800 whitespace-nowrap">
+                    <div className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800">
                       {formatCell(p.compensationAmount, true)}
                     </div>
-                    {isEditing ? (
-                      <div className="px-2.5 py-1.5">
-                        <div className="flex items-center justify-center gap-0.5">
+                    <div className="flex items-center justify-end gap-0 pr-0.5">
+                      {isEditing ? (
+                        <>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenEditParcel(p);
                             }}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
+                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
                             aria-label="필지 수정"
                             title="수정"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Pencil className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
@@ -1033,15 +1026,15 @@ export function RoadRewardDetailPanel({
                               e.stopPropagation();
                               handleDeleteParcelFromList(p.id);
                             }}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
                             aria-label="필지 삭제"
                             title="삭제"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3 w-3" />
                           </button>
-                        </div>
-                      </div>
-                    ) : null}
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}
