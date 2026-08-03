@@ -240,9 +240,13 @@ export function RoadRewardDetailPanel({
   );
 
   const displayParcels = isEditing ? draftParcels : caseItem?.parcels ?? [];
-  /** 패널 전체폭. 헤더 안 잘리게 열 폭 복구. 액션 열은 조회/수정 공통 확보 */
+  /**
+   * 상세 패널 ~480px 기준 5열+액션 동시 표시.
+   * 읍면동·보상금액은 최소폭 확보 후 남는 폭만 분배(한쪽만 키우면 다른 쪽이 잘림).
+   * 편입지번·지목·편입면적·액션은 헤더/값 길이만큼 고정.
+   */
   const parcelGridCols =
-    "grid-cols-[minmax(0,1.3fr)_5rem_2.75rem_6.5rem_minmax(0,1.5fr)_2.75rem]";
+    "grid-cols-[minmax(7rem,1fr)_4.25rem_2.25rem_5.5rem_minmax(7rem,1.4fr)_2.5rem]";
   const displayGeom = isEditing
     ? draftGeom
     : {
@@ -999,10 +1003,16 @@ export function RoadRewardDetailPanel({
                     <div className="min-w-0 truncate px-1.5 text-center text-slate-800" title={p.jimok}>
                       {formatCell(p.jimok)}
                     </div>
-                    <div className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800">
+                    <div
+                      className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800"
+                      title={formatCell(p.areaIncluded, true)}
+                    >
                       {formatCell(p.areaIncluded, true)}
                     </div>
-                    <div className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800">
+                    <div
+                      className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800"
+                      title={formatCell(p.compensationAmount, true)}
+                    >
                       {formatCell(p.compensationAmount, true)}
                     </div>
                     <div className="flex items-center justify-end gap-0 pr-0.5">
