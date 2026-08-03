@@ -2,15 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { listConsoleMenuCatalog } from '@/lib/consoleMenuAccess/registry';
-import { Layers, LayoutGrid, Server } from 'lucide-react';
+import { Layers, Server } from 'lucide-react';
 import { permCall, type PermMappingTab, type SerRow, type SysRow } from './permApi';
 import { SerLevelSegments, SysAccessSegments } from './PermAccessSegments';
 
 const MAPPING_TABS = [
   { id: 'ser' as const, label: '기능별 권한관리', icon: Layers },
   { id: 'sys' as const, label: '시스템별 접속권한 관리', icon: Server },
-  { id: 'console' as const, label: '콘솔 메뉴 권한', icon: LayoutGrid },
 ];
 
 export type PermRoleMappingPanelProps = {
@@ -43,11 +41,8 @@ export function PermRoleMappingPanel(props: PermRoleMappingPanelProps) {
   const [privateSers, setPrivateSers] = useState<SerRow[]>([]);
   const [privateSys, setPrivateSys] = useState<SysRow[]>([]);
   const [serpMap, setSerpMap] = useState<Record<string, number>>({});
-  const [consoleSerpMap, setConsoleSerpMap] = useState<Record<string, number>>({});
   const [syspSet, setSyspSet] = useState<Set<string>>(new Set());
   const [catalogLoaded, setCatalogLoaded] = useState(false);
-
-  const consoleMenuCatalog = useMemo(() => listConsoleMenuCatalog(), []);
 
   const privateSysGroups = useMemo(() => {
     type G = {
@@ -128,46 +123,21 @@ export function PermRoleMappingPanel(props: PermRoleMappingPanelProps) {
     setSyspSet(new Set(rows.map((r) => (r.sysKey != null ? String(r.sysKey) : '')).filter(Boolean)));
   }, []);
 
-  const loadConsoleSerp = useCallback(async (key: number) => {
-    const rows = (await permCall('getSerpForPerm', { permKey: key })) as {
-      serEng: string;
-      serpType: number;
-    }[];
-    const byEng = new Map(rows.map((r) => [r.serEng, r.serpType]));
-    const m: Record<string, number> = {};
-    for (const c of listConsoleMenuCatalog()) {
-      m[c.permEng] = byEng.get(c.permEng) ?? 0;
-    }
-    setConsoleSerpMap(m);
-  }, []);
-
   useEffect(() => {
     if (permKey == null) {
       setSerpMap({});
-      setConsoleSerpMap({});
       setSyspSet(new Set());
       return;
     }
     if (tab === 'ser') void loadSerp(permKey).catch(reportError);
-    else if (tab === 'sys') void loadSysp(permKey).catch(reportError);
-    else void loadConsoleSerp(permKey).catch(reportError);
-  }, [permKey, tab, loadSerp, loadSysp, loadConsoleSerp, reportError]);
+    else void loadSysp(permKey).catch(reportError);
+  }, [permKey, tab, loadSerp, loadSysp, reportError]);
 
   async function setSerLevel(serEng: string, serpType: number) {
     if (permKey == null) return;
     try {
       await permCall('setSerpForPerm', { permKey, serEng, serpType });
       setSerpMap((prev) => ({ ...prev, [serEng]: serpType }));
-    } catch (e) {
-      reportError(e);
-    }
-  }
-
-  async function setConsoleSerLevel(permEng: string, serpType: number) {
-    if (permKey == null) return;
-    try {
-      await permCall('setSerpForPerm', { permKey, serEng: permEng, serpType });
-      setConsoleSerpMap((prev) => ({ ...prev, [permEng]: serpType }));
     } catch (e) {
       reportError(e);
     }
@@ -195,7 +165,7 @@ export function PermRoleMappingPanel(props: PermRoleMappingPanelProps) {
   if (permKey == null) {
     return (
       <p className={cn('text-sm text-muted-foreground py-4', className)}>
-        권한을 선택하면 기능·시스템·콘솔 메뉴별 매핑을 편집할 수 있습니다.
+        권한을 선택하면 기능·시스템별 매핑을 편집할 수 있습니다.
       </p>
     );
   }
@@ -284,7 +254,7 @@ export function PermRoleMappingPanel(props: PermRoleMappingPanelProps) {
               )}
             </tbody>
           </table>
-        ) : tab === 'sys' ? (
+        ) : (
           <table className="w-full text-sm border-collapse min-w-[720px] table-fixed">
             <colgroup>
               <col className="w-[22%]" />
@@ -310,8 +280,8 @@ export function PermRoleMappingPanel(props: PermRoleMappingPanelProps) {
               {privateSys.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="p-4 text-muted-foreground">
-                    비공개 시스템이 없습니다. DB 시스템은 sys_is_private, config 전용은 systemList.config
-                    의 sys_is_private 을 켜세요.
+                    비공개 시스템이 없습니다. runtime ENABLED_SYSTEMS에 포함된 항목 중
+                    sys_is_private 이 켜진 시스템만 표시됩니다.
                   </td>
                 </tr>
               ) : (
@@ -332,61 +302,6 @@ export function PermRoleMappingPanel(props: PermRoleMappingPanelProps) {
                         <SysAccessSegments
                           allowed={allOn}
                           onChange={(on) => void toggleSysGroup(g.sysKeys, on)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        ) : (
-          <table className="w-full text-sm border-collapse min-w-[760px] table-fixed">
-            <colgroup>
-              <col className="w-[14%]" />
-              <col className="w-[22%]" />
-              <col className="w-[34%]" />
-              <col className="w-[30%]" />
-            </colgroup>
-            <thead className="sticky top-0 z-10 bg-muted border-b">
-              <tr className="text-left">
-                <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                  영역
-                </th>
-                <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                  메뉴
-                </th>
-                <th className="py-1.5 px-2 text-xs font-semibold border-r border-muted-foreground/15 leading-tight">
-                  permEng
-                </th>
-                <th className="py-1.5 px-2 text-xs font-semibold leading-tight">접근단계</th>
-              </tr>
-            </thead>
-            <tbody>
-              {consoleMenuCatalog.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="p-4 text-muted-foreground">
-                    등록된 콘솔 메뉴가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                consoleMenuCatalog.map((c) => {
-                  const v = consoleSerpMap[c.permEng] ?? 0;
-                  return (
-                    <tr key={c.permEng} className="border-b border-border/60 hover:bg-muted/50">
-                      <td className="py-1.5 px-2 text-xs align-top border-r border-border/40">
-                        {c.areaLabel}
-                      </td>
-                      <td className="py-1.5 px-2 text-xs align-top border-r border-border/40">
-                        {c.menuLabel}
-                      </td>
-                      <td className="py-1.5 px-2 min-w-0 font-mono text-[10px] align-top border-r border-border/40 leading-snug whitespace-normal break-words [overflow-wrap:anywhere]">
-                        {c.permEng}
-                      </td>
-                      <td className="py-1.5 px-2 align-top">
-                        <SerLevelSegments
-                          value={v}
-                          onChange={(nv) => void setConsoleSerLevel(c.permEng, nv)}
                         />
                       </td>
                     </tr>

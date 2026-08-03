@@ -1,13 +1,56 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
+import { Users, Shield, Database, BarChart3 } from "lucide-react"
+import { AdminConsoleLayout, type AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { PermissionFeatureManager } from "@/app/(pages)/dev/_components/PermissionFeatureManager"
 import { AccessRequestQueue } from "@/app/(pages)/dev/_components/AccessRequestQueue"
 import { UserManager } from "@/app/(pages)/dev/_components/UserManager"
-import { SYS_MANAGER_CONSOLE_MENUS } from "@/lib/consoleMenuAccess/menus/sysManager"
+import { LayerManagerContent } from "@/app/(pages)/dev/_components/LayerManagerContent"
+import { LayerManagerUploadButtons } from "@/app/(pages)/dev/_components/layerManager/LayerManagerUploadButtons"
+import { DataHistoryManagerContent } from "@/app/(pages)/dev/_components/DataHistoryManagerContent"
+import { SignUpApprove } from "@/app/(pages)/dev/_components/SignUpApprove"
+import {
+  SYS_MANAGER_CONSOLE_MENUS,
+  type SysManagerConsoleMenuId,
+} from "@/lib/consoleMenuAccess/menus/sysManager"
 
 const SYS_ADMIN_MENUS = SYS_MANAGER_CONSOLE_MENUS
+
+/** 캡쳐 대분류와 동일 그룹 (개발자 콘솔 menuGroups 패턴) */
+export const SYS_MANAGER_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
+  {
+    id: "userManagement",
+    label: "사용자관리",
+    icon: Users,
+    menuIds: ["signUpApprove", "userManager"],
+  },
+  {
+    id: "permissionManagement",
+    label: "권한관리",
+    icon: Shield,
+    menuIds: ["permissionFeature", "accessRequestQueue"],
+  },
+  {
+    id: "dataManagement",
+    label: "데이터관리",
+    icon: Database,
+    menuIds: ["layerManager", "dataHistoryManager"],
+  },
+  {
+    id: "usageStats",
+    label: "시스템 사용현황",
+    icon: BarChart3,
+    menuIds: [
+      "featureUsageStats",
+      "userAccessStats",
+      "userMgmtHistory",
+      "userPermHistory",
+    ],
+  },
+]
+
+const SYS_AUTO_COLLAPSE_MENU_IDS: readonly SysManagerConsoleMenuId[] = ["layerManager"]
 
 function PlaceholderPanel({ title }: { title: string }) {
   return (
@@ -18,24 +61,32 @@ function PlaceholderPanel({ title }: { title: string }) {
   )
 }
 
+function menuLabel(menuId: string): string {
+  return SYS_ADMIN_MENUS.find((m) => m.id === menuId)?.label ?? menuId
+}
+
 function getSysAdminDescription(menuId: string): string {
   switch (menuId) {
+    case "signUpApprove":
+      return "가입 신청 대기 목록을 승인·반려합니다."
     case "userManager":
       return "사용자관리 설정 화면입니다."
     case "permissionFeature":
       return "비공개 서비스·시스템에 대한 perm(역할) 매핑입니다."
     case "accessRequestQueue":
       return "비공개 리소스 개별 신청 승인·반려"
-    case "uploadHistory":
-      return "LAS·SHP·Excel 등 데이터 업로드 이력 조회"
-    case "dataAccessLog":
-      return "레이어·속성 등 데이터 접근 기록 조회"
-    case "userMgmtHistory":
-      return "계정 생성·권한 변경 등 사용자 관리 이력 조회"
-    case "userAccessStats":
-      return "로그인·접속 건수 등 사용자 접속 통계"
+    case "layerManager":
+      return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
+    case "dataHistoryManager":
+      return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
     case "featureUsageStats":
-      return "기능(서비스)별 사용 횟수·현황 통계"
+      return "기능(서비스)별 사용 횟수·현황 통계 (구현 예정)"
+    case "userAccessStats":
+      return "로그인·접속 건수 등 사용자 접속 현황 (구현 예정)"
+    case "userMgmtHistory":
+      return "계정 생성·변경 등 사용자 관리 이력 조회 (구현 예정)"
+    case "userPermHistory":
+      return "권한 부여·변경 이력 조회 (구현 예정)"
     default:
       return ""
   }
@@ -43,6 +94,12 @@ function getSysAdminDescription(menuId: string): string {
 
 function renderSysAdminContent(menuId: string): ReactNode {
   switch (menuId) {
+    case "signUpApprove":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <SignUpApprove />
+        </div>
+      )
     case "userManager":
       return <UserManager />
     case "permissionFeature":
@@ -53,16 +110,23 @@ function renderSysAdminContent(menuId: string): ReactNode {
       )
     case "accessRequestQueue":
       return <AccessRequestQueue />
-    case "uploadHistory":
-      return <PlaceholderPanel title="데이터 업로드 이력" />
-    case "dataAccessLog":
-      return <PlaceholderPanel title="데이터 접근기록" />
-    case "userMgmtHistory":
-      return <PlaceholderPanel title="사용자 관리 이력" />
-    case "userAccessStats":
-      return <PlaceholderPanel title="사용자 접속 통계" />
+    case "layerManager":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-13rem)]">
+          <LayerManagerContent />
+        </div>
+      )
+    case "dataHistoryManager":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <DataHistoryManagerContent />
+        </div>
+      )
     case "featureUsageStats":
-      return <PlaceholderPanel title="기능별 사용현황 통계" />
+    case "userAccessStats":
+    case "userMgmtHistory":
+    case "userPermHistory":
+      return <PlaceholderPanel title={menuLabel(menuId)} />
     default:
       return null
   }
@@ -73,10 +137,16 @@ export default function SysManagerPage() {
     <AdminConsoleLayout
       title="시스템 관리"
       menus={SYS_ADMIN_MENUS}
+      menuGroups={SYS_MANAGER_MENU_GROUPS}
+      stateStorageKey="sysManagerConsoleMenu"
       defaultMenuId="userManager"
       getDescription={getSysAdminDescription}
       renderContent={renderSysAdminContent}
+      renderTitleExtra={(menuId) =>
+        menuId === "layerManager" ? <LayerManagerUploadButtons /> : null
+      }
       consoleArea="sysManager"
+      autoCollapseMenuIds={SYS_AUTO_COLLAPSE_MENU_IDS}
     />
   )
 }

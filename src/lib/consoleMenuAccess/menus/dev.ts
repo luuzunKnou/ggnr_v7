@@ -6,6 +6,7 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'serviceList', label: '기능 목록관리' },
   { id: 'systemIntegration', label: '시스템 연계' },
   { id: 'geocodingTest', label: '지오코딩 테스트' },
+  { id: 'signUpApprove', label: '사용자 가입 승인' },
   { id: 'userManager', label: '사용자관리' },
   { id: 'permissionFeature', label: '권한관리' },
   { id: 'accessRequestQueue', label: '권한 신청 처리' },
@@ -25,6 +26,10 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'fileConverter', label: 'File Converter' },
   { id: 'lasFixer', label: 'LAS Fixer' },
   { id: 'orthophotoManager', label: '정사영상관리' },
+  { id: 'featureUsageStats', label: '기능별 사용현황' },
+  { id: 'userAccessStats', label: '사용자 접속현황' },
+  { id: 'userMgmtHistory', label: '사용자 관리 이력' },
+  { id: 'userPermHistory', label: '사용자 권한 관리 이력' },
 ] as const satisfies readonly ConsoleMenuDef[];
 
 export type DevConsoleMenuId = (typeof DEV_CONSOLE_MENUS)[number]['id'];

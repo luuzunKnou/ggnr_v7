@@ -127,7 +127,7 @@ export function DevFloatingPanel({
           role="button"
           tabIndex={0}
           onPointerDown={handlePointerDown}
-          className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-slate-100 bg-slate-50/40 px-3 py-1.5 active:cursor-grabbing hover:bg-slate-50/60 dark:border-slate-800"
+          className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-slate-100 bg-slate-50/40 px-4 py-3 active:cursor-grabbing hover:bg-slate-50/60 dark:border-slate-800"
           onKeyDown={(e) => {
             if (e.key === ' ' || e.key === 'Enter') e.preventDefault();
           }}
@@ -138,6 +138,7 @@ export function DevFloatingPanel({
             onClick={onClose}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             aria-label="닫기"
+            title="닫기"
           >
             <X className="h-3.5 w-3.5" />
           </button>

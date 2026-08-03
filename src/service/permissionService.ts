@@ -22,11 +22,19 @@ import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { upMap } from '@/database/schema/up_map';
 import { usr } from '@/database/schema/usr';
-import { getServiceList, getSystemList, getSystemListAll } from '@/service/configService';
+import { getServiceList, getSystemList, getSystemListAll, getEnabledSystemsRaw } from '@/service/configService';
 import { loadUserAccess } from '@/lib/auth/access';
 import { listConsoleMenuCatalog as buildConsoleMenuCatalog } from '@/lib/consoleMenuAccess/registry';
 
 type Params = Record<string, unknown> & { _sessionUsrId?: string };
+
+/** runtime ENABLED_SYSTEMS 키 집합. 비어 있으면 필터 없음(null). */
+function enabledSysKeySet(): Set<string> | null {
+  const raw = getEnabledSystemsRaw();
+  if (!raw) return null;
+  const keys = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+  return keys.size > 0 ? keys : null;
+}
 
 function normalizePermSysKey(v: unknown): string | null {
   if (v == null) return null;
@@ -180,6 +188,9 @@ export async function listPrivateSers(_p: Params) {
 
 export async function listPrivateSys(_p: Params) {
   requireSession(_p);
+  /** 메인과 동일: ENABLED_SYSTEMS가 있으면 그 키만. 없으면 전체. */
+  const enabledKeys = enabledSysKeySet();
+
   const dbRows = await db
     .select({
       sysKey: sys.sysKey,
@@ -204,6 +215,7 @@ export async function listPrivateSys(_p: Params) {
   const byKey = new Map<string, Row>();
   for (const r of dbRows) {
     const k = String(r.sysKey);
+    if (enabledKeys && !enabledKeys.has(k)) continue;
     byKey.set(k, {
       sysKey: k,
       sysKor: r.sysKor,
@@ -216,6 +228,7 @@ export async function listPrivateSys(_p: Params) {
   for (const s of getSystemListAll().systems) {
     const k = s.sys_key?.trim();
     if (!k || s.sys_is_private !== true) continue;
+    if (enabledKeys && !enabledKeys.has(k)) continue;
     const cfgDetail =
       s.sys_detail != null && String(s.sys_detail).trim() ? String(s.sys_detail).trim() : null;
     const existing = byKey.get(k);

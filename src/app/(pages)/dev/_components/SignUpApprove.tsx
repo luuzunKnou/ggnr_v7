@@ -1,0 +1,304 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from '@/app/shadcnComponents/ui/button';
+import { cn } from '@/lib/utils';
+import { call } from '@/lib/api';
+import { RefreshCw } from 'lucide-react';
+import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
+
+type SignUpRow = {
+  usrId: string;
+  ugName: string;
+  utName: string;
+  usrName: string | null;
+  usrTel: string | null;
+  usrMail: string | null;
+  usrEtc: string | null;
+  usrReqTime: string | null;
+  usrOkTime: string | null;
+  usrCancleTime: string | null;
+};
+
+type StatusFilter = 'all' | 'pending' | 'rejected';
+type SignUpStatus = 'pending' | 'rejected';
+
+function unwrapData<T>(res: { data?: unknown; success?: boolean; error?: string }): T {
+  const inner = res.data as { data?: T; success?: boolean; error?: string } | T | undefined;
+  if (inner && typeof inner === 'object' && 'data' in (inner as object) && 'success' in (inner as object)) {
+    return (inner as { data: T }).data;
+  }
+  return inner as T;
+}
+
+function formatTime(v: string | null): string {
+  if (!v) return '—';
+  try {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return v;
+    return d.toLocaleString('ko-KR');
+  } catch {
+    return v;
+  }
+}
+
+function rowStatus(r: SignUpRow): SignUpStatus {
+  if (r.usrCancleTime) return 'rejected';
+  return 'pending';
+}
+
+const STATUS_LABEL: Record<SignUpStatus, string> = {
+  pending: '승인대기',
+  rejected: '반려',
+};
+
+const STATUS_CLASS: Record<SignUpStatus, string> = {
+  pending:
+    'inline-flex rounded-sm bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-200',
+  rejected:
+    'inline-flex rounded-sm bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-950/30 dark:text-red-200',
+};
+
+const FILTERS: { id: StatusFilter; label: string }[] = [
+  { id: 'all', label: '전체' },
+  { id: 'pending', label: '승인대기' },
+  { id: 'rejected', label: '반려' },
+];
+
+const uiStyle = USER_MANAGER_UI_STYLE;
+const tableRowClass =
+  'border-t border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+
+export function SignUpApprove() {
+  const [rows, setRows] = useState<SignUpRow[]>([]);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'usrService',
+        action: 'listPendingSignUps',
+        params: {},
+      });
+      const data = unwrapData<SignUpRow[]>(res);
+      setRows(Array.isArray(data) ? data : []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '목록 조회 실패');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const filteredRows = useMemo(() => {
+    if (filter === 'all') return rows;
+    if (filter === 'pending') return rows.filter((r) => rowStatus(r) === 'pending');
+    return rows.filter((r) => rowStatus(r) === 'rejected');
+  }, [rows, filter]);
+
+  async function approve(usrId: string) {
+    setBusyId(usrId);
+    setMsg('');
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'usrService',
+        action: 'approveSignUp',
+        params: { usr_id: usrId },
+      });
+      const inner = res.data as { success?: boolean; error?: string } | undefined;
+      if (inner?.success === false) {
+        setError(inner.error ?? '승인 실패');
+        return;
+      }
+      setMsg(`승인됨: ${usrId}`);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '승인 실패');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(usrId: string) {
+    if (!window.confirm(`${usrId} 가입 신청을 반려할까요?`)) return;
+    setBusyId(usrId);
+    setMsg('');
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'usrService',
+        action: 'rejectSignUp',
+        params: { usr_id: usrId },
+      });
+      const inner = res.data as { success?: boolean; error?: string } | undefined;
+      if (inner?.success === false) {
+        setError(inner.error ?? '반려 실패');
+        return;
+      }
+      setMsg(`반려됨: ${usrId}`);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '반려 실패');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const emptyText =
+    filter === 'pending'
+      ? '승인 대기 중인 가입 신청이 없습니다.'
+      : filter === 'rejected'
+        ? '반려된 가입 신청이 없습니다.'
+        : '가입 신청 내역이 없습니다.';
+
+  return (
+    <div className={uiStyle.page}>
+      <div className={uiStyle.toolbar}>
+        <div className="flex shrink-0 items-center gap-0 border border-border">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              title={`${f.label} 보기`}
+              className={cn(
+                'h-8 px-3 text-xs transition-colors',
+                filter === f.id
+                  ? 'bg-foreground text-background'
+                  : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {error ? (
+          <p className="min-w-0 max-w-[280px] shrink truncate text-sm text-red-600" title={error}>
+            {error}
+          </p>
+        ) : msg ? (
+          <p className="min-w-0 max-w-[280px] shrink truncate text-sm text-emerald-600" title={msg}>
+            {msg}
+          </p>
+        ) : null}
+        {loading && <span className="text-sm text-muted-foreground">조회 중...</span>}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={cn('ml-auto shrink-0 gap-1 rounded-none', uiStyle.secondaryButton)}
+          onClick={() => void load()}
+          disabled={loading}
+          title="새로고침"
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+          새로고침
+        </Button>
+      </div>
+
+      <div className={uiStyle.tableWrap}>
+        <table className={uiStyle.table}>
+          <thead className={cn('sticky top-0', uiStyle.tableHead)}>
+            <tr>
+              <th className={cn('text-left', uiStyle.tableCell)}>상태</th>
+              <th className={cn('text-left', uiStyle.tableCell)}>아이디</th>
+              <th className={cn('text-left', uiStyle.tableCell)}>이름</th>
+              <th className={cn('text-left', uiStyle.tableCell)}>부서/팀</th>
+              <th className={cn('text-left', uiStyle.tableCell)}>연락처</th>
+              <th className={cn('text-left', uiStyle.tableCell)}>이메일</th>
+              <th className={cn('text-left', uiStyle.tableCell)}>신청시간</th>
+              <th className={cn('text-left w-[140px]', uiStyle.tableCell)}>처리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr className={tableRowClass}>
+                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={8}>
+                  불러오는 중…
+                </td>
+              </tr>
+            ) : filteredRows.length === 0 ? (
+              <tr className={tableRowClass}>
+                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={8}>
+                  {emptyText}
+                </td>
+              </tr>
+            ) : (
+              filteredRows.map((r) => {
+                const status = rowStatus(r);
+                const pending = status === 'pending';
+                return (
+                  <tr key={r.usrId} className={tableRowClass}>
+                    <td className={uiStyle.tableCell}>
+                      <span className={STATUS_CLASS[status]}>{STATUS_LABEL[status]}</span>
+                    </td>
+                    <td className={uiStyle.tableCell}>{r.usrId}</td>
+                    <td className={uiStyle.tableCell}>{r.usrName ?? '—'}</td>
+                    <td className={uiStyle.tableCell}>
+                      {r.ugName} / {r.utName}
+                    </td>
+                    <td className={uiStyle.tableCell}>{r.usrTel ?? '—'}</td>
+                    <td className={uiStyle.tableCell}>
+                      <span className="block truncate" title={r.usrMail ?? ''}>
+                        {r.usrMail ?? '—'}
+                      </span>
+                    </td>
+                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                      {formatTime(r.usrReqTime)}
+                    </td>
+                    <td className={uiStyle.tableCell}>
+                      {pending ? (
+                        <div className="flex flex-wrap gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className={cn(
+                              'h-6 rounded-none px-2 text-[11px]',
+                              uiStyle.primaryButton
+                            )}
+                            disabled={busyId === r.usrId}
+                            onClick={() => void approve(r.usrId)}
+                            title={`${r.usrId} 승인`}
+                          >
+                            승인
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className={cn(
+                              'h-6 rounded-none px-2 text-[11px]',
+                              uiStyle.secondaryButton
+                            )}
+                            disabled={busyId === r.usrId}
+                            onClick={() => void reject(r.usrId)}
+                            title={`${r.usrId} 반려`}
+                          >
+                            반려
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

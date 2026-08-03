@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Settings, Database, Wrench, GitBranch } from "lucide-react"
+import { Settings, Database, Wrench, GitBranch, BarChart3 } from "lucide-react"
 import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
@@ -17,6 +17,7 @@ import { OrthophotoManagerContent } from "./OrthophotoManagerContent"
 import { PermissionFeatureManager } from "./PermissionFeatureManager"
 import { AccessRequestQueue } from "./AccessRequestQueue"
 import { UserManager } from "./UserManager"
+import { SignUpApprove } from "./SignUpApprove"
 import { RuntimeEnvEditor } from "./RuntimeEnvEditor"
 import { SystemIntegrationManager } from "./SystemIntegrationManager"
 import { GeocodingTestPanel } from "./GeocodingTestPanel"
@@ -35,6 +36,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     menuIds: [
       "systemList",
       "serviceList",
+      "signUpApprove",
       "userManager",
       "permissionFeature",
       "accessRequestQueue",
@@ -53,6 +55,17 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "systemIntegration",
       "fileManager",
       "fileConverter",
+    ],
+  },
+  {
+    id: "usageStats",
+    label: "시스템 사용현황",
+    icon: BarChart3,
+    menuIds: [
+      "featureUsageStats",
+      "userAccessStats",
+      "userMgmtHistory",
+      "userPermHistory",
     ],
   },
   {
@@ -97,12 +110,22 @@ export function getDevMenuDescription(menuId: string): string {
       return "외부 시스템 연계 실행 및 로그 확인"
     case "geocodingTest":
       return "VWorld Address API GetCoord(도로명/지번) — runtime VWORLD_API_KEY 로 좌표 조회"
+    case "signUpApprove":
+      return "가입 신청 대기 목록을 승인·반려합니다."
     case "userManager":
       return "사용자관리 설정 화면입니다."
     case "permissionFeature":
       return "비공개 서비스·시스템에 대한 perm(역할) 매핑입니다."
     case "accessRequestQueue":
       return "비공개 리소스 개별 신청 승인·반려"
+    case "featureUsageStats":
+      return "기능(서비스)별 사용 횟수·현황 통계 (구현 예정)"
+    case "userAccessStats":
+      return "로그인·접속 건수 등 사용자 접속 현황 (구현 예정)"
+    case "userMgmtHistory":
+      return "계정 생성·변경 등 사용자 관리 이력 조회 (구현 예정)"
+    case "userPermHistory":
+      return "권한 부여·변경 이력 조회 (구현 예정)"
     case "layerManager":
       return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
     case "dataHistoryManager":
@@ -154,6 +177,22 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-auto min-h-0 max-h-[calc(100vh-14rem)] p-2">
           <GeocodingTestPanel />
+        </div>
+      )
+    case "signUpApprove":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <SignUpApprove />
+        </div>
+      )
+    case "featureUsageStats":
+    case "userAccessStats":
+    case "userMgmtHistory":
+    case "userPermHistory":
+      return (
+        <div className="rounded-md border border-dashed border-muted-foreground/25 bg-muted/20 px-4 py-10 text-center">
+          <p className="text-sm font-medium text-foreground">{devMenuLabel(menuId)}</p>
+          <p className="mt-2 text-sm text-muted-foreground">화면은 추후 연동 예정입니다.</p>
         </div>
       )
     case "userManager":
