@@ -236,6 +236,9 @@ export function RoadRewardDetailPanel({
   );
 
   const displayParcels = isEditing ? draftParcels : caseItem?.parcels ?? [];
+  const parcelGridCols = isEditing
+    ? "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)_max-content_minmax(max-content,1fr)_minmax(max-content,1fr)_auto]"
+    : "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)_max-content_minmax(max-content,1fr)_minmax(max-content,1fr)]";
   const displayGeom = isEditing
     ? draftGeom
     : {
@@ -934,98 +937,114 @@ export function RoadRewardDetailPanel({
                 : "등록된 필지가 없습니다."}
             </div>
           ) : (
-            <div className="overflow-hidden rounded border border-slate-200">
-              <table className="w-full table-fixed border-collapse text-[11px]">
-                <colgroup>
-                  <col className={isEditing ? "w-[24%]" : "w-[28%]"} />
-                  <col className={isEditing ? "w-[18%]" : "w-[22%]"} />
-                  <col className={isEditing ? "w-[18%]" : "w-[25%]"} />
-                  <col className={isEditing ? "w-[22%]" : "w-[25%]"} />
-                  {isEditing ? <col className="w-[18%]" /> : null}
-                </colgroup>
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-700">
-                      읍면동
-                    </th>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-700">
-                      지번(편입)
-                    </th>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-right font-semibold text-slate-700">
-                      편입면적(㎡)
-                    </th>
-                    <th className="border-b border-slate-200 px-2 py-1.5 text-right font-semibold text-slate-700">
-                      보상금액(원)
-                    </th>
+            <div className="overflow-x-auto rounded border border-slate-200 text-[11px]">
+              <div
+                className={cn(
+                  "grid items-center border-b border-slate-200 bg-slate-50",
+                  parcelGridCols
+                )}
+              >
+                <div className="px-2.5 py-1.5 text-left font-semibold text-slate-700 whitespace-nowrap">
+                  읍면동
+                </div>
+                <div className="px-2.5 py-1.5 text-left font-semibold text-slate-700 whitespace-nowrap">
+                  지번(편입)
+                </div>
+                <div className="px-2.5 py-1.5 text-center font-semibold text-slate-700 whitespace-nowrap">
+                  지목
+                </div>
+                <div className="px-2.5 py-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                  편입면적(㎡)
+                </div>
+                <div className="px-2.5 py-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                  보상금액(원)
+                </div>
+                {isEditing ? (
+                  <div className="px-2.5 py-1.5" aria-label="필지 편집" />
+                ) : null}
+              </div>
+              {displayParcels.map((p) => {
+                const isSelected = p.id === selectedParcelId;
+                return (
+                  <div
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleParcelRowClick(p)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleParcelRowClick(p);
+                      }
+                    }}
+                    title={
+                      isEditing
+                        ? "클릭하면 지도에서 위치를 확인합니다"
+                        : "클릭하면 필지 상세를 봅니다"
+                    }
+                    className={cn(
+                      "grid cursor-pointer items-center border-b border-slate-100 last:border-b-0 hover:bg-slate-50",
+                      parcelGridCols,
+                      isSelected && "bg-primary/5"
+                    )}
+                  >
+                    <div
+                      className="truncate px-2.5 py-1.5 text-left text-slate-800"
+                      title={p.eupmyeonDong}
+                    >
+                      {formatCell(p.eupmyeonDong)}
+                    </div>
+                    <div
+                      className="truncate px-2.5 py-1.5 text-left text-slate-800"
+                      title={p.jibunIncluded}
+                    >
+                      {formatCell(p.jibunIncluded)}
+                    </div>
+                    <div
+                      className="truncate px-2.5 py-1.5 text-center text-slate-800"
+                      title={p.jimok}
+                    >
+                      {formatCell(p.jimok)}
+                    </div>
+                    <div className="px-2.5 py-1.5 text-right tabular-nums text-slate-800 whitespace-nowrap">
+                      {formatCell(p.areaIncluded, true)}
+                    </div>
+                    <div className="px-2.5 py-1.5 text-right tabular-nums text-slate-800 whitespace-nowrap">
+                      {formatCell(p.compensationAmount, true)}
+                    </div>
                     {isEditing ? (
-                      <th className="border-b border-slate-200 px-2 py-1.5" aria-label="필지 편집" />
+                      <div className="px-2.5 py-1.5">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditParcel(p);
+                            }}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
+                            aria-label="필지 수정"
+                            title="수정"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteParcelFromList(p.id);
+                            }}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            aria-label="필지 삭제"
+                            title="삭제"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     ) : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayParcels.map((p) => {
-                    const isSelected = p.id === selectedParcelId;
-                    return (
-                      <tr
-                        key={p.id}
-                        onClick={() => handleParcelRowClick(p)}
-                        title={
-                          isEditing
-                            ? "클릭하면 지도에서 위치를 확인합니다"
-                            : "클릭하면 필지 상세를 봅니다"
-                        }
-                        className={cn(
-                          "cursor-pointer border-b border-slate-100 hover:bg-slate-50",
-                          isSelected && "bg-primary/5"
-                        )}
-                      >
-                        <td className="truncate px-2 py-1.5 text-slate-800" title={p.eupmyeonDong}>
-                          {formatCell(p.eupmyeonDong)}
-                        </td>
-                        <td className="truncate px-2 py-1.5 text-slate-800" title={p.jibunIncluded}>
-                          {formatCell(p.jibunIncluded)}
-                        </td>
-                        <td className="px-2 py-1.5 text-right text-slate-800">
-                          {formatCell(p.areaIncluded, true)}
-                        </td>
-                        <td className="px-2 py-1.5 text-right text-slate-800">
-                          {formatCell(p.compensationAmount, true)}
-                        </td>
-                        {isEditing ? (
-                          <td className="px-2 py-1.5">
-                            <div className="flex items-center justify-center gap-0.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenEditParcel(p);
-                                }}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
-                                aria-label="필지 수정"
-                                title="수정"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteParcelFromList(p.id);
-                                }}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
-                                aria-label="필지 삭제"
-                                title="삭제"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        ) : null}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
