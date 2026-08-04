@@ -90,16 +90,16 @@ export function RoadRewardParcelModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 scrollbar-hide">
           {readOnly ? (
             <div className="flex flex-col gap-1 text-xs">
-              <span className="font-medium text-slate-600">필지 주소(당초)</span>
+              <span className="font-medium text-slate-600">읍면동·지번(당초)</span>
               <div className={fieldReadonlyClass}>{parcelAddrQuery || "—"}</div>
             </div>
           ) : (
             <div className="flex flex-col gap-1 text-xs">
-              <span className="font-medium text-slate-600">필지 주소(당초)</span>
+              <span className="font-medium text-slate-600">읍면동·지번(당초)</span>
               <AddressSearchPanel
                 vworldApiKey={vworldApiKey}
                 layout="field"
-                placeholder="주소 검색 (지번/도로명) — 읍면동·지번 자동 입력"
+                placeholder="주소 검색 (지번/도로명) — 읍면동·지번(당초) 자동 입력"
                 initialQuery={parcelAddrQuery}
                 onClear={() => {
                   onFieldChange("eupmyeonDong", "");

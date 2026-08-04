@@ -241,12 +241,11 @@ export function RoadRewardDetailPanel({
 
   const displayParcels = isEditing ? draftParcels : caseItem?.parcels ?? [];
   /**
-   * 상세 패널 ~480px 기준 5열+액션 동시 표시.
-   * 읍면동·보상금액은 최소폭 확보 후 남는 폭만 분배(한쪽만 키우면 다른 쪽이 잘림).
-   * 편입지번·지목·편입면적·액션은 헤더/값 길이만큼 고정.
+   * 상세 패널 ~480px. 헤더 문구가 늘면 다른 열·액션에서 폭을 뺏김 → 6열 합이 패널을 넘지 않게 맞춤.
+   * 액션 3rem(아이콘 2개), 지번(편입) 4.75rem, 나머지 최소폭+분배.
    */
   const parcelGridCols =
-    "grid-cols-[minmax(7rem,1fr)_4.25rem_2.25rem_5.5rem_minmax(7rem,1.4fr)_2.5rem]";
+    "grid-cols-[minmax(6.5rem,1fr)_4.75rem_2.25rem_5.25rem_minmax(6.5rem,1.3fr)_3rem]";
   const displayGeom = isEditing
     ? draftGeom
     : {
@@ -956,7 +955,7 @@ export function RoadRewardDetailPanel({
                   읍면동
                 </div>
                 <div className="min-w-0 px-1.5 font-semibold text-slate-700 whitespace-nowrap">
-                  편입지번
+                  지번(편입)
                 </div>
                 <div className="min-w-0 px-1.5 text-center font-semibold text-slate-700 whitespace-nowrap">
                   지목
@@ -1015,7 +1014,7 @@ export function RoadRewardDetailPanel({
                     >
                       {formatCell(p.compensationAmount, true)}
                     </div>
-                    <div className="flex items-center justify-end gap-0 pr-0.5">
+                    <div className="flex w-full shrink-0 items-center justify-center gap-0">
                       {isEditing ? (
                         <>
                           <button
