@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -77,6 +78,14 @@ export function ShpUploadTab({
   onGoHistory,
   onFinished,
 }: Props) {
+  const { data: session } = useSession();
+  const operatorLabel = useMemo(() => {
+    const id = String(session?.user?.id ?? '').trim();
+    const name = String(session?.user?.name ?? '').trim();
+    if (id && name) return `${id}(${name})`;
+    return id || name || '';
+  }, [session?.user?.id, session?.user?.name]);
+
   const [entries, setEntries] = useState<DirEntry[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -596,7 +605,12 @@ export function ShpUploadTab({
         const histRes = await call('', 'POST', {
           service: 'layerHistoryService',
           action: 'createLayerHistory',
-          params: { contents: historyContents, successCount: 0, failCount: 0 },
+          params: {
+            contents: historyContents,
+            successCount: 0,
+            failCount: 0,
+            createUser: operatorLabel || undefined,
+          },
         });
         const hd = histRes?.data ?? histRes;
         lhKey = hd?.lhKey;

@@ -161,7 +161,7 @@ type Props = {
 };
 
 const CHECKBOX_CLASS =
-  'size-3.5 shrink-0 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500/30';
+  'size-3.5 shrink-0 cursor-pointer rounded border-border text-primary focus:ring-primary/30';
 
 function bulkSwitchTitle(allOn: boolean): string {
   return allOn ? '전체 해제' : '전체 선택';
@@ -253,11 +253,11 @@ export function ParcelAnalysisItemSelector({
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', disabled && 'pointer-events-none opacity-50')}>
-      <div className="shrink-0 border-b border-slate-200 px-3 py-2.5">
+      <div className="shrink-0 border-b border-border px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-[#666]">분석 항목</p>
-            <p className="mt-0.5 text-[10px] text-slate-500">
+            <p className="text-[12px] font-semibold text-muted-foreground">분석 항목</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
               {itemsReady ? `${selectedCount}/${totalCount} 선택` : '항목 불러오는 중…'}
             </p>
           </div>
@@ -290,11 +290,11 @@ export function ParcelAnalysisItemSelector({
                   {isOpen ? (
                     <ChevronDown className="size-3.5 shrink-0 text-primary" />
                   ) : (
-                    <ChevronRight className="size-3.5 shrink-0 text-slate-500" />
+                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                   )}
-                  <span className="truncate text-[12px] font-semibold text-[#666]">{group.title}</span>
+                  <span className="truncate text-[12px] font-semibold text-muted-foreground">{group.title}</span>
                   {!isOpen && (allOn || someOn) && (
-                    <span className="shrink-0 text-[10px] font-normal text-slate-500">
+                    <span className="shrink-0 text-[10px] font-normal text-muted-foreground">
                       {selected}/{total}
                     </span>
                   )}
@@ -311,13 +311,13 @@ export function ParcelAnalysisItemSelector({
               </div>
 
               {isOpen && (
-                <ul className="ml-1.5 mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                <ul className="ml-1.5 mt-1 space-y-0.5 border-l border-border pl-2">
                   {group.items.map((item) => {
                     const checked = selectedIds.has(item.id);
                     return (
                       <li key={item.id}>
                         <label
-                          className="flex cursor-pointer items-center gap-2 rounded py-1 pr-1 hover:bg-slate-50"
+                          className="flex cursor-pointer items-center gap-2 rounded py-1 pr-1 hover:bg-muted/60"
                           title={item.description}
                         >
                           <input
@@ -326,7 +326,7 @@ export function ParcelAnalysisItemSelector({
                             checked={checked}
                             onChange={() => toggleItem(item.id)}
                           />
-                          <span className="text-[11px] text-[#666]">{item.title}</span>
+                          <span className="text-[11px] text-muted-foreground">{item.title}</span>
                         </label>
                       </li>
                     );

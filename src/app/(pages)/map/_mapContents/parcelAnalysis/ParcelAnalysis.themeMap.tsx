@@ -48,7 +48,7 @@ import {
 
 /** «분석 중» 안내 모달 전용 — 원형 유지, 기존 36px 대비 가로·세로 +10px */
 export const PARCEL_ANALYSIS_ANALYZING_SPINNER =
-  'size-[46px] shrink-0 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600';
+  'size-[46px] shrink-0 animate-spin rounded-full border-2 border-border border-t-primary';
 
 type GeomType = 'POINT' | 'LINE' | 'POLYGON';
 
@@ -88,7 +88,7 @@ export function FacilityLayerLegendIcon({ layerKey, geomType = 'POLYGON' }: Prop
   if (useFallback) {
     return (
       <span
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-slate-300 bg-slate-200"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border bg-muted"
         aria-hidden
       >
         <FacilityLegendFallback geomType={geomType} />
@@ -98,7 +98,7 @@ export function FacilityLayerLegendIcon({ layerKey, geomType = 'POLYGON' }: Prop
 
   return (
     <span
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-slate-200 bg-white"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border bg-background"
       aria-hidden
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -132,7 +132,7 @@ export function ParcelAnalysisThemeLegend({ theme, categories }: ThemeLegendProp
     .join(', ');
 
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-slate-700">
+    <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-foreground">
       {onMap.map((cat) => {
         const strokeColor = resolveThemeColor(theme, cat.label);
         const swatch = themeSwatchStyle(strokeColor);
@@ -152,7 +152,7 @@ export function ParcelAnalysisThemeLegend({ theme, categories }: ThemeLegendProp
       })}
       {combineTableOnly ? (
         <span
-          className="inline-flex items-center gap-1.5 text-slate-500"
+          className="inline-flex items-center gap-1.5 text-muted-foreground"
           title={tableOnlyTitle}
         >
           <span
@@ -163,9 +163,9 @@ export function ParcelAnalysisThemeLegend({ theme, categories }: ThemeLegendProp
           그 외 {tableOnly.length}구분
         </span>
       ) : tableOnly.length > 0 ? (
-        <span className="text-[10px] text-slate-500">표만: {tableOnlyTitle}</span>
+        <span className="text-[10px] text-muted-foreground">표만: {tableOnlyTitle}</span>
       ) : null}
-      <span className="inline-flex items-center gap-1.5 text-slate-500">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
         <span
           className={SWATCH_CLASS}
           style={themeNoParcelSwatchStyle()}
@@ -440,7 +440,7 @@ function ParcelAnalysisThemeMapInner({
   return (
     <div ref={rootRef} className="my-2 space-y-2">
       <div
-        className="relative w-full overflow-hidden rounded border border-slate-200 bg-slate-100"
+        className="relative w-full overflow-hidden rounded border border-border bg-muted"
         style={{ height: MAP_HEIGHT_PX }}
       >
         <div
@@ -450,18 +450,18 @@ function ParcelAnalysisThemeMapInner({
         />
         {showMapOverlay ? (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center bg-slate-100/85"
+            className="absolute inset-0 z-10 flex items-center justify-center bg-muted/85"
             aria-busy="true"
             aria-live="polite"
           >
             <div className="flex flex-col items-center gap-2 px-4 text-center">
               <div className={PARCEL_ANALYSIS_ANALYZING_SPINNER} aria-hidden />
-              <p className="text-[11px] text-slate-500">{overlayMessage}</p>
+              <p className="text-[11px] text-muted-foreground">{overlayMessage}</p>
             </div>
           </div>
         ) : null}
       </div>
-      {error ? <p className="text-[11px] text-amber-700">{error}</p> : null}
+      {error ? <p className="text-[11px] text-amber-700 dark:text-amber-300">{error}</p> : null}
       {painted?.ok && painted.categories?.length && !showMapOverlay ? (
         <ParcelAnalysisThemeLegend theme={theme} categories={painted.categories} />
       ) : null}

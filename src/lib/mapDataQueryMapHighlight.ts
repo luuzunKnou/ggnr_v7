@@ -52,6 +52,7 @@ const RADAR_RADIUS = 52;
 /**
  * 데이터조회(LayerDataPanel) — 선택 행 1건 강조(펄스 + 포인트 레이더).
  * 서비스 WMS 아래 + 기존 흰 글로우에 가까운 약한 빨강 채움/이중 선.
+ * LINE은 동일 이중 선에 굵기·투명도만 소폭 강조.
  */
 export function createDataQuerySelectionRowHighlightStyle(
   getPulsePhase: () => number
@@ -89,13 +90,23 @@ export function createDataQuerySelectionRowHighlightStyle(
       });
     }
     const geomType = feature.getGeometry()?.getType();
-    const isLineOrPolygon =
-      geomType === "LineString" ||
-      geomType === "MultiLineString" ||
-      geomType === "Polygon" ||
-      geomType === "MultiPolygon";
-    if (isLineOrPolygon) {
-      const t = Math.sin(phase);
+    const t = Math.sin(phase);
+
+    // LINE: Polygon과 같은 이중 선, 굵기·투명도만 소폭 강조 (fill 불필요)
+    if (geomType === "LineString" || geomType === "MultiLineString") {
+      const whiteOp = 0.7 + 0.3 * t;
+      const redOp = 0.6 + 0.35 * t;
+      return [
+        new Style({
+          stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteOp})`, width: 9 + 1.5 * t }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: `rgba(220, 38, 38, ${redOp})`, width: 5.5 + 1.2 * t }),
+        }),
+      ];
+    }
+
+    if (geomType === "Polygon" || geomType === "MultiPolygon") {
       const whiteOp = 0.6 + 0.35 * t;
       const redOp = 0.5 + 0.3 * t;
       const fillOp = 0.12 + 0.1 * t;
@@ -109,6 +120,7 @@ export function createDataQuerySelectionRowHighlightStyle(
         }),
       ];
     }
+
     const strokeOpacity = 0.5 + 0.4 * Math.sin(phase);
     return new Style({
       stroke: new Stroke({ color: `rgba(220, 38, 38, ${strokeOpacity})`, width: 6 }),

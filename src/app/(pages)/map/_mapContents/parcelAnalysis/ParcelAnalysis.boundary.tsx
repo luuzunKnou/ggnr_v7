@@ -580,12 +580,12 @@ export function ParcelAnalysisBoundaryPicker({
 
   return (
     <div className="space-y-4">
-      <p className="flex items-center gap-1.5 text-sm text-slate-600">
-        <span className="text-slate-500">{sido || '—'}</span>
-        <span className="text-slate-300" aria-hidden>
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <span className="text-muted-foreground">{sido || '—'}</span>
+        <span className="text-muted-foreground/40" aria-hidden>
           &gt;
         </span>
-        <span className="font-medium text-slate-800">{sigungu || '—'}</span>
+        <span className="font-medium text-foreground">{sigungu || '—'}</span>
       </p>
 
       <div
@@ -595,25 +595,25 @@ export function ParcelAnalysisBoundaryPicker({
         )}
       >
         {emdLoading && optionSource.length === 0 && (
-          <p className="text-sm text-slate-500">읍·면·동 목록을 불러오는 중…</p>
+          <p className="text-sm text-muted-foreground">읍·면·동 목록을 불러오는 중…</p>
         )}
         {!emdLoading && emdError && optionSource.length === 0 && (
           <div className="space-y-2">
-            <p className="text-sm text-red-600">{emdError}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{emdError}</p>
             <button
               type="button"
               onClick={onReloadEmd}
-              className="cursor-pointer text-xs font-medium text-blue-600 hover:underline"
+              className="cursor-pointer text-xs font-medium text-primary hover:underline"
             >
               다시 불러오기
             </button>
           </div>
         )}
         {!emdLoading && !emdError && optionSource.length === 0 && (
-          <p className="text-sm text-slate-500">표시할 읍·면·동이 없습니다.</p>
+          <p className="text-sm text-muted-foreground">표시할 읍·면·동이 없습니다.</p>
         )}
         {emdLoading && optionSource.length > 0 && (
-          <p className="w-full text-xs text-slate-400">목록 갱신 중…</p>
+          <p className="w-full text-xs text-muted-foreground">목록 갱신 중…</p>
         )}
         {optionSource.map((emd) => {
           const selected = selectedEmdCodes.has(emd.code);
@@ -625,8 +625,8 @@ export function ParcelAnalysisBoundaryPicker({
               className={cn(
                 'cursor-pointer rounded-full border px-3.5 py-1.5 text-sm transition-colors',
                 selected
-                  ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'border-border bg-background text-foreground hover:border-border hover:bg-muted/60'
               )}
             >
               {emd.name}
@@ -636,13 +636,13 @@ export function ParcelAnalysisBoundaryPicker({
       </div>
 
       {previewManyEmd && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           UI 미리보기 (mock 18개). URL에서 <span className="font-mono">parcelPreview=manyEmd</span> 제거 시 실제 목록으로 복귀합니다.
         </p>
       )}
 
       {selectedEmdCodes.size > 0 && (
-        <div className="max-h-48 space-y-4 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3">
+        <div className="max-h-48 space-y-4 overflow-y-auto rounded-lg border border-border bg-background p-3">
           {[...selectedEmdCodes].map((emdCode) => {
             const emd = optionSource.find((e) => e.code === emdCode);
             const riList = riByEmd[emdCode] ?? [];
@@ -655,10 +655,10 @@ export function ParcelAnalysisBoundaryPicker({
               someRiChecked && riList.length > 0 && st.riCodes.size < riList.length && !st.allRi;
             return (
               <div key={emdCode} className="space-y-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                   <input
                     type="checkbox"
-                    className="size-4 cursor-pointer rounded border-slate-300 text-blue-600"
+                    className="size-4 cursor-pointer rounded border-border text-primary"
                     checked={allRiChecked}
                     ref={(el) => {
                       if (el) el.indeterminate = isIndeterminate;
@@ -666,24 +666,24 @@ export function ParcelAnalysisBoundaryPicker({
                     onChange={(e) => toggleAllRi(emdCode, e.target.checked)}
                   />
                   <span className="font-medium">{emd.name}</span>
-                  <span className="text-slate-500">전체</span>
+                  <span className="text-muted-foreground">전체</span>
                 </label>
                 <div className="flex flex-wrap gap-x-4 gap-y-2 pl-6">
                   {riLoading && (
-                    <p className="text-xs text-slate-500">리 목록을 불러오는 중…</p>
+                    <p className="text-xs text-muted-foreground">리 목록을 불러오는 중…</p>
                   )}
                   {!riLoading && riList.length === 0 && (
-                    <p className="text-xs text-amber-700">리 목록이 없습니다.</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">리 목록이 없습니다.</p>
                   )}
                   {!riLoading &&
                     riList.map((ri) => (
                     <label
                       key={ri.code}
-                      className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-700"
+                      className="flex cursor-pointer items-center gap-1.5 text-sm text-foreground"
                     >
                       <input
                         type="checkbox"
-                        className="size-3.5 cursor-pointer rounded border-slate-300 text-blue-600"
+                        className="size-3.5 cursor-pointer rounded border-border text-primary"
                         checked={st.riCodes.has(ri.code)}
                         onChange={(e) => toggleRi(emdCode, ri.code, e.target.checked)}
                       />
@@ -697,29 +697,29 @@ export function ParcelAnalysisBoundaryPicker({
         </div>
       )}
 
-      <div className="text-sm text-slate-700">
+      <div className="text-sm text-foreground">
         <div className="flex items-center justify-between gap-2">
           <span>
-            선택 항목 <span className="font-medium text-slate-900">({selectionCount}건)</span>
+            선택 항목 <span className="font-medium text-foreground">({selectionCount}건)</span>
           </span>
           {canResetDraft && (
             <button
               type="button"
               onClick={resetDraft}
-              className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline"
+              className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
             >
               선택 초기화
             </button>
           )}
         </div>
         {selectionLabels.length > 0 ? (
-          <span className="mt-1 block text-sm leading-relaxed text-slate-500">
+          <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
             {selectionLabels.join(', ')}
           </span>
         ) : selectedEmdCodes.size > 0 ? (
-          <span className="mt-1 block text-sm text-amber-700">리를 1개 이상 선택하세요.</span>
+          <span className="mt-1 block text-sm text-amber-700 dark:text-amber-300">리를 1개 이상 선택하세요.</span>
         ) : (
-          <span className="mt-1 block text-sm text-slate-400">읍·면·동을 선택하세요.</span>
+          <span className="mt-1 block text-sm text-muted-foreground">읍·면·동을 선택하세요.</span>
         )}
       </div>
     </div>

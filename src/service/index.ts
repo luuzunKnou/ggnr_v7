@@ -16,6 +16,8 @@ import * as shpUploadService from './shpUploadService';
 import * as excelHistoryService from './excelHistoryService';
 import * as excelUploadService from './excelUploadService';
 import * as layerHistoryService from './layerHistoryService';
+import * as dataHistoryService from './dataHistoryService';
+import * as dataLogService from './dataLogService';
 import * as permissionService from './permissionService';
 import * as usrService from './usrService';
 import * as riverBasicPlanService from './riverBasicPlanService';
@@ -69,6 +71,8 @@ export {
   excelUploadService,
   excelHistoryService,
   layerHistoryService,
+  dataHistoryService,
+  dataLogService,
   permissionService,
   usrService,
   riverBasicPlanService,

@@ -13,7 +13,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { useChunkedUpload } from '../useChunkedUpload';
 import { getCoordFromAddress } from '@/app/(pages)/map/_mapComponents/addressSearch/vworldAddressSearch';
-import { ChevronRight, ChevronLeft, Loader2, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ChevronDown, Loader2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   parseExcelMatrix,
@@ -22,6 +22,24 @@ import {
 } from '@/lib/excelSheetParse';
 import { LEDGER_ROW_KEY_HEADER, expandDevBehaviorLedgerRowsAsync } from '@/lib/excelDevLedgerExpand';
 import { cn } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
+import {
+  buildExcelWizardClosingLines,
+  buildExcelWizardMetaLines,
+  formatGeocodeFailLine,
+  formatProcessDuration,
+} from './excelWizardProcessLog';
+import { ExcelProcessLogLines } from './ExcelProcessLogLines';
+import {
+  EXCEL_COMPOSITE_KEY_ENG,
+  EXCEL_COMPOSITE_KEY_KOR,
+  EXCEL_LAYER_SYSTEM_COLS,
+  type ExcelWizardKeyMode,
+  buildExcelCompositeKeyValue,
+  isExcelSystemKeyColumn,
+} from './excelWizardKey';
+import { SyncDetailModal } from '../shp/SyncDetailModal';
+import { requestExcelHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 
 type ParseResult = {
   headers: string[];
@@ -39,8 +57,6 @@ function safeColumnName(name: string): string {
 function safeTableName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'layer_table';
 }
-
-const EXCEL_LAYER_SYSTEM_COLS = new Set(['id', 'geom', 'parcel_address']);
 
 /** 1단계: 업로드·후속 처리 방식 (항목 추가 시 배열만 확장) */
 export const EXCEL_UPLOAD_WORKFLOW_OPTIONS: ReadonlyArray<{
@@ -446,6 +462,7 @@ export function ExlWizardModal({
   showServerPickButton,
   onPickFromServer,
 }: Props) {
+  const { data: session } = useSession();
   const [step, setStep] = useState(1);
   const [pathOrResult, setPathOrResult] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -480,6 +497,8 @@ export function ExlWizardModal({
   const [objSplitJibunColumn, setObjSplitJibunColumn] = useState<string | null>(null);
   const [tableKor, setTableKor] = useState('');
   const [tableEng, setTableEng] = useState('');
+  /** 1단계 그룹명 (이력·define 반영) */
+  const [tableGroup, setTableGroup] = useState('');
   /** 1단계에서 확인한 layer 테이블 존재 여부·컬럼 메타 (null이면 아직 확인 안 함) */
   const [layerTableMeta, setLayerTableMeta] = useState<{
     exists: boolean;
@@ -491,11 +510,16 @@ export function ExlWizardModal({
   const [excelOnlySkipAdd, setExcelOnlySkipAdd] = useState<Set<string>>(() => new Set());
   /** 기존 테이블만: DB에만 있어 스키마에서 제거할 컬럼명(영문) */
   const [diffDropColumns, setDiffDropColumns] = useState<Set<string>>(() => new Set());
+  /** 3단계 DIFF 펼침 — 기본 펼침, 필요 시 접어 Key 필드 표 공간 확보 */
+  const [schemaDiffOpen, setSchemaDiffOpen] = useState(true);
   const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([]);
-  /** true면 엑셀에 없는 키 컬럼을 새로 두고 행마다 고유값 자동 부여 */
-  const [useSyntheticKeyField, setUseSyntheticKeyField] = useState(false);
+  const [keyMode, setKeyMode] = useState<ExcelWizardKeyMode>('single');
   const [syntheticKeyKor, setSyntheticKeyKor] = useState('일련키');
   const [syntheticKeyEng, setSyntheticKeyEng] = useState('feat_key');
+  const [compositeKeyKor, setCompositeKeyKor] = useState(EXCEL_COMPOSITE_KEY_KOR);
+  const [compositeKeyEng, setCompositeKeyEng] = useState(EXCEL_COMPOSITE_KEY_ENG);
+  const useSyntheticKeyField = keyMode === 'synthetic';
+  const usesCompositeKey = keyMode === 'composite';
   const [geometryType, setGeometryType] = useState<'Point' | 'Polygon' | null>(null);
   /** 엑셀 타이틀(헤더) 1행 또는 2행(이중 헤더) */
   const [titleRowLines, setTitleRowLines] = useState<1 | 2 | 3>(1);
@@ -514,6 +538,40 @@ export function ExlWizardModal({
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingDone, setProcessingDone] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  /** 기존 테이블 정합성 모달 */
+  const [excelSyncOpen, setExcelSyncOpen] = useState(false);
+  const [excelSyncApplying, setExcelSyncApplying] = useState(false);
+  const integrityPendingRef = useRef<{
+    stagedRows: Array<{
+      attrs: Record<string, unknown>;
+      parcels: { address: string; x?: number; y?: number }[];
+      mulgunjis: { address: string; x?: number; y?: number }[];
+    }>;
+    columns: Array<{
+      define_field_name: string;
+      define_field_kor_name: string;
+      define_field_show_list?: boolean;
+      define_field_show_search?: boolean;
+      define_field_is_key?: boolean;
+    }>;
+    keyField: string;
+    appendKeys: string[];
+    tableEng: string;
+    tableKor: string;
+    tableGroup: string;
+    geometryType: 'Point' | 'Polygon';
+    separateJijukTable: boolean;
+    separateMulgunjiTable: boolean;
+    effectivePath: string | null;
+    oldRowCount: number;
+    startedMs: number;
+    operatorId: string;
+    operatorLabel: string;
+    totalExtractCount: number;
+    totalCoordOk: number;
+    geocodeFailCount: number;
+    syncKeyField: string;
+  } | null>(null);
   /** 파일 input에 파일이 올라왔는지 확인용 (선택된 파일명 표시) */
   const [selectedFileInfo, setSelectedFileInfo] = useState<{ name: string; size: number } | null>(null);
   const step4StartedRef = useRef(false);
@@ -618,10 +676,10 @@ export function ExlWizardModal({
 
     const TOTAL_STEPS = 4;
   const stepLabels: Record<number, string> = {
-    1: '01. 파일 업로드',
-    2: '02. 지도에 표현할 값 선택',
-    3: '03. 영문·한글 파일명 및 필드명',
-    4: '04. 데이터 처리',
+    1: '파일 업로드',
+    2: '지도에 표현할 값 선택',
+    3: '영문·한글 파일명 및 필드명',
+    4: '데이터 처리',
   };
 
   const hasKorean = (s: string) => /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(s);
@@ -666,7 +724,7 @@ export function ExlWizardModal({
 
   useEffect(() => {
     if (isLedgerWorkflow || isAndongRoadUseWorkflow) {
-      setUseSyntheticKeyField(false);
+      setKeyMode('single');
       setCreateSeparateJijukTable(true);
       setCreateSeparateMulgunjiTable(true);
       if (isAndongRoadUseWorkflow) {
@@ -720,30 +778,54 @@ export function ExlWizardModal({
     return { excelBoth, excelOnly, dbOnly };
   }, [layerTableMeta, fieldDefs]);
 
-  const hasKeySelected = activeFieldDefs.some((f) => f.isKey);
+  const keyFieldDefs = useMemo(
+    () => activeFieldDefs.filter((f) => f.isKey && !isExcelSystemKeyColumn(f.headerEng)),
+    [activeFieldDefs]
+  );
+  const syntheticKeyAllowed = !layerTableMeta?.exists;
   const syntheticKeyEngTrim = syntheticKeyEng.trim();
+  const compositeKeyEngTrim = compositeKeyEng.trim();
+  const compositeKeyEngOk =
+    usesCompositeKey &&
+    compositeKeyEngTrim.length > 0 &&
+    /^[a-zA-Z0-9_]+$/.test(compositeKeyEngTrim) &&
+    !/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(compositeKeyEngTrim) &&
+    !/\s/.test(compositeKeyEngTrim) &&
+    !activeFieldDefs.some((f) => f.headerEng === compositeKeyEngTrim) &&
+    !isExcelSystemKeyColumn(compositeKeyEngTrim);
   const syntheticKeyEngOk =
     useSyntheticKeyField &&
+    syntheticKeyAllowed &&
     syntheticKeyEngTrim.length > 0 &&
     /^[a-zA-Z0-9_]+$/.test(syntheticKeyEngTrim) &&
     !/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(syntheticKeyEngTrim) &&
     !/\s/.test(syntheticKeyEngTrim) &&
-    !activeFieldDefs.some((f) => f.headerEng === syntheticKeyEngTrim);
+    !activeFieldDefs.some((f) => f.headerEng === syntheticKeyEngTrim) &&
+    !isExcelSystemKeyColumn(syntheticKeyEngTrim);
   const hasKeyOk =
     isLedgerWorkflow || isAndongRoadUseWorkflow
       ? true
-      : useSyntheticKeyField
+      : keyMode === 'synthetic'
         ? syntheticKeyEngOk
-        : hasKeySelected;
+        : keyMode === 'composite'
+          ? keyFieldDefs.length >= 2 && compositeKeyEngOk
+          : keyFieldDefs.length === 1;
   const hasListSearchSelected = activeFieldDefs.some((f) => f.showList);
+  const listSearchAllSelected = fieldDefs.length > 0 && fieldDefs.every((f) => f.showList);
+  const listSearchSomeSelected = fieldDefs.some((f) => f.showList);
   const keyEngTrim = useSyntheticKeyField ? syntheticKeyEng.trim() : '';
-  const keyColSafe = useSyntheticKeyField ? safeColumnName(keyEngTrim) : safeColumnName(activeFieldDefs.find((f) => f.isKey)?.headerEng ?? '');
+  const keyColSafe = useSyntheticKeyField
+    ? safeColumnName(keyEngTrim)
+    : usesCompositeKey
+      ? safeColumnName(compositeKeyEngTrim)
+      : safeColumnName(keyFieldDefs[0]?.headerEng ?? '');
   const keyNotDropped =
     isLedgerWorkflow || isAndongRoadUseWorkflow
       ? true
       : !layerTableMeta?.exists ||
         !keyColSafe ||
         useSyntheticKeyField ||
+        usesCompositeKey ||
         !diffDropColumns.has(keyColSafe);
   const canGoStep4 =
     canLeaveStep2 &&
@@ -850,16 +932,31 @@ export function ExlWizardModal({
   const keyField = useMemo(() => {
     if (isLedgerWorkflow) return 'ledger_row_key';
     if (isAndongRoadUseWorkflow) return 'andong_charge_row';
-    if (useSyntheticKeyField) return syntheticKeyEng.trim() || '';
-    return activeFieldDefs.find((f) => f.isKey)?.headerEng ?? '';
-  }, [isLedgerWorkflow, isAndongRoadUseWorkflow, useSyntheticKeyField, syntheticKeyEng, activeFieldDefs]);
+    if (keyMode === 'synthetic') return syntheticKeyEng.trim() || '';
+    if (keyMode === 'composite') return compositeKeyEng.trim() || '';
+    if (keyFieldDefs.length === 0) return '';
+    return keyFieldDefs[0].headerEng.trim() || '';
+  }, [
+    isLedgerWorkflow,
+    isAndongRoadUseWorkflow,
+    keyMode,
+    syntheticKeyEng,
+    compositeKeyEng,
+    keyFieldDefs,
+  ]);
+
+  useEffect(() => {
+    if (layerTableMeta?.exists && keyMode === 'synthetic') {
+      setKeyMode('single');
+    }
+  }, [layerTableMeta?.exists, keyMode]);
 
   useEffect(() => {
     if (isLedgerWorkflow || isAndongRoadUseWorkflow) {
       setKeyDuplicateError(null);
       return;
     }
-    if (useSyntheticKeyField) {
+    if (keyMode === 'synthetic') {
       setKeyDuplicateError(null);
       return;
     }
@@ -867,18 +964,29 @@ export function ExlWizardModal({
       setKeyDuplicateError(null);
       return;
     }
-    const keyFieldDef = activeFieldDefs.find((f) => f.isKey);
-    if (!keyFieldDef) {
+    if (keyMode === 'composite' && keyFieldDefs.length < 2) {
+      setKeyDuplicateError('복합키는 Key 열을 2개 이상 선택하세요.');
+      return;
+    }
+    if (keyMode === 'single' && keyFieldDefs.length === 0) {
       setKeyDuplicateError(null);
       return;
     }
-    const keyIdx = workflowParseResult.headers.indexOf(keyFieldDef.originalHeader);
-    if (keyIdx < 0) {
+    if (keyFieldDefs.length === 0) {
       setKeyDuplicateError(null);
       return;
     }
-    const colKey = workflowParseResult.headers[keyIdx];
-    const values = workflowParseResult.rows.map((r) => String(r[colKey] ?? '').trim());
+    for (const def of keyFieldDefs) {
+      if (isExcelSystemKeyColumn(def.headerEng)) {
+        setKeyDuplicateError(
+          `「${def.headerKor || def.headerEng}」은(는) 시스템 컬럼이라 정합성 키로 쓸 수 없습니다. 다른 열을 선택하세요.`
+        );
+        return;
+      }
+    }
+    const values = workflowParseResult.rows.map((r) =>
+      buildExcelCompositeKeyValue(keyFieldDefs.map((def) => r[def.originalHeader]))
+    );
     const counts = new Map<string, number>();
     for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
     const dupEntries = [...counts.entries()].filter(([, n]) => n > 1);
@@ -893,10 +1001,14 @@ export function ExlWizardModal({
       return `"${shortened}" (${n}건)`;
     };
     const shown = dupEntries.slice(0, MAX_SHOW).map(([val, n]) => formatDup(val, n));
-    let msg = `Key로 선택한 열에 같은 값이 여러 행에 있습니다. 중복 값: ${shown.join(', ')}`;
+    const keyLabel =
+      keyFieldDefs.length === 1
+        ? keyFieldDefs[0].headerKor || keyFieldDefs[0].headerEng
+        : keyFieldDefs.map((d) => d.headerKor || d.headerEng).join(' + ');
+    let msg = `Key로 선택한 열(${keyLabel})에 같은 값이 여러 행에 있습니다. 중복 값: ${shown.join(', ')}`;
     if (dupEntries.length > MAX_SHOW) msg += ` … 외 ${dupEntries.length - MAX_SHOW}종`;
     setKeyDuplicateError(msg);
-  }, [step, activeFieldDefs, workflowParseResult, useSyntheticKeyField, isLedgerWorkflow, isAndongRoadUseWorkflow]);
+  }, [step, keyFieldDefs, workflowParseResult, keyMode, isLedgerWorkflow, isAndongRoadUseWorkflow]);
 
   useEffect(() => {
     if (step === 1) {
@@ -934,6 +1046,21 @@ export function ExlWizardModal({
         return;
       }
     }
+    if (usesCompositeKey) {
+      if (hasKorean(compositeKeyEng.trim())) {
+        setEngNameKoreanError('복합키 필드 영문명에는 한글을 사용할 수 없습니다.');
+        return;
+      }
+      if (hasSpace(compositeKeyEng.trim())) {
+        setEngNameKoreanError('복합키 필드 영문명에는 공백을 사용할 수 없습니다.');
+        return;
+      }
+      const dup = fieldDefs.some((f) => f.headerEng === compositeKeyEng.trim());
+      if (dup && compositeKeyEng.trim()) {
+        setEngNameKoreanError(`복합키 필드 영문명이 엑셀 필드 "${compositeKeyEng.trim()}"와 같습니다. 다른 이름을 사용하세요.`);
+        return;
+      }
+    }
     if (hasKorean(tableEng.trim())) {
       setEngNameKoreanError('테이블 영문명에는 한글을 사용할 수 없습니다.');
       return;
@@ -953,7 +1080,7 @@ export function ExlWizardModal({
       return;
     }
     setEngNameKoreanError(null);
-  }, [step, tableEng, fieldDefs, useSyntheticKeyField, syntheticKeyEng]);
+  }, [step, tableEng, fieldDefs, useSyntheticKeyField, syntheticKeyEng, usesCompositeKey, compositeKeyEng]);
 
   useEffect(() => {
     const H = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
@@ -1092,12 +1219,59 @@ export function ExlWizardModal({
 
     const skEngRaw = syntheticKeyEng.trim();
     const skSafe = safeColumnName(skEngRaw);
+    const ckEngRaw = compositeKeyEng.trim();
+    const ckSafe = safeColumnName(ckEngRaw);
+    const ckKorRaw = compositeKeyKor.trim() || ckEngRaw;
+    const startedAt = new Date();
+    const startedMs = Date.now();
+    const operatorId = String(session?.user?.id ?? '').trim();
+    const operatorName = String(session?.user?.name ?? '').trim();
+    const operatorLabel =
+      operatorId && operatorName
+        ? `${operatorId}(${operatorName})`
+        : operatorId || operatorName || '미확인';
+    const writeMode = layerTableMeta?.exists
+      ? '전체 교체'
+      : '신규';
+    const parcelAddressMode =
+      parcelSelectMode === 'splitColumns'
+        ? '열 구분 조합'
+        : `한 열(${selectedGeocodingHeader ?? '-'})`;
+    const objectAddressMode =
+      objectAddressSelectMode === 'splitColumns'
+        ? '열 구분 조합'
+        : selectedObjectAddressHeader
+          ? `한 열(${selectedObjectAddressHeader})`
+          : '미사용';
 
+    pushLog(
+      ...buildExcelWizardMetaLines({
+        operatorLabel,
+        startedAtLabel: startedAt.toLocaleString(),
+        tableEng: tableEng.trim(),
+        tableKor: tableKor.trim() || tableEng.trim(),
+        writeMode,
+        keyFieldLabel:
+          keyField ||
+          (useSyntheticKeyField
+            ? skEngRaw
+            : keyFieldDefs.map((d) => d.headerEng).filter(Boolean).join(' + ')) ||
+          '',
+        geometryType: geometryType ?? '-',
+        parcelAddressMode,
+        objectAddressMode,
+        sourcePath: pathOrResult,
+      })
+    );
     pushLog('주소 추출 및 지오코딩을 시작합니다.');
     if (isLedgerWorkflow) {
       pushLog('대장 업로드: 행키는 규칙(ledger_row_key) 고정, 4단계에서 행 확장 후 삽입합니다.');
     } else if (useSyntheticKeyField) {
       pushLog(`신규 키 필드 사용: ${skEngRaw} → 행마다 k00000001 형식으로 부여`);
+    } else if (usesCompositeKey) {
+      pushLog(
+        `복합 Key 사용: ${keyFieldDefs.map((d) => d.headerKor || d.headerEng).join(' + ')} → ${ckEngRaw} (${ckKorRaw})`
+      );
     }
     if (parcelSelectMode === 'splitColumns') {
       pushLog('필지 주소: 열 구분 조합 방식 — 행마다 시·군구·읍·리·지번을 이어 붙입니다. (GPT 미사용)');
@@ -1115,7 +1289,10 @@ export function ExlWizardModal({
     let effectivePath: string | null = pathOrResult;
     if (selectedFile && !pathOrResult) {
       pushLog('파일을 서버에 저장 중...');
-      const up = await upload(selectedFile, 'excel');
+      const te = safeTableName(tableEng.trim());
+      const up = await upload(selectedFile, 'excel', {
+        excelSavePath: `${te}/${selectedFile.name}`,
+      });
       if (!up?.savedPath) {
         const msg = up?.error ?? '파일 저장에 실패했습니다.';
         setProcessingError(msg);
@@ -1125,7 +1302,7 @@ export function ExlWizardModal({
       }
       setPathOrResult(up.savedPath);
       effectivePath = up.savedPath;
-      pushLog('파일 저장 완료.');
+      pushLog(`파일 저장 완료: ${up.savedPath}`);
     }
     setProcessingProgress(5);
 
@@ -1345,9 +1522,24 @@ export function ExlWizardModal({
           `점용대장정보 ${inserted.ledgerInfo ?? 0}건, 부과정보 ${inserted.charge ?? 0}건, 점용지 ${inserted.occupancyParcel ?? 0}건, 물건지 ${inserted.objectParcel ?? 0}건`,
           `도형 매칭: 성공 ${geom.resolved ?? 0}건, NULL ${geom.nullGeom ?? 0}건`
         );
+        pushLog(
+          ...buildExcelWizardClosingLines({
+            endedAtLabel: new Date().toLocaleString(),
+            durationLabel: formatProcessDuration(Date.now() - startedMs),
+            extractCount: andongRows.length,
+            coordOk: Number(geom.resolved ?? 0),
+            coordFail: Number(geom.nullGeom ?? 0),
+            pnuAttempt: 0,
+            pnuOk: 0,
+            jijukOk: Number(geom.resolved ?? 0),
+            jijukNull: Number(geom.nullGeom ?? 0),
+            insertCount: totalInsertCount,
+            defineResult: '안동 전용 처리(서버 내장)',
+            geoserverResult: '안동 전용 처리(서버 내장)',
+          })
+        );
         await flushLogToFile(effectivePath);
         setProcessingDone(true);
-        onSuccess?.();
         return;
       } catch (e: unknown) {
         andongEventSource.close();
@@ -1451,13 +1643,30 @@ export function ExlWizardModal({
                 define_field_is_key: false,
               })),
             ]
-          : activeFieldDefs.map((f) => ({
-              define_field_name: f.headerEng,
-              define_field_kor_name: f.headerKor,
-              define_field_show_list: f.showList,
-              define_field_show_search: f.showSearch,
-              define_field_is_key: f.isKey,
-            }));
+          : usesCompositeKey
+            ? [
+                {
+                  define_field_name: ckEngRaw,
+                  define_field_kor_name: ckKorRaw,
+                  define_field_show_list: true,
+                  define_field_show_search: true,
+                  define_field_is_key: true,
+                },
+                ...activeFieldDefs.map((f) => ({
+                  define_field_name: f.headerEng,
+                  define_field_kor_name: f.headerKor,
+                  define_field_show_list: f.showList,
+                  define_field_show_search: f.showSearch,
+                  define_field_is_key: false,
+                })),
+              ]
+            : activeFieldDefs.map((f) => ({
+                define_field_name: f.headerEng,
+                define_field_kor_name: f.headerKor,
+                define_field_show_list: f.showList,
+                define_field_show_search: f.showSearch,
+                define_field_is_key: f.isKey && !isExcelSystemKeyColumn(f.headerEng),
+              }));
 
     if (layerTableMeta?.exists) {
       const dropList = [...diffDropColumns]
@@ -1493,6 +1702,27 @@ export function ExlWizardModal({
           define_field_show_list: false,
           define_field_show_search: false,
           define_field_is_key: false,
+        });
+      }
+      if (useSyntheticKeyField && skEngRaw) {
+        const skCol = safeColumnName(skEngRaw);
+        if (skCol && !dbNames.has(skCol) && !addCols.some((c) => safeColumnName(c.define_field_name) === skCol)) {
+          addCols.push({
+            define_field_name: skEngRaw,
+            define_field_kor_name: syntheticKeyKor.trim() || skEngRaw,
+            define_field_show_list: true,
+            define_field_show_search: true,
+            define_field_is_key: true,
+          });
+        }
+      }
+      if (usesCompositeKey && ckSafe && !dbNames.has(ckSafe)) {
+        addCols.push({
+          define_field_name: ckEngRaw,
+          define_field_kor_name: ckKorRaw,
+          define_field_show_list: true,
+          define_field_show_search: true,
+          define_field_is_key: true,
         });
       }
       if (dropList.length > 0 || addCols.length > 0) {
@@ -1627,11 +1857,46 @@ export function ExlWizardModal({
     }
 
     let geocodeFailCount = 0;
-    const geocodeFailReasons: { address: string; reason: string }[] = [];
+    const geocodeFailReasons: { row: number; key: string; rawCell: string; address: string; reason: string }[] = [];
     const totalRows = workRows.length;
     let totalInsertCount = 0;
     let totalPolygonMatched = 0;
     let totalPolygonNull = 0;
+    let totalExtractCount = 0;
+    let totalCoordOk = 0;
+    let totalPnuAttempt = 0;
+    let totalPnuOk = 0;
+
+    let oldRowCount = 0;
+    if (layerTableMeta?.exists) {
+      try {
+        const cntRes = await call('', 'POST', {
+          service: 'excelHistoryService',
+          action: 'countExcelLayerRows',
+          params: { tableName: tableEng.trim() },
+        });
+        const cntData = cntRes?.data ?? cntRes;
+        if (cntData?.success !== false && cntData?.count != null) {
+          oldRowCount = Number(cntData.count) || 0;
+          pushLog(`기존 테이블 행 수(이전): ${oldRowCount.toLocaleString('ko-KR')}건`);
+        }
+      } catch (e: unknown) {
+        pushLog(`이전 행 수 조회 오류(계속 진행): ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    const syncKeyForCapture = safeColumnName(keyField);
+    const integrityMode = !!layerTableMeta?.exists && !!syncKeyForCapture;
+    let integrityAppliedWithoutModal = false;
+    if (integrityMode) {
+      pushLog(`기존 테이블 정합성 모드: 키=${syncKeyForCapture} (전체 덮어쓰기 없이 비교·선택 반영)`);
+    }
+
+    const stagedRows: Array<{
+      attrs: Record<string, unknown>;
+      parcels: { address: string; x?: number; y?: number }[];
+      mulgunjis: { address: string; x?: number; y?: number }[];
+    }> = [];
 
     for (let i = 0; i < workRows.length; i++) {
       const row = workRows[i];
@@ -1648,11 +1913,28 @@ export function ExlWizardModal({
       });
       if (useSyntheticKeyField && skSafe) {
         attrs[skSafe] = `k${String(i + 1).padStart(8, '0')}`;
+      } else if (usesCompositeKey && ckSafe) {
+        attrs[ckSafe] = buildExcelCompositeKeyValue(
+          keyFieldDefs.map((def) => row[def.originalHeader])
+        );
       }
 
       const addresses = (addressesByRow.get(i) ?? []).map((a) => normalizeExcelAddressForGeocode(a)).filter(Boolean);
       rawText = unifiedAddressByRow.get(i) ?? '';
       const objectRawText = objectUnifiedAddressByRow.get(i) ?? '';
+      const rowKeyVal = String(
+        attrs[safeColumnName(keyField)] ?? attrs.ledger_row_key ?? attrs[skSafe] ?? ''
+      ).trim();
+      const pushGeocodeFail = (address: string, reason: string) => {
+        geocodeFailCount++;
+        geocodeFailReasons.push({
+          row: i + 1,
+          key: rowKeyVal,
+          rawCell: rawText || objectRawText,
+          address,
+          reason,
+        });
+      };
       const mulgunjiAddrs = (mulgunjiByRow.get(i) ?? [])
         .map((a) => normalizeExcelAddressForGeocode(a))
         .filter(Boolean);
@@ -1667,15 +1949,13 @@ export function ExlWizardModal({
           if (coord.ok) {
             mulgunjis.push({ address: addr, x: coord.lon, y: coord.lat });
           } else {
-            geocodeFailCount++;
             mulgunjis.push({ address: addr });
-            geocodeFailReasons.push({ address: addr, reason: coord.message || '물건지 GetCoord 실패' });
+            pushGeocodeFail(addr, coord.message || '물건지 GetCoord 실패');
           }
         } catch (e: unknown) {
-          geocodeFailCount++;
           mulgunjis.push({ address: addr });
           const msg = e instanceof Error ? e.message : String(e);
-          geocodeFailReasons.push({ address: addr, reason: msg || '물건지 API 오류' });
+          pushGeocodeFail(addr, msg || '물건지 API 오류');
         }
       }
 
@@ -1691,20 +1971,21 @@ export function ExlWizardModal({
           if (coord.ok) {
             parcels.push({ address: addr, x: coord.lon, y: coord.lat });
           } else {
-            geocodeFailCount++;
             parcels.push({ address: addr });
-            geocodeFailReasons.push({ address: addr, reason: coord.message || 'GetCoord 실패' });
+            pushGeocodeFail(addr, coord.message || 'GetCoord 실패');
           }
         } catch (e: unknown) {
-          geocodeFailCount++;
           parcels.push({ address: addr });
           const msg = e instanceof Error ? e.message : String(e);
-          geocodeFailReasons.push({ address: addr, reason: msg || 'API 오류' });
+          pushGeocodeFail(addr, msg || 'API 오류');
         }
       }
       if (addresses.length === 0) parcels.push({ address: '' });
 
+      const extractN = addresses.filter((a) => a.trim()).length;
       const coordOk = parcels.filter((p) => p.x != null && p.y != null).length;
+      totalExtractCount += extractN;
+      totalCoordOk += coordOk;
       const resultText =
         addresses.length > 0
           ? ` — 필지 ${addresses.length}개 추출, ${coordOk}개 좌표 획득`
@@ -1733,7 +2014,13 @@ export function ExlWizardModal({
       setProcessingProgress(Math.round(15 + (65 * (i + 1)) / totalRows));
       pushLog(...rowLogLines);
 
-      // 좌표 가져온 직후 해당 행만 서버에 INSERT (한 줄씩)
+      stagedRows.push({ attrs, parcels, mulgunjis });
+
+      // 신규 테이블만 행 단위 INSERT. 기존 테이블은 지오코딩 후 정합성 비교.
+      if (integrityMode) {
+        continue;
+      }
+
       try {
         const createRes = await call('', 'POST', {
           service: 'excelUploadService',
@@ -1751,6 +2038,8 @@ export function ExlWizardModal({
             separateMulgunjiTable,
             jijukTableComment: `${(tableKor || tableEng).trim()}_필지목록`,
             mulgunjiTableComment: `${(tableKor || tableEng).trim()}_물건지`,
+            excelRowNumber: i + 1,
+            rowKeyHint: rowKeyVal,
           },
         });
         const createData = createRes?.data ?? createRes;
@@ -1762,6 +2051,8 @@ export function ExlWizardModal({
           return;
         }
         totalInsertCount += createData.rowCount ?? 0;
+        totalPnuAttempt += createData.pnuAttemptCount ?? 0;
+        totalPnuOk += createData.pnuOkCount ?? 0;
         if (geometryType === 'Polygon') {
           totalPolygonMatched += createData.polygonMatchedCount ?? 0;
           totalPolygonNull += createData.polygonNullCount ?? 0;
@@ -1775,9 +2066,95 @@ export function ExlWizardModal({
       }
     }
 
+    if (integrityMode) {
+      pushLog(`지오코딩 완료 ${stagedRows.length}건 — 키 기준 정합성 비교 중…`);
+      try {
+        const prepRes = await call('', 'POST', {
+          service: 'excelUploadService',
+          action: 'prepareExcelIntegritySync',
+          params: {
+            tableName: tableEng.trim(),
+            keyField: syncKeyForCapture,
+            rows: stagedRows,
+            geometryType: geometryType ?? undefined,
+          },
+        });
+        const prep = prepRes?.data ?? prepRes;
+        if (!prep?.success) {
+          const err = prep?.error ?? '정합성 비교 실패';
+          setProcessingError(err);
+          pushLog(err);
+          await flushLogToFile(effectivePath);
+          return;
+        }
+        pushLog(
+          `정합성 비교: 동일 ${prep.unchangedCount ?? 0} · 신규 ${prep.appendCount ?? 0} · 충돌 ${prep.conflictCount ?? 0} · 삭제 ${prep.removeCount ?? 0}`
+        );
+        if ((prep.conflictCount ?? 0) > 0 && geometryType) {
+          pushLog(
+            `도형 모드(${geometryType}) 기준으로 속성·도형 차이를 충돌로 분류했습니다. 정합성 화면에서 geom 변경을 확인하세요.`
+          );
+        }
+        if (
+          (prep.unchangedCount ?? 0) === 0 &&
+          (prep.conflictCount ?? 0) === 0 &&
+          (prep.appendCount ?? 0) > 0 &&
+          (prep.removeCount ?? 0) > 0
+        ) {
+          pushLog(
+            '경고: 키가 하나도 겹치지 않습니다. 복합키 구성·영문명이 이전과 다르거나, DB에 키 값이 없을 수 있습니다. 삭제 탭에서 기존 행 삭제 여부를 확인하세요.'
+          );
+        }
+        integrityPendingRef.current = {
+          stagedRows,
+          columns,
+          keyField: syncKeyForCapture,
+          appendKeys: Array.isArray(prep.appendKeys) ? prep.appendKeys : [],
+          tableEng: tableEng.trim(),
+          tableKor: tableKor || tableEng,
+          tableGroup: tableGroup.trim(),
+          geometryType: geometryType ?? 'Point',
+          separateJijukTable,
+          separateMulgunjiTable,
+          effectivePath,
+          oldRowCount,
+          startedMs,
+          operatorId,
+          operatorLabel,
+          totalExtractCount,
+          totalCoordOk,
+          geocodeFailCount,
+          syncKeyField: syncKeyForCapture,
+        };
+        if (
+          (prep.appendCount ?? 0) + (prep.conflictCount ?? 0) + (prep.removeCount ?? 0) === 0
+        ) {
+          pushLog(
+            `정합성 비교: 변경 없음 (동일 ${prep.unchangedCount ?? 0}건) — 모달 없이 이어서 마무리합니다.`
+          );
+          integrityPendingRef.current = null;
+          integrityAppliedWithoutModal = true;
+        } else {
+          setExcelSyncOpen(true);
+          pushLog(
+            '정합성 검증 화면에서 반영/유지를 선택한 뒤 닫으면 DB에 확정됩니다. (미결이 남아 있으면 취소)'
+          );
+          setProcessingProgress(88);
+          await flushLogToFile(effectivePath);
+          return;
+        }
+      } catch (e: unknown) {
+        const err = e instanceof Error ? e.message : String(e);
+        setProcessingError(err);
+        pushLog(err);
+        await flushLogToFile(effectivePath);
+        return;
+      }
+    }
+
     const failLogLines = [`지오코딩 실패: ${geocodeFailCount}건`];
-    geocodeFailReasons.forEach(({ address, reason }) => {
-      failLogLines.push(`  · ${address}: ${reason}`);
+    geocodeFailReasons.forEach((f) => {
+      failLogLines.push(formatGeocodeFailLine(f));
     });
     pushLog(...failLogLines);
     setProcessingProgress(85);
@@ -1786,11 +2163,14 @@ export function ExlWizardModal({
       if (geometryType === 'Polygon' && (totalPolygonMatched > 0 || totalPolygonNull > 0)) {
         pushLog(
           `[지적(jijuk) 폴리곤 매칭] 성공 ${totalPolygonMatched}건, 미매칭(geom NULL) ${totalPolygonNull}건`,
-          '  - 서버 콘솔에서 상세 로그 확인 가능 (매칭 성공/미매칭 좌표, 오류 메시지)',
+          '  - 서버 .log 하단에 PNU 폴백 상세(행·키·주소)가 이어 붙습니다.',
         );
       }
       setProcessingProgress(90);
-      await call('', 'POST', {
+      let defineResult = '미실행';
+      let geoserverResult = '미실행';
+      let fieldMapResult = '미실행';
+      const defineRes = await call('', 'POST', {
         service: 'excelUploadService',
         action: 'createDefineTableAndFieldsForExcel',
         params: {
@@ -1798,6 +2178,7 @@ export function ExlWizardModal({
           tableKorName: tableKor || tableEng,
           geometryType,
           columns,
+          group: tableGroup.trim() || undefined,
           ...(separateJijukTable && tableEng.trim()
             ? {
                 jijukChild: {
@@ -1816,8 +2197,12 @@ export function ExlWizardModal({
             : {}),
         },
       });
+      const defineData = defineRes?.data ?? defineRes;
+      defineResult = defineData?.success === false
+        ? `실패: ${defineData?.error ?? '알 수 없음'}`
+        : '성공';
       setProcessingProgress(95);
-      await call('', 'POST', {
+      const gsRes = await call('', 'POST', {
         service: 'excelUploadService',
         action: 'createGeoServerLayerForExcel',
         params: {
@@ -1831,6 +2216,10 @@ export function ExlWizardModal({
             : {}),
         },
       });
+      const gsData = gsRes?.data ?? gsRes;
+      geoserverResult = gsData?.success === false
+        ? `실패: ${gsData?.error ?? '알 수 없음'}`
+        : '성공';
       const fieldMap: Record<string, string> = {};
       if (isLedgerWorkflow) {
         fieldMap[LEDGER_ROW_KEY_HEADER] = 'ledger_row_key';
@@ -1838,42 +2227,147 @@ export function ExlWizardModal({
       activeFieldDefs.forEach((f) => {
         if (f.headerEng) fieldMap[f.originalHeader] = f.headerEng;
       });
-      await call('', 'POST', {
+      const mapRes = await call('', 'POST', {
         service: 'excelUploadService',
         action: 'writeExcelFieldNameMap',
         params: { entries: fieldMap },
       });
+      const mapData = mapRes?.data ?? mapRes;
+      fieldMapResult = mapData?.success === false
+        ? `실패: ${mapData?.error ?? '알 수 없음'}`
+        : '성공';
       setProcessingProgress(100);
       pushLog('완료.', `삽입 행 수: ${totalInsertCount}`);
+      pushLog(
+        ...buildExcelWizardClosingLines({
+          endedAtLabel: new Date().toLocaleString(),
+          durationLabel: formatProcessDuration(Date.now() - startedMs),
+          extractCount: totalExtractCount,
+          coordOk: totalCoordOk,
+          coordFail: geocodeFailCount,
+          pnuAttempt: totalPnuAttempt,
+          pnuOk: totalPnuOk,
+          jijukOk: totalPolygonMatched,
+          jijukNull: totalPolygonNull,
+          insertCount: totalInsertCount,
+          defineResult,
+          geoserverResult,
+          fieldMapResult,
+        })
+      );
       await flushLogToFile(effectivePath);
       const geocodingDef =
         parcelSelectMode === 'singleColumn' && selectedGeocodingHeader
           ? activeFieldDefs.find((f) => f.originalHeader === selectedGeocodingHeader)
           : undefined;
-      const fullLogText = lines.join('\n');
-      await call('', 'POST', {
-        service: 'excelHistoryService',
-        action: 'createExcelHistory',
-        params: {
-          sourcePath: effectivePath ?? undefined,
-          tableName: tableEng,
-          tableKorName: tableKor || tableEng,
-          group: '',
-          rowCount: totalInsertCount,
-          result: '성공',
-          contents: fullLogText,
-          geocodingHeaderKor:
-            parcelSelectMode === 'singleColumn' ? selectedGeocodingHeader ?? undefined : '시도·시군구·읍면동·리·지번(열 구분)',
-          geocodingHeaderEng: geocodingDef?.headerEng,
-          geometryType: geometryType ?? undefined,
-        },
-      }).catch(() => {});
+      const syncKeyField = safeColumnName(
+        isLedgerWorkflow
+          ? 'ledger_row_key'
+          : keyField.trim() || (useSyntheticKeyField ? skEngRaw : '')
+      );
+      let ehKey: number | undefined;
+      try {
+        const histRes = await call('', 'POST', {
+          service: 'excelHistoryService',
+          action: 'createExcelHistory',
+          params: {
+            sourcePath: effectivePath ?? undefined,
+            tableName: tableEng,
+            tableKorName: tableKor || tableEng,
+            group: tableGroup.trim() || undefined,
+            rowCount: totalInsertCount,
+            result: '성공',
+            oldRowCount,
+            contents: undefined,
+            createUser: /^\d+$/.test(operatorId) ? Number(operatorId) : undefined,
+            geocodingHeaderKor:
+              parcelSelectMode === 'singleColumn' ? selectedGeocodingHeader ?? undefined : '시도·시군구·읍면동·리·지번(열 구분)',
+            geocodingHeaderEng: geocodingDef?.headerEng,
+            geometryType: geometryType ?? undefined,
+          },
+        });
+        const histData = histRes?.data ?? histRes;
+        ehKey = typeof histData?.ehKey === 'number' ? histData.ehKey : undefined;
+      } catch {
+        /* ignore */
+      }
+      // 행 비교 스냅샷 없이 현재 적재분 append → data_log 반영
+      if (ehKey != null && syncKeyField && !integrityAppliedWithoutModal) {
+        try {
+          const finRes = await call('', 'POST', {
+            service: 'excelHistoryService',
+            action: 'finalizeExcelSyncLogsAfterUpload',
+            params: {
+              ehKey,
+              tableName: tableEng.trim(),
+              keyField: syncKeyField,
+              logUser: operatorLabel !== '미확인' ? operatorLabel : operatorId || undefined,
+            },
+          });
+          const finData = finRes?.data ?? finRes;
+          if (finData?.success === false) {
+            pushLog(`데이터 이력 반영 실패: ${finData?.error ?? '알 수 없음'}`);
+          } else {
+            pushLog(
+              `데이터 이력 반영: 추가 ${finData?.appendCount ?? 0}` +
+                (finData?.conflictCount || finData?.removeCount
+                  ? `, 변경 ${finData?.conflictCount ?? 0}, 삭제 ${finData?.removeCount ?? 0}`
+                  : '') +
+                (finData?.unchangedSkipped ? `, 동일생략 ${finData.unchangedSkipped}` : '')
+            );
+          }
+        } catch (e: unknown) {
+          pushLog(`데이터 이력 반영 오류: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (ehKey != null && integrityAppliedWithoutModal) {
+        try {
+          const attachRes = await call('', 'POST', {
+            service: 'excelHistoryService',
+            action: 'attachExcelIntegritySyncToHistory',
+            params: {
+              ehKey,
+              tableName: tableEng.trim(),
+              logUser: operatorLabel !== '미확인' ? operatorLabel : operatorId || undefined,
+            },
+          });
+          const attachData = attachRes?.data ?? attachRes;
+          if (attachData?.success === false) {
+            pushLog(`정합성 이력 연결 실패: ${attachData?.error ?? '알 수 없음'}`);
+          } else {
+            pushLog(
+              `정합성 이력 연결: 추가 ${attachData?.appendCount ?? 0}, 변경 ${attachData?.conflictCount ?? 0}, 삭제 ${attachData?.removeCount ?? 0}` +
+                (attachData?.keptCount ? `, 유지 ${attachData.keptCount}` : '')
+            );
+          }
+        } catch (e: unknown) {
+          pushLog(`정합성 이력 연결 오류: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (ehKey != null && !syncKeyField) {
+        pushLog('키 필드가 없어 데이터 이력 반영을 건너뜁니다.');
+      }
       setProcessingDone(true);
-      onSuccess?.();
+      requestExcelHistoryRefresh();
     } catch (e: unknown) {
       const err = e instanceof Error ? e.message : String(e);
       setProcessingError(err);
       pushLog(err);
+      pushLog(
+        ...buildExcelWizardClosingLines({
+          endedAtLabel: new Date().toLocaleString(),
+          durationLabel: formatProcessDuration(Date.now() - startedMs),
+          extractCount: totalExtractCount,
+          coordOk: totalCoordOk,
+          coordFail: geocodeFailCount,
+          pnuAttempt: totalPnuAttempt,
+          pnuOk: totalPnuOk,
+          jijukOk: totalPolygonMatched,
+          jijukNull: totalPolygonNull,
+          insertCount: totalInsertCount,
+          defineResult: '오류로 중단',
+          geoserverResult: '오류로 중단',
+          fieldMapResult: '오류로 중단',
+        })
+      );
       await flushLogToFile(effectivePath);
     }
   }, [
@@ -1900,22 +2394,29 @@ export function ExlWizardModal({
     objSplitJibunColumn,
     tableEng,
     tableKor,
+    tableGroup,
     keyField,
+    keyFieldDefs,
+    usesCompositeKey,
+    keyMode,
     fieldDefs,
     activeFieldDefs,
     layerTableMeta,
     diffDropColumns,
     geometryType,
     apiKeys,
-    onSuccess,
     selectedFile,
     pathOrResult,
     upload,
     useSyntheticKeyField,
     syntheticKeyEng,
     syntheticKeyKor,
+    compositeKeyEng,
+    compositeKeyKor,
     createSeparateJijukTable,
     createSeparateMulgunjiTable,
+    session?.user?.id,
+    session?.user?.name,
   ]);
 
   useEffect(() => {
@@ -1925,8 +2426,242 @@ export function ExlWizardModal({
     }
   }, [step, processingDone, processingError, runStep4]);
 
+  const appendProcessLog = useCallback((...entries: string[]) => {
+    setProcessingLog((prev) => [...prev, ...entries]);
+  }, []);
+
+  const handleExcelSyncReviewClose = useCallback(async () => {
+    const pending = integrityPendingRef.current;
+    setExcelSyncOpen(false);
+    if (!pending) {
+      appendProcessLog('정합성 검증을 종료했습니다.');
+      setProcessingDone(true);
+      return;
+    }
+    setExcelSyncApplying(true);
+    try {
+      const sumRes = await call('', 'POST', {
+        service: 'excelHistoryService',
+        action: 'getExcelIntegrityIntentSummary',
+        params: { tableName: pending.tableEng },
+      });
+      const sum = sumRes?.data ?? sumRes;
+      if (!sum?.success) {
+        const err = sum?.error ?? '정합성 선택 상태 조회 실패';
+        setProcessingError(err);
+        appendProcessLog(err);
+        return;
+      }
+      const pendingCount = Number(sum.pendingCount ?? 0);
+      const appendKeys = (sum.appendKeys ?? []) as string[];
+      const conflictKeys = (sum.conflictKeys ?? []) as string[];
+      const removeKeys = (sum.removeKeys ?? []) as string[];
+      const keptKeys = (sum.keptKeys ?? []) as string[];
+      const intentTotal =
+        appendKeys.length + conflictKeys.length + removeKeys.length + keptKeys.length;
+
+      if (pendingCount > 0 || intentTotal === 0) {
+        await call('', 'POST', {
+          service: 'excelHistoryService',
+          action: 'discardExcelIntegrityReview',
+          params: { tableName: pending.tableEng },
+        }).catch(() => undefined);
+        integrityPendingRef.current = null;
+        appendProcessLog(
+          pendingCount > 0
+            ? `정합성 검증을 취소했습니다. 미결 ${pendingCount}건이 남아 DB는 변경되지 않았습니다.`
+            : '정합성 검증을 취소했습니다. 선택한 반영/유지가 없어 DB는 변경되지 않았습니다.'
+        );
+        setProcessingDone(true);
+        return;
+      }
+
+      appendProcessLog(
+        `정합성 확정 중… 신규 ${appendKeys.length} · 변경 ${conflictKeys.length} · 삭제 ${removeKeys.length} · 유지 ${keptKeys.length}`
+      );
+      const applyRes = await call('', 'POST', {
+        service: 'excelUploadService',
+        action: 'applyExcelIntegritySync',
+        params: {
+          tableName: pending.tableEng,
+          tableKorName: pending.tableKor,
+          keyField: pending.keyField,
+          columns: pending.columns,
+          rows: pending.stagedRows,
+          geometryType: pending.geometryType,
+          conflictKeysUseExcel: conflictKeys,
+          removeKeys,
+          conflictKeysKeepDb: keptKeys,
+          appendKeys,
+          separateJijukTable: pending.separateJijukTable,
+          separateMulgunjiTable: pending.separateMulgunjiTable,
+          jijukTableComment: `${pending.tableKor.trim()}_필지목록`,
+          mulgunjiTableComment: `${pending.tableKor.trim()}_물건지`,
+        },
+      });
+      const ad = applyRes?.data ?? applyRes;
+      if (!ad?.success) {
+        const err = ad?.error ?? '정합성 적용 실패';
+        setProcessingError(err);
+        appendProcessLog(err);
+        return;
+      }
+      appendProcessLog(
+        `정합성 적용 완료: 추가/갱신 삽입 ${ad.insertedCount ?? 0}, 삭제 ${ad.deletedCount ?? 0}, 충돌반영 ${ad.updatedCount ?? 0}, 유지 ${ad.keptCount ?? 0}`
+      );
+
+      setProcessingProgress(92);
+      const defineRes = await call('', 'POST', {
+        service: 'excelUploadService',
+        action: 'createDefineTableAndFieldsForExcel',
+        params: {
+          tableName: pending.tableEng,
+          tableKorName: pending.tableKor,
+          geometryType: pending.geometryType,
+          columns: pending.columns,
+          group: pending.tableGroup.trim() || undefined,
+        },
+      });
+      const defineData = defineRes?.data ?? defineRes;
+      const defineResult =
+        defineData?.success === false ? `실패: ${defineData?.error ?? '알 수 없음'}` : '성공';
+      const gsRes = await call('', 'POST', {
+        service: 'excelUploadService',
+        action: 'createGeoServerLayerForExcel',
+        params: { tableName: pending.tableEng, geometryType: pending.geometryType },
+      });
+      const gsData = gsRes?.data ?? gsRes;
+      const geoserverResult =
+        gsData?.success === false ? `실패: ${gsData?.error ?? '알 수 없음'}` : '성공';
+
+      let finalRowCount = ad.insertedCount ?? 0;
+      try {
+        const cntRes = await call('', 'POST', {
+          service: 'excelHistoryService',
+          action: 'countExcelLayerRows',
+          params: { tableName: pending.tableEng },
+        });
+        const cntData = cntRes?.data ?? cntRes;
+        if (cntData?.success && typeof cntData.count === 'number') {
+          finalRowCount = cntData.count;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      const integrityContentsParts: string[] = [];
+      if (appendKeys.length > 0) {
+        integrityContentsParts.push(`추가 ${appendKeys.length.toLocaleString('ko-KR')}건`);
+      }
+      if (conflictKeys.length > 0) {
+        integrityContentsParts.push(`변경 ${conflictKeys.length.toLocaleString('ko-KR')}건`);
+      }
+      if (removeKeys.length > 0) {
+        integrityContentsParts.push(`삭제 ${removeKeys.length.toLocaleString('ko-KR')}건`);
+      }
+      if (keptKeys.length > 0) {
+        integrityContentsParts.push(`유지 ${keptKeys.length.toLocaleString('ko-KR')}건`);
+      }
+      const integrityContents =
+        integrityContentsParts.length > 0 ? integrityContentsParts.join(' · ') : '변경 없음';
+
+      try {
+        const histRes = await call('', 'POST', {
+          service: 'excelHistoryService',
+          action: 'createExcelHistory',
+          params: {
+            sourcePath: pending.effectivePath ?? undefined,
+            tableName: pending.tableEng,
+            tableKorName: pending.tableKor,
+            group: pending.tableGroup.trim() || undefined,
+            rowCount: finalRowCount,
+            result: '성공',
+            oldRowCount: pending.oldRowCount,
+            contents: integrityContents,
+            createUser: /^\d+$/.test(pending.operatorId) ? Number(pending.operatorId) : undefined,
+            geometryType: pending.geometryType,
+          },
+        });
+        const histData = histRes?.data ?? histRes;
+        const ehKey = typeof histData?.ehKey === 'number' ? histData.ehKey : undefined;
+        if (ehKey != null) {
+          const attachRes = await call('', 'POST', {
+            service: 'excelHistoryService',
+            action: 'attachExcelIntegritySyncToHistory',
+            params: {
+              ehKey,
+              tableName: pending.tableEng,
+              logUser:
+                pending.operatorLabel !== '미확인'
+                  ? pending.operatorLabel
+                  : pending.operatorId || undefined,
+              fallbackCounts: {
+                append: appendKeys.length,
+                conflict: conflictKeys.length,
+                remove: removeKeys.length,
+                kept: keptKeys.length,
+              },
+            },
+          });
+          const attachData = attachRes?.data ?? attachRes;
+          if (attachData?.success === false) {
+            appendProcessLog(`정합성 이력 연결 실패: ${attachData?.error ?? '알 수 없음'}`);
+          } else {
+            appendProcessLog(
+              `이력 조회 반영: 추가 ${attachData?.appendCount ?? 0}, 변경 ${attachData?.conflictCount ?? 0}, 삭제 ${attachData?.removeCount ?? 0}` +
+                (attachData?.keptCount ? `, 유지 ${attachData.keptCount}` : '')
+            );
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+
+      appendProcessLog(
+        '완료.',
+        `정합성 반영 삽입 ${ad.insertedCount ?? 0}`,
+        ...buildExcelWizardClosingLines({
+          endedAtLabel: new Date().toLocaleString(),
+          durationLabel: formatProcessDuration(Date.now() - pending.startedMs),
+          extractCount: pending.totalExtractCount,
+          coordOk: pending.totalCoordOk,
+          coordFail: pending.geocodeFailCount,
+          pnuAttempt: 0,
+          pnuOk: 0,
+          jijukOk: 0,
+          jijukNull: 0,
+          insertCount: ad.insertedCount ?? 0,
+          defineResult,
+          geoserverResult,
+          fieldMapResult: '정합성 경로',
+        })
+      );
+      integrityPendingRef.current = null;
+      setProcessingProgress(100);
+      setProcessingDone(true);
+      requestExcelHistoryRefresh();
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      setProcessingError(err);
+      appendProcessLog(err);
+    } finally {
+      setExcelSyncApplying(false);
+    }
+  }, [appendProcessLog]);
+
   const handleClose = () => {
+    const shouldNotifySuccess = processingDone;
+    const pendingTable = integrityPendingRef.current?.tableEng?.trim() || '';
+    if (!shouldNotifySuccess && pendingTable) {
+      void call('', 'POST', {
+        service: 'excelHistoryService',
+        action: 'discardExcelIntegrityReview',
+        params: { tableName: pendingTable },
+      }).catch(() => undefined);
+    }
     step4StartedRef.current = false;
+    setExcelSyncOpen(false);
+    integrityPendingRef.current = null;
     setStep(1);
     setPathOrResult(null);
     setSelectedFile(null);
@@ -1958,27 +2693,89 @@ export function ExlWizardModal({
     setObjSplitRiColumn(null);
     setObjSplitJibunColumn(null);
     setGeometryType(null);
-    setUseSyntheticKeyField(false);
+    setKeyMode('single');
     setSyntheticKeyKor('일련키');
     setSyntheticKeyEng('feat_key');
+    setCompositeKeyKor(EXCEL_COMPOSITE_KEY_KOR);
+    setCompositeKeyEng(EXCEL_COMPOSITE_KEY_ENG);
     setTableKor('');
     setTableEng('');
+    setTableGroup('');
     setEngNameKoreanError(null);
     setLayerTableMeta(null);
     setTableCheckHint(null);
     setTableCheckLoading(false);
     setExcelOnlySkipAdd(new Set());
     setDiffDropColumns(new Set());
+    setSchemaDiffOpen(true);
     setProcessingLog([]);
     setProcessingProgress(0);
     setProcessingDone(false);
     setProcessingError(null);
     onOpenChange(false);
+    // 4단계 완료 직후가 아니라 닫기(버튼·ESC·바깥 클릭) 시에만 이력 탭 등으로 이동
+    if (shouldNotifySuccess) {
+      requestExcelHistoryRefresh();
+      onSuccess?.();
+    }
+  };
+
+  /** ESC·바깥 클릭·X — 실수 닫힘 방지. 4단계 완료/오류 후 «닫기»는 skipConfirm */
+  const dismissConfirmLockRef = useRef(false);
+  const requestClose = (opts?: { skipConfirm?: boolean }) => {
+    if (excelSyncOpen) return;
+    if (dismissConfirmLockRef.current) return;
+    const doneOrError = processingDone || Boolean(processingError);
+    if (!opts?.skipConfirm && !doneOrError) {
+      dismissConfirmLockRef.current = true;
+      const ok = window.confirm(
+        '위저드를 닫으면 진행 중인 설정이 모두 초기화됩니다. 닫으시겠습니까?'
+      );
+      // confirm OK 클릭이 바깥 클릭으로 다시 잡히지 않도록 잠시 잠금
+      window.setTimeout(() => {
+        dismissConfirmLockRef.current = false;
+      }, 300);
+      if (!ok) return;
+    }
+    handleClose();
+  };
+
+  const preventOutsideDismiss = (e: Event) => {
+    e.preventDefault();
+  };
+
+  /** pointerDown만 닫기 요청 — interact와 동시 호출 시 confirm이 두 번 뜸 */
+  const onPointerDownOutsideDismiss = (e: Event) => {
+    e.preventDefault();
+    if (excelSyncOpen) return;
+    window.setTimeout(() => requestClose(), 0);
+  };
+
+  const onEscapeDismiss = (e: Event) => {
+    e.preventDefault();
+    if (excelSyncOpen) return;
+    requestClose();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="w-[1200px] h-[700px] min-w-[1200px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col gap-y-2 p-4" showCloseButton>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) requestClose();
+      }}
+      modal={!excelSyncOpen}
+    >
+      <DialogContent
+        className="w-[1200px] h-[800px] min-w-[1200px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col gap-y-2 p-4"
+        showCloseButton={!excelSyncOpen}
+        onInteractOutside={preventOutsideDismiss}
+        onPointerDownOutside={onPointerDownOutsideDismiss}
+        onFocusOutside={(e) => {
+          if (excelSyncOpen) e.preventDefault();
+        }}
+        onEscapeKeyDown={onEscapeDismiss}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" aria-hidden />
@@ -1989,7 +2786,7 @@ export function ExlWizardModal({
           <div
             className={cn(
               'flex-1 min-h-0 pr-1',
-              step === 3 ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto space-y-4'
+              step === 3 ? 'flex min-h-0 flex-col overflow-y-auto' : 'overflow-y-auto space-y-4'
             )}
           >
           {step === 1 && (
@@ -2067,9 +2864,18 @@ export function ExlWizardModal({
               <div className="rounded-md border border-gray-200 bg-muted/30 p-3 space-y-3">
                 <p className="text-sm font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-                  테이블 한글명·영문명
+                  테이블 그룹명·한글명·영문명
                 </p>
                 <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">그룹명</span>
+                    <Input
+                      value={tableGroup}
+                      onChange={(e) => setTableGroup(e.target.value)}
+                      className="h-8 w-48 text-sm"
+                      placeholder="그룹명"
+                    />
+                  </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">테이블 한글명</span>
                     <Input
@@ -2674,81 +3480,114 @@ export function ExlWizardModal({
             </div>
           )}
           {step === 3 && workflowParseResult && (
-            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col gap-5">
               {layerTableMeta?.exists && schemaDiff ? (
                 <div className="shrink-0 rounded-md border border-gray-200 bg-muted/30 p-3 space-y-3 text-sm">
-                  <p className="text-sm font-medium flex items-center gap-2 text-black dark:text-zinc-100">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 text-left text-sm font-medium text-black dark:text-zinc-100"
+                    onClick={() => setSchemaDiffOpen((v) => !v)}
+                    aria-expanded={schemaDiffOpen}
+                  >
+                    {schemaDiffOpen ? (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-                    기존 테이블과의 DIFF
-                  </p>
-                  {schemaDiff.excelBoth.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-green-800 dark:text-green-300 mb-1">양쪽에 있음 ({schemaDiff.excelBoth.length})</p>
-                      <ul className="text-xs space-y-0.5 list-disc list-inside text-muted-foreground">
-                        {schemaDiff.excelBoth.map((f) => (
-                          <li key={f.originalHeader}>
-                            {f.headerKor} → <span className="font-mono text-foreground">{safeColumnName(f.headerEng)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {schemaDiff.excelOnly.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-blue-900 dark:text-blue-200 mb-1">엑셀에만 있음 — DB에 추가</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto border border-dashed rounded p-2">
-                        {schemaDiff.excelOnly.map((f) => (
-                          <label key={f.originalHeader} className="flex items-center gap-2 cursor-pointer text-xs">
-                            <input
-                              type="checkbox"
-                              checked={!excelOnlySkipAdd.has(f.originalHeader)}
-                              onChange={(e) => {
-                                const on = e.target.checked;
-                                setExcelOnlySkipAdd((prev) => {
-                                  const n = new Set(prev);
-                                  if (on) n.delete(f.originalHeader);
-                                  else n.add(f.originalHeader);
-                                  return n;
-                                });
-                              }}
-                            />
-                            <span className="truncate" title={f.originalHeader}>
-                              {f.headerKor} → <span className="font-mono">{f.headerEng}</span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {schemaDiff.dbOnly.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-destructive mb-1">DB에만 있음 — 스키마에서 삭제(주의)</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto border border-dashed border-destructive/30 rounded p-2">
-                        {schemaDiff.dbOnly.map((c) => (
-                          <label key={c.name} className="flex items-center gap-2 cursor-pointer text-xs">
-                            <input
-                              type="checkbox"
-                              checked={diffDropColumns.has(c.name)}
-                              onChange={(e) => {
-                                const on = e.target.checked;
-                                setDiffDropColumns((prev) => {
-                                  const n = new Set(prev);
-                                  if (on) n.add(c.name);
-                                  else n.delete(c.name);
-                                  return n;
-                                });
-                              }}
-                            />
-                            <span className="font-mono">{c.name}</span>
-                            {c.comment ? <span className="text-muted-foreground truncate">({c.comment})</span> : null}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {schemaDiff.excelBoth.length === 0 && schemaDiff.excelOnly.length === 0 && schemaDiff.dbOnly.length === 0 && (
-                    <p className="text-xs text-muted-foreground">비교할 사용자 컬럼이 없습니다.</p>
-                  )}
+                    <span className="shrink-0">기존 테이블과의 DIFF</span>
+                    <span className="ml-auto text-xs font-normal text-muted-foreground tabular-nums">
+                      양쪽 {schemaDiff.excelBoth.length} · 추가 {schemaDiff.excelOnly.length} · 삭제후보{' '}
+                      {schemaDiff.dbOnly.length}
+                      {!schemaDiffOpen ? ' · 펼치기' : ''}
+                    </span>
+                  </button>
+                  {schemaDiffOpen ? (
+                    <>
+                      {schemaDiff.excelBoth.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-green-800 dark:text-green-300 mb-1">
+                            양쪽에 있음 ({schemaDiff.excelBoth.length})
+                          </p>
+                          <ul className="text-xs space-y-0.5 list-disc list-inside text-muted-foreground max-h-32 overflow-y-auto">
+                            {schemaDiff.excelBoth.map((f) => (
+                              <li key={f.originalHeader}>
+                                {f.headerKor} →{' '}
+                                <span className="font-mono text-foreground">{safeColumnName(f.headerEng)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {schemaDiff.excelOnly.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-blue-900 dark:text-blue-200 mb-1">
+                            엑셀에만 있음 — DB에 추가
+                          </p>
+                          <div className="space-y-1 max-h-32 overflow-y-auto border border-dashed rounded p-2">
+                            {schemaDiff.excelOnly.map((f) => (
+                              <label
+                                key={f.originalHeader}
+                                className="flex items-center gap-2 cursor-pointer text-xs"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!excelOnlySkipAdd.has(f.originalHeader)}
+                                  onChange={(e) => {
+                                    const on = e.target.checked;
+                                    setExcelOnlySkipAdd((prev) => {
+                                      const n = new Set(prev);
+                                      if (on) n.delete(f.originalHeader);
+                                      else n.add(f.originalHeader);
+                                      return n;
+                                    });
+                                  }}
+                                />
+                                <span className="truncate" title={f.originalHeader}>
+                                  {f.headerKor} → <span className="font-mono">{f.headerEng}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {schemaDiff.dbOnly.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-destructive mb-1">
+                            DB에만 있음 — 스키마에서 삭제(주의)
+                          </p>
+                          <div className="space-y-1 max-h-32 overflow-y-auto border border-dashed border-destructive/30 rounded p-2">
+                            {schemaDiff.dbOnly.map((c) => (
+                              <label key={c.name} className="flex items-center gap-2 cursor-pointer text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={diffDropColumns.has(c.name)}
+                                  onChange={(e) => {
+                                    const on = e.target.checked;
+                                    setDiffDropColumns((prev) => {
+                                      const n = new Set(prev);
+                                      if (on) n.add(c.name);
+                                      else n.delete(c.name);
+                                      return n;
+                                    });
+                                  }}
+                                />
+                                <span className="font-mono">{c.name}</span>
+                                {c.comment ? (
+                                  <span className="text-muted-foreground truncate">({c.comment})</span>
+                                ) : null}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {schemaDiff.excelBoth.length === 0 &&
+                        schemaDiff.excelOnly.length === 0 &&
+                        schemaDiff.dbOnly.length === 0 && (
+                          <p className="text-xs text-muted-foreground">비교할 사용자 컬럼이 없습니다.</p>
+                        )}
+                    </>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -2757,10 +3596,19 @@ export function ExlWizardModal({
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                   테이블명 요약
                 </p>
-                <p className="text-sm">
-                  <span className="text-muted-foreground">한글</span> {tableKor || '—'}{' '}
-                  <span className="text-muted-foreground ml-2">영문</span>{' '}
-                  <span className="font-mono">{tableEng || '—'}</span>
+                <p className="text-sm flex flex-wrap items-baseline gap-x-8 gap-y-1">
+                  <span className="inline-flex items-baseline gap-3">
+                    <span className="text-muted-foreground shrink-0">그룹</span>
+                    <span>{tableGroup || '—'}</span>
+                  </span>
+                  <span className="inline-flex items-baseline gap-3">
+                    <span className="text-muted-foreground shrink-0">한글</span>
+                    <span>{tableKor || '—'}</span>
+                  </span>
+                  <span className="inline-flex items-baseline gap-3">
+                    <span className="text-muted-foreground shrink-0">영문</span>
+                    <span className="font-mono">{tableEng || '—'}</span>
+                  </span>
                 </p>
               </div>
 
@@ -2770,32 +3618,93 @@ export function ExlWizardModal({
                     <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                     Key(식별자) 설정
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    id·geom 등 시스템 컬럼은 Key로 선택할 수 없습니다. 복합키는 표에서 구성 열을 2개 이상 체크하세요.
+                  </p>
                   <div className="flex flex-wrap gap-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         name="keyMode"
-                        checked={!useSyntheticKeyField}
+                        checked={keyMode === 'single'}
                         onChange={() => {
-                          setUseSyntheticKeyField(false);
+                          setKeyMode('single');
+                          setFieldDefs((prev) => {
+                            const first = prev.findIndex(
+                              (f) => f.isKey && !isExcelSystemKeyColumn(f.headerEng)
+                            );
+                            return prev.map((f, i) => ({
+                              ...f,
+                              isKey: first >= 0 ? i === first : false,
+                            }));
+                          });
                         }}
                       />
-                      기존 열을 Key로 사용
+                      기존 열을 Key로 사용 (단일)
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         name="keyMode"
-                        checked={useSyntheticKeyField}
+                        checked={keyMode === 'composite'}
+                        onChange={() => setKeyMode('composite')}
+                      />
+                      기존 열을 복합키로 사용
+                    </label>
+                    <label
+                      className={cn(
+                        'flex items-center gap-2',
+                        syntheticKeyAllowed ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                      )}
+                      title={
+                        syntheticKeyAllowed
+                          ? undefined
+                          : '기존 테이블이 있으면 행번호 임시 키를 쓸 수 없습니다. 업무 키(또는 복합키)를 선택하세요.'
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="keyMode"
+                        checked={keyMode === 'synthetic'}
+                        disabled={!syntheticKeyAllowed}
                         onChange={() => {
-                          setUseSyntheticKeyField(true);
+                          if (!syntheticKeyAllowed) return;
+                          setKeyMode('synthetic');
                           setFieldDefs((prev) => prev.map((f) => ({ ...f, isKey: false })));
                         }}
                       />
-                      신규 키 필드 사용 (행마다 고유값 자동 부여)
+                      신규 키 필드 사용 (신규 테이블만, 행마다 고유값 자동 부여)
                     </label>
                   </div>
-                  {useSyntheticKeyField && (
+                  {keyMode === 'composite' && (
+                    <div className="flex flex-wrap items-end gap-4 pl-0.5">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">복합키 한글명</span>
+                        <Input
+                          className="h-8 w-40 text-sm"
+                          value={compositeKeyKor}
+                          onChange={(e) => setCompositeKeyKor(e.target.value)}
+                          placeholder={EXCEL_COMPOSITE_KEY_KOR}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">복합키 영문명</span>
+                        <Input
+                          className="h-8 w-40 text-sm !text-gray-500"
+                          value={compositeKeyEng}
+                          onChange={(e) => setCompositeKeyEng(e.target.value)}
+                          placeholder={EXCEL_COMPOSITE_KEY_ENG}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground max-w-md pb-1">
+                        선택한 열 값을 | 로 이어 붙여 이 컬럼에 저장하고 정합성 비교에 사용합니다.
+                        {keyFieldDefs.length > 0
+                          ? ` 구성: ${keyFieldDefs.map((d) => d.headerKor || d.headerEng).join(' + ')}`
+                          : ''}
+                      </p>
+                    </div>
+                  )}
+                  {useSyntheticKeyField && syntheticKeyAllowed && (
                     <div className="flex flex-wrap items-end gap-4 pl-0.5">
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">한글명</span>
@@ -2816,7 +3725,7 @@ export function ExlWizardModal({
                         />
                       </div>
                       <p className="text-xs text-muted-foreground max-w-md pb-1">
-                        DB에는 k00000001, k00000002 … 형태로 저장됩니다. 다른 필드와 겹치지 않는 영문명을 쓰세요.
+                        DB에는 k00000001, k00000002 … 형태로 저장됩니다. 재업로드 정합성에는 적합하지 않으므로 신규 테이블에만 사용하세요.
                       </p>
                     </div>
                   )}
@@ -2829,7 +3738,7 @@ export function ExlWizardModal({
                 </div>
               )}
 
-              <div className="flex min-h-0 flex-1 flex-col gap-1.5 rounded-md border border-gray-200 bg-muted/30 p-2">
+              <div className="flex min-h-[180px] flex-1 flex-col gap-1.5 rounded-md border border-gray-200 bg-muted/30 p-2">
                 <p className="shrink-0 text-xs font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
                   {isLedgerWorkflow || isAndongRoadUseWorkflow
@@ -2840,19 +3749,38 @@ export function ExlWizardModal({
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-gray-100 border-b border-gray-200 sticky top-0 z-[1]">
-                        <th className="text-left font-medium py-0.5 px-2 border-r border-gray-200 last:border-r-0">한글명</th>
-                        <th className="text-left font-medium py-0.5 px-2 border-r border-gray-200 last:border-r-0">영문명</th>
-                        <th className="text-center font-medium py-0.5 px-1 border-r border-gray-200 last:border-r-0 w-16">목록·검색</th>
+                        <th className="text-left font-medium py-1 px-2 border-r border-gray-200 last:border-r-0 w-[43%]">한글명</th>
+                        <th className="text-left font-medium py-1 px-2 border-r border-gray-200 last:border-r-0 w-[43%]">영문명</th>
+                        <th className="text-center font-medium py-1 px-1 border-r border-gray-200 last:border-r-0 w-20">
+                          <label className="inline-flex cursor-pointer items-center justify-center gap-1" title="목록·검색 전체 선택/해제">
+                            <input
+                              type="checkbox"
+                              checked={listSearchAllSelected}
+                              ref={(el) => {
+                                if (el) el.indeterminate = listSearchSomeSelected && !listSearchAllSelected;
+                              }}
+                              onChange={() => {
+                                const next = !listSearchAllSelected;
+                                setFieldDefs((prev) =>
+                                  prev.map((f) => ({ ...f, showList: next, showSearch: next }))
+                                );
+                              }}
+                            />
+                            <span>목록·검색</span>
+                          </label>
+                        </th>
                         {!isLedgerWorkflow && !isAndongRoadUseWorkflow ? (
                           <th
                             className={cn(
-                              'text-center font-medium py-0.5 px-1 w-11 border-l border-transparent',
+                              'text-center font-medium py-1 px-1 w-11 border-l border-transparent',
                               useSyntheticKeyField && 'bg-muted/80 text-muted-foreground'
                             )}
                             title={
                               useSyntheticKeyField
                                 ? '신규 키 필드 사용 시 표에서 열 Key를 선택할 수 없습니다.'
-                                : undefined
+                                : keyMode === 'composite'
+                                  ? '복합키 구성 열을 2개 이상 체크하세요.'
+                                  : '단일 Key 열을 하나 선택하세요.'
                             }
                           >
                             Key
@@ -2862,7 +3790,8 @@ export function ExlWizardModal({
                     </thead>
                     <tbody>
                       {fieldDefs.map((f, idx) => {
-                        const keyRadioDisabled = useSyntheticKeyField;
+                        const systemKeyBlocked = isExcelSystemKeyColumn(f.headerEng);
+                        const keyToggleDisabled = useSyntheticKeyField || systemKeyBlocked;
                         return (
                         <tr key={idx} className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50/50">
                           <td className="p-0 h-7 border-r border-gray-200 align-middle">
@@ -2885,7 +3814,12 @@ export function ExlWizardModal({
                               onChange={(e) =>
                                 setFieldDefs((prev) => {
                                   const next = [...prev];
-                                  next[idx] = { ...next[idx], headerEng: e.target.value };
+                                  const eng = e.target.value;
+                                  next[idx] = {
+                                    ...next[idx],
+                                    headerEng: eng,
+                                    isKey: isExcelSystemKeyColumn(eng) ? false : next[idx].isKey,
+                                  };
                                   return next;
                                 })
                               }
@@ -2911,19 +3845,39 @@ export function ExlWizardModal({
                             <td
                               className={cn(
                                 'p-0 h-7 align-middle border-l border-border/40',
-                                keyRadioDisabled && 'pointer-events-none cursor-not-allowed bg-muted/50 opacity-40'
+                                keyToggleDisabled && 'pointer-events-none cursor-not-allowed bg-muted/50 opacity-40'
                               )}
+                              title={
+                                systemKeyBlocked
+                                  ? '시스템 컬럼은 정합성 키로 사용할 수 없습니다.'
+                                  : useSyntheticKeyField
+                                    ? '신규 키 필드 사용 시 표에서 열 Key를 선택할 수 없습니다.'
+                                    : keyMode === 'composite'
+                                      ? '복합키 구성 열 (여러 개 선택)'
+                                      : '단일 Key 열'
+                              }
                             >
                               <label className="flex h-full w-full items-center justify-center py-0 px-1">
                                 <input
-                                  type="radio"
-                                  name="keyField"
-                                  disabled={keyRadioDisabled}
-                                  tabIndex={keyRadioDisabled ? -1 : undefined}
+                                  type={keyMode === 'composite' ? 'checkbox' : 'radio'}
+                                  name={keyMode === 'composite' ? undefined : 'keyField'}
+                                  disabled={keyToggleDisabled}
+                                  tabIndex={keyToggleDisabled ? -1 : undefined}
                                   checked={f.isKey}
-                                  onChange={() =>
-                                    setFieldDefs((prev) => prev.map((x, i) => ({ ...x, isKey: i === idx })))
-                                  }
+                                  onChange={() => {
+                                    if (keyToggleDisabled) return;
+                                    if (keyMode === 'composite') {
+                                      setFieldDefs((prev) =>
+                                        prev.map((x, i) =>
+                                          i === idx ? { ...x, isKey: !x.isKey } : x
+                                        )
+                                      );
+                                    } else {
+                                      setFieldDefs((prev) =>
+                                        prev.map((x, i) => ({ ...x, isKey: i === idx }))
+                                      );
+                                    }
+                                  }}
                                 />
                               </label>
                             </td>
@@ -2955,11 +3909,9 @@ export function ExlWizardModal({
               </div>
               <div
                 ref={processingLogScrollRef}
-                className="rounded-md border border-gray-200 bg-muted/30 p-3 text-xs font-mono h-[340px] overflow-auto shadow-xs"
+                className="rounded-md border border-gray-200 bg-muted/30 p-3 h-[530px] overflow-auto shadow-xs"
               >
-                {processingLog.map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
+                <ExcelProcessLogLines lines={processingLog} />
               </div>
             </div>
           )}
@@ -2997,12 +3949,29 @@ export function ExlWizardModal({
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           )}
-          {step === 4 && (processingDone || processingError) && (
-            <Button onClick={handleClose}>닫기</Button>
+          {step === 4 && (processingDone || processingError) && !excelSyncOpen && (
+            <Button onClick={() => requestClose({ skipConfirm: true })}>닫기</Button>
+          )}
+          {step === 4 && excelSyncOpen && (
+            <Button variant="outline" onClick={() => void handleExcelSyncReviewClose()} disabled={excelSyncApplying}>
+              정합성 닫기
+            </Button>
           )}
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+      {excelSyncOpen && integrityPendingRef.current ? (
+        <SyncDetailModal
+          source="excel"
+          tableName={integrityPendingRef.current.tableEng}
+          pendingOnly
+          deferDbWrite
+          onClose={() => {
+            void handleExcelSyncReviewClose();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
