@@ -5,7 +5,7 @@ export { buildFormAttributesFromDefineFields, fetchFormAttributesForPreset } fro
 export { LayerRowAddButton } from "./LayerRowAddButton";
 export { LayerRowPanelButton } from "./LayerRowPanelButton";
 export { layerRowPanelButtonClass } from "./layerRowPanelButtonStyles";
-export { LayerRowEditHeader } from "./LayerRowEditHeader";
+export { LayerRowEditHeader, LayerRowEditFooter, LayerRowEditToolbar } from "./LayerRowEditHeader";
 export { LayerRowAttributeSection } from "./LayerRowAttributeSection";
 export { LayerParcelListSection } from "./LayerParcelListSection";
 export { LayerParcelTextSection } from "./LayerParcelTextSection";

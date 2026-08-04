@@ -4,6 +4,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMapContext } from './MapContext';
 import { call } from '@/lib/api';
@@ -12,6 +13,11 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
+import {
+  hasProtoUnreadNotifications,
+  PROTO_NOTIF_CHANGED_EVENT,
+} from '../_mapContents/bizNotif/bizNotifStore';
+import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -26,34 +32,60 @@ interface SidebarButtonProps {
   onClick?: () => void;
   isActive?: boolean;
   disabled?: boolean;
+  /** true면 아이콘만 (하단 알림·사용자) */
+  iconOnly?: boolean;
 }
 
-function SidebarButton({ icon, label, onClick, isActive, disabled }: SidebarButtonProps) {
+function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly }: SidebarButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       title={label}
+      aria-label={label}
       className={cn(
-        'flex flex-col items-center justify-center pt-[7px] pb-[7px] w-[65px] text-white/90 hover:text-white hover:bg-white/10 transition-colors',
+        'flex w-[65px] flex-col items-center justify-center text-white/90 transition-colors hover:bg-white/10 hover:text-white',
+        iconOnly ? 'py-2.5' : 'pb-[7px] pt-[7px]',
         isActive && 'bg-white/20 text-white',
-        disabled && 'opacity-35 pointer-events-none cursor-not-allowed hover:bg-transparent'
+        disabled && 'pointer-events-none cursor-not-allowed opacity-35 hover:bg-transparent'
       )}
     >
       {icon}
-      <span className="text-[10.5px] pt-[4px] break-keep text-center font-light">{label}</span>
+      {!iconOnly && (
+        <span className="break-keep pt-[4px] text-center text-[10.5px] font-light">{label}</span>
+      )}
     </button>
   );
 }
 
 /**
  * 좌측 고정 사이드바 (65px)
- * - 디자인은 사용자 제공 `map-sidebar.tsx` 참고
  * - 클릭 시 URL query param `opened`에 window key를 토글 (MapControls와 동일 패턴)
  */
 const CONSECUTIVE_CLICKS_TO_TOGGLE_DEBUG = 5;
 const CLICK_RESET_MS = 800;
+
+function renderMaskIcon(iconFile: string) {
+  const iconSrc = `/image/serviceListIcon/${iconFile}.svg`;
+  return (
+    <span
+      className="inline-block h-5 w-5 shrink-0 bg-current"
+      style={{
+        WebkitMaskImage: `url(${iconSrc})`,
+        maskImage: `url(${iconSrc})`,
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+      }}
+      role="img"
+      aria-hidden
+    />
+  );
+}
 
 export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const router = useRouter();
@@ -63,11 +95,59 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const mapContext = useMapContext();
   const debugClickCountRef = useRef(0);
   const debugClickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const myInfoAnchorRef = useRef<HTMLDivElement>(null);
+  const navScrollHoldRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [navHover, setNavHover] = useState(false);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+  const [protoNotifUnread, setProtoNotifUnread] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setProtoNotifUnread(hasProtoUnreadNotifications());
+    sync();
+    window.addEventListener(PROTO_NOTIF_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(PROTO_NOTIF_CHANGED_EVENT, sync);
+  }, []);
+
+  const updateNavScrollState = useCallback(() => {
+    const el = navScrollRef.current;
+    if (!el) {
+      setCanScrollUp(false);
+      setCanScrollDown(false);
+      return;
+    }
+    setCanScrollUp(el.scrollTop > 2);
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
+
+  const stopNavScrollHold = useCallback(() => {
+    if (navScrollHoldRef.current) {
+      clearInterval(navScrollHoldRef.current);
+      navScrollHoldRef.current = null;
+    }
+  }, []);
+
+  const startNavScrollHold = useCallback(
+    (dir: -1 | 1) => {
+      stopNavScrollHold();
+      const step = () => {
+        const el = navScrollRef.current;
+        if (!el) return;
+        el.scrollBy({ top: dir * 28, behavior: 'auto' });
+        updateNavScrollState();
+      };
+      step();
+      navScrollHoldRef.current = setInterval(step, 50);
+    },
+    [stopNavScrollHold, updateNavScrollState]
+  );
 
   const [serviceListConfig, setServiceListConfig] = useState<ServiceItem[]>([]);
   const [systemList, setSystemList] = useState<{ sys_key: string; serviceList?: string[] }[]>([]);
   const [deniedSerOpen, setDeniedSerOpen] = useState(false);
   const [deniedSerEng, setDeniedSerEng] = useState('');
+  const [bootProject, setBootProject] = useState('');
   const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
 
   const systemKeyFromUrl = searchParams.get('system') ?? '';
@@ -107,6 +187,12 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   useEffect(() => {
     fetchServiceList();
     fetchSystemList();
+    call('', 'POST', { service: 'configService', action: 'getBootProject', params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        setBootProject(String(data?.project ?? '').trim());
+      })
+      .catch(() => setBootProject(''));
   }, [fetchServiceList, fetchSystemList]);
 
   useEffect(() => {
@@ -133,13 +219,34 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const serviceMap = new Map(serviceListConfig.map((s) => [s.ser_eng ?? '', s]));
   const sidebarItemsRaw: ServiceItem[] = serviceKeysInOrder
     .map((key) => serviceMap.get(key))
-    .filter((s): s is ServiceItem => s != null);
+    .filter((s): s is ServiceItem => s != null)
+    .filter((item) => {
+      if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
+      // 촬영요청·승인 — 개발 중, 오픈 전까지 비노출
+      if (item.ser_eng === 'shootingRequest' || item.ser_eng === 'shootingApproval') return false;
+      return true;
+    });
 
   const sidebarItems = sidebarItemsRaw.filter((item) => {
     if (item.ser_is_private !== true) return true;
     if (accessLoading) return false;
     return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
   });
+
+  const roadDataFlowSidebarLock = openedWindows.includes('roadDataFlow');
+  const hasUseFeeInList = sidebarItems.some((s) => s.ser_eng === 'useFee');
+
+  useEffect(() => {
+    updateNavScrollState();
+    const el = navScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => updateNavScrollState());
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      stopNavScrollHold();
+    };
+  }, [updateNavScrollState, stopNavScrollHold, sidebarItems.length]);
 
   const handleDebugZoneClick = useCallback(() => {
     if (debugClickTimeoutRef.current) {
@@ -218,48 +325,131 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           alt="메인으로"
           width={40}
           height={40}
-          className="max-h-10 max-w-[35px] h-auto w-auto object-contain"
+          className="h-auto max-h-10 w-auto max-w-[35px] object-contain"
         />
       </Link>
-      <nav className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto" aria-label="서비스 메뉴">
-        {sidebarItems.map((item) => {
-          const serEng = item.ser_eng ?? '';
-          const openedKey = getOpenedKeyForSerEng(serEng);
-          const label = item.ser_kor ?? serEng;
-          const isPriv = item.ser_is_private === true;
-          const policy = isPriv ? sidebarServicePolicy(snapshot, serEng, true) : 'open';
-          const onSvcClick =
-            policy === 'block'
-              ? () => {
-                  setDeniedSerEng(serEng);
-                  setDeniedSerOpen(true);
-                }
-              : serEng === 'shapeEditor'
-                ? handleShapeEditorClick
-                : serEng === 'parcelAnalysis'
-                  ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
-                  : () => toggleWindow(openedKey);
-          return (
+      <div className="flex min-h-0 w-full flex-1 flex-col">
+        <nav
+          className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+          aria-label="서비스 메뉴"
+          onMouseEnter={() => setNavHover(true)}
+          onMouseLeave={() => {
+            setNavHover(false);
+            stopNavScrollHold();
+          }}
+        >
+          {navHover && canScrollUp && (
+            <button
+              type="button"
+              className="absolute left-0 right-0 top-0 z-[2] flex h-6 items-center justify-center bg-gradient-to-b from-black/55 to-transparent text-white/90"
+              aria-label="메뉴 위로 스크롤"
+              onMouseEnter={() => startNavScrollHold(-1)}
+              onMouseLeave={stopNavScrollHold}
+            >
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          )}
+          <div
+            ref={navScrollRef}
+            className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            onScroll={updateNavScrollState}
+          >
+            {sidebarItems.map((item) => {
+              const serEng = item.ser_eng ?? '';
+              const openedKey = getOpenedKeyForSerEng(serEng);
+              const label = item.ser_kor ?? serEng;
+              const isPriv = item.ser_is_private === true;
+              const policy = isPriv ? sidebarServicePolicy(snapshot, serEng, true) : 'open';
+              const onSvcClick =
+                policy === 'block'
+                  ? () => {
+                      setDeniedSerEng(serEng);
+                      setDeniedSerOpen(true);
+                    }
+                  : serEng === 'shapeEditor'
+                    ? handleShapeEditorClick
+                    : serEng === 'parcelAnalysis'
+                      ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
+                      : () => toggleWindow(openedKey);
+              const svcDisabled =
+                policy !== 'block' && roadDataFlowSidebarLock && openedKey !== 'roadDataFlow';
+              return (
+                <React.Fragment key={serEng}>
+                  <SidebarButton
+                    icon={renderServiceIcon(item)}
+                    label={label}
+                    onClick={onSvcClick}
+                    isActive={
+                      policy !== 'block' &&
+                      serEng !== 'shapeEditor' &&
+                      openedWindows.includes(openedKey)
+                    }
+                    disabled={policy === 'block' ? false : svcDisabled}
+                  />
+                  {serEng === 'usageDataAs' &&
+                    bootProject === 'build_uj' &&
+                    !hasUseFeeInList && (
+                      <SidebarButton
+                        icon={renderMaskIcon('useFee')}
+                        label="점사용료"
+                        onClick={() => toggleWindow('useFee')}
+                        isActive={openedWindows.includes('useFee')}
+                        disabled={roadDataFlowSidebarLock}
+                      />
+                    )}
+                </React.Fragment>
+              );
+            })}
+            {bootProject === 'build_uj' &&
+              !hasUseFeeInList &&
+              !sidebarItems.some((s) => s.ser_eng === 'usageDataAs') && (
+                <SidebarButton
+                  icon={renderMaskIcon('useFee')}
+                  label="점사용료"
+                  onClick={() => toggleWindow('useFee')}
+                  isActive={openedWindows.includes('useFee')}
+                  disabled={roadDataFlowSidebarLock}
+                />
+              )}
+          </div>
+          {navHover && canScrollDown && (
+            <button
+              type="button"
+              className="absolute bottom-0 left-0 right-0 z-[2] flex h-6 items-center justify-center bg-gradient-to-t from-black/55 to-transparent text-white/90"
+              aria-label="메뉴 아래로 스크롤"
+              onMouseEnter={() => startNavScrollHold(1)}
+              onMouseLeave={stopNavScrollHold}
+            >
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          )}
+        </nav>
+        {/* 프로토타입: 내 정보 · 알림 */}
+        <div className="relative flex w-full shrink-0 flex-col border-t border-white/15">
+          <div ref={myInfoAnchorRef} className="w-full">
             <SidebarButton
-              key={serEng}
-              icon={renderServiceIcon(item)}
-              label={label}
-              onClick={onSvcClick}
-              isActive={
-                policy !== 'block' &&
-                serEng !== 'shapeEditor' &&
-                openedWindows.includes(openedKey)
+              icon={
+                <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                  {renderMaskIcon('userAccount')}
+                  {protoNotifUnread ? (
+                    <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500" />
+                  ) : null}
+                </span>
               }
-              disabled={false}
+              label="내 정보"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('ggnr-proto-user-account-toggle'));
+              }}
             />
-          );
-        })}
-      </nav>
+          </div>
+          <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
+        </div>
+      </div>
       <button
         type="button"
         onClick={handleDebugZoneClick}
-        className="h-[50px] w-full shrink-0 cursor-default"
-        style={{ minHeight: '50px' }}
+        className="h-[28px] w-full shrink-0 cursor-default"
+        style={{ minHeight: '28px' }}
         aria-label="디버그 패널 토글 (5회 연속 클릭)"
       />
       <ResourceAccessDeniedDialog
@@ -271,4 +461,3 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     </aside>
   );
 }
-

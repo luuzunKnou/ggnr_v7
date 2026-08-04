@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "rdid",
-    "define_field_kor_name": "rdid",
+    "define_field_kor_name": "관리번호",
     "define_field_type": "text",
     "define_field_idx": 1000001,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "ufid",
-    "define_field_kor_name": "ufid",
+    "define_field_kor_name": "일련번호",
     "define_field_type": "text",
     "define_field_idx": 1000002,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "road_name",
-    "define_field_kor_name": "road_name",
+    "define_field_kor_name": "노선명",
     "define_field_type": "text",
     "define_field_idx": 1000003,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "road_no",
-    "define_field_kor_name": "road_no",
+    "define_field_kor_name": "노선번호",
     "define_field_type": "text",
     "define_field_idx": 1000004,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "sect",
-    "define_field_kor_name": "sect",
+    "define_field_kor_name": "구간",
     "define_field_type": "text",
     "define_field_idx": 1000005,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "ip_no",
-    "define_field_kor_name": "ip_no",
+    "define_field_kor_name": "IP번호",
     "define_field_type": "text",
     "define_field_idx": 1000006,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "ia_deg",
-    "define_field_kor_name": "ia_deg",
+    "define_field_kor_name": "교각(도)",
     "define_field_type": "number",
     "define_field_idx": 1000007,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "ia_min",
-    "define_field_kor_name": "ia_min",
+    "define_field_kor_name": "교각(분)",
     "define_field_type": "number",
     "define_field_idx": 1000008,
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "ia_sec",
-    "define_field_kor_name": "ia_sec",
+    "define_field_kor_name": "교각(초)",
     "define_field_type": "number",
     "define_field_idx": 1000009,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "r",
-    "define_field_kor_name": "r",
+    "define_field_kor_name": "곡선반경",
     "define_field_type": "number",
     "define_field_idx": 1000010,
     "define_field_is_required": false,
@@ -326,7 +326,7 @@
   },
   {
     "define_field_name": "tl",
-    "define_field_kor_name": "tl",
+    "define_field_kor_name": "접선장",
     "define_field_type": "number",
     "define_field_idx": 1000011,
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "cl",
-    "define_field_kor_name": "cl",
+    "define_field_kor_name": "곡선장",
     "define_field_type": "number",
     "define_field_idx": 1000012,
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "sect_st_km",
-    "define_field_kor_name": "sect_st_km",
+    "define_field_kor_name": "곡선시점",
     "define_field_type": "number",
     "define_field_idx": 1000013,
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "sect_ed_km",
-    "define_field_kor_name": "sect_ed_km",
+    "define_field_kor_name": "곡선종점",
     "define_field_type": "number",
     "define_field_idx": 1000014,
     "define_field_is_required": false,
@@ -426,7 +426,7 @@
   },
   {
     "define_field_name": "sl",
-    "define_field_kor_name": "sl",
+    "define_field_kor_name": "중앙종거",
     "define_field_type": "number",
     "define_field_idx": 1000015,
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "slope",
-    "define_field_kor_name": "slope",
+    "define_field_kor_name": "경사",
     "define_field_type": "number",
     "define_field_idx": 1000016,
     "define_field_is_required": false,
@@ -476,7 +476,7 @@
   },
   {
     "define_field_name": "wid",
-    "define_field_kor_name": "wid",
+    "define_field_kor_name": "확폭",
     "define_field_type": "number",
     "define_field_idx": 1000017,
     "define_field_is_required": false,
@@ -501,7 +501,7 @@
   },
   {
     "define_field_name": "line",
-    "define_field_kor_name": "line",
+    "define_field_kor_name": "직선장",
     "define_field_type": "number",
     "define_field_idx": 1000018,
     "define_field_is_required": false,
@@ -526,7 +526,7 @@
   },
   {
     "define_field_name": "remark",
-    "define_field_kor_name": "remark",
+    "define_field_kor_name": "비고",
     "define_field_type": "text",
     "define_field_idx": 1000019,
     "define_field_is_required": false,
@@ -679,6 +679,31 @@
     "define_field_kor_name": "geom",
     "define_field_type": "text",
     "define_field_idx": 1000025,
+    "define_field_is_required": false,
+    "define_field_show_search": false,
+    "define_field_show_list": true,
+    "define_field_show_detail": true,
+    "define_field_read_only": false,
+    "define_field_is_key": false,
+    "define_field_show_search_detail": false,
+    "define_field_max_length": "",
+    "define_field_sort_idx": "",
+    "define_field_sort_type": "",
+    "define_field_sel_list": "",
+    "define_field_sel_table": "",
+    "define_field_sel_query": "",
+    "define_field_sel_url": "",
+    "define_field_show_detail_list": false,
+    "define_field_sel_key_field": "",
+    "define_field_sel_label_field": "",
+    "define_field_default_value": "",
+    "define_field_show_title": false
+  },
+  {
+    "define_field_name": "sern",
+    "define_field_kor_name": "시스템관리ID",
+    "define_field_type": "text",
+    "define_field_idx": 1000026,
     "define_field_is_required": false,
     "define_field_show_search": false,
     "define_field_show_list": true,

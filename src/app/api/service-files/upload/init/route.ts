@@ -27,11 +27,17 @@ export async function POST(req: NextRequest) {
     const key = typeof o.key === 'string' ? o.key : o.key != null ? String(o.key) : null;
     const fileName = typeof o.fileName === 'string' ? o.fileName : null;
     const totalSize = typeof o.totalSize === 'number' && Number.isFinite(o.totalSize) ? o.totalSize : null;
+    const subfolderRaw = typeof o.subfolder === 'string' ? o.subfolder.trim() : '';
+    const subfolder =
+      subfolderRaw && subfolderRaw !== '기타' ? subfolderRaw : undefined;
     if (layer == null || key == null || fileName == null || totalSize == null || totalSize < 0) {
       return NextResponse.json({ error: 'layer, key, fileName, totalSize 가 필요합니다.' }, { status: 400 });
     }
     if (assertSafeFileDataSegment(layer) == null || assertSafeFileDataSegment(key) == null) {
       return NextResponse.json({ error: '유효하지 않은 layer 또는 key 입니다.' }, { status: 400 });
+    }
+    if (subfolder != null && assertSafeFileDataSegment(subfolder) == null) {
+      return NextResponse.json({ error: '유효하지 않은 subfolder 입니다.' }, { status: 400 });
     }
     const result = await initServiceFileDataUpload({
       serEng,
@@ -40,6 +46,7 @@ export async function POST(req: NextRequest) {
       fileName,
       totalSize,
       ownerUsrId: usrId,
+      subfolder,
     });
     return NextResponse.json({
       uploadId: result.uploadId,

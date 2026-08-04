@@ -12,12 +12,21 @@ export function assertSafeFileDataSegment(segment: string): string | null {
   return t;
 }
 
-/** 목록 조회용 상대 디렉터리 (슬래시 구분) */
-export function fileDataRelativeDir(layerName: string, keyValue: string): string | null {
+/** 목록 조회용 상대 디렉터리 (슬래시 구분). optional subfolder → file_data/{layer}/{key}/{subfolder} */
+export function fileDataRelativeDir(
+  layerName: string,
+  keyValue: string,
+  subfolder?: string | null
+): string | null {
   const L = assertSafeFileDataSegment(layerName);
   const K = assertSafeFileDataSegment(String(keyValue));
   if (!L || !K) return null;
-  return `file_data/${L}/${K}`;
+  const base = `file_data/${L}/${K}`;
+  const sub = String(subfolder ?? '').trim();
+  if (!sub) return base;
+  const S = assertSafeFileDataSegment(sub);
+  if (!S) return null;
+  return `${base}/${S}`;
 }
 
 /**

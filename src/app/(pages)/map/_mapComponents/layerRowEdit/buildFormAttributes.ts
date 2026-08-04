@@ -16,6 +16,7 @@ export function buildFormAttributesFromDefineFields(
     [...(preset.excludeFields ?? []), ...GEOM_FIELDS].map((f) => f.toLowerCase()).filter(Boolean)
   );
   const keyLower = String(preset.keyField ?? "id").toLowerCase();
+  const includeHidden = preset.includeHiddenDetail === true;
 
   return fields
     .map((raw) => {
@@ -23,18 +24,23 @@ export function buildFormAttributesFromDefineFields(
       if (!field) return null;
       const lower = field.toLowerCase();
       if (exclude.has(lower)) return null;
-      if (!isTrueFlag(raw.define_field_show_detail)) return null;
+      const showDetail = isTrueFlag(raw.define_field_show_detail);
+      if (!showDetail && !includeHidden) return null;
       if (lower === keyLower) return null;
       return {
         field,
         label: String(raw.define_field_kor_name ?? field).trim() || field,
         value: "",
+        showDetail,
         idx: parseInt(String(raw.define_field_idx ?? "999999"), 10) || 999999,
       };
     })
-    .filter((x): x is LayerRowDetailAttr & { idx: number } => x != null)
-    .sort((a, b) => (a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field)))
-    .map(({ field, label, value }) => ({ field, label, value }));
+    .filter((x): x is LayerRowDetailAttr & { idx: number; showDetail: boolean } => x != null)
+    .sort((a, b) => {
+      if (a.showDetail !== b.showDetail) return a.showDetail ? -1 : 1;
+      return a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field);
+    })
+    .map(({ field, label, value, showDetail }) => ({ field, label, value, showDetail }));
 }
 
 export async function fetchFormAttributesForPreset(
@@ -48,16 +54,20 @@ export async function fetchFormAttributesForPreset(
         table: preset.tableName,
         schema: preset.schema,
         excludeFields: preset.excludeFields,
+        includeHiddenDetail: preset.includeHiddenDetail,
       },
     });
     const data = res?.data ?? res;
     const fields = Array.isArray(data?.fields) ? data.fields : [];
     if (fields.length > 0) {
-      return fields.map((d: { field?: string; label?: string }) => ({
-        field: String(d.field ?? "").trim(),
-        label: String(d.label ?? d.field ?? "").trim() || String(d.field ?? ""),
-        value: "",
-      }));
+      return fields.map(
+        (d: { field?: string; label?: string; showDetail?: boolean }) => ({
+          field: String(d.field ?? "").trim(),
+          label: String(d.label ?? d.field ?? "").trim() || String(d.field ?? ""),
+          value: "",
+          showDetail: d.showDetail !== false,
+        })
+      );
     }
   } catch {
     // fallback below

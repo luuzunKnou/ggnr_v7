@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "input_mthd",
-    "define_field_kor_name": "input_mthd",
+    "define_field_kor_name": "입력방법",
     "define_field_type": "text",
     "define_field_idx": 2,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "roa_cls_se",
-    "define_field_kor_name": "roa_cls_se",
+    "define_field_kor_name": "도로법적위계",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "rds_man_no",
-    "define_field_kor_name": "rds_man_no",
+    "define_field_kor_name": "도로구간일련번호",
     "define_field_type": "number",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,

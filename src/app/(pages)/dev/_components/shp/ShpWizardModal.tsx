@@ -1282,6 +1282,32 @@ export function ShpWizardModal({
         const layerRow = layers.find((l) => l.name.toLowerCase() === r.sourceFile.toLowerCase());
         if (layerRow?.epsg != null) sourceSrsByPath[r.pathOrResult.replace(/\\/g, '/')] = `EPSG:${layerRow.epsg}`;
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+        body: JSON.stringify({
+          sessionId: '1c82ab',
+          runId: 'pre-fix',
+          hypothesisId: 'A-E',
+          location: 'ShpWizardModal.tsx:runComponentSetup:entry',
+          message: 'component setup start',
+          data: {
+            readyPath,
+            statusCount: statusRows.length,
+            needBefore: statusRows.filter((r) => !r.table || !r.layer || !r.style || !r.define).length,
+            sampleBefore: statusRows.slice(0, 3).map((r) => ({
+              file: r.sourceFile,
+              table: r.table,
+              layer: r.layer,
+              style: r.style,
+              define: r.define,
+            })),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const res = await call('', 'POST', {
         service: 'shpUploadService',
         action: 'processShpBatch',
@@ -1341,8 +1367,28 @@ export function ShpWizardModal({
         );
       } else if (d?.error) {
         setLayersError(String(d.error));
+      } else if (!allReady) {
+        // 배치 성공으로 보이지만 상태 재조회 후 아직 누락이면 안내
+        setLayersError(
+          `생성 후 상태 확인: 아직 ${needAfter.length}개 파일에 Table·Layer·Style·Define 누락이 있습니다.`
+        );
       }
     } catch (e: unknown) {
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+        body: JSON.stringify({
+          sessionId: '1c82ab',
+          runId: 'pre-fix',
+          hypothesisId: 'C',
+          location: 'ShpWizardModal.tsx:runComponentSetup:catch',
+          message: 'component setup threw',
+          data: { error: e instanceof Error ? e.message : String(e) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setLayersError(e instanceof Error ? e.message : String(e));
     } finally {
       setComponentSetupRunning(false);

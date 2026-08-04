@@ -3,28 +3,37 @@
 import { useCallback, useState } from "react";
 import { useMapContext } from "../MapContext";
 import { getParcelExtent3857, fitMapToLayerRowParcel } from "./layerRowParcelUtils";
-import { resolveParcelGeoms } from "./resolveParcelGeoms";
+import { resolveParcelItemForHighlight } from "./resolveParcelItemForHighlight";
 import type { LayerRowParcelItem } from "./types";
 
 export function useLayerParcelNavigation(wmsLayerId?: string) {
   const mapContext = useMapContext();
   const [movingParcelIdx, setMovingParcelIdx] = useState<number | null>(null);
+  const [selectedParcelIdx, setSelectedParcelIdx] = useState<number | null>(null);
 
-  const navigateToParcel = useCallback(
-    async (item: LayerRowParcelItem, idx: number) => {
+  const clearSelection = useCallback(() => {
+    setSelectedParcelIdx(null);
+  }, []);
+
+  const selectParcel = useCallback(
+    async (
+      item: LayerRowParcelItem,
+      idx: number,
+      options?: { onHighlight?: (resolved: LayerRowParcelItem | null) => void }
+    ) => {
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
 
-      let ext = getParcelExtent3857(item);
-      if (!ext) {
-        const [resolved] = await resolveParcelGeoms([item]);
-        ext = getParcelExtent3857(resolved ?? item);
-      }
-      if (!ext) return;
-
+      setSelectedParcelIdx(idx);
       setMovingParcelIdx(idx);
       try {
-        fitMapToLayerRowParcel(map, item, {
+        const target = await resolveParcelItemForHighlight(item, wmsLayerId);
+        if (!getParcelExtent3857(target) && !target.geometry3857) {
+          options?.onHighlight?.(null);
+          return;
+        }
+        options?.onHighlight?.(target);
+        fitMapToLayerRowParcel(map, target, {
           wmsLayerId,
           setVisibleLayerNames: mapContext?.setVisibleLayerNames,
           applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
@@ -36,5 +45,12 @@ export function useLayerParcelNavigation(wmsLayerId?: string) {
     [mapContext, wmsLayerId]
   );
 
-  return { navigateToParcel, movingParcelIdx };
+  return {
+    selectParcel,
+    /** @deprecated selectParcel 사용 */
+    navigateToParcel: selectParcel,
+    selectedParcelIdx,
+    clearSelection,
+    movingParcelIdx,
+  };
 }

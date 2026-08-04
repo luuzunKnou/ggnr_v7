@@ -7,15 +7,25 @@ import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
-import { RIVER_USE_LEDGER_WMS_LAYER_ID } from "./riverUseLedgerLayerId";
+import {
+  RIVER_USE_LEDGER_WMS_LAYER_ID,
+  RIVER_USAGE_DATA_WMS_LAYER_ID,
+} from "./riverUseLedgerLayerId";
 import { LAYER_ROW_NEW_ID, LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
 
 type ListRow = {
   rowKey: string;
   permitNo: string;
   spot: string;
-  year: string;
-  date: string;
+  col3: string;
+  col4: string;
+};
+
+type ListHeaders = {
+  permitNo: string;
+  spot: string;
+  col3: string;
+  col4: string;
 };
 
 type Props = {
@@ -24,6 +34,13 @@ type Props = {
   onSelectDetailId: (id: string) => void;
   refreshKey?: number;
   onAdd?: () => void;
+};
+
+const DEFAULT_HEADERS: ListHeaders = {
+  permitNo: "부과번호",
+  spot: "소재지",
+  col3: "부과연도",
+  col4: "부과일자",
 };
 
 export function RiverUseLedgerListPanel({
@@ -37,28 +54,62 @@ export function RiverUseLedgerListPanel({
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const layerAddedByPanelRef = useRef(false);
+  const activeLayerIdRef = useRef(RIVER_USE_LEDGER_WMS_LAYER_ID.toLowerCase());
 
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ListRow[]>([]);
+  const [headers, setHeaders] = useState<ListHeaders>(DEFAULT_HEADERS);
+  const [searchPlaceholder, setSearchPlaceholder] = useState(
+    "검색 (부과번호, 장소, 연도, 일자 등)"
+  );
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
 
-  /** 패널 마운트 시 하천점용 레이어를 켜고, 언마운트 시 이 패널이 켠 경우만 원복 */
   useEffect(() => {
-    const ctx = mapContextRef.current;
-    const lid = RIVER_USE_LEDGER_WMS_LAYER_ID.toLowerCase();
-    if (!ctx?.setVisibleLayerNames) return;
-    const alreadyOn = (ctx.visibleLayerNames ?? new Set<string>()).has(lid);
-    if (!alreadyOn) {
-      ctx.setVisibleLayerNames((prev) => new Set(prev).add(lid));
-      layerAddedByPanelRef.current = true;
-    } else {
-      layerAddedByPanelRef.current = false;
-    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await call("", "POST", {
+          service: "riverUseLedgerService",
+          action: "getRiverUseLedgerConfig",
+          params: {},
+        });
+        const data = res?.data ?? res;
+        if (cancelled || data?.error) return;
+        if (data?.listHeaders) {
+          setHeaders({
+            permitNo: String(data.listHeaders.permitNo ?? DEFAULT_HEADERS.permitNo),
+            spot: String(data.listHeaders.spot ?? DEFAULT_HEADERS.spot),
+            col3: String(data.listHeaders.col3 ?? DEFAULT_HEADERS.col3),
+            col4: String(data.listHeaders.col4 ?? DEFAULT_HEADERS.col4),
+          });
+        }
+        const lid = String(data?.wmsLayerId ?? RIVER_USE_LEDGER_WMS_LAYER_ID)
+          .trim()
+          .toLowerCase();
+        activeLayerIdRef.current = lid || RIVER_USE_LEDGER_WMS_LAYER_ID.toLowerCase();
+        if (data?.variant === "usage") {
+          setSearchPlaceholder("검색 (허가번호, 위치, 하천명, 점용자 등)");
+        }
+        const ctx = mapContextRef.current;
+        if (ctx?.setVisibleLayerNames) {
+          const alreadyOn = (ctx.visibleLayerNames ?? new Set<string>()).has(activeLayerIdRef.current);
+          if (!alreadyOn) {
+            ctx.setVisibleLayerNames((prev) => new Set(prev).add(activeLayerIdRef.current));
+            layerAddedByPanelRef.current = true;
+          }
+        }
+      } catch {
+        /* keep defaults */
+      }
+    })();
+
     return () => {
+      cancelled = true;
       const c = mapContextRef.current;
       if (!layerAddedByPanelRef.current || !c?.setVisibleLayerNames) return;
+      const lid = activeLayerIdRef.current;
       c.setVisibleLayerNames((prev) => {
         if (!prev.has(lid)) return prev;
         const next = new Set(prev);
@@ -92,7 +143,7 @@ export function RiverUseLedgerListPanel({
           window.alert("위치 정보를 찾을 수 없습니다.");
           return;
         }
-        const lid = RIVER_USE_LEDGER_WMS_LAYER_ID.toLowerCase();
+        const lid = activeLayerIdRef.current || RIVER_USAGE_DATA_WMS_LAYER_ID.toLowerCase();
         mapContext?.setVisibleLayerNames?.((prev) => {
           if (prev.has(lid)) return prev;
           return new Set(prev).add(lid);
@@ -132,8 +183,8 @@ export function RiverUseLedgerListPanel({
             rowKey: String(r.rowKey ?? "").trim(),
             permitNo: String(r.permitNo ?? "").trim(),
             spot: String(r.spot ?? "").trim(),
-            year: String(r.year ?? "").trim(),
-            date: String(r.date ?? "").trim(),
+            col3: String(r.col3 ?? r.year ?? "").trim(),
+            col4: String(r.col4 ?? r.date ?? "").trim(),
           }))
         );
       } catch (e: unknown) {
@@ -176,7 +227,7 @@ export function RiverUseLedgerListPanel({
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="검색 (부과번호, 장소, 연도, 일자 등)"
+            placeholder={searchPlaceholder}
             className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
           />
         </div>
@@ -193,16 +244,16 @@ export function RiverUseLedgerListPanel({
             <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
               <tr>
                 <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
-                  부과번호
+                  {headers.permitNo}
                 </th>
                 <th className="min-w-[120px] px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
-                  소재지
+                  {headers.spot}
                 </th>
                 <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
-                  부과연도
+                  {headers.col3}
                 </th>
                 <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
-                  부과일자
+                  {headers.col4}
                 </th>
               </tr>
             </thead>
@@ -247,11 +298,11 @@ export function RiverUseLedgerListPanel({
                       <td className="px-2 py-1.5 text-slate-700 align-top break-words" title={row.spot}>
                         {row.spot || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-700">
-                        {row.year || "—"}
+                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-700" title={row.col3}>
+                        {row.col3 || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-700">
-                        {row.date || "—"}
+                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-700" title={row.col4}>
+                        {row.col4 || "—"}
                       </td>
                     </tr>
                   );

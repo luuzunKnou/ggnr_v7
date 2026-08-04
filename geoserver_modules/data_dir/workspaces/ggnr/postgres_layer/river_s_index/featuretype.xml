@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-1018</id>
+  <name>river_s_index</name>
+  <nativeName>river_s_index</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>river_s_index</title>
+  <keywords>
+    <string>features</string>
+    <string>river_s_index</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>386178.00444747985</minx>
+    <maxx>421221.74374747917</maxx>
+    <miny>352951.98175079236</miny>
+    <maxy>406158.527350791</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.0821606289111</minx>
+    <maxx>129.4892877886832</maxx>
+    <miny>36.649354378411495</miny>
+    <maxy>37.13597131758666</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

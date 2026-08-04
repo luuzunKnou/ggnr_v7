@@ -1,0 +1,39 @@
+/* 꼭짓점 고도 — 거리 측정 라벨과 동일 구조, border 없음 · 숫자만 빨간 강조 */
+.label {
+  background: white;
+  color: black;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: none;
+  line-height: 1.4;
+}
+
+.value {
+  color: #f47378;
+  font-weight: 600;
+}
+
+/* 구간 고도차 — 반투명 배경·어두운 글씨로 꼭짓점과 구분 */
+.diffLabel {
+  background-color: rgba(255, 255, 255, 0.55);
+  color: #545454;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1.4;
+  border: none;
+  box-shadow: none;
+}
+
+.diffValue {
+  color: #545454;
+  font-weight: 500;
+}

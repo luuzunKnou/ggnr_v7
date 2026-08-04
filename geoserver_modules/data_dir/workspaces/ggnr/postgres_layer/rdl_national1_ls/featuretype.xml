@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-f8a</id>
+  <name>rdl_national1_ls</name>
+  <nativeName>rdl_national1_ls</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>rdl_national1_ls</title>
+  <keywords>
+    <string>features</string>
+    <string>rdl_national1_ls</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>375277.16789784795</minx>
+    <maxx>419762.1109477475</maxx>
+    <miny>314092.66319324897</miny>
+    <maxy>441690.2041934265</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.9515149875247</minx>
+    <maxx>129.48337365232723</maxx>
+    <miny>36.29982820645866</miny>
+    <maxy>37.458038433674346</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

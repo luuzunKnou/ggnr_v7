@@ -1190,6 +1190,33 @@ function writeCssStyleToDataDir(name: string, cssBody: string): void {
   }
 }
 
+/** 카탈로그에 없는데 data_dir에만 남은 스타일 파일(고아 css/xml/tmp) 제거 — 재생성 전 정리 */
+function removeOrphanStyleFiles(name: string): void {
+  try {
+    const stylesDir = getStylesDir();
+    if (!fs.existsSync(stylesDir)) return;
+    const safe = name.trim().toLowerCase();
+    for (const ext of ['.css', '.xml', '.sld'] as const) {
+      try {
+        fs.unlinkSync(path.join(stylesDir, `${safe}${ext}`));
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const f of fs.readdirSync(stylesDir)) {
+      if (f.startsWith(`${safe}.sld.`) && f.endsWith('.tmp')) {
+        try {
+          fs.unlinkSync(path.join(stylesDir, f));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function getGeoServerStyleNameSet(baseUrl: string): Promise<Set<string>> {
   const set = new Set<string>();
   const res = await getGeoServerStyleList({ url: baseUrl });
@@ -1624,7 +1651,14 @@ export async function applyDefaultStyleToLayer(params: {
     }
 
     const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
-    const createRes = await createGeoServerStyle({
+
+    // 고아 css만 있고 카탈로그에 없으면 GeoServer가 already exists로 오판 → PUT만 되고 목록엔 안 잡힘
+    let catalogExists = await geoServerStyleExists(baseUrl, layerName);
+    if (!catalogExists) {
+      removeOrphanStyleFiles(layerName);
+    }
+
+    let createRes = await createGeoServerStyle({
       url: baseUrl,
       name: layerName,
       geometryType,
@@ -1632,29 +1666,71 @@ export async function applyDefaultStyleToLayer(params: {
     });
 
     if (createRes.success && 'alreadyExists' in createRes && createRes.alreadyExists) {
-      const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
-        method: 'PUT',
-        body: cssBody,
-        contentType: 'application/vnd.geoserver.geocss+css',
-      });
-      if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
-    } else if (!createRes.success) {
-      const exists = await geoServerStyleExists(baseUrl, layerName);
-      if (!exists) {
-        return { success: false, error: createRes.error ?? '스타일 생성 실패' };
-      }
-      const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
-        method: 'PUT',
-        body: cssBody,
-        contentType: 'application/vnd.geoserver.geocss+css',
-      });
-      if (putRes.ok) {
-        writeCssStyleToDataDir(layerName, cssBody);
-      } else if (!(await geoServerStyleExists(baseUrl, layerName))) {
-        const text = await putRes.text().catch(() => '');
-        return { success: false, error: `스타일 수정 실패: ${putRes.status} ${text}` };
+      catalogExists = await geoServerStyleExists(baseUrl, layerName);
+      if (!catalogExists) {
+        // #region agent log
+        fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1c82ab' },
+          body: JSON.stringify({
+            sessionId: '1c82ab',
+            runId: 'post-fix',
+            hypothesisId: 'B',
+            location: 'devTestService.ts:applyDefaultStyleToLayer',
+            message: 'orphan style alreadyExists without catalog',
+            data: { layerName },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        removeOrphanStyleFiles(layerName);
+        createRes = await createGeoServerStyle({
+          url: baseUrl,
+          name: layerName,
+          geometryType,
+          styleProps,
+        });
+      } else {
+        const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
+          method: 'PUT',
+          body: cssBody,
+          contentType: 'application/vnd.geoserver.geocss+css',
+        });
+        if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
       }
     }
+
+    if (!createRes.success) {
+      catalogExists = await geoServerStyleExists(baseUrl, layerName);
+      if (!catalogExists) {
+        removeOrphanStyleFiles(layerName);
+        createRes = await createGeoServerStyle({
+          url: baseUrl,
+          name: layerName,
+          geometryType,
+          styleProps,
+        });
+      }
+      if (!createRes.success && !(await geoServerStyleExists(baseUrl, layerName))) {
+        return { success: false, error: createRes.error ?? '스타일 생성 실패' };
+      }
+      if (await geoServerStyleExists(baseUrl, layerName)) {
+        const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(layerName)}`, {
+          method: 'PUT',
+          body: cssBody,
+          contentType: 'application/vnd.geoserver.geocss+css',
+        });
+        if (putRes.ok) writeCssStyleToDataDir(layerName, cssBody);
+      }
+    }
+
+    if (!(await geoServerStyleExists(baseUrl, layerName))) {
+      return {
+        success: false,
+        error: `스타일이 GeoServer 카탈로그에 등록되지 않았습니다: ${layerName}`,
+      };
+    }
+
     const setRes = await setLayerDefaultStyle({
       url: baseUrl,
       workspace,
@@ -1889,20 +1965,51 @@ function sqlExprsGeometryTo5181Wkt(geomColEscaped: string, catalogSrid: unknown)
 
 export type EmdRiOption = { code: string; name: string };
 
+/** 테이블에 실제 존재하는 컬럼명 집합 (information_schema 기준) */
+async function getExistingColumns(schema: string, table: string): Promise<Set<string>> {
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(table)}'`
+    )
+  );
+  return new Set(
+    (res.rows as Array<{ column_name?: string }>).map((r) => String(r.column_name ?? ''))
+  );
+}
+
+/** ORDER BY 용 정렬 컬럼 — gid/ogc_fid 계열이 있으면 우선, 없으면 nameCol로 대체(하드코딩 "gid" 부재 시 전체 실패 방지) */
+function pickOrderColumn(cols: Set<string>, nameCol: string): string {
+  const candidates = ['gid', 'ogc_fid', 'objectid', 'fid'];
+  const found = candidates.find((c) => cols.has(c));
+  return found ?? nameCol;
+}
+
 /**
- * 읍면동(emd) 목록 조회. emd_cd, 이름 반환. ORDER BY gid 만 적용.
+ * 읍면동(emd) 목록 조회. emd_cd, 이름 반환.
  */
 export async function getEmdRiOptions(params: { schema?: string } = {}) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
   const result: { emd: EmdRiOption[]; error?: string } = { emd: [] };
 
+  let cols: Set<string>;
+  try {
+    cols = await getExistingColumns(schema, 'emd');
+  } catch (e: unknown) {
+    result.error = e instanceof Error ? e.message : String(e);
+    return result;
+  }
+
   for (const nameCol of EMD_LIST_NAME_COLUMNS) {
+    if (!cols.has(nameCol)) continue;
+    const orderCol = pickOrderColumn(cols, nameCol);
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT "emd_cd" AS code, "${nameCol}" AS name FROM "${schema}"."emd"
            WHERE "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
-           ORDER BY "gid"`
+           ORDER BY "${orderCol}"`
         )
       );
       const rows = (res.rows as { code: string; name: string }[]).map((r) => ({
@@ -1916,7 +2023,8 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
         return true;
       });
       if (result.emd.length > 0) break;
-    } catch {
+    } catch (e: unknown) {
+      result.error = e instanceof Error ? e.message : String(e);
       continue;
     }
   }
@@ -1929,7 +2037,7 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
 
 /**
  * 선택한 읍면동(emd_cd) 하위 리(ri) 목록 조회.
- * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%'), ORDER BY gid.
+ * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%').
  */
 export async function getRiOptionsByEmd(params: { schema?: string; emdCode: string } = { emdCode: '' }) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
@@ -1940,15 +2048,29 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
     return result;
   }
 
+  let cols: Set<string>;
+  try {
+    cols = await getExistingColumns(schema, 'ri');
+  } catch (e: unknown) {
+    result.error = e instanceof Error ? e.message : String(e);
+    return result;
+  }
+  if (cols.size === 0) {
+    result.error = `"${schema}"."ri" 테이블을 찾을 수 없습니다.`;
+    return result;
+  }
+
   const safeEmdCode = emdCode.replace(/'/g, "''");
   for (const nameCol of RI_LIST_NAME_COLUMNS) {
+    if (!cols.has(nameCol)) continue;
+    const orderCol = pickOrderColumn(cols, nameCol);
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT "ri_cd" AS code, "${nameCol}" AS name FROM "${schema}"."ri"
            WHERE "ri_cd" LIKE '${safeEmdCode}' || '%'
              AND "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
-           ORDER BY "gid"`
+           ORDER BY "${orderCol}"`
         )
       );
       const rows = (res.rows as { code: string; name: string }[]).map((r) => ({

@@ -6,14 +6,18 @@ import { sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+import { extent3857CenterTo4326, fetchParcelJibunFromCoord } from '@/lib/vworldAddressServer';
 import { getPnuFromAddress } from './excelUploadService';
 import { getDefineTableKeyFieldName } from './standardService';
 import { recordDataLog } from './dataLogService';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer', 'public']);
-/** public_layer.jijuk — geometry_columns SRID=0, 실제 좌표는 EPSG:5181 */
+/** jijuk — geometry_columns SRID=0, 실제 좌표는 EPSG:5181 */
 const JIJUK_GEOM_SRID = 5181;
+const JIJUK_SCHEMA_CANDIDATES = ['layer', 'public_layer', 'public'] as const;
+let jijukSchemaCache: string | null = null;
+let jijukOrderColCache: string | null = null;
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
 
@@ -29,6 +33,41 @@ export type DefineFieldMeta = {
 function resolveSchema(raw?: string): string {
   const s = String(raw ?? '').trim() || DEFAULT_SCHEMA;
   return ALLOWED_SCHEMAS.has(s) ? s : DEFAULT_SCHEMA;
+}
+
+async function resolveJijukSchema(): Promise<string> {
+  if (jijukSchemaCache) return jijukSchemaCache;
+  const schemasIn = JIJUK_SCHEMA_CANDIDATES.map((s) => `'${esc(s)}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_schema
+       FROM information_schema.tables
+       WHERE table_name = 'jijuk' AND table_schema IN (${schemasIn})
+       ORDER BY CASE table_schema WHEN 'layer' THEN 0 WHEN 'public_layer' THEN 1 ELSE 2 END
+       LIMIT 1`
+    )
+  );
+  const schema = String((res.rows?.[0] as { table_schema?: string } | undefined)?.table_schema ?? '').trim();
+  jijukSchemaCache = schema || 'public_layer';
+  return jijukSchemaCache;
+}
+
+async function resolveJijukOrderColumn(jijukSchema: string): Promise<string> {
+  if (jijukOrderColCache) return jijukOrderColCache;
+  const safeSchema = esc(jijukSchema);
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = '${safeSchema}' AND table_name = 'jijuk'
+         AND column_name IN ('gid', 'ogc_fid', 'pnu')
+       ORDER BY CASE column_name WHEN 'gid' THEN 0 WHEN 'ogc_fid' THEN 1 ELSE 2 END
+       LIMIT 1`
+    )
+  );
+  const col = String((res.rows?.[0] as { column_name?: string } | undefined)?.column_name ?? 'pnu').trim();
+  jijukOrderColCache = col || 'pnu';
+  return jijukOrderColCache;
 }
 
 function esc(value: string): string {
@@ -90,12 +129,15 @@ function resolveKeyField(tableName: string, override?: string): string | null {
 export function getEditableFieldDefinitions(params: {
   table: string;
   excludeFields?: string[];
+  /** true면 show_detail=false 필드도 포함 (더보기로 표시·저장) */
+  includeHiddenDetail?: boolean;
 }): DefineFieldMeta[] {
   const table = String(params?.table ?? '').trim().toLowerCase();
   if (!table) return [];
   const exclude = new Set(
     (params.excludeFields ?? []).map((f) => String(f).trim().toLowerCase()).filter(Boolean)
   );
+  const includeHidden = params.includeHiddenDetail === true;
   const fields = loadDefineFields(table);
   return fields
     .map((raw) => {
@@ -105,7 +147,7 @@ export function getEditableFieldDefinitions(params: {
       if (GEOM_COLUMN_NAMES.has(lower) || exclude.has(lower)) return null;
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       const readOnly = isTrueFlag(raw.define_field_read_only);
-      if (!showDetail) return null;
+      if (!showDetail && !includeHidden) return null;
       const meta: DefineFieldMeta = {
         field,
         label: String(raw.define_field_kor_name ?? field).trim() || field,
@@ -117,7 +159,11 @@ export function getEditableFieldDefinitions(params: {
       return meta;
     })
     .filter((x): x is DefineFieldMeta => x !== null)
-    .sort((a, b) => (a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field)));
+    .sort((a, b) => {
+      // 기본 표시 필드를 먼저, 숨김(더보기) 필드는 뒤에
+      if (a.showDetail !== b.showDetail) return a.showDetail ? -1 : 1;
+      return a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field);
+    });
 }
 
 /** defineLayer + 실제 DB 컬럼 교집합 (define만 있고 DB에 없는 필드 제외) */
@@ -125,6 +171,7 @@ export async function getEditableFieldDefinitionsForTable(params: {
   table: string;
   schema?: string;
   excludeFields?: string[];
+  includeHiddenDetail?: boolean;
 }): Promise<{ fields: DefineFieldMeta[]; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   if (!tableGuess) return { fields: [], error: 'table이 필요합니다.' };
@@ -138,6 +185,7 @@ export async function getEditableFieldDefinitionsForTable(params: {
   const fields = getEditableFieldDefinitions({
     table: tableGuess,
     excludeFields: params.excludeFields,
+    includeHiddenDetail: params.includeHiddenDetail,
   }).filter((d) => columnSet.has(d.field.toLowerCase()));
 
   return { fields };
@@ -271,7 +319,7 @@ async function resolveGeomColumnMeta(
 function geomColRef(raw: string): string {
   if (raw.includes('.')) {
     const [table, col] = raw.split('.', 2);
-    return `${quoteIdent(table)}.${quoteIdent(col)}`;
+    return `${table}.${col}`;
   }
   return quoteIdent(raw);
 }
@@ -282,6 +330,34 @@ function jijukGeom5181Sql(geomCol = 'geom'): string {
 
 function jijukGeom3857Sql(geomCol = 'geom'): string {
   return `ST_Transform(${jijukGeom5181Sql(geomCol)}, 3857)`;
+}
+
+type JijukTableRef = {
+  /** "schema"."table" */
+  qualified: string;
+  /** ORDER BY 용 PK (gid | ogc_fid 등) */
+  orderCol: string;
+};
+
+/** 프로젝트 DB에 있는 지적(jijuk) 테이블 위치 해석 — public_layer 우선, 없으면 layer */
+async function resolveJijukTableRef(): Promise<JijukTableRef | null> {
+  for (const schema of JIJUK_SCHEMA_CANDIDATES) {
+    const table = await resolveLayerPhysicalRelName(schema, 'jijuk');
+    if (!table) continue;
+    const columns = await getTableColumns(schema, table);
+    const colSet = new Set(columns.map((c) => c.toLowerCase()));
+    if (!colSet.has('geom')) continue;
+    const orderCol = colSet.has('gid')
+      ? 'gid'
+      : colSet.has('ogc_fid')
+        ? 'ogc_fid'
+        : columns[0]!;
+    return {
+      qualified: `${quoteIdent(schema)}.${quoteIdent(table)}`,
+      orderCol,
+    };
+  }
+  return null;
 }
 
 function geomTo3857Sql(geomCol: string, tableSrid: number): string {
@@ -403,6 +479,7 @@ export async function updateTableRowByKey(params: {
   keyField?: string;
   changes: Record<string, unknown>;
   excludeFields?: string[];
+  includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
   geomClear?: boolean;
   /** 이력 작업자 표시 문자열 */
@@ -438,6 +515,7 @@ export async function updateTableRowByKey(params: {
   const editableDefs = getEditableFieldDefinitions({
     table: tableGuess,
     excludeFields: params.excludeFields,
+    includeHiddenDetail: params.includeHiddenDetail,
   });
   const editableFields = new Map(
     editableDefs.filter((d) => !d.readOnly && d.field.toLowerCase() !== keyField.toLowerCase()).map((d) => [d.field.toLowerCase(), d])
@@ -574,9 +652,14 @@ async function getColumnMetaList(schema: string, table: string): Promise<ColumnM
 function buildInsertEditableMap(
   tableGuess: string,
   keyField: string,
-  excludeFields?: string[]
+  excludeFields?: string[],
+  includeHiddenDetail?: boolean
 ): Map<string, DefineFieldMeta> {
-  const editableDefs = getEditableFieldDefinitions({ table: tableGuess, excludeFields });
+  const editableDefs = getEditableFieldDefinitions({
+    table: tableGuess,
+    excludeFields,
+    includeHiddenDetail,
+  });
   return new Map(
     editableDefs
       .filter((d) => !d.readOnly && d.field.toLowerCase() !== keyField.toLowerCase())
@@ -591,6 +674,7 @@ export async function insertTableRow(params: {
   keyField?: string;
   values: Record<string, unknown>;
   excludeFields?: string[];
+  includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
   logUser?: string | null;
 }): Promise<{ success: boolean; keyValue?: string; error?: string }> {
@@ -612,10 +696,17 @@ export async function insertTableRow(params: {
     return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
-  const editableFields = buildInsertEditableMap(tableGuess, keyField, params.excludeFields);
-  const values = params?.values ?? {};
+  const editableFields = buildInsertEditableMap(
+    tableGuess,
+    keyField,
+    params.excludeFields,
+    params.includeHiddenDetail
+  );
+  const values = { ...(params?.values ?? {}) };
   const insertCols: string[] = [];
   const insertVals: string[] = [];
+
+  const insertedColSet = new Set<string>();
 
   for (const [key, rawVal] of Object.entries(values)) {
     const col = findColumnName(columnMeta.map((c) => c.name), key);
@@ -625,6 +716,36 @@ export async function insertTableRow(params: {
     const val = normalizeChangeValue(rawVal);
     insertCols.push(quoteIdent(col));
     insertVals.push(val == null ? 'NULL' : `'${esc(val)}'`);
+    insertedColSet.add(col.toLowerCase());
+  }
+
+  const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField);
+  if (keyCol && !insertedColSet.has(keyCol.toLowerCase())) {
+    let keyRaw = values[keyField] ?? values[keyCol];
+    let keyVal = normalizeChangeValue(keyRaw);
+    if ((keyVal == null || !String(keyVal).trim()) && (tableGuess === 'usage_data_as' || tableGuess === 'cons_data_as')) {
+      if (tableGuess === 'usage_data_as') {
+        const { getNextUsageDataAsConsCode } = await import('./usageDataAsService');
+        const generated = await getNextUsageDataAsConsCode();
+        if (!String(generated.consCode ?? '').trim()) {
+          return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+        }
+        keyVal = generated.consCode;
+      } else {
+        const { getNextConsCode } = await import('./consDataAsService');
+        const generated = await getNextConsCode();
+        if (!String(generated.consCode ?? '').trim()) {
+          return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+        }
+        keyVal = generated.consCode;
+      }
+      values[keyField] = keyVal;
+    }
+    if (keyVal != null && String(keyVal).trim()) {
+      insertCols.push(quoteIdent(keyCol));
+      insertVals.push(`'${esc(String(keyVal).trim())}'`);
+      insertedColSet.add(keyCol.toLowerCase());
+    }
   }
 
   const geomWkt = String(params.geomWkt5181 ?? '').trim();
@@ -693,11 +814,24 @@ type JijukParcelGeomRow = {
   jibun?: unknown;
   emd_name?: unknown;
   ri_name?: unknown;
+  jimok?: unknown;
+  area_sqm?: unknown;
   geometry?: unknown;
   xmin?: unknown;
   ymin?: unknown;
   xmax?: unknown;
   ymax?: unknown;
+};
+
+export type JijukParcelGeomDto = {
+  address: string;
+  pnu: string;
+  /** 지목 — jijuk.jibun 끝 한글(예: 240답 → 답) */
+  jimok?: string;
+  /** 당초면적(㎡) — 필지 도형 ST_Area(5181) */
+  areaSqm?: number;
+  extent3857: [number, number, number, number] | null;
+  geometry3857: Record<string, unknown> | null;
 };
 
 function pnuDigitsOnly(pnu: unknown): string {
@@ -722,34 +856,85 @@ function formatLotFromPnuDigits(pnuDigits: string): string {
   return '';
 }
 
-function formatJibunLabel(jibunRaw: string, pnu: unknown): string {
-  const jibun = String(jibunRaw ?? '').trim();
-  if (jibun && !/(특별|광역|시|군|구)(\s|$)/u.test(jibun) && !/(읍|면|동|리)(\s)/u.test(jibun)) {
-    return jibun;
-  }
-  if (jibun) {
-    const stripped = formatAddressStripSidoSigungu(jibun);
-    if (stripped && !/(읍|면|동|리)(\s)/u.test(stripped)) return stripped;
-    if (stripped && /(\d|-)/.test(stripped)) {
-      const tokens = stripped.split(/\s+/);
-      const lot = tokens[tokens.length - 1];
-      if (lot && /[\d-]/.test(lot)) return lot;
-    }
-  }
-  return formatLotFromPnuDigits(pnuDigitsOnly(pnu));
+function hasSubstantialParcelDetail(value: string): boolean {
+  if (!value) return false;
+  if (/\d/.test(value)) return true;
+  return /리(\s|$)/u.test(value);
 }
 
+function extractLotLabelFromJibun(jibunRaw: string, pnu: unknown): string {
+  const fromPnu = formatLotFromPnuDigits(pnuDigitsOnly(pnu));
+  if (fromPnu) return fromPnu;
+  const stripped = formatAddressStripSidoSigungu(String(jibunRaw ?? '').trim());
+  if (!stripped) return '';
+  // «240답», «산7임», «1-1 답» → 지번만
+  const lotJimok = stripped.match(/^(산?\d+(?:-\d+)?)[\s]*[가-힣]+$/u);
+  if (lotJimok?.[1]) return lotJimok[1];
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+  const lot = tokens[tokens.length - 1] ?? '';
+  return lot && /[\d-]/.test(lot) ? lot : stripped;
+}
+
+/**
+ * public_layer.jijuk.jibun 은 지번+지목 결합 값이다.
+ * 예: «240답», «산7임», «1-1 답», «0-22 구»
+ */
+function extractJimokFromJijukJibun(jibunRaw: unknown): string {
+  const s = String(jibunRaw ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^(?:산?\d+(?:-\d+)?)[\s]*([가-힣]+)$/u);
+  return m?.[1]?.trim() ?? '';
+}
+
+function extractRiNameFromJibun(strippedJibun: string, emdName: string, lotPart: string): string {
+  const tokens = String(strippedJibun ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return "";
+
+  const emd = String(emdName ?? "").trim();
+  const lot = String(lotPart ?? "").trim();
+
+  for (const token of tokens) {
+    if (emd && token === emd) continue;
+    if (lot && token === lot) continue;
+    if (/^산?\d+(?:-\d+)?$/u.test(token)) continue;
+    if (/리$/u.test(token)) return token;
+  }
+  return "";
+}
+
+/** jijuk 행 → 주소검색과 동일 형식(시·군·구 제외, 읍·면·동·리 + 지번) */
 function buildParcelAddressFromJijukRow(row: JijukParcelGeomRow): string {
-  const emdName = String(row.emd_name ?? '').trim();
-  const riName = String(row.ri_name ?? '').trim();
-  const jibunPart = formatJibunLabel(String(row.jibun ?? ''), row.pnu);
+  const jibunRaw = String(row.jibun ?? "").trim();
+  const strippedJibun = jibunRaw ? formatAddressStripSidoSigungu(jibunRaw) : "";
+
+  const emdName = String(row.emd_name ?? "").trim();
+  const lotPart = extractLotLabelFromJibun(jibunRaw, row.pnu);
+  let riName = String(row.ri_name ?? "").trim();
+  if (!riName) {
+    riName = extractRiNameFromJibun(strippedJibun, emdName, lotPart);
+  }
+
   const parts: string[] = [];
   if (emdName) parts.push(emdName);
-  if (riName) parts.push(riName);
-  if (jibunPart) parts.push(jibunPart);
-  if (parts.length > 0) return parts.join(' ');
-  const fallback = formatAddressStripSidoSigungu(String(row.jibun ?? '').trim());
-  return fallback;
+  if (riName && riName !== emdName) parts.push(riName);
+  if (lotPart) {
+    const assembled = parts.join(" ");
+    if (!assembled.includes(lotPart)) parts.push(lotPart);
+  }
+
+  if (parts.length >= 2) return parts.join(" ");
+
+  if (strippedJibun && hasSubstantialParcelDetail(strippedJibun)) {
+    return strippedJibun;
+  }
+
+  if (parts.length === 1) return parts[0]!;
+
+  if (strippedJibun) return strippedJibun;
+  return lotPart || pnuDigitsOnly(row.pnu);
 }
 
 function pnuAdminCodes(pnu: unknown): { emdCd: string; liCd: string } {
@@ -758,52 +943,103 @@ function pnuAdminCodes(pnu: unknown): { emdCd: string; liCd: string } {
 }
 
 type AdminTableMeta = {
+  emdSchema: string | null;
   emdNameExpr: string | null;
+  emdCodeCol: string;
+  riSchema: string | null;
   riCodeCol: string | null;
   riNameCol: string | null;
+  riGeomCol: string | null;
+  riGeomSrid: number;
 };
+
+function normalizedTableSrid5181(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return JIJUK_GEOM_SRID;
+  return n;
+}
+
+/** geometry_columns SRID 기준 EPSG:5181 표현식 */
+function geomExprTo5181Sql(qualifiedCol: string, catalogSrid: number): string {
+  const srid = normalizedTableSrid5181(catalogSrid);
+  if (srid === JIJUK_GEOM_SRID) return qualifiedCol;
+  return `ST_Transform(ST_SetSRID(${qualifiedCol}, ${srid}), ${JIJUK_GEOM_SRID})`;
+}
 
 let adminTableMetaCache: AdminTableMeta | null = null;
 
 async function resolveAdminTableMeta(): Promise<AdminTableMeta> {
   if (adminTableMetaCache) return adminTableMetaCache;
 
-  const meta: AdminTableMeta = { emdNameExpr: null, riCodeCol: null, riNameCol: null };
+  const meta: AdminTableMeta = {
+    emdSchema: null,
+    emdNameExpr: null,
+    emdCodeCol: 'emd_cd',
+    riSchema: null,
+    riCodeCol: null,
+    riNameCol: null,
+    riGeomCol: null,
+    riGeomSrid: JIJUK_GEOM_SRID,
+  };
   try {
     const res = await db.execute(
       sql.raw(
-        `SELECT table_name::text AS table_name, column_name::text AS column_name
+        `SELECT table_schema::text AS table_schema, table_name::text AS table_name, column_name::text AS column_name
          FROM information_schema.columns
-         WHERE table_schema = 'public_layer' AND table_name IN ('emd', 'ri')`
+         WHERE table_schema IN ('public_layer', 'layer') AND table_name IN ('emd', 'ri')
+         ORDER BY CASE table_schema WHEN 'public_layer' THEN 0 ELSE 1 END, table_name, ordinal_position`
       )
     );
-    const emdCols = new Set<string>();
-    const riCols = new Set<string>();
+    const colsByTable = new Map<string, Set<string>>();
+    const schemaByTable = new Map<string, string>();
     for (const row of res.rows ?? []) {
+      const schema = String((row as { table_schema?: string }).table_schema ?? '').trim();
       const table = String((row as { table_name?: string }).table_name ?? '').trim().toLowerCase();
       const col = String((row as { column_name?: string }).column_name ?? '').trim().toLowerCase();
-      if (table === 'emd') emdCols.add(col);
-      if (table === 'ri') riCols.add(col);
+      if (!schema || !table || !col) continue;
+      if (!colsByTable.has(table)) colsByTable.set(table, new Set());
+      colsByTable.get(table)!.add(col);
+      if (!schemaByTable.has(table)) schemaByTable.set(table, schema);
     }
 
-    const emdNameParts: string[] = [];
-    for (const col of ['emd_kor_nm', 'emd_nm', 'adm_nm', 'name']) {
-      if (emdCols.has(col)) emdNameParts.push(`NULLIF(TRIM(${quoteIdent(col)}::text), '')`);
-    }
-    if (emdNameParts.length > 0) {
-      meta.emdNameExpr = emdNameParts.length === 1 ? emdNameParts[0]! : `COALESCE(${emdNameParts.join(', ')})`;
-    }
-
-    for (const col of ['li_cd', 'ri_cd']) {
-      if (riCols.has(col)) {
-        meta.riCodeCol = col;
-        break;
+    const emdCols = colsByTable.get('emd');
+    if (emdCols) {
+      meta.emdSchema = schemaByTable.get('emd') ?? null;
+      const emdNameParts: string[] = [];
+      for (const col of ['emd_kor_nm', 'emd_nm', 'adm_nm', 'name']) {
+        if (emdCols.has(col)) emdNameParts.push(`NULLIF(TRIM(${quoteIdent(col)}::text), '')`);
+      }
+      if (emdNameParts.length > 0) {
+        meta.emdNameExpr = emdNameParts.length === 1 ? emdNameParts[0]! : `COALESCE(${emdNameParts.join(', ')})`;
+      }
+      for (const col of ['emd_cd', 'emd_code']) {
+        if (emdCols.has(col)) {
+          meta.emdCodeCol = col;
+          break;
+        }
       }
     }
-    for (const col of ['ri_nm', 'name', 'adm_nm']) {
-      if (riCols.has(col)) {
-        meta.riNameCol = col;
-        break;
+
+    const riCols = colsByTable.get('ri');
+    if (riCols) {
+      meta.riSchema = schemaByTable.get('ri') ?? null;
+      for (const col of ['ri_cd', 'li_cd']) {
+        if (riCols.has(col)) {
+          meta.riCodeCol = col;
+          break;
+        }
+      }
+      for (const col of ['ri_nm', 'li_kor_nm', 'li_nm', 'name', 'adm_nm']) {
+        if (riCols.has(col)) {
+          meta.riNameCol = col;
+          break;
+        }
+      }
+      const riSchema = schemaByTable.get('ri');
+      if (riSchema) {
+        const geomMeta = await resolveGeomColumnMeta(riSchema, 'ri', ['geom']);
+        meta.riGeomCol = geomMeta?.col ?? 'geom';
+        meta.riGeomSrid = geomMeta?.srid ?? JIJUK_GEOM_SRID;
       }
     }
   } catch {
@@ -812,6 +1048,79 @@ async function resolveAdminTableMeta(): Promise<AdminTableMeta> {
 
   adminTableMetaCache = meta;
   return meta;
+}
+
+/** ri 테이블 코드 매칭 실패 시 bjd.tr_kor_nm 폴백 (예: 사계리) */
+async function loadRiNamesFromBjdByLiCds(liCds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const uniq = [...new Set(liCds.filter((c) => c.length === 10 && !c.endsWith('00')))];
+  if (uniq.length === 0) return out;
+
+  const ingestBjdRows = (rows: unknown[], liCdHint?: string) => {
+    for (const row of rows ?? []) {
+      const code = String((row as { code?: string }).code ?? '').trim();
+      const name = String((row as { name?: string }).name ?? '').trim();
+      if (!name || !/리(\s|$)/u.test(name)) continue;
+      if (code && uniq.includes(code)) {
+        out.set(code, name);
+        continue;
+      }
+      if (liCdHint && code.length >= 10) {
+        const emd = liCdHint.slice(0, 8);
+        const suffix = liCdHint.slice(8, 10);
+        if (code.slice(0, 8) === emd && code.slice(8, 10) === suffix) {
+          out.set(liCdHint, name);
+        }
+      }
+    }
+  };
+
+  const inList = uniq.map((c) => `'${esc(c)}'`).join(', ');
+  for (const schema of ['public_layer', 'layer'] as const) {
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT tr_cd::text AS code, NULLIF(TRIM(tr_kor_nm::text), '') AS name
+           FROM ${quoteIdent(schema)}.${quoteIdent('bjd')}
+           WHERE tr_cd::text IN (${inList})
+             AND NULLIF(TRIM(tr_kor_nm::text), '') IS NOT NULL`
+        )
+      );
+      ingestBjdRows(res.rows ?? []);
+      if (out.size >= uniq.length) break;
+    } catch {
+      // try next schema
+    }
+  }
+
+  const stillMissing = uniq.filter((c) => !out.has(c));
+  if (stillMissing.length === 0) return out;
+
+  for (const schema of ['public_layer', 'layer'] as const) {
+    for (const liCd of stillMissing) {
+      if (out.has(liCd)) continue;
+      const emd = esc(liCd.slice(0, 8));
+      const suffix = esc(liCd.slice(8, 10));
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT tr_cd::text AS code, NULLIF(TRIM(tr_kor_nm::text), '') AS name
+             FROM ${quoteIdent(schema)}.${quoteIdent('bjd')}
+             WHERE SUBSTRING(tr_cd::text, 1, 8) = '${emd}'
+               AND SUBSTRING(tr_cd::text, 9, 2) = '${suffix}'
+               AND NULLIF(TRIM(tr_kor_nm::text), '') IS NOT NULL
+             LIMIT 1`
+          )
+        );
+        ingestBjdRows(res.rows ?? [], liCd);
+      } catch {
+        // try next
+      }
+    }
+    if (stillMissing.every((c) => out.has(c))) break;
+  }
+
+  return out;
 }
 
 async function loadAdminNamesByPnuCodes(
@@ -826,14 +1135,15 @@ async function loadAdminNamesByPnuCodes(
 
   const meta = await resolveAdminTableMeta();
 
-  if (uniqEmd.length > 0 && meta.emdNameExpr) {
+  if (uniqEmd.length > 0 && meta.emdNameExpr && meta.emdSchema) {
     const inList = uniqEmd.map((c) => `'${esc(c)}'`).join(', ');
+    const emdCodeCol = quoteIdent(meta.emdCodeCol);
     try {
       const res = await db.execute(
         sql.raw(
-          `SELECT emd_cd::text AS code, ${meta.emdNameExpr} AS name
-           FROM public_layer.emd
-           WHERE emd_cd::text IN (${inList})`
+          `SELECT ${emdCodeCol}::text AS code, ${meta.emdNameExpr} AS name
+           FROM ${quoteIdent(meta.emdSchema)}.${quoteIdent('emd')}
+           WHERE ${emdCodeCol}::text IN (${inList})`
         )
       );
       for (const row of res.rows ?? []) {
@@ -846,29 +1156,179 @@ async function loadAdminNamesByPnuCodes(
     }
   }
 
-  if (uniqLi.length > 0 && meta.riCodeCol && meta.riNameCol) {
-    const inList = uniqLi.map((c) => `'${esc(c)}'`).join(', ');
+  if (uniqLi.length > 0 && meta.riSchema && meta.riCodeCol && meta.riNameCol) {
     const codeCol = quoteIdent(meta.riCodeCol);
     const nameCol = quoteIdent(meta.riNameCol);
+    const codeToName = new Map<string, string>();
+
+    const ingestRiRows = (rows: unknown[]) => {
+      for (const row of rows ?? []) {
+        const code = String((row as { code?: string }).code ?? '').trim();
+        const name = String((row as { name?: string }).name ?? '').trim();
+        if (code && name) codeToName.set(code, name);
+      }
+    };
+
+    const exactList = uniqLi.map((c) => `'${esc(c)}'`).join(', ');
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT ${codeCol}::text AS code, NULLIF(TRIM(${nameCol}::text), '') AS name
-           FROM public_layer.ri
-           WHERE ${codeCol}::text IN (${inList})`
+           FROM ${quoteIdent(meta.riSchema)}.${quoteIdent('ri')}
+           WHERE ${codeCol}::text IN (${exactList})`
         )
       );
-      for (const row of res.rows ?? []) {
-        const code = String((row as { code?: string }).code ?? '').trim();
-        const name = String((row as { name?: string }).name ?? '').trim();
-        if (code && name) riNames.set(code, name);
-      }
+      ingestRiRows(res.rows ?? []);
     } catch {
       // ignore
+    }
+
+    const emdPrefixes = [...new Set(uniqLi.map((li) => li.slice(0, 8)).filter((c) => c.length === 8))];
+    if (emdPrefixes.length > 0) {
+      const emdInList = emdPrefixes.map((c) => `'${esc(c)}'`).join(', ');
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT ${codeCol}::text AS code, NULLIF(TRIM(${nameCol}::text), '') AS name
+             FROM ${quoteIdent(meta.riSchema)}.${quoteIdent('ri')}
+             WHERE SUBSTRING(${codeCol}::text, 1, 8) IN (${emdInList})
+               AND NULLIF(TRIM(${nameCol}::text), '') IS NOT NULL`
+          )
+        );
+        ingestRiRows(res.rows ?? []);
+      } catch {
+        // ignore
+      }
+    }
+
+    for (const liCd of uniqLi) {
+      if (codeToName.has(liCd)) {
+        riNames.set(liCd, codeToName.get(liCd)!);
+        continue;
+      }
+      const suffix = liCd.slice(8, 10);
+      if (suffix === '00') continue;
+      for (const [code, name] of codeToName) {
+        if (code.length >= 10 && code.slice(0, 8) === liCd.slice(0, 8) && code.slice(8, 10) === suffix) {
+          riNames.set(liCd, name);
+          break;
+        }
+      }
+    }
+
+    const stillMissingRi = uniqLi.filter((li) => !riNames.has(li) && li.slice(8, 10) !== '00');
+    if (stillMissingRi.length > 0 && meta.riSchema && meta.riCodeCol && meta.riNameCol) {
+      const codeCol = quoteIdent(meta.riCodeCol);
+      const nameCol = quoteIdent(meta.riNameCol);
+      for (const liCd of stillMissingRi) {
+        const emd = esc(liCd.slice(0, 8));
+        const suffix = esc(liCd.slice(8, 10));
+        try {
+          const res = await db.execute(
+            sql.raw(
+              `SELECT ${codeCol}::text AS code, NULLIF(TRIM(${nameCol}::text), '') AS name
+               FROM ${quoteIdent(meta.riSchema)}.${quoteIdent('ri')}
+               WHERE SUBSTRING(${codeCol}::text, 1, 8) = '${emd}'
+                 AND SUBSTRING(${codeCol}::text, 9, 2) = '${suffix}'
+                 AND NULLIF(TRIM(${nameCol}::text), '') IS NOT NULL
+               LIMIT 1`
+            )
+          );
+          const row = res.rows?.[0] as { code?: string; name?: string } | undefined;
+          const name = String(row?.name ?? '').trim();
+          if (name) riNames.set(liCd, name);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  const missingLi = uniqLi.filter((li) => !riNames.has(li));
+  if (missingLi.length > 0) {
+    const bjdNames = await loadRiNamesFromBjdByLiCds(missingLi);
+    for (const [code, name] of bjdNames) {
+      if (!riNames.has(code)) riNames.set(code, name);
     }
   }
 
   return { emdNames, riNames };
+}
+
+/** PNU 코드 조회로 리명을 못 찾은 필지 — 도형 중심이 속한 ri 폴리곤에서 이름 보강 */
+async function enrichJijukRowsWithRiNameBySpatial(rows: JijukParcelGeomRow[]): Promise<JijukParcelGeomRow[]> {
+  const needSpatial = rows.filter((row) => {
+    if (String(row.ri_name ?? "").trim()) return false;
+    return pnuDigitsOnly(row.pnu).length >= 19;
+  });
+  if (needSpatial.length === 0) return rows;
+
+  const meta = await resolveAdminTableMeta();
+  if (!meta.riSchema || !meta.riNameCol) return rows;
+
+  const jijukSchema = await resolveJijukSchema();
+  const pnus = [
+    ...new Set(
+      needSpatial
+        .map((row) => pnuDigitsOnly(row.pnu).slice(0, 19))
+        .filter((p) => p.length === 19)
+    ),
+  ];
+  if (pnus.length === 0) return rows;
+
+  const riNameCol = quoteIdent(meta.riNameCol);
+  const riGeomCol = quoteIdent(meta.riGeomCol ?? 'geom');
+  const riGeom5181 = geomExprTo5181Sql(`r.${riGeomCol}`, meta.riGeomSrid);
+  const jijukGeom5181 = jijukGeom5181Sql('j.geom');
+  const spatialRiByPnu = new Map<string, string>();
+
+  const chunkSize = 100;
+  for (let i = 0; i < pnus.length; i += chunkSize) {
+    const chunk = pnus.slice(i, i + chunkSize);
+    const inList = chunk.map((p) => `'${esc(p)}'`).join(", ");
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT DISTINCT ON (pnu_digits)
+             pnu_digits AS pnu,
+             ri_nm
+           FROM (
+             SELECT
+               SUBSTRING(REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g'), 1, 19) AS pnu_digits,
+               NULLIF(TRIM(r.${riNameCol}::text), '') AS ri_nm,
+               ST_Area(${riGeom5181}) AS ri_area
+             FROM ${quoteIdent(jijukSchema)}.${quoteIdent("jijuk")} j
+             INNER JOIN ${quoteIdent(meta.riSchema)}.${quoteIdent("ri")} r
+               ON r.${riGeomCol} IS NOT NULL
+              AND ST_Contains(
+                ${riGeom5181},
+                ST_PointOnSurface(${jijukGeom5181})
+              )
+             WHERE SUBSTRING(REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g'), 1, 19) IN (${inList})
+               AND NULLIF(TRIM(r.${riNameCol}::text), '') IS NOT NULL
+           ) matched
+           WHERE ri_nm IS NOT NULL
+           ORDER BY pnu_digits, ri_area ASC`
+        )
+      );
+      for (const row of res.rows ?? []) {
+        const pnu = String((row as { pnu?: string }).pnu ?? "").trim();
+        const riNm = String((row as { ri_nm?: string }).ri_nm ?? "").trim();
+        if (pnu && riNm) spatialRiByPnu.set(pnu, riNm);
+      }
+    } catch {
+      // spatial 보강 실패 시 PNU·jibun 기반 결과만 사용
+    }
+  }
+
+  if (spatialRiByPnu.size === 0) return rows;
+
+  return rows.map((row) => {
+    const pnu = pnuDigitsOnly(row.pnu).slice(0, 19);
+    const spatialRi = pnu ? spatialRiByPnu.get(pnu) : undefined;
+    if (!spatialRi || String(row.ri_name ?? "").trim()) return row;
+    return { ...row, ri_name: spatialRi };
+  });
 }
 
 /** PNU → 대지위치(읍·면·동·리) + 지번(본·부번). 건축물대장 주소 폴백용 */
@@ -911,7 +1371,7 @@ async function enrichJijukRowsWithAdminNames(rows: JijukParcelGeomRow[]): Promis
       if (liCd) liCds.push(liCd);
     }
     const { emdNames, riNames } = await loadAdminNamesByPnuCodes(emdCds, liCds);
-    return rows.map((row) => {
+    let enriched: JijukParcelGeomRow[] = rows.map((row) => {
       const { emdCd, liCd } = pnuAdminCodes(row.pnu);
       return {
         ...row,
@@ -919,21 +1379,26 @@ async function enrichJijukRowsWithAdminNames(rows: JijukParcelGeomRow[]): Promis
         ri_name: riNames.get(liCd) ?? row.ri_name,
       };
     });
+    enriched = await enrichJijukRowsWithRiNameBySpatial(enriched);
+    return enriched;
   } catch {
     return rows;
   }
 }
 
-const jijukParcelSelectSql = (geomCol: string) => `
+const jijukParcelSelectSql = (geomCol: string, fromQualified: string) => `
   SELECT
     j.pnu::text AS pnu,
     j.jibun::text AS jibun,
+    -- jibun = 지번+지목(예: 240답, 산7임, 1-1 답). 지목은 끝 한글
+    NULLIF(TRIM(SUBSTRING(j.jibun::text FROM '(?:산?[0-9]+(?:-[0-9]+)?)[[:space:]]*([가-힣]+)$')), '') AS jimok,
+    ROUND(ST_Area(${jijukGeom5181Sql(geomCol)})::numeric, 2)::float8 AS area_sqm,
     ST_AsGeoJSON(${jijukGeom3857Sql(geomCol)})::json AS geometry,
     ST_XMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmin,
     ST_YMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymin,
     ST_XMax(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmax,
     ST_YMax(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymax
-  FROM public_layer.jijuk j
+  FROM ${fromQualified} j
   WHERE j.geom IS NOT NULL`;
 
 function buildJijukPnuMatchWhereSql(pnuDigits: string): string | null {
@@ -957,12 +1422,7 @@ async function resolvePnuDigitsFromInput(address: string, explicitPnu?: string):
   return pnu ? pnuDigitsOnly(pnu) : null;
 }
 
-function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
-  address: string;
-  pnu: string;
-  extent3857: [number, number, number, number] | null;
-  geometry3857: Record<string, unknown> | null;
-} | null {
+function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): JijukParcelGeomDto | null {
   const address = buildParcelAddressFromJijukRow(row);
   const pnu = pnuDigitsOnly(row.pnu);
   if (!address && !pnu) return null;
@@ -975,10 +1435,60 @@ function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
   const geometry = row.geometry;
   const geometry3857 =
     geometry != null && typeof geometry === 'object' ? (geometry as Record<string, unknown>) : null;
-  return { address: address || pnu, pnu, extent3857, geometry3857 };
+  // SQL 파싱 실패·구형 응답 대비 — jibun에서 지목 재추출
+  const jimok =
+    String(row.jimok ?? '').trim() || extractJimokFromJijukJibun(row.jibun);
+  const areaSqmRaw = Number(row.area_sqm);
+  const areaSqm = Number.isFinite(areaSqmRaw) && areaSqmRaw > 0 ? areaSqmRaw : undefined;
+  return {
+    address: address || pnu,
+    pnu,
+    ...(jimok ? { jimok } : {}),
+    ...(areaSqm != null ? { areaSqm } : {}),
+    extent3857,
+    geometry3857,
+  };
 }
 
-/** 주소·PNU(및 선택 좌표)로 public_layer.jijuk 필지 도형 조회 — jibun 문자열 비교 없음 */
+/** PNU상 리 구역인데 주소에 리명이 빠진 경우 (예: 북면 360-1 vs 북면 사계리 360-1) */
+function parcelAddressMissingRiName(row: JijukParcelGeomRow, address: string): boolean {
+  const liCd = pnuAdminCodes(row.pnu).liCd;
+  if (liCd.length < 10 || liCd.slice(8, 10) === '00') return false;
+  const stripped = formatAddressStripSidoSigungu(String(address ?? '').trim());
+  if (!stripped) return false;
+  return !/리(\s|$)/u.test(stripped);
+}
+
+/** jijuk 필지 주소 — DB 보강 후에도 리명 누락 시 VWorld 역지오코딩으로 주소검색과 동일 형식 보강 */
+async function finalizeJijukParcelGeom(
+  row: JijukParcelGeomRow,
+  mapped: JijukParcelGeomDto
+): Promise<JijukParcelGeomDto> {
+  if (!parcelAddressMissingRiName(row, mapped.address)) return mapped;
+
+  const coord = extent3857CenterTo4326(mapped.extent3857);
+  if (!coord) return mapped;
+
+  const jibun = await fetchParcelJibunFromCoord(coord.lon, coord.lat);
+  if (!jibun) return mapped;
+
+  const normalized = formatAddressStripSidoSigungu(jibun);
+  if (!normalized || !/리(\s|$)/u.test(normalized)) return mapped;
+
+  return { ...mapped, address: normalized };
+}
+
+async function mapJijukRowsToParcelGeoms(rows: JijukParcelGeomRow[]): Promise<JijukParcelGeomDto[]> {
+  const out: JijukParcelGeomDto[] = [];
+  for (const row of rows) {
+    const mapped = mapJijukRowToParcelGeom(row);
+    if (!mapped) continue;
+    out.push(await finalizeJijukParcelGeom(row, mapped));
+  }
+  return out;
+}
+
+/** 주소·PNU(및 선택 좌표)로 jijuk 필지 도형 조회 — jibun 문자열 비교 없음 */
 export async function resolveJijukParcelGeomsByAddresses(params: {
   items: Array<{ address: string; lon?: number; lat?: number; pnu?: string }>;
 }): Promise<{
@@ -997,6 +1507,18 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
     extent3857: [number, number, number, number] | null;
     geometry3857: Record<string, unknown> | null;
   }> = [];
+  const jijukRef = await resolveJijukTableRef();
+  if (!jijukRef) {
+    return {
+      parcels: items.map((item) => ({
+        address: String(item.address ?? '').trim(),
+        pnu: pnuDigitsOnly(item.pnu ?? item.address),
+        extent3857: null,
+        geometry3857: null,
+      })),
+      error: 'jijuk 테이블을 찾을 수 없습니다.',
+    };
+  }
 
   for (const item of items) {
     const address = String(item.address ?? '').trim();
@@ -1005,13 +1527,16 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
     const hasPoint =
       typeof lon === 'number' && typeof lat === 'number' && Number.isFinite(lon) && Number.isFinite(lat);
 
-    const selectSql = jijukParcelSelectSql('j.geom');
+    const selectSql = jijukParcelSelectSql('j.geom', jijukRef.qualified);
+    const orderSql = `j.${quoteIdent(jijukRef.orderCol)}`;
 
-    const runQuery = async (whereSql: string, orderSql: string) => {
+    const runQuery = async (whereSql: string) => {
       const queryStr = `${selectSql} AND ${whereSql} ORDER BY ${orderSql} LIMIT 1`;
       const res = await db.execute(sql.raw(queryStr));
       const enriched = await enrichJijukRowsWithAdminNames([(res.rows?.[0] ?? {}) as JijukParcelGeomRow]);
-      return mapJijukRowToParcelGeom(enriched[0] ?? {});
+      const mapped = mapJijukRowToParcelGeom(enriched[0] ?? {});
+      if (!mapped) return null;
+      return finalizeJijukParcelGeom(enriched[0] ?? {}, mapped);
     };
 
     try {
@@ -1019,14 +1544,14 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
 
       if (hasPoint) {
         const point5181 = `ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), ${JIJUK_GEOM_SRID})`;
-        mapped = await runQuery(`ST_Intersects(${jijukGeom5181Sql('j.geom')}, ${point5181})`, 'j.gid');
+        mapped = await runQuery(`ST_Intersects(${jijukGeom5181Sql('j.geom')}, ${point5181})`);
       }
 
       if (!mapped?.geometry3857) {
         const pnuDigits = await resolvePnuDigitsFromInput(address, item.pnu);
         const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
         if (pnuWhere) {
-          mapped = await runQuery(pnuWhere, 'j.gid');
+          mapped = await runQuery(pnuWhere);
         }
       }
 
@@ -1043,21 +1568,19 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
   return { parcels };
 }
 
-/** 도형(WKT 5181)과 면적으로 겹치는 public_layer.jijuk 필지 (경계 접합·선 접촉만 제외) */
+/** 도형(WKT 5181)과 면적으로 겹치는 jijuk 필지 (경계 접합·선 접촉만 제외) */
 export async function listJijukParcelsByGeomWkt5181(params: {
   wkt5181: string;
   limit?: number;
 }): Promise<{
-  parcels: Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }>;
+  parcels: JijukParcelGeomDto[];
   error?: string;
 }> {
   const wkt = String(params?.wkt5181 ?? '').trim();
   if (!wkt) return { parcels: [], error: 'wkt5181이 필요합니다.' };
+
+  const jijukRef = await resolveJijukTableRef();
+  if (!jijukRef) return { parcels: [], error: 'jijuk 테이블을 찾을 수 없습니다.' };
 
   const limit = Math.min(Math.max(Math.floor(params?.limit ?? 500), 1), 1000);
   const searchGeom = `ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), ${JIJUK_GEOM_SRID})`;
@@ -1066,27 +1589,18 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   const intersectGeom = `ST_Intersection(${jijukGeom}, ${searchGeom})`;
 
   const queryStr = `
-    ${jijukParcelSelectSql('j.geom')}
+    ${jijukParcelSelectSql('j.geom', jijukRef.qualified)}
       AND ${jijukGeom} && ${searchGeom}
       AND ST_Intersects(${jijukGeom}, ${searchGeom})
       AND ST_Dimension(${intersectGeom}) = 2
-      AND ST_Area(${intersectGeom}) > 1.0
-    ORDER BY j.gid
+      AND ST_Area(${intersectGeom}) > 0.01
+    ORDER BY j.${quoteIdent(jijukRef.orderCol)}
     LIMIT ${limit}`;
 
   try {
     const res = await db.execute(sql.raw(queryStr));
     const enriched = await enrichJijukRowsWithAdminNames((res.rows ?? []) as JijukParcelGeomRow[]);
-    const parcels = enriched
-      .map((r) => mapJijukRowToParcelGeom(r as JijukParcelGeomRow))
-      .filter(
-        (x): x is {
-          address: string;
-          pnu: string;
-          extent3857: [number, number, number, number] | null;
-          geometry3857: Record<string, unknown> | null;
-        } => x != null
-      );
+    const parcels = await mapJijukRowsToParcelGeoms(enriched as JijukParcelGeomRow[]);
     return { parcels };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1112,7 +1626,10 @@ export async function subtractParcelFromParentWkt5181(params: {
     const pnuDigits = pnuDigitsOnly(params?.subtractPnu);
     const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
     if (pnuWhere) {
-      subtractExpr = `(SELECT ${jijukGeom5181Sql('j.geom')} FROM public_layer.jijuk j WHERE j.geom IS NOT NULL AND ${pnuWhere} ORDER BY j.gid LIMIT 1)`;
+      const jijukRef = await resolveJijukTableRef();
+      if (jijukRef) {
+        subtractExpr = `(SELECT ${jijukGeom5181Sql('j.geom')} FROM ${jijukRef.qualified} j WHERE j.geom IS NOT NULL AND ${pnuWhere} ORDER BY j.${quoteIdent(jijukRef.orderCol)} LIMIT 1)`;
+      }
     }
   }
   if (!subtractExpr) {
@@ -1151,6 +1668,8 @@ export async function syncChildParcelsByParentId(params: {
   schema?: string;
   childTableName: string;
   childParentField?: string;
+  /** 주소 컬럼 (미지정 시 parcel_address → usage_loc 순 탐색) */
+  childAddressField?: string;
   parentId: string;
   /** @deprecated addresses 대신 parcels 사용 */
   addresses?: string[];
@@ -1169,9 +1688,13 @@ export async function syncChildParcelsByParentId(params: {
   const childCols = await getTableColumns(schema, childTable);
   const parentField = String(params?.childParentField ?? 'parent_id').trim() || 'parent_id';
   const parentCol = findColumnName(childCols, parentField);
-  const addressCol = findColumnName(childCols, 'parcel_address');
+  const addressFieldHint = String(params?.childAddressField ?? '').trim();
+  const addressCol =
+    (addressFieldHint ? findColumnName(childCols, addressFieldHint) : null) ??
+    findColumnName(childCols, 'parcel_address') ??
+    findColumnName(childCols, 'usage_loc');
   if (!parentCol || !addressCol) {
-    return { success: false, error: '자식 테이블에 parent_id·parcel_address 컬럼이 필요합니다.' };
+    return { success: false, error: '자식 테이블에 부모키·주소(usage_loc/parcel_address) 컬럼이 필요합니다.' };
   }
 
   const geomCol = findColumnName(childCols, 'geom');
@@ -1194,15 +1717,17 @@ export async function syncChildParcelsByParentId(params: {
       )
     );
 
+    const jijukRef = geomCol ? await resolveJijukTableRef() : null;
+
     for (const row of parcelRows) {
       const addr = row.address;
       const pnuDigits = await resolvePnuDigitsFromInput(addr, row.pnu);
       const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
       const geomInsert =
-        geomCol && pnuWhere
-          ? `(SELECT j.geom FROM public_layer.jijuk j
+        geomCol && pnuWhere && jijukRef
+          ? `(SELECT j.geom FROM ${jijukRef.qualified} j
               WHERE j.geom IS NOT NULL AND ${pnuWhere}
-              ORDER BY j.gid
+              ORDER BY j.${quoteIdent(jijukRef.orderCol)}
               LIMIT 1)`
           : null;
       const cols = [quoteIdent(parentCol), quoteIdent(addressCol)];
@@ -1226,13 +1751,15 @@ export async function syncChildParcelsByParentId(params: {
   }
 }
 
-/** PK 기준 행 삭제 (자식 jijuk 테이블 선삭제) */
+/** PK 기준 행 삭제 (자식 테이블 선삭제) */
 export async function deleteTableRowByKey(params: {
   table: string;
   schema?: string;
   keyValue: string | number;
   keyField?: string;
+  /** @deprecated childTableNames 사용 권장 */
   childTableName?: string;
+  childTableNames?: string[];
   childParentField?: string;
   logUser?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
@@ -1264,22 +1791,27 @@ export async function deleteTableRowByKey(params: {
       keyValue,
     });
 
-    const childTableGuess = String(params?.childTableName ?? '').trim().toLowerCase();
-    if (childTableGuess) {
+    const childTableGuesses = [
+      ...(Array.isArray(params.childTableNames) ? params.childTableNames : []),
+      ...(params.childTableName ? [params.childTableName] : []),
+    ]
+      .map((name) => String(name ?? "").trim().toLowerCase())
+      .filter(Boolean);
+    const uniqueChildTables = [...new Set(childTableGuesses)];
+    const parentField = String(params?.childParentField ?? 'parent_id').trim() || 'parent_id';
+
+    for (const childTableGuess of uniqueChildTables) {
       const childTable = await resolveLayerPhysicalRelName(schema, childTableGuess);
-      if (childTable) {
-        const childCols = await getTableColumns(schema, childTable);
-        const parentField = String(params?.childParentField ?? 'parent_id').trim() || 'parent_id';
-        const parentCol = findColumnName(childCols, parentField);
-        if (parentCol) {
-          await db.execute(
-            sql.raw(
-              `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
-               WHERE ${quoteIdent(parentCol)}::text = '${esc(keyValue)}'`
-            )
-          );
-        }
-      }
+      if (!childTable) continue;
+      const childCols = await getTableColumns(schema, childTable);
+      const parentCol = findColumnName(childCols, parentField);
+      if (!parentCol) continue;
+      await db.execute(
+        sql.raw(
+          `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
+           WHERE ${quoteIdent(parentCol)}::text = '${esc(keyValue)}'`
+        )
+      );
     }
 
     const res = await db.execute(

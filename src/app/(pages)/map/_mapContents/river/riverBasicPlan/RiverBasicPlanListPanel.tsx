@@ -4,14 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  riverBasicPlanAsDefineTable,
+  riverBasicPlanIndexDefineTable,
+  type RiverBasicPlanTab,
+} from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 
-/** 하천 기본계획 진입 시 항상 켜야 하는 레이어 (하천 선택 시 DetailPanel과 동일) */
-const RIVER_BASIC_PLAN_DEFAULT_LAYERS = ["river_d_index", "river_plan_as"] as const;
-
-type RiverType = "river" | "smallRiver";
+type RiverType = RiverBasicPlanTab;
 
 type RiverItem = {
   riverName: string;
@@ -26,6 +28,10 @@ type Props = {
   onSelectRiver: (riverName: string) => void;
   onClose: () => void;
 };
+
+function defaultLayersForTab(tab: RiverType): readonly string[] {
+  return [riverBasicPlanIndexDefineTable(tab), riverBasicPlanAsDefineTable(tab)];
+}
 
 export function RiverBasicPlanListPanel({
   tab,
@@ -42,15 +48,23 @@ export function RiverBasicPlanListPanel({
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<RiverItem[]>([]);
 
-  /** 패널 진입 시 기본 레이어 켜기, 언마운트 시 끄기 */
+  /** 패널 진입·탭 변경 시 해당 탭 기본 레이어 켜기, 언마운트 시 양쪽 끄기 */
   useEffect(() => {
     const ctx = mapContextRef.current;
     if (!ctx?.setVisibleLayerNames) return;
+    const onLayers = defaultLayersForTab(tab);
+    const offLayers = defaultLayersForTab(tab === "smallRiver" ? "river" : "smallRiver");
     ctx.setVisibleLayerNames((prev) => {
       const next = new Set(prev);
       let changed = false;
-      for (const id of RIVER_BASIC_PLAN_DEFAULT_LAYERS) {
-        if (!next.has(id)) { next.add(id); changed = true; }
+      for (const id of offLayers) {
+        if (next.delete(id)) changed = true;
+      }
+      for (const id of onLayers) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
       }
       return changed ? next : prev;
     });
@@ -60,13 +74,13 @@ export function RiverBasicPlanListPanel({
       c.setVisibleLayerNames((prev) => {
         const next = new Set(prev);
         let changed = false;
-        for (const id of RIVER_BASIC_PLAN_DEFAULT_LAYERS) {
+        for (const id of [...onLayers, ...offLayers]) {
           if (next.delete(id)) changed = true;
         }
         return changed ? next : prev;
       });
     };
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
     const t = setTimeout(async () => {

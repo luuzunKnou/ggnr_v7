@@ -1,4 +1,4 @@
-import { asc, eq, isNull, or } from 'drizzle-orm';
+import { asc, and, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { ug } from '@/database/schema/ug';
@@ -6,6 +6,7 @@ import { ut } from '@/database/schema/ut';
 import { perm } from '@/database/schema/perm';
 import { upMap } from '@/database/schema/up_map';
 import { hashPassword } from '@/lib/auth/password';
+import { getSessionUsrId } from '@/lib/auth/guard';
 
 type NullableBool = boolean | null;
 
@@ -40,6 +41,63 @@ async function ensureUgUt(ugName: string, utName: string) {
   const [existingUt] = await db.select().from(ut).where(eq(ut.utName, utName)).limit(1);
   if (!existingUt) {
     await db.insert(ut).values({ utName, ugName, utIsDel: false, utIsHidden: false });
+  }
+}
+
+function formatUserDeptLabel(ugName: string | null | undefined, utName: string | null | undefined): string {
+  const ug = String(ugName ?? '').trim();
+  const ut = String(utName ?? '').trim();
+  if (ug && ut && ug !== ut) return `${ug} · ${ut}`;
+  return ug || ut || '';
+}
+
+/** 로그인 사용자 본인 프로필 (지도 «내 정보» 패널) */
+export async function getMyProfile(_params?: unknown) {
+  const usrId = (await getSessionUsrId())?.trim() ?? '';
+  if (!usrId) return { success: false, error: 'Unauthorized' };
+
+  if (usrId === 'su') {
+    return {
+      success: true,
+      data: {
+        usrId: 'su',
+        name: '슈퍼관리자',
+        dept: '시스템',
+        phone: '',
+        email: '',
+      },
+    };
+  }
+
+  try {
+    const [row] = await db
+      .select({
+        usrId: usr.usrId,
+        usrName: usr.usrName,
+        ugName: usr.ugName,
+        utName: usr.utName,
+        usrTel: usr.usrTel,
+        usrMail: usr.usrMail,
+      })
+      .from(usr)
+      .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
+      .limit(1);
+
+    if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
+
+    return {
+      success: true,
+      data: {
+        usrId: row.usrId,
+        name: String(row.usrName ?? '').trim() || row.usrId,
+        dept: formatUserDeptLabel(row.ugName, row.utName),
+        phone: String(row.usrTel ?? '').trim(),
+        email: String(row.usrMail ?? '').trim(),
+      },
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '내 정보 조회 실패';
+    return { success: false, error: message };
   }
 }
 

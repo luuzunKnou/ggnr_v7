@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6ad12bdb:19fb0d2380b:-79de</id>
+  <name>lard_lawst_ri_budr</name>
+  <nativeName>lard_lawst_ri_budr</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>lard_lawst_ri_budr</title>
+  <keywords>
+    <string>features</string>
+    <string>lard_lawst_ri_budr</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>382981.5546645415</minx>
+    <maxx>419256.19016872044</maxx>
+    <miny>452532.17678532866</miny>
+    <maxy>508211.4818309747</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.07071138273645</minx>
+    <maxx>129.4977180017987</maxx>
+    <miny>37.54626000699834</miny>
+    <maxy>38.055487174104755</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

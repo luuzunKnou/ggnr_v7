@@ -1,0 +1,101 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import VectorLayer from "ol/layer/Vector";
+import VectorSource from "ol/source/Vector";
+import GeoJSON from "ol/format/GeoJSON";
+import { Style, Stroke, Fill } from "ol/style";
+import { call } from "@/lib/api";
+import { useMapContext } from "../../../_mapComponents/MapContext";
+import { USAGE_DATA_AS_WMS_LAYER_ID } from "./usageDataAsLayerId";
+import { LAYER_ROW_NEW_ID } from "../../../_mapComponents/layerRowEdit";
+
+const PARENT_GEOM_STYLE = new Style({
+  stroke: new Stroke({ color: "rgba(239, 68, 68, 0.95)", width: 2.5 }),
+  fill: new Fill({ color: "rgba(239, 68, 68, 0.12)" }),
+});
+
+/** 상세 조회 — 점용(부모) 도형 활성 표시 */
+export function useUsageDataAsParentGeomHighlight(
+  detailId: string,
+  active: boolean,
+  isEditing: boolean,
+  reloadToken = 0
+) {
+  const mapContext = useMapContext();
+  const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  const parentExtentRef = useRef<[number, number, number, number] | null>(null);
+
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
+
+    const source = new VectorSource();
+    const layer = new VectorLayer({
+      source,
+      style: PARENT_GEOM_STYLE,
+      zIndex: 910,
+    });
+    layer.set("usageDataAsParentGeomHighlight", true);
+    map.addLayer(layer);
+    layerRef.current = layer;
+
+    return () => {
+      map.removeLayer(layer);
+      layerRef.current = null;
+      parentExtentRef.current = null;
+    };
+  }, [mapContext?.mapInstanceRef]);
+
+  useEffect(() => {
+    const source = layerRef.current?.getSource();
+    if (!source) return;
+
+    source.clear();
+    parentExtentRef.current = null;
+
+    const key = String(detailId ?? "").trim();
+    if (!active || isEditing || !key || key === LAYER_ROW_NEW_ID) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await call("", "POST", {
+          service: "layerRowService",
+          action: "getTableRowGeomGeoJson3857",
+          params: {
+            table: USAGE_DATA_AS_WMS_LAYER_ID,
+            schema: "layer",
+            keyField: "cons_code",
+            keyValue: key,
+          },
+        });
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const geometry = data?.geometry;
+        if (!geometry || typeof geometry !== "object") return;
+
+        const format = new GeoJSON();
+        const features = format.readFeatures(
+          { type: "Feature", geometry, properties: {} },
+          { dataProjection: "EPSG:3857", featureProjection: "EPSG:3857" }
+        );
+        if (cancelled || features.length === 0) return;
+        source.clear();
+        source.addFeatures(features);
+        const ext = features[0]?.getGeometry()?.getExtent();
+        if (ext && ext.length === 4 && ext.every((v) => Number.isFinite(v))) {
+          parentExtentRef.current = ext as [number, number, number, number];
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, detailId, isEditing, reloadToken]);
+
+  return { parentExtentRef };
+}

@@ -28,9 +28,15 @@
 *.pem
 .cursor/local/
 .cursor/plans/
+.cursor/rules/_personal/
+.cursor/debug*.log
 
 # 기동 명령(boot)·버전관리 재시작 신호 (npm run 시 자동 생성, PC/세션마다 다름)
 .cursor-runtime/
+
+# local scratch / agent temp
+.tmp/
+debug-*.log
 
 # debug
 npm-debug.log*
