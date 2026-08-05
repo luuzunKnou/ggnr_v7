@@ -22,6 +22,15 @@ const LAYER_Z_INDEX = 920;
 const FETCH_LIMIT = 120;
 const PRICE_CONCURRENCY = 6;
 const MOVEEND_DEBOUNCE_MS = 450;
+/** 지번 라벨보다 한 단계 여유 — 지적도가 보이는 줌대에서도 공시지가 표시 */
+const OFFICIAL_PRICE_MAX_SCALE_DENOMINATOR = 10000;
+
+function isOfficialLandPriceZoomOk(resolution: number): boolean {
+  if (!Number.isFinite(resolution) || resolution <= 0) return false;
+  // 지번 라벨 기준과 동일 공식, 분모만 완화
+  if (isJijukJibunLabelVisible(resolution)) return true;
+  return resolution / 0.00028 <= OFFICIAL_PRICE_MAX_SCALE_DENOMINATOR;
+}
 
 type JijukParcelRow = {
   pnu?: string;
@@ -137,7 +146,7 @@ export function useOfficialLandPriceMapLayer(
 
       const view = map.getView();
       const resolution = view.getResolution();
-      if (resolution == null || !isJijukJibunLabelVisible(resolution)) {
+      if (resolution == null || !isOfficialLandPriceZoomOk(resolution)) {
         sourceRef.current.clear();
         return;
       }
