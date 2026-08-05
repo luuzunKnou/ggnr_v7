@@ -16,6 +16,8 @@ import * as shpUploadService from './shpUploadService';
 import * as excelHistoryService from './excelHistoryService';
 import * as excelUploadService from './excelUploadService';
 import * as layerHistoryService from './layerHistoryService';
+import * as dataHistoryService from './dataHistoryService';
+import * as dataLogService from './dataLogService';
 import * as permissionService from './permissionService';
 import * as usrService from './usrService';
 import * as riverBasicPlanService from './riverBasicPlanService';
@@ -24,6 +26,8 @@ import * as roadUseLedgerService from './roadUseLedgerService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
 import * as occupationLedgerService from './occupationLedgerService';
+import * as consDataAsService from './consDataAsService';
+import * as roadRewardService from './roadRewardService';
 import * as roadUseAndongService from './roadUseAndongService';
 import * as buildPublicLandService from './buildPublicLandService';
 import * as fileDataUploadService from './fileDataUploadService';
@@ -38,11 +42,16 @@ import * as seumService from './seumService';
 /** API `service: 'seumPermitService'` 호환 — seumService와 동일 모듈 */
 import * as seumPermitService from './seumService';
 import * as memoService from './memoService';
+import * as dataQueryHistoryService from './dataQueryHistoryService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
+import * as shootingRequestService from './shootingRequestService';
+import * as flightLogbookService from './flightLogbookService';
+import * as aerialUploadService from './aerialUploadService';
 import * as useFeeService from './useFeeService';
+import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as elevationService from './elevationService';
 import * as thematicMapService from './thematicMapService';
@@ -65,6 +74,8 @@ export {
   excelUploadService,
   excelHistoryService,
   layerHistoryService,
+  dataHistoryService,
+  dataLogService,
   permissionService,
   usrService,
   riverBasicPlanService,
@@ -73,6 +84,8 @@ export {
   riverUseLedgerService,
   usageDataAsService,
   occupationLedgerService,
+  consDataAsService,
+  roadRewardService,
   roadUseAndongService,
   buildPublicLandService,
   fileDataUploadService,
@@ -86,10 +99,15 @@ export {
   seumService,
   seumPermitService,
   memoService,
+  dataQueryHistoryService,
   noticeService,
   boardService,
   mngVersionHistoryService,
+  shootingRequestService,
+  flightLogbookService,
+  aerialUploadService,
   useFeeService,
+  groundwaterPermitService,
   bizNotifService,
   elevationService,
 };

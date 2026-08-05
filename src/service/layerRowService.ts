@@ -9,6 +9,7 @@ import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { extent3857CenterTo4326, fetchParcelJibunFromCoord } from '@/lib/vworldAddressServer';
 import { getPnuFromAddress } from './excelUploadService';
 import { getDefineTableKeyFieldName } from './standardService';
+import { recordDataLog } from './dataLogService';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer', 'public']);
@@ -420,6 +421,56 @@ function geomSetExpr(wkt5181: string): string {
   return `ST_SetSRID(ST_GeomFromText('${esc(wkt5181.trim())}'), 5181)`;
 }
 
+async function fetchRowAttrsAsJson(params: {
+  schema: string;
+  table: string;
+  keyCol: string;
+  keyValue: string;
+}): Promise<Record<string, unknown> | null> {
+  const fq = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
+  const where = `${quoteIdent(params.keyCol)}::text = '${esc(params.keyValue)}'`;
+  try {
+    // geom 있으면 전체 GeoJSON으로 포함 (이력 상세용)
+    const res = await db.execute(
+      sql.raw(
+        `SELECT (
+           (COALESCE(row_to_json(t.*)::jsonb, '{}'::jsonb) - 'geom')
+           || CASE
+                WHEN t.geom IS NULL THEN '{}'::jsonb
+                ELSE jsonb_build_object('geom', ST_AsGeoJSON(t.geom)::jsonb)
+              END
+         ) AS j
+         FROM ${fq} t
+         WHERE ${where}
+         LIMIT 1`
+      )
+    );
+    const row = res.rows?.[0] as { j?: Record<string, unknown> } | undefined;
+    return row?.j && typeof row.j === 'object' ? row.j : null;
+  } catch {
+    // geom 컬럼 없는 테이블 등 — 속성만
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT COALESCE(row_to_json(t.*)::jsonb, '{}'::jsonb) AS j
+           FROM ${fq} t
+           WHERE ${where}
+           LIMIT 1`
+        )
+      );
+      const row = res.rows?.[0] as { j?: Record<string, unknown> } | undefined;
+      return row?.j && typeof row.j === 'object' ? row.j : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function safeLogUser(raw?: string | null): string | null {
+  const s = String(raw ?? '').trim();
+  return s || null;
+}
+
 /** defineLayer 허용 필드만 UPDATE */
 export async function updateTableRowByKey(params: {
   table: string;
@@ -431,6 +482,8 @@ export async function updateTableRowByKey(params: {
   includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
   geomClear?: boolean;
+  /** 이력 작업자 표시 문자열 */
+  logUser?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   const keyValue = String(params?.keyValue ?? '').trim();
@@ -468,6 +521,14 @@ export async function updateTableRowByKey(params: {
     editableDefs.filter((d) => !d.readOnly && d.field.toLowerCase() !== keyField.toLowerCase()).map((d) => [d.field.toLowerCase(), d])
   );
 
+  const keyCol = findColumnName(columns, keyField)!;
+  const oldData = await fetchRowAttrsAsJson({
+    schema,
+    table,
+    keyCol,
+    keyValue,
+  });
+
   const setParts: string[] = [];
   for (const [key, rawVal] of entries) {
     const col = findColumnName(columns, key);
@@ -475,22 +536,56 @@ export async function updateTableRowByKey(params: {
     const def = editableFields.get(col.toLowerCase());
     if (!def) continue;
     const val = normalizeChangeValue(rawVal);
+    const oldKey =
+      oldData && Object.prototype.hasOwnProperty.call(oldData, col)
+        ? col
+        : Object.keys(oldData ?? {}).find((k) => k.toLowerCase() === col.toLowerCase());
+    const oldVal = normalizeChangeValue(oldKey != null ? oldData?.[oldKey] : undefined);
+    if (val === oldVal) continue;
     setParts.push(val == null ? `${quoteIdent(col)} = NULL` : `${quoteIdent(col)} = '${esc(val)}'`);
   }
 
   if (geomClear) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
-    setParts.push(`${quoteIdent(geomCol)} = NULL`);
+    const hadGeom = oldData != null && (oldData.geom != null || oldData.geometry != null);
+    if (hadGeom) {
+      setParts.push(`${quoteIdent(geomCol)} = NULL`);
+    }
   } else if (geomWkt) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
-    setParts.push(`${quoteIdent(geomCol)} = ${geomSetExpr(geomWkt)}`);
+    // 동일 도형이면 UPDATE 생략 (WKT 왕복으로 이력에 잡히는 것 방지)
+    let geomSame = false;
+    try {
+      const eqRes = await db.execute(
+        sql.raw(
+          `SELECT CASE
+             WHEN ${quoteIdent(geomCol)} IS NULL THEN false
+             ELSE ST_Equals(
+               ${quoteIdent(geomCol)},
+               ${geomSetExpr(geomWkt)}
+             )
+           END AS same
+           FROM ${quoteIdent(schema)}.${quoteIdent(table)}
+           WHERE ${quoteIdent(keyCol)}::text = '${esc(keyValue)}'
+           LIMIT 1`
+        )
+      );
+      geomSame = Boolean((eqRes.rows?.[0] as { same?: boolean } | undefined)?.same);
+    } catch {
+      geomSame = false;
+    }
+    if (!geomSame) {
+      setParts.push(`${quoteIdent(geomCol)} = ${geomSetExpr(geomWkt)}`);
+    }
   }
 
-  if (setParts.length === 0) return { success: false, error: '적용할 변경이 없습니다.' };
+  if (setParts.length === 0) {
+    // 속성·도형 실질 변경 없음 — 이력도 남기지 않음
+    return { success: true };
+  }
 
-  const keyCol = findColumnName(columns, keyField)!;
   const q = `UPDATE ${quoteIdent(schema)}.${quoteIdent(table)}
              SET ${setParts.join(', ')}
              WHERE ${quoteIdent(keyCol)}::text = '${esc(keyValue)}'
@@ -500,6 +595,24 @@ export async function updateTableRowByKey(params: {
     const res = await db.execute(sql.raw(q));
     const updated = res.rows?.[0] as { updated_key?: string } | undefined;
     if (!updated?.updated_key) return { success: false, error: '대상 행을 찾을 수 없습니다.' };
+
+    const newData = await fetchRowAttrsAsJson({
+      schema,
+      table,
+      keyCol,
+      keyValue,
+    });
+    void recordDataLog({
+      source: '시스템',
+      type: '수정',
+      user: safeLogUser(params.logUser),
+      tableName: tableGuess,
+      keyField,
+      keyValue,
+      oldData: oldData ?? undefined,
+      newData: newData ?? undefined,
+    }).catch(() => {});
+
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -563,6 +676,7 @@ export async function insertTableRow(params: {
   excludeFields?: string[];
   includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
+  logUser?: string | null;
 }): Promise<{ success: boolean; keyValue?: string; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   if (!tableGuess) return { success: false, error: 'table이 필요합니다.' };
@@ -609,13 +723,22 @@ export async function insertTableRow(params: {
   if (keyCol && !insertedColSet.has(keyCol.toLowerCase())) {
     let keyRaw = values[keyField] ?? values[keyCol];
     let keyVal = normalizeChangeValue(keyRaw);
-    if ((keyVal == null || !String(keyVal).trim()) && tableGuess === 'usage_data_as') {
-      const { getNextUsageDataAsConsCode } = await import('./usageDataAsService');
-      const generated = await getNextUsageDataAsConsCode();
-      if (!String(generated.consCode ?? '').trim()) {
-        return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+    if ((keyVal == null || !String(keyVal).trim()) && (tableGuess === 'usage_data_as' || tableGuess === 'cons_data_as')) {
+      if (tableGuess === 'usage_data_as') {
+        const { getNextUsageDataAsConsCode } = await import('./usageDataAsService');
+        const generated = await getNextUsageDataAsConsCode();
+        if (!String(generated.consCode ?? '').trim()) {
+          return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+        }
+        keyVal = generated.consCode;
+      } else {
+        const { getNextConsCode } = await import('./consDataAsService');
+        const generated = await getNextConsCode();
+        if (!String(generated.consCode ?? '').trim()) {
+          return { success: false, error: generated.error ?? '공사코드를 생성하지 못했습니다.' };
+        }
+        keyVal = generated.consCode;
       }
-      keyVal = generated.consCode;
       values[keyField] = keyVal;
     }
     if (keyVal != null && String(keyVal).trim()) {
@@ -640,6 +763,36 @@ export async function insertTableRow(params: {
     insertCols.push(quoteIdent(geomCol));
     insertVals.push(geomSetExpr(geomWkt));
   }
+
+  if (insertCols.length === 0) {
+    const q = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} DEFAULT VALUES
+               RETURNING ${quoteIdent(findColumnName(columnMeta.map((c) => c.name), keyField)!)}::text AS new_key`;
+    try {
+      const res = await db.execute(sql.raw(q));
+      const row = res.rows?.[0] as { new_key?: string } | undefined;
+      const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
+      if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+      const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
+      const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+      void recordDataLog({
+        source: '시스템',
+        type: '추가',
+        user: safeLogUser(params.logUser),
+        tableName: tableGuess,
+        keyField,
+        keyValue,
+        newData: newData ?? undefined,
+      }).catch(() => {});
+      return { success: true, keyValue };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false, error: msg };
+    }
+  }
+
+  const q = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} (${insertCols.join(', ')})
+             VALUES (${insertVals.join(', ')})
+             RETURNING ${quoteIdent(findColumnName(columnMeta.map((c) => c.name), keyField)!)}::text AS new_key`;
 
   const insertBase =
     insertCols.length === 0
@@ -671,6 +824,17 @@ export async function insertTableRow(params: {
     const row = res.rows?.[0] as { new_key?: string } | undefined;
     const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
     if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+    const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
+    const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+    void recordDataLog({
+      source: '시스템',
+      type: '추가',
+      user: safeLogUser(params.logUser),
+      tableName: tableGuess,
+      keyField,
+      keyValue,
+      newData: newData ?? undefined,
+    }).catch(() => {});
     return { success: true, keyValue };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -683,11 +847,24 @@ type JijukParcelGeomRow = {
   jibun?: unknown;
   emd_name?: unknown;
   ri_name?: unknown;
+  jimok?: unknown;
+  area_sqm?: unknown;
   geometry?: unknown;
   xmin?: unknown;
   ymin?: unknown;
   xmax?: unknown;
   ymax?: unknown;
+};
+
+export type JijukParcelGeomDto = {
+  address: string;
+  pnu: string;
+  /** 지목 — jijuk.jibun 끝 한글(예: 240답 → 답) */
+  jimok?: string;
+  /** 당초면적(㎡) — 필지 도형 ST_Area(5181) */
+  areaSqm?: number;
+  extent3857: [number, number, number, number] | null;
+  geometry3857: Record<string, unknown> | null;
 };
 
 function pnuDigitsOnly(pnu: unknown): string {
@@ -723,9 +900,23 @@ function extractLotLabelFromJibun(jibunRaw: string, pnu: unknown): string {
   if (fromPnu) return fromPnu;
   const stripped = formatAddressStripSidoSigungu(String(jibunRaw ?? '').trim());
   if (!stripped) return '';
+  // «240답», «산7임», «1-1 답» → 지번만
+  const lotJimok = stripped.match(/^(산?\d+(?:-\d+)?)[\s]*[가-힣]+$/u);
+  if (lotJimok?.[1]) return lotJimok[1];
   const tokens = stripped.split(/\s+/).filter(Boolean);
   const lot = tokens[tokens.length - 1] ?? '';
   return lot && /[\d-]/.test(lot) ? lot : stripped;
+}
+
+/**
+ * public_layer.jijuk.jibun 은 지번+지목 결합 값이다.
+ * 예: «240답», «산7임», «1-1 답», «0-22 구»
+ */
+function extractJimokFromJijukJibun(jibunRaw: unknown): string {
+  const s = String(jibunRaw ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^(?:산?\d+(?:-\d+)?)[\s]*([가-힣]+)$/u);
+  return m?.[1]?.trim() ?? '';
 }
 
 function extractRiNameFromJibun(strippedJibun: string, emdName: string, lotPart: string): string {
@@ -1232,6 +1423,9 @@ const jijukParcelSelectSql = (geomCol: string, fromQualified: string) => `
   SELECT
     j.pnu::text AS pnu,
     j.jibun::text AS jibun,
+    -- jibun = 지번+지목(예: 240답, 산7임, 1-1 답). 지목은 끝 한글
+    NULLIF(TRIM(SUBSTRING(j.jibun::text FROM '(?:산?[0-9]+(?:-[0-9]+)?)[[:space:]]*([가-힣]+)$')), '') AS jimok,
+    ROUND(ST_Area(${jijukGeom5181Sql(geomCol)})::numeric, 2)::float8 AS area_sqm,
     ST_AsGeoJSON(${jijukGeom3857Sql(geomCol)})::json AS geometry,
     ST_XMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmin,
     ST_YMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymin,
@@ -1261,12 +1455,7 @@ async function resolvePnuDigitsFromInput(address: string, explicitPnu?: string):
   return pnu ? pnuDigitsOnly(pnu) : null;
 }
 
-function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
-  address: string;
-  pnu: string;
-  extent3857: [number, number, number, number] | null;
-  geometry3857: Record<string, unknown> | null;
-} | null {
+function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): JijukParcelGeomDto | null {
   const address = buildParcelAddressFromJijukRow(row);
   const pnu = pnuDigitsOnly(row.pnu);
   if (!address && !pnu) return null;
@@ -1279,7 +1468,19 @@ function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): {
   const geometry = row.geometry;
   const geometry3857 =
     geometry != null && typeof geometry === 'object' ? (geometry as Record<string, unknown>) : null;
-  return { address: address || pnu, pnu, extent3857, geometry3857 };
+  // SQL 파싱 실패·구형 응답 대비 — jibun에서 지목 재추출
+  const jimok =
+    String(row.jimok ?? '').trim() || extractJimokFromJijukJibun(row.jibun);
+  const areaSqmRaw = Number(row.area_sqm);
+  const areaSqm = Number.isFinite(areaSqmRaw) && areaSqmRaw > 0 ? areaSqmRaw : undefined;
+  return {
+    address: address || pnu,
+    pnu,
+    ...(jimok ? { jimok } : {}),
+    ...(areaSqm != null ? { areaSqm } : {}),
+    extent3857,
+    geometry3857,
+  };
 }
 
 /** PNU상 리 구역인데 주소에 리명이 빠진 경우 (예: 북면 360-1 vs 북면 사계리 360-1) */
@@ -1294,8 +1495,8 @@ function parcelAddressMissingRiName(row: JijukParcelGeomRow, address: string): b
 /** jijuk 필지 주소 — DB 보강 후에도 리명 누락 시 VWorld 역지오코딩으로 주소검색과 동일 형식 보강 */
 async function finalizeJijukParcelGeom(
   row: JijukParcelGeomRow,
-  mapped: NonNullable<ReturnType<typeof mapJijukRowToParcelGeom>>
-): Promise<NonNullable<ReturnType<typeof mapJijukRowToParcelGeom>>> {
+  mapped: JijukParcelGeomDto
+): Promise<JijukParcelGeomDto> {
   if (!parcelAddressMissingRiName(row, mapped.address)) return mapped;
 
   const coord = extent3857CenterTo4326(mapped.extent3857);
@@ -1310,20 +1511,8 @@ async function finalizeJijukParcelGeom(
   return { ...mapped, address: normalized };
 }
 
-async function mapJijukRowsToParcelGeoms(rows: JijukParcelGeomRow[]): Promise<
-  Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }>
-> {
-  const out: Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }> = [];
+async function mapJijukRowsToParcelGeoms(rows: JijukParcelGeomRow[]): Promise<JijukParcelGeomDto[]> {
+  const out: JijukParcelGeomDto[] = [];
   for (const row of rows) {
     const mapped = mapJijukRowToParcelGeom(row);
     if (!mapped) continue;
@@ -1417,12 +1606,7 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   wkt5181: string;
   limit?: number;
 }): Promise<{
-  parcels: Array<{
-    address: string;
-    pnu: string;
-    extent3857: [number, number, number, number] | null;
-    geometry3857: Record<string, unknown> | null;
-  }>;
+  parcels: JijukParcelGeomDto[];
   error?: string;
 }> {
   const wkt = String(params?.wkt5181 ?? '').trim();
@@ -1610,6 +1794,7 @@ export async function deleteTableRowByKey(params: {
   childTableName?: string;
   childTableNames?: string[];
   childParentField?: string;
+  logUser?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   const keyValue = String(params?.keyValue ?? '').trim();
@@ -1632,6 +1817,13 @@ export async function deleteTableRowByKey(params: {
   const keyCol = findColumnName(columns, keyField)!;
 
   try {
+    const oldData = await fetchRowAttrsAsJson({
+      schema,
+      table,
+      keyCol,
+      keyValue,
+    });
+
     const childTableGuesses = [
       ...(Array.isArray(params.childTableNames) ? params.childTableNames : []),
       ...(params.childTableName ? [params.childTableName] : []),
@@ -1664,6 +1856,17 @@ export async function deleteTableRowByKey(params: {
     );
     const deleted = res.rows?.[0] as { deleted_key?: string } | undefined;
     if (!deleted?.deleted_key) return { success: false, error: '삭제할 데이터를 찾을 수 없습니다.' };
+
+    void recordDataLog({
+      source: '시스템',
+      type: '삭제',
+      user: safeLogUser(params.logUser),
+      tableName: tableGuess,
+      keyField,
+      keyValue,
+      oldData: oldData ?? undefined,
+    }).catch(() => {});
+
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

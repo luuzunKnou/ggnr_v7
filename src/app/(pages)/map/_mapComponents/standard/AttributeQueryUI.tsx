@@ -663,6 +663,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
       return;
     }
     if (!setSpatialFilterWkt) return;
+    /** 켜진(체크된) 레이어가 하나도 없으면 지오메트리 조회 후 검색이 대기 상태로 멈춰
+     *  "검색 중" 스피너가 끝없이 표시된다 — 검색 전에 미리 안내. */
+    if (visibleSearchTableNamesRef.current.length === 0) {
+      if (typeof window !== 'undefined') {
+        window.alert('검색할 레이어가 켜져 있지 않습니다. 좌측 레이어 목록에서 레이어를 클릭하거나 체크박스를 켠 뒤 다시 검색하세요.');
+      }
+      return;
+    }
     setGeometrySearchLoading(true);
     setSearchTab('boundary');
     try {

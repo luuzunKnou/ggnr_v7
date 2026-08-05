@@ -26,6 +26,8 @@ export type UseChunkedUploadReturn = {
     uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source' | 'fileManager',
     options?: {
       shpSavePath?: string;
+      /** excel_data 하위 상대경로. 예: `{tableEng}/{원본파일명}` → excel_data/{tableEng}/{시각}_{원본} */
+      excelSavePath?: string;
       fileDataSavePath?: string;
       satelliteTifSavePath?: string;
       sourceSavePath?: string;
@@ -66,6 +68,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
       uploadType: 'tif' | 'las' | 'shp' | 'excel' | 'fileData' | 'satelliteTif' | 'source' | 'fileManager',
       options?: {
         shpSavePath?: string;
+        excelSavePath?: string;
         fileDataSavePath?: string;
         satelliteTifSavePath?: string;
         sourceSavePath?: string;
@@ -85,6 +88,8 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
       const fileName =
         uploadType === 'shp' && options?.shpSavePath
           ? options.shpSavePath
+          : uploadType === 'excel' && options?.excelSavePath
+            ? options.excelSavePath.replace(/\\/g, '/')
           : uploadType === 'fileData' && options?.fileDataSavePath
             ? options.fileDataSavePath
             : uploadType === 'satelliteTif' && options?.satelliteTifSavePath

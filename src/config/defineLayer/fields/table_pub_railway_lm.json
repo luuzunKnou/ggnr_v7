@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "sig_cd",
-    "define_field_kor_name": "sig_cd",
+    "define_field_kor_name": "시군구코드",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "rlr_rlw_sn",
-    "define_field_kor_name": "rlr_rlw_sn",
+    "define_field_kor_name": "철도선로일련번호",
     "define_field_type": "number",
     "define_field_idx": 4,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "kor_rlr_nm",
-    "define_field_kor_name": "kor_rlr_nm",
+    "define_field_kor_name": "철도노선명_한글",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "eng_rlr_nm",
-    "define_field_kor_name": "eng_rlr_nm",
+    "define_field_kor_name": "철도노선명_영문",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "opert_de",
-    "define_field_kor_name": "opert_de",
+    "define_field_kor_name": "작업일시",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,

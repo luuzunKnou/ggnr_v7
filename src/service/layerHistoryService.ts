@@ -158,14 +158,19 @@ export async function createLayerHistory(params: {
   contents: string;
   successCount: number;
   failCount: number;
-  createUser?: number;
+  /** 작업자 — `usrId(usrName)` 또는 표시 문자열 */
+  createUser?: string | number | null;
 }): Promise<{ success: boolean; lhKey?: number; error?: string }> {
   try {
+    const createUser =
+      params.createUser == null || params.createUser === ''
+        ? null
+        : String(params.createUser).trim() || null;
     const rows = await db.insert(lh).values({
       lhContents: params.contents,
       lhSuccessCount: params.successCount,
       lhFailCount: params.failCount,
-      lhCreateUser: params.createUser ?? null,
+      lhCreateUser: createUser,
       lhCreateDate: todayWorkDateString(),
     }).returning({ lhKey: lh.lhKey });
     return { success: true, lhKey: rows[0]?.lhKey };
@@ -411,12 +416,17 @@ export async function abortIncompleteLayerHistory(params: {
       await db.execute(sql`
         DELETE FROM sync_log
         WHERE sl_operation IS NULL
-          AND sl_superseded_at IS NULL
           AND LOWER(sl_table_name) IN (${sql.join(
             tableNames.map((n) => sql`${n.toLowerCase()}`),
             sql`, `
           )})
       `);
+      try {
+        const { dropShpSyncTempTablesForNames } = await import('./shpUploadService');
+        await dropShpSyncTempTablesForNames({ tableNames });
+      } catch {
+        /* best-effort */
+      }
     }
 
     await db.delete(dh).where(eq(dh.dhLhKey, lhKey));

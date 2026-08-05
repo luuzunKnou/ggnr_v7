@@ -1,0 +1,19 @@
+<layer>
+  <name>lsmd_adm_sect_ri</name>
+  <id>LayerInfoImpl-6ad12bdb:19fb0d2380b:-78a9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6ad12bdb:19fb0d2380b:-78a8</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6ad12bdb:19fb0d2380b:-78aa</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-03 06:59:52.23 UTC</dateCreated>
+  <dateModified>2026-08-03 06:59:52.143 UTC</dateModified>
+</layer>

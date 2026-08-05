@@ -23,6 +23,7 @@ export function ServiceFilePdfThumb({
   layerSegment,
   keyValue,
   fileName,
+  subfolder,
   size = 'sm',
   className,
   /** 픽셀 기준 긴 변 상한 (클수록 고해상도, 렌더 비용 증가) */
@@ -34,6 +35,7 @@ export function ServiceFilePdfThumb({
   layerSegment: string;
   keyValue: string | number;
   fileName: string;
+  subfolder?: string | null;
   size?: 'sm' | 'md';
   className?: string;
   thumbMaxPx?: number;
@@ -41,7 +43,7 @@ export function ServiceFilePdfThumb({
 }) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const url = serviceFileDataDownloadUrl(serEng, layerSegment, keyValue, fileName);
+  const url = serviceFileDataDownloadUrl(serEng, layerSegment, keyValue, fileName, { subfolder });
   const alive = useRef(true);
   const loadingTaskRef = useRef<ReturnType<typeof getDocument> | null>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);

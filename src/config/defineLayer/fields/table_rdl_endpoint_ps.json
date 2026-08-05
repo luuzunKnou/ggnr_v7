@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "name",
-    "define_field_kor_name": "name",
+    "define_field_kor_name": "종점명",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "road_class",
-    "define_field_kor_name": "road_class",
+    "define_field_kor_name": "도로분류",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "start_end",
-    "define_field_kor_name": "start_end",
+    "define_field_kor_name": "시종점분류",
     "define_field_type": "text",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "admin_no",
-    "define_field_kor_name": "admin_no",
+    "define_field_kor_name": "관리도로 번호",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "no",
-    "define_field_kor_name": "no",
+    "define_field_kor_name": "번호",
     "define_field_type": "text",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "admin",
-    "define_field_kor_name": "admin",
+    "define_field_kor_name": "관리기관",
     "define_field_type": "text",
     "define_field_idx": 10,
     "define_field_is_required": false,

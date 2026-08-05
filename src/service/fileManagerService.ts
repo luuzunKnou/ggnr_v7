@@ -397,13 +397,15 @@ export async function createFileManagerZipStream(params: {
 
 /**
  * file_data/{layerName}/{keyValue}/ 내 파일 목록 (첨부 공통).
- * 폴더가 없으면 빈 배열.
+ * optional subfolder → file_data/{layer}/{key}/{subfolder}/
+ * 폴더가 없으면 빈 배열. 하위 디렉터리의 파일은 포함하지 않음(직접 자식만).
  */
 export async function listServiceFileDataFiles(params: {
   layerName: string;
   keyValue: string;
+  subfolder?: string | null;
 }): Promise<ListDirectoryResult['files']> {
-  const rel = fileDataRelativeDir(params.layerName, params.keyValue);
+  const rel = fileDataRelativeDir(params.layerName, params.keyValue, params.subfolder);
   if (!rel) return [];
 
   const filterTmp = (files: ListDirectoryResult['files']) =>
@@ -415,6 +417,55 @@ export async function listServiceFileDataFiles(params: {
   } catch {
     return [];
   }
+}
+
+/**
+ * file_data/{layer}/{key}/ 하위 폴더명 + 루트에 파일이 있는지.
+ */
+export async function listServiceFileDataFolders(params: {
+  layerName: string;
+  keyValue: string;
+}): Promise<{ folders: string[]; hasRootFiles: boolean }> {
+  const rel = fileDataRelativeDir(params.layerName, params.keyValue);
+  if (!rel) return { folders: [], hasRootFiles: false };
+
+  try {
+    const r = await listDirectory({ relativePath: rel });
+    const folders = (r.directories ?? []).filter((name) => {
+      const t = String(name ?? '').trim();
+      return Boolean(t) && t !== '.' && t !== '..';
+    });
+    const hasRootFiles = (r.files ?? []).some(
+      (f) => f?.name && !isServiceFileDataTmpMarkedFileName(f.name)
+    );
+    return { folders, hasRootFiles };
+  } catch {
+    return { folders: [], hasRootFiles: false };
+  }
+}
+
+/**
+ * file_data/{layer}/{key}/{folder}/ 빈 폴더를 미리 생성.
+ * 신규 등록 직후 첨부 탭(도면·조서 등)이 파일 없이도 바로 보이도록 할 때 사용.
+ */
+export async function ensureServiceFileDataFolders(params: {
+  layerName: string;
+  keyValue: string;
+  folders: string[];
+}): Promise<{ ok: true }> {
+  await ensureBaseStructure();
+  for (const folder of params.folders ?? []) {
+    const rel = fileDataRelativeDir(params.layerName, params.keyValue, folder);
+    if (!rel) continue;
+    const target = resolveWithinBase(rel);
+    if (!target) continue;
+    try {
+      await fs.mkdir(target.abs, { recursive: true });
+    } catch {
+      // 이미 있으면 무시
+    }
+  }
+  return { ok: true };
 }
 
 /** file_data/{layer}/{fromKey}/ 첨부를 {toKey}/ 로 이전 (글쓰기 임시 키 → 게시글 키) */
@@ -472,12 +523,13 @@ export async function softDeleteServiceFileDataItem(params: {
   layerName: string;
   keyValue: string;
   fileName: string;
+  subfolder?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const safeName = assertSafeServiceFileBasename(params.fileName);
   if (!safeName || isServiceFileDataTmpMarkedFileName(safeName)) {
     return { ok: false, error: '유효하지 않은 파일명입니다.' };
   }
-  const rel = fileDataRelativeDir(params.layerName, params.keyValue);
+  const rel = fileDataRelativeDir(params.layerName, params.keyValue, params.subfolder);
   if (!rel) return { ok: false, error: '유효하지 않은 경로입니다.' };
   const base = getBaseDir();
   const dirAbs = path.resolve(path.join(base, ...rel.split('/')));

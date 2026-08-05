@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "road_type",
-    "define_field_kor_name": "road_type",
+    "define_field_kor_name": "도로분류",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "length",
-    "define_field_kor_name": "length",
+    "define_field_kor_name": "길이",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,
@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "defense",
-    "define_field_kor_name": "defense",
+    "define_field_kor_name": "방위",
     "define_field_type": "text",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "sinuosity",
-    "define_field_kor_name": "sinuosity",
+    "define_field_kor_name": "굴곡도",
     "define_field_type": "number",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "alwnc_resn",
-    "define_field_kor_name": "alwnc_resn",
+    "define_field_kor_name": "상세사유",
     "define_field_type": "text",
     "define_field_idx": 11,
     "define_field_is_required": false,
@@ -551,7 +551,7 @@
   },
   {
     "define_field_name": "rn",
-    "define_field_kor_name": "rn",
+    "define_field_kor_name": "도로명주소",
     "define_field_type": "text",
     "define_field_idx": 23,
     "define_field_is_required": false,

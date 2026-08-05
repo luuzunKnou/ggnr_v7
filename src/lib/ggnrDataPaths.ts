@@ -6,6 +6,8 @@ export const GGNR_DATA_PATHS = {
   meta: '.meta',
   fileData: 'file_data',
   excelData: 'excel_data',
+  /** 레이어관리 오류수정 자동 수정 로그 */
+  autofixLog: 'autofix_log',
   shpData: 'shp_data',
   /** SHP 동기화 이력별 스냅샷 (상세 지도 복원용) */
   shpHistory: 'shp_history',
@@ -37,6 +39,7 @@ export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.shpData,
   GGNR_DATA_PATHS.shpHistory,
   GGNR_DATA_PATHS.excelData,
+  GGNR_DATA_PATHS.autofixLog,
   GGNR_DATA_PATHS.tilesTif,
   GGNR_DATA_PATHS.tilesJpg,
   GGNR_DATA_PATHS.dtilesLas,

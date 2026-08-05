@@ -1,27 +1,21 @@
-/** 하천 공사대장 — 임시 데이터·CRUD 헬퍼 (실DB 연동 시 교체) */
+/** 하천 공사대장 — 타입·매퍼·UI 헬퍼 (실데이터: cons_data_as) */
 
 import type { LayerRowParcelItem } from "../../../_mapComponents/layerRowEdit/types";
 
 export type RiverConstructionLedgerGeom = {
   type: "MultiPolygon";
-  /** WGS84 — 폴리곤 여러 개: [ [ [ [lon,lat], ... 외곽선 ] ], ... ] 공사구간이 여러 구역으로 나뉠 수 있음 */
+  /** WGS84 — 폴리곤 여러 개: [ [ [ [lon,lat], ... 외곽선 ] ], ... ] */
   coordinates: [number, number][][][];
 };
 
 export type RiverConstructionLedgerPreviewKind = "image" | "pdf" | "other";
 
-/** 첨부 분류 — 상세 패널 첨부 탭 구분용 */
-export type RiverConstructionLedgerAttachmentCategory = "drawing" | "spec" | "start" | "etc";
+/** 첨부 폴더명(=탭). 루트 파일은 «기타» */
+export type RiverConstructionLedgerAttachmentCategory = string;
 
-export const RIVER_CONSTRUCTION_ATTACHMENT_CATEGORIES: {
-  value: RiverConstructionLedgerAttachmentCategory;
-  label: string;
-}[] = [
-  { value: "drawing", label: "도면" },
-  { value: "spec", label: "시방서" },
-  { value: "start", label: "착수" },
-  { value: "etc", label: "기타" },
-];
+export const CONS_ATTACH_ROOT_FOLDER = "기타";
+export const CONS_DATA_AS_FILE_LAYER = "cons_data_as";
+export const CONS_DATA_AS_NEW_ID_PREFIX = "rcl-new-";
 
 export type RiverConstructionLedgerAttachment = {
   id: string;
@@ -41,7 +35,7 @@ export type RiverConstructionLedgerRow = {
   location: string;
   /** 공사량 */
   quantity: string;
-  /** 대상 하천명 (복수) — 상세 «대상 하천» 섹션 */
+  /** 대상 하천명 (복수 UI — DB river_name 단건은 [river_name]) */
   riverNames: string[];
   /** 계약일 */
   contractDate: string;
@@ -76,12 +70,12 @@ export type RiverConstructionLedgerRow = {
   /** 비고 */
   remark: string;
   geom: RiverConstructionLedgerGeom | null;
+  /** 첨부 — 폴더 탭에서 별도 로드 (행 캐시용, 비어 있을 수 있음) */
   attachments: RiverConstructionLedgerAttachment[];
-  /** 공사구간 도형과 겹치는 필지 목록 — 도형 그리기/수정 시 자동 조회 + 수동 추가(도로점용과 동일 패턴) */
   parcels: LayerRowParcelItem[];
 };
 
-/** 목록·검색용 임시 하천 후보 (대량 선택 UI 확인용 ~60) */
+/** 목록·검색용 임시 하천 후보 */
 export const RIVER_CONSTRUCTION_RIVER_PRESETS = [
   "남천",
   "동천",
@@ -145,204 +139,38 @@ export const RIVER_CONSTRUCTION_RIVER_PRESETS = [
   "백암온천천",
 ] as const;
 
-function poly(ring: [number, number][]): RiverConstructionLedgerGeom {
-  const closed =
-    ring.length > 0 &&
-    (ring[0]![0] !== ring[ring.length - 1]![0] || ring[0]![1] !== ring[ring.length - 1]![1])
-      ? [...ring, ring[0]!]
-      : ring;
-  return { type: "MultiPolygon", coordinates: [[closed]] };
-}
-
-/** 울진군 일대 대략 폴리곤 (시각화용) */
-const GEOM_NAMCHEON = poly([
-  [129.398, 36.988],
-  [129.405, 36.988],
-  [129.406, 36.994],
-  [129.399, 36.995],
-]);
-const GEOM_DONGCHEON = poly([
-  [129.418, 37.05],
-  [129.428, 37.05],
-  [129.429, 37.058],
-  [129.419, 37.058],
-]);
-const GEOM_SEOCHON = poly([
-  [129.348, 36.725],
-  [129.358, 36.725],
-  [129.359, 36.732],
-  [129.349, 36.732],
-]);
-const GEOM_BUKCHEON = poly([
-  [129.275, 36.945],
-  [129.288, 36.945],
-  [129.289, 36.955],
-  [129.276, 36.955],
-]);
-
-const MOCK_ROWS: RiverConstructionLedgerRow[] = [
-  {
-    id: "rcl-001",
-    name: "남천 제방보강공사",
-    location: "남천 일원",
-    quantity: "제방 1.2km",
-    riverNames: ["남천"],
-    contractDate: "2024-02-15",
-    startDate: "2024-03-01",
-    endDate: "2024-11-30",
-    actualEndDate: "2024-11-28",
-    companyName: "(주)한강건설",
-    representative: "김한강",
-    phone: "054-123-4567",
-    companyAddress: "경북 울진군 울진읍 중앙로 12",
-    supervisor: "하천과",
-    supervisorName: "이감독",
-    budgetBefore: "1,100",
-    budgetIncrease: "150",
-    budgetDecrease: "0",
-    budgetAfter: "1,250",
-    changeReason: "토공량 증가",
-    remark: "우기 전 제방 보강 완료",
-    geom: GEOM_NAMCHEON,
-    attachments: [],
-    parcels: [],
-  },
-  {
-    id: "rcl-002",
-    name: "동천·왕피천 호안정비공사",
-    location: "동천·왕피천 중류",
-    quantity: "호안 0.8km",
-    riverNames: ["동천", "왕피천"],
-    contractDate: "2025-01-20",
-    startDate: "2025-02-15",
-    endDate: "2025-12-31",
-    actualEndDate: "",
-    companyName: "(주)동해토건",
-    representative: "박동해",
-    phone: "054-234-5678",
-    companyAddress: "경북 울진군 근남면 수산리 45",
-    supervisor: "하천과",
-    supervisorName: "최감독",
-    budgetBefore: "800",
-    budgetIncrease: "60",
-    budgetDecrease: "0",
-    budgetAfter: "860",
-    changeReason: "",
-    remark: "호안 블록 교체 구간",
-    geom: GEOM_DONGCHEON,
-    attachments: [],
-    parcels: [],
-  },
-  {
-    id: "rcl-003",
-    name: "서천 수문개보수공사",
-    location: "서천 하류",
-    quantity: "수문 2기",
-    riverNames: ["서천"],
-    contractDate: "",
-    startDate: "",
-    endDate: "",
-    actualEndDate: "",
-    companyName: "",
-    representative: "",
-    phone: "",
-    companyAddress: "",
-    supervisor: "하천과",
-    supervisorName: "",
-    budgetBefore: "420",
-    budgetIncrease: "0",
-    budgetDecrease: "0",
-    budgetAfter: "420",
-    changeReason: "",
-    remark: "설계 검토 중",
-    geom: GEOM_SEOCHON,
-    attachments: [],
-    parcels: [],
-  },
-  {
-    id: "rcl-004",
-    name: "북천 퇴적토준설공사",
-    location: "북천 상류",
-    quantity: "준설 3,200㎥",
-    riverNames: ["북천"],
-    contractDate: "2023-04-01",
-    startDate: "2023-05-10",
-    endDate: "2023-09-20",
-    actualEndDate: "2023-09-18",
-    companyName: "(주)청수환경",
-    representative: "정청수",
-    phone: "054-345-6789",
-    companyAddress: "경북 울진군 북면 부구로 88",
-    supervisor: "환경과",
-    supervisorName: "한감독",
-    budgetBefore: "550",
-    budgetIncrease: "0",
-    budgetDecrease: "20",
-    budgetAfter: "530",
-    changeReason: "준설량 축소",
-    remark: "퇴적토 반출 완료",
-    geom: GEOM_BUKCHEON,
-    attachments: [],
-    parcels: [],
-  },
-  {
-    id: "rcl-005",
-    name: "남천·매화천 생태복원공사",
-    location: "남천·매화천 상류",
-    quantity: "식생대 0.5km",
-    riverNames: ["남천", "매화천"],
-    contractDate: "2025-03-10",
-    startDate: "2025-04-01",
-    endDate: "2025-11-30",
-    actualEndDate: "",
-    companyName: "(주)녹색하천",
-    representative: "윤녹색",
-    phone: "054-456-7890",
-    companyAddress: "경북 울진군 평해읍 평해로 3",
-    supervisor: "하천과",
-    supervisorName: "오감독",
-    budgetBefore: "950",
-    budgetIncrease: "30",
-    budgetDecrease: "0",
-    budgetAfter: "980",
-    changeReason: "식생 보강",
-    remark: "식생대 조성",
-    geom: poly([
-      [129.401, 36.996],
-      [129.408, 36.996],
-      [129.409, 37.001],
-      [129.402, 37.001],
-    ]),
-    attachments: [],
-    parcels: [],
-  },
-  {
-    id: "rcl-060",
-    name: "울진권역 통합 하천정비공사",
-    location: "울진군 일원",
-    quantity: "정비 다수 구간",
-    riverNames: [...RIVER_CONSTRUCTION_RIVER_PRESETS] as string[],
-    contractDate: "2025-12-01",
-    startDate: "2026-01-15",
-    endDate: "2026-12-31",
-    actualEndDate: "",
-    companyName: "(주)통합하천",
-    representative: "강통합",
-    phone: "054-567-8901",
-    companyAddress: "경북 울진군 울진읍 연호로 100",
-    supervisor: "하천과",
-    supervisorName: "송감독",
-    budgetBefore: "12,000",
-    budgetIncrease: "500",
-    budgetDecrease: "0",
-    budgetAfter: "12,500",
-    changeReason: "대상 구간 확대",
-    remark: "대상 하천 60개 — 대량 UI 확인용 임시 데이터",
-    geom: GEOM_NAMCHEON,
-    attachments: [],
-    parcels: [],
-  },
-];
+export type ConsDataAsApiRow = {
+  consCode?: string;
+  consName?: string;
+  consLocat?: string;
+  consVolum?: string;
+  riverName?: string;
+  contDate?: string;
+  startDate?: string;
+  doneDate?: string;
+  sdoneDate?: string;
+  businName?: string;
+  ceoName?: string;
+  businPhon?: string;
+  businAddr?: string;
+  directPos?: string;
+  directNam?: string;
+  amountPre?: string;
+  amountVar?: string;
+  amountCha?: string;
+  amountAft?: string;
+  reason?: string;
+  descript?: string;
+  geom?: RiverConstructionLedgerGeom | null;
+  parcels?: Array<{
+    address?: string;
+    riverName?: string;
+    remark?: string;
+    pnu?: string;
+    extent3857?: [number, number, number, number] | null;
+    geometry3857?: Record<string, unknown> | null;
+  }>;
+};
 
 function formatSizeLabel(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -351,7 +179,9 @@ function formatSizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatUploadedAt(d = new Date()): string {
+function formatUploadedAt(iso?: string): string {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
     year: "numeric",
@@ -366,7 +196,7 @@ function formatUploadedAt(d = new Date()): string {
     .replace(",", "");
 }
 
-function guessPreviewKind(name: string, mime?: string): RiverConstructionLedgerPreviewKind {
+export function guessPreviewKind(name: string, mime?: string): RiverConstructionLedgerPreviewKind {
   const lower = name.toLowerCase();
   if (mime?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(lower)) return "image";
   if (mime === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
@@ -403,7 +233,6 @@ export function formatRiverNamesShort(
   return `${list.slice(0, maxShow).join(", ")} 외 ${list.length - maxShow}`;
 }
 
-/** 등록 가능한 하천명인지 (임시 하천 마스터) */
 export function isKnownRiverName(name: string): boolean {
   const n = name.trim();
   if (!n) return false;
@@ -412,7 +241,6 @@ export function isKnownRiverName(name: string): boolean {
   );
 }
 
-/** 마스터에 있는 정식 하천명으로 정규화 (없으면 null) */
 export function resolveKnownRiverName(name: string): string | null {
   const n = name.trim();
   if (!n) return null;
@@ -430,12 +258,20 @@ function hashRiverName(name: string): number {
   return h;
 }
 
-/** WGS84 → Web Mercator(EPSG:3857) 대략 변환 (임시 좌표용) */
 function lonLatTo3857(lon: number, lat: number): [number, number] {
   const x = (lon * 20037508.34) / 180;
   const y =
     (Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180)) * (20037508.34 / 180);
   return [x, y];
+}
+
+function poly(ring: [number, number][]): RiverConstructionLedgerGeom {
+  const closed =
+    ring.length > 0 &&
+    (ring[0]![0] !== ring[ring.length - 1]![0] || ring[0]![1] !== ring[ring.length - 1]![1])
+      ? [...ring, ring[0]!]
+      : ring;
+  return { type: "MultiPolygon", coordinates: [[closed]] };
 }
 
 /**
@@ -449,36 +285,39 @@ export function getMockRiverFocus(riverName: string): {
 } | null {
   const name = riverName.trim();
   if (!name) return null;
-
-  const presetIdx = (RIVER_CONSTRUCTION_RIVER_PRESETS as readonly string[]).indexOf(name);
-  const i = presetIdx >= 0 ? presetIdx : hashRiverName(name) % 60;
-  const col = i % 10;
-  const row = Math.floor(i / 10);
-  /** 울진군 일대 대략 격자 */
-  const lon = 129.28 + col * 0.018;
-  const lat = 36.72 + row * 0.032;
-  const half = 0.0035;
+  const h = hashRiverName(name);
+  const lon = 129.2 + ((h % 2500) / 2500) * 0.35;
+  const lat = 36.7 + (((h >> 8) % 2500) / 2500) * 0.4;
+  const dLon = 0.004;
+  const dLat = 0.0035;
   const geom = poly([
-    [lon - half, lat - half],
-    [lon + half, lat - half],
-    [lon + half, lat + half],
-    [lon - half, lat + half],
+    [lon, lat],
+    [lon + dLon, lat],
+    [lon + dLon, lat + dLat],
+    [lon, lat + dLat],
   ]);
-  const corners = [
-    lonLatTo3857(lon - half, lat - half),
-    lonLatTo3857(lon + half, lat - half),
-    lonLatTo3857(lon + half, lat + half),
-    lonLatTo3857(lon - half, lat + half),
-  ];
-  const xs = corners.map((c) => c[0]);
-  const ys = corners.map((c) => c[1]);
+  const [x0, y0] = lonLatTo3857(lon, lat);
+  const [x1, y1] = lonLatTo3857(lon + dLon, lat + dLat);
   const extent3857: [number, number, number, number] = [
-    Math.min(...xs),
-    Math.min(...ys),
-    Math.max(...xs),
-    Math.max(...ys),
+    Math.min(x0, x1),
+    Math.min(y0, y1),
+    Math.max(x0, x1),
+    Math.max(y0, y1),
   ];
   return { riverName: name, extent3857, geom };
+}
+
+/**
+ * 편집모드 진입 시 — 예전 주소검색 방식으로 등록된 필지는 하천명·비고 값이 비어 있어
+ * 입력란이 빈칸으로 보인다. 기존 address 값을 하천명 입력란에 채워 편집 중 사라지지 않게 한다.
+ */
+export function withRiverNameFallback(items: LayerRowParcelItem[]): LayerRowParcelItem[] {
+  return items.map((p) => {
+    if (p.riverName?.trim() || p.remark?.trim()) return p;
+    const addr = String(p.address ?? "").trim();
+    if (!addr || addr === "—") return p;
+    return { ...p, riverName: addr };
+  });
 }
 
 export function rowHasRiver(row: RiverConstructionLedgerRow, riverName: string): boolean {
@@ -490,16 +329,136 @@ export function rowHasRiver(row: RiverConstructionLedgerRow, riverName: string):
   return normalizeRiverNames(row.riverNames).some((n) => n === target);
 }
 
-export function cloneRiverConstructionLedgerRows(): RiverConstructionLedgerRow[] {
-  return structuredClone(MOCK_ROWS).map((r) => ({
-    ...r,
-    riverNames: normalizeRiverNames(r.riverNames),
-  }));
+export function isNewRiverConstructionLedgerRow(row: Pick<RiverConstructionLedgerRow, "id">): boolean {
+  return String(row.id ?? "").startsWith(CONS_DATA_AS_NEW_ID_PREFIX);
+}
+
+export function mapConsDataAsApiToLedgerRow(api: ConsDataAsApiRow): RiverConstructionLedgerRow {
+  const consCode = String(api.consCode ?? "").trim();
+  const riverName = String(api.riverName ?? "").trim();
+  const parcels: LayerRowParcelItem[] = (api.parcels ?? [])
+    .map((p) => {
+      const riverName = String(p?.riverName ?? "").trim();
+      const remark = String(p?.remark ?? "").trim();
+      const address = String(p?.address ?? "").trim() || remark || riverName;
+      const geometry3857 = p?.geometry3857 ?? null;
+      if (!address && !riverName && !remark && !geometry3857) return null;
+      const pnu = String(p?.pnu ?? "").trim();
+      const ext = p?.extent3857;
+      const extent3857 =
+        Array.isArray(ext) &&
+        ext.length === 4 &&
+        ext.every((v) => Number.isFinite(Number(v)))
+          ? ([Number(ext[0]), Number(ext[1]), Number(ext[2]), Number(ext[3])] as [
+              number,
+              number,
+              number,
+              number,
+            ])
+          : null;
+      const displayParts = [riverName, remark].filter(Boolean);
+      const displayText =
+        displayParts.length > 0 ? displayParts.join(" · ") : undefined;
+      const item: LayerRowParcelItem = {
+        address: address || displayText || "—",
+        extent3857,
+        ...(geometry3857 ? { geometry3857 } : {}),
+        ...(displayText ? { displayText } : {}),
+        ...(pnu ? { pnu } : {}),
+        ...(riverName ? { riverName } : {}),
+        ...(remark ? { remark } : {}),
+      };
+      return item;
+    })
+    .filter((x): x is LayerRowParcelItem => x != null);
+
+  let geom: RiverConstructionLedgerGeom | null = null;
+  if (api.geom?.type === "MultiPolygon" && Array.isArray(api.geom.coordinates)) {
+    geom = {
+      type: "MultiPolygon",
+      coordinates: api.geom.coordinates as RiverConstructionLedgerGeom["coordinates"],
+    };
+  }
+
+  return {
+    id: consCode,
+    name: String(api.consName ?? "").trim(),
+    location: String(api.consLocat ?? "").trim(),
+    quantity: String(api.consVolum ?? "").trim(),
+    riverNames: riverName ? normalizeRiverNames([riverName]) : [],
+    contractDate: String(api.contDate ?? "").trim(),
+    startDate: String(api.startDate ?? "").trim(),
+    endDate: String(api.doneDate ?? "").trim(),
+    actualEndDate: String(api.sdoneDate ?? "").trim(),
+    companyName: String(api.businName ?? "").trim(),
+    representative: String(api.ceoName ?? "").trim(),
+    phone: String(api.businPhon ?? "").trim(),
+    companyAddress: String(api.businAddr ?? "").trim(),
+    supervisor: String(api.directPos ?? "").trim(),
+    supervisorName: String(api.directNam ?? "").trim(),
+    budgetBefore: String(api.amountPre ?? "").trim(),
+    budgetIncrease: String(api.amountVar ?? "").trim(),
+    budgetDecrease: String(api.amountCha ?? "").trim(),
+    budgetAfter: String(api.amountAft ?? "").trim(),
+    changeReason: String(api.reason ?? "").trim(),
+    remark: String(api.descript ?? "").trim(),
+    geom,
+    attachments: [],
+    parcels,
+  };
+}
+
+/** UI 행 → DB 저장 values */
+export function ledgerRowToConsDataAsValues(row: {
+  name: string;
+  location: string;
+  quantity: string;
+  riverNames: string[];
+  contractDate: string;
+  startDate: string;
+  endDate: string;
+  actualEndDate: string;
+  companyName: string;
+  representative: string;
+  phone: string;
+  companyAddress: string;
+  supervisor: string;
+  supervisorName: string;
+  budgetBefore: string;
+  budgetIncrease: string;
+  budgetDecrease: string;
+  budgetAfter: string;
+  changeReason: string;
+  remark: string;
+}): Record<string, string> {
+  const rivers = normalizeRiverNames(row.riverNames);
+  return {
+    cons_name: row.name.trim(),
+    cons_locat: row.location.trim(),
+    cons_volum: row.quantity.trim(),
+    river_name: rivers.join(", "),
+    cont_date: row.contractDate.trim(),
+    start_date: row.startDate.trim(),
+    done_date: row.endDate.trim(),
+    sdone_date: row.actualEndDate.trim(),
+    busin_name: row.companyName.trim(),
+    ceo_name: row.representative.trim(),
+    busin_phon: row.phone.trim(),
+    busin_addr: row.companyAddress.trim(),
+    direct_pos: row.supervisor.trim(),
+    direct_nam: row.supervisorName.trim(),
+    amount_pre: row.budgetBefore.trim(),
+    amount_var: row.budgetIncrease.trim(),
+    amount_cha: row.budgetDecrease.trim(),
+    amount_aft: row.budgetAfter.trim(),
+    reason: row.changeReason.trim(),
+    descript: row.remark.trim(),
+  };
 }
 
 export function createEmptyRiverConstructionLedgerRow(): RiverConstructionLedgerRow {
   return {
-    id: `rcl-new-${Date.now()}`,
+    id: `${CONS_DATA_AS_NEW_ID_PREFIX}${Date.now()}`,
     name: "",
     location: "",
     quantity: "",
@@ -526,21 +485,17 @@ export function createEmptyRiverConstructionLedgerRow(): RiverConstructionLedger
   };
 }
 
-export function createAttachmentFromFile(
-  file: File,
-  category: RiverConstructionLedgerAttachmentCategory = "etc"
+export function mapServiceFileToAttachment(
+  file: { name: string; size: number; modified?: string },
+  folder: string
 ): RiverConstructionLedgerAttachment {
-  const previewKind = guessPreviewKind(file.name, file.type);
-  const previewUrl =
-    previewKind === "image" || previewKind === "pdf" ? URL.createObjectURL(file) : undefined;
   return {
-    id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: `${folder}:${file.name}`,
     name: file.name,
-    category,
+    category: folder,
     sizeLabel: formatSizeLabel(file.size),
-    uploadedAt: formatUploadedAt(),
-    previewUrl,
-    previewKind,
+    uploadedAt: formatUploadedAt(file.modified),
+    previewKind: guessPreviewKind(file.name),
   };
 }
 

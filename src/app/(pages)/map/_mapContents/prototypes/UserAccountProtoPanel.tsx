@@ -20,6 +20,11 @@ import {
   type ProtoNotifItem,
 } from '../bizNotif/bizNotifStore'
 import { UserAccountProtoNotifTab } from './UserAccountProtoNotifTab'
+import {
+  MyShootingRequestTab,
+  useMyShootingRequestCount,
+} from '../shootingRequest/MyShootingRequestTab'
+import { SHOOTING_REQUEST_UI_ENABLED } from '../shootingRequest/shootingRequestUiFlag'
 
 /** 프로토 내 정보 패널 */
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
@@ -56,17 +61,31 @@ function profileInitials(name: string): string {
 }
 
 /** 패널 하단 탭 — 추후 탭 추가 시 이 배열에만 항목 추가 */
-const PROTO_PANEL_TABS = [{ id: 'notif', label: '알림' }] as const
-type ProtoPanelTabId = (typeof PROTO_PANEL_TABS)[number]['id']
+const PROTO_PANEL_TABS_ALL = [
+  { id: 'shooting', label: '촬영요청' },
+  { id: 'notif', label: '알림' },
+] as const
+type ProtoPanelTabId = (typeof PROTO_PANEL_TABS_ALL)[number]['id']
+const PROTO_PANEL_TABS = SHOOTING_REQUEST_UI_ENABLED
+  ? PROTO_PANEL_TABS_ALL
+  : PROTO_PANEL_TABS_ALL.filter((t) => t.id !== 'shooting')
 
 type Props = {
   open: boolean
   onClose: () => void
   onOpenLedger: (ledgerId: string) => void
   onOpenFee: (feeId: string) => void
+  /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
+  onSelectShootingRequest?: (id: string) => void
 }
 
-export function UserAccountProtoPanel({ open, onClose, onOpenLedger, onOpenFee }: Props) {
+export function UserAccountProtoPanel({
+  open,
+  onClose,
+  onOpenLedger,
+  onOpenFee,
+  onSelectShootingRequest,
+}: Props) {
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
   const system = String(searchParams.get('system') ?? '').trim()
@@ -74,6 +93,13 @@ export function UserAccountProtoPanel({ open, onClose, onOpenLedger, onOpenFee }
   const [activeTab, setActiveTab] = useState<ProtoPanelTabId | null>(null)
   const [profile, setProfile] = useState<MyProfileView>(() => profileFromSession(null))
   const [profileLoading, setProfileLoading] = useState(false)
+  const shootingCount = useMyShootingRequestCount(SHOOTING_REQUEST_UI_ENABLED && open)
+
+  useEffect(() => {
+    if (!SHOOTING_REQUEST_UI_ENABLED && activeTab === 'shooting') {
+      setActiveTab(null)
+    }
+  }, [activeTab])
 
   useEffect(() => {
     if (!open || status === 'loading') return
@@ -167,8 +193,19 @@ export function UserAccountProtoPanel({ open, onClose, onOpenLedger, onOpenFee }
             tabs={PROTO_PANEL_TABS}
             activeTab={activeTab}
             notifUnreadCount={unreadNotifCount}
+            shootingCount={shootingCount}
             onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
           />
+
+          {SHOOTING_REQUEST_UI_ENABLED && activeTab === 'shooting' ? (
+            <MyShootingRequestTab
+              open={open && activeTab === 'shooting'}
+              onSelectRequest={(id) => {
+                onClose()
+                onSelectShootingRequest?.(id)
+              }}
+            />
+          ) : null}
 
           {activeTab === 'notif' ? (
             <UserAccountProtoNotifTab
@@ -270,18 +307,22 @@ function PanelTabBar({
   tabs,
   activeTab,
   notifUnreadCount,
+  shootingCount,
   onToggleTab,
 }: {
   tabs: typeof PROTO_PANEL_TABS
   activeTab: ProtoPanelTabId | null
   notifUnreadCount: number
+  shootingCount: number
   onToggleTab: (tabId: ProtoPanelTabId) => void
 }) {
   return (
     <div className="flex shrink-0 items-end gap-0 border-b border-slate-200 bg-white px-3">
       {tabs.map((tab) => {
         const active = activeTab === tab.id
-        const count = tab.id === 'notif' ? notifUnreadCount : 0
+        const count =
+          tab.id === 'notif' ? notifUnreadCount : tab.id === 'shooting' ? shootingCount : 0
+        const showCount = tab.id === 'notif' ? count > 0 : tab.id === 'shooting'
         return (
           <button
             key={tab.id}
@@ -296,8 +337,15 @@ function PanelTabBar({
             )}
           >
             {tab.label}
-            {tab.id === 'notif' && count > 0 ? (
-              <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-50 px-1 text-[10px] font-medium tabular-nums text-red-600 ring-1 ring-red-100">
+            {showCount ? (
+              <span
+                className={cn(
+                  'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums ring-1',
+                  tab.id === 'notif'
+                    ? 'bg-red-50 text-red-600 ring-red-100'
+                    : 'bg-slate-100 text-slate-600 ring-slate-200'
+                )}
+              >
                 {count}
               </span>
             ) : null}

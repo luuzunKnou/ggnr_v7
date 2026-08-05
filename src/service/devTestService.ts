@@ -2,7 +2,9 @@
  * DevTest Service
  */
 import { db } from '@/database/db';
-import { sql } from 'drizzle-orm';
+import { usr } from '@/database/schema/usr';
+import { getSessionUsrId } from '@/lib/auth/guard';
+import { eq, sql } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -16,6 +18,9 @@ import {
 } from '@/lib/geoserverStyleUtils';
 import { normalizeDefineTableSource } from '@/lib/defineLayerTablesNormalize';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
+import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+
+const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 /** 심볼 베이스 URL (GeoServer가 이미지를 요청할 주소). NEXT_PUBLIC_APP_URL 없으면 localhost:3000 */
 const SYMBOL_BASE_URL =
@@ -2090,20 +2095,51 @@ function sqlExprsGeometryTo5181Wkt(geomColEscaped: string, catalogSrid: unknown)
 
 export type EmdRiOption = { code: string; name: string };
 
+/** 테이블에 실제 존재하는 컬럼명 집합 (information_schema 기준) */
+async function getExistingColumns(schema: string, table: string): Promise<Set<string>> {
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(table)}'`
+    )
+  );
+  return new Set(
+    (res.rows as Array<{ column_name?: string }>).map((r) => String(r.column_name ?? ''))
+  );
+}
+
+/** ORDER BY 용 정렬 컬럼 — gid/ogc_fid 계열이 있으면 우선, 없으면 nameCol로 대체(하드코딩 "gid" 부재 시 전체 실패 방지) */
+function pickOrderColumn(cols: Set<string>, nameCol: string): string {
+  const candidates = ['gid', 'ogc_fid', 'objectid', 'fid'];
+  const found = candidates.find((c) => cols.has(c));
+  return found ?? nameCol;
+}
+
 /**
- * 읍면동(emd) 목록 조회. emd_cd, 이름 반환. ORDER BY gid 만 적용.
+ * 읍면동(emd) 목록 조회. emd_cd, 이름 반환.
  */
 export async function getEmdRiOptions(params: { schema?: string } = {}) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
   const result: { emd: EmdRiOption[]; error?: string } = { emd: [] };
 
+  let cols: Set<string>;
+  try {
+    cols = await getExistingColumns(schema, 'emd');
+  } catch (e: unknown) {
+    result.error = e instanceof Error ? e.message : String(e);
+    return result;
+  }
+
   for (const nameCol of EMD_LIST_NAME_COLUMNS) {
+    if (!cols.has(nameCol)) continue;
+    const orderCol = pickOrderColumn(cols, nameCol);
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT "emd_cd" AS code, "${nameCol}" AS name FROM "${schema}"."emd"
            WHERE "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
-           ORDER BY "gid"`
+           ORDER BY "${orderCol}"`
         )
       );
       const rows = (res.rows as { code: string; name: string }[]).map((r) => ({
@@ -2117,7 +2153,8 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
         return true;
       });
       if (result.emd.length > 0) break;
-    } catch {
+    } catch (e: unknown) {
+      result.error = e instanceof Error ? e.message : String(e);
       continue;
     }
   }
@@ -2130,7 +2167,7 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
 
 /**
  * 선택한 읍면동(emd_cd) 하위 리(ri) 목록 조회.
- * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%'), ORDER BY gid.
+ * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%').
  */
 export async function getRiOptionsByEmd(params: { schema?: string; emdCode: string } = { emdCode: '' }) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
@@ -2141,15 +2178,29 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
     return result;
   }
 
+  let cols: Set<string>;
+  try {
+    cols = await getExistingColumns(schema, 'ri');
+  } catch (e: unknown) {
+    result.error = e instanceof Error ? e.message : String(e);
+    return result;
+  }
+  if (cols.size === 0) {
+    result.error = `"${schema}"."ri" 테이블을 찾을 수 없습니다.`;
+    return result;
+  }
+
   const safeEmdCode = emdCode.replace(/'/g, "''");
   for (const nameCol of RI_LIST_NAME_COLUMNS) {
+    if (!cols.has(nameCol)) continue;
+    const orderCol = pickOrderColumn(cols, nameCol);
     try {
       const res = await db.execute(
         sql.raw(
           `SELECT "ri_cd" AS code, "${nameCol}" AS name FROM "${schema}"."ri"
            WHERE "ri_cd" LIKE '${safeEmdCode}' || '%'
              AND "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
-           ORDER BY "gid"`
+           ORDER BY "${orderCol}"`
         )
       );
       const rows = (res.rows as { code: string; name: string }[]).map((r) => ({
@@ -3087,9 +3138,307 @@ export async function syncDefineCodesFromDb(params: {
   }
 }
 
+/** 세션 사용자 → `usrId(usrName)` (이름 없으면 usrId만) */
+async function resolveAutofixOperatorLabel(): Promise<string | null> {
+  const usrId = await getSessionUsrId();
+  if (!usrId) return null;
+  try {
+    const [row] = await db
+      .select({ usrName: usr.usrName })
+      .from(usr)
+      .where(eq(usr.usrId, usrId))
+      .limit(1);
+    const name = row?.usrName?.trim();
+    return name ? `${usrId}(${name})` : usrId;
+  } catch {
+    return usrId;
+  }
+}
+
+/**
+ * 자동 수정 결과 → GGNR_DATA_DIR/autofix_log/YYYYMMDD_HHmmss_테이블명.log
+ */
+function writeLayerSetupAutofixLog(p: {
+  tableName: string;
+  schema: string;
+  issues: LayerSetupIssueType[];
+  fixed: string[];
+  errors: string[];
+  success: boolean;
+  defineSchema?: string;
+  schemaMismatchAction?: string;
+  missingCodeFields?: string[];
+  group?: string;
+  geometryType?: string;
+  /** 작업자 표시 — `usrId(usrName)` */
+  operator?: string | null;
+  /** 실제 실행 SQL·REST·파일 작업 등 */
+  actions?: string[];
+  /** 실행으로 변경된 DB·파일·GeoServer 대상 */
+  changes?: Array<{ kind: 'db' | 'file' | 'geoserver'; label: string }>;
+}): { logPath?: string; logError?: string } {
+  const issueLabel = (k: string) =>
+    (
+      {
+        schema_mismatch: '스키마 불일치',
+        geoserver_layer: 'GeoServer Layer 없음',
+        geoserver_style: 'GeoServer Style 없음',
+        define_layer: '레이어 설정 (Layer) 누락',
+        define_field: '레이어 설정 (Field) 누락',
+        define_code: '레이어 설정 (Code) 누락',
+        temp_sync_table: 'SHP 임시 테이블 잔여',
+      } as Record<string, string>
+    )[k] ?? k;
+
+  try {
+    const now = new Date();
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const ts = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}_${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
+    const safeTable = String(p.tableName).replace(/[^a-zA-Z0-9_-]/g, '_') || 'unknown';
+    const dir = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.autofixLog);
+    fs.mkdirSync(dir, { recursive: true });
+    const fileName = `${ts}_${safeTable}.log`;
+    const abs = path.join(dir, fileName);
+
+    const lines: string[] = [
+      '=== 레이어 설정 오류 자동 수정 ===',
+      `일시: ${now.toLocaleString('ko-KR')}`,
+      `작업자: ${p.operator?.trim() || '-'}`,
+      `결과: ${p.success ? '성공' : '실패'}`,
+      `스키마: ${p.schema}`,
+      `테이블: ${p.tableName}`,
+    ];
+    if (p.group?.trim()) lines.push(`그룹: ${p.group.trim()}`);
+    if (p.geometryType?.trim()) lines.push(`도형: ${p.geometryType.trim()}`);
+    if (p.defineSchema) lines.push(`정의 스키마: ${p.defineSchema}`);
+    if (p.schemaMismatchAction) lines.push(`스키마 불일치 처리: ${p.schemaMismatchAction}`);
+    lines.push('');
+    lines.push(
+      `감지 오류: ${
+        p.issues.length > 0 ? p.issues.map(issueLabel).join(', ') : '(없음)'
+      }`
+    );
+    if (p.missingCodeFields && p.missingCodeFields.length > 0) {
+      lines.push(`누락 코드 필드: ${p.missingCodeFields.join(', ')}`);
+    }
+    lines.push(
+      `수정 완료: ${
+        p.fixed.length > 0 ? p.fixed.map(issueLabel).join(', ') : '(없음)'
+      }`
+    );
+
+    lines.push('');
+    lines.push('======== 실행 상세 ========');
+    lines.push('');
+    if (p.actions && p.actions.length > 0) {
+      p.actions.forEach((a, i) => {
+        const text = String(a ?? '').trim();
+        const colon = text.indexOf(':');
+        if (colon > 0 && colon < 24) {
+          const kind = text.slice(0, colon).trim();
+          const body = text.slice(colon + 1).trim();
+          if (!body) {
+            lines.push(`${i + 1}. [${kind}]`);
+            return;
+          }
+          const bodyLines = body.split(/\n/);
+          lines.push(`${i + 1}. [${kind}] ${bodyLines[0]}`);
+          for (let j = 1; j < bodyLines.length; j++) {
+            lines.push(`   ${bodyLines[j]}`);
+          }
+        } else {
+          lines.push(`${i + 1}. ${text}`);
+        }
+      });
+    } else {
+      lines.push('(기록된 실행 단계 없음)');
+    }
+
+    lines.push('');
+    lines.push('======== 변경 목록 ========');
+    lines.push('');
+    const changeList = p.changes ?? [];
+    const dbChanges = changeList.filter((c) => c.kind === 'db');
+    const fileChanges = changeList.filter((c) => c.kind === 'file');
+    const gsChanges = changeList.filter((c) => c.kind === 'geoserver');
+    if (changeList.length === 0) {
+      lines.push('(변경된 대상 없음)');
+    } else {
+      if (dbChanges.length > 0) {
+        lines.push('');
+        lines.push('[DB]');
+        for (const c of dbChanges) lines.push(`  - ${c.label}`);
+      }
+      if (fileChanges.length > 0) {
+        lines.push('');
+        lines.push('[파일]');
+        for (const c of fileChanges) lines.push(`  - ${c.label}`);
+      }
+      if (gsChanges.length > 0) {
+        lines.push('');
+        lines.push('[GeoServer]');
+        for (const c of gsChanges) lines.push(`  - ${c.label}`);
+      }
+    }
+
+    if (p.errors.length > 0) {
+      lines.push('');
+      lines.push('실패/오류:');
+      for (const err of p.errors) lines.push(`  - ${err}`);
+    }
+    lines.push('');
+    lines.push(`로그: ${GGNR_DATA_PATHS.autofixLog}/${fileName}`);
+
+    fs.writeFileSync(abs, lines.join('\n'), 'utf-8');
+    return { logPath: `${GGNR_DATA_PATHS.autofixLog}/${fileName}` };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { logError: msg };
+  }
+}
+
+export type LayerSetupAutofixLogRow = {
+  fileName: string;
+  relativePath: string;
+  tableName: string;
+  stampedAt: string;
+  mtimeMs: number;
+  size: number;
+  result: '성공' | '실패' | null;
+};
+
+function parseAutofixLogFileName(fileName: string): { stampedAt: string; tableName: string } | null {
+  const m = /^(\d{8})_(\d{6})_(.+)\.log$/i.exec(fileName);
+  if (!m) return null;
+  const ymd = m[1];
+  const hms = m[2];
+  const stampedAt = `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)} ${hms.slice(0, 2)}:${hms.slice(2, 4)}:${hms.slice(4, 6)}`;
+  return { stampedAt, tableName: m[3] };
+}
+
+function peekAutofixLogResult(absPath: string): '성공' | '실패' | null {
+  try {
+    const fd = fs.openSync(absPath, 'r');
+    try {
+      const buf = Buffer.alloc(512);
+      const n = fs.readSync(fd, buf, 0, 512, 0);
+      const head = buf.slice(0, n).toString('utf-8');
+      if (/결과:\s*성공/.test(head)) return '성공';
+      if (/결과:\s*실패/.test(head)) return '실패';
+      return null;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+/** autofix_log 폴더 이력 목록 (최신순, 페이지네이션) */
+export async function listLayerSetupAutofixLogs(params: { page?: number; limit?: number } = {}) {
+  const limit = Math.min(Math.max(Number(params.limit) || 20, 1), 100);
+  const page = Math.max(Number(params.page) || 1, 1);
+  const dir = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.autofixLog);
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      return {
+        success: true as const,
+        logs: [] as LayerSetupAutofixLogRow[],
+        total: 0,
+        page: 1,
+        limit,
+        totalPages: 1,
+      };
+    }
+    const names = fs
+      .readdirSync(dir)
+      .filter((f) => f.toLowerCase().endsWith('.log'));
+    const rows: LayerSetupAutofixLogRow[] = [];
+    for (const fileName of names) {
+      const parsed = parseAutofixLogFileName(fileName);
+      if (!parsed) continue;
+      const abs = path.join(dir, fileName);
+      let st: fs.Stats;
+      try {
+        st = fs.statSync(abs);
+      } catch {
+        continue;
+      }
+      if (!st.isFile()) continue;
+      rows.push({
+        fileName,
+        relativePath: `${GGNR_DATA_PATHS.autofixLog}/${fileName}`,
+        tableName: parsed.tableName,
+        stampedAt: parsed.stampedAt,
+        mtimeMs: st.mtimeMs,
+        size: st.size,
+        result: peekAutofixLogResult(abs),
+      });
+    }
+    rows.sort((a, b) => b.mtimeMs - a.mtimeMs || b.fileName.localeCompare(a.fileName));
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+    const safePage = Math.min(page, totalPages);
+    const offset = (safePage - 1) * limit;
+    const sliced = rows.slice(offset, offset + limit);
+    return {
+      success: true as const,
+      logs: sliced,
+      total,
+      page: safePage,
+      limit,
+      totalPages,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      success: false as const,
+      error: msg,
+      logs: [] as LayerSetupAutofixLogRow[],
+      total: 0,
+      page: 1,
+      limit,
+      totalPages: 1,
+    };
+  }
+}
+
+/** autofix_log 단일 파일 내용 */
+export async function getLayerSetupAutofixLog(params: { fileName?: string; relativePath?: string } = {}) {
+  const raw =
+    String(params.fileName ?? '').trim() ||
+    String(params.relativePath ?? '')
+      .trim()
+      .replace(/\\/g, '/');
+  if (!raw) return { success: false as const, error: 'fileName이 필요합니다.' };
+
+  const base = path.basename(raw.includes('/') ? raw.split('/').pop()! : raw);
+  if (!base.toLowerCase().endsWith('.log') || base !== path.basename(base)) {
+    return { success: false as const, error: '잘못된 로그 파일명입니다.' };
+  }
+  if (base.includes('..') || /[\\/]/.test(base)) {
+    return { success: false as const, error: '잘못된 로그 파일명입니다.' };
+  }
+
+  const relativePath = `${GGNR_DATA_PATHS.autofixLog}/${base}`;
+  const abs = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.autofixLog, base);
+  try {
+    if (!fs.existsSync(abs)) {
+      return { success: false as const, error: '로그 파일이 없습니다.', logPath: relativePath };
+    }
+    const content = fs.readFileSync(abs, 'utf-8');
+    return { success: true as const, content, logPath: relativePath, fileName: base };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg, logPath: relativePath };
+  }
+}
+
 /**
  * 레이어 설정 오류 자동 수정
  * (임시테이블 삭제 → 스키마 이동 → define → code → geoserver layer → style 순)
+ * 결과는 GGNR_DATA_DIR/autofix_log/YYYYMMDD_HHmmss_테이블명.log 에 기록
  */
 export async function fixLayerSetupIssues(params: {
   tableName: string;
@@ -3111,23 +3460,79 @@ export async function fixLayerSetupIssues(params: {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
 
-  const issueSet = new Set(params.issues ?? []);
+  const issueList = (params.issues ?? []).filter(Boolean) as LayerSetupIssueType[];
+  const issueSet = new Set(issueList);
   const fixed: string[] = [];
   const errors: string[] = [];
+  const actions: string[] = [];
+  const changes: Array<{ kind: 'db' | 'file' | 'geoserver'; label: string }> = [];
   const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+  const step = (line: string) => {
+    actions.push(line);
+  };
+  const markChange = (
+    kind: 'db' | 'file' | 'geoserver',
+    op: '생성' | '수정' | '삭제' | '이동' | '재생성' | '지정',
+    target: string
+  ) => {
+    const t = target.trim();
+    if (!t) return;
+    const label = `[${op}] ${t}`;
+    if (changes.some((c) => c.kind === kind && c.label === label)) return;
+    changes.push({ kind, label });
+  };
+
+  const finish = async (result: {
+    success: boolean;
+    fixed: string[];
+    errors: string[];
+    error?: string;
+  }) => {
+    const operator = await resolveAutofixOperatorLabel();
+    const log = writeLayerSetupAutofixLog({
+      tableName,
+      schema,
+      issues: issueList,
+      fixed: result.fixed,
+      errors: result.errors,
+      success: result.success,
+      defineSchema: params.defineSchema,
+      schemaMismatchAction: params.schemaMismatchAction,
+      missingCodeFields: params.missingCodeFields,
+      group: params.group,
+      geometryType: params.geometryType,
+      operator,
+      actions,
+      changes,
+    });
+    return {
+      ...result,
+      logPath: log.logPath,
+      logError: log.logError,
+    };
+  };
 
   try {
+    step(`대상: ${schema}.${tableName}`);
+    step(`요청 이슈: ${issueList.length > 0 ? issueList.join(', ') : '(없음)'}`);
+    step(`GeoServer URL: ${baseUrl}`);
+
     // SHP 업로드 잔여 임시 테이블은 DROP만 수행 (정의·GeoServer 생성 금지)
     if (issueSet.has('temp_sync_table') || isShpSyncTempTableName(tableName)) {
       try {
         const { db } = await import('@/database/db');
         const { sql } = await import('drizzle-orm');
-        await db.execute(sql.raw(`DROP TABLE IF EXISTS ${schema}."${tableName}"`));
+        const dropSql = `DROP TABLE IF EXISTS ${schema}."${tableName}"`;
+        step(`SQL: ${dropSql}`);
+        await db.execute(sql.raw(dropSql));
+        step('결과: 임시 테이블 DROP 완료');
+        markChange('db', '삭제', `${schema}."${tableName}"`);
         fixed.push('temp_sync_table');
-        return { success: true, fixed, errors };
+        return await finish({ success: true, fixed, errors });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        return { success: false, fixed, errors: [msg], error: msg };
+        step(`실패: ${msg}`);
+        return await finish({ success: false, fixed, errors: [msg], error: msg });
       }
     }
 
@@ -3138,6 +3543,7 @@ export async function fixLayerSetupIssues(params: {
           ? params.defineSchema
           : undefined;
       if (!targetSchema) {
+        step('정의 스키마 미전달 → tables.json에서 조회');
         const defineRes = await getDefineLayerTables();
         const row = defineRes.success
           ? defineRes.tables?.find(
@@ -3150,68 +3556,78 @@ export async function fixLayerSetupIssues(params: {
         targetSchema = row
           ? normalizeLayerSchema((row as Record<string, unknown>).define_table_schema)
           : undefined;
+        step(`tables.json 정의 스키마: ${targetSchema ?? '(없음)'}`);
+      } else {
+        step(`정의 스키마(요청): ${targetSchema}`);
       }
       if (!targetSchema || targetSchema === schema) {
         errors.push('정의 스키마를 확인할 수 없거나 이미 동일합니다.');
+        step('중단: 정의 스키마 확인 불가 또는 동일');
       } else {
         try {
           const { db } = await import('@/database/db');
           const { sql } = await import('drizzle-orm');
-          const existsRes = await db.execute(
-            sql.raw(
-              `SELECT 1 FROM information_schema.tables
+          const existsSql = `SELECT 1 FROM information_schema.tables
                WHERE table_schema = '${targetSchema}' AND table_name = '${tableName.replace(/'/g, "''")}'
-               LIMIT 1`
-            )
-          );
+               LIMIT 1`;
+          step(`SQL: ${existsSql.replace(/\s+/g, ' ').trim()}`);
+          const existsRes = await db.execute(sql.raw(existsSql));
           const targetExists = (existsRes.rows?.length ?? 0) > 0;
+          step(`대상 스키마 테이블 존재: ${targetExists ? '예' : '아니오'}`);
           const action: 'move' | 'drop' =
             params.schemaMismatchAction === 'move' || params.schemaMismatchAction === 'drop'
               ? params.schemaMismatchAction
               : targetExists
                 ? 'drop'
                 : 'move';
+          step(`스키마 불일치 처리 방식: ${action}`);
 
           if (action === 'drop') {
-            // 정의 스키마에 정상본이 있을 때만 잘못된 스키마 잔여 삭제
             if (!targetExists) {
               errors.push(
                 `정의 스키마(${targetSchema})에 '${tableName}'이(가) 없어 잔여를 삭제할 수 없습니다.`
               );
+              step('중단: 정의 스키마에 정상본 없음 → DROP 불가');
             } else {
-              await db.execute(
-                sql.raw(`DROP TABLE IF EXISTS ${schema}.${quoteIdent(tableName)}`)
-              );
+              const dropSql = `DROP TABLE IF EXISTS ${schema}.${quoteIdent(tableName)}`;
+              step(`SQL: ${dropSql}`);
+              await db.execute(sql.raw(dropSql));
+              step(`결과: 잘못된 스키마 잔여 삭제 (${schema} → 정의=${targetSchema})`);
+              markChange('db', '삭제', `${schema}."${tableName}" (잘못된 스키마 잔여)`);
               fixed.push('schema_mismatch');
-              return { success: true, fixed, errors };
+              return await finish({ success: true, fixed, errors });
             }
           } else if (targetExists) {
             errors.push(
               `대상 스키마(${targetSchema})에 '${tableName}'이(가) 이미 있어 이동할 수 없습니다.`
             );
+            step('중단: 대상 스키마에 동일 테이블 존재 → MOVE 불가');
           } else {
-            await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS ${targetSchema}`));
-            await db.execute(
-              sql.raw(
-                `ALTER TABLE ${schema}.${quoteIdent(tableName)} SET SCHEMA ${targetSchema}`
-              )
-            );
+            const createSchemaSql = `CREATE SCHEMA IF NOT EXISTS ${targetSchema}`;
+            step(`SQL: ${createSchemaSql}`);
+            await db.execute(sql.raw(createSchemaSql));
+            markChange('db', '생성', `스키마 ${targetSchema} (없으면 생성)`);
+            const alterSql = `ALTER TABLE ${schema}.${quoteIdent(tableName)} SET SCHEMA ${targetSchema}`;
+            step(`SQL: ${alterSql}`);
+            await db.execute(sql.raw(alterSql));
+            step(`결과: 스키마 이동 ${schema} → ${targetSchema}`);
+            markChange('db', '이동', `${schema}."${tableName}" → ${targetSchema}."${tableName}"`);
             fixed.push('schema_mismatch');
             schema = targetSchema;
           }
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
           errors.push(`스키마 불일치 수정 실패: ${msg}`);
+          step(`실패: ${msg}`);
         }
       }
-      // 스키마 처리 실패 시 이후 단계는 잘못된 스키마로 동작할 수 있어 중단
       if (errors.length > 0) {
-        return {
+        return await finish({
           success: false,
           fixed,
           errors,
           error: errors.join(' | '),
-        };
+        });
       }
     }
 
@@ -3221,6 +3637,25 @@ export async function fixLayerSetupIssues(params: {
         params.geometryType && VALID_GEOMETRY_TYPES.has(params.geometryType.toUpperCase())
           ? (params.geometryType.toUpperCase() as 'POINT' | 'LINE' | 'POLYGON')
           : undefined;
+      const safeTableFile = tableName.replace(/[^a-zA-Z0-9_-]/g, '');
+      const fieldsRel = `src/config/defineLayer/fields/table_${safeTableFile}.json`;
+      const fieldsAbs = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safeTableFile}.json`);
+      const fieldsExisted = fs.existsSync(fieldsAbs);
+      const defineBefore = await getDefineLayerTables();
+      const tableDefExisted = !!(
+        defineBefore.success &&
+        defineBefore.tables?.some(
+          (r) =>
+            String((r as Record<string, unknown>).define_table_name ?? '')
+              .trim()
+              .toLowerCase() === tableName.toLowerCase()
+        )
+      );
+      step(
+        `호출: createDefineTableAndFieldsByTableName({ tableName: '${tableName}', dbSchema: '${schema}', geometryType: ${geom ? `'${geom}'` : 'undefined'}, group: ${params.group?.trim() ? `'${params.group.trim()}'` : 'undefined'} })`
+      );
+      step(`파일: src/config/defineLayer/tables.json upsert (define_table_name=${tableName})`);
+      step(`파일: ${fieldsRel} 생성/갱신`);
       const defRes = await createDefineTableAndFieldsByTableName({
         tableName,
         dbSchema: schema,
@@ -3229,7 +3664,15 @@ export async function fixLayerSetupIssues(params: {
       });
       if (!defRes.success) {
         errors.push(defRes.error ?? '레이어/필드 정의 생성 실패');
+        step(`실패: ${defRes.error ?? '레이어/필드 정의 생성 실패'}`);
       } else {
+        step('결과: 레이어/필드 정의 생성 완료');
+        markChange(
+          'file',
+          tableDefExisted ? '수정' : '생성',
+          'src/config/defineLayer/tables.json (해당 테이블 항목)'
+        );
+        markChange('file', fieldsExisted ? '수정' : '생성', fieldsRel);
         if (issueSet.has('define_layer')) fixed.push('define_layer');
         if (issueSet.has('define_field')) fixed.push('define_field');
       }
@@ -3238,45 +3681,335 @@ export async function fixLayerSetupIssues(params: {
     if (issueSet.has('define_code')) {
       let codeFields = params.missingCodeFields ?? [];
       if (codeFields.length === 0) {
+        step('누락 코드 필드 미전달 → fields JSON에서 CODE 타입·codes 없음 조회');
         const fields = readDefineFieldsFile(tableName);
         codeFields = fields
           .filter((f) => String(f.define_field_type ?? '').toUpperCase() === 'CODE')
           .map((f) => String(f.define_field_name ?? '').trim())
           .filter((name) => name && readDefineCodesFile(tableName, name).length === 0);
       }
+      step(`코드 생성 대상 필드: ${codeFields.length > 0 ? codeFields.join(', ') : '(없음)'}`);
       for (const fieldName of codeFields) {
+        const safeCode = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
+        const codesRel = `src/config/defineLayer/codes/field_${safeCode}.json`;
+        const codesAbs = path.join(DEFINE_LAYER_CODES_DIR, `field_${safeCode}.json`);
+        const codesExisted = fs.existsSync(codesAbs);
+        step(
+          `호출: syncDefineCodesFromDb({ schema: '${schema}', tableName: '${tableName}', fieldName: '${fieldName}' })`
+        );
+        step(
+          `SQL: SELECT DISTINCT "${fieldName.replace(/"/g, '""')}" AS val FROM "${schema}"."${tableName.replace(/"/g, '""')}" WHERE "${fieldName.replace(/"/g, '""')}" IS NOT NULL AND TRIM(COALESCE("${fieldName.replace(/"/g, '""')}"::text, '')) <> '' ORDER BY 1 LIMIT 500`
+        );
+        step(`파일: ${codesRel} 생성`);
         const codeRes = await syncDefineCodesFromDb({ schema, tableName, fieldName });
-        if (!codeRes.success) errors.push(`${fieldName}: ${codeRes.error ?? '코드 생성 실패'}`);
+        if (!codeRes.success) {
+          errors.push(`${fieldName}: ${codeRes.error ?? '코드 생성 실패'}`);
+          step(`실패(${fieldName}): ${codeRes.error ?? '코드 생성 실패'}`);
+        } else {
+          step(`결과(${fieldName}): 코드 ${codeRes.count ?? '?'}건 기록`);
+          markChange('file', codesExisted ? '수정' : '생성', codesRel);
+        }
       }
       if (codeFields.length > 0 && errors.length === 0) fixed.push('define_code');
     }
 
     if (issueSet.has('geoserver_layer')) {
+      const layerNameLc = tableName.toLowerCase();
+      const layerProbe = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/ggnr/layers/${encodeURIComponent(layerNameLc)}.json`
+      );
+      const layerExisted = layerProbe.ok;
+      step(`호출: createOrUpdateGeoServerLayer({ layerName: '${tableName}', url: '${baseUrl}' })`);
+      step(`REST: DELETE ${baseUrl}/rest/workspaces/ggnr/layers/${layerNameLc}`);
+      step(
+        `REST: DELETE ${baseUrl}/rest/workspaces/ggnr/datastores/postgres_layer|postgres_public_layer/featuretypes/${layerNameLc}`
+      );
+      step(
+        `REST: POST ${baseUrl}/rest/workspaces/ggnr/datastores/(스키마별)/featuretypes.json  body.featureType.name=${layerNameLc} nativeName=${tableName} srs=EPSG:5181`
+      );
       const layerRes = await createOrUpdateGeoServerLayer({
         layerName: tableName,
         url: baseUrl,
       });
-      if (!layerRes.success) errors.push(layerRes.error ?? 'GeoServer 레이어 생성 실패');
-      else fixed.push('geoserver_layer');
+      if (!layerRes.success) {
+        errors.push(layerRes.error ?? 'GeoServer 레이어 생성 실패');
+        step(`실패: ${layerRes.error ?? 'GeoServer 레이어 생성 실패'}`);
+      } else {
+        step(`결과: GeoServer FeatureType/Layer 발행 완료 (${layerRes.layerName ?? layerNameLc})`);
+        markChange(
+          'geoserver',
+          layerExisted ? '재생성' : '생성',
+          `Layer/FeatureType: ggnr:${layerRes.layerName ?? layerNameLc}`
+        );
+        fixed.push('geoserver_layer');
+      }
     }
 
     if (issueSet.has('geoserver_style')) {
+      const layerNameLc = tableName.toLowerCase();
+      const styleExisted = await geoServerStyleExists(baseUrl, layerNameLc);
+      const cssRel = `geoserver_modules/data_dir/styles/${layerNameLc}.css`;
+      const cssExisted = fs.existsSync(path.join(getStylesDir(), `${layerNameLc}.css`));
+      step(`호출: applyDefaultStyleToLayer({ layerName: '${tableName}', url: '${baseUrl}' })`);
+      step(`REST: POST/PUT ${baseUrl}/rest/styles (CSS, name=${layerNameLc})`);
+      step(`파일: ${cssRel} 기록`);
+      step(`REST: PUT ${baseUrl}/rest/workspaces/ggnr/layers/${layerNameLc}.json (defaultStyle=${layerNameLc})`);
       const styleRes = await applyDefaultStyleToLayer({
         layerName: tableName,
         url: baseUrl,
       });
-      if (!styleRes.success) errors.push(styleRes.error ?? 'GeoServer 스타일 생성 실패');
-      else fixed.push('geoserver_style');
+      if (!styleRes.success) {
+        errors.push(styleRes.error ?? 'GeoServer 스타일 생성 실패');
+        step(`실패: ${styleRes.error ?? 'GeoServer 스타일 생성 실패'}`);
+      } else {
+        step('결과: GeoServer 스타일 생성·레이어 기본 스타일 지정 완료');
+        markChange('geoserver', styleExisted ? '수정' : '생성', `Style: ${layerNameLc}`);
+        markChange('geoserver', '지정', `Layer defaultStyle: ggnr:${layerNameLc} → ${layerNameLc}`);
+        markChange('file', cssExisted ? '수정' : '생성', cssRel);
+        fixed.push('geoserver_style');
+      }
     }
 
-    return {
+    return await finish({
       success: errors.length === 0,
       fixed,
       errors,
       error: errors.length ? errors.join(' | ') : undefined,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    step(`예외: ${msg}`);
+    return await finish({ success: false, fixed, errors: [...errors, msg], error: msg });
+  }
+}
+
+/**
+ * 레이어 설정 스키마 전환: 정의(tables.json) 저장 → DB SET SCHEMA → GeoServer FeatureType 재발행.
+ * 중간 실패 시 정의는 유지(오류수정 탭에서 이어서 처리).
+ */
+export async function switchLayerTableSchema(params: {
+  tableName: string;
+  toSchema: 'layer' | 'public_layer';
+  url?: string;
+}) {
+  const tableName = String(params.tableName ?? '').trim();
+  const toSchema = params.toSchema === 'public_layer' ? 'public_layer' : 'layer';
+  const baseUrl = (params.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const workspace = 'ggnr';
+
+  if (!tableName) {
+    return { success: false as const, error: 'tableName이 필요합니다.', steps: [] as string[] };
+  }
+
+  const steps: string[] = [];
+  const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+  const stepsDone = {
+    defineSaved: false,
+    dbMoved: false,
+    geoserverUpdated: false,
+  };
+
+  try {
+    if (!fs.existsSync(DEFINE_LAYER_TABLES_PATH)) {
+      return { success: false as const, error: 'tables.json not found', steps, ...stepsDone };
+    }
+    const raw = fs.readFileSync(DEFINE_LAYER_TABLES_PATH, 'utf-8');
+    const tables = JSON.parse(raw) as Record<string, unknown>[];
+    if (!Array.isArray(tables)) {
+      return { success: false as const, error: 'Invalid tables format', steps, ...stepsDone };
+    }
+
+    const rowIdx = tables.findIndex(
+      (r) =>
+        String(r.define_table_name ?? '')
+          .trim()
+          .toLowerCase() === tableName.toLowerCase()
+    );
+    if (rowIdx < 0) {
+      return {
+        success: false as const,
+        error: `레이어 정의에 '${tableName}'이(가) 없습니다.`,
+        steps,
+        ...stepsDone,
+      };
+    }
+
+    const fromDefine = normalizeLayerSchema(tables[rowIdx].define_table_schema);
+    tables[rowIdx] = { ...tables[rowIdx], define_table_schema: toSchema };
+    normalizeDefineTableSource(tables);
+    const sorted = sortDefineLayerTables(tables as DefineLayerRow[]);
+    fs.mkdirSync(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
+    fs.writeFileSync(DEFINE_LAYER_TABLES_PATH, JSON.stringify(sorted, null, 2), 'utf-8');
+    stepsDone.defineSaved = true;
+    steps.push(`정의 스키마 저장: ${fromDefine} → ${toSchema}`);
+
+    const listRes = await getLayerTableList();
+    const dbRows =
+      listRes.success && Array.isArray(listRes.tables)
+        ? (listRes.tables as Array<{ schema: string; table: string }>)
+        : [];
+    const matches = dbRows.filter(
+      (t) =>
+        (t.schema === 'layer' || t.schema === 'public_layer') &&
+        String(t.table).toLowerCase() === tableName.toLowerCase()
+    );
+    const inTarget = matches.find((t) => t.schema === toSchema);
+    const inOther = matches.find((t) => t.schema !== toSchema);
+
+    if (!matches.length) {
+      steps.push('DB 테이블 없음 → 정의만 변경');
+      return {
+        success: true as const,
+        message: `정의 스키마만 ${toSchema}로 변경했습니다. (DB 테이블 없음)`,
+        steps,
+        fromSchema: fromDefine,
+        toSchema,
+        ...stepsDone,
+      };
+    }
+
+    if (inOther && inTarget) {
+      return {
+        success: false as const,
+        error: `대상 스키마(${toSchema})에 '${tableName}'이(가) 이미 있어 이동할 수 없습니다. 오류수정 탭에서 잔여를 확인하세요.`,
+        steps,
+        fromSchema: fromDefine,
+        toSchema,
+        ...stepsDone,
+      };
+    }
+
+    let physicalTable = inTarget?.table ?? inOther?.table ?? tableName;
+    let actualFrom: 'layer' | 'public_layer' | undefined = inTarget
+      ? toSchema
+      : inOther
+        ? normalizeLayerSchema(inOther.schema)
+        : undefined;
+
+    if (actualFrom && actualFrom !== toSchema) {
+      const createSchemaSql = `CREATE SCHEMA IF NOT EXISTS ${toSchema}`;
+      steps.push(`SQL: ${createSchemaSql}`);
+      await db.execute(sql.raw(createSchemaSql));
+      const alterSql = `ALTER TABLE ${actualFrom}.${quoteIdent(physicalTable)} SET SCHEMA ${toSchema}`;
+      steps.push(`SQL: ${alterSql}`);
+      await db.execute(sql.raw(alterSql));
+      stepsDone.dbMoved = true;
+      steps.push(`DB 스키마 이동: ${actualFrom} → ${toSchema}`);
+      physicalTable = physicalTable;
+    } else {
+      steps.push(`DB 이미 ${toSchema}에 있음 → 이동 생략`);
+    }
+
+    const layerNameLc = tableName.toLowerCase();
+    const delLayer = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerNameLc)}`,
+      { method: 'DELETE' }
+    );
+    if (!delLayer.ok && delLayer.status !== 404) {
+      const text = await delLayer.text();
+      return {
+        success: false as const,
+        error: `GeoServer 레이어 삭제 실패: ${delLayer.status} ${text}`,
+        steps,
+        fromSchema: fromDefine,
+        toSchema,
+        ...stepsDone,
+      };
+    }
+    for (const ds of ['postgres_layer', 'postgres_public_layer'] as const) {
+      const delFt = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${ds}/featuretypes/${encodeURIComponent(layerNameLc)}`,
+        { method: 'DELETE' }
+      );
+      if (!delFt.ok && delFt.status !== 404) {
+        const text = await delFt.text();
+        return {
+          success: false as const,
+          error: `GeoServer FeatureType 삭제 실패(${ds}): ${delFt.status} ${text}`,
+          steps,
+          fromSchema: fromDefine,
+          toSchema,
+          ...stepsDone,
+        };
+      }
+    }
+    steps.push('GeoServer 기존 Layer/FeatureType 삭제(양쪽 datastore)');
+
+    const layerRes = await createOrUpdateGeoServerLayer({
+      layerName: physicalTable,
+      url: baseUrl,
+    });
+    if (!layerRes.success) {
+      return {
+        success: false as const,
+        error: layerRes.error ?? 'GeoServer 레이어 재발행 실패',
+        steps,
+        fromSchema: fromDefine,
+        toSchema,
+        ...stepsDone,
+      };
+    }
+    steps.push(`GeoServer FeatureType 재발행: ${layerRes.layerName ?? layerNameLc}`);
+
+    // 기존 스타일이 있으면 내용 덮어쓰지 않고 기본 스타일만 재지정
+    const styleExists = await geoServerStyleExists(baseUrl, layerNameLc);
+    if (styleExists) {
+      const setRes = await setLayerDefaultStyle({
+        url: baseUrl,
+        workspace,
+        layerName: layerNameLc,
+        styleName: layerNameLc,
+      });
+      if (!setRes.success) {
+        return {
+          success: false as const,
+          error: setRes.error ?? 'GeoServer 스타일 지정 실패',
+          steps,
+          fromSchema: fromDefine,
+          toSchema,
+          ...stepsDone,
+        };
+      }
+      steps.push('GeoServer 기존 스타일 재지정 완료');
+    } else {
+      const styleRes = await applyDefaultStyleToLayer({
+        layerName: physicalTable,
+        url: baseUrl,
+      });
+      if (!styleRes.success) {
+        return {
+          success: false as const,
+          error: styleRes.error ?? 'GeoServer 스타일 생성·지정 실패',
+          steps,
+          fromSchema: fromDefine,
+          toSchema,
+          ...stepsDone,
+        };
+      }
+      steps.push('GeoServer 기본 스타일 생성·지정 완료');
+    }
+    stepsDone.geoserverUpdated = true;
+
+    return {
+      success: true as const,
+      message: `스키마 전환 완료: ${fromDefine} → ${toSchema} (정의·DB·GeoServer)`,
+      steps,
+      fromSchema: fromDefine,
+      toSchema,
+      ...stepsDone,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { success: false, fixed, errors: [...errors, msg], error: msg };
+    steps.push(`예외: ${msg}`);
+    return {
+      success: false as const,
+      error: msg,
+      steps,
+      ...stepsDone,
+    };
   }
 }
+

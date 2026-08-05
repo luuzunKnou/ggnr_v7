@@ -31,17 +31,24 @@ export async function POST(req: NextRequest) {
   const layer = typeof o.layer === 'string' ? o.layer : null;
   const key = typeof o.key === 'string' ? o.key : o.key != null ? String(o.key) : null;
   const fileName = typeof o.fileName === 'string' ? o.fileName : null;
+  const subfolderRaw = typeof o.subfolder === 'string' ? o.subfolder.trim() : '';
+  const subfolder =
+    subfolderRaw && subfolderRaw !== '기타' ? subfolderRaw : undefined;
   if (layer == null || key == null || fileName == null) {
     return NextResponse.json({ error: 'layer, key, fileName 이 필요합니다.' }, { status: 400 });
   }
   if (assertSafeFileDataSegment(layer) == null || assertSafeFileDataSegment(key) == null) {
     return NextResponse.json({ error: '유효하지 않은 layer 또는 key 입니다.' }, { status: 400 });
   }
+  if (subfolder != null && assertSafeFileDataSegment(subfolder) == null) {
+    return NextResponse.json({ error: '유효하지 않은 subfolder 입니다.' }, { status: 400 });
+  }
 
   const result = await softDeleteServiceFileDataItem({
     layerName: layer,
     keyValue: key,
     fileName,
+    subfolder,
   });
   if (!result.ok) {
     const status =

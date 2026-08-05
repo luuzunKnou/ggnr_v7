@@ -18,16 +18,6 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDetailScalarValue } from "@/lib/formatDetailScalar";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
-
-/** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
-function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
-  if (/year|연도/i.test(key)) {
-    if (raw === null || raw === undefined) return "-";
-    const s = String(raw).trim().replace(/,/g, "");
-    return s === "" ? "-" : s;
-  }
-  return formatDetailScalarValue(raw);
-}
 import {
   riverBasicPlanAsDefineTable,
   riverBasicPlanGdParentDefineTable,
@@ -38,7 +28,7 @@ import {
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
-import { getRowKey } from "../../../_mapComponents/standard/defineLayerRowUtils";
+import { getRowKey, getRowValueByField } from "../../../_mapComponents/standard/defineLayerRowUtils";
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -51,6 +41,17 @@ import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import { getRiverBasicPlanDetailFields } from "./riverBasicPlanDetailFields";
+
+/** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
+function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
+  if (/year|연도/i.test(key)) {
+    if (raw === null || raw === undefined) return "-";
+    const s = String(raw).trim().replace(/,/g, "");
+    return s === "" ? "-" : s;
+  }
+  return formatDetailScalarValue(raw);
+}
 
 type IndexBundle = {
   index: {
@@ -156,6 +157,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [indexListError, setIndexListError] = useState<string | null>(null);
   const indexFitDoneRef = useRef<string | null>(null);
   const setRiverBasicPlanIndexFromMap = mapContext?.setRiverBasicPlanIndexFromMap;
+  /** 기본계획(AS) 상세보기 필드 — 하드코딩 */
+  const planDetailFields = useMemo(() => getRiverBasicPlanDetailFields(tab), [tab]);
   /** define_field_is_key — 데이터 조회 첨부와 동일 (file_data/river_d_index/{키}/) */
   const [indexTableKeyFieldName, setIndexTableKeyFieldName] = useState<string | null>(null);
   /** define_table_parents_layer === river_plan_gd_ps 인 자식 define_table_name */
@@ -691,8 +694,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   const detailEntries = useMemo(() => {
     const row = detail ?? {};
-    return Object.entries(row).filter(([k]) => k !== "geom");
-  }, [detail]);
+    return planDetailFields.map((f) => ({
+      key: f.name,
+      label: f.label,
+      value: getRowValueByField(row, f.name),
+    }));
+  }, [detail, planDetailFields]);
 
   const actionButtons: { label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { label: "보고서", icon: FileText },
@@ -1107,15 +1114,25 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
               ) : !detail || detailEntries.length === 0 ? (
                 <p className="text-sm text-slate-500 py-1">속성정보가 없습니다.</p>
               ) : (
-                <div className="overflow-hidden rounded border border-slate-200">
-                  {detailEntries.map(([k, v], idx) => (
-                    <div
-                      key={k}
-                      className={`flex ${idx !== detailEntries.length - 1 ? "border-b border-slate-200" : ""}`}
-                    >
-                      <div className="w-[130px] shrink-0 bg-slate-100 px-2.5 py-1.5 text-[11px] text-[#666]">{k}</div>
-                      <div className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] text-[#666] break-all">
-                        {formatRiverBasicPlanAttrValue(k, v)}
+                <div className="overflow-hidden rounded border border-slate-200 grid grid-cols-[max-content_minmax(0,1fr)]">
+                  {detailEntries.map((entry, idx) => (
+                    <div key={entry.key} className="contents">
+                      <div
+                        className={`bg-slate-100 px-2.5 py-1.5 text-[11px] text-[#666] whitespace-nowrap ${
+                          idx !== detailEntries.length - 1 ? "border-b border-slate-200" : ""
+                        }`}
+                      >
+                        {entry.label}
+                      </div>
+                      <div
+                        className={`min-w-0 px-2.5 py-1.5 text-[11px] text-[#666] break-all ${
+                          idx !== detailEntries.length - 1 ? "border-b border-slate-200" : ""
+                        }`}
+                      >
+                        {formatRiverBasicPlanAttrValue(
+                          `${entry.key} ${entry.label}`,
+                          entry.value
+                        )}
                       </div>
                     </div>
                   ))}

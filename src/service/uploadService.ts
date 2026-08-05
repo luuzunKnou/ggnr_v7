@@ -108,6 +108,7 @@ export async function initServiceFileDataUpload(params: {
   keyValue: string;
   ownerUsrId: string;
   serEng: string;
+  subfolder?: string | null;
 }): Promise<InitChunkedUploadResult> {
   if (!(await userCanAccessServiceFileData(params.ownerUsrId, params.serEng.trim(), 'write'))) {
     throw new Error('Forbidden');
@@ -116,7 +117,7 @@ export async function initServiceFileDataUpload(params: {
   if (!safeName) {
     throw new Error('유효하지 않은 파일명입니다.');
   }
-  const relDir = fileDataRelativeDir(params.layerName, params.keyValue);
+  const relDir = fileDataRelativeDir(params.layerName, params.keyValue, params.subfolder);
   if (!relDir) {
     throw new Error('유효하지 않은 layer 또는 key 입니다.');
   }
@@ -231,8 +232,21 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     subDir = 'shp_data';
     saveFileName = meta.fileName;
   } else if (meta.uploadType === 'excel') {
+    // excel_data/{테이블영문명}/{시각}_{원본파일명} — 영문 폴더 단위로 SHP와 유사하게 묶음
     subDir = 'excel_data';
-    saveFileName = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}_${meta.fileName}`;
+    const ts = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const normalizedExcel = meta.fileName.replace(/\\/g, '/');
+    const excelParts = normalizedExcel.split('/').filter((p) => p && p !== '.');
+    if (excelParts.some((p) => p === '..')) {
+      throw new Error('Invalid fileName path');
+    }
+    if (excelParts.length >= 2) {
+      const tableFolder = excelParts[0].replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'layer_table';
+      const baseName = excelParts[excelParts.length - 1];
+      saveFileName = `${tableFolder}/${ts}_${baseName}`;
+    } else {
+      saveFileName = `${ts}_${excelParts[0] ?? meta.fileName}`;
+    }
   } else if (meta.uploadType === 'fileData') {
     subDir = 'file_data';
     saveFileName = meta.fileName;
@@ -258,10 +272,12 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   if (segments.some((p) => p === '..')) {
     throw new Error('Invalid fileName path');
   }
-  /** 폴더 선택 업로드(webkitRelativePath) 시 하위 경로 유지. 루트만 저장하면 후처리가 shp_data/폴더/파일.shp 를 찾다가 실패함. */
+  /** 폴더 선택 업로드(webkitRelativePath) 시 하위 경로 유지. 루트만 저장하면 후처리가 shp_data/폴더/파일.shp 를 찾다가 실패함.
+   * excel: excel_data/{테이블영문명}/파일 경로 유지. */
   const preserveRelativePath =
     meta.uploadType === 'fileData' ||
     meta.uploadType === 'shp' ||
+    meta.uploadType === 'excel' ||
     meta.uploadType === 'satelliteTif' ||
     meta.uploadType === 'source' ||
     meta.uploadType === 'fileManager';

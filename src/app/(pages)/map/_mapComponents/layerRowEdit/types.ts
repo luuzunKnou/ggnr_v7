@@ -43,6 +43,8 @@ export type LayerRowDetailAttr = {
 
 export type LayerRowParcelItem = {
   address: string;
+  /** 목록 표시문 (없으면 address). 예: 하천명 · 비고 */
+  displayText?: string;
   /** PNU 19자리(또는 18자리) — jijuk 매칭용 */
   pnu?: string;
   extent3857: [number, number, number, number] | null;
@@ -54,4 +56,8 @@ export type LayerRowParcelItem = {
   showMapGeom?: boolean;
   /** WMS 레이어 개별 on/off — ogc_fid 등 */
   wmsRowKey?: { keyField: string; keyValue: string };
+  /** 공사대장 등 — 주소검색 대신 하천명·비고를 직접 입력하는 필지 항목용 */
+  riverName?: string;
+  /** 공사대장 등 — 필지별 비고 */
+  remark?: string;
 };

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   Dialog,
   DialogContent,
@@ -119,6 +120,14 @@ function formatCountCell(n: number | undefined) {
 }
 
 export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePath, workName, onSuccess }: Props) {
+  const { data: session } = useSession();
+  const operatorLabel = useMemo(() => {
+    const id = String(session?.user?.id ?? '').trim();
+    const name = String(session?.user?.name ?? '').trim();
+    if (id && name) return `${id}(${name})`;
+    return id || name || '';
+  }, [session?.user?.id, session?.user?.name]);
+
   const [postProcessing, setPostProcessing] = useState(false);
   const [fileLogs, setFileLogs] = useState<FileLogEntry[]>([]);
   const [postProgress, setPostProgress] = useState<{ current: number; total: number } | null>(null);
@@ -507,7 +516,12 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
         const histRes = await call('', 'POST', {
           service: 'layerHistoryService',
           action: 'createLayerHistory',
-          params: { contents: historyContents, successCount: 0, failCount: 0 },
+          params: {
+            contents: historyContents,
+            successCount: 0,
+            failCount: 0,
+            createUser: operatorLabel || undefined,
+          },
         });
         const hd = histRes?.data ?? histRes;
         lhKey = hd?.lhKey;

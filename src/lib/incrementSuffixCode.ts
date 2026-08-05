@@ -17,3 +17,6 @@ export function incrementSuffixCode(code: string): string {
 }
 
 export const DEFAULT_USAGE_DATA_AS_CONS_CODE = "JY_000001";
+
+/** GS_000001 — 공사대장(cons_data_as) 신규 키 기본값 */
+export const DEFAULT_CONS_DATA_AS_CONS_CODE = "GS_000001";

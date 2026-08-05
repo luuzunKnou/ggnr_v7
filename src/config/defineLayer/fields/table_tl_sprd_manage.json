@@ -726,7 +726,7 @@
   },
   {
     "define_field_name": "rn_dlb_de",
-    "define_field_kor_name": "rn_dlb_de",
+    "define_field_kor_name": "도로명심의일자",
     "define_field_type": "text",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -751,7 +751,7 @@
   },
   {
     "define_field_name": "roa_man_es",
-    "define_field_kor_name": "roa_man_es",
+    "define_field_kor_name": "도로제정권자",
     "define_field_type": "text",
     "define_field_idx": 9,
     "define_field_is_required": false,
@@ -776,7 +776,7 @@
   },
   {
     "define_field_name": "nlr_lcl_no",
-    "define_field_kor_name": "nlr_lcl_no",
+    "define_field_kor_name": "국도/지방도번호",
     "define_field_type": "text",
     "define_field_idx": 10,
     "define_field_is_required": false,
@@ -801,7 +801,7 @@
   },
   {
     "define_field_name": "ope_man_id",
-    "define_field_kor_name": "ope_man_id",
+    "define_field_kor_name": "작업자ID",
     "define_field_type": "text",
     "define_field_idx": 11,
     "define_field_is_required": false,
@@ -826,7 +826,7 @@
   },
   {
     "define_field_name": "par_sig_cd",
-    "define_field_kor_name": "par_sig_cd",
+    "define_field_kor_name": "분기시군구코드",
     "define_field_type": "text",
     "define_field_idx": 12,
     "define_field_is_required": false,
@@ -851,7 +851,7 @@
   },
   {
     "define_field_name": "par_rds_no",
-    "define_field_kor_name": "par_rds_no",
+    "define_field_kor_name": "분기도로구간일련번호",
     "define_field_type": "number",
     "define_field_idx": 13,
     "define_field_is_required": false,
@@ -876,7 +876,7 @@
   },
   {
     "define_field_name": "input_mthd",
-    "define_field_kor_name": "input_mthd",
+    "define_field_kor_name": "입력방법",
     "define_field_type": "text",
     "define_field_idx": 14,
     "define_field_is_required": false,
@@ -901,7 +901,7 @@
   },
   {
     "define_field_name": "crsrd_cnt",
-    "define_field_kor_name": "crsrd_cnt",
+    "define_field_kor_name": "교차로수",
     "define_field_type": "number",
     "define_field_idx": 15,
     "define_field_is_required": false,
@@ -926,7 +926,7 @@
   },
   {
     "define_field_name": "issu_yn",
-    "define_field_kor_name": "issu_yn",
+    "define_field_kor_name": "발급여부",
     "define_field_type": "text",
     "define_field_idx": 16,
     "define_field_is_required": false,

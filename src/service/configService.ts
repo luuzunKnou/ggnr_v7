@@ -289,6 +289,8 @@ export function getBootProject(_params?: unknown): { project: string } {
 
 export function getMapConfig(_params?: unknown): {
   VWORLD_API_KEY: string
+  /** 브이월드 키 발급 시 등록한 서비스 URL. 2D데이터 API에서만 필요(없으면 파라미터 생략) */
+  VWORLD_DOMAIN: string
   OPENAI_API_KEY: string
   SAFEMAP_API_KEY: string
   SAFETYDATA_API_KEY: string
@@ -305,6 +307,7 @@ export function getMapConfig(_params?: unknown): {
     ""
   return {
     VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
+    VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
     OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
     SAFEMAP_API_KEY: vars.SAFEMAP_API_KEY?.trim() ?? '',
     SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',

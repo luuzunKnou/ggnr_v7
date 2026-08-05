@@ -16,6 +16,12 @@ type Props = {
   parcels: LayerRowParcelItem[];
   movingParcelIdx: number | null;
   onParcelClick: (item: LayerRowParcelItem, idx: number) => void;
+  /** 편집 중 빈 목록 안내 (미지정 시 기본 문구) */
+  emptyEditingHint?: string;
+  /** 목록 ul max-height 클래스 (기본 max-h-48) */
+  listMaxHeightClassName?: string;
+  /** 제목 줄 상단 여백 제거 등 */
+  dense?: boolean;
 };
 
 export function LayerParcelTextSection({
@@ -26,6 +32,9 @@ export function LayerParcelTextSection({
   parcels,
   movingParcelIdx,
   onParcelClick,
+  emptyEditingHint,
+  listMaxHeightClassName = "max-h-48",
+  dense = false,
 }: Props) {
   const mapContext = useMapContext();
   const vworldApiKey = mapContext?.vworldApiKey ?? "";
@@ -35,7 +44,12 @@ export function LayerParcelTextSection({
 
   return (
     <>
-      <div className="mt-4 mb-1 flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          "mb-1 flex items-center justify-between gap-2",
+          dense ? "mt-1" : "mt-4"
+        )}
+      >
         <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           필지목록
           {listItems.length > 0 ? (
@@ -51,13 +65,19 @@ export function LayerParcelTextSection({
       </div>
 
       {listItems.length === 0 ? (
-        <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+        <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-2 text-slate-500">
           {isEditing
-            ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다."
+            ? emptyEditingHint ??
+              "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다."
             : "등록된 필지가 없습니다."}
         </div>
       ) : (
-        <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide">
+        <ul
+          className={cn(
+            "list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide",
+            listMaxHeightClassName
+          )}
+        >
           {listItems.map((item, i) => (
             <li
               key={`${i}-${item.address.slice(0, 24)}`}
@@ -75,7 +95,9 @@ export function LayerParcelTextSection({
                     title="클릭 시 위치 이동"
                   >
                     <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
-                    <span className="min-w-0 flex-1 break-words">{item.address}</span>
+                    <span className="min-w-0 flex-1 break-words">
+                      {item.displayText?.trim() || item.address}
+                    </span>
                     {movingParcelIdx === i && (
                       <span className="ml-1 shrink-0 text-[11px] text-slate-500">이동 중…</span>
                     )}
@@ -101,7 +123,7 @@ export function LayerParcelTextSection({
                   title="클릭 시 위치 이동"
                 >
                   <span className="mr-2 tabular-nums text-slate-400">{i + 1}.</span>
-                  {item.address}
+                  {item.displayText?.trim() || item.address}
                   {movingParcelIdx === i && <span className="ml-2 text-[11px] text-slate-500">이동 중…</span>}
                 </button>
               )}
