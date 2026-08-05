@@ -1,19 +1,16 @@
 <layer>
   <name>usage_data_as</name>
-  <id>LayerInfoImpl--5417137b:19f83ba2858:12e</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77b3</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--5417137b:19f83ba2858:12f</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffe</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--5417137b:19f83ba2858:12d</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77b4</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-23 04:05:37.12 UTC</dateCreated>
-  <dateModified>2026-07-23 04:05:37.181 UTC</dateModified>
+  <dateCreated>2026-08-04 05:39:08.979 UTC</dateCreated>
 </layer>

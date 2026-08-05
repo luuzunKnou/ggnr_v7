@@ -4,9 +4,8 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useMapContext } from './MapContext';
 import { call } from '@/lib/api';
 import { sidebarServicePolicy } from '@/lib/accessClient';
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
@@ -34,9 +33,10 @@ interface SidebarButtonProps {
   disabled?: boolean;
   /** true면 아이콘만 (하단 알림·사용자) */
   iconOnly?: boolean;
+  className?: string;
 }
 
-function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly }: SidebarButtonProps) {
+function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly, className }: SidebarButtonProps) {
   return (
     <button
       type="button"
@@ -48,7 +48,8 @@ function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly }: S
         'flex w-[65px] flex-col items-center justify-center text-white/90 transition-colors hover:bg-white/10 hover:text-white',
         iconOnly ? 'py-2.5' : 'pb-[7px] pt-[7px]',
         isActive && 'bg-white/20 text-white',
-        disabled && 'pointer-events-none cursor-not-allowed opacity-35 hover:bg-transparent'
+        disabled && 'pointer-events-none cursor-not-allowed opacity-35 hover:bg-transparent',
+        className
       )}
     >
       {icon}
@@ -63,9 +64,6 @@ function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly }: S
  * 좌측 고정 사이드바 (65px)
  * - 클릭 시 URL query param `opened`에 window key를 토글 (MapControls와 동일 패턴)
  */
-const CONSECUTIVE_CLICKS_TO_TOGGLE_DEBUG = 5;
-const CLICK_RESET_MS = 800;
-
 function renderMaskIcon(iconFile: string) {
   const iconSrc = `/image/serviceListIcon/${iconFile}.svg`;
   return (
@@ -92,9 +90,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const searchParams = useSearchParams();
   const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
   const openedWindows = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
-  const mapContext = useMapContext();
-  const debugClickCountRef = useRef(0);
-  const debugClickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const myInfoAnchorRef = useRef<HTMLDivElement>(null);
   const navScrollHoldRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -245,24 +240,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
       stopNavScrollHold();
     };
   }, [updateNavScrollState, stopNavScrollHold, sidebarItems.length]);
-
-  const handleDebugZoneClick = useCallback(() => {
-    if (debugClickTimeoutRef.current) {
-      clearTimeout(debugClickTimeoutRef.current);
-      debugClickTimeoutRef.current = null;
-    }
-    debugClickCountRef.current += 1;
-    if (debugClickCountRef.current >= CONSECUTIVE_CLICKS_TO_TOGGLE_DEBUG) {
-      const next = !(mapContext?.showDebugUi ?? false);
-      mapContext?.setShowDebugUi(next);
-      debugClickCountRef.current = 0;
-    } else {
-      debugClickTimeoutRef.current = setTimeout(() => {
-        debugClickCountRef.current = 0;
-        debugClickTimeoutRef.current = null;
-      }, CLICK_RESET_MS);
-    }
-  }, [mapContext]);
 
   const toggleWindow = (windowName: string) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
@@ -418,13 +395,16 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
             </button>
           )}
         </nav>
-        {/* 프로토타입: 내 정보 · 알림 */}
-        <div className="relative flex w-full shrink-0 flex-col border-t border-white/15">
+        {/* 계정 구역 */}
+        <div className="relative mt-1 flex w-full shrink-0 flex-col border-t border-white/15 pb-[5px] pt-1">
           <div ref={myInfoAnchorRef} className="w-full">
             <SidebarButton
               icon={
-                <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                  {renderMaskIcon('userAccount')}
+                <span
+                  className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
+                  style={{ backgroundColor: 'var(--color-blue-600)' }}
+                >
+                  <UserRound className="h-4 w-4" strokeWidth={2} aria-hidden />
                   {protoNotifUnread ? (
                     <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500" />
                   ) : null}
@@ -439,13 +419,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
         </div>
       </div>
-      <button
-        type="button"
-        onClick={handleDebugZoneClick}
-        className="h-[28px] w-full shrink-0 cursor-default"
-        style={{ minHeight: '28px' }}
-        aria-label="디버그 패널 토글 (5회 연속 클릭)"
-      />
       <ResourceAccessDeniedDialog
         open={deniedSerOpen}
         onOpenChange={setDeniedSerOpen}

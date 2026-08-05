@@ -12,6 +12,7 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   waterSupplyWork: 'waterSupply',
   waterworksLedger: 'constructionLedger',
   riverBasicPlan: 'riverBasicPlan',
+  // occupationLedger* 는 ser_eng 그대로 opened 토큰으로 사용 (접두사로 패널 분기)
 };
 
 export function getOpenedKeyForSerEng(serEng: string): string {

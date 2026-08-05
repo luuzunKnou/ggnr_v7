@@ -625,6 +625,14 @@ export async function insertTableRow(params: {
     }
   }
 
+  /** 공통 점용대장 — 업무키(id)를 ogc_fid 순번과 동일하게 맞춤 */
+  const syncOccupationLedgerIdToOgcFid =
+    tableGuess === 'water_occupationledger' ||
+    tableGuess === 'road_occupationledger' ||
+    tableGuess === 'public_occupationledger';
+  const ogcFidCol = findColumnName(columnMeta.map((c) => c.name), 'ogc_fid');
+  const resolvedKeyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
+
   const geomWkt = String(params.geomWkt5181 ?? '').trim();
   if (geomWkt) {
     const geomCol = await resolveGeomColumn(schema, table);
@@ -633,27 +641,33 @@ export async function insertTableRow(params: {
     insertVals.push(geomSetExpr(geomWkt));
   }
 
-  if (insertCols.length === 0) {
-    const q = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} DEFAULT VALUES
-               RETURNING ${quoteIdent(findColumnName(columnMeta.map((c) => c.name), keyField)!)}::text AS new_key`;
-    try {
-      const res = await db.execute(sql.raw(q));
-      const row = res.rows?.[0] as { new_key?: string } | undefined;
-      const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
-      if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
-      return { success: true, keyValue };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { success: false, error: msg };
-    }
-  }
-
-  const q = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} (${insertCols.join(', ')})
-             VALUES (${insertVals.join(', ')})
-             RETURNING ${quoteIdent(findColumnName(columnMeta.map((c) => c.name), keyField)!)}::text AS new_key`;
+  const insertBase =
+    insertCols.length === 0
+      ? `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} DEFAULT VALUES`
+      : `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} (${insertCols.join(', ')})
+         VALUES (${insertVals.join(', ')})`;
 
   try {
-    const res = await db.execute(sql.raw(q));
+    if (syncOccupationLedgerIdToOgcFid && ogcFidCol && resolvedKeyCol) {
+      // id 미입력 INSERT → ogc_fid 확보 → id = 순번(문자열)
+      const res = await db.execute(sql.raw(`${insertBase} RETURNING ${quoteIdent(ogcFidCol)} AS fid`));
+      const fid = String((res.rows?.[0] as { fid?: string } | undefined)?.fid ?? '').trim();
+      if (!fid || !Number.isFinite(Number(fid))) {
+        return { success: false, error: '등록 후 순번을 확인하지 못했습니다.' };
+      }
+      await db.execute(
+        sql.raw(
+          `UPDATE ${quoteIdent(schema)}.${quoteIdent(table)}
+           SET ${quoteIdent(resolvedKeyCol)} = '${esc(fid)}'
+           WHERE ${quoteIdent(ogcFidCol)} = ${Number(fid)}`
+        )
+      );
+      return { success: true, keyValue: fid };
+    }
+
+    const res = await db.execute(
+      sql.raw(`${insertBase} RETURNING ${quoteIdent(resolvedKeyCol)}::text AS new_key`)
+    );
     const row = res.rows?.[0] as { new_key?: string } | undefined;
     const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
     if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };

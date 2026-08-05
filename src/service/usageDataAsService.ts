@@ -15,6 +15,7 @@ import {
   resolveJijukParcelGeomsByAddresses,
   syncChildParcelsByParentId,
 } from './layerRowService';
+import { labelForUsageDataAsField } from '@/app/(pages)/map/_mapContents/river/usageDataAs/usageDataAsFieldLabels';
 
 const MAIN_TABLE = 'usage_data_as';
 const SOLO_TABLE = 'usage_data_as_solo';
@@ -448,7 +449,7 @@ export async function getUsageDataAsDetailByKey(params: {
       const def = metaByField.get(field.toLowerCase());
       return {
         field,
-        label: def?.label ?? field,
+        label: labelForUsageDataAsField(field),
         value: String(row[field] ?? '').trim() || '—',
         showDetail: def?.showDetail !== false,
       };

@@ -26,6 +26,11 @@ export type LayerRowEditPreset = {
   autoGenerateKeyOnCreate?: boolean;
   /** show_detail=false 필드도 더보기로 표시·저장 */
   includeHiddenDetail?: boolean;
+  /**
+   * 화면 고정 한글 필드명 (defineLayer 한글명 무시).
+   * key는 컬럼명(대소문자 무시). 있으면 해당 맵만 사용.
+   */
+  fieldLabels?: Record<string, string>;
 };
 
 export type LayerRowDetailAttr = {

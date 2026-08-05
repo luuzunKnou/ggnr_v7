@@ -3,13 +3,10 @@
  */
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
-import {
-  nglFeeList,
-  nglFeeListColumnComments,
-  type NglFeeList,
-} from '@/database/schema/ngl_fee_list';
+import { nglFeeList, type NglFeeList } from '@/database/schema/ngl_fee_list';
 import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
 import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
+import { labelForUseFeeField } from '@/app/(pages)/map/_mapContents/useFee/useFeeFieldLabels';
 
 const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
 
@@ -281,14 +278,14 @@ export async function getUseFeeList(params?: {
   }
 }
 
-const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string; label?: string }[] = [
-  { key: 'feeStatus', db: 'fee_status', label: '상태' },
+const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string }[] = [
+  { key: 'feeStatus', db: 'fee_status' },
   { key: 'lvyNo', db: 'lvy_no' },
   { key: 'ledgerNo', db: 'ledger_no' },
   { key: 'fyr', db: 'fyr' },
   { key: 'dptNm', db: 'dpt_nm' },
   { key: 'dptCd', db: 'dpt_cd' },
-  { key: 'actSeCd', db: 'act_se_cd', label: '회계구분코드' },
+  { key: 'actSeCd', db: 'act_se_cd' },
   { key: 'rprsTxmCd', db: 'rprs_txm_cd' },
   { key: 'rprsTxmNm', db: 'rprs_txm_nm' },
   { key: 'itmSn', db: 'itm_sn' },
@@ -297,64 +294,64 @@ const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string; label?: string }[
   { key: 'pyrNo', db: 'pyr_no' },
   { key: 'pyrNm', db: 'pyr_nm' },
   { key: 'pyrAddr', db: 'pyr_addr' },
-  { key: 'pyrSeCd', db: 'pyr_se_cd', label: '납부자구분코드' },
-  { key: 'pyrMngNo', db: 'pyr_mng_no', label: '납부자관리번호' },
-  { key: 'pyrSttCd', db: 'pyr_stt_cd', label: '납부자상태코드' },
-  { key: 'pyrSttNm', db: 'pyr_stt_nm', label: '납부자상태' },
-  { key: 'zip', db: 'zip', label: '우편번호' },
-  { key: 'pyrCnpcNo', db: 'pyr_cnpc_no', label: '전화번호' },
-  { key: 'pyrMblCnpcNo', db: 'pyr_mbl_cnpc_no', label: '휴대폰번호' },
-  { key: 'pyrEmlAddr', db: 'pyr_eml_addr', label: '이메일' },
-  { key: 'lvySeCd', db: 'lvy_se_cd', label: '부과구분코드' },
+  { key: 'pyrSeCd', db: 'pyr_se_cd' },
+  { key: 'pyrMngNo', db: 'pyr_mng_no' },
+  { key: 'pyrSttCd', db: 'pyr_stt_cd' },
+  { key: 'pyrSttNm', db: 'pyr_stt_nm' },
+  { key: 'zip', db: 'zip' },
+  { key: 'pyrCnpcNo', db: 'pyr_cnpc_no' },
+  { key: 'pyrMblCnpcNo', db: 'pyr_mbl_cnpc_no' },
+  { key: 'pyrEmlAddr', db: 'pyr_eml_addr' },
+  { key: 'lvySeCd', db: 'lvy_se_cd' },
   { key: 'lvyYmd', db: 'lvy_ymd' },
   { key: 'frstPidYmd', db: 'frst_pid_ymd' },
-  { key: 'lastPidYmd', db: 'last_pid_ymd', label: '최종납기일자' },
-  { key: 'pidAfYmd', db: 'pid_af_ymd', label: '납기후일자' },
-  { key: 'pidAfAmt', db: 'pid_af_amt', label: '납기후금액' },
-  { key: 'frstPctAmt', db: 'frst_pct_amt', label: '최초본세' },
-  { key: 'lastPctAmt', db: 'last_pct_amt', label: '최종본세' },
-  { key: 'lastAdtnAmt', db: 'last_adtn_amt', label: '가산금' },
-  { key: 'lastItmIntrAmt', db: 'last_itm_intr_amt', label: '분납이자' },
-  { key: 'lvySttSeNm', db: 'lvy_stt_se_nm', label: '부과상태' },
-  { key: 'rcvmtSeNm', db: 'rcvmt_se_nm', label: '수납구분명' },
-  { key: 'szrSeNm', db: 'szr_se_nm', label: '압류구분명' },
-  { key: 'itmSeNm', db: 'itm_se_nm', label: '분납구분명' },
-  { key: 'untyLvyDataSeNm', db: 'unty_lvy_data_se_nm', label: '통합부과구분' },
-  { key: 'rdtSeNm', db: 'rdt_se_nm', label: '감경구분명' },
-  { key: 'dftSeNm', db: 'dft_se_nm', label: '결손구분명' },
-  { key: 'arrRsnCd', db: 'arr_rsn_cd', label: '체납사유코드' },
-  { key: 'arrRsnNm', db: 'arr_rsn_nm', label: '체납사유' },
-  { key: 'autoPaySeCd', db: 'auto_pay_se_cd', label: '자동납부구분' },
+  { key: 'lastPidYmd', db: 'last_pid_ymd' },
+  { key: 'pidAfYmd', db: 'pid_af_ymd' },
+  { key: 'pidAfAmt', db: 'pid_af_amt' },
+  { key: 'frstPctAmt', db: 'frst_pct_amt' },
+  { key: 'lastPctAmt', db: 'last_pct_amt' },
+  { key: 'lastAdtnAmt', db: 'last_adtn_amt' },
+  { key: 'lastItmIntrAmt', db: 'last_itm_intr_amt' },
+  { key: 'lvySttSeNm', db: 'lvy_stt_se_nm' },
+  { key: 'rcvmtSeNm', db: 'rcvmt_se_nm' },
+  { key: 'szrSeNm', db: 'szr_se_nm' },
+  { key: 'itmSeNm', db: 'itm_se_nm' },
+  { key: 'untyLvyDataSeNm', db: 'unty_lvy_data_se_nm' },
+  { key: 'rdtSeNm', db: 'rdt_se_nm' },
+  { key: 'dftSeNm', db: 'dft_se_nm' },
+  { key: 'arrRsnCd', db: 'arr_rsn_cd' },
+  { key: 'arrRsnNm', db: 'arr_rsn_nm' },
+  { key: 'autoPaySeCd', db: 'auto_pay_se_cd' },
   { key: 'glNm', db: 'gl_nm' },
   { key: 'glMngNo', db: 'gl_mng_no' },
   { key: 'glAddr', db: 'gl_addr' },
-  { key: 'glZip', db: 'gl_zip', label: '물건지우편번호' },
+  { key: 'glZip', db: 'gl_zip' },
   { key: 'acctItmCd', db: 'acct_itm_cd' },
-  { key: 'mngItemSn1', db: 'mng_item_sn1', label: '점용기간' },
-  { key: 'mngItemSn2', db: 'mng_item_sn2', label: '점용면적' },
-  { key: 'mngItemSn3', db: 'mng_item_sn3', label: '공시지가' },
-  { key: 'mngItemSn4', db: 'mng_item_sn4', label: '점용면적' },
+  { key: 'mngItemSn1', db: 'mng_item_sn1' },
+  { key: 'mngItemSn2', db: 'mng_item_sn2' },
+  { key: 'mngItemSn3', db: 'mng_item_sn3' },
+  { key: 'mngItemSn4', db: 'mng_item_sn4' },
   { key: 'mngItemSn5', db: 'mng_item_sn5' },
   { key: 'mngItemSn6', db: 'mng_item_sn6' },
   { key: 'spacBizCd', db: 'spac_biz_cd' },
   { key: 'rcvmtYmd', db: 'rcvmt_ymd' },
-  { key: 'rcvmtPctAmt', db: 'rcvmt_pct_amt', label: '수납본세' },
-  { key: 'rcvmtAdtnAmt', db: 'rcvmt_adtn_amt', label: '수납가산금' },
-  { key: 'itmIntrAmt', db: 'itm_intr_amt', label: '수납분납이자' },
-  { key: 'rcvmtBank', db: 'rcvmt_bank', label: '수납은행' },
-  { key: 'rcvmtTyCd', db: 'rcvmt_ty_cd', label: '수납유형코드' },
-  { key: 'rcvmtTyNm', db: 'rcvmt_ty_nm', label: '수납유형' },
-  { key: 'actYmd', db: 'act_ymd', label: '회계일자' },
-  { key: 'pmkYmd', db: 'pmk_ymd', label: '납부일자' },
-  { key: 'rcvmtSeCd', db: 'rcvmt_se_cd', label: '수납구분코드' },
-  { key: 'rcvmtSttSeCd', db: 'rcvmt_stt_se_cd', label: '수납상태코드' },
-  { key: 'taxnNo', db: 'taxn_no', label: '과세번호' },
+  { key: 'rcvmtPctAmt', db: 'rcvmt_pct_amt' },
+  { key: 'rcvmtAdtnAmt', db: 'rcvmt_adtn_amt' },
+  { key: 'itmIntrAmt', db: 'itm_intr_amt' },
+  { key: 'rcvmtBank', db: 'rcvmt_bank' },
+  { key: 'rcvmtTyCd', db: 'rcvmt_ty_cd' },
+  { key: 'rcvmtTyNm', db: 'rcvmt_ty_nm' },
+  { key: 'actYmd', db: 'act_ymd' },
+  { key: 'pmkYmd', db: 'pmk_ymd' },
+  { key: 'rcvmtSeCd', db: 'rcvmt_se_cd' },
+  { key: 'rcvmtSttSeCd', db: 'rcvmt_stt_se_cd' },
+  { key: 'taxnNo', db: 'taxn_no' },
 ];
 
 for (let i = 1; i <= 20; i++) {
   DETAIL_FIELD_ORDER.push(
-    { key: `vtlacBankNm${i}` as keyof NglFeeList, db: `vtlac_bank_nm${i}`, label: `가상계좌은행${i}` },
-    { key: `vrActno${i}` as keyof NglFeeList, db: `vr_actno${i}`, label: `가상계좌번호${i}` }
+    { key: `vtlacBankNm${i}` as keyof NglFeeList, db: `vtlac_bank_nm${i}` },
+    { key: `vrActno${i}` as keyof NglFeeList, db: `vr_actno${i}` }
   );
 }
 
@@ -385,8 +382,8 @@ function isVirtualAccountField(key: string): boolean {
 
 function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
   const attrs: UseFeeDetailAttr[] = [];
-  for (const { key, db, label } of DETAIL_FIELD_ORDER) {
-    const resolvedLabel = label ?? nglFeeListColumnComments[db] ?? db;
+  for (const { key } of DETAIL_FIELD_ORDER) {
+    const resolvedLabel = labelForUseFeeField(String(key));
     // 코드성 필드는 상세 화면에서 숨김
     if (resolvedLabel.includes('코드')) continue;
 

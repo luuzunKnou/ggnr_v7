@@ -182,6 +182,20 @@ export type MapContextValue = {
       }) => void)
     | null
   >;
+  /** 공통 점용대장 패널(URL opened=occupationLedger) 열림 */
+  occupationLedgerPanelOpen: boolean;
+  setOccupationLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 점용대장 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (OccupationLedgerListPanel이 등록)
+   */
+  applyOccupationLedgerMapPickRef: MutableRefObject<
+    | ((pick: {
+        rowKey: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -422,6 +436,14 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
       }) => void)
     | null
   >(null);
+  const [occupationLedgerPanelOpen, setOccupationLedgerPanelOpen] = useState(false);
+  const applyOccupationLedgerMapPickRef = useRef<
+    | ((pick: {
+        rowKey: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >(null);
   const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
   const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
   const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
@@ -567,6 +589,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         usageDataAsPanelOpen,
         setUsageDataAsPanelOpen,
         applyUsageDataAsMapPickRef,
+        occupationLedgerPanelOpen,
+        setOccupationLedgerPanelOpen,
+        applyOccupationLedgerMapPickRef,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,

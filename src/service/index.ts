@@ -23,6 +23,7 @@ import * as roadLedgerService from './roadLedgerService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
+import * as occupationLedgerService from './occupationLedgerService';
 import * as roadUseAndongService from './roadUseAndongService';
 import * as buildPublicLandService from './buildPublicLandService';
 import * as fileDataUploadService from './fileDataUploadService';
@@ -44,6 +45,7 @@ import * as geoserverProcessService from './geoserverProcessService';
 import * as useFeeService from './useFeeService';
 import * as bizNotifService from './bizNotifService';
 import * as elevationService from './elevationService';
+import * as thematicMapService from './thematicMapService';
 
 export {
   configService,
@@ -53,6 +55,7 @@ export {
   sysService,
   serService,
   standardService,
+  thematicMapService,
   complaintService,
   fileManagerService,
   uploadService,
@@ -69,6 +72,7 @@ export {
   roadUseLedgerService,
   riverUseLedgerService,
   usageDataAsService,
+  occupationLedgerService,
   roadUseAndongService,
   buildPublicLandService,
   fileDataUploadService,

@@ -1,19 +1,16 @@
 <layer>
   <name>landown_fishfarm</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55f3</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-71bc</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-244e</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55f4</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71bd</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:06:40.399 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:12.703 UTC</dateModified>
+  <dateCreated>2026-08-04 06:38:59.113 UTC</dateCreated>
 </layer>

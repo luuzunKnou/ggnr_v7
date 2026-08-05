@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-58f5</id>
+  <name>landown_religion</name>
+  <nativeName>landown</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>landown</title>
+  <keywords>
+    <string>features</string>
+    <string>landown</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>388689.0093459183</minx>
+    <maxx>420678.7792694628</maxx>
+    <miny>356150.95168716717</miny>
+    <maxy>404816.6098796178</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.11101292055724</minx>
+    <maxx>129.48278853350524</maxx>
+    <miny>36.67828045564937</miny>
+    <maxy>37.123385371880396</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>a7 = &apos;08&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

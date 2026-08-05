@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-7ee2</id>
+  <name>lsmd_cont_uq164_uqv810</name>
+  <nativeName>lsmd_cont_uq164</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>lsmd_cont_uq164</title>
+  <keywords>
+    <string>lsmd_cont_uq164</string>
+    <string>features</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>409385.0866266844</minx>
+    <maxx>418286.0167860205</maxx>
+    <miny>358779.79277727526</miny>
+    <maxy>402583.81344704016</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.34310802938046</minx>
+    <maxx>129.45524166357495</maxx>
+    <miny>36.70249988595502</miny>
+    <maxy>37.09888562994011</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>mnum LIKE &apos;%UQV810%&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

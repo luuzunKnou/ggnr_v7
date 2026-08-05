@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-7cec</id>
+  <name>lsmd_cont_up201_upb220</name>
+  <nativeName>lsmd_cont_up201</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>lsmd_cont_up201</title>
+  <keywords>
+    <string>features</string>
+    <string>lsmd_cont_up201</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>415359.2563323121</minx>
+    <maxx>416492.69803335296</maxx>
+    <miny>361358.8854142593</miny>
+    <maxy>362782.1439547647</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.41063442634538</minx>
+    <maxx>129.4237143711241</maxx>
+    <miny>36.726129858783715</miny>
+    <maxy>36.7392013589581</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>mnum LIKE &apos;%UPB220%&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>
