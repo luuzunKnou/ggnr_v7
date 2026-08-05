@@ -5,6 +5,9 @@ import { Search, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
 import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
+import { useMapContext } from "../../../_mapComponents/MapContext";
+import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import type { RoadRewardCase } from "./roadRewardMock";
 import {
   ROAD_REWARD_NEW_ID,
@@ -12,6 +15,11 @@ import {
   mapRoadRewardDtoToCase,
   type RoadRewardCaseDtoClient,
 } from "./roadRewardApi";
+import { ROAD_REWARD_WMS_LAYER_IDS } from "./roadRewardLayerId";
+
+function lowerLayerIds(ids: readonly string[]): string[] {
+  return ids.map((id) => id.toLowerCase());
+}
 
 type Props = {
   cases: RoadRewardCase[];
@@ -30,11 +38,79 @@ export function RoadRewardListPanel({
   onAdd,
   onClose,
 }: Props) {
+  const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const initialLoadDoneRef = useRef(false);
   const selectSeqRef = useRef(0);
+
+  /** 패널 진입 시 보상편입용지·필지 레이어 켜고 전체 extent로 지도 이동 */
+  useEffect(() => {
+    const ctx = mapContextRef.current;
+    const layerIds = lowerLayerIds(ROAD_REWARD_WMS_LAYER_IDS);
+    if (!ctx?.setVisibleLayerNames) return;
+
+    ctx.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const lid of layerIds) {
+        if (!next.has(lid)) {
+          next.add(lid);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    let cancelled = false;
+    void call("", "POST", {
+      service: "roadRewardService",
+      action: "getLayerExtent3857",
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const extent = data?.extent3857 as number[] | null | undefined;
+        const map = mapContextRef.current?.mapInstanceRef?.current;
+        if (
+          !map ||
+          !Array.isArray(extent) ||
+          extent.length !== 4 ||
+          !extent.every((v) => Number.isFinite(Number(v)))
+        ) {
+          return;
+        }
+        window.setTimeout(() => {
+          if (cancelled) return;
+          scheduleFitMapToExtent3857(map, extent.map(Number), {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () =>
+              mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+          });
+        }, 80);
+      })
+      .catch(() => {
+        /* extent 없으면 레이어만 켠 상태 유지 */
+      });
+
+    return () => {
+      cancelled = true;
+      const c = mapContextRef.current;
+      if (!c?.setVisibleLayerNames) return;
+      c.setVisibleLayerNames((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const lid of layerIds) {
+          if (next.delete(lid)) changed = true;
+        }
+        return changed ? next : prev;
+      });
+    };
+  }, []);
 
   const loadRows = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true;

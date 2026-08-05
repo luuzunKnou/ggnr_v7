@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { call } from '@/lib/api';
 import { useMapContext } from '../MapContext';
 import type { CompUI } from './types';
@@ -25,10 +25,19 @@ import {
   Wrench,
   CircleDot,
   ClipboardList,
+  ClipboardCheck,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { COMPLAINT_STATE_OPTIONS, getStateStyle as getStateStyleBase } from './state-options';
+import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
+import { COMP_WMS_LAYER_IDS } from './complaintLayerId';
+import { fitMapToComplaintExtent3857 } from './fitComplaintMap';
+
+function lowerLayerIds(ids: readonly string[]): string[] {
+  return ids.map((id) => id.toLowerCase());
+}
 
 const EMPTY_COMP: CompUI = {
   compKey: 0,
@@ -50,7 +59,7 @@ function getStateStyle(state: string) {
   const style = getStateStyleBase(state);
   const iconMap: Record<string, React.ReactNode> = {
     접수: <ClipboardList className="h-3 w-3 text-[#1D6AE3]" />,
-    점검: <CheckCircle2 className="h-3 w-3 text-emerald-600" />,
+    점검: <ClipboardCheck className="h-3 w-3 text-violet-600" />,
     처리중: <Wrench className="h-3 w-3 text-orange-600" />,
     완료: <CheckCircle2 className="h-3 w-3 text-green-600" />,
   };
@@ -59,6 +68,8 @@ function getStateStyle(state: string) {
 
 export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const setComplaintDetail = mapContext?.setComplaintDetail;
   const complaintDetail = mapContext?.complaintDetail ?? null;
 
@@ -69,6 +80,71 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
   const [filterState, setFilterState] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  /** 패널 진입 시 민원관리 레이어 켜고 전체 extent로 지도 이동 */
+  useEffect(() => {
+    const ctx = mapContextRef.current;
+    const layerIds = lowerLayerIds(COMP_WMS_LAYER_IDS);
+    if (!ctx?.setVisibleLayerNames) return;
+
+    ctx.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const lid of layerIds) {
+        if (!next.has(lid)) {
+          next.add(lid);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'complaintService',
+      action: 'getLayerExtent3857',
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const extent = data?.extent3857 as number[] | null | undefined;
+        const map = mapContextRef.current?.mapInstanceRef?.current;
+        if (
+          !map ||
+          !Array.isArray(extent) ||
+          extent.length !== 4 ||
+          !extent.every((v) => Number.isFinite(Number(v)))
+        ) {
+          return;
+        }
+        window.setTimeout(() => {
+          if (cancelled) return;
+          scheduleFitMapToExtent3857(map, extent.map(Number), {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () =>
+              mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+          });
+        }, 80);
+      })
+      .catch(() => {
+        /* extent 없으면 레이어만 켠 상태 유지 */
+      });
+
+    return () => {
+      cancelled = true;
+      const c = mapContextRef.current;
+      if (!c?.setVisibleLayerNames) return;
+      c.setVisibleLayerNames((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const lid of layerIds) {
+          if (next.delete(lid)) changed = true;
+        }
+        return changed ? next : prev;
+      });
+    };
+  }, []);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -109,13 +185,21 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
           params: { compKey: comp.compKey },
         });
         if (res?.success && res?.data) {
-          setComplaintDetail(res.data as Parameters<typeof setComplaintDetail>[0]);
+          const data = res.data as CompUI & {
+            extent3857?: [number, number, number, number] | null;
+          };
+          setComplaintDetail(data as Parameters<typeof setComplaintDetail>[0]);
+          fitMapToComplaintExtent3857(
+            mapContext?.mapInstanceRef?.current,
+            data.extent3857,
+            () => mapContext?.applyMapViewPaddingRef?.current?.()
+          );
         }
       } catch (e) {
         console.error('민원 상세 조회 실패:', e);
       }
     },
-    [setComplaintDetail]
+    [setComplaintDetail, mapContext]
   );
 
   const selectedKey = complaintDetail?.compKey ?? null;
@@ -137,23 +221,39 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
             compName: values.compName || null,
             compTel: values.compTel || null,
             compContent: values.compContent || null,
+            lon: values.lon ?? null,
+            lat: values.lat ?? null,
           },
         });
-        const created = createRes?.data as { compKey?: number } | undefined;
+        const created = createRes?.data as
+          | (CompUI & { extent3857?: [number, number, number, number] | null; compKey?: number })
+          | undefined;
         const compKey = created?.compKey;
         if (!compKey) {
           console.error('민원 생성 실패: compKey 없음');
           return;
         }
-        const getRes = await call('', 'POST', {
-          service: 'complaintService',
-          action: 'get',
-          params: { compKey },
-        });
-        if (getRes?.success && getRes?.data) {
-          setComplaintDetail(getRes.data as Parameters<typeof setComplaintDetail>[0]);
+        // create 응답에 extent 없으면 get으로 보강
+        let detail = created;
+        if (!created?.extent3857) {
+          const getRes = await call('', 'POST', {
+            service: 'complaintService',
+            action: 'get',
+            params: { compKey },
+          });
+          if (getRes?.success && getRes?.data) {
+            detail = getRes.data as typeof created;
+          }
+        }
+        if (detail) {
+          setComplaintDetail(detail as Parameters<typeof setComplaintDetail>[0]);
           setAddDialogOpen(false);
           loadList();
+          fitMapToComplaintExtent3857(
+            mapContext?.mapInstanceRef?.current,
+            detail.extent3857,
+            () => mapContext?.applyMapViewPaddingRef?.current?.()
+          );
         }
       } catch (e) {
         console.error('민원 생성 실패:', e);
@@ -161,7 +261,7 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
         setSaving(false);
       }
     },
-    [setComplaintDetail, loadList]
+    [setComplaintDetail, loadList, mapContext]
   );
 
   const filtered = useMemo(() => {

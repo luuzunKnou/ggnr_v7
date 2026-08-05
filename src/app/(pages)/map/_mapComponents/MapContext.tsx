@@ -304,6 +304,8 @@ export type MapContextValue = {
   setLayerRowGeomEdit: Dispatch<SetStateAction<LayerRowGeomEditState>>;
   /** 편집 중 도형 WKT(EPSG:5181). 저장 시 layerRowService로 전달 */
   layerRowGeomEditWktRef: MutableRefObject<string | null>;
+  /** 사용자가 도형을 실제로 변경했는지 (로드만 한 경우 false) */
+  layerRowGeomEditDirtyRef: MutableRefObject<boolean>;
   /** 도형 영역 필지 자동/수동 반영 → 상세 패널 필지목록 */
   layerRowParcelApplyRef: MutableRefObject<
     | ((
@@ -479,6 +481,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [dataFlowForcedBackgroundMapId, setDataFlowForcedBackgroundMapId] = useState<string | null>(null);
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
+  const layerRowGeomEditDirtyRef = useRef(false);
   const layerRowParcelApplyRef = useRef<
     | ((
         items: {
@@ -625,6 +628,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         layerRowGeomEdit,
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,
+        layerRowGeomEditDirtyRef,
         layerRowParcelApplyRef,
         layerRowParcelRemoveRef,
         layerRowDraftParcels,

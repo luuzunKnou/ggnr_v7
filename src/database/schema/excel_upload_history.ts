@@ -6,6 +6,8 @@ export const eh = pgTable('excel_upload_history', {
   ehTableName: varchar('eh_table_name').notNull(),
   ehTableKorName: varchar('eh_table_kor_name'),
   ehGroup: varchar('eh_group'),
+  /** TRUNCATE 직전 행 수 */
+  ehOldRowCount: integer('eh_old_row_count'),
   ehRowCount: integer('eh_row_count'),
   ehResult: varchar('eh_result'),
   ehContents: varchar('eh_contents'),
@@ -29,7 +31,8 @@ export const ehColumnComments: Record<string, string> = {
   eh_table_name: '생성된 테이블 영문명',
   eh_table_kor_name: '한글명',
   eh_group: '그룹',
-  eh_row_count: '삽입 행 수',
+  eh_old_row_count: '이전 행 수(TRUNCATE 직전)',
+  eh_row_count: '현재 행 수(삽입 후)',
   eh_result: '결과 (성공/실패)',
   eh_contents: '요약 메시지',
   eh_create_date: '작업 일시',

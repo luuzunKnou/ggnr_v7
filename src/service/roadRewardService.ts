@@ -820,6 +820,56 @@ export async function getExtent3857ByOgcFid(params: {
   return { extent3857: detail.row?.extent3857 ?? null };
 }
 
+/** 보상편입용지·필지 레이어 전체 extent (메뉴 진입 시 지도 맞춤) */
+export async function getLayerExtent3857(): Promise<{
+  extent3857: [number, number, number, number] | null;
+  error?: string;
+}> {
+  try {
+    const geomSelects: string[] = [];
+    for (const table of [MAIN_TABLE, PARCEL_TABLE]) {
+      const meta = await resolveTableWithSchema(table);
+      if (!meta) continue;
+      const cols = await getTableColumns(meta.schema, meta.tableName);
+      const geomCol = findColumn(cols, 'geom');
+      if (!geomCol) continue;
+      const safe = meta.tableName.replace(/"/g, '""');
+      const safeSchema = meta.schema.replace(/"/g, '""');
+      geomSelects.push(
+        `SELECT ST_Transform(t.${quoteIdent(geomCol)}, 3857) AS g
+         FROM "${safeSchema}"."${safe}" t
+         WHERE t.${quoteIdent(geomCol)} IS NOT NULL`
+      );
+    }
+    if (geomSelects.length === 0) {
+      return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
+    }
+    const sqlText = `
+      SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
+             ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
+      FROM (
+        SELECT ST_Extent(g)::box2d AS ext
+        FROM (${geomSelects.join(' UNION ALL ')}) u
+        WHERE g IS NOT NULL
+      ) s
+      WHERE ext IS NOT NULL`;
+    const res = await db.execute(sql.raw(sqlText));
+    const row = res.rows?.[0] as {
+      xmin?: unknown;
+      ymin?: unknown;
+      xmax?: unknown;
+      ymax?: unknown;
+    } | undefined;
+    const coords = [Number(row?.xmin), Number(row?.ymin), Number(row?.xmax), Number(row?.ymax)];
+    if (!coords.every((v) => Number.isFinite(v))) {
+      return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
+    }
+    return { extent3857: coords as [number, number, number, number] };
+  } catch (e: unknown) {
+    return { extent3857: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 type ParcelSaveInput = {
   ogcFid?: number | string;
   pnu?: string;
@@ -907,9 +957,9 @@ export async function recomputeMainGeomFromParcels(params?: {
 }
 
 /**
- * 필지 geom 교정 후에도 부모에 «옛 필지 도형»이 남은 경우 복구.
- * 필지 합이 부모와 거의 안 겹치면(직접 그린 넓은 편입범위는 필지를 포함하므로 제외)
- * 부모 geom 을 필지 합집합으로 강제 교체한다.
+ * 부모 geom 이 «당초 지적(또는 당초+편입)»에 가깝고 현재 필지 합과 면적이 크게 다르면
+ * 필지 합으로 강제 교체. (작은 편입 필지가 큰 부모 안에 들어 overlap≈1 이던 이전 조건은 실패했음)
+ * 직접 그린 넓은 편입범위는 당초 지적과 면적·겹침이 맞지 않아 제외된다.
  */
 async function repairStaleParentGeomVsParcels(params?: {
   rewardOgcFid?: number | string;
@@ -940,29 +990,75 @@ async function repairStaleParentGeomVsParcels(params?: {
         ? `AND m.${quoteIdent(mainKeyCol)} = ${Math.floor(rewardFid)}`
         : '';
 
+    // 1) 부모 면적 ≫ 필지 합 면적 (1.8배 이상)
+    // 2) 필지 합이 부모의 25% 미만만 차지 (부모가 옛 큰 도형)
+    // 3) 당초≠편입 필지가 있고, 부모의 50% 이상이 당초 지적(PNU 본번·부번 추정)과 겹침
     const stale = await db.execute(
       sql.raw(
-        `SELECT m.${quoteIdent(mainKeyCol)} AS fid
-         FROM "${ms}"."${mt}" m
-         INNER JOIN (
+        `WITH parcel_union AS (
            SELECT
              p.${quoteIdent(parentCol)} AS reward_fid,
              ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_MakeValid(p.${quoteIdent(parcelGeomCol)})))) AS union_geom
            FROM "${ps}"."${pt}" p
            WHERE p.${quoteIdent(parcelGeomCol)} IS NOT NULL
            GROUP BY p.${quoteIdent(parentCol)}
-         ) sub ON m.${quoteIdent(mainKeyCol)} = sub.reward_fid
+         ),
+         orig_hit AS (
+           SELECT DISTINCT p.${quoteIdent(parentCol)} AS reward_fid
+           FROM "${ps}"."${pt}" p
+           INNER JOIN public_layer.jijuk j
+             ON REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g')
+              = (
+                  SUBSTRING(REGEXP_REPLACE(COALESCE(p.pnu, ''), '[^0-9]', '', 'g') FROM 1 FOR 10)
+                  || CASE WHEN COALESCE(TRIM(p.jibun_original), '') ~ '^산' THEN '2' ELSE '1' END
+                  || lpad(split_part(regexp_replace(COALESCE(p.jibun_original, ''), '[^0-9-]', '', 'g'), '-', 1), 4, '0')
+                  || lpad(
+                       COALESCE(NULLIF(split_part(regexp_replace(COALESCE(p.jibun_original, ''), '[^0-9-]', '', 'g'), '-', 2), ''), '0'),
+                       4, '0'
+                     )
+                )
+           INNER JOIN "${ms}"."${mt}" m
+             ON m.${quoteIdent(mainKeyCol)} = p.${quoteIdent(parentCol)}
+            AND m.${quoteIdent(mainGeomCol)} IS NOT NULL
+           WHERE COALESCE(TRIM(p.jibun_included), '') <> ''
+             AND COALESCE(TRIM(p.jibun_original), '') <> ''
+             AND COALESCE(TRIM(p.jibun_included), '') <> COALESCE(TRIM(p.jibun_original), '')
+             AND LENGTH(REGEXP_REPLACE(COALESCE(p.pnu, ''), '[^0-9]', '', 'g')) >= 19
+             AND ST_Area(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181)) > 0
+             AND (
+               ST_Area(
+                 ST_Intersection(
+                   ST_MakeValid(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181)),
+                   ST_MakeValid(ST_Transform(j.geom, 5181))
+                 )
+               )
+               / ST_Area(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181))
+             ) >= 0.5
+         )
+         SELECT m.${quoteIdent(mainKeyCol)} AS fid
+         FROM "${ms}"."${mt}" m
+         INNER JOIN parcel_union u ON m.${quoteIdent(mainKeyCol)} = u.reward_fid
+         INNER JOIN orig_hit o ON m.${quoteIdent(mainKeyCol)} = o.reward_fid
          WHERE m.${quoteIdent(mainGeomCol)} IS NOT NULL
-           AND ST_Area(ST_Transform(sub.union_geom, 5181)) > 0
+           AND ST_Area(ST_Transform(u.union_geom, 5181)) > 0
+           -- 다필지 직접 그린 편입범위는 건드리지 않음 (1필지·당초≠편입 잔존만)
+           AND (
+             SELECT COUNT(*)::int
+             FROM "${ps}"."${pt}" p2
+             WHERE p2.${quoteIdent(parentCol)} = m.${quoteIdent(mainKeyCol)}
+               AND p2.${quoteIdent(parcelGeomCol)} IS NOT NULL
+           ) = 1
+           AND ST_Area(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181))
+             > ST_Area(ST_Transform(u.union_geom, 5181)) * 1.8
            AND (
              ST_Area(
                ST_Intersection(
                  ST_MakeValid(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181)),
-                 ST_MakeValid(ST_Transform(sub.union_geom, 5181))
+                 ST_MakeValid(ST_Transform(u.union_geom, 5181))
                )
              )
-             / ST_Area(ST_Transform(sub.union_geom, 5181))
-           ) < 0.5
+             / ST_Area(ST_Transform(m.${quoteIdent(mainGeomCol)}, 5181))
+           ) < 0.25
          ${fidFilter}`
       )
     );

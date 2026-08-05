@@ -9,6 +9,7 @@ import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { extent3857CenterTo4326, fetchParcelJibunFromCoord } from '@/lib/vworldAddressServer';
 import { getPnuFromAddress } from './excelUploadService';
 import { getDefineTableKeyFieldName } from './standardService';
+import { recordDataLog } from './dataLogService';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer', 'public']);
@@ -420,6 +421,56 @@ function geomSetExpr(wkt5181: string): string {
   return `ST_SetSRID(ST_GeomFromText('${esc(wkt5181.trim())}'), 5181)`;
 }
 
+async function fetchRowAttrsAsJson(params: {
+  schema: string;
+  table: string;
+  keyCol: string;
+  keyValue: string;
+}): Promise<Record<string, unknown> | null> {
+  const fq = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
+  const where = `${quoteIdent(params.keyCol)}::text = '${esc(params.keyValue)}'`;
+  try {
+    // geom 있으면 전체 GeoJSON으로 포함 (이력 상세용)
+    const res = await db.execute(
+      sql.raw(
+        `SELECT (
+           (COALESCE(row_to_json(t.*)::jsonb, '{}'::jsonb) - 'geom')
+           || CASE
+                WHEN t.geom IS NULL THEN '{}'::jsonb
+                ELSE jsonb_build_object('geom', ST_AsGeoJSON(t.geom)::jsonb)
+              END
+         ) AS j
+         FROM ${fq} t
+         WHERE ${where}
+         LIMIT 1`
+      )
+    );
+    const row = res.rows?.[0] as { j?: Record<string, unknown> } | undefined;
+    return row?.j && typeof row.j === 'object' ? row.j : null;
+  } catch {
+    // geom 컬럼 없는 테이블 등 — 속성만
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT COALESCE(row_to_json(t.*)::jsonb, '{}'::jsonb) AS j
+           FROM ${fq} t
+           WHERE ${where}
+           LIMIT 1`
+        )
+      );
+      const row = res.rows?.[0] as { j?: Record<string, unknown> } | undefined;
+      return row?.j && typeof row.j === 'object' ? row.j : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function safeLogUser(raw?: string | null): string | null {
+  const s = String(raw ?? '').trim();
+  return s || null;
+}
+
 /** defineLayer 허용 필드만 UPDATE */
 export async function updateTableRowByKey(params: {
   table: string;
@@ -431,6 +482,8 @@ export async function updateTableRowByKey(params: {
   includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
   geomClear?: boolean;
+  /** 이력 작업자 표시 문자열 */
+  logUser?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   const keyValue = String(params?.keyValue ?? '').trim();
@@ -468,6 +521,14 @@ export async function updateTableRowByKey(params: {
     editableDefs.filter((d) => !d.readOnly && d.field.toLowerCase() !== keyField.toLowerCase()).map((d) => [d.field.toLowerCase(), d])
   );
 
+  const keyCol = findColumnName(columns, keyField)!;
+  const oldData = await fetchRowAttrsAsJson({
+    schema,
+    table,
+    keyCol,
+    keyValue,
+  });
+
   const setParts: string[] = [];
   for (const [key, rawVal] of entries) {
     const col = findColumnName(columns, key);
@@ -475,22 +536,56 @@ export async function updateTableRowByKey(params: {
     const def = editableFields.get(col.toLowerCase());
     if (!def) continue;
     const val = normalizeChangeValue(rawVal);
+    const oldKey =
+      oldData && Object.prototype.hasOwnProperty.call(oldData, col)
+        ? col
+        : Object.keys(oldData ?? {}).find((k) => k.toLowerCase() === col.toLowerCase());
+    const oldVal = normalizeChangeValue(oldKey != null ? oldData?.[oldKey] : undefined);
+    if (val === oldVal) continue;
     setParts.push(val == null ? `${quoteIdent(col)} = NULL` : `${quoteIdent(col)} = '${esc(val)}'`);
   }
 
   if (geomClear) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
-    setParts.push(`${quoteIdent(geomCol)} = NULL`);
+    const hadGeom = oldData != null && (oldData.geom != null || oldData.geometry != null);
+    if (hadGeom) {
+      setParts.push(`${quoteIdent(geomCol)} = NULL`);
+    }
   } else if (geomWkt) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
-    setParts.push(`${quoteIdent(geomCol)} = ${geomSetExpr(geomWkt)}`);
+    // 동일 도형이면 UPDATE 생략 (WKT 왕복으로 이력에 잡히는 것 방지)
+    let geomSame = false;
+    try {
+      const eqRes = await db.execute(
+        sql.raw(
+          `SELECT CASE
+             WHEN ${quoteIdent(geomCol)} IS NULL THEN false
+             ELSE ST_Equals(
+               ${quoteIdent(geomCol)},
+               ${geomSetExpr(geomWkt)}
+             )
+           END AS same
+           FROM ${quoteIdent(schema)}.${quoteIdent(table)}
+           WHERE ${quoteIdent(keyCol)}::text = '${esc(keyValue)}'
+           LIMIT 1`
+        )
+      );
+      geomSame = Boolean((eqRes.rows?.[0] as { same?: boolean } | undefined)?.same);
+    } catch {
+      geomSame = false;
+    }
+    if (!geomSame) {
+      setParts.push(`${quoteIdent(geomCol)} = ${geomSetExpr(geomWkt)}`);
+    }
   }
 
-  if (setParts.length === 0) return { success: false, error: '적용할 변경이 없습니다.' };
+  if (setParts.length === 0) {
+    // 속성·도형 실질 변경 없음 — 이력도 남기지 않음
+    return { success: true };
+  }
 
-  const keyCol = findColumnName(columns, keyField)!;
   const q = `UPDATE ${quoteIdent(schema)}.${quoteIdent(table)}
              SET ${setParts.join(', ')}
              WHERE ${quoteIdent(keyCol)}::text = '${esc(keyValue)}'
@@ -500,6 +595,24 @@ export async function updateTableRowByKey(params: {
     const res = await db.execute(sql.raw(q));
     const updated = res.rows?.[0] as { updated_key?: string } | undefined;
     if (!updated?.updated_key) return { success: false, error: '대상 행을 찾을 수 없습니다.' };
+
+    const newData = await fetchRowAttrsAsJson({
+      schema,
+      table,
+      keyCol,
+      keyValue,
+    });
+    void recordDataLog({
+      source: '시스템',
+      type: '수정',
+      user: safeLogUser(params.logUser),
+      tableName: tableGuess,
+      keyField,
+      keyValue,
+      oldData: oldData ?? undefined,
+      newData: newData ?? undefined,
+    }).catch(() => {});
+
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -563,6 +676,7 @@ export async function insertTableRow(params: {
   excludeFields?: string[];
   includeHiddenDetail?: boolean;
   geomWkt5181?: string | null;
+  logUser?: string | null;
 }): Promise<{ success: boolean; keyValue?: string; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   if (!tableGuess) return { success: false, error: 'table이 필요합니다.' };
@@ -650,6 +764,17 @@ export async function insertTableRow(params: {
       const row = res.rows?.[0] as { new_key?: string } | undefined;
       const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
       if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+      const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
+      const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+      void recordDataLog({
+        source: '시스템',
+        type: '추가',
+        user: safeLogUser(params.logUser),
+        tableName: tableGuess,
+        keyField,
+        keyValue,
+        newData: newData ?? undefined,
+      }).catch(() => {});
       return { success: true, keyValue };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -666,6 +791,17 @@ export async function insertTableRow(params: {
     const row = res.rows?.[0] as { new_key?: string } | undefined;
     const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
     if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+    const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
+    const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+    void recordDataLog({
+      source: '시스템',
+      type: '추가',
+      user: safeLogUser(params.logUser),
+      tableName: tableGuess,
+      keyField,
+      keyValue,
+      newData: newData ?? undefined,
+    }).catch(() => {});
     return { success: true, keyValue };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1625,6 +1761,7 @@ export async function deleteTableRowByKey(params: {
   childTableName?: string;
   childTableNames?: string[];
   childParentField?: string;
+  logUser?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   const keyValue = String(params?.keyValue ?? '').trim();
@@ -1647,6 +1784,13 @@ export async function deleteTableRowByKey(params: {
   const keyCol = findColumnName(columns, keyField)!;
 
   try {
+    const oldData = await fetchRowAttrsAsJson({
+      schema,
+      table,
+      keyCol,
+      keyValue,
+    });
+
     const childTableGuesses = [
       ...(Array.isArray(params.childTableNames) ? params.childTableNames : []),
       ...(params.childTableName ? [params.childTableName] : []),
@@ -1679,6 +1823,17 @@ export async function deleteTableRowByKey(params: {
     );
     const deleted = res.rows?.[0] as { deleted_key?: string } | undefined;
     if (!deleted?.deleted_key) return { success: false, error: '삭제할 데이터를 찾을 수 없습니다.' };
+
+    void recordDataLog({
+      source: '시스템',
+      type: '삭제',
+      user: safeLogUser(params.logUser),
+      tableName: tableGuess,
+      keyField,
+      keyValue,
+      oldData: oldData ?? undefined,
+    }).catch(() => {});
+
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

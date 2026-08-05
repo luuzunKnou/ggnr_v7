@@ -62,10 +62,10 @@ const HIDDEN_INDICATOR: TocIndicator = { top: 0, height: 0, visible: false };
 
 /** 목차 선택 — 앱 primary(#0F91B2) 기준, 도로대장 목록 패널과 동일 톤 */
 const TOC_ITEM_ACTIVE =
-  'rounded-r-sm bg-primary/[0.11] pl-2.5 font-medium text-slate-900';
-const TOC_ITEM_IDLE = 'rounded-sm pl-2.5 text-slate-600 font-medium hover:bg-primary/5 hover:text-slate-900';
+  'rounded-r-sm bg-primary/[0.11] pl-2.5 font-medium text-foreground';
+const TOC_ITEM_IDLE = 'rounded-sm pl-2.5 text-muted-foreground font-medium hover:bg-primary/5 hover:text-foreground';
 const TOC_GROUP_ACTIVE = 'text-primary';
-const TOC_GROUP_IDLE = 'text-slate-800 hover:text-primary';
+const TOC_GROUP_IDLE = 'text-foreground hover:text-primary';
 
 function TocGroupHeading({
   title,
@@ -186,7 +186,7 @@ function TocGroupItemList({
   }, [updateIndicator, group.items]);
 
   return (
-    <ul ref={listRef} className="relative ml-1.5 mt-1 space-y-0.5 border-l border-slate-200">
+    <ul ref={listRef} className="relative ml-1.5 mt-1 space-y-0.5 border-l border-border">
       {indicator.visible ? (
         <span
           aria-hidden
@@ -229,8 +229,8 @@ export function ParcelAnalysisResultTocNav({
   resolveItemLabel,
 }: TocNavProps) {
   return (
-    <nav className="min-h-0 w-[200px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-3 py-3">
-      <p className="mb-2 text-xs font-semibold text-slate-800">목차</p>
+    <nav className="min-h-0 w-[200px] shrink-0 overflow-y-auto border-r border-border bg-background px-3 py-3">
+      <p className="mb-2 text-xs font-semibold text-foreground">목차</p>
       <div className="space-y-3">
         {groups.map((group) => (
           <div key={group.title}>
@@ -298,12 +298,12 @@ const RESULT_CONTENT_MIN_WIDTH_PX = 720;
 /** 건축물대장·토지현황 표 공통 최대 높이 — 초과 시 표 영역 내부 세로 스크롤 */
 const RESULT_SCROLL_TABLE_MAX_HEIGHT_PX = 460;
 
-const TH_CELL = 'border border-slate-200 px-2 py-1.5 whitespace-nowrap';
-const TH_CELL_STICKY = cn(TH_CELL, 'sticky top-0 z-10 bg-slate-100');
-const TD_CELL = 'border border-slate-200 px-2 py-1.5 whitespace-nowrap';
+const TH_CELL = 'border border-border px-2 py-1.5 whitespace-nowrap';
+const TH_CELL_STICKY = cn(TH_CELL, 'sticky top-0 z-10 bg-muted');
+const TD_CELL = 'border border-border px-2 py-1.5 whitespace-nowrap';
 /** 구분 열에 레이어 범례 아이콘이 들어가는 시설 현황 표 — 행 높이 압축 */
-const TH_CELL_COMPACT = 'border border-slate-200 px-2 py-1 whitespace-nowrap';
-const TD_CELL_COMPACT = 'border border-slate-200 px-2 py-1 whitespace-nowrap';
+const TH_CELL_COMPACT = 'border border-border px-2 py-1 whitespace-nowrap';
+const TD_CELL_COMPACT = 'border border-border px-2 py-1 whitespace-nowrap';
 
 const FACILITY_STAT_EMPTY = '—';
 
@@ -427,7 +427,7 @@ function ResultTable({
         {table}
       </div>
       {footer ? (
-        <div className="shrink-0 border-t border-slate-200 bg-blue-50/60 px-3 py-2.5 text-center">
+        <div className="shrink-0 border-t border-border bg-primary/5 px-3 py-2.5 text-center">
           {footer}
         </div>
       ) : null}
@@ -459,7 +459,7 @@ function LandLinkageValueCell({
   const title = hasValue ? parcelLandLinkageSourceTitle(linkageSource) : isFail ? PARCEL_LAND_LINKAGE_FAIL_TITLE : undefined;
   return (
     <td
-      className={cn(TD_CELL, isFail && 'font-medium text-amber-800')}
+      className={cn(TD_CELL, isFail && 'font-medium text-amber-800 dark:text-amber-300')}
       title={title}
     >
       <span className={cn(hasValue && srcClass)}>{text}</span>
@@ -467,7 +467,7 @@ function LandLinkageValueCell({
         <div className={cn('mt-0.5 text-[10px] leading-tight font-medium', srcClass)}>{srcLabel}</div>
       ) : null}
       {showSourceText && isFail ? (
-        <div className="mt-0.5 text-[10px] leading-tight font-medium text-amber-800">
+        <div className="mt-0.5 text-[10px] leading-tight font-medium text-amber-800 dark:text-amber-300">
           {PARCEL_LAND_LINKAGE_FAIL_LABEL}
         </div>
       ) : null}
@@ -770,7 +770,7 @@ export function ParcelAnalysisResultModal({
         aria-labelledby="parcel-analysis-result-title"
         className={cn(
           'bg-background pointer-events-auto fixed top-[50%] left-[50%] flex min-h-0 -translate-x-1/2 -translate-y-1/2 flex-col gap-0 overflow-hidden',
-          'rounded-[5px] border border-slate-200/80 p-0 shadow-xl outline-none'
+          'rounded-[5px] border border-border p-0 shadow-xl outline-none'
         )}
         style={{
           width: RESULT_MODAL_WIDTH,
@@ -780,12 +780,12 @@ export function ParcelAnalysisResultModal({
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/50 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 id="parcel-analysis-result-title" className="text-base font-semibold text-slate-900">
+            <h2 id="parcel-analysis-result-title" className="text-base font-semibold text-foreground">
               ○ 공간분석 결과
             </h2>
-            <p className="mt-0.5 truncate text-xs text-slate-500">
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
               [ {headerBracket} ] · 항목 {itemCount}
             </p>
           </div>
@@ -797,14 +797,14 @@ export function ParcelAnalysisResultModal({
         </div>
 
         {analyzeError ? (
-          <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+          <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
             {analyzeError}
           </div>
         ) : null}
 
         {enriching ? (
-          <div className="flex shrink-0 items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2 text-xs text-blue-800">
-            <div className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+          <div className="flex shrink-0 items-center gap-2 border-b border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary">
+            <div className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-primary/25 border-t-primary" />
             데이터를 보강하는 중입니다…
           </div>
         ) : null}
@@ -839,17 +839,17 @@ export function ParcelAnalysisResultModal({
                 data-section-id={s.id}
                 className="px-3 pt-3 pb-6 last:pb-3 sm:px-4"
               >
-                <div className="mb-2 snap-start border-b border-slate-200 pb-1.5">
-                  <h3 className="text-sm font-bold text-slate-900">
+                <div className="mb-2 snap-start border-b border-border pb-1.5">
+                  <h3 className="text-sm font-bold text-foreground">
                     {resolveSectionHeading(s, landSectionTitle)}
                   </h3>
                   {s.kind === 'basicMap' && s.basicMapLayerIds?.length ? (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {basicMapCompositeTitle(s.basicMapLayerIds)}
                     </p>
                   ) : null}
                   {themeHint ? (
-                    <p className="mt-1 text-[11px] leading-snug text-slate-500">{themeHint}</p>
+                    <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{themeHint}</p>
                   ) : null}
                 </div>
                 {renderSectionBody(s, result, {
@@ -861,7 +861,7 @@ export function ParcelAnalysisResultModal({
               );
             })}
             {sections.length === 0 && (
-              <p className="text-sm text-slate-500">선택된 분석 항목이 없습니다.</p>
+              <p className="text-sm text-muted-foreground">선택된 분석 항목이 없습니다.</p>
             )}
             </div>
           </div>
@@ -886,15 +886,15 @@ export function ParcelAnalysisAnalyzingModal({ open, onCancel }: AnalyzingModalP
     >
       <DialogContent
         showCloseButton={false}
-        className="flex w-[min(380px,calc(100vw-2rem))] flex-col items-center gap-3 border-slate-200/80 px-6 py-8 sm:max-w-[min(380px,calc(100vw-2rem))]"
+        className="flex w-[min(380px,calc(100vw-2rem))] flex-col items-center gap-3 border-border px-6 py-8 sm:max-w-[min(380px,calc(100vw-2rem))]"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={() => onCancel?.()}
       >
         <DialogTitle className="sr-only">분석 중</DialogTitle>
         <DialogDescription className="sr-only">분석 결과를 불러오는 중입니다.</DialogDescription>
         <div className={PARCEL_ANALYSIS_ANALYZING_SPINNER} />
-        <p className="text-sm font-medium text-slate-800">분석 중…</p>
-        <p className="w-full break-keep text-center text-xs leading-relaxed text-slate-500">
+        <p className="text-sm font-medium text-foreground">분석 중…</p>
+        <p className="w-full break-keep text-center text-xs leading-relaxed text-muted-foreground">
           필지가 많으면 수 분 이상 걸릴 수 있습니다.
           <br />
           토지현황·토지이용계획은 100건씩 순차 표시됩니다.
@@ -954,7 +954,7 @@ function formatBuildingLedgerProgress(
 
 function SectionProgressLine({ text, loading }: { text: string; loading: boolean }) {
   return (
-    <p className={cn('mb-2 text-[11px]', loading ? 'text-blue-700' : 'text-slate-600')}>
+    <p className={cn('mb-2 text-[11px]', loading ? 'text-primary' : 'text-muted-foreground')}>
       {text}
       {loading ? ' · 불러오는 중…' : ''}
     </p>
@@ -978,9 +978,9 @@ function LoadingProgressBlock({
       : '';
 
   return (
-    <span className="inline-flex items-center justify-center gap-2 text-[11px] text-blue-700">
+    <span className="inline-flex items-center justify-center gap-2 text-[11px] text-primary">
       <span
-        className="size-3 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"
+        className="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/25 border-t-primary"
         aria-hidden
       />
       {label}
@@ -1019,8 +1019,8 @@ function TableLoadingMoreRow({
   loading?: boolean;
 }) {
   return (
-    <tr className="bg-blue-50/60">
-      <td colSpan={colSpan} className="border border-slate-200 px-3 py-2.5 text-center">
+    <tr className="bg-primary/5">
+      <td colSpan={colSpan} className="border border-border px-3 py-2.5 text-center">
         <LoadingProgressBlock label={label} loaded={loaded} total={total} loading={loading} />
       </td>
     </tr>
@@ -1061,11 +1061,11 @@ function renderSectionBody(
       return (
         <div className="space-y-2">
           {result.buildingLedgerNotice ? (
-            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
               {result.buildingLedgerNotice}
             </p>
           ) : (
-            <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+            <div className="rounded-md border border-dashed border-border bg-muted px-3 py-6 text-center text-xs text-muted-foreground">
               분석 영역 필지에서 건축물대장을 찾지 못했습니다.
             </div>
           )}
@@ -1076,7 +1076,7 @@ function renderSectionBody(
     return (
       <>
         {result.buildingLedgerNotice ? (
-          <p className="mb-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+          <p className="mb-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
             {result.buildingLedgerNotice}
           </p>
         ) : null}
@@ -1106,7 +1106,7 @@ function renderSectionBody(
           <tbody>
             {found === 0 && loading ? (
               <tr>
-                <td colSpan={9} className="border border-slate-200 px-2 py-6 text-center text-[11px] text-slate-500">
+                <td colSpan={9} className="border border-border px-2 py-6 text-center text-[11px] text-muted-foreground">
                   표에 건축물이 있으면 여기에 표시됩니다.
                 </td>
               </tr>
@@ -1167,13 +1167,13 @@ function renderSectionBody(
       <div className="space-y-3">
         {mapBlock}
         {!rows.length ? (
-          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+          <div className="rounded-md border border-dashed border-border bg-muted px-3 py-6 text-center text-xs text-muted-foreground">
             분석 영역에서 해당 시설을 찾지 못했습니다.
           </div>
         ) : (
           <ResultTable>
             <thead>
-              <tr className="bg-slate-100 text-left">
+              <tr className="bg-muted text-left">
                 <th className={TH_CELL_COMPACT}>구분</th>
                 <th className={TH_CELL_COMPACT}>시설 수(개)</th>
                 <th className={TH_CELL_COMPACT}>연장(m)</th>
@@ -1212,7 +1212,7 @@ function renderSectionBody(
     if (result.landUseStats.length === 0) {
       if (result.landUseProgress?.loading) {
         return (
-          <div className="rounded-md border border-dashed border-blue-200 bg-blue-50 px-3 py-6 text-center text-xs text-blue-800">
+          <div className="rounded-md border border-dashed border-primary/25 bg-primary/5 px-3 py-6 text-center text-xs text-primary">
             토지이용계획을 순차 집계하는 중입니다…
             {parcelProgress ? (
               <p className="mt-1 text-[11px]">
@@ -1224,7 +1224,7 @@ function renderSectionBody(
         );
       }
       return (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+        <div className="rounded-md border border-dashed border-border bg-muted px-3 py-6 text-center text-xs text-muted-foreground">
           분석 영역에서 토지이용계획 정보를 찾지 못했습니다.
         </div>
       );
@@ -1236,7 +1236,7 @@ function renderSectionBody(
         ) : null}
         <ResultTable>
           <thead>
-            <tr className="bg-slate-100 text-left">
+            <tr className="bg-muted text-left">
               <th className={TH_CELL}>용도지역</th>
               <th className={TH_CELL}>필지수</th>
               <th className={TH_CELL}>면적</th>
@@ -1267,7 +1267,7 @@ function renderSectionBody(
       if (result.landRowsProgress?.loading) {
         const landProgress = result.landRowsProgress;
         return (
-          <div className="rounded-md border border-dashed border-blue-200 bg-blue-50 px-3 py-6 text-center text-xs text-blue-800">
+          <div className="rounded-md border border-dashed border-primary/25 bg-primary/5 px-3 py-6 text-center text-xs text-primary">
             <LoadingProgressBlock
               label="토지현황 불러오는 중"
               loaded={landProgress.loaded}
@@ -1307,7 +1307,7 @@ function renderSectionBody(
             />
           ) : null}
           {result.linkageNotice ? (
-            <p className="text-[11px] text-amber-700">{result.linkageNotice}</p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-300">{result.linkageNotice}</p>
           ) : null}
           <LandLinkageLegend rows={result.landRows} />
           <ResultTable
@@ -1326,7 +1326,7 @@ function renderSectionBody(
             }
           >
             <thead>
-              <tr className="text-left text-slate-700">
+              <tr className="text-left text-foreground">
                 <th className={TH_CELL_STICKY}>순번</th>
                 <th className={TH_CELL_STICKY}>PNU</th>
                 <th className={TH_CELL_STICKY}>지번</th>
@@ -1384,7 +1384,7 @@ function renderSectionBody(
         ) : null}
         <ResultTable>
           <thead>
-            <tr className="bg-slate-100 text-left">
+            <tr className="bg-muted text-left">
               <th className={TH_CELL}>소유구분</th>
               <th className={TH_CELL}>필지수</th>
               <th className={TH_CELL}>면적</th>
@@ -1424,7 +1424,7 @@ function renderSectionBody(
         ) : null}
         <ResultTable>
           <thead>
-            <tr className="bg-slate-100 text-left">
+            <tr className="bg-muted text-left">
               <th className={TH_CELL}>지목</th>
               <th className={TH_CELL}>필지수</th>
               <th className={TH_CELL}>면적</th>
@@ -1453,17 +1453,17 @@ function renderSectionBody(
     section.kind === 'basicMap'
   ) {
     return (
-      <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+      <div className="rounded-md border border-dashed border-border bg-muted px-3 py-6 text-center text-xs text-muted-foreground">
         분석 영역에서 해당 필지를 찾지 못했습니다.
       </div>
     );
   }
 
   return (
-    <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+    <div className="rounded-md border border-dashed border-border bg-muted px-3 py-6 text-center text-xs text-muted-foreground">
       {section.groupTitle} · {section.itemTitle}
       <br />
-      <span className="text-[10px] text-slate-400">(4차 외부 연계에서 제공됩니다)</span>
+      <span className="text-[10px] text-muted-foreground">(4차 외부 연계에서 제공됩니다)</span>
     </div>
   );
 }

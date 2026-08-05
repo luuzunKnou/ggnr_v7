@@ -3979,7 +3979,7 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "complaint",
+    "define_table_name": "comp",
     "define_table_kor_name": "민원관리",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "G",
@@ -4094,6 +4094,30 @@
     "define_table_write_share": "P",
     "define_table_group": "밭기반 정비사업",
     "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_reward",
+    "define_table_kor_name": "보상편입용지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "보상편입용지",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_reward_parcel",
+    "define_table_kor_name": "보상편입용지 필지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "보상편입용지",
+    "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"

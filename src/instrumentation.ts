@@ -8,6 +8,8 @@
  * - DISABLE_SAFETYDATA_SCHEDULER=1 / DISABLE_KAIS_SCHEDULER=1 / DISABLE_NSSM_LOG_BACKUP_SCHEDULER=1 /
  *   DISABLE_USE_FEE_SYNC_SCHEDULER=1 로 개별 끔
  *
+ * 앱 layer 테이블: 도로점용대장·메모 등 — 없으면 CREATE, public에만 있으면 layer로 이동.
+ *
  * instrumentation은 edge/nodejs 둘 다 컴파일되므로, pg를 쓰는 스케줄러는
  * NEXT_RUNTIME === 'nodejs' 분기 안에서만 동적 import 한다.
  */
@@ -23,6 +25,30 @@ export async function register(): Promise<void> {
     } catch (e) {
       console.warn(
         '[instrumentation] pending version history flush skipped:',
+        e instanceof Error ? e.message : e
+      );
+    }
+
+    try {
+      const { ensureLayerAppTables } = await import('@/service/ensureLayerAppTables');
+      const ensured = await ensureLayerAppTables();
+      if (ensured.created.length || ensured.moved.length) {
+        console.info(
+          '[instrumentation] layer app tables:',
+          [
+            ensured.created.length ? `created=${ensured.created.join(',')}` : '',
+            ensured.moved.length ? `moved=${ensured.moved.join(',')}` : '',
+          ]
+            .filter(Boolean)
+            .join(' ')
+        );
+      }
+      if (ensured.errors.length) {
+        console.warn('[instrumentation] layer app tables errors:', ensured.errors.join(' | '));
+      }
+    } catch (e) {
+      console.warn(
+        '[instrumentation] layer app tables ensure skipped:',
         e instanceof Error ? e.message : e
       );
     }

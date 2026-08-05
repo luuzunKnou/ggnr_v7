@@ -76,7 +76,7 @@ export function MapSideListPanel({
     <div
       ref={panelRef}
       className={cn(
-        'h-full shrink-0 flex flex-col bg-white border-r border-slate-200 shadow-lg overflow-hidden relative',
+        'relative flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background shadow-lg',
         className
       )}
       style={{ width: `${width}px` }}
@@ -85,10 +85,10 @@ export function MapSideListPanel({
         role="separator"
         aria-label="패널 너비 조절"
         onMouseDown={handleResizeStart}
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center z-10 group hover:bg-slate-100/80"
+        className="absolute right-0 top-0 bottom-0 z-10 flex w-2 cursor-col-resize items-center justify-center group hover:bg-muted/60"
       >
-        <span className="opacity-0 group-hover:opacity-100 text-slate-400 transition-opacity">
-          <GripVertical className="w-4 h-4" />
+        <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+          <GripVertical className="h-4 w-4" />
         </span>
       </div>
 

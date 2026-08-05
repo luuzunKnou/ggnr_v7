@@ -574,12 +574,13 @@ export default function OpenLayersMap({
     });
     layer.set('spatialDrawLayer', true);
     const { type, onComplete } = spatialDrawRequest;
+    // stopClick: 그리기 종료 클릭이 singleclick(식별·오버레이 선택)으로 이어지지 않게 함
     const draw =
       type === 'rectangle'
-        ? new Draw({ source, type: 'Circle', geometryFunction: createBox() })
+        ? new Draw({ source, type: 'Circle', geometryFunction: createBox(), stopClick: true })
         : type === 'polygon'
-          ? new Draw({ source, type: 'Polygon' })
-          : new Draw({ source, type: 'Circle' });
+          ? new Draw({ source, type: 'Polygon', stopClick: true })
+          : new Draw({ source, type: 'Circle', stopClick: true });
     const onDrawEnd = (e: unknown) => {
       const evt = e as { feature: { getGeometry(): import('ol/geom').Geometry } };
       const rawGeom = evt.feature.getGeometry();
@@ -697,12 +698,15 @@ export default function OpenLayersMap({
     Boolean(mapContext?.roadNetworkPanelOpen) ||
     Boolean(mapContext?.roadNetworkPointPickActive);
 
-  // 지도 클릭 → 도형 검색. 도로망도 패널 열림 시 오버레이 클릭 우선(식별 비활성)
+  // 지도 클릭 → 도형 검색. 도형 그리기·도형편집·CCTV·도로망 오버레이 픽 중에는 식별 비활성
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
-    roadCctvPanelOpen || !!layerRowGeomEdit || roadNetworkOverlayPickActive
+    roadCctvPanelOpen ||
+      !!layerRowGeomEdit ||
+      !!spatialDrawRequest ||
+      roadNetworkOverlayPickActive
   );
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.

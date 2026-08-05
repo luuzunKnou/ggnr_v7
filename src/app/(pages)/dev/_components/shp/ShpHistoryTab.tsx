@@ -13,7 +13,7 @@ type HistoryRow = {
   lhContents: string | null;
   lhSuccessCount: number | null;
   lhFailCount: number | null;
-  lhCreateUser: number | null;
+  lhCreateUser: string | null;
   lhCreateDate: string | null;
 };
 
@@ -148,7 +148,7 @@ export function ShpHistoryTab({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex flex-col h-full min-h-0 p-2 gap-2">
+    <div className="flex flex-col h-full min-h-0 px-2 pt-2 pb-0 gap-2">
       <div className="shrink-0 flex items-center gap-2">
         {!embedded && (
           <span className="text-sm font-medium">레이어 업데이트 이력</span>
@@ -171,12 +171,12 @@ export function ShpHistoryTab({
             <thead className="sticky top-0 z-10">
               <tr className="text-left">
                 <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-8" />
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-28 whitespace-nowrap">업데이트 날짜</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 whitespace-nowrap">작업자</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">레이어 수</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-16 text-center whitespace-nowrap">성공</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-16 text-center whitespace-nowrap">실패</th>
-                <th className="py-1 px-1 text-xs font-medium bg-muted">업데이트 내용</th>
+                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-28 text-center whitespace-nowrap">업데이트 날짜</th>
+                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-36 text-center whitespace-nowrap">작업자</th>
+                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-24 text-center whitespace-nowrap">레이어 수</th>
+                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">성공</th>
+                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">실패</th>
+                <th className="py-1 px-2 text-xs font-medium bg-muted">업데이트 내용</th>
               </tr>
             </thead>
             <tbody>
@@ -189,15 +189,15 @@ export function ShpHistoryTab({
                       className={cn('border-t cursor-pointer hover:bg-muted/40', isExpanded && 'bg-muted/20')}
                       onClick={() => toggleExpand(row.lhKey)}
                     >
-                      <td className="py-1.5 px-2">
+                      <td className="h-[28px] px-2 align-middle">
                         {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                       </td>
-                      <td className="py-1.5 px-2 whitespace-nowrap">{row.lhCreateDate ?? '—'}</td>
-                      <td className="py-1.5 px-2 text-muted-foreground">{row.lhCreateUser ?? '—'}</td>
-                      <td className="py-1.5 px-2 text-center">{layerCount}</td>
-                      <td className="py-1.5 px-2 text-center text-green-600">{row.lhSuccessCount ?? 0}</td>
-                      <td className="py-1.5 px-2 text-center text-red-500">{row.lhFailCount ?? 0}</td>
-                      <td className="py-1.5 px-2 truncate max-w-[20rem]" title={row.lhContents ?? ''}>{row.lhContents ?? '—'}</td>
+                      <td className="h-[28px] px-2 align-middle text-center whitespace-nowrap">{row.lhCreateDate ?? '—'}</td>
+                      <td className="h-[28px] px-2 align-middle text-center text-muted-foreground truncate max-w-[9rem]" title={row.lhCreateUser ?? ''}>{row.lhCreateUser ?? '—'}</td>
+                      <td className="h-[28px] px-2 align-middle text-right">{layerCount}</td>
+                      <td className="h-[28px] px-2 align-middle text-right text-green-600">{row.lhSuccessCount ?? 0}</td>
+                      <td className="h-[28px] px-2 align-middle text-right text-red-500">{row.lhFailCount ?? 0}</td>
+                      <td className="h-[28px] px-4 align-middle truncate max-w-[20rem]" title={row.lhContents ?? ''}>{row.lhContents ?? '—'}</td>
                     </tr>
                     {isExpanded && (
                       <tr key={`detail-${row.lhKey}`}>
@@ -214,14 +214,14 @@ export function ShpHistoryTab({
                                   <tr className="text-left">
                                     <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-14 text-center">결과</th>
                                     <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-30">레이어 그룹</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-35">레이어 한글명</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-40">레이어 영문명</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-22 whitespace-nowrap">구분</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-18 text-right" title="처리 전 DB 행 수">이전</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-18 text-right" title="처리 후 DB 행 수">현재</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-18 text-right text-emerald-700 dark:text-emerald-400" title="SHP 기준 추가 행">추가</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-18 text-right text-orange-600" title="속성 충돌(변경 필요)">변경</th>
-                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-18 text-right text-red-500" title="삭제 대상">삭제</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-46">레이어 한글명</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-46">레이어 영문명</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-22 text-center whitespace-nowrap">구분</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-right" title="처리 전 DB 행 수">이전</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-right" title="처리 후 DB 행 수">현재</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-right text-emerald-700 dark:text-emerald-400" title="SHP 기준 추가 행">추가</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-right text-orange-600" title="속성 충돌(변경 필요)">변경</th>
+                                    <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-right text-red-500" title="삭제 대상">삭제</th>
                                     <th className="py-1 px-1 text-xs font-medium border-r bg-muted px-4">업데이트 내용</th>
                                     <th className="py-1 px-1 text-xs font-medium bg-muted w-24 text-center">액션</th>
                                   </tr>
@@ -242,12 +242,12 @@ export function ShpHistoryTab({
                                       <td className="py-1 px-2 truncate" title={d.dhGroup ?? ''}>{d.dhGroup ?? '—'}</td>
                                       <td className="py-1 px-2 truncate" title={d.dhKorName ?? ''}>{d.dhKorName ?? '—'}</td>
                                       <td className="py-1 px-2 font-mono truncate" title={d.dhName ?? ''}>{d.dhName ?? '—'}</td>
-                                      <td className="py-1 px-2 truncate" title={d.dhType ?? ''}>{d.dhType ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right tabular-nums">{d.dhOldData ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right tabular-nums">{d.dhNewData ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{d.dhAppendCount ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right tabular-nums text-orange-600">{d.dhConflictCount ?? '—'}</td>
-                                      <td className="py-1 px-2 text-right tabular-nums text-red-500">{d.dhRemoveCount ?? '—'}</td>
+                                      <td className="py-1 px-2 text-center truncate" title={d.dhType ?? ''}>{d.dhType ?? '—'}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{formatCount(d.dhOldData)}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{formatCount(d.dhNewData)}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{formatCount(d.dhAppendCount)}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums text-orange-600">{formatCount(d.dhConflictCount)}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums text-red-500">{formatCount(d.dhRemoveCount)}</td>
                                       <td className="py-1 px-4 truncate" title={d.dhContents ?? ''}>
                                         {d.dhContents ?? '—'}
                                       </td>
@@ -281,13 +281,11 @@ export function ShpHistoryTab({
         )}
       </section>
 
-      {totalPages > 1 && (
-        <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
-          <span>{page} / {totalPages}</span>
-          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
-        </div>
-      )}
+      <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
+        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
+        <span>{page} / {totalPages}</span>
+        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
+      </div>
 
       {syncModal && (
         <SyncDetailModal
@@ -300,6 +298,10 @@ export function ShpHistoryTab({
       )}
     </div>
   );
+}
+
+function formatCount(n: number | null | undefined): string {
+  return n != null ? n.toLocaleString('ko-KR') : '—';
 }
 
 function ResultBadge({ result }: { result: string | null }) {

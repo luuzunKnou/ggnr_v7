@@ -27,6 +27,9 @@ export type ComplaintFormValues = {
   compCu: string;
   compAdr: string;
   compContent: string;
+  /** 주소검색 선택 시 EPSG:4326 — 저장 시 geom 반영 */
+  lon?: number | null;
+  lat?: number | null;
 };
 
 interface ComplaintInfoProps {
@@ -53,6 +56,8 @@ function toFormValues(c: CompUI): ComplaintFormValues {
     compCu: c.compCu ?? '',
     compAdr: c.compAdr ?? '',
     compContent: c.compContent ?? '',
+    lon: null,
+    lat: null,
   };
 }
 
@@ -164,9 +169,18 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
                   (item.roadAddress ?? '').trim() ||
                   (item.jibunAddress ?? '').trim() ||
                   (item.address ?? '').trim();
-                if (adr) update('compAdr', adr);
+                const lon = Number(item.point?.x);
+                const lat = Number(item.point?.y);
+                setForm((prev) => ({
+                  ...prev,
+                  compAdr: adr || prev.compAdr,
+                  lon: Number.isFinite(lon) ? lon : null,
+                  lat: Number.isFinite(lat) ? lat : null,
+                }));
               }}
-              onClear={() => update('compAdr', '')}
+              onClear={() =>
+                setForm((prev) => ({ ...prev, compAdr: '', lon: null, lat: null }))
+              }
             />
           </div>
         </div>

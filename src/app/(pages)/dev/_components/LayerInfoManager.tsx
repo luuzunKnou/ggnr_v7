@@ -13,7 +13,7 @@ import {
 import { Save, RotateCcw, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SchemaBadge, SourceBadge } from "./layerManager/defineBadges"
-import { requestLayerManagerListRefresh } from "./layerManager/layerManagerUploadBridge"
+import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } from "./layerManager/layerManagerUploadBridge"
 import { StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { call } from "@/lib/api"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
@@ -205,6 +205,14 @@ export function LayerInfoManager({
     tableName: string
     schema: string
   } | null>(null)
+  const [schemaSwitchOpen, setSchemaSwitchOpen] = useState(false)
+  const [schemaSwitchTarget, setSchemaSwitchTarget] = useState<{
+    tableName: string
+    fromSchema: string
+    toSchema: "layer" | "public_layer"
+    tableIdx: number
+  } | null>(null)
+  const [schemaSwitching, setSchemaSwitching] = useState(false)
   const [attrDeleteOpen, setAttrDeleteOpen] = useState(false)
   const [attrDeleteTarget, setAttrDeleteTarget] = useState<string | null>(null)
   const [formName, setFormName] = useState("")
@@ -250,6 +258,22 @@ export function LayerInfoManager({
     loadFullList()
   }, [loadFullList])
 
+  const loadDbTableKeySet = useCallback(async () => {
+    try {
+      const res = await call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
+      const data = res?.data ?? res
+      if (!data?.success || !Array.isArray(data.tables)) return
+      const keys = new Set<string>(
+        (data.tables as Array<{ schema: string; table: string }>).map(
+          (t) => `${t.schema === "public_layer" ? "public_layer" : "layer"}:${String(t.table).toLowerCase()}`
+        )
+      )
+      setDbTableKeySet(keys)
+    } catch {
+      // 조회 실패해도 "사용중" 필터만 못 쓰게 되고 나머지는 정상 동작
+    }
+  }, [])
+
   const loadStyleInfo = useCallback(async () => {
     setStyleLoading(true)
     try {
@@ -282,6 +306,14 @@ export function LayerInfoManager({
   }, [])
 
   useEffect(() => {
+    return registerLayerManagerDefineRefresh(() => {
+      void loadFullList()
+      void loadDbTableKeySet()
+      void loadStyleInfo()
+    })
+  }, [loadFullList, loadDbTableKeySet, loadStyleInfo])
+
+  useEffect(() => {
     if (config?.tables?.length) {
       loadStyleInfo()
     }
@@ -289,26 +321,8 @@ export function LayerInfoManager({
 
   /** "사용중" 필터용 — 현재 접속된 DB(layer/public_layer 스키마)에 실제로 존재하는 테이블 목록 */
   useEffect(() => {
-    let cancelled = false
-    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      .then((res) => {
-        if (cancelled) return
-        const data = res?.data ?? res
-        if (!data?.success || !Array.isArray(data.tables)) return
-        const keys = new Set<string>(
-          (data.tables as Array<{ schema: string; table: string }>).map(
-            (t) => `${t.schema === "public_layer" ? "public_layer" : "layer"}:${String(t.table).toLowerCase()}`
-          )
-        )
-        setDbTableKeySet(keys)
-      })
-      .catch(() => {
-        // 조회 실패해도 "사용중" 필터만 못 쓰게 되고 나머지는 정상 동작
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    void loadDbTableKeySet()
+  }, [loadDbTableKeySet])
 
   // 디바운싱: 검색어 입력 후 300ms 대기
   useEffect(() => {
@@ -564,6 +578,70 @@ export function LayerInfoManager({
     setLayerDefineDeleteTarget({ tableName, schema })
     setLayerDefineDeleteOpen(true)
   }, [])
+
+  const openSchemaSwitch = useCallback(
+    (tableIdx: number, tableName: string, currentSchema: string) => {
+      const from =
+        SCHEMA_OPTIONS.includes(currentSchema as (typeof SCHEMA_OPTIONS)[number])
+          ? currentSchema
+          : "layer"
+      const toSchema: "layer" | "public_layer" =
+        from === "public_layer" ? "layer" : "public_layer"
+      setSchemaSwitchTarget({
+        tableName,
+        fromSchema: from,
+        toSchema,
+        tableIdx,
+      })
+      setSchemaSwitchOpen(true)
+    },
+    []
+  )
+
+  const handleSchemaSwitchConfirm = useCallback(async () => {
+    if (!schemaSwitchTarget || !config) return
+    const { tableName, toSchema, tableIdx } = schemaSwitchTarget
+    setSchemaSwitching(true)
+    setError(null)
+    setSuccessMsg(null)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "switchLayerTableSchema",
+        params: {
+          tableName,
+          toSchema,
+          url: GEOSERVER_DEFAULT_URL,
+        },
+      })
+      const data = res?.data ?? res
+      // 정의는 서비스에서 먼저 저장됨 → UI 반영
+      updateCell(tableIdx, "define_table_schema", toSchema)
+      originalTablesRef.current.set(tableName, {
+        ...(originalTablesRef.current.get(tableName) ??
+          (config.tables[tableIdx] as Record<string, unknown>)),
+        define_table_schema: toSchema,
+      })
+      await loadDbTableKeySet()
+      setStyleVersion((v) => v + 1)
+      requestLayerManagerListRefresh()
+      if (!data?.success) {
+        setError(
+          `${data?.error ?? "스키마 전환 실패"} (정의는 저장됨 · 오류수정 탭에서 이어서 처리할 수 있습니다)`
+        )
+        setSchemaSwitchOpen(false)
+        setSchemaSwitchTarget(null)
+        return
+      }
+      setSuccessMsg(data.message ?? `"${tableName}" 스키마 전환 완료`)
+      setSchemaSwitchOpen(false)
+      setSchemaSwitchTarget(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "스키마 전환 실패")
+    } finally {
+      setSchemaSwitching(false)
+    }
+  }, [schemaSwitchTarget, config, updateCell, loadDbTableKeySet])
 
   const handleLayerDefineDeleteConfirm = useCallback(async () => {
     if (!layerDefineDeleteTarget || !config) return
@@ -1237,14 +1315,16 @@ export function LayerInfoManager({
                       ) : col.badge === "schema" ? (
                         <button
                           type="button"
-                          className="cursor-pointer rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          title="클릭하면 layer ↔ public_layer 전환 (정의만 바뀝니다. 실제 DB 테이블·GeoServer 레이어는 별도로 이전해야 합니다)"
+                          className="cursor-pointer rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                          title="클릭하면 layer ↔ public_layer 전환 (정의·DB·GeoServer)"
+                          disabled={schemaSwitching || !!actionLoading}
                           onClick={() => {
+                            const tableName = String(row.define_table_name ?? "").trim()
+                            if (!tableName) return
                             const current = SCHEMA_OPTIONS.includes(val as (typeof SCHEMA_OPTIONS)[number])
                               ? val
                               : "layer"
-                            const next = current === "public_layer" ? "layer" : "public_layer"
-                            updateCell(tableIdx, key, next)
+                            openSchemaSwitch(tableIdx, tableName, current)
                           }}
                         >
                           <SchemaBadge value={val} />
@@ -1444,6 +1524,48 @@ export function LayerInfoManager({
               disabled={!!actionLoading}
             >
               {actionLoading ? "삭제 중..." : "삭제"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 스키마 전환: 정의 + DB + GeoServer */}
+      <Dialog
+        open={schemaSwitchOpen}
+        onOpenChange={(open) => {
+          if (schemaSwitching) return
+          setSchemaSwitchOpen(open)
+          if (!open) setSchemaSwitchTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>스키마 전환</DialogTitle>
+          </DialogHeader>
+          <p className="py-2 text-sm whitespace-pre-line">
+            {schemaSwitchTarget
+              ? `테이블 "${schemaSwitchTarget.tableName}"의 스키마를\n${schemaSwitchTarget.fromSchema} → ${schemaSwitchTarget.toSchema}\n로 전환합니다.\n\n레이어 정의 · DB 테이블 · GeoServer 레이어를 함께 변경합니다.`
+              : ""}
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="text-muted-foreground"
+              disabled={schemaSwitching}
+              onClick={() => {
+                setSchemaSwitchOpen(false)
+                setSchemaSwitchTarget(null)
+              }}
+            >
+              취소
+            </Button>
+            <Button
+              variant="default"
+              className="hover:cursor-pointer"
+              disabled={schemaSwitching}
+              onClick={() => void handleSchemaSwitchConfirm()}
+            >
+              {schemaSwitching ? "전환 중..." : "전환"}
             </Button>
           </DialogFooter>
         </DialogContent>
