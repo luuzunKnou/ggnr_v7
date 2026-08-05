@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld" xmlns="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -43,6 +44,7 @@
               </sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
+          
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">
@@ -102,7 +104,10 @@
                   <sld:CssParameter name="fill">#000000</sld:CssParameter>
                   <sld:CssParameter name="fill-opacity">0</sld:CssParameter>
                 </sld:Fill>
-                <sld:Stroke/>
+                <sld:Stroke>
+                  <sld:CssParameter name="stroke">#000000</sld:CssParameter>
+                  <sld:CssParameter name="stroke-width">1</sld:CssParameter>
+                </sld:Stroke>
               </sld:Mark>
               <sld:Size>15</sld:Size>
               <sld:Rotation>
@@ -125,7 +130,10 @@
                   <sld:CssParameter name="fill">#000000</sld:CssParameter>
                   <sld:CssParameter name="fill-opacity">0</sld:CssParameter>
                 </sld:Fill>
-                <sld:Stroke/>
+                <sld:Stroke>
+                  <sld:CssParameter name="stroke">#000000</sld:CssParameter>
+                  <sld:CssParameter name="stroke-width">1</sld:CssParameter>
+                </sld:Stroke>
               </sld:Mark>
               <sld:Size>15</sld:Size>
               <sld:Rotation>
@@ -139,21 +147,30 @@
             <sld:Label>
               <ogc:Function name="if_then_else">
                 <ogc:Function name="equalTo">
-                  <ogc:Function name="parseInt">
-                    <ogc:PropertyName>eve_bsi_sl</ogc:PropertyName>
+                  <ogc:Function name="property">
+                    <ogc:Literal>eve_bsi_sl</ogc:Literal>
                   </ogc:Function>
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
-                <ogc:Function name="parseInt">
-                  <ogc:PropertyName>eve_bsi_mn</ogc:PropertyName>
+                <ogc:Function name="numberFormat">
+                  <ogc:Literal>0.00</ogc:Literal>
+                  <ogc:Function name="property">
+                    <ogc:Literal>eve_bsi_mn</ogc:Literal>
+                  </ogc:Function>
                 </ogc:Function>
                 <ogc:Function name="Concatenate">
-                  <ogc:Function name="parseInt">
-                    <ogc:PropertyName>eve_bsi_mn</ogc:PropertyName>
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>eve_bsi_mn</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                   <ogc:Literal>-</ogc:Literal>
-                  <ogc:Function name="parseInt">
-                    <ogc:PropertyName>eve_bsi_sl</ogc:PropertyName>
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>eve_bsi_sl</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>
@@ -178,8 +195,6 @@
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">normal</sld:CssParameter>
             </sld:Font>
             <sld:LabelPlacement>
               <sld:LinePlacement>
@@ -202,21 +217,30 @@
             <sld:Label>
               <ogc:Function name="if_then_else">
                 <ogc:Function name="equalTo">
-                  <ogc:Function name="parseInt">
-                    <ogc:PropertyName>odd_bsi_sl</ogc:PropertyName>
+                  <ogc:Function name="property">
+                    <ogc:Literal>odd_bsi_sl</ogc:Literal>
                   </ogc:Function>
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
-                <ogc:Function name="parseInt">
-                  <ogc:PropertyName>odd_bsi_mn</ogc:PropertyName>
+                <ogc:Function name="numberFormat">
+                  <ogc:Literal>0.00</ogc:Literal>
+                  <ogc:Function name="property">
+                    <ogc:Literal>odd_bsi_mn</ogc:Literal>
+                  </ogc:Function>
                 </ogc:Function>
                 <ogc:Function name="Concatenate">
-                  <ogc:Function name="parseInt">
-                    <ogc:PropertyName>odd_bsi_mn</ogc:PropertyName>
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>odd_bsi_mn</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                   <ogc:Literal>-</ogc:Literal>
-                  <ogc:Function name="parseInt">
-                    <ogc:PropertyName>odd_bsi_sl</ogc:PropertyName>
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>odd_bsi_sl</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>
@@ -241,8 +265,6 @@
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">normal</sld:CssParameter>
             </sld:Font>
             <sld:LabelPlacement>
               <sld:LinePlacement>
@@ -266,4 +288,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import {
@@ -9,8 +9,12 @@ import {
   type ThematicMapLayerGroup,
   type ThematicMapLayerOption,
 } from '../layerFactory/thematicMapLayerFactory';
+import { MAP_LAYER_PANEL_MAX_H_CLASS } from './mapLayerPanelLayout';
 
 const FALLBACK_LEGEND_COLOR = 'rgb(148,163,184)';
+
+/** @deprecated mapLayerPanelLayout 으로 이동 — 호환 re-export */
+export { MAP_LAYER_PANEL_MAX_H_CLASS } from './mapLayerPanelLayout';
 
 function GroupSelectCheckbox({
   checked,
@@ -61,43 +65,38 @@ function ThematicMapGroupSection({
   const selectedCount = group.layers.filter((l) => selectedTableNames.has(l.tableName)).length;
   const allSelected = selectedCount === group.layers.length && group.layers.length > 0;
   const someSelected = selectedCount > 0 && !allSelected;
+  const groupTableNames = group.layers.map((l) => l.tableName);
 
   return (
     <div className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
-      <button
-        type="button"
-        title={group.title}
-        onClick={() => setIsExpanded(!isExpanded)}
+      <div
         className={cn(
-          'flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-[13px] font-medium transition-colors',
-          'bg-slate-100 text-foreground hover:bg-slate-200',
-          'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15 dark:hover:text-white',
+          'flex w-full items-center justify-between gap-2 py-2 pl-3 pr-4 font-medium transition-colors',
+          'bg-slate-100 text-foreground',
+          'dark:bg-white/10 dark:text-white/90',
           (allSelected || someSelected) && 'text-blue-600 dark:text-white'
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <button
+          type="button"
+          title={group.title}
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left hover:opacity-90"
+        >
           <div className="h-4 w-1 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400" />
-          <GroupSelectCheckbox
-            checked={allSelected}
-            indeterminate={someSelected}
-            onChange={(checked) =>
-              onToggleGroup(
-                group.layers.map((l) => l.tableName),
-                checked
-              )
-            }
-          />
-          <span className="truncate">{group.title}</span>
-          <span className="shrink-0 text-[11px] font-normal text-slate-400 dark:text-white/50">
-            {selectedCount}/{group.layers.length}
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate text-[12px] leading-none">{group.title}</span>
+            <span className="shrink-0 text-[11px] font-normal leading-none text-slate-400 dark:text-white/50">
+              {selectedCount}/{group.layers.length}
+            </span>
           </span>
-        </div>
-        {isExpanded ? (
-          <ChevronUp className="h-4 w-4 shrink-0 text-slate-400 dark:text-white/50" />
-        ) : (
-          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 dark:text-white/50" />
-        )}
-      </button>
+        </button>
+        <GroupSelectCheckbox
+          checked={allSelected}
+          indeterminate={someSelected}
+          onChange={(checked) => onToggleGroup(groupTableNames, checked)}
+        />
+      </div>
 
       {isExpanded && (
         <div className="pb-1">
@@ -109,7 +108,7 @@ function ThematicMapGroupSection({
               <label
                 key={option.tableName}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 transition-colors',
+                  'flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4 transition-colors',
                   'hover:bg-slate-50 dark:hover:bg-white/10',
                   checked && 'bg-blue-50 dark:bg-white/20'
                 )}
@@ -162,13 +161,13 @@ export interface ThematicMapLayerSelectorProps {
   onSelectionChange: (next: Set<string>) => void;
   onClose?: () => void;
   className?: string;
+  /** 패널 제목 (기본: 주제도) */
+  title?: string;
 }
 
 /**
- * 배경지도와 같은 그룹 골격.
- * - 제목 → 전체 선택/해제 → 그룹(접기) → 레이어별 체크
- * - 행: 왼쪽 스타일·레이어명 / 오른쪽 선택
- * - 안쪽 얇은 스크롤(scrollbar-thin)
+ * 주제도 — 그룹 접기 + 개별/그룹 체크.
+ * 최대 높이: 화면 하단 10px 여백, 스크롤은 목록 안쪽.
  */
 export function ThematicMapLayerSelector({
   groups = THEMATIC_MAP_LAYER_GROUPS,
@@ -176,6 +175,7 @@ export function ThematicMapLayerSelector({
   onSelectionChange,
   onClose,
   className,
+  title = '주제도',
 }: ThematicMapLayerSelectorProps) {
   const allTableNames = useMemo(
     () => groups.flatMap((g) => g.layers.map((l) => l.tableName)),
@@ -210,13 +210,13 @@ export function ThematicMapLayerSelector({
     <div
       className={cn(
         'flex w-56 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
-        'max-h-[min(70vh,calc(100vh-90px))]',
+        MAP_LAYER_PANEL_MAX_H_CLASS,
         'dark:border dark:border-white/10 dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm',
         className
       )}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-        <span className="text-[13px] font-medium text-slate-800 dark:text-white/90">주제도</span>
+        <span className="text-[13px] font-medium text-slate-800 dark:text-white/90">{title}</span>
         {onClose ? (
           <button
             type="button"
@@ -251,7 +251,7 @@ export function ThematicMapLayerSelector({
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {groups.length === 0 ? (
           <div className="px-3 py-3 text-[11px] leading-snug text-slate-500 dark:text-white/60">
-            주제도 그룹이 정의에 없습니다.
+            표시할 레이어가 없습니다.
           </div>
         ) : (
           groups.map((group) => (

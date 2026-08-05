@@ -11,7 +11,7 @@ import { RESOLUTIONS_3857 } from '@/app/(pages)/map/_mapComponents/config/mapDef
 import { createCadastralLayers, createBuildingRoadLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { createBasicSectionLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/jimokLayerFactory';
-import { createLandownLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/landownLayerFactory';
+import { createOwnershipLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/ownershipLayerFactory';
 import { createThematicMapLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/thematicMapLayerFactory';
 import { createSafetydataMapLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/safetydataMapLayerFactory';
 import {
@@ -25,8 +25,10 @@ import {
 } from '@/app/(pages)/map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { useBasicSectionLayerSync } from '@/app/(pages)/map/_mapComponents/layerFactory/basicSectionLayerFactory';
 import { useJimokLayerSync } from '@/app/(pages)/map/_mapComponents/layerFactory/jimokLayerFactory';
-import { useLandownLayerSync } from '@/app/(pages)/map/_mapComponents/layerFactory/landownLayerFactory';
+import { useOwnershipLayerSync } from '@/app/(pages)/map/_mapComponents/layerFactory/ownershipLayerFactory';
 import { useThematicMapLayerSync } from '@/app/(pages)/map/_mapComponents/layerFactory/thematicMapLayerFactory';
+import { useThematicMapCatalog } from '@/app/(pages)/map/_mapComponents/hooks/useThematicMapCatalog';
+import { useOwnershipCatalog } from '@/app/(pages)/map/_mapComponents/hooks/useOwnershipCatalog';
 import type { MapPrintSnapshot } from './mapPrintTypes';
 
 export function useMapPrintMap(
@@ -45,6 +47,12 @@ export function useMapPrintMap(
   const mapRef = useRef<OlMap | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [map, setMap] = useState<OlMap | null>(null);
+  const { availableLayerTableNames: thematicAvailableTableNames, loading: thematicCatalogLoading } =
+    useThematicMapCatalog();
+  const {
+    availableLayerTableNames: ownershipAvailableTableNames,
+    loading: ownershipCatalogLoading,
+  } = useOwnershipCatalog();
 
   useEffect(() => {
     if (!open || !hostRef.current || !snapshot) return;
@@ -61,7 +69,7 @@ export function useMapPrintMap(
         ...createBuildingRoadLayers(),
         ...createBasicSectionLayers(),
         ...createJimokLayers(),
-        ...createLandownLayers(),
+        ...createOwnershipLayers(),
         ...createThematicMapLayers(),
         ...createSafetydataMapLayers(),
       ],
@@ -100,8 +108,20 @@ export function useMapPrintMap(
   useBuildingRoadLayerSync(map, mapReady, activeLayerControls, visibleBuildingRoad);
   useBasicSectionLayerSync(map, mapReady, activeLayerControls);
   useJimokLayerSync(map, mapReady, activeLayerControls, visibleJimok);
-  useLandownLayerSync(map, mapReady, activeLayerControls, visibleLandown);
-  useThematicMapLayerSync(map, mapReady, activeLayerControls, visibleThematic);
+  useOwnershipLayerSync(
+    map,
+    mapReady,
+    activeLayerControls,
+    visibleLandown,
+    ownershipCatalogLoading ? null : ownershipAvailableTableNames
+  );
+  useThematicMapLayerSync(
+    map,
+    mapReady,
+    activeLayerControls,
+    visibleThematic,
+    thematicCatalogLoading ? null : thematicAvailableTableNames
+  );
 
   return { map, mapReady, mapRef };
 }

@@ -1,7 +1,7 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--3f73bcf1:19cc802047a:306b</id>
+  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71ef</id>
   <name>landown_springwater</name>
-  <nativeName>jijuk</nativeName>
+  <nativeName>landown</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
@@ -12,26 +12,28 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>347461.06325309</minx>
-    <maxx>347815.04473875195</maxx>
-    <miny>344525.05574061174</miny>
-    <maxy>345354.65376110806</maxy>
+    <minx>400671.33315574133</minx>
+    <maxx>409282.8342990369</maxx>
+    <miny>360398.38542430336</miny>
+    <maxy>399837.67602467403</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.64772858096123</minx>
-    <maxx>128.6518417754984</maxx>
-    <miny>36.587668197834624</miny>
-    <maxy>36.595195711484536</maxy>
+    <minx>129.24609122565042</minx>
+    <maxx>129.35329013812304</maxx>
+    <miny>36.71909724818043</miny>
+    <maxy>37.07606615053523</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
+  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
-  <cqlFilter><![CDATA[jibun LIKE '%광']]></cqlFilter>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>jimok = &apos;06&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>
@@ -39,4 +41,5 @@
   <overridingServiceSRS>false</overridingServiceSRS>
   <skipNumberMatched>false</skipNumberMatched>
   <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
 </featureType>

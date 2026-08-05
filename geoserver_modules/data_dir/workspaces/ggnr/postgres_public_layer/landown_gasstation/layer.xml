@@ -1,19 +1,16 @@
 <layer>
   <name>landown_gasstation</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55ed</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-71c0</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-244b</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55ee</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71c1</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:06:46.487 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:12.969 UTC</dateModified>
+  <dateCreated>2026-08-04 06:38:53.599 UTC</dateCreated>
 </layer>

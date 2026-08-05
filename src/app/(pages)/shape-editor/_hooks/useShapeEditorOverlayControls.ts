@@ -5,7 +5,7 @@ import {
   BUILDING_ROAD_LAYERS,
 } from '../../map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { JIMOK_LAYERS } from '../../map/_mapComponents/layerFactory/jimokLayerFactory';
-import { LANDOWN_LAYERS } from '../../map/_mapComponents/layerFactory/landownLayerFactory';
+import { OWNERSHIP_LAYERS } from '../../map/_mapComponents/layerFactory/ownershipLayerFactory';
 
 /** OpenLayersMap MULTI_SELECT_IDS 중 도형편집기 상단바에 노출할 항목 */
 export const SHAPE_EDITOR_OVERLAY_CONTROLS = [
@@ -43,7 +43,7 @@ export function useShapeEditorOverlayControls() {
         );
       } else if (id === 'ownership') {
         setVisibleLandownLayerNames((v) =>
-          v != null && v.size > 0 ? v : new Set(LANDOWN_LAYERS.map((l) => l.tableName))
+          v != null && v.size > 0 ? v : new Set(OWNERSHIP_LAYERS.map((l) => l.tableName))
         );
       } else if (id === 'building-road') {
         setVisibleBuildingRoadLayerNames((v) =>

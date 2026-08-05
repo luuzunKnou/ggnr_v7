@@ -1,0 +1,19 @@
+<layer>
+  <name>landown_japan</name>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-61e1</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--5fabfce7:19fca79c611:-5c2f</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-61e2</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-04 07:13:48.894 UTC</dateCreated>
+  <dateModified>2026-08-04 07:17:53.125 UTC</dateModified>
+</layer>

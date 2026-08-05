@@ -7,10 +7,18 @@
         <sld:Rule>
           <sld:PointSymbolizer>
             <sld:Graphic>
-              <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="river_plan_gd_ps_cib.svg"/>
-                <sld:Format>image/svg+xml</sld:Format>
-              </sld:ExternalGraphic>
+              <sld:Mark>
+                <sld:WellKnownName>circle</sld:WellKnownName>
+                <sld:Fill>
+                  <sld:CssParameter name="fill">#FF5722</sld:CssParameter>
+                  <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
+                </sld:Fill>
+                <sld:Stroke>
+                  <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
+                  <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
+                  <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
+                </sld:Stroke>
+              </sld:Mark>
               <sld:Size>
                 <ogc:Function name="min">
                   <ogc:Literal>18</ogc:Literal>
@@ -31,10 +39,6 @@
                   </ogc:Add>
                 </ogc:Function>
               </sld:Size>
-              <sld:AnchorPoint>
-                <sld:AnchorPointX>0.5</sld:AnchorPointX>
-                <sld:AnchorPointY>0.5</sld:AnchorPointY>
-              </sld:AnchorPoint>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

@@ -1,4 +1,6 @@
 import type { LayerRowEditPreset } from "./types";
+import { USAGE_DATA_AS_FIELD_LABELS } from "../../_mapContents/river/usageDataAs/usageDataAsFieldLabels";
+import { OCCUPATION_LEDGER_FIELD_LABELS } from "../../_mapContents/occupationLedger/occupationLedgerFieldLabels";
 
 /** 화면별 preset — 새 기능 추가 시 여기만 등록 */
 export const LAYER_ROW_EDIT_PRESETS = {
@@ -43,6 +45,49 @@ export const LAYER_ROW_EDIT_PRESETS = {
     additionalChildTableNames: ["usage_data_as_mgj"],
     childParentField: "cons_code",
     childAddressField: "usage_loc",
+    fieldLabels: USAGE_DATA_AS_FIELD_LABELS,
+  },
+  waterOccupationLedger: {
+    tableName: "water_occupationledger",
+    schema: "layer",
+    keyField: "id",
+    autoGenerateKeyOnCreate: true,
+    excludeFields: ["ogc_fid"],
+    includeHiddenDetail: true,
+    dateFields: ["perm_start_date", "perm_end_date", "permit_date"],
+    childTableName: "water_occupationledger_jijuk",
+    additionalChildTableNames: ["water_occupationledger_mgj"],
+    childParentField: "id",
+    childAddressField: "occup_place",
+    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
+  },
+  roadOccupationLedger: {
+    tableName: "road_occupationledger",
+    schema: "layer",
+    keyField: "id",
+    autoGenerateKeyOnCreate: true,
+    excludeFields: ["ogc_fid"],
+    includeHiddenDetail: true,
+    dateFields: ["perm_start_date", "perm_end_date", "permit_date"],
+    childTableName: "road_occupationledger_jijuk",
+    additionalChildTableNames: ["road_occupationledger_mgj"],
+    childParentField: "id",
+    childAddressField: "occup_place",
+    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
+  },
+  publicOccupationLedger: {
+    tableName: "public_occupationledger",
+    schema: "layer",
+    keyField: "id",
+    autoGenerateKeyOnCreate: true,
+    excludeFields: ["ogc_fid"],
+    includeHiddenDetail: true,
+    dateFields: ["perm_start_date", "perm_end_date", "permit_date"],
+    childTableName: "public_occupationledger_jijuk",
+    additionalChildTableNames: ["public_occupationledger_mgj"],
+    childParentField: "id",
+    childAddressField: "occup_place",
+    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
   },
 } as const satisfies Record<string, LayerRowEditPreset>;
 

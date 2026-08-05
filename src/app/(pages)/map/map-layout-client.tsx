@@ -69,6 +69,13 @@ import { RoadRewardListPanel } from "./_mapContents/road/roadReward/RoadRewardLi
 import { RoadRewardDetailPanel } from "./_mapContents/road/roadReward/RoadRewardDetailPanel"
 import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMock"
 import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
+import { OccupationLedgerListPanel } from "./_mapContents/occupationLedger/OccupationLedgerListPanel"
+import { OccupationLedgerDetailPanel } from "./_mapContents/occupationLedger/OccupationLedgerDetailPanel"
+import { clearOccupationLedgerWmsLayers } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
+import {
+  findOpenedOccupationLedgerSerEng,
+  isOccupationLedgerOpenedToken,
+} from "@/lib/occupationLedgerBinding"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
@@ -299,6 +306,13 @@ const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
 const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
 const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
 
+const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 466
+const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 466
+const OCCUPATION_LEDGER_PANEL_MAX_WIDTH = 960
+const OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
+const OCCUPATION_LEDGER_DETAIL_MIN_WIDTH = 320
+const OCCUPATION_LEDGER_DETAIL_MAX_WIDTH = 640
+
 /** serviceList `ser_eng`: roadReward — 보상편입용지 */
 const ROAD_REWARD_OPENED_KEY = "roadReward"
 const ROAD_REWARD_PANEL_DEFAULT_WIDTH = 320
@@ -325,6 +339,7 @@ function MapLayoutContent({
   const setRiverBasicPlanPanelOpen = mapContext?.setRiverBasicPlanPanelOpen
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
   const setUsageDataAsPanelOpen = mapContext?.setUsageDataAsPanelOpen
+  const setOccupationLedgerPanelOpen = mapContext?.setOccupationLedgerPanelOpen
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
   const setRoadLedgerIdentifyRow = mapContext?.setRoadLedgerIdentifyRow
   const setRoadLedgerFacilityModal = mapContext?.setRoadLedgerFacilityModal
@@ -436,6 +451,8 @@ function MapLayoutContent({
   const riverConstructionLedgerDetailOpen =
     riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
   const usageDataAsOpen = openedWindows.includes(USAGE_DATA_AS_OPENED_KEY)
+  const occupationLedgerSerEng = findOpenedOccupationLedgerSerEng(openedWindows)
+  const occupationLedgerOpen = Boolean(occupationLedgerSerEng)
   const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
   const useFeeOpen = openedWindows.includes(USE_FEE_OPENED_KEY)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
@@ -451,6 +468,9 @@ function MapLayoutContent({
   const [usageDataAsDetailId, setUsageDataAsDetailId] = useState<string | null>(null)
   const [usageDataAsListRefreshKey, setUsageDataAsListRefreshKey] = useState(0)
   const usageDataAsDetailOpen = usageDataAsOpen && Boolean(usageDataAsDetailId)
+  const [occupationLedgerDetailId, setOccupationLedgerDetailId] = useState<string | null>(null)
+  const [occupationLedgerListRefreshKey, setOccupationLedgerListRefreshKey] = useState(0)
+  const occupationLedgerDetailOpen = occupationLedgerOpen && Boolean(occupationLedgerDetailId)
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
@@ -556,6 +576,12 @@ function MapLayoutContent({
   )
   const [usageDataAsPanelWidth, setUsageDataAsPanelWidth] = useState(USAGE_DATA_AS_PANEL_DEFAULT_WIDTH)
   const [usageDataAsDetailWidth, setUsageDataAsDetailWidth] = useState(USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH)
+  const [occupationLedgerPanelWidth, setOccupationLedgerPanelWidth] = useState(
+    OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH
+  )
+  const [occupationLedgerDetailWidth, setOccupationLedgerDetailWidth] = useState(
+    OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH
+  )
   const [roadRewardPanelWidth, setRoadRewardPanelWidth] = useState(ROAD_REWARD_PANEL_DEFAULT_WIDTH)
   const [roadRewardDetailWidth, setRoadRewardDetailWidth] = useState(ROAD_REWARD_DETAIL_DEFAULT_WIDTH)
   // const [useLedgerProtoPanelWidth, setUseLedgerProtoPanelWidth] = useState(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
@@ -599,6 +625,8 @@ function MapLayoutContent({
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
     (usageDataAsOpen ? usageDataAsPanelWidth : 0) +
     (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0) +
+    (occupationLedgerOpen ? occupationLedgerPanelWidth : 0) +
+    (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0) +
     (roadRewardOpen ? roadRewardPanelWidth : 0) +
     (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
@@ -674,8 +702,13 @@ function MapLayoutContent({
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0)
   const usageDataAsDetailLeftPx =
     usageDataAsPanelLeftPx + (usageDataAsOpen ? usageDataAsPanelWidth : 0)
-  const roadRewardPanelLeftPx =
+  const occupationLedgerPanelLeftPx =
     usageDataAsDetailLeftPx + (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0)
+  const occupationLedgerDetailLeftPx =
+    occupationLedgerPanelLeftPx + (occupationLedgerOpen ? occupationLedgerPanelWidth : 0)
+  const roadRewardPanelLeftPx =
+    occupationLedgerDetailLeftPx +
+    (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0)
   const roadRewardDetailLeftPx =
     roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
   const memoPanelLeftPx =
@@ -741,6 +774,20 @@ function MapLayoutContent({
       clearUsageDataAsWmsLayers(setVisibleLayerNames)
     }
   }, [setUsageDataAsPanelOpen, usageDataAsOpen, setVisibleLayerNames])
+
+  useEffect(() => {
+    setOccupationLedgerPanelOpen?.(occupationLedgerOpen)
+    if (!occupationLedgerOpen) {
+      clearOccupationLedgerWmsLayers(setVisibleLayerNames, {
+        serEng: occupationLedgerSerEng,
+      })
+    }
+  }, [
+    setOccupationLedgerPanelOpen,
+    occupationLedgerOpen,
+    setVisibleLayerNames,
+    occupationLedgerSerEng,
+  ])
 
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
@@ -986,6 +1033,12 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseOccupationLedger = () => {
+    setOccupationLedgerDetailId(null)
+    const next = openedWindows.filter((w) => !isOccupationLedgerOpenedToken(w))
+    setOpened(next)
+  }
+
   const handleCloseRoadReward = () => {
     setRoadRewardSelectedId(null)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
@@ -1061,6 +1114,14 @@ function MapLayoutContent({
   useEffect(() => {
     if (!usageDataAsOpen) setUsageDataAsDetailId(null)
   }, [usageDataAsOpen])
+
+  useEffect(() => {
+    if (!occupationLedgerOpen) setOccupationLedgerDetailId(null)
+  }, [occupationLedgerOpen])
+
+  useEffect(() => {
+    setOccupationLedgerDetailId(null)
+  }, [occupationLedgerSerEng])
 
   useEffect(() => {
     if (!roadRewardOpen) setRoadRewardSelectedId(null)
@@ -1756,6 +1817,53 @@ function MapLayoutContent({
                   onDeleted={() => {
                     setUsageDataAsDetailId(null)
                     setUsageDataAsListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {occupationLedgerOpen && occupationLedgerSerEng && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={occupationLedgerPanelWidth}
+                minWidth={OCCUPATION_LEDGER_PANEL_MIN_WIDTH}
+                maxWidth={OCCUPATION_LEDGER_PANEL_MAX_WIDTH}
+                leftOffsetPx={occupationLedgerPanelLeftPx}
+                onWidthChange={setOccupationLedgerPanelWidth}
+              >
+                <OccupationLedgerListPanel
+                  serEng={occupationLedgerSerEng}
+                  onClose={handleCloseOccupationLedger}
+                  selectedDetailId={occupationLedgerDetailId}
+                  onSelectDetailId={setOccupationLedgerDetailId}
+                  refreshKey={occupationLedgerListRefreshKey}
+                  onAdd={() => setOccupationLedgerDetailId(LAYER_ROW_NEW_ID)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {occupationLedgerOpen && occupationLedgerSerEng && occupationLedgerDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={occupationLedgerDetailWidth}
+                minWidth={OCCUPATION_LEDGER_DETAIL_MIN_WIDTH}
+                maxWidth={OCCUPATION_LEDGER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={occupationLedgerDetailLeftPx}
+                onWidthChange={setOccupationLedgerDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <OccupationLedgerDetailPanel
+                  detailId={occupationLedgerDetailId}
+                  serEng={occupationLedgerSerEng}
+                  onClose={() => setOccupationLedgerDetailId(null)}
+                  onSaved={() => setOccupationLedgerListRefreshKey((k) => k + 1)}
+                  onCreated={(newKey) => {
+                    setOccupationLedgerListRefreshKey((k) => k + 1)
+                    setOccupationLedgerDetailId(newKey)
+                  }}
+                  onDeleted={() => {
+                    setOccupationLedgerDetailId(null)
+                    setOccupationLedgerListRefreshKey((k) => k + 1)
                   }}
                 />
               </MapSideListPanel>

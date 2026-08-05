@@ -1,7 +1,12 @@
-/* 구조물도 분할(bsag) */
 * {
-  mark: url("river_plan_gd_ps_bsag.svg");
-  mark-mime: "image/svg+xml";
+  mark: symbol(circle);
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
-  mark-anchor: 0.5 0.5;
+  :mark {
+    fill: #FFEB3B;
+    stroke: #FFFFFF;
+    stroke-width: 1.5;
+    stroke-opacity: 0.5;
+    fill-opacity: 0.5;
+  };
+  z-index: 0;
 }

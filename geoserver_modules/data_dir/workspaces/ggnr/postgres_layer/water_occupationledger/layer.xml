@@ -1,0 +1,16 @@
+<layer>
+  <name>water_occupationledger</name>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77ab</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffe</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77ac</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-04 05:45:24.889 UTC</dateCreated>
+</layer>

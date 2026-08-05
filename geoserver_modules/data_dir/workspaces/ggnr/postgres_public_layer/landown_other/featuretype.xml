@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55e0</id>
+  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71cf</id>
   <name>landown_other</name>
   <nativeName>landown</nativeName>
   <namespace>
@@ -12,25 +12,27 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>329584.825694174</minx>
-    <maxx>378160.8088720036</maxx>
-    <miny>313678.3993543824</miny>
-    <maxy>368402.5365454397</maxy>
+    <minx>386205.0698454323</minx>
+    <maxx>421220.7721556168</maxx>
+    <miny>352324.4219221913</miny>
+    <maxy>407693.9550654095</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.44288436623754</minx>
-    <maxx>128.99614854813566</maxx>
-    <miny>36.304676343967266</miny>
-    <maxy>36.805414354061504</maxy>
+    <minx>129.08231088916799</minx>
+    <maxx>129.48973000109717</maxx>
+    <miny>36.643704720306296</miny>
+    <maxy>37.14979179012599</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
+  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
   <cqlFilter>a7 = &apos;09&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
@@ -39,4 +41,5 @@
   <overridingServiceSRS>false</overridingServiceSRS>
   <skipNumberMatched>false</skipNumberMatched>
   <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
 </featureType>

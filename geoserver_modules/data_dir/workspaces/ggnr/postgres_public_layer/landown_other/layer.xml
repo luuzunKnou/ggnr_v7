@@ -1,19 +1,16 @@
 <layer>
   <name>landown_other</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55df</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-71ce</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-24df</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55e0</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71cf</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:07:15.483 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:13.919 UTC</dateModified>
+  <dateCreated>2026-08-04 06:38:36.115 UTC</dateCreated>
 </layer>

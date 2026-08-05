@@ -1,0 +1,16 @@
+<layer>
+  <name>lsmd_cont_uq125_uqj100</name>
+  <id>LayerInfoImpl--53d6c018:19fca58eff6:-7f03</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--53d6c018:19fca58eff6:-7f04</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-04 01:29:09.331 UTC</dateCreated>
+</layer>

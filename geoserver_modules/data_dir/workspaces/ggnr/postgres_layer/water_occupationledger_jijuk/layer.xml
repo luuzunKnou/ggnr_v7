@@ -1,0 +1,16 @@
+<layer>
+  <name>water_occupationledger_jijuk</name>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77a9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffe</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77aa</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-04 05:45:26.525 UTC</dateCreated>
+</layer>
