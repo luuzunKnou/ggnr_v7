@@ -288,6 +288,65 @@ async function geoserverFetch(
 }
 
 /**
+ * FeatureType CQL 필터 설정.
+ * 전체 GET+PUT 대신 cqlFilter만 부분 갱신 — Windows에서 FeatureType 디렉터리 move/AccessDenied 회피.
+ */
+async function setFeatureTypeCqlFilter(
+  baseUrl: string,
+  workspace: string,
+  datastoreName: string,
+  featureTypeName: string,
+  cqlFilter: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const path = `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(featureTypeName)}`;
+  const escaped = cqlFilter
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const xml = `<featureType><cqlFilter>${escaped}</cqlFilter></featureType>`;
+
+  const xmlRes = await geoserverFetch(baseUrl, path, {
+    method: 'PUT',
+    body: xml,
+    contentType: 'application/xml',
+  });
+  if (xmlRes.ok) return { success: true };
+
+  const jsonRes = await geoserverFetch(baseUrl, path, {
+    method: 'PUT',
+    body: JSON.stringify({ featureType: { cqlFilter } }),
+  });
+  if (jsonRes.ok) return { success: true };
+
+  const xmlText = await xmlRes.text().catch(() => '');
+  const jsonText = await jsonRes.text().catch(() => '');
+  return {
+    success: false,
+    error: `FeatureType CQL 적용 실패: xml=${xmlRes.status} ${xmlText}; json=${jsonRes.status} ${jsonText}`,
+  };
+}
+
+/** FeatureType이 어느 저장소에 있는지 확인 (layer / public_layer) */
+async function findFeatureTypeDatastore(
+  baseUrl: string,
+  workspace: string,
+  featureTypeName: string,
+  preferredDatastore?: string
+): Promise<string | null> {
+  const candidates = preferredDatastore
+    ? [preferredDatastore, ...['postgres_layer', 'postgres_public_layer'].filter((d) => d !== preferredDatastore)]
+    : ['postgres_public_layer', 'postgres_layer'];
+  for (const ds of candidates) {
+    const res = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/datastores/${ds}/featuretypes/${encodeURIComponent(featureTypeName)}.json`
+    );
+    if (res.ok) return ds;
+  }
+  return null;
+}
+
+/**
  * GeoServer DB 연결 설정 (workspace + PostGIS 데이터 스토어 생성)
  */
 export async function setupGeoServerDb(params: {
@@ -656,43 +715,6 @@ export async function createGeoServerLayers(params: {
       return { success: true as const };
     };
 
-    /** FeatureType에 CQL 필터 설정 — 최상위 cqlFilter 속성 사용 (GeoServer REST 규격) */
-    const setFeatureTypeCqlFilter = async (
-      datastoreName: string,
-      featureTypeName: string,
-      cqlFilter: string
-    ) => {
-      const getRes = await geoserverFetch(
-        baseUrl,
-        `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(featureTypeName)}.json`
-      );
-      if (!getRes.ok) {
-        const text = await getRes.text();
-        return { success: false as const, error: `FeatureType 조회 실패: ${getRes.status} ${text}` };
-      }
-
-      const ftData = await getRes.json();
-      const featureType = ftData?.featureType ?? ftData;
-
-      const putBody = JSON.stringify({
-        featureType: {
-          ...featureType,
-          cqlFilter,
-        },
-      });
-
-      const putRes = await geoserverFetch(
-        baseUrl,
-        `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(featureTypeName)}`,
-        { method: 'PUT', body: putBody }
-      );
-      if (!putRes.ok) {
-        const text = await putRes.text();
-        return { success: false as const, error: `FeatureType CQL 적용 실패: ${putRes.status} ${text}` };
-      }
-      return { success: true as const };
-    };
-
     for (const row of defineRes.tables) {
       const defineLayerName = String(row.define_table_name ?? '').trim();
       if (!defineLayerName) continue;
@@ -751,7 +773,13 @@ export async function createGeoServerLayers(params: {
 
       if (ftRes.ok || ftRes.status === 409) {
         if (divQuery) {
-          const ftCqlRes = await setFeatureTypeCqlFilter(datastoreName, publishName, divQuery);
+          const ftCqlRes = await setFeatureTypeCqlFilter(
+            baseUrl,
+            workspace,
+            datastoreName,
+            publishName,
+            divQuery
+          );
           if (!ftCqlRes.success) {
             failed.push({ schema: sourceTable.schema, table: defineLayerName, error: ftCqlRes.error });
             continue;
@@ -916,11 +944,113 @@ export async function createOrUpdateGeoServerLayer(params: {
       return { success: false as const, error: `FeatureType 생성 실패: ${ftRes.status} ${text}` };
     }
 
-    // CQL은 POST body에 이미 포함했으므로 별도 PUT 하지 않음 (PUT 시 GeoServer가 동일 경로 move 시도 → Windows AccessDeniedException)
+    if (divQuery) {
+      const cqlRes = await setFeatureTypeCqlFilter(baseUrl, workspace, datastoreName, layerName, divQuery);
+      if (!cqlRes.success) {
+        return { success: false as const, error: cqlRes.error, layerName };
+      }
+    }
+
     return { success: true as const, layerName };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false as const, error: msg };
+  }
+}
+
+/**
+ * tables.json 분할(div_query)을 기존 GeoServer FeatureType CQL에 일괄 반영.
+ * 레이어 재생성 없이 CQL만 갱신. GeoServer에 없는 분할 레이어는 skipped.
+ */
+export async function syncGeoServerCqlFiltersFromDefine(params: {
+  url?: string;
+  workspace?: string;
+} = {}) {
+  const baseUrl = (params?.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const workspace = params?.workspace?.trim() || 'ggnr';
+
+  const updated: Array<{ layer: string; datastore: string; cql: string }> = [];
+  const skipped: Array<{ layer: string; reason: string }> = [];
+  const failed: Array<{ layer: string; error: string }> = [];
+
+  try {
+    const defineRes = await getDefineLayerTables();
+    if (!defineRes.success || !defineRes.tables?.length) {
+      return {
+        success: false as const,
+        error: defineRes.error ?? 'defineLayer 테이블이 없습니다.',
+        updated,
+        skipped,
+        failed,
+      };
+    }
+
+    const dbTableMap = new Map<string, { schema: string; table: string }>();
+    const listRes = await getLayerTableList();
+    if (listRes.success && Array.isArray(listRes.tables)) {
+      for (const t of listRes.tables) {
+        if (t.schema !== 'layer' && t.schema !== 'public_layer') continue;
+        if (!dbTableMap.has(t.table) || t.schema === 'layer') {
+          dbTableMap.set(t.table, { schema: t.schema, table: t.table });
+        }
+      }
+    }
+
+    for (const row of defineRes.tables) {
+      const defineLayerName = String(row.define_table_name ?? '').trim();
+      if (!defineLayerName) continue;
+      const parentLayer = String(row.define_table_parents_layer ?? '').trim();
+      const divQuery = String(row.define_table_div_query ?? '').trim();
+      if (!parentLayer || !divQuery) continue;
+
+      const publishName = defineLayerName.toLowerCase();
+      const sourceTable = resolveDbTableCaseInsensitive(dbTableMap, parentLayer);
+      const preferredDatastore =
+        sourceTable?.schema === 'layer'
+          ? 'postgres_layer'
+          : sourceTable?.schema === 'public_layer'
+            ? 'postgres_public_layer'
+            : undefined;
+
+      const datastoreName = await findFeatureTypeDatastore(
+        baseUrl,
+        workspace,
+        publishName,
+        preferredDatastore
+      );
+      if (!datastoreName) {
+        skipped.push({ layer: publishName, reason: 'GeoServer FeatureType 없음' });
+        continue;
+      }
+
+      const cqlRes = await setFeatureTypeCqlFilter(
+        baseUrl,
+        workspace,
+        datastoreName,
+        publishName,
+        divQuery
+      );
+      if (!cqlRes.success) {
+        failed.push({ layer: publishName, error: cqlRes.error });
+        continue;
+      }
+      updated.push({ layer: publishName, datastore: datastoreName, cql: divQuery });
+    }
+
+    return {
+      success: failed.length === 0,
+      updated,
+      skipped,
+      failed,
+      summary: {
+        updated: updated.length,
+        skipped: skipped.length,
+        failed: failed.length,
+      },
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg, updated, skipped, failed };
   }
 }
 

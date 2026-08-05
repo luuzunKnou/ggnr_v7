@@ -152,16 +152,25 @@
                   </ogc:Function>
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
-                <ogc:Function name="property">
-                  <ogc:Literal>eve_bsi_mn</ogc:Literal>
-                </ogc:Function>
-                <ogc:Function name="Concatenate">
+                <ogc:Function name="numberFormat">
+                  <ogc:Literal>0.00</ogc:Literal>
                   <ogc:Function name="property">
                     <ogc:Literal>eve_bsi_mn</ogc:Literal>
                   </ogc:Function>
+                </ogc:Function>
+                <ogc:Function name="Concatenate">
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>eve_bsi_mn</ogc:Literal>
+                    </ogc:Function>
+                  </ogc:Function>
                   <ogc:Literal>-</ogc:Literal>
-                  <ogc:Function name="property">
-                    <ogc:Literal>eve_bsi_sl</ogc:Literal>
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>eve_bsi_sl</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>
@@ -213,16 +222,25 @@
                   </ogc:Function>
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
-                <ogc:Function name="property">
-                  <ogc:Literal>odd_bsi_mn</ogc:Literal>
-                </ogc:Function>
-                <ogc:Function name="Concatenate">
+                <ogc:Function name="numberFormat">
+                  <ogc:Literal>0.00</ogc:Literal>
                   <ogc:Function name="property">
                     <ogc:Literal>odd_bsi_mn</ogc:Literal>
                   </ogc:Function>
+                </ogc:Function>
+                <ogc:Function name="Concatenate">
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>odd_bsi_mn</ogc:Literal>
+                    </ogc:Function>
+                  </ogc:Function>
                   <ogc:Literal>-</ogc:Literal>
-                  <ogc:Function name="property">
-                    <ogc:Literal>odd_bsi_sl</ogc:Literal>
+                  <ogc:Function name="numberFormat">
+                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Function name="property">
+                      <ogc:Literal>odd_bsi_sl</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>

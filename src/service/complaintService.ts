@@ -3,13 +3,138 @@
  */
 import { db } from '@/database/db';
 import { comp, compd } from '@/database/schema';
+import { fetchCoordFromAddress } from '@/lib/vworldAddressServer';
 import { eq, desc, asc, sql, inArray } from 'drizzle-orm';
+import {
+  applyDefaultStyleToLayer,
+  createOrUpdateGeoServerLayer,
+  getGeoServerLayerList,
+  getGeoServerStyleList,
+  setLayerDefaultStyle,
+} from '@/service/devTestService';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
+const COMP_LAYER_ID = 'comp';
+/** PostGIS·raw SQL 용 정규 테이블 (layer 스키마, 뷰 아님) */
+const COMP_TABLE_SQL = 'layer."comp"';
+
+/**
+ * 민원관리 WMS: GeoServer 레이어·스타일 없으면 생성.
+ * 스타일이 이미 있으면 덮어쓰지 않는다. (테이블은 layer.comp 실테이블)
+ */
+export async function ensureWmsLayer(): Promise<{
+  success: boolean;
+  layerCreated?: boolean;
+  styleCreated?: boolean;
+  error?: string;
+}> {
+  let layerCreated = false;
+  let styleCreated = false;
+
+  try {
+    const listRes = await getGeoServerLayerList();
+    const layerNames = (listRes.layers ?? []).map((n) => String(n).toLowerCase());
+    if (!layerNames.includes(COMP_LAYER_ID)) {
+      const layerRes = await createOrUpdateGeoServerLayer({ layerName: COMP_LAYER_ID });
+      if (!layerRes.success) {
+        return {
+          success: false,
+          error: layerRes.error ?? 'GeoServer 레이어 생성 실패',
+        };
+      }
+      layerCreated = true;
+    }
+
+    const styleList = await getGeoServerStyleList();
+    const hasStyle = (styleList.styles ?? []).some(
+      (s) => String(s?.name ?? '').toLowerCase() === COMP_LAYER_ID
+    );
+    if (!hasStyle) {
+      const styleRes = await applyDefaultStyleToLayer({ layerName: COMP_LAYER_ID });
+      if (!styleRes.success) {
+        return {
+          success: false,
+          layerCreated,
+          error: styleRes.error ?? 'GeoServer 스타일 생성 실패',
+        };
+      }
+      styleCreated = true;
+    } else if (layerCreated) {
+      await setLayerDefaultStyle({
+        layerName: COMP_LAYER_ID,
+        styleName: COMP_LAYER_ID,
+      });
+    }
+
+    return { success: true, layerCreated, styleCreated };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, layerCreated, styleCreated, error: msg };
+  }
+}
 
 export type CompRow = typeof comp.$inferSelect;
 export type CompdRow = typeof compd.$inferSelect;
+
+function emptyToNull(s: string | null | undefined): string | null {
+  if (s == null) return null;
+  const t = String(s).trim();
+  return t === '' ? null : t;
+}
+
+function parseLonLat(
+  lon?: number | string | null,
+  lat?: number | string | null
+): { lon: number; lat: number } | null {
+  const x = Number(lon);
+  const y = Number(lat);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (x < -180 || x > 180 || y < -90 || y > 90) return null;
+  return { lon: x, lat: y };
+}
+
+/** 주소(및 선택 좌표)로 comp.geom(Point,5181) 갱신. 주소 없으면 NULL */
+async function syncCompGeomFromAddress(params: {
+  compKey: number;
+  compAdr?: string | null;
+  lon?: number | string | null;
+  lat?: number | string | null;
+}): Promise<void> {
+  const key = Number(params.compKey);
+  if (!Number.isInteger(key) || key < 1) return;
+
+  const adr = emptyToNull(params.compAdr);
+  let lonLat = parseLonLat(params.lon, params.lat);
+  if (!lonLat && adr) {
+    lonLat = await fetchCoordFromAddress(adr);
+  }
+
+  try {
+    if (!lonLat) {
+      await db.execute(sql.raw(`UPDATE ${COMP_TABLE_SQL} SET "geom" = NULL WHERE "comp_key" = ${key}`));
+      return;
+    }
+    const { lon, lat } = lonLat;
+    await db.execute(
+      sql.raw(
+        `UPDATE ${COMP_TABLE_SQL}
+         SET "geom" = ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), 5181)
+         WHERE "comp_key" = ${key}`
+      )
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // 컬럼 미적용 DB에서도 접수 저장은 유지
+    if (/column .*geom.* does not exist/i.test(msg) || /geom.*존재하지/i.test(msg)) {
+      console.warn(
+        '[complaintService] layer.comp.geom 컬럼이 없습니다. ALTER TABLE layer.comp ADD COLUMN geom geometry(Point,5181); 후 다시 저장하세요.'
+      );
+      return;
+    }
+    throw e;
+  }
+}
 
 /** 목록 조회 (페이징, 각 행에 latestState 포함) */
 export async function list(params: {
@@ -52,7 +177,7 @@ export async function list(params: {
   return { rows: rowsWithState, total };
 }
 
-/** 단건 조회 + 처리내역(compd) 목록 */
+/** 단건 조회 + 처리내역(compd) 목록 + 지도 이동용 extent3857 */
 export async function get(params: { compKey: number }) {
   const key = Number(params?.compKey);
   if (!Number.isInteger(key) || key < 1) return null;
@@ -66,13 +191,38 @@ export async function get(params: { compKey: number }) {
     .where(eq(compd.compKey, key))
     .orderBy(asc(compd.compdKey));
 
-  return { ...row, compdList };
+  let extent3857 = await getCompExtent3857(key);
+  // geom 없으면 주소로 좌표 보강 후 이동용 extent 재조회
+  if (!extent3857 && row.compAdr) {
+    await syncCompGeomFromAddress({ compKey: key, compAdr: row.compAdr });
+    extent3857 = await getCompExtent3857(key);
+  }
+
+  return { ...row, compdList, extent3857 };
 }
 
-function emptyToNull(s: string | null | undefined): string | null {
-  if (s == null) return null;
-  const t = String(s).trim();
-  return t === '' ? null : t;
+/** comp.geom → EPSG:3857 점 extent (없으면 null) */
+async function getCompExtent3857(
+  compKey: number
+): Promise<[number, number, number, number] | null> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_X(ST_Transform(geom, 3857))::float8 AS x,
+                ST_Y(ST_Transform(geom, 3857))::float8 AS y
+         FROM ${COMP_TABLE_SQL}
+         WHERE "comp_key" = ${compKey} AND geom IS NOT NULL
+         LIMIT 1`
+      )
+    );
+    const r = res.rows?.[0] as { x?: unknown; y?: unknown } | undefined;
+    const x = Number(r?.x);
+    const y = Number(r?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return [x, y, x, y];
+  } catch {
+    return null;
+  }
 }
 
 /** 민원 접수 생성 (생성 시 상태 '접수' 이력 1건 자동 추가) */
@@ -86,6 +236,9 @@ export async function create(params: {
   compTel?: string | null;
   compContent?: string | null;
   compExtra?: Record<string, unknown> | null;
+  /** 주소검색 선택 시 전달 — 있으면 geocode 생략 */
+  lon?: number | string | null;
+  lat?: number | string | null;
 }) {
   try {
     const [inserted] = await db
@@ -116,7 +269,17 @@ export async function create(params: {
       compdExtra: null,
     });
 
-    return inserted;
+    await syncCompGeomFromAddress({
+      compKey: inserted.compKey,
+      compAdr: params.compAdr,
+      lon: params.lon,
+      lat: params.lat,
+    });
+
+    const [withGeom] = await db.select().from(comp).where(eq(comp.compKey, inserted.compKey)).limit(1);
+    if (!withGeom) return inserted;
+    // 생성 직후 상세·지도 이동용 extent 포함
+    return (await get({ compKey: inserted.compKey })) ?? withGeom;
   } catch (e: unknown) {
     const err = e as { code?: string; detail?: string; message?: string };
     const msg = err.detail || err.message || String(e);
@@ -136,6 +299,8 @@ export async function update(params: {
   compTel?: string | null;
   compContent?: string | null;
   compExtra?: Record<string, unknown> | null;
+  lon?: number | string | null;
+  lat?: number | string | null;
 }) {
   const key = Number(params.compKey);
   if (!Number.isInteger(key) || key < 1) return null;
@@ -150,14 +315,40 @@ export async function update(params: {
   if (params.compTel !== undefined) set.compTel = emptyToNull(params.compTel);
   if (params.compContent !== undefined) set.compContent = emptyToNull(params.compContent);
   if (params.compExtra !== undefined) set.compExtra = params.compExtra;
-  if (Object.keys(set).length === 0) return (await get({ compKey: key })) ?? null;
 
-  const [updated] = await db
-    .update(comp)
-    .set(set as Partial<typeof comp.$inferInsert>)
-    .where(eq(comp.compKey, key))
-    .returning();
-  return updated ?? null;
+  const shouldSyncGeom =
+    params.compAdr !== undefined || params.lon !== undefined || params.lat !== undefined;
+
+  if (Object.keys(set).length === 0 && !shouldSyncGeom) {
+    return (await get({ compKey: key })) ?? null;
+  }
+
+  if (Object.keys(set).length > 0) {
+    await db
+      .update(comp)
+      .set(set as Partial<typeof comp.$inferInsert>)
+      .where(eq(comp.compKey, key));
+  }
+
+  if (shouldSyncGeom) {
+    let adr = params.compAdr;
+    if (adr === undefined) {
+      const [cur] = await db
+        .select({ compAdr: comp.compAdr })
+        .from(comp)
+        .where(eq(comp.compKey, key))
+        .limit(1);
+      adr = cur?.compAdr ?? null;
+    }
+    await syncCompGeomFromAddress({
+      compKey: key,
+      compAdr: adr,
+      lon: params.lon,
+      lat: params.lat,
+    });
+  }
+
+  return (await get({ compKey: key })) ?? null;
 }
 
 /** 민원 처리내역(compd) 추가 */
@@ -236,4 +427,46 @@ export async function remove(params: { compKey: number }) {
 
   await db.delete(comp).where(eq(comp.compKey, key));
   return { deleted: true };
+}
+
+/** 민원관리 메뉴 진입 시 전체 위치(comp.geom) extent — EPSG:3857 */
+export async function getLayerExtent3857(): Promise<{
+  extent3857: [number, number, number, number] | null;
+  error?: string;
+}> {
+  // 레이어·스타일 없으면 생성 (실패해도 extent 조회는 시도)
+  await ensureWmsLayer().catch(() => null);
+
+  try {
+    const res = await db.execute(
+      sql.raw(`
+        SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
+               ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
+        FROM (
+          SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS ext
+          FROM ${COMP_TABLE_SQL}
+          WHERE geom IS NOT NULL
+        ) s
+        WHERE ext IS NOT NULL`)
+    );
+    const row = res.rows?.[0] as {
+      xmin?: unknown;
+      ymin?: unknown;
+      xmax?: unknown;
+      ymax?: unknown;
+    } | undefined;
+    const coords = [Number(row?.xmin), Number(row?.ymin), Number(row?.xmax), Number(row?.ymax)];
+    if (!coords.every((v) => Number.isFinite(v))) {
+      return { extent3857: null };
+    }
+    return {
+      extent3857: coords as [number, number, number, number],
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/column .*geom.* does not exist/i.test(msg) || /geom.*존재하지/i.test(msg)) {
+      return { extent3857: null, error: 'geom 컬럼이 없습니다.' };
+    }
+    return { extent3857: null, error: msg };
+  }
 }

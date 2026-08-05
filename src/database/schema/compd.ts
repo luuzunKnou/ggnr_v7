@@ -1,7 +1,12 @@
-import { pgTable, serial, integer, varchar, timestamp, json } from 'drizzle-orm/pg-core';
+import { pgSchema, serial, integer, varchar, timestamp, json } from 'drizzle-orm/pg-core';
 import { comp } from './comp';
 
-export const compd = pgTable('compd', {
+const layer = pgSchema('layer');
+
+/**
+ * 민원 처리내역 — 접수(comp)와 같이 layer 스키마.
+ */
+export const compd = layer.table('compd', {
   compdKey: serial('compd_key').primaryKey().notNull(),
   compKey: integer('comp_key')
     .references(() => comp.compKey, { onDelete: 'cascade' })

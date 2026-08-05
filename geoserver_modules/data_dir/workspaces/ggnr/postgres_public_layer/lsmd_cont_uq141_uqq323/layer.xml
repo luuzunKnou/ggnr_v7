@@ -1,0 +1,19 @@
+<layer>
+  <name>lsmd_cont_uq141_uqq323</name>
+  <id>LayerInfoImpl--187c4de7:19fc6dabc17:-7fbb</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--187c4de7:19fc6dabc17:-7de3</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--187c4de7:19fc6dabc17:-7fbc</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-03 09:29:10.510 UTC</dateCreated>
+  <dateModified>2026-08-03 09:50:51.835 UTC</dateModified>
+</layer>

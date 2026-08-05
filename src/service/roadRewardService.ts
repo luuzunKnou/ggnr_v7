@@ -820,6 +820,56 @@ export async function getExtent3857ByOgcFid(params: {
   return { extent3857: detail.row?.extent3857 ?? null };
 }
 
+/** 보상편입용지·필지 레이어 전체 extent (메뉴 진입 시 지도 맞춤) */
+export async function getLayerExtent3857(): Promise<{
+  extent3857: [number, number, number, number] | null;
+  error?: string;
+}> {
+  try {
+    const geomSelects: string[] = [];
+    for (const table of [MAIN_TABLE, PARCEL_TABLE]) {
+      const meta = await resolveTableWithSchema(table);
+      if (!meta) continue;
+      const cols = await getTableColumns(meta.schema, meta.tableName);
+      const geomCol = findColumn(cols, 'geom');
+      if (!geomCol) continue;
+      const safe = meta.tableName.replace(/"/g, '""');
+      const safeSchema = meta.schema.replace(/"/g, '""');
+      geomSelects.push(
+        `SELECT ST_Transform(t.${quoteIdent(geomCol)}, 3857) AS g
+         FROM "${safeSchema}"."${safe}" t
+         WHERE t.${quoteIdent(geomCol)} IS NOT NULL`
+      );
+    }
+    if (geomSelects.length === 0) {
+      return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
+    }
+    const sqlText = `
+      SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
+             ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
+      FROM (
+        SELECT ST_Extent(g)::box2d AS ext
+        FROM (${geomSelects.join(' UNION ALL ')}) u
+        WHERE g IS NOT NULL
+      ) s
+      WHERE ext IS NOT NULL`;
+    const res = await db.execute(sql.raw(sqlText));
+    const row = res.rows?.[0] as {
+      xmin?: unknown;
+      ymin?: unknown;
+      xmax?: unknown;
+      ymax?: unknown;
+    } | undefined;
+    const coords = [Number(row?.xmin), Number(row?.ymin), Number(row?.xmax), Number(row?.ymax)];
+    if (!coords.every((v) => Number.isFinite(v))) {
+      return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
+    }
+    return { extent3857: coords as [number, number, number, number] };
+  } catch (e: unknown) {
+    return { extent3857: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 type ParcelSaveInput = {
   ogcFid?: number | string;
   pnu?: string;

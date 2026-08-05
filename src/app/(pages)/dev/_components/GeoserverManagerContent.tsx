@@ -38,6 +38,16 @@ type DiffRow = {
 
 const EXCLUDED_STYLE_NAMES = new Set(["generic", "line", "point", "polygon", "raster"])
 
+/** DB/GeoServer는 소문자 테이블명 — tables.json camelCase와 대소문자 무시 매칭 */
+function findIgnoreCase(set: Set<string>, key: string): string | null {
+  const want = key.toLowerCase()
+  if (set.has(key)) return key
+  for (const v of set) {
+    if (v.toLowerCase() === want) return v
+  }
+  return null
+}
+
 type GeoserverManagerSchema = "layer" | "public_layer"
 
 export function GeoserverManagerContent({ schema = "layer" }: { schema?: GeoserverManagerSchema }) {
@@ -56,6 +66,7 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
   const [styleAutoLoading, setStyleAutoLoading] = useState(false)
   const [styleBulkRecreateLoading, setStyleBulkRecreateLoading] = useState(false)
   const [layerAutoCreateLoading, setLayerAutoCreateLoading] = useState(false)
+  const [cqlSyncLoading, setCqlSyncLoading] = useState(false)
   const [regeneratingLayerKey, setRegeneratingLayerKey] = useState<string | null>(null)
   const [regeneratingStyleKey, setRegeneratingStyleKey] = useState<string | null>(null)
   const logScrollRef = useRef<HTMLDivElement>(null)
@@ -205,14 +216,16 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
         const parentsLayer = defineRow?.parentsLayer || null
         const divQuery = defineRow?.divQuery || null
         const isSplitLayer = !!parentsLayer && !!divQuery
-        const dbMatched = isSplitLayer
-          ? layerSchemaSet.has(parentsLayer)
-          : layerSchemaSet.has(key)
-        const layerSchema = dbMatched
+        const dbHit = isSplitLayer
+          ? findIgnoreCase(layerSchemaSet, parentsLayer)
+          : findIgnoreCase(layerSchemaSet, key)
+        const layerSchema = dbHit
           ? isSplitLayer
-            ? `${parentsLayer}  -  ${divQuery}`
-            : key
+            ? `${dbHit}  -  ${divQuery}`
+            : dbHit
           : null
+        const geoHit = findIgnoreCase(geoSet, key)
+        const styleHit = findIgnoreCase(styleSet, key)
 
         return {
           key,
@@ -220,8 +233,8 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
           parentsLayer,
           divQuery,
           layerSchema,
-          geoserver: geoSet.has(key) ? key : null,
-          style: styleSet.has(key) ? key : null,
+          geoserver: geoHit,
+          style: styleHit,
           excludeFromMismatch: splitParents.has(key),
         }
       })
@@ -329,6 +342,32 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
     }
   }
 
+  const syncCqlFilters = async () => {
+    setCqlSyncLoading(true)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "syncGeoServerCqlFiltersFromDefine",
+        params: { url: geoserverUrl },
+      })
+      const d = res?.data ?? res
+      const summary = d?.summary
+      const msg = d?.success
+        ? `분할 CQL 동기화 완료: 적용 ${summary?.updated ?? d?.updated?.length ?? 0} · 스킵 ${summary?.skipped ?? d?.skipped?.length ?? 0} · 실패 ${summary?.failed ?? d?.failed?.length ?? 0}`
+        : `분할 CQL 동기화 실패: ${d?.error ?? "알 수 없음"} (적용 ${summary?.updated ?? 0} · 실패 ${summary?.failed ?? d?.failed?.length ?? 0})`
+      window.alert(msg)
+      setLogLines((prev) => [...prev, msg])
+      if (Array.isArray(d?.failed) && d.failed.length > 0) {
+        for (const f of d.failed.slice(0, 10)) {
+          setLogLines((prev) => [...prev, `  실패 ${f.layer}: ${f.error}`])
+        }
+      }
+      await Promise.all([fetchCounts(), fetchDiff()])
+    } finally {
+      setCqlSyncLoading(false)
+    }
+  }
+
   const regenerateLayer = async (layerKey: string) => {
     setRegeneratingLayerKey(layerKey)
     try {
@@ -339,8 +378,17 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
       })
       const d = res?.data ?? res
       if (d?.success) {
+        setLogLines((prev) => [...prev, `[레이어 재생성] ${layerKey} → 성공`])
         await Promise.all([fetchCounts(), fetchDiff()])
+      } else {
+        const err = String(d?.error ?? "알 수 없는 오류")
+        setLogLines((prev) => [...prev, `[레이어 재생성] ${layerKey} → 실패: ${err}`])
+        window.alert(`레이어 재생성 실패\n${layerKey}\n${err}`)
       }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e)
+      setLogLines((prev) => [...prev, `[레이어 재생성] ${layerKey} → 예외: ${err}`])
+      window.alert(`레이어 재생성 실패\n${layerKey}\n${err}`)
     } finally {
       setRegeneratingLayerKey(null)
     }
@@ -356,8 +404,17 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
       })
       const d = res?.data ?? res
       if (d?.success) {
+        setLogLines((prev) => [...prev, `[스타일 재생성] ${layerKey} → 성공`])
         await Promise.all([fetchCounts(), fetchDiff()])
+      } else {
+        const err = String(d?.error ?? "알 수 없는 오류")
+        setLogLines((prev) => [...prev, `[스타일 재생성] ${layerKey} → 실패: ${err}`])
+        window.alert(`스타일 재생성 실패\n${layerKey}\n${err}`)
       }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e)
+      setLogLines((prev) => [...prev, `[스타일 재생성] ${layerKey} → 예외: ${err}`])
+      window.alert(`스타일 재생성 실패\n${layerKey}\n${err}`)
     } finally {
       setRegeneratingStyleKey(null)
     }
@@ -464,6 +521,15 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={autoCreateLayers} disabled={layerAutoCreateLoading}>
                 {layerAutoCreateLoading ? "생성 중..." : "레이어 자동생성"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={syncCqlFilters}
+                disabled={cqlSyncLoading}
+                title="tables.json 분할(div_query)을 기존 GeoServer FeatureType CQL에 반영"
+              >
+                {cqlSyncLoading ? "CQL 동기화 중..." : "분할 CQL 동기화"}
               </Button>
               <Button size="sm" variant="outline" onClick={autoApplyStyles} disabled={styleAutoLoading}>
                 {styleAutoLoading ? "적용 중..." : "스타일 자동설정"}

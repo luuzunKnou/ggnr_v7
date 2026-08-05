@@ -1,22 +1,19 @@
 <layer>
   <name>lsmd_cont_uq111_uqa123</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7dfc</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-7fc9</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-24be</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7dfd</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-7fca</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">mnum LIKE &apos;%UQA123%&apos;</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:00:40.644 UTC</dateCreated>
-  <dateModified>2026-02-11 16:00:40.670 UTC</dateModified>
+  <dateCreated>2026-08-04 01:55:15.483 UTC</dateCreated>
+  <dateModified>2026-08-04 01:55:26.351 UTC</dateModified>
 </layer>

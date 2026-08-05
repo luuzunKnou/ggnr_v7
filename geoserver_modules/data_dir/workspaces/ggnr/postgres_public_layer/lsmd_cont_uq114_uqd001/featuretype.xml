@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7de3</id>
+  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-7ff4</id>
   <name>lsmd_cont_uq114_uqd001</name>
   <nativeName>lsmd_cont_uq114</nativeName>
   <namespace>
@@ -12,25 +12,28 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>335418.1003880574</minx>
-    <maxx>374336.0987292032</maxx>
-    <miny>329559.37987992645</miny>
-    <maxy>365881.69571450085</maxy>
+    <minx>399993.04065625416</minx>
+    <maxx>418361.57083707873</maxx>
+    <miny>358553.76612131635</miny>
+    <maxy>401181.5537310506</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.51058128333634</minx>
-    <maxx>128.95274222505012</maxx>
-    <miny>36.44840836008902</miny>
-    <maxy>36.78189073268017</maxy>
+    <minx>129.23802241034704</minx>
+    <maxx>129.4556831810179</maxx>
+    <miny>36.70044760887492</miny>
+    <maxy>37.08831091010602</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
+  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>mnum LIKE &apos;%UQD001%&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>
@@ -38,4 +41,5 @@
   <overridingServiceSRS>false</overridingServiceSRS>
   <skipNumberMatched>false</skipNumberMatched>
   <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
 </featureType>

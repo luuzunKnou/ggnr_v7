@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff, ScrollText } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -18,6 +19,8 @@ import { useMapContext } from './MapContext';
 import { transform } from 'ol/proj';
 import { canAccessPrivateSystem } from '@/lib/accessClient';
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
+import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess';
+import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 
 type SystemOption = {
@@ -75,6 +78,15 @@ export function MapSearchBar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const mapContext = useMapContext();
+  const { data: session } = useSession();
+  const { levels: consoleMenuLevels, loading: consoleAccessLoading } = useConsoleMenuAccess();
+
+  const showDebugUi = mapContext?.showDebugUi ?? false;
+  const canToggleGeoserverLog = useMemo(() => {
+    if (String(session?.user?.id ?? '').trim() === 'su') return true;
+    if (consoleAccessLoading) return false;
+    return hasAnyDevConsoleAccess(consoleMenuLevels);
+  }, [session?.user?.id, consoleAccessLoading, consoleMenuLevels]);
 
   const initialQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams]);
   const [query, setQuery] = useState(initialQuery);
@@ -444,6 +456,26 @@ export function MapSearchBar({
         {/* 레이어 그룹: 남는 공간만 사용 */}
         <div className="min-w-0 flex-1 flex overflow-hidden" aria-hidden />
 
+        {/* 우측: GeoServer 로그(권한자) + 시스템 선택 */}
+        <div className="shrink-0 flex items-center gap-2">
+          {canToggleGeoserverLog && (
+            <button
+              type="button"
+              onClick={() => mapContext?.setShowDebugUi(!showDebugUi)}
+              className={cn(
+                'shrink-0 flex items-center justify-center w-[30px] h-[30px] opacity-90 rounded-[5px] bg-white backdrop-blur-md border border-slate-200 shadow-lg transition-colors',
+                showDebugUi
+                  ? 'bg-slate-100 text-blue-600'
+                  : 'text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-blue-600'
+              )}
+              aria-label={showDebugUi ? 'GeoServer 로그 끄기' : 'GeoServer 로그 켜기'}
+              aria-pressed={showDebugUi}
+              title={showDebugUi ? 'GeoServer 로그 끄기' : 'GeoServer 로그 켜기'}
+            >
+              <ScrollText className="w-5 h-5" strokeWidth={2} />
+            </button>
+          )}
+
         {/* 시스템 선택: 오른쪽 끝 고정, 셀렉트박스 스타일, 클릭 시 모달 */}
         {systemList.length > 0 && (() => {
           const selectedSystem = systemList.find((s) => s.sys_key === selectedSystemKey);
@@ -531,6 +563,7 @@ export function MapSearchBar({
             </>
           );
         })()}
+        </div>
       </div>
     </div>
   );

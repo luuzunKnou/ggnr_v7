@@ -7,6 +7,29 @@ function isTrueFlag(raw: unknown): boolean {
   return String(raw ?? "").trim().toLowerCase() === "true";
 }
 
+function buildFixedLabelLookup(
+  fieldLabels?: Record<string, string>
+): Map<string, string> | null {
+  if (!fieldLabels) return null;
+  const entries = Object.entries(fieldLabels);
+  if (entries.length === 0) return null;
+  return new Map(entries.map(([k, v]) => [k.toLowerCase(), v]));
+}
+
+/** preset.fieldLabels가 있으면 define 한글명 무시. 없으면 fallback·필드명 */
+export function resolvePresetFieldLabel(
+  field: string,
+  preset: LayerRowEditPreset,
+  fallback?: string
+): string {
+  const lookup = buildFixedLabelLookup(preset.fieldLabels);
+  const lower = String(field ?? "")
+    .trim()
+    .toLowerCase();
+  if (lookup) return lookup.get(lower) ?? field;
+  return (fallback && String(fallback).trim()) || field;
+}
+
 /** defineLayer fields JSON → 등록/수정 폼용 속성 목록 */
 export function buildFormAttributesFromDefineFields(
   fields: Record<string, unknown>[],
@@ -17,6 +40,7 @@ export function buildFormAttributesFromDefineFields(
   );
   const keyLower = String(preset.keyField ?? "id").toLowerCase();
   const includeHidden = preset.includeHiddenDetail === true;
+  const fixedLabels = buildFixedLabelLookup(preset.fieldLabels);
 
   return fields
     .map((raw) => {
@@ -27,9 +51,12 @@ export function buildFormAttributesFromDefineFields(
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       if (!showDetail && !includeHidden) return null;
       if (lower === keyLower) return null;
+      const defineLabel = String(raw.define_field_kor_name ?? field).trim() || field;
       return {
         field,
-        label: String(raw.define_field_kor_name ?? field).trim() || field,
+        label: fixedLabels
+          ? fixedLabels.get(lower) ?? field
+          : defineLabel,
         value: "",
         showDetail,
         idx: parseInt(String(raw.define_field_idx ?? "999999"), 10) || 999999,
@@ -60,14 +87,15 @@ export async function fetchFormAttributesForPreset(
     const data = res?.data ?? res;
     const fields = Array.isArray(data?.fields) ? data.fields : [];
     if (fields.length > 0) {
-      return fields.map(
-        (d: { field?: string; label?: string; showDetail?: boolean }) => ({
-          field: String(d.field ?? "").trim(),
-          label: String(d.label ?? d.field ?? "").trim() || String(d.field ?? ""),
+      return fields.map((d: { field?: string; label?: string; showDetail?: boolean }) => {
+        const field = String(d.field ?? "").trim();
+        return {
+          field,
+          label: resolvePresetFieldLabel(field, preset, d.label),
           value: "",
           showDetail: d.showDetail !== false,
-        })
-      );
+        };
+      });
     }
   } catch {
     // fallback below

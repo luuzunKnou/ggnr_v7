@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6ad12bdb:19fb0d2380b:-7496</id>
+  <name>comp</name>
+  <nativeName>comp</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>comp</title>
+  <keywords>
+    <string>features</string>
+    <string>comp</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>413625.5032541101</minx>
+    <maxx>413724.93979517394</maxx>
+    <miny>390958.4488640162</miny>
+    <maxy>392069.6945493206</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.39956495611403</minx>
+    <maxx>129.40099570451454</maxx>
+    <miny>36.99324528546758</miny>
+    <maxy>37.00327230061123</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

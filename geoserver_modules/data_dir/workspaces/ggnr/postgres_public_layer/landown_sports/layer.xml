@@ -1,19 +1,16 @@
 <layer>
   <name>landown_sports</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc802047a:306a</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-71ea</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-243a</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc802047a:3069</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71eb</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:15:11.0 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:15.299 UTC</dateModified>
+  <dateCreated>2026-08-04 06:38:11.13 UTC</dateCreated>
 </layer>

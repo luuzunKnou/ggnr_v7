@@ -77,7 +77,6 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   const [boundaryLoading, setBoundaryLoading] = useState(false);
 
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
-  const isSpatialActive = !!(spatialWkt || spatialDrawRequest);
 
   /** 패널 진입 시 공사대장 레이어 켜고 전체 extent로 지도 이동 */
   useEffect(() => {
@@ -566,17 +565,12 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             })}
             <button
               type="button"
-              title={spatialWkt ? "공간 필터 해제" : "검색 초기화"}
+              title="검색 초기화"
               onClick={clearSpatial}
-              className={cn(
-                "flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 transition-colors",
-                spatialWkt
-                  ? "border-amber-300 bg-white text-amber-600 hover:border-amber-400"
-                  : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-primary"
-              )}
+              className="flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border border-slate-200 bg-white py-1.5 text-slate-400 transition-colors hover:border-slate-300 hover:text-primary"
             >
               <RefreshCw className="h-4 w-4 shrink-0" strokeWidth={2} />
-              <span className="text-[10px]">{spatialWkt ? "해제" : "초기화"}</span>
+              <span className="text-[10px]">초기화</span>
             </button>
             {spatialDrawRequest ? (
               <p className="w-full text-[10px] text-slate-500">지도에 도형을 그려 주세요.</p>
@@ -680,16 +674,6 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
         <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
           <span>목록 {items.length}건</span>
-          {isSpatialActive ? (
-            <button
-              type="button"
-              onClick={clearSpatial}
-              className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 hover:text-amber-800"
-            >
-              <X className="h-3 w-3" />
-              범위 적용 중 · 해제
-            </button>
-          ) : null}
         </div>
       </div>
 
