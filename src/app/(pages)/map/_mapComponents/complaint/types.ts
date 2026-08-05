@@ -11,6 +11,8 @@ export interface CompUI {
   compContent: string | null;
   compExtra: Record<string, unknown> | null;
   latestState?: string | null;
+  /** 상세 조회 시 지도 이동용 (EPSG:3857, 점이면 xmin=xmax) */
+  extent3857?: [number, number, number, number] | null;
 }
 
 /** 민원 처리내역 (compd) - compdContents: 처리내용, compdExtra에 title 등 */

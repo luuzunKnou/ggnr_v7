@@ -30,13 +30,20 @@ export function useRiverConstructionLedgerOverlayLayer(mapReady: boolean) {
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const sourceRef = useRef<VectorSource | null>(null);
   const panelOpenRef = useRef(false);
+  const skipPickRef = useRef(false);
   const setSelectedIdRef = useRef(mapContext?.setRiverConstructionLedgerSelectedId);
 
   const panelOpen = mapContext?.riverConstructionLedgerPanelOpen ?? false;
   const rows = mapContext?.riverConstructionLedgerOverlayRows ?? [];
   const geomEditingId = mapContext?.riverConstructionLedgerGeomEditingId ?? null;
+  /** 도형 검색 그리기·행 도형 편집 중에는 오버레이 클릭 선택 금지 */
+  const skipPick =
+    Boolean(mapContext?.spatialDrawRequest) ||
+    Boolean(mapContext?.layerRowGeomEdit) ||
+    Boolean(geomEditingId);
 
   panelOpenRef.current = panelOpen;
+  skipPickRef.current = skipPick;
   setSelectedIdRef.current = mapContext?.setRiverConstructionLedgerSelectedId;
 
   useEffect(() => {
@@ -56,7 +63,7 @@ export function useRiverConstructionLedgerOverlayLayer(mapReady: boolean) {
     layerRef.current = layer;
 
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
-      if (!panelOpenRef.current) return;
+      if (!panelOpenRef.current || skipPickRef.current) return;
       const hit = map.forEachFeatureAtPixel(
         evt.pixel,
         (feature) => {

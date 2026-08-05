@@ -773,13 +773,27 @@ export function LayerDataPanel({
         const sortedAll = Array.isArray(rawFields)
           ? [...rawFields].sort((a, b) => parseInt(String(a.define_field_idx ?? '999999'), 10) - parseInt(String(b.define_field_idx ?? '999999'), 10))
           : [];
-        const fieldsList = sortedAll.filter((f) => String(f.define_field_show_list ?? '').toLowerCase() === 'true');
-        setFields(fieldsList);
-        const excludeFromDetail = (name: string) => {
+        const excludeGeomLike = (name: string) => {
           const n = name.trim().toLowerCase();
-          return n === 'gid' || n === 'geom';
+          return (
+            n === 'gid' ||
+            n === 'geom' ||
+            n === 'geometry' ||
+            n === 'the_geom' ||
+            n === 'wkb_geometry' ||
+            n === 'shape'
+          );
         };
-        setDetailFields(sortedAll.filter((f) => !excludeFromDetail(String(f.define_field_name ?? ''))));
+        // 목록 표시 설정이어도 geom류는 속성 목록에 넣지 않음 (값은 지도 하이라이트용으로만 사용)
+        const fieldsList = sortedAll.filter(
+          (f) =>
+            String(f.define_field_show_list ?? '').toLowerCase() === 'true' &&
+            !excludeGeomLike(String(f.define_field_name ?? ''))
+        );
+        setFields(fieldsList);
+        setDetailFields(
+          sortedAll.filter((f) => !excludeGeomLike(String(f.define_field_name ?? '')))
+        );
         const keyField = Array.isArray(rawFields) ? rawFields.find((f) => String(f.define_field_is_key ?? '').toLowerCase() === 'true') : null;
         setKeyFieldName(keyField ? String(keyField.define_field_name ?? '').trim() || null : null);
 
@@ -1048,13 +1062,26 @@ export function LayerDataPanel({
   const useFacilityCols =
     Boolean(useRoadLedgerFacilityListColumns) && facilityColumnKeys.length > 0;
 
+  const isGeomLikeFieldName = (name: string) => {
+    const n = name.trim().toLowerCase();
+    return (
+      n === 'gid' ||
+      n === 'geom' ||
+      n === 'geometry' ||
+      n === 'the_geom' ||
+      n === 'wkb_geometry' ||
+      n === 'shape'
+    );
+  };
   /** 목록 컬럼: '목록 표시' 필드 > detailFields > rows의 키에서 gid/geom 제외한 자동 생성 */
   const autoFields: DefineFieldRow[] = (fields.length === 0 && detailFields.length === 0 && rows.length > 0)
     ? Object.keys(rows[0] as Record<string, unknown>)
-        .filter((k) => { const n = k.toLowerCase(); return n !== 'gid' && n !== 'geom'; })
+        .filter((k) => !isGeomLikeFieldName(k))
         .map((k) => ({ define_field_name: k, define_field_kor_name: k }))
     : [];
-  const listFieldsAll = fields.length > 0 ? fields : detailFields.length > 0 ? detailFields : autoFields;
+  const listFieldsAll = (fields.length > 0 ? fields : detailFields.length > 0 ? detailFields : autoFields).filter(
+    (f) => !isGeomLikeFieldName(String(f.define_field_name ?? ''))
+  );
   /** 데이터 조회와 동일: 최대 5열. 시설관리(도로대장 시설 컬럼)도 같은 레이아웃·클래스만 사용 */
   const listFields = useFacilityCols
     ? facilityColumnKeys.slice(0, 5).map((k) => ({
@@ -1072,10 +1099,7 @@ export function LayerDataPanel({
       ? []
       : detailFields.length === 0
       ? Object.entries(selectedRow)
-          .filter(([k]) => {
-            const n = k.toLowerCase();
-            return n !== 'gid' && n !== 'geom';
-          })
+          .filter(([k]) => !isGeomLikeFieldName(k))
           .map(([k, v], i) => ({
             fieldKey: k || `auto-${i}`,
             label: k,

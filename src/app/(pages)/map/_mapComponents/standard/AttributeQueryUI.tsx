@@ -478,7 +478,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
       return;
     }
     const tables = visibleSearchTableNamesRef.current;
-    if (tables.length === 0) return;
+    if (tables.length === 0) {
+      if (typeof window !== 'undefined') {
+        window.alert(
+          '검색할 레이어가 켜져 있지 않습니다. 좌측 레이어 목록에서 레이어를 클릭하거나 체크박스를 켠 뒤 다시 검색하세요.'
+        );
+      }
+      return;
+    }
     setGeometrySearchLoading(true);
     setSearchTab('keyword');
     void call('', 'POST', {
@@ -736,7 +743,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
       if (!setSpatialDrawRequest || !setSpatialFilterWkt || !setSpatialFilteredLayerNames) return;
       if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return;
       const targets = visibleLayerTargetsRef.current;
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        if (typeof window !== 'undefined') {
+          window.alert(
+            '검색할 레이어가 켜져 있지 않습니다. 좌측 레이어 목록에서 레이어를 클릭하거나 체크박스를 켠 뒤 다시 그리세요.'
+          );
+        }
+        return;
+      }
       setSearchTab('shape');
       setActiveTool(type);
       setSpatialDrawRequest({
@@ -760,6 +774,13 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     setEmdSelected('');
     setRiSelected('');
     setBoundaryBadges([]);
+    setDataSelectTable('');
+    setDataSelectField('');
+    setDataSelectValue('');
+    setDataSelectFieldOptions([]);
+    setDataSelectValueOptions([]);
+    setDataSelectFieldLabels({});
+    setDataSelectValueLabels({});
   }, [setIdentifyResultList, setSpatialFilterWkt, setSpatialFilteredLayerNames]);
 
   useEffect(() => {
@@ -1098,17 +1119,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
               })}
               <button
                 type="button"
-                onClick={() => {
-                  if (spatialFilterWkt) clearSpatialFilter();
-                  else setActiveTool('rectangle');
-                }}
+                onClick={() => clearSpatialFilter()}
                 className={cn(
                   'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-white py-2 transition-colors',
-                  spatialFilterWkt
+                  spatialFilterWkt || dataSelectTable
                     ? 'border-amber-300 text-amber-600 hover:border-amber-400'
                     : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-primary'
                 )}
-                title={spatialFilterWkt ? '공간 필터 해제' : '초기화'}
+                title="초기화"
               >
                 <RefreshCw className="h-5 w-5 shrink-0" strokeWidth={2} />
               </button>

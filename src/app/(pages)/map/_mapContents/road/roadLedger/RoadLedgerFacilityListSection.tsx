@@ -19,6 +19,8 @@ import {
 
 /** 시설 테이블당 목록에서 먼저 보여 줄 행 수 — 이후 더보기로 전체 */
 const FACILITY_LIST_PREVIEW_ROWS = 5;
+/** 더보기(전체 행) 시 테이블 영역 최대 높이 — 패널 전체가 무한히 늘어나지 않도록 */
+const FACILITY_LIST_EXPANDED_MAX_H = "max-h-64";
 
 function facilityTableExpandKey(groupKey: string, defineTableName: string): string {
   return `${groupKey}::${defineTableName}`;
@@ -314,9 +316,14 @@ export function RoadLedgerFacilityListSection({
                       <p className="px-2 py-1.5 text-[11px] text-slate-500">표시할 속성이 없습니다.</p>
                     ) : (
                       <>
-                        <div className="max-w-full overflow-x-auto">
+                        <div
+                          className={cn(
+                            "max-w-full overflow-x-auto",
+                            tableExpanded && `${FACILITY_LIST_EXPANDED_MAX_H} overflow-y-auto overscroll-contain`,
+                          )}
+                        >
                         <table className="w-max min-w-full border-collapse text-left text-[10px] text-slate-700">
-                          <thead>
+                          <thead className={tableExpanded ? "sticky top-0 z-[1]" : undefined}>
                             <tr className="border-b border-slate-200 bg-slate-100">
                               {columnKeys.map((col) => (
                                 <th
