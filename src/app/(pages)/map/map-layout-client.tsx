@@ -21,7 +21,8 @@ import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetwor
 import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
-import { SafetyWaterPanel } from "./_mapContents/safty/safetyWater/SafetyWaterPanel"
+import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
+import type { SafetyWaterStationKind } from "./_mapContents/safty/safetyWater/safetyWaterTypes"
 import { SafetyFacPanel } from "./_mapContents/safty/safetyFac/SafetyFacPanel"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
@@ -104,6 +105,7 @@ import {
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
+import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
 
@@ -166,6 +168,10 @@ const SAFETY_INFO_PANEL_MAX_WIDTH = 1200
 const SAFETY_WATER_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_WATER_PANEL_MIN_WIDTH = 280
 const SAFETY_WATER_PANEL_MAX_WIDTH = 600
+
+const SAFETY_WATER_STATS_DEFAULT_WIDTH = 460
+const SAFETY_WATER_STATS_MIN_WIDTH = 360
+const SAFETY_WATER_STATS_MAX_WIDTH = 900
 
 const SAFETY_FAC_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_FAC_PANEL_MIN_WIDTH = 280
@@ -336,6 +342,8 @@ function MapLayoutContent({
   const mapInstanceRef = mapContext?.mapInstanceRef
   const setMapPaddingLeft = mapContext?.setMapPaddingLeft
   const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef
+  const mapViewPaddingOverrideRef = mapContext?.mapViewPaddingOverrideRef
+  const mapSplitSecondaryKind = mapContext?.mapSplitSecondaryKind
   const setRiverBasicPlanPanelOpen = mapContext?.setRiverBasicPlanPanelOpen
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
   const setUsageDataAsPanelOpen = mapContext?.setUsageDataAsPanelOpen
@@ -546,6 +554,9 @@ function MapLayoutContent({
   const [safetyMapPanelWidth, setSafetyMapPanelWidth] = useState(SAFETY_MAP_PANEL_DEFAULT_WIDTH)
   const [safetyInfoPanelWidth, setSafetyInfoPanelWidth] = useState(SAFETY_INFO_PANEL_DEFAULT_WIDTH)
   const [safetyWaterPanelWidth, setSafetyWaterPanelWidth] = useState(SAFETY_WATER_PANEL_DEFAULT_WIDTH)
+  const [safetyWaterStatsWidth, setSafetyWaterStatsWidth] = useState(SAFETY_WATER_STATS_DEFAULT_WIDTH)
+  const [safetyWaterStatsKinds, setSafetyWaterStatsKinds] = useState<SafetyWaterStationKind[]>([])
+  const safetyWaterStatsOpen = safetyWaterStatsKinds.length > 0
   const [safetyFacPanelWidth, setSafetyFacPanelWidth] = useState(SAFETY_FAC_PANEL_DEFAULT_WIDTH)
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
@@ -636,6 +647,7 @@ function MapLayoutContent({
     (safetyMapOpen ? safetyMapPanelWidth : 0) +
     (safetyInfoOpen ? safetyInfoPanelWidth : 0) +
     (safetyWaterOpen ? safetyWaterPanelWidth : 0) +
+    (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
@@ -720,7 +732,9 @@ function MapLayoutContent({
   const safetyMapPanelLeftPx = map3dPanelLeftPx + (map3dDataOpen ? map3dDataPanelWidth : 0)
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
   const safetyWaterPanelLeftPx = safetyInfoPanelLeftPx + (safetyInfoOpen ? safetyInfoPanelWidth : 0)
-  const safetyFacPanelLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
+  const safetyWaterStatsLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
+  const safetyFacPanelLeftPx =
+    safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
   const safetyHospitalBedPanelLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
   const jsjReservoirPanelLeftPx =
@@ -745,12 +759,21 @@ function MapLayoutContent({
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
-  /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함 */
+  /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
+   * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
+   * 상하 분할 override([0,0,0,0])가 있으면 왼쪽 패딩을 넣지 않음(스페이서와 이중 패딩 방지). */
   useLayoutEffect(() => {
     const apply = () => {
       const map = mapInstanceRef?.current
       if (!map) return
-      map.getView().padding = [0, 0, 0, mapPaddingLeft]
+      const override = mapViewPaddingOverrideRef?.current
+      const padding: [number, number, number, number] =
+        override ?? [0, 0, 0, mapPaddingLeft]
+      if (mapSplitSecondaryKind === "streetView") {
+        applyViewPaddingPreservingVisualCenter(map, padding)
+      } else {
+        map.getView().padding = padding
+      }
       setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
     }
     if (applyMapViewPaddingRef) {
@@ -760,7 +783,14 @@ function MapLayoutContent({
     return () => {
       if (applyMapViewPaddingRef) applyMapViewPaddingRef.current = null
     }
-  }, [applyMapViewPaddingRef, mapPaddingLeft, mapInstanceRef, setMapPaddingLeft])
+  }, [
+    applyMapViewPaddingRef,
+    mapViewPaddingOverrideRef,
+    mapPaddingLeft,
+    mapInstanceRef,
+    setMapPaddingLeft,
+    mapSplitSecondaryKind,
+  ])
 
   useEffect(() => {
     setRiverBasicPlanPanelOpen?.(riverBasicPlanOpen)
@@ -1239,9 +1269,14 @@ function MapLayoutContent({
   }
 
   const handleCloseSafetyWater = () => {
+    setSafetyWaterStatsKinds([])
     const next = openedWindows.filter((w) => w !== SAFETY_WATER_OPENED_KEY)
     setOpened(next)
   }
+
+  useEffect(() => {
+    if (!safetyWaterOpen) setSafetyWaterStatsKinds([])
+  }, [safetyWaterOpen])
 
   const handleCloseSafetyFac = () => {
     const next = openedWindows.filter((w) => w !== SAFETY_FAC_OPENED_KEY)
@@ -2036,17 +2071,21 @@ function MapLayoutContent({
             </div>
           )}
           {safetyWaterOpen && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={safetyWaterPanelWidth}
-                minWidth={SAFETY_WATER_PANEL_MIN_WIDTH}
-                maxWidth={SAFETY_WATER_PANEL_MAX_WIDTH}
-                leftOffsetPx={safetyWaterPanelLeftPx}
-                onWidthChange={setSafetyWaterPanelWidth}
-              >
-                <SafetyWaterPanel onClose={handleCloseSafetyWater} />
-              </MapSideListPanel>
-            </div>
+            <SafetyWaterShell
+              listLeftPx={safetyWaterPanelLeftPx}
+              listWidth={safetyWaterPanelWidth}
+              listMinWidth={SAFETY_WATER_PANEL_MIN_WIDTH}
+              listMaxWidth={SAFETY_WATER_PANEL_MAX_WIDTH}
+              onListWidthChange={setSafetyWaterPanelWidth}
+              statsLeftPx={safetyWaterStatsLeftPx}
+              statsWidth={safetyWaterStatsWidth}
+              onStatsWidthChange={setSafetyWaterStatsWidth}
+              statsMinWidth={SAFETY_WATER_STATS_MIN_WIDTH}
+              statsMaxWidth={SAFETY_WATER_STATS_MAX_WIDTH}
+              statsKinds={safetyWaterStatsKinds}
+              onStatsKindsChange={setSafetyWaterStatsKinds}
+              onClose={handleCloseSafetyWater}
+            />
           )}
           {safetyFacOpen && (
             <div className="pointer-events-auto shrink-0">

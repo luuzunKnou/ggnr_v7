@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { DevFloatingPanel } from './DevFloatingPanel';
 import { registerDevVersionHistoryRefresh } from './devVersionHistoryBridge';
@@ -28,7 +28,12 @@ type VersionHistoryDialogProps = {
   defaultFilter: HistoryFilter;
   /** 소스코드 관리만 기능 구분 select 표시 */
   showFeatureFilter?: boolean;
+  /** 엑셀 파일명 접두사 (메뉴명, 공백 없음) */
+  exportFilePrefix: '소스코드관리' | '최신소스적용';
 };
+
+const PAGE_SIZE = 100;
+const SCROLL_LOAD_THRESHOLD = 80;
 
 function historyTypeLabel(type: string): string {
   switch (type) {
@@ -69,45 +74,154 @@ export function VersionHistoryDialog({
   onClose,
   defaultFilter,
   showFeatureFilter = false,
+  exportFilePrefix,
 }: VersionHistoryDialogProps) {
   const [filter, setFilter] = useState<HistoryFilter>(defaultFilter);
   const [dateYmd, setDateYmd] = useState('');
   const [q, setQ] = useState('');
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [expandedKey, setExpandedKey] = useState<number | null>(null);
   const filterRef = useRef(filter);
   const dateYmdRef = useRef(dateYmd);
   const qRef = useRef(q);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const itemsLenRef = useRef(0);
+  const listScrollRef = useRef<HTMLDivElement>(null);
 
   filterRef.current = filter;
   dateYmdRef.current = dateYmd;
   qRef.current = q;
+  hasMoreRef.current = hasMore;
+  itemsLenRef.current = items.length;
+
+  const buildQuery = useCallback((offset: number) => {
+    const qs = new URLSearchParams({
+      filter: toApiHistoryFilter(filterRef.current),
+      limit: String(PAGE_SIZE),
+      offset: String(offset),
+    });
+    if (dateYmdRef.current.trim()) qs.set('date', dateYmdRef.current.trim());
+    if (qRef.current.trim()) qs.set('q', qRef.current.trim());
+    return qs;
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setHasMore(false);
+    hasMoreRef.current = false;
     try {
-      const qs = new URLSearchParams({
-        filter: toApiHistoryFilter(filterRef.current),
-        limit: '50',
-      });
-      if (dateYmdRef.current.trim()) qs.set('date', dateYmdRef.current.trim());
-      if (qRef.current.trim()) qs.set('q', qRef.current.trim());
+      const qs = buildQuery(0);
       const res = await fetch(`/api/dev/version-history?${qs.toString()}`, { cache: 'no-store' });
-      const json = (await res.json()) as { items?: HistoryItem[]; error?: string };
+      const json = (await res.json()) as {
+        items?: HistoryItem[];
+        hasMore?: boolean;
+        error?: string;
+      };
       if (!res.ok) throw new Error(json.error ?? '조회 실패');
-      setItems(json.items ?? []);
+      const next = json.items ?? [];
+      setItems(next);
+      const more = json.hasMore ?? next.length >= PAGE_SIZE;
+      setHasMore(more);
+      hasMoreRef.current = more;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setItems([]);
+      setHasMore(false);
+      hasMoreRef.current = false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [buildQuery]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const offset = itemsLenRef.current;
+      const qs = buildQuery(offset);
+      const res = await fetch(`/api/dev/version-history?${qs.toString()}`, { cache: 'no-store' });
+      const json = (await res.json()) as {
+        items?: HistoryItem[];
+        hasMore?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? '추가 조회 실패');
+      const next = json.items ?? [];
+      setItems((prev) => [...prev, ...next]);
+      const more = json.hasMore ?? next.length >= PAGE_SIZE;
+      setHasMore(more);
+      hasMoreRef.current = more;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }, [buildQuery]);
+
+  const handleScroll = useCallback(() => {
+    const el = listScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    if (scrollTop + clientHeight >= scrollHeight - SCROLL_LOAD_THRESHOLD) {
+      void loadMore();
+    }
+  }, [loadMore]);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const qs = new URLSearchParams({
+        filter: toApiHistoryFilter(filterRef.current),
+        prefix: exportFilePrefix,
+      });
+      if (dateYmdRef.current.trim()) qs.set('date', dateYmdRef.current.trim());
+      if (qRef.current.trim()) qs.set('q', qRef.current.trim());
+      const res = await fetch(`/api/dev/version-history/export?${qs.toString()}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(json.error ?? '엑셀 다운로드 실패');
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') ?? '';
+      const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+      const plain = /filename="([^"]+)"/.exec(cd);
+      const fromHeader = star?.[1]
+        ? decodeURIComponent(star[1].trim())
+        : plain?.[1];
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const fallback = `${exportFilePrefix}_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`;
+      const name = fromHeader && fromHeader.endsWith('.xlsx') ? fromHeader : fallback;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.title = '엑셀 다운로드';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExporting(false);
+    }
+  }, [exportFilePrefix]);
 
   useEffect(() => {
     if (!open) return;
@@ -187,7 +301,7 @@ export function VersionHistoryDialog({
           size="sm"
           variant="outline"
           className="shrink-0"
-          disabled={loading}
+          disabled={loading || loadingMore}
           onClick={() => void load()}
         >
           검색
@@ -197,7 +311,7 @@ export function VersionHistoryDialog({
           size="sm"
           variant="outline"
           className="shrink-0"
-          disabled={loading}
+          disabled={loading || loadingMore}
           onClick={() => {
             setFilter(defaultFilter);
             setDateYmd('');
@@ -211,8 +325,24 @@ export function VersionHistoryDialog({
         >
           초기화
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="ml-2 shrink-0 px-2"
+          disabled={loading || exporting}
+          onClick={() => void handleExport()}
+          title="엑셀 다운로드"
+          aria-label="엑셀 다운로드"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+        </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-2 text-xs">
+      <div
+        ref={listScrollRef}
+        className="min-h-0 flex-1 overflow-auto px-4 py-2 text-xs"
+        onScroll={handleScroll}
+      >
         {loading && <div className="text-muted-foreground">조회 중...</div>}
         {error && <div className="text-red-600 dark:text-red-400">{error}</div>}
         {!loading && !error && !hasSearched && (
@@ -230,6 +360,7 @@ export function VersionHistoryDialog({
                 className="flex w-full flex-wrap items-center gap-3 py-2 text-left hover:bg-muted/40"
                 onClick={() => setExpandedKey(expanded ? null : row.mvhKey)}
                 aria-expanded={expanded}
+                title={expanded ? '접기' : '펼치기'}
               >
                 <span className="shrink-0 tabular-nums">{formatDt(row.mvhCreateDate)}</span>
                 {showFeatureFilter && (
@@ -290,6 +421,7 @@ export function VersionHistoryDialog({
             </div>
           );
         })}
+        {loadingMore && <div className="py-2 text-muted-foreground">더 불러오는 중...</div>}
       </div>
     </DevFloatingPanel>
   );

@@ -1,0 +1,19 @@
+<layer>
+  <name>elevation</name>
+  <id>LayerInfoImpl--3f61ad2b:19f69edb1ad:-63ce</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--3f61ad2b:19f69edb1ad:-63cd</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--3f61ad2b:19f69edb1ad:-63cf</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-24 05:27:26.801 UTC</dateCreated>
+  <dateModified>2026-07-24 05:27:27.743 UTC</dateModified>
+</layer>

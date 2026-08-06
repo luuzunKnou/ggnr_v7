@@ -296,6 +296,7 @@ export function getMapConfig(_params?: unknown): {
   SAFETYDATA_API_KEY: string
   DATA_PORTAL_KEY: string
   dataPotalKey: string
+  KAKAO_MAP_API_KEY: string
 } {
   const vars = getRuntimeEnvVars()
   const dataPortalKey =
@@ -313,6 +314,7 @@ export function getMapConfig(_params?: unknown): {
     SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
     DATA_PORTAL_KEY: dataPortalKey,
     dataPotalKey: dataPortalKey,
+    KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
   }
 }
 
