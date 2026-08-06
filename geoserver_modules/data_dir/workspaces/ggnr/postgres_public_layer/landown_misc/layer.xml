@@ -1,19 +1,16 @@
 <layer>
   <name>landown_misc</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc801599a:-17b</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-71cc</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-2446</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc801599a:-17c</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71cd</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:14:25.905 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:13.771 UTC</dateModified>
+  <dateCreated>2026-08-04 06:38:37.849 UTC</dateCreated>
 </layer>

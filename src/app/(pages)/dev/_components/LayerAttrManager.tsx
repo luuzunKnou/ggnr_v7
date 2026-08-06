@@ -7,6 +7,7 @@ import { Save, RotateCcw, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
+import { registerLayerManagerDefineRefresh } from "./layerManager/layerManagerUploadBridge"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -232,48 +233,57 @@ export function LayerAttrManager({
   }, [fields])
 
   // 테이블 목록 로드 (전체)
-  useEffect(() => {
-    let cancelled = false
+  const loadTables = useCallback(async () => {
     setLoadingTables(true)
-    fetch("/api/config/defineLayer")
-      .then((res) => res.json())
-      .then((body) => {
-        if (cancelled) return
-        if (body.success && Array.isArray(body.data)) {
-          setTables(body.data)
-          if (body.data.length > 0 && !selectedTableKey && !fixedTableKey) {
-            const first = String((body.data[0] as Record<string, unknown>).define_table_name ?? "")
-            if (first) setSelectedTableKey(first)
-          }
-        }
-      })
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "테이블 목록 로드 실패"))
-      .finally(() => !cancelled && setLoadingTables(false))
-    return () => { cancelled = true }
+    try {
+      const res = await fetch("/api/config/defineLayer")
+      const body = await res.json()
+      if (body.success && Array.isArray(body.data)) {
+        setTables(body.data)
+        setSelectedTableKey((prev) => {
+          if (prev || fixedTableKey) return prev
+          const first = String((body.data[0] as Record<string, unknown>)?.define_table_name ?? "")
+          return first || prev
+        })
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "테이블 목록 로드 실패")
+    } finally {
+      setLoadingTables(false)
+    }
+  }, [fixedTableKey])
+
+  const loadDbTableKeySet = useCallback(async () => {
+    try {
+      const res = await call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
+      const data = res?.data ?? res
+      if (!data?.success || !Array.isArray(data.tables)) return
+      const keys = new Set<string>(
+        (data.tables as Array<{ schema: string; table: string }>).map(
+          (t) => `${t.schema === "public_layer" ? "public_layer" : "layer"}:${String(t.table).toLowerCase()}`
+        )
+      )
+      setDbTableKeySet(keys)
+    } catch {
+      // 조회 실패해도 "사용중" 필터만 못 쓰게 되고 나머지는 정상 동작
+    }
   }, [])
+
+  useEffect(() => {
+    void loadTables()
+  }, [loadTables])
 
   /** "사용중" 필터용 — 현재 접속된 DB(layer/public_layer 스키마)에 실제로 존재하는 테이블 목록 */
   useEffect(() => {
-    let cancelled = false
-    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      .then((res) => {
-        if (cancelled) return
-        const data = res?.data ?? res
-        if (!data?.success || !Array.isArray(data.tables)) return
-        const keys = new Set<string>(
-          (data.tables as Array<{ schema: string; table: string }>).map(
-            (t) => `${t.schema === "public_layer" ? "public_layer" : "layer"}:${String(t.table).toLowerCase()}`
-          )
-        )
-        setDbTableKeySet(keys)
-      })
-      .catch(() => {
-        // 조회 실패해도 "사용중" 필터만 못 쓰게 되고 나머지는 정상 동작
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    void loadDbTableKeySet()
+  }, [loadDbTableKeySet])
+
+  useEffect(() => {
+    return registerLayerManagerDefineRefresh(() => {
+      void loadTables()
+      void loadDbTableKeySet()
+    })
+  }, [loadTables, loadDbTableKeySet])
 
   const loadFirstPage = useCallback(async (tableKey: string) => {
     if (!tableKey) return

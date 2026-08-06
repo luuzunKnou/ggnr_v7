@@ -1,0 +1,19 @@
+<layer>
+  <name>river_plan_ot_as</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-1118</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-1117</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-1119</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 04:20:02.786 UTC</dateCreated>
+  <dateModified>2026-07-14 04:20:02.871 UTC</dateModified>
+</layer>

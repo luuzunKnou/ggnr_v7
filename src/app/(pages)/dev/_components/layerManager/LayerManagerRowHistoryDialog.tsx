@@ -156,7 +156,7 @@ export function LayerManagerRowHistoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[min(96rem,98vw)] w-[98vw] max-h-[85vh] flex flex-col gap-3 overflow-hidden sm:max-w-[min(96rem,98vw)]">
+      <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[85vh] flex flex-col gap-3 overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle>수정 이력 — {title}</DialogTitle>
         </DialogHeader>

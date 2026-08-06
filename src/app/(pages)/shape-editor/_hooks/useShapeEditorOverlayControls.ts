@@ -5,7 +5,7 @@ import {
   BUILDING_ROAD_LAYERS,
 } from '../../map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { JIMOK_LAYERS } from '../../map/_mapComponents/layerFactory/jimokLayerFactory';
-import { LANDOWN_LAYERS } from '../../map/_mapComponents/layerFactory/landownLayerFactory';
+import { OWNERSHIP_LAYERS } from '../../map/_mapComponents/layerFactory/ownershipLayerFactory';
 
 /** OpenLayersMap MULTI_SELECT_IDS 중 도형편집기 상단바에 노출할 항목 */
 export const SHAPE_EDITOR_OVERLAY_CONTROLS = [
@@ -27,6 +27,10 @@ export function useShapeEditorOverlayControls() {
   const [visibleBuildingRoadLayerNames, setVisibleBuildingRoadLayerNames] = useState<
     Set<string> | null
   >(null);
+  /** null = 주제도 전체 (도형편집기는 선택 패널 없음) */
+  const [visibleThematicLayerNames, setVisibleThematicLayerNames] = useState<Set<string> | null>(
+    null
+  );
 
   const toggleControl = useCallback((id: ShapeEditorOverlayControlId) => {
     setActiveControls((prev) => {
@@ -39,12 +43,14 @@ export function useShapeEditorOverlayControls() {
         );
       } else if (id === 'ownership') {
         setVisibleLandownLayerNames((v) =>
-          v != null && v.size > 0 ? v : new Set(LANDOWN_LAYERS.map((l) => l.tableName))
+          v != null && v.size > 0 ? v : new Set(OWNERSHIP_LAYERS.map((l) => l.tableName))
         );
       } else if (id === 'building-road') {
         setVisibleBuildingRoadLayerNames((v) =>
           v != null && v.size > 0 ? v : new Set(BUILDING_ROAD_LAYERS.map((l) => l.tableName))
         );
+      } else if (id === 'thematic-map') {
+        setVisibleThematicLayerNames(null);
       }
 
       return [...prev, id];
@@ -61,6 +67,7 @@ export function useShapeEditorOverlayControls() {
     visibleJimokLayerNames,
     visibleLandownLayerNames,
     visibleBuildingRoadLayerNames,
+    visibleThematicLayerNames,
     toggleControl,
     isActive,
   };

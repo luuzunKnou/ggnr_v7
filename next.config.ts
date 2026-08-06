@@ -9,7 +9,13 @@ const cesiumStatic = path.join(__dirname, "public/cesiumStatic");
 const nextConfig: NextConfig = {
   devIndicators: false,
   turbopack: {},
-  serverExternalPackages: ['@napi-rs/canvas', '@napi-rs/canvas-win32-x64-msvc', 'pdfjs-dist'],
+  serverExternalPackages: [
+    '@napi-rs/canvas',
+    '@napi-rs/canvas-win32-x64-msvc',
+    'pdfjs-dist',
+    'pg',
+    'pg-native',
+  ],
   async rewrites() {
     return [
       { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },

@@ -1,0 +1,19 @@
+<layer>
+  <name>landown_clan</name>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-4be0</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--5fabfce7:19fca79c611:-5c31</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-4be1</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-04 08:00:23.146 UTC</dateCreated>
+  <dateModified>2026-08-04 08:00:24.709 UTC</dateModified>
+</layer>

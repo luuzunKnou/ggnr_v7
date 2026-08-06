@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6ad12bdb:19fb0d2380b:-75e7</id>
+  <name>road_reward_parcel</name>
+  <nativeName>road_reward_parcel</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>road_reward_parcel</title>
+  <keywords>
+    <string>features</string>
+    <string>road_reward_parcel</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>388281.6015005098</minx>
+    <maxx>417413.8473370182</maxx>
+    <miny>356253.77636969404</miny>
+    <maxy>407335.2030490381</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.10648298601987</minx>
+    <maxx>129.44681679195833</maxx>
+    <miny>36.679957573658776</miny>
+    <maxy>37.14614588812627</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

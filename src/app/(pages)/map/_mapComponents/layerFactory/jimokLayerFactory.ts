@@ -75,17 +75,25 @@ export function useJimokLayerSync(
   activeControls: string[],
   /** null = 전체 표시, 빈 Set = 전체 숨김, 비어 있지 않은 Set = 선택된 것만 */
   visibleTableNames?: Set<string> | null,
+  /**
+   * DB·정의 기준 가용 테이블명. null/undefined = 아직 미조회(전부 끔).
+   * Set이면 그 안의 레이어만 켤 수 있음.
+   */
+  availableTableNames?: Set<string> | null
 ) {
   useEffect(() => {
     if (!mapReady || !map) return;
     const groupOn = activeControls.includes('land-category');
+    const catalogReady = availableTableNames != null;
     const showAll = visibleTableNames == null;
     map.getLayers().getArray().forEach((l) => {
       if (!l.get('jimokLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
-      const allowed =
+      const inCatalog =
+        catalogReady && tableName != null && availableTableNames.has(tableName);
+      const selected =
         showAll || (tableName != null && (visibleTableNames?.has(tableName) ?? false));
-      l.setVisible(groupOn && allowed);
+      l.setVisible(groupOn && inCatalog && selected);
     });
-  }, [map, mapReady, activeControls, visibleTableNames]);
+  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames]);
 }

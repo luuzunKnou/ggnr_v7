@@ -798,10 +798,34 @@ export async function getJijukParcelsInBbox(params: {
   const geomCol = 'geom';
   const tableSrid = 5181;
 
+  /** DB마다 PK가 gid / ogc_fid 로 다름 — 없으면 pnu 정렬 */
+  let orderCol = 'pnu';
+  try {
+    const colRes = await db.execute(
+      sql.raw(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = '${schema}' AND table_name = '${tableName}'
+           AND column_name IN ('gid', 'ogc_fid', 'pnu')
+         ORDER BY CASE column_name WHEN 'gid' THEN 0 WHEN 'ogc_fid' THEN 1 ELSE 2 END
+         LIMIT 1`
+      )
+    );
+    const col = String(
+      (colRes.rows?.[0] as { column_name?: string } | undefined)?.column_name ?? ''
+    ).trim();
+    if (col) orderCol = col;
+  } catch {
+    /* keep pnu */
+  }
+
   const envelope = `ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, ${srid})`;
   const envelopeInTable = `ST_Transform(${envelope}, ${tableSrid})`;
   const safeGeomCol = geomCol.replace(/"/g, '""');
-  const queryStr = `SELECT "gid", "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "gid" LIMIT ${limit}`;
+  const safeOrderCol = orderCol.replace(/"/g, '""');
+  const idSelect =
+    orderCol === 'pnu' ? `"pnu"` : `"${safeOrderCol}" AS "gid", "pnu"`;
+  const queryStr = `SELECT ${idSelect}, "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "${safeOrderCol}" LIMIT ${limit}`;
 
   try {
     const dataRes = await db.execute(sql.raw(queryStr));

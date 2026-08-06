@@ -7,13 +7,14 @@
   stroke-opacity: 1.0;
 }
 
-/* 줌 14 이상: 내부 기준점 + 낮은 적합도 + 대칭 변위로 생략 최소화, 가능한 한 중앙 */
+/* 줌 14 이상: cons_code(MB_009_INDEX_013) 끝 번호만 표시 (013 → 13)
+   색인도는 직사각형이므로 라벨은 무게중심(가운데)에 배치 */
 [@z >= 14] * {
-  label: [parseInt(strSubstring(draw_name, 11, 14))];
+  label: [parseInt(strSubstring(cons_code, strLength(cons_code) - 3, strLength(cons_code)))];
   label-anchor: 0.5 0.5;
   label-offset: 0 0;
   label-rotation: 0;
-  label-geometry: [interiorPoint(geom)];
+  label-geometry: [centroid(geom)];
 
   font-family: "Yu Gothic Bold";
   font-size: 18;

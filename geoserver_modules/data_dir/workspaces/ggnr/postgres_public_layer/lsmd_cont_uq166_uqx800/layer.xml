@@ -1,22 +1,19 @@
 <layer>
   <name>lsmd_cont_uq166_uqx800</name>
-  <id>LayerInfoImpl-4bf97568:19c4d6c3053:-7eb2</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-7db5</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-2519</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4bf97568:19c4d6c3053:-7eb3</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-7db6</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
-  <metadata>
-    <entry key="cqlFilter">mnum LIKE &apos;%UQX800%&apos;</entry>
-  </metadata>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-02-11 16:00:29.851 UTC</dateCreated>
-  <dateModified>2026-02-11 16:00:29.872 UTC</dateModified>
+  <dateCreated>2026-08-04 02:01:17.970 UTC</dateCreated>
+  <dateModified>2026-08-04 02:01:19.337 UTC</dateModified>
 </layer>

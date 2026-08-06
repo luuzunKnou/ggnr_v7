@@ -1,0 +1,16 @@
+/* ??? ?? - ???? ??(river_plan_jd_lm)? ?? */
+* {
+  stroke-geometry: [geom];
+  stroke: #ffffff, #e91e63;
+  stroke-width: 3, 2;
+  stroke-opacity: 0.0, 1.0;
+  stroke-linecap: butt, butt;
+
+  mark-geometry: [startPoint(geom)], [endPoint(geom)];
+  mark: url("river_plan_jd_lm_capline.svg"), url("river_plan_jd_lm_capline.svg");
+  mark-mime: "image/svg+xml", "image/svg+xml";
+  mark-size: 20, 20;
+  /* SVG? ?? ?? ? ? ??? ?? */
+  mark-rotation: [startAngle(geom)], [endAngle(geom)];
+  mark-anchor: 0.5 0.5, 0.5 0.5;
+}

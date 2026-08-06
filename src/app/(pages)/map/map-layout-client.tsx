@@ -17,6 +17,8 @@ import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riv
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
 import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/RoadLedgerFacilityAttrModal"
+import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetworkListPanel"
+import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
@@ -44,11 +46,57 @@ import { RoadUseLedgerListPanel } from "./_mapContents/road/roadUseLedger/RoadUs
 import { RoadUseLedgerDetailPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerDetailPanel"
 import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerListPanel"
 import { RiverUseLedgerDetailPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerDetailPanel"
+import { AerialManagePanel } from "./_mapContents/aerialView/AerialManagePanel"
+import type { AerialKind } from "./_mapContents/aerialView/aerialMediaTypes"
+import { ShootingRequestPanel } from "./_mapContents/shootingRequest/ShootingRequestPanel"
+import { ShootingRequestDetailPanel } from "./_mapContents/shootingRequest/ShootingRequestDetailPanel"
+import { ShootingRequestFormModal } from "./_mapContents/shootingRequest/ShootingRequestFormModal"
+import {
+  SHOOTING_REQUEST_NEW_ID,
+  beginMediaRegistration,
+  findShootingRequest,
+} from "./_mapContents/shootingRequest/shootingRequestMockStore"
+import { SHOOTING_REQUEST_UI_ENABLED } from "./_mapContents/shootingRequest/shootingRequestUiFlag"
+import {
+  aerialKindToOpenedKey,
+  shootTypeToAerialKind,
+} from "./_mapContents/shootingRequest/shootTypeToAerialKind"
+import { RiverConstructionLedgerListPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerListPanel"
+import { RiverConstructionLedgerDetailPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerDetailPanel"
+import { UsageDataAsListPanel } from "./_mapContents/river/usageDataAs/UsageDataAsListPanel"
+import { UsageDataAsDetailPanel } from "./_mapContents/river/usageDataAs/UsageDataAsDetailPanel"
+import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usageDataAsMapSync"
+import { RoadRewardListPanel } from "./_mapContents/road/roadReward/RoadRewardListPanel"
+import { RoadRewardDetailPanel } from "./_mapContents/road/roadReward/RoadRewardDetailPanel"
+import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMock"
+import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
+import { OccupationLedgerListPanel } from "./_mapContents/occupationLedger/OccupationLedgerListPanel"
+import { OccupationLedgerDetailPanel } from "./_mapContents/occupationLedger/OccupationLedgerDetailPanel"
+import { clearOccupationLedgerWmsLayers } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
+import {
+  findOpenedOccupationLedgerSerEng,
+  isOccupationLedgerOpenedToken,
+} from "@/lib/occupationLedgerBinding"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+// 점용대장(프) 더미 — 대장↔점사용료 실연동 전까지 비활성
+// import {
+//   UseLedgerProtoListPanel,
+//   UseLedgerProtoDetailPanel,
+//   UseLedgerProtoLinkedPanel,
+// } from "./_mapContents/prototypes/UseLedgerProtoPanels"
 import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
+import { UseFeeListPanel } from "./_mapContents/useFee/UseFeeListPanel"
+import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
+import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
+import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
+import {
+  UserAccountProtoPanel,
+} from "./_mapContents/prototypes/UserAccountProtoPanel"
+// import { PROTO_LEDGERS, type ProtoLedgerRow } from "./_mapContents/prototypes/dummyData"
+// import { flyToProtoLedger } from "./_mapContents/prototypes/protoMapNavigation"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
 import {
   clearServiceMenuLayerState,
@@ -100,6 +148,14 @@ const ROAD_LEDGER_LIST_MAX_WIDTH = 680
 const ROAD_LEDGER_DETAIL_DEFAULT_WIDTH = 460
 const ROAD_LEDGER_DETAIL_MIN_WIDTH = 360
 const ROAD_LEDGER_DETAIL_MAX_WIDTH = 900
+
+const ROAD_NETWORK_LIST_DEFAULT_WIDTH = 400
+const ROAD_NETWORK_LIST_MIN_WIDTH = 300
+const ROAD_NETWORK_LIST_MAX_WIDTH = 680
+
+const ROAD_NETWORK_DETAIL_DEFAULT_WIDTH = 420
+const ROAD_NETWORK_DETAIL_MIN_WIDTH = 340
+const ROAD_NETWORK_DETAIL_MAX_WIDTH = 720
 
 const SAFETY_MAP_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_MAP_PANEL_MIN_WIDTH = 280
@@ -167,6 +223,7 @@ const MEMO_OPENED_KEY = "memoManagement"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
+const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
@@ -180,6 +237,50 @@ const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
 const BUILD_PUBLIC_LAND_OPENED_KEY = "buildPublicLand"
 const RIVER_USE_LEDGER_OPENED_KEY = "riverUseLedger"
+const AERIAL_VIEW_OPENED_KEY = "aerialView"
+/** 레거시 통합 키 — UAV는 종류별 키 사용 */
+const AERIAL_MANAGE_OPENED_KEY = "aerialManage"
+const AERIAL_ORTHO_OPENED_KEY = "aerialOrtho"
+const AERIAL_DRONE_OPENED_KEY = "aerialDrone"
+const AERIAL_PANORAMA_OPENED_KEY = "aerialPanorama"
+const AERIAL_SATELLITE_OPENED_KEY = "aerialSatellite"
+const AERIAL_MANAGE_KIND_KEYS = [
+  AERIAL_MANAGE_OPENED_KEY,
+  AERIAL_ORTHO_OPENED_KEY,
+  AERIAL_DRONE_OPENED_KEY,
+  AERIAL_PANORAMA_OPENED_KEY,
+  AERIAL_SATELLITE_OPENED_KEY,
+] as const
+const SHOOTING_REQUEST_OPENED_KEY = "shootingRequest"
+const SHOOTING_APPROVAL_OPENED_KEY = "shootingApproval"
+const SHOOTING_PANEL_KEYS = [SHOOTING_REQUEST_OPENED_KEY, SHOOTING_APPROVAL_OPENED_KEY] as const
+const USAGE_DATA_AS_OPENED_KEY = "usageDataAs"
+// 점용대장(프) 더미 — 대장↔점사용료 실연동 전까지 비활성
+// const USE_LEDGER_PROTO_OPENED_KEY = "useLedgerProto"
+// const USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH = 466
+// const USE_LEDGER_PROTO_PANEL_MIN_WIDTH = 466
+// const USE_LEDGER_PROTO_PANEL_MAX_WIDTH = 960
+// const USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH = 340
+// const USE_LEDGER_PROTO_DETAIL_MIN_WIDTH = 340
+// const USE_LEDGER_PROTO_DETAIL_MAX_WIDTH = 480
+const USE_FEE_OPENED_KEY = "useFee"
+/** 점용상세(343)와 동일 기준 */
+const USE_FEE_DETAIL_DEFAULT_WIDTH = 343
+const USE_FEE_DETAIL_MIN_WIDTH = 343
+const USE_FEE_DETAIL_MAX_WIDTH = 480
+/** 하천점용 목록(466)과 동일 기준 */
+const USE_FEE_PANEL_DEFAULT_WIDTH = 466
+const USE_FEE_PANEL_MIN_WIDTH = 466
+const USE_FEE_PANEL_MAX_WIDTH = 960
+
+/** serviceList.ser_eng / systemList 메뉴 키와 동일 */
+const GROUNDWATER_PERMIT_OPENED_KEY = "underWaterUse"
+const GROUNDWATER_PERMIT_PANEL_DEFAULT_WIDTH = 720
+const GROUNDWATER_PERMIT_PANEL_MIN_WIDTH = 560
+const GROUNDWATER_PERMIT_PANEL_MAX_WIDTH = 960
+const GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH = 400
+const GROUNDWATER_PERMIT_DETAIL_MIN_WIDTH = 320
+const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -187,6 +288,45 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
+const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = 360
+const AERIAL_MANAGE_PANEL_MIN_WIDTH = 300
+const AERIAL_MANAGE_PANEL_MAX_WIDTH = 1200
+const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = 340
+const SHOOTING_REQUEST_PANEL_MIN_WIDTH = 280
+const SHOOTING_REQUEST_PANEL_MAX_WIDTH = 480
+const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = 520
+const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = 420
+const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = 720
+const RIVER_CONSTRUCTION_LEDGER_OPENED_KEY = "riverConstructionLedger"
+const RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH = 560
+const RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH = 420
+const RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH = 900
+const RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
+const RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH = 320
+const RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH = 640
+
+const USAGE_DATA_AS_PANEL_DEFAULT_WIDTH = 466
+const USAGE_DATA_AS_PANEL_MIN_WIDTH = 466
+const USAGE_DATA_AS_PANEL_MAX_WIDTH = 960
+const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
+const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
+const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
+
+const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 466
+const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 466
+const OCCUPATION_LEDGER_PANEL_MAX_WIDTH = 960
+const OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
+const OCCUPATION_LEDGER_DETAIL_MIN_WIDTH = 320
+const OCCUPATION_LEDGER_DETAIL_MAX_WIDTH = 640
+
+/** serviceList `ser_eng`: roadReward — 보상편입용지 */
+const ROAD_REWARD_OPENED_KEY = "roadReward"
+const ROAD_REWARD_PANEL_DEFAULT_WIDTH = 320
+const ROAD_REWARD_PANEL_MIN_WIDTH = 260
+const ROAD_REWARD_PANEL_MAX_WIDTH = 480
+const ROAD_REWARD_DETAIL_DEFAULT_WIDTH = 480
+const ROAD_REWARD_DETAIL_MIN_WIDTH = 380
+const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
 
 function MapLayoutContent({
   children,
@@ -206,9 +346,27 @@ function MapLayoutContent({
   const mapSplitSecondaryKind = mapContext?.mapSplitSecondaryKind
   const setRiverBasicPlanPanelOpen = mapContext?.setRiverBasicPlanPanelOpen
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
+  const setUsageDataAsPanelOpen = mapContext?.setUsageDataAsPanelOpen
+  const setOccupationLedgerPanelOpen = mapContext?.setOccupationLedgerPanelOpen
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
   const setRoadLedgerIdentifyRow = mapContext?.setRoadLedgerIdentifyRow
   const setRoadLedgerFacilityModal = mapContext?.setRoadLedgerFacilityModal
+  const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId
+  const setRoadNetworkPanelOpen = mapContext?.setRoadNetworkPanelOpen
+  const setRoadNetworkOverlayRows = mapContext?.setRoadNetworkOverlayRows
+  const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
+  const setRoadNetworkPointPickActive = mapContext?.setRoadNetworkPointPickActive
+  const setRoadNetworkDraftSitePoint = mapContext?.setRoadNetworkDraftSitePoint
+  const setRoadNetworkSitePointKind = mapContext?.setRoadNetworkSitePointKind
+  const setRoadNetworkEndpointMarkers = mapContext?.setRoadNetworkEndpointMarkers
+  const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
+  const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
+  const setRiverConstructionLedgerPanelOpen = mapContext?.setRiverConstructionLedgerPanelOpen
+  const setRiverConstructionLedgerOverlayRows = mapContext?.setRiverConstructionLedgerOverlayRows
+  const setRiverConstructionLedgerSelectedRiver = mapContext?.setRiverConstructionLedgerSelectedRiver
+  const setRiverConstructionLedgerRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus
+  const setRiverConstructionLedgerGeomEditingId =
+    mapContext?.setRiverConstructionLedgerGeomEditingId
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -247,6 +405,11 @@ function MapLayoutContent({
   const roadLedgerOpen = openedWindows.includes(ROAD_LEDGER_OPENED_KEY)
   const roadLedgerDetailOpen =
     roadLedgerOpen && Boolean(mapContext?.roadLedgerIdentifyRow)
+  const roadNetworkOpen = openedWindows.includes(ROAD_NETWORK_OPENED_KEY)
+  const roadNetworkDetailOpen =
+    roadNetworkOpen && Boolean(mapContext?.roadNetworkSelectedId)
+  const roadNetworkSelectedRow =
+    mapContext?.roadNetworkRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
@@ -261,6 +424,46 @@ function MapLayoutContent({
   const buildPublicLandOpen = openedWindows.includes(BUILD_PUBLIC_LAND_OPENED_KEY)
   const roadUseLedgerOpen = openedWindows.includes(ROAD_USE_LEDGER_OPENED_KEY)
   const riverUseLedgerOpen = openedWindows.includes(RIVER_USE_LEDGER_OPENED_KEY)
+  const aerialManageOpenedKey =
+    AERIAL_MANAGE_KIND_KEYS.find((k) => openedWindows.includes(k)) ?? null
+  const aerialManageOpen = aerialManageOpenedKey != null
+  const aerialManageKind: AerialKind | undefined =
+    aerialManageOpenedKey === AERIAL_ORTHO_OPENED_KEY
+      ? "ortho"
+      : aerialManageOpenedKey === AERIAL_DRONE_OPENED_KEY
+        ? "drone"
+        : aerialManageOpenedKey === AERIAL_PANORAMA_OPENED_KEY
+          ? "panorama"
+          : aerialManageOpenedKey === AERIAL_SATELLITE_OPENED_KEY
+            ? "satellite"
+            : undefined
+  const shootingApprovalOpen =
+    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
+  const shootingRequestOpen =
+    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
+  const shootingListOpen = shootingApprovalOpen
+  const shootingPanelOpen = shootingApprovalOpen || shootingRequestOpen
+  const [shootingRequestDetailId, setShootingRequestDetailId] = useState<string | null>(null)
+  const [shootingRequestListMode, setShootingRequestListMode] = useState<'mine' | 'approval'>('mine')
+  /** 내 정보 → 촬영요청 목록에서 연 신청서 모달 id (사이드 패널 아님) */
+  const [myInfoShootingModalId, setMyInfoShootingModalId] = useState<string | null>(null)
+  const shootingRequestDetailOpen =
+    shootingPanelOpen &&
+    Boolean(shootingRequestDetailId) &&
+    shootingRequestDetailId !== SHOOTING_REQUEST_NEW_ID
+  const riverConstructionLedgerOpen = openedWindows.includes(RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
+  const riverConstructionLedgerSelectedRow =
+    mapContext?.riverConstructionLedgerRows?.find(
+      (r) => r.id === mapContext?.riverConstructionLedgerSelectedId
+    ) ?? null
+  const riverConstructionLedgerDetailOpen =
+    riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
+  const usageDataAsOpen = openedWindows.includes(USAGE_DATA_AS_OPENED_KEY)
+  const occupationLedgerSerEng = findOpenedOccupationLedgerSerEng(openedWindows)
+  const occupationLedgerOpen = Boolean(occupationLedgerSerEng)
+  const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
+  const useFeeOpen = openedWindows.includes(USE_FEE_OPENED_KEY)
+  const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -270,6 +473,28 @@ function MapLayoutContent({
   const [riverUseLedgerDetailId, setRiverUseLedgerDetailId] = useState<string | null>(null)
   const [riverUseLedgerListRefreshKey, setRiverUseLedgerListRefreshKey] = useState(0)
   const riverUseLedgerDetailOpen = riverUseLedgerOpen && Boolean(riverUseLedgerDetailId)
+  const [usageDataAsDetailId, setUsageDataAsDetailId] = useState<string | null>(null)
+  const [usageDataAsListRefreshKey, setUsageDataAsListRefreshKey] = useState(0)
+  const usageDataAsDetailOpen = usageDataAsOpen && Boolean(usageDataAsDetailId)
+  const [occupationLedgerDetailId, setOccupationLedgerDetailId] = useState<string | null>(null)
+  const [occupationLedgerListRefreshKey, setOccupationLedgerListRefreshKey] = useState(0)
+  const occupationLedgerDetailOpen = occupationLedgerOpen && Boolean(occupationLedgerDetailId)
+  /** 보상편입용지 — DB(road_reward) 조회·저장 */
+  const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
+  const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
+  const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
+  // 점용대장(프) 더미 state 비활성
+  // const useLedgerProtoOpen = openedWindows.includes(USE_LEDGER_PROTO_OPENED_KEY)
+  // const [useLedgerProtoDetailId, setUseLedgerProtoDetailId] = useState<string | null>(null)
+  // const [useLedgerProtoFeeId, setUseLedgerProtoFeeId] = useState<string | null>(null)
+  // const [useLedgerProtoRows, setUseLedgerProtoRows] = useState<ProtoLedgerRow[]>(() => [...PROTO_LEDGERS])
+  const [useFeeDetailId, setUseFeeDetailId] = useState<string | null>(null)
+  const useFeeDetailOpen = useFeeOpen && Boolean(useFeeDetailId)
+  const [groundwaterPermitDetailId, setGroundwaterPermitDetailId] = useState<string | null>(null)
+  const groundwaterPermitDetailOpen =
+    groundwaterPermitOpen && Boolean(groundwaterPermitDetailId)
+  const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
+
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
   const memoDetailOpen = memoManagementOpen && Boolean(memoDetailId)
@@ -324,6 +549,8 @@ function MapLayoutContent({
   const [riverBasicPlanDetailWidth, setRiverBasicPlanDetailWidth] = useState(RIVER_BASIC_PLAN_DETAIL_DEFAULT_WIDTH)
   const [roadLedgerListWidth, setRoadLedgerListWidth] = useState(ROAD_LEDGER_LIST_DEFAULT_WIDTH)
   const [roadLedgerDetailWidth, setRoadLedgerDetailWidth] = useState(ROAD_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [roadNetworkListWidth, setRoadNetworkListWidth] = useState(ROAD_NETWORK_LIST_DEFAULT_WIDTH)
+  const [roadNetworkDetailWidth, setRoadNetworkDetailWidth] = useState(ROAD_NETWORK_DETAIL_DEFAULT_WIDTH)
   const [safetyMapPanelWidth, setSafetyMapPanelWidth] = useState(SAFETY_MAP_PANEL_DEFAULT_WIDTH)
   const [safetyInfoPanelWidth, setSafetyInfoPanelWidth] = useState(SAFETY_INFO_PANEL_DEFAULT_WIDTH)
   const [safetyWaterPanelWidth, setSafetyWaterPanelWidth] = useState(SAFETY_WATER_PANEL_DEFAULT_WIDTH)
@@ -345,6 +572,40 @@ function MapLayoutContent({
   const [roadUseLedgerDetailWidth, setRoadUseLedgerDetailWidth] = useState(ROAD_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
+  const [aerialManagePanelWidth, setAerialManagePanelWidth] = useState(AERIAL_MANAGE_PANEL_DEFAULT_WIDTH)
+  const [shootingRequestPanelWidth, setShootingRequestPanelWidth] = useState(
+    SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH
+  )
+  const [shootingRequestDetailWidth, setShootingRequestDetailWidth] = useState(
+    SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH
+  )
+  const [riverConstructionLedgerPanelWidth, setRiverConstructionLedgerPanelWidth] = useState(
+    RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH
+  )
+  const [riverConstructionLedgerDetailWidth, setRiverConstructionLedgerDetailWidth] = useState(
+    RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH
+  )
+  const [usageDataAsPanelWidth, setUsageDataAsPanelWidth] = useState(USAGE_DATA_AS_PANEL_DEFAULT_WIDTH)
+  const [usageDataAsDetailWidth, setUsageDataAsDetailWidth] = useState(USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH)
+  const [occupationLedgerPanelWidth, setOccupationLedgerPanelWidth] = useState(
+    OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH
+  )
+  const [occupationLedgerDetailWidth, setOccupationLedgerDetailWidth] = useState(
+    OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH
+  )
+  const [roadRewardPanelWidth, setRoadRewardPanelWidth] = useState(ROAD_REWARD_PANEL_DEFAULT_WIDTH)
+  const [roadRewardDetailWidth, setRoadRewardDetailWidth] = useState(ROAD_REWARD_DETAIL_DEFAULT_WIDTH)
+  // const [useLedgerProtoPanelWidth, setUseLedgerProtoPanelWidth] = useState(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
+  // const [useLedgerProtoDetailWidth, setUseLedgerProtoDetailWidth] = useState(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
+  // const [useLedgerProtoFeeWidth, setUseLedgerProtoFeeWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
+  const [useFeePanelWidth, setUseFeePanelWidth] = useState(USE_FEE_PANEL_DEFAULT_WIDTH)
+  const [useFeeDetailWidth, setUseFeeDetailWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
+  const [groundwaterPermitPanelWidth, setGroundwaterPermitPanelWidth] = useState(
+    GROUNDWATER_PERMIT_PANEL_DEFAULT_WIDTH
+  )
+  const [groundwaterPermitDetailWidth, setGroundwaterPermitDetailWidth] = useState(
+    GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH
+  )
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -360,12 +621,25 @@ function MapLayoutContent({
     (riverBasicPlanOpen && selectedRiverName ? riverBasicPlanDetailWidth : 0) +
     (roadLedgerOpen ? roadLedgerListWidth : 0) +
     (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0) +
+    (roadNetworkOpen ? roadNetworkListWidth : 0) +
+    (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0) +
     (buildPublicLandOpen ? buildPublicLandPanelWidth : 0) +
     (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0) +
     (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0) +
     (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0) +
     (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0) +
     (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0) +
+    (aerialManageOpen ? aerialManagePanelWidth : 0) +
+    (shootingListOpen ? shootingRequestPanelWidth : 0) +
+    (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0) +
+    (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0) +
+    (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
+    (usageDataAsOpen ? usageDataAsPanelWidth : 0) +
+    (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0) +
+    (occupationLedgerOpen ? occupationLedgerPanelWidth : 0) +
+    (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0) +
+    (roadRewardOpen ? roadRewardPanelWidth : 0) +
+    (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -378,7 +652,14 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
-    (roadCctvOpen ? roadCctvPanelWidth : 0)
+    (roadCctvOpen ? roadCctvPanelWidth : 0) +
+    // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
+    // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
+    // (useLedgerProtoFeeDetailOpen ? useLedgerProtoFeeWidth : 0) +
+    (useFeeOpen ? useFeePanelWidth : 0) +
+    (useFeeDetailOpen ? useFeeDetailWidth : 0) +
+    (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
+    (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -402,7 +683,11 @@ function MapLayoutContent({
     roadLedgerListLeftPx + (roadLedgerOpen ? roadLedgerListWidth : 0)
   const afterRoadLedgerPanelsLeftPx =
     roadLedgerDetailLeftPx + (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0)
-  const buildPublicLandPanelLeftPx = afterRoadLedgerPanelsLeftPx
+  const roadNetworkListLeftPx = afterRoadLedgerPanelsLeftPx
+  const roadNetworkDetailLeftPx =
+    roadNetworkListLeftPx + (roadNetworkOpen ? roadNetworkListWidth : 0)
+  const buildPublicLandPanelLeftPx =
+    roadNetworkDetailLeftPx + (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
   const buildPublicLandDetailLeftPx =
     buildPublicLandPanelLeftPx + (buildPublicLandOpen ? buildPublicLandPanelWidth : 0)
   const roadUseLedgerPanelLeftPx =
@@ -413,8 +698,33 @@ function MapLayoutContent({
     roadUseLedgerDetailLeftPx + (roadUseLedgerDetailOpen ? roadUseLedgerDetailWidth : 0)
   const riverUseLedgerDetailLeftPx =
     riverUseLedgerPanelLeftPx + (riverUseLedgerOpen ? riverUseLedgerPanelWidth : 0)
-  const memoPanelLeftPx =
+  const aerialManagePanelLeftPx =
     riverUseLedgerDetailLeftPx + (riverUseLedgerDetailOpen ? riverUseLedgerDetailWidth : 0)
+  const shootingRequestPanelLeftPx =
+    aerialManagePanelLeftPx + (aerialManageOpen ? aerialManagePanelWidth : 0)
+  const shootingRequestDetailLeftPx =
+    shootingRequestPanelLeftPx + (shootingListOpen ? shootingRequestPanelWidth : 0)
+  const riverConstructionLedgerPanelLeftPx =
+    shootingRequestDetailLeftPx + (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0)
+  const riverConstructionLedgerDetailLeftPx =
+    riverConstructionLedgerPanelLeftPx +
+    (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0)
+  const usageDataAsPanelLeftPx =
+    riverConstructionLedgerDetailLeftPx +
+    (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0)
+  const usageDataAsDetailLeftPx =
+    usageDataAsPanelLeftPx + (usageDataAsOpen ? usageDataAsPanelWidth : 0)
+  const occupationLedgerPanelLeftPx =
+    usageDataAsDetailLeftPx + (usageDataAsDetailOpen ? usageDataAsDetailWidth : 0)
+  const occupationLedgerDetailLeftPx =
+    occupationLedgerPanelLeftPx + (occupationLedgerOpen ? occupationLedgerPanelWidth : 0)
+  const roadRewardPanelLeftPx =
+    occupationLedgerDetailLeftPx +
+    (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0)
+  const roadRewardDetailLeftPx =
+    roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
+  const memoPanelLeftPx =
+    roadRewardDetailLeftPx + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
@@ -431,6 +741,22 @@ function MapLayoutContent({
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
   const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
+  // const useLedgerProtoPanelLeftPx =
+  //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
+  // const useLedgerProtoDetailLeftPx =
+  //   useLedgerProtoPanelLeftPx + (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0)
+  // const useLedgerProtoFeeLeftPx =
+  //   useLedgerProtoDetailLeftPx + (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0)
+  const useFeePanelLeftPx =
+    roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
+  const useFeeDetailLeftPx =
+    useFeePanelLeftPx + (useFeeOpen ? useFeePanelWidth : 0)
+  const groundwaterPermitPanelLeftPx =
+    useFeeDetailLeftPx + (useFeeDetailOpen ? useFeeDetailWidth : 0)
+  const groundwaterPermitDetailLeftPx =
+    groundwaterPermitPanelLeftPx +
+    (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
@@ -448,7 +774,7 @@ function MapLayoutContent({
       } else {
         map.getView().padding = padding
       }
-      setMapPaddingLeft?.(mapPaddingLeft)
+      setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
     }
     if (applyMapViewPaddingRef) {
       applyMapViewPaddingRef.current = apply
@@ -472,8 +798,84 @@ function MapLayoutContent({
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
 
   useEffect(() => {
+    setUsageDataAsPanelOpen?.(usageDataAsOpen)
+    // 패널 닫힘·시스템(메인) 이탈 후 재진입 시 점용 레이어만 켜져 클릭 무반응 되는 것 방지
+    if (!usageDataAsOpen) {
+      clearUsageDataAsWmsLayers(setVisibleLayerNames)
+    }
+  }, [setUsageDataAsPanelOpen, usageDataAsOpen, setVisibleLayerNames])
+
+  useEffect(() => {
+    setOccupationLedgerPanelOpen?.(occupationLedgerOpen)
+    if (!occupationLedgerOpen) {
+      clearOccupationLedgerWmsLayers(setVisibleLayerNames, {
+        serEng: occupationLedgerSerEng,
+      })
+    }
+  }, [
+    setOccupationLedgerPanelOpen,
+    occupationLedgerOpen,
+    setVisibleLayerNames,
+    occupationLedgerSerEng,
+  ])
+
+  useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
   }, [setRoadLedgerPanelOpen, roadLedgerOpen])
+
+  useEffect(() => {
+    setRoadNetworkPanelOpen?.(roadNetworkOpen)
+    if (!roadNetworkOpen) {
+      setRoadNetworkSelectedId?.(null)
+      setRoadNetworkOverlayRows?.([])
+      setSpatialDrawRequest?.(null)
+      setSpatialFilterWkt?.(null)
+      setRoadNetworkPointPickActive?.(false)
+      setRoadNetworkDraftSitePoint?.(null)
+      setRoadNetworkSitePointKind?.(null)
+      setRoadNetworkEndpointMarkers?.(null)
+      setRoadNetworkFocusedSitePointKey?.(null)
+      if (mapContext?.roadNetworkPointPickRef) {
+        mapContext.roadNetworkPointPickRef.current = null
+      }
+    }
+  }, [
+    roadNetworkOpen,
+    setRoadNetworkPanelOpen,
+    setRoadNetworkSelectedId,
+    setRoadNetworkOverlayRows,
+    setSpatialDrawRequest,
+    setSpatialFilterWkt,
+    setRoadNetworkPointPickActive,
+    setRoadNetworkDraftSitePoint,
+    setRoadNetworkSitePointKind,
+    setRoadNetworkEndpointMarkers,
+    setRoadNetworkFocusedSitePointKey,
+    mapContext?.roadNetworkPointPickRef,
+  ])
+
+  useEffect(() => {
+    setRiverConstructionLedgerPanelOpen?.(riverConstructionLedgerOpen)
+    if (!riverConstructionLedgerOpen) {
+      setRiverConstructionLedgerSelectedId?.(null)
+      setRiverConstructionLedgerOverlayRows?.([])
+      setRiverConstructionLedgerSelectedRiver?.(null)
+      setRiverConstructionLedgerRiverFocus?.(null)
+      setRiverConstructionLedgerGeomEditingId?.(null)
+      setSpatialDrawRequest?.(null)
+      setSpatialFilterWkt?.(null)
+    }
+  }, [
+    riverConstructionLedgerOpen,
+    setRiverConstructionLedgerPanelOpen,
+    setRiverConstructionLedgerSelectedId,
+    setRiverConstructionLedgerOverlayRows,
+    setRiverConstructionLedgerSelectedRiver,
+    setRiverConstructionLedgerRiverFocus,
+    setRiverConstructionLedgerGeomEditingId,
+    setSpatialDrawRequest,
+    setSpatialFilterWkt,
+  ])
 
   useEffect(() => {
     if (!roadLedgerOpen) {
@@ -606,6 +1008,15 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleHideRoadNetwork = () => {
+    setRoadNetworkSelectedId?.(null)
+    setRoadNetworkOverlayRows?.([])
+    setSpatialDrawRequest?.(null)
+    setSpatialFilterWkt?.(null)
+    const next = openedWindows.filter((w) => w !== ROAD_NETWORK_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseRoadUseLedger = () => {
     setRoadUseLedgerDetailId(null)
     const next = openedWindows.filter((w) => w !== ROAD_USE_LEDGER_OPENED_KEY)
@@ -615,6 +1026,52 @@ function MapLayoutContent({
   const handleCloseRiverUseLedger = () => {
     setRiverUseLedgerDetailId(null)
     const next = openedWindows.filter((w) => w !== RIVER_USE_LEDGER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseAerialManage = () => {
+    const next = openedWindows.filter(
+      (w) => !(AERIAL_MANAGE_KIND_KEYS as readonly string[]).includes(w)
+    )
+    setOpened(next)
+  }
+
+  const handleCloseShootingRequest = () => {
+    setShootingRequestDetailId(null)
+    setShootingRequestListMode('mine')
+    const next = openedWindows.filter(
+      (w) => !(SHOOTING_PANEL_KEYS as readonly string[]).includes(w)
+    )
+    setOpened(next)
+  }
+
+  const handleCloseRiverConstructionLedger = () => {
+    setRiverConstructionLedgerSelectedId?.(null)
+    setRiverConstructionLedgerSelectedRiver?.(null)
+    setRiverConstructionLedgerRiverFocus?.(null)
+    setRiverConstructionLedgerGeomEditingId?.(null)
+    setRiverConstructionLedgerOverlayRows?.([])
+    setSpatialDrawRequest?.(null)
+    setSpatialFilterWkt?.(null)
+    const next = openedWindows.filter((w) => w !== RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseUsageDataAs = () => {
+    setUsageDataAsDetailId(null)
+    const next = openedWindows.filter((w) => w !== USAGE_DATA_AS_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseOccupationLedger = () => {
+    setOccupationLedgerDetailId(null)
+    const next = openedWindows.filter((w) => !isOccupationLedgerOpenedToken(w))
+    setOpened(next)
+  }
+
+  const handleCloseRoadReward = () => {
+    setRoadRewardSelectedId(null)
+    const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
     setOpened(next)
   }
 
@@ -630,17 +1087,172 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  // const handleCloseUseLedgerProto = () => { ... } // 점용대장(프) 더미 비활성
+
+  const handleCloseUseFee = () => {
+    setUseFeeDetailId(null)
+    const next = openedWindows.filter((w) => w !== USE_FEE_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseGroundwaterPermit = () => {
+    setGroundwaterPermitDetailId(null)
+    const next = openedWindows.filter((w) => w !== GROUNDWATER_PERMIT_OPENED_KEY)
+    setOpened(next)
+  }
+
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
+
+  useEffect(() => {
+    if (
+      roadNetworkOpen &&
+      mapContext?.roadNetworkSelectedId &&
+      !(mapContext.roadNetworkRows ?? []).some((r) => r.id === mapContext.roadNetworkSelectedId)
+    ) {
+      setRoadNetworkSelectedId?.(null)
+    }
+  }, [
+    roadNetworkOpen,
+    mapContext?.roadNetworkSelectedId,
+    mapContext?.roadNetworkRows,
+    setRoadNetworkSelectedId,
+  ])
 
   useEffect(() => {
     if (!riverUseLedgerOpen) setRiverUseLedgerDetailId(null)
   }, [riverUseLedgerOpen])
 
   useEffect(() => {
+    if (
+      riverConstructionLedgerOpen &&
+      mapContext?.riverConstructionLedgerSelectedId &&
+      !(mapContext.riverConstructionLedgerRows ?? []).some(
+        (r) => r.id === mapContext.riverConstructionLedgerSelectedId
+      )
+    ) {
+      setRiverConstructionLedgerSelectedId?.(null)
+    }
+  }, [
+    riverConstructionLedgerOpen,
+    mapContext?.riverConstructionLedgerSelectedId,
+    mapContext?.riverConstructionLedgerRows,
+    setRiverConstructionLedgerSelectedId,
+  ])
+
+  useEffect(() => {
+    if (!usageDataAsOpen) setUsageDataAsDetailId(null)
+  }, [usageDataAsOpen])
+
+  useEffect(() => {
+    if (!occupationLedgerOpen) setOccupationLedgerDetailId(null)
+  }, [occupationLedgerOpen])
+
+  useEffect(() => {
+    setOccupationLedgerDetailId(null)
+  }, [occupationLedgerSerEng])
+
+  useEffect(() => {
+    if (!roadRewardOpen) setRoadRewardSelectedId(null)
+  }, [roadRewardOpen])
+
+  // 점용대장(프) 더미 effects 비활성
+  // useEffect(() => { if (!useLedgerProtoOpen) { setUseLedgerProtoDetailId(null); setUseLedgerProtoFeeId(null) } }, [useLedgerProtoOpen])
+  // useEffect(() => { if (useLedgerProtoOpen) setUseLedgerProtoPanelWidth(...) }, [useLedgerProtoOpen])
+  // useEffect(() => { if (useLedgerProtoDetailOpen) setUseLedgerProtoDetailWidth(...) }, [useLedgerProtoDetailOpen])
+  // useEffect(() => { if (useLedgerProtoFeeDetailOpen) setUseLedgerProtoFeeWidth(...) }, [useLedgerProtoFeeDetailOpen])
+  // useEffect(() => { ... map resize when proto fee open ... }, [...])
+
+  useEffect(() => {
+    if (!useFeeOpen) {
+      setUseFeeDetailId(null)
+      return
+    }
+    setUseFeePanelWidth(USE_FEE_PANEL_DEFAULT_WIDTH)
+  }, [useFeeOpen])
+
+  useEffect(() => {
+    if (useFeeDetailOpen) {
+      setUseFeeDetailWidth(USE_FEE_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [useFeeDetailOpen])
+
+  useEffect(() => {
+    if (!groundwaterPermitOpen) setGroundwaterPermitDetailId(null)
+  }, [groundwaterPermitOpen])
+
+  useEffect(() => {
+    const onToggle = () => {
+      setProtoUserAccountOpen((v) => !v)
+    }
+    const onOpenNotif = () => {
+      setProtoUserAccountOpen(true)
+    }
+    window.addEventListener('ggnr-proto-user-account-toggle', onToggle)
+    window.addEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    return () => {
+      window.removeEventListener('ggnr-proto-user-account-toggle', onToggle)
+      window.removeEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!memoManagementOpen) setMemoDetailId(null)
   }, [memoManagementOpen])
+
+  useEffect(() => {
+    if (!shootingPanelOpen) {
+      setShootingRequestDetailId(null)
+      setShootingRequestListMode('mine')
+      return
+    }
+    if (shootingApprovalOpen) {
+      setShootingRequestListMode('approval')
+    } else if (shootingRequestOpen) {
+      setShootingRequestListMode('mine')
+    }
+  }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
+
+  useEffect(() => {
+    if (!shootingRequestOpen) return
+    if (searchParams.get('shotForm') !== 'new') return
+    setShootingRequestListMode('mine')
+    setShootingRequestDetailId(SHOOTING_REQUEST_NEW_ID)
+    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    current.delete('shotForm')
+    router.replace(`/map?${current.toString()}`)
+  }, [shootingRequestOpen, searchParams, router])
+
+  const openShootingRequestForm = useCallback(() => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    current.set('opened', SHOOTING_REQUEST_OPENED_KEY)
+    current.set('shotForm', 'new')
+    router.push(`/map?${current.toString()}`)
+  }, [router, searchParams])
+
+  /** 승인 건 → 촬영형태에 맞는 영상관리 + 활성 신청 연결 */
+  const openMediaRegisterFromRequest = useCallback(
+    (requestId: string) => {
+      const req = findShootingRequest(requestId)
+      if (!req) return
+      const started = beginMediaRegistration(requestId)
+      if (!started) return
+
+      setShootingRequestDetailId(null)
+
+      const kindKey = aerialKindToOpenedKey(shootTypeToAerialKind(req.shootType))
+      const next = openedWindows.filter(
+        (w) =>
+          !(SHOOTING_PANEL_KEYS as readonly string[]).includes(w) &&
+          !(AERIAL_MANAGE_KIND_KEYS as readonly string[]).includes(w) &&
+          w !== AERIAL_VIEW_OPENED_KEY
+      )
+      next.push(kindKey)
+      setOpened(next)
+    },
+    [openedWindows]
+  )
 
   useEffect(() => {
     if (!buildPublicLandOpen) setBuildPublicLandSelectedId(null)
@@ -746,6 +1358,7 @@ function MapLayoutContent({
         <div className="absolute inset-0 z-0">{children}</div>
 
         <MapSidebar indexLogoSrc={indexLogoSrc} />
+        <UsageDataAsNotifBootstrap />
         <RoadDataFlowAnalysisOrchestrator />
         <ParcelAnalysisOrchestrator />
 
@@ -918,6 +1531,41 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {roadNetworkOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadNetworkListWidth}
+                minWidth={ROAD_NETWORK_LIST_MIN_WIDTH}
+                maxWidth={ROAD_NETWORK_LIST_MAX_WIDTH}
+                leftOffsetPx={roadNetworkListLeftPx}
+                onWidthChange={setRoadNetworkListWidth}
+              >
+                <RoadNetworkListPanel onClose={handleHideRoadNetwork} />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadNetworkOpen && roadNetworkSelectedRow && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadNetworkDetailWidth}
+                minWidth={ROAD_NETWORK_DETAIL_MIN_WIDTH}
+                maxWidth={ROAD_NETWORK_DETAIL_MAX_WIDTH}
+                leftOffsetPx={roadNetworkDetailLeftPx}
+                onWidthChange={setRoadNetworkDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RoadNetworkDetailPanel
+                  row={roadNetworkSelectedRow}
+                  onClose={() => setRoadNetworkSelectedId?.(null)}
+                  overlayLeftPx={roadNetworkListLeftPx}
+                  overlayWidthPx={
+                    roadNetworkListWidth +
+                    (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {buildPublicLandOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -1053,6 +1701,279 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {aerialManageOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={aerialManagePanelWidth}
+                minWidth={AERIAL_MANAGE_PANEL_MIN_WIDTH}
+                maxWidth={AERIAL_MANAGE_PANEL_MAX_WIDTH}
+                leftOffsetPx={aerialManagePanelLeftPx}
+                onWidthChange={setAerialManagePanelWidth}
+                className="transition-[width] duration-200 ease-out"
+                contentClassName="overflow-hidden"
+              >
+                <AerialManagePanel
+                  kind={aerialManageKind}
+                  onClose={handleCloseAerialManage}
+                  onContentWidthChange={(w) => {
+                    setAerialManagePanelWidth(
+                      Math.min(
+                        AERIAL_MANAGE_PANEL_MAX_WIDTH,
+                        Math.max(AERIAL_MANAGE_PANEL_MIN_WIDTH, w)
+                      )
+                    )
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {shootingListOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={shootingRequestPanelWidth}
+                minWidth={SHOOTING_REQUEST_PANEL_MIN_WIDTH}
+                maxWidth={SHOOTING_REQUEST_PANEL_MAX_WIDTH}
+                leftOffsetPx={shootingRequestPanelLeftPx}
+                onWidthChange={setShootingRequestPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <ShootingRequestPanel
+                  onClose={handleCloseShootingRequest}
+                  selectedDetailId={shootingRequestDetailId}
+                  onSelectDetailId={setShootingRequestDetailId}
+                  listMode={shootingRequestListMode}
+                  onListModeChange={setShootingRequestListMode}
+                  hideModeTabs
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {shootingPanelOpen &&
+            shootingRequestDetailId &&
+            shootingRequestDetailId !== SHOOTING_REQUEST_NEW_ID && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={shootingRequestDetailWidth}
+                minWidth={SHOOTING_REQUEST_DETAIL_MIN_WIDTH}
+                maxWidth={SHOOTING_REQUEST_DETAIL_MAX_WIDTH}
+                leftOffsetPx={shootingRequestDetailLeftPx}
+                onWidthChange={setShootingRequestDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <ShootingRequestDetailPanel
+                  detailId={shootingRequestDetailId}
+                  onClose={() => {
+                    if (shootingRequestOpen) {
+                      handleCloseShootingRequest()
+                    } else {
+                      setShootingRequestDetailId(null)
+                    }
+                  }}
+                  onCreated={(newId) => setShootingRequestDetailId(newId)}
+                  listMode={shootingRequestListMode}
+                  onStartMediaRegister={
+                    shootingRequestListMode === 'approval' ? openMediaRegisterFromRequest : undefined
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverConstructionLedgerOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverConstructionLedgerPanelWidth}
+                minWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH}
+                maxWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH}
+                leftOffsetPx={riverConstructionLedgerPanelLeftPx}
+                onWidthChange={setRiverConstructionLedgerPanelWidth}
+              >
+                <RiverConstructionLedgerListPanel onClose={handleCloseRiverConstructionLedger} />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverConstructionLedgerOpen && riverConstructionLedgerSelectedRow && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverConstructionLedgerDetailWidth}
+                minWidth={RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH}
+                maxWidth={RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={riverConstructionLedgerDetailLeftPx}
+                onWidthChange={setRiverConstructionLedgerDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RiverConstructionLedgerDetailPanel
+                  row={riverConstructionLedgerSelectedRow}
+                  onClose={() => {
+                    setRiverConstructionLedgerRiverFocus?.(null)
+                    setRiverConstructionLedgerGeomEditingId?.(null)
+                    setRiverConstructionLedgerSelectedId?.(null)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {usageDataAsOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={usageDataAsPanelWidth}
+                minWidth={USAGE_DATA_AS_PANEL_MIN_WIDTH}
+                maxWidth={USAGE_DATA_AS_PANEL_MAX_WIDTH}
+                leftOffsetPx={usageDataAsPanelLeftPx}
+                onWidthChange={setUsageDataAsPanelWidth}
+              >
+                <UsageDataAsListPanel
+                  onClose={handleCloseUsageDataAs}
+                  selectedDetailId={usageDataAsDetailId}
+                  onSelectDetailId={setUsageDataAsDetailId}
+                  refreshKey={usageDataAsListRefreshKey}
+                  onAdd={() => setUsageDataAsDetailId(LAYER_ROW_NEW_ID)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {usageDataAsOpen && usageDataAsDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={usageDataAsDetailWidth}
+                minWidth={USAGE_DATA_AS_DETAIL_MIN_WIDTH}
+                maxWidth={USAGE_DATA_AS_DETAIL_MAX_WIDTH}
+                leftOffsetPx={usageDataAsDetailLeftPx}
+                onWidthChange={setUsageDataAsDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <UsageDataAsDetailPanel
+                  detailId={usageDataAsDetailId}
+                  onClose={() => setUsageDataAsDetailId(null)}
+                  onSaved={() => setUsageDataAsListRefreshKey((k) => k + 1)}
+                  onCreated={(newKey) => {
+                    setUsageDataAsListRefreshKey((k) => k + 1)
+                    setUsageDataAsDetailId(newKey)
+                  }}
+                  onDeleted={() => {
+                    setUsageDataAsDetailId(null)
+                    setUsageDataAsListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {occupationLedgerOpen && occupationLedgerSerEng && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={occupationLedgerPanelWidth}
+                minWidth={OCCUPATION_LEDGER_PANEL_MIN_WIDTH}
+                maxWidth={OCCUPATION_LEDGER_PANEL_MAX_WIDTH}
+                leftOffsetPx={occupationLedgerPanelLeftPx}
+                onWidthChange={setOccupationLedgerPanelWidth}
+              >
+                <OccupationLedgerListPanel
+                  serEng={occupationLedgerSerEng}
+                  onClose={handleCloseOccupationLedger}
+                  selectedDetailId={occupationLedgerDetailId}
+                  onSelectDetailId={setOccupationLedgerDetailId}
+                  refreshKey={occupationLedgerListRefreshKey}
+                  onAdd={() => setOccupationLedgerDetailId(LAYER_ROW_NEW_ID)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {occupationLedgerOpen && occupationLedgerSerEng && occupationLedgerDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={occupationLedgerDetailWidth}
+                minWidth={OCCUPATION_LEDGER_DETAIL_MIN_WIDTH}
+                maxWidth={OCCUPATION_LEDGER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={occupationLedgerDetailLeftPx}
+                onWidthChange={setOccupationLedgerDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <OccupationLedgerDetailPanel
+                  detailId={occupationLedgerDetailId}
+                  serEng={occupationLedgerSerEng}
+                  onClose={() => setOccupationLedgerDetailId(null)}
+                  onSaved={() => setOccupationLedgerListRefreshKey((k) => k + 1)}
+                  onCreated={(newKey) => {
+                    setOccupationLedgerListRefreshKey((k) => k + 1)
+                    setOccupationLedgerDetailId(newKey)
+                  }}
+                  onDeleted={() => {
+                    setOccupationLedgerDetailId(null)
+                    setOccupationLedgerListRefreshKey((k) => k + 1)
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadRewardOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadRewardPanelWidth}
+                minWidth={ROAD_REWARD_PANEL_MIN_WIDTH}
+                maxWidth={ROAD_REWARD_PANEL_MAX_WIDTH}
+                leftOffsetPx={roadRewardPanelLeftPx}
+                onWidthChange={setRoadRewardPanelWidth}
+              >
+                <RoadRewardListPanel
+                  cases={roadRewardCases}
+                  selectedId={roadRewardSelectedId}
+                  onCasesChange={setRoadRewardCases}
+                  onSelectId={setRoadRewardSelectedId}
+                  onClose={handleCloseRoadReward}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadRewardOpen && roadRewardSelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadRewardDetailWidth}
+                minWidth={ROAD_REWARD_DETAIL_MIN_WIDTH}
+                maxWidth={ROAD_REWARD_DETAIL_MAX_WIDTH}
+                leftOffsetPx={roadRewardDetailLeftPx}
+                onWidthChange={setRoadRewardDetailWidth}
+                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+              >
+                <RoadRewardDetailPanel
+                  caseId={roadRewardSelectedId}
+                  cases={roadRewardCases}
+                  onCasesChange={setRoadRewardCases}
+                  onClose={() => setRoadRewardSelectedId(null)}
+                  onDeleted={() => setRoadRewardSelectedId(null)}
+                  onCaseIdChange={setRoadRewardSelectedId}
+                  overlayLeftPx={roadRewardPanelLeftPx}
+                  overlayWidthPx={
+                    roadRewardPanelWidth + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          <ShootingRequestFormModal
+            open={
+              SHOOTING_REQUEST_UI_ENABLED &&
+              (myInfoShootingModalId != null ||
+                (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
+            }
+            detailId={
+              myInfoShootingModalId ??
+              (shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID
+                ? SHOOTING_REQUEST_NEW_ID
+                : null)
+            }
+            onOpenChange={(o) => {
+              if (o) return
+              if (myInfoShootingModalId != null) {
+                setMyInfoShootingModalId(null)
+                return
+              }
+              if (shootingRequestOpen) {
+                handleCloseShootingRequest()
+              } else {
+                setShootingRequestDetailId(null)
+              }
+            }}
+            onCreated={(newId) => setShootingRequestDetailId(newId)}
+          />
           {memoManagementOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -1233,6 +2154,77 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {/* 점용대장(프) 더미 패널 비활성 — UseLedgerProtoList/Detail + 연계 점사용료 */}
+          {useFeeOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeePanelWidth}
+                minWidth={USE_FEE_PANEL_MIN_WIDTH}
+                maxWidth={USE_FEE_PANEL_MAX_WIDTH}
+                leftOffsetPx={useFeePanelLeftPx}
+                onWidthChange={setUseFeePanelWidth}
+              >
+                <UseFeeListPanel
+                  onClose={handleCloseUseFee}
+                  selectedId={useFeeDetailId}
+                  onSelectId={(id) => {
+                    setUseFeeDetailId((prev) => (prev === id ? null : id))
+                  }}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {useFeeOpen && useFeeDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={useFeeDetailWidth}
+                minWidth={USE_FEE_DETAIL_MIN_WIDTH}
+                maxWidth={USE_FEE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={useFeeDetailLeftPx}
+                onWidthChange={setUseFeeDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <UseFeeDetailPanel
+                  detailId={useFeeDetailId}
+                  onClose={() => setUseFeeDetailId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {groundwaterPermitOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={groundwaterPermitPanelWidth}
+                minWidth={GROUNDWATER_PERMIT_PANEL_MIN_WIDTH}
+                maxWidth={GROUNDWATER_PERMIT_PANEL_MAX_WIDTH}
+                leftOffsetPx={groundwaterPermitPanelLeftPx}
+                onWidthChange={setGroundwaterPermitPanelWidth}
+              >
+                <GroundwaterPermitListPanel
+                  onClose={handleCloseGroundwaterPermit}
+                  selectedDetailId={groundwaterPermitDetailId}
+                  onSelectDetailId={setGroundwaterPermitDetailId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {groundwaterPermitOpen && groundwaterPermitDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={groundwaterPermitDetailWidth}
+                minWidth={GROUNDWATER_PERMIT_DETAIL_MIN_WIDTH}
+                maxWidth={GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={groundwaterPermitDetailLeftPx}
+                onWidthChange={setGroundwaterPermitDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <GroundwaterPermitDetailPanel
+                  detailId={groundwaterPermitDetailId}
+                  onClose={() => setGroundwaterPermitDetailId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -1254,6 +2246,21 @@ function MapLayoutContent({
                 onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
               />
               <AddressInfoDetail />
+            </div>
+            <div className="pointer-events-auto">
+              <UserAccountProtoPanel
+                open={protoUserAccountOpen}
+                onClose={() => setProtoUserAccountOpen(false)}
+                onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
+                onOpenLedger={(ledgerId) => {
+                  setOpened([USAGE_DATA_AS_OPENED_KEY])
+                  setUsageDataAsDetailId(ledgerId)
+                }}
+                onOpenFee={(feeId) => {
+                  setOpened([USE_FEE_OPENED_KEY])
+                  setUseFeeDetailId(feeId)
+                }}
+              />
             </div>
           </div>
         </div>

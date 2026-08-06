@@ -282,8 +282,15 @@ export function getParcelAnalysisRegionFromFooter(_params?: unknown): {
 /** 지도용 클라이언트 설정 (주소 검색 등).
  * runtime.env 의 지도/외부연계 키를 반환.
  */
+/** npm run dev -- <project> 로 기동한 프로젝트 키 (사이드바 메뉴 분기 등) */
+export function getBootProject(_params?: unknown): { project: string } {
+  return { project: (process.env.GGNR_PROJECT ?? "build_yy").trim() || "build_yy" }
+}
+
 export function getMapConfig(_params?: unknown): {
   VWORLD_API_KEY: string
+  /** 브이월드 키 발급 시 등록한 서비스 URL. 2D데이터 API에서만 필요(없으면 파라미터 생략) */
+  VWORLD_DOMAIN: string
   OPENAI_API_KEY: string
   SAFEMAP_API_KEY: string
   SAFETYDATA_API_KEY: string
@@ -301,6 +308,7 @@ export function getMapConfig(_params?: unknown): {
     ""
   return {
     VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
+    VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
     OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
     SAFEMAP_API_KEY: vars.SAFEMAP_API_KEY?.trim() ?? '',
     SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
@@ -602,12 +610,24 @@ export function getSystemListDebug(): {
   const base = readSystemListFromDisk()
   if (base.error) return { systems: [], error: base.error, debug: base.debug }
   let systems = base.systems
-  const enabledStr = (getRuntimeEnvVars().ENABLED_SYSTEMS ?? "").trim()
+  const runtime = getRuntimeEnvVars()
+  const enabledStr = (runtime.ENABLED_SYSTEMS ?? "").trim()
   if (enabledStr) {
     const allowedKeys = new Set(enabledStr.split(",").map((s) => s.trim()).filter(Boolean))
     if (allowedKeys.size > 0) {
       const filtered = systems.filter((s) => allowedKeys.has(s.sys_key?.trim() ?? ""))
       if (filtered.length > 0) systems = filtered
+    }
+  }
+  /** runtime.env DISABLED_SERVICES — 프로젝트별로 사이드바 메뉴(ser_eng) 숨김 */
+  const disabledStr = (runtime.DISABLED_SERVICES ?? "").trim()
+  if (disabledStr) {
+    const disabled = new Set(disabledStr.split(",").map((s) => s.trim()).filter(Boolean))
+    if (disabled.size > 0) {
+      systems = systems.map((s) => ({
+        ...s,
+        serviceList: (s.serviceList ?? []).filter((eng) => !disabled.has(String(eng).trim())),
+      }))
     }
   }
   return { systems, debug: base.debug }

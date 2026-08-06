@@ -125,35 +125,13 @@ export function useMeasure(
     }
   };
 
-  // 면적 계산 (제곱미터 단위)
+  // 면적 계산 (제곱미터). ol/sphere getArea는 기본 projection=EPSG:3857 — 미리 4326으로 바꾸면 0에 가까운 값 나옴
   const calculateArea = (geometry: Polygon): number => {
     const projection = map?.getView().getProjection();
     if (!projection) return 0;
 
-    const projectionCode = projection.getCode();
-    const coordinates = geometry.getCoordinates()[0];
-
     try {
-      // 투영 좌표계(EPSG:3857, EPSG:5181 등)는 이미 미터 단위이므로 직접 계산
-      if (projectionCode === 'EPSG:3857' || projectionCode === 'EPSG:5181' || projectionCode.startsWith('EPSG:518')) {
-        // Shoelace 공식을 사용하여 면적 계산
-        let area = 0;
-        for (let i = 0; i < coordinates.length - 1; i++) {
-          const [x1, y1] = coordinates[i];
-          const [x2, y2] = coordinates[i + 1];
-          area += x1 * y2 - x2 * y1;
-        }
-        return Math.abs(area) / 2;
-      }
-
-      // WGS84나 다른 지리 좌표계는 구면 면적 계산
-      const wgs84Projection = getProjection('EPSG:4326');
-      if (!wgs84Projection) return 0;
-
-      const transformedCoords = coordinates.map((coord) =>
-        projectionCode === 'EPSG:4326' ? coord : transform(coord, projection, wgs84Projection)
-      );
-      return getArea(new Polygon([transformedCoords]));
+      return getArea(geometry, { projection: projection.getCode() });
     } catch (e) {
       console.error('면적 계산 실패:', e);
       return 0;
@@ -166,18 +144,13 @@ export function useMeasure(
       return value >= 1000
         ? { value: value / 1000, unit: 'km', text: `${(value / 1000).toFixed(2)} km` }
         : { value, unit: 'm', text: `${value.toFixed(2)} m` };
-    } else {
-      // 면적은 ha(헥타르) 대신 km²로 통일해서 표시
-      // - 10,000m² 이상: km² (1km² = 1,000,000m²)
-      // - 그 미만: m²
-      if (value >= 10000) {
-        const km2 = value / 1000000;
-        // 1km² 미만 구간(예: 0.03km²)에서 0.00으로 보이지 않게 자리수를 늘림
-        const decimals = km2 >= 1 ? 2 : 4;
-        return { value: km2, unit: 'km²', text: `${km2.toFixed(decimals)} km²` };
-      }
-      return { value, unit: 'm²', text: `${value.toFixed(2)} m²` };
     }
+    // 면적: 항상 m², 천 단위 콤마
+    const text = `${value.toLocaleString('ko-KR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} m²`;
+    return { value, unit: 'm²', text };
   };
 
   // 스타일 생성 함수
@@ -298,12 +271,18 @@ export function useMeasure(
         
         if (overlayRef.current && overlayElementRef.current) {
           overlayElementRef.current.style.display = 'block';
-          // 안내 문구 표시 (거리 측정만)
-          if (measureType === 'distance') {
-            const instructionLine = overlayElementRef.current.querySelector('#measure-instruction-line') as HTMLElement | null;
-            if (instructionLine) {
-              instructionLine.style.display = 'block';
-            }
+          const instructionLine = overlayElementRef.current.querySelector(
+            '#measure-instruction-line'
+          ) as HTMLElement | null;
+          if (instructionLine) {
+            instructionLine.style.display = 'block';
+            instructionLine.textContent = '더블클릭으로 마침';
+          }
+          const distanceLine = overlayElementRef.current.querySelector(
+            '#measure-distance-line'
+          ) as HTMLElement | null;
+          if (distanceLine && measureType === 'area') {
+            distanceLine.innerHTML = '면적 측정 중';
           }
         }
       });
@@ -363,40 +342,13 @@ export function useMeasure(
               distanceLine.innerHTML = `총거리 : <span style="color: #3388ff; font-weight: 600;">${formatted.text}</span>`;
             }
             overlayRef.current.setPosition(currentPoint);
-          } else if (measureType === 'area' && geometry instanceof Polygon) {
-            const coordinates = geometry.getCoordinates();
-            if (coordinates.length === 0 || coordinates[0].length < 3) return;
-
-            // 현재 커서 위치를 포함한 임시 다각형 생성
-            const tempCoords = [...coordinates[0], currentPoint];
-            let totalArea = 0;
-
-            // 투영 좌표계는 직접 미터 단위로 계산
-            if (projectionCode === 'EPSG:3857' || projectionCode === 'EPSG:5181' || projectionCode.startsWith('EPSG:518')) {
-              // Shoelace 공식을 사용하여 면적 계산
-              let area = 0;
-              for (let i = 0; i < tempCoords.length - 1; i++) {
-                const [x1, y1] = tempCoords[i];
-                const [x2, y2] = tempCoords[i + 1];
-                area += x1 * y2 - x2 * y1;
-              }
-              totalArea = Math.abs(area) / 2;
-            } else {
-              // WGS84나 다른 지리 좌표계는 구면 면적 계산
-              const wgs84Projection = getProjection('EPSG:4326');
-              if (!wgs84Projection) return;
-
-              const transformedCoords = tempCoords.map((coord) =>
-                projectionCode === 'EPSG:4326' ? coord : transform(coord, projection, wgs84Projection)
-              );
-              totalArea = getArea(new Polygon([transformedCoords]));
-            }
-
-            const formatted = formatMeasure(totalArea, 'area');
-            // "총면적 : XXXm²" 형식으로 표시 (숫자 부분은 파란색)
-            const distanceLine = overlayElementRef.current.querySelector('#measure-distance-line') as HTMLElement;
+          } else if (measureType === 'area') {
+            // 면적: 그리는 중에는 계산하지 않음(스케치 좌표·Mercator 왜곡으로 완료 값과 어긋남). 완료(drawend) 시 m² 계산.
+            const distanceLine = overlayElementRef.current.querySelector(
+              '#measure-distance-line'
+            ) as HTMLElement | null;
             if (distanceLine) {
-              distanceLine.innerHTML = `총면적 : <span style="color: #3388ff; font-weight: 600;">${formatted.text}</span>`;
+              distanceLine.textContent = '면적 측정 중';
             }
             overlayRef.current.setPosition(currentPoint);
           }
@@ -474,7 +426,10 @@ export function useMeasure(
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
           border: 1px solid rgba(0, 0, 0, 0.1);
         `;
-        completedOverlayElement.innerHTML = `<span style="color: #3388ff; font-weight: 600;">${formatted.text}</span>`;
+        completedOverlayElement.innerHTML =
+          finalMeasureType === 'area'
+            ? `총면적 : <span style="color: #3388ff; font-weight: 600;">${formatted.text}</span>`
+            : `<span style="color: #3388ff; font-weight: 600;">${formatted.text}</span>`;
 
         const positioning = isDistance ? 'bottom-center' : 'center-center';
         const offset = isDistance ? [0, -10] : [0, 0];

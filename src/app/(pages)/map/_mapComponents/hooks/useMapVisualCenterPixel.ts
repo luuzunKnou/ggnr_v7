@@ -14,28 +14,41 @@ export function useMapVisualCenterPixel(
     if (!mapReady || !map) return;
     const view = map.getView();
     const update = () => {
+      const size = map.getSize();
+      if (!size) return;
       const padding = (view as unknown as { padding?: number[] }).padding;
-      // padding 미적용 시에만 layout mapPaddingLeft로 보정
-      if (padding == null && mapPaddingLeft > 0) {
-        const size = map.getSize();
-        if (!size) return;
-        setCenterPixel({
-          x: (size[0] + mapPaddingLeft) / 2,
-          y: size[1] / 2,
+      // padding 미적용 시 layout mapPaddingLeft로 보정, 적용 시엔 유틸 사용
+      if (padding == null) {
+        const x = (size[0] + mapPaddingLeft) / 2;
+        const y = size[1] / 2;
+        setCenterPixel((prev) => {
+          if (prev && prev.x === x && prev.y === y) return prev;
+          return { x, y };
         });
         return;
       }
       const pixel = getMapVisualCenterPixel(map);
-      if (pixel) setCenterPixel({ x: pixel[0], y: pixel[1] });
+      if (!pixel) return;
+      const x = pixel[0];
+      const y = pixel[1];
+      setCenterPixel((prev) => {
+        if (prev && prev.x === x && prev.y === y) return prev;
+        return { x, y };
+      });
     };
     update();
+    // postrender는 매 프레임 setState를 유발해 Maximum update depth를 만들 수 있음
     map.on("change:size", update);
-    map.on("postrender", update);
-    view.on("change", update);
+    view.on("change:size", update);
+    view.on("change:resolution", update);
+    view.on("change:center", update);
+    window.addEventListener("resize", update);
     return () => {
       map.un("change:size", update);
-      map.un("postrender", update);
-      view.un("change", update);
+      view.un("change:size", update);
+      view.un("change:resolution", update);
+      view.un("change:center", update);
+      window.removeEventListener("resize", update);
     };
   }, [map, mapReady, mapPaddingLeft]);
 

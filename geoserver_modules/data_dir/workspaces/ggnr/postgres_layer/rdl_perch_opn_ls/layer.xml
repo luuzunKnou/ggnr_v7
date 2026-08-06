@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_perch_opn_ls</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-e07</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-e06</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-e08</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 05:32:30.992 UTC</dateCreated>
+  <dateModified>2026-07-14 05:32:31.126 UTC</dateModified>
+</layer>

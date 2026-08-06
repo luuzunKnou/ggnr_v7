@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_startpoint_ps</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-eef</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-eee</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-ef0</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 05:24:30.140 UTC</dateCreated>
+  <dateModified>2026-07-14 05:24:30.243 UTC</dateModified>
+</layer>

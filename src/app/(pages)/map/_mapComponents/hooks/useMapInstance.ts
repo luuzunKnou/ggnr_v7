@@ -9,7 +9,8 @@ import { DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT, DEFAULT_ZOOM_2D, RESOLUTIONS_38
 import { createCadastralLayers, createBuildingRoadLayers } from '../layerFactory/boundaryLayerFactory';
 import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '../layerFactory/jimokLayerFactory';
-import { createLandownLayers } from '../layerFactory/landownLayerFactory';
+import { createOwnershipLayers } from '../layerFactory/ownershipLayerFactory';
+import { createThematicMapLayers } from '../layerFactory/thematicMapLayerFactory';
 import { createSafetydataMapLayers } from '../layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from './useMapStatePersist';
@@ -59,7 +60,8 @@ export function useMapInstance(
         ...createBuildingRoadLayers(),
         ...createBasicSectionLayers(),
         ...createJimokLayers(),
-        ...createLandownLayers(),
+        ...createOwnershipLayers(),
+        ...createThematicMapLayers(),
         ...createSafetydataMapLayers(),
       ],
       view: new View({

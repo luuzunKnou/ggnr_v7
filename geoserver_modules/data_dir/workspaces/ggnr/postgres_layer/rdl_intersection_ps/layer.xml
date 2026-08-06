@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_intersection_ps</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-bf8</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-bf7</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-bf9</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 06:03:57.209 UTC</dateCreated>
+  <dateModified>2026-07-14 06:03:57.265 UTC</dateModified>
+</layer>

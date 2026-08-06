@@ -5,7 +5,8 @@ export const lh = pgTable('layer_history', {
   lhContents: varchar('lh_contents'),
   lhSuccessCount: integer('lh_success_count'),
   lhFailCount: integer('lh_fail_count'),
-  lhCreateUser: integer('lh_create_user'),
+  /** 작업자 표시 문자열 — `usrId(usrName)` 형식 */
+  lhCreateUser: varchar('lh_create_user'),
   lhCreateDate: date('lh_create_date'),
 });
 
