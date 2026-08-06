@@ -11,6 +11,7 @@ import Overlay from 'ol/Overlay';
 import DoubleClickZoom from 'ol/interaction/DoubleClickZoom';
 import { call } from '@/lib/api';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
+import { bindMapViewportPointerPresence } from './mapViewportPointerPresence';
 
 const DEBOUNCE_MS = 200;
 
@@ -129,6 +130,7 @@ export function useAltitudeMeasure(
         }),
         zIndex: 9999,
       });
+      layerRef.current.set('mapSplitNoMirror', true);
       olMap.addLayer(layerRef.current);
     }
   }, []);
@@ -291,6 +293,23 @@ export function useAltitudeMeasure(
       }, DEBOUNCE_MS);
     };
 
+    const hideLiveCursor = () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      const cursor = cursorFeatureRef.current;
+      if (cursor) {
+        cursor.setGeometry(undefined);
+        cursor.changed();
+      }
+      preview.setPosition(undefined);
+      layerRef.current?.changed();
+      map.render();
+    };
+
+    hideLiveCursor();
+
     const onSingleClick = (e: { coordinate?: number[]; originalEvent?: Event }) => {
       const coordinate = e.coordinate;
       if (!coordinate || coordinate.length < 2) return;
@@ -307,7 +326,6 @@ export function useAltitudeMeasure(
             ? `고도 : ${data.elevation} m`
             : '고도 관련 데이터가 없습니다');
 
-        // 오류여도 클릭 지점에 안내 고정 (지원지역 벗어남 등)
         const feature = new Feature({
           geometry: new Point(coordinate),
           altitudeRole: 'result',
@@ -333,11 +351,16 @@ export function useAltitudeMeasure(
       onStopRef.current();
     };
 
+    const unbindPresence = bindMapViewportPointerPresence(map, {
+      onLeave: hideLiveCursor,
+    });
+
     map.on('pointermove', onPointerMove);
     map.on('singleclick', onSingleClick);
     map.on('dblclick', onDblClick);
 
     return () => {
+      unbindPresence();
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;

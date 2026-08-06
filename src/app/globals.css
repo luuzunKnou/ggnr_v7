@@ -221,9 +221,18 @@
   input[type="radio"] {
     accent-color: var(--primary);
   }
+  /* 지도분할·배경 싱크 OFF — 우측 지도 라디오만 파란 accent */
+  input[type="radio"].background-map-radio-right {
+    accent-color: #2563eb;
+  }
   .dark input[type="checkbox"],
   .dark input[type="radio"] {
     color-scheme: dark;
+    accent-color: var(--primary);
+  }
+  /* color-scheme:dark 이후에도 우측 파란 accent 유지(다크에서 조금 밝게) */
+  .dark input[type="radio"].background-map-radio-right {
+    accent-color: #60a5fa;
   }
   .dark input[type="checkbox"]:disabled,
   .dark input[type="radio"]:disabled {

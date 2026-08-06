@@ -19,6 +19,7 @@ import {
   Banknote,
   ClipboardPen,
   Images,
+  Columns2 as MapSplitIcon,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -48,6 +49,8 @@ interface MapControlPanelProps {
   className?: string
   /** 첫 번째 그룹(배경지도) 바로 아래에 삽입할 추가 컨트롤 */
   extraAfterFirstGroup?: React.ReactNode
+  /** 버튼 id별 좌측 확장 패널 (해당 버튼 행에 정렬) */
+  renderItemPanel?: (id: string) => React.ReactNode
 }
 
 // 개별 컨트롤 버튼 컴포넌트
@@ -98,13 +101,14 @@ export function MapControlPanel({
   onItemRightClick,
   className,
   extraAfterFirstGroup,
+  renderItemPanel,
 }: MapControlPanelProps) {
   return (
     <div className={cn("flex flex-col gap-2.5 opacity-90 shrink-0", className)} style={{ width: 45 }}>
       {groups.map((group, groupIndex) => (
         <React.Fragment key={group.id}>
           <div
-            className="flex flex-col bg-white/95 text-foreground backdrop-blur-sm rounded-[5px] shadow-lg border border-slate-200 overflow-hidden shrink-0 dark:bg-black/55 dark:text-white/90 dark:border-white/10"
+            className="flex flex-col bg-white/95 text-foreground backdrop-blur-sm rounded-[5px] shadow-lg border border-slate-200 shrink-0 dark:bg-black/55 dark:text-white/90 dark:border-white/10 overflow-visible"
             style={{ width: 45, minWidth: 45, maxWidth: 45 }}
           >
             {group.items
@@ -114,19 +118,26 @@ export function MapControlPanel({
               )
               .map((item) => {
               const isActive = activeIds.includes(item.id)
+              const itemPanel = renderItemPanel?.(item.id)
               return (
-                <MapControlButton
-                  key={item.id}
-                  item={item}
-                  isActive={isActive}
-                  onClick={() => {
-                    item.onClick?.()
-                    onItemClick?.(item.id, isActive)
-                  }}
-                  onRightClick={
-                    onItemRightClick ? () => onItemRightClick(item.id) : undefined
-                  }
-                />
+                <div key={item.id} className="relative shrink-0">
+                  {itemPanel != null && (
+                    <div className="pointer-events-auto absolute right-[calc(100%+12px)] bottom-0 z-10">
+                      {itemPanel}
+                    </div>
+                  )}
+                  <MapControlButton
+                    item={item}
+                    isActive={isActive}
+                    onClick={() => {
+                      item.onClick?.()
+                      onItemClick?.(item.id, isActive)
+                    }}
+                    onRightClick={
+                      onItemRightClick ? () => onItemRightClick(item.id) : undefined
+                    }
+                  />
+                </div>
               )
             })}
             {groupIndex === 0 && extraAfterFirstGroup != null && extraAfterFirstGroup}
@@ -160,6 +171,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
   {
     id: "views",
     items: [
+      { id: "map-split", icon: MapSplitIcon, label: "지도분할", allowMultiple: true },
       { id: "street-view", icon: PersonStanding, label: "거리뷰", allowMultiple: true },
       { id: "official-land-price", icon: Banknote, label: "공시지가", allowMultiple: true },
     ],

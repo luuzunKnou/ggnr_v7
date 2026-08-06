@@ -26,6 +26,7 @@ import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
 import { DEFAULT_CAMERA_HEIGHT_3D, DEFAULT_ZOOM_2D } from './config/mapDefaults';
 import { MapSplitLayout } from './mapSplit/MapSplitLayout';
 import { useStreetViewSecondary } from '../_mapContents/streetView/useStreetViewSecondary';
+import { useMapSplitSecondary } from '../_mapContents/mapSplit/useMapSplitSecondary';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
 
 /** 3D 오른쪽 패널에서 다중 토글 허용 id (OpenLayers MULTI_SELECT_IDS 와 동일 계열) */
@@ -347,8 +348,8 @@ export default function MapViewModeWrapper({
 
   const secondaryKind = mapContext?.mapSplitSecondaryKind ?? null;
   const mapSync = mapContext?.mapSplitMapSync ?? true;
-  const setMapSync = mapContext?.setMapSplitMapSync;
   const streetViewActive = secondaryKind === 'streetView';
+  const mapSplitActive = secondaryKind === 'map';
 
   const streetView = useStreetViewSecondary({
     active: streetViewActive && viewMode === '2d',
@@ -356,23 +357,35 @@ export default function MapViewModeWrapper({
     projectName,
   });
 
-  // 보조 칸 스위치 — 이후 map/panorama 등 확장
+  const mapSplit = useMapSplitSecondary({
+    active: mapSplitActive && viewMode === '2d',
+  });
+
+  // 보조 칸 스위치 — streetView | map
   let secondaryPanel = null as ReactNode;
   let gutterControls: ReturnType<typeof useStreetViewSecondary>['controls'] = undefined;
   let splitControlOffsetRatio: number | undefined;
   let onSplitControlOffsetChange: ((ratio: number) => void) | undefined;
   let splitControlsExpanded: boolean | undefined;
+  let onSplitControlsExpandedChange: ((expanded: boolean) => void) | undefined;
   if (secondaryKind === 'streetView') {
     secondaryPanel = streetView.panel;
     gutterControls = streetView.controls;
     splitControlOffsetRatio = streetView.controlOffsetRatio;
     onSplitControlOffsetChange = streetView.onControlOffsetRatioChange;
     splitControlsExpanded = streetView.controlsExpanded;
+    onSplitControlsExpandedChange = streetView.onControlsExpandedChange;
+  } else if (secondaryKind === 'map') {
+    secondaryPanel = mapSplit.panel;
+    gutterControls = mapSplit.controls;
+    splitControlsExpanded = mapSplit.controlsExpanded;
+    onSplitControlsExpandedChange = mapSplit.onControlsExpandedChange;
   }
 
   const onSplitSizeTick = useCallback(() => {
     mapContext?.mapInstanceRef?.current?.updateSize();
-  }, [mapContext?.mapInstanceRef]);
+    mapContext?.mapSplitSecondaryMapRef?.current?.updateSize();
+  }, [mapContext?.mapInstanceRef, mapContext?.mapSplitSecondaryMapRef]);
 
   const [splitOrientation, setSplitOrientation] = useState<'horizontal' | 'vertical'>(
     'horizontal'
@@ -443,6 +456,7 @@ export default function MapViewModeWrapper({
           onControlOffsetRatioChange={onSplitControlOffsetChange}
           controlOffsetDraggable={false}
           controlsExpanded={splitControlsExpanded}
+          onControlsExpandedChange={onSplitControlsExpandedChange}
           onSizeTick={onSplitSizeTick}
           mapPaddingLeft={mapContext?.mapPaddingLeft ?? 0}
           onOrientationChange={setSplitOrientation}

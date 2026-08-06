@@ -13,6 +13,7 @@ import { transform } from 'ol/proj';
 import { call } from '@/lib/api';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import styles from '../measure/measureElevationTooltip.module.css';
+import { bindMapViewportPointerPresence } from './mapViewportPointerPresence';
 
 /** 거리 측정(#3388ff)과 동일 굵기·점 크기, 색만 빨간 계열 */
 const SLOPE_COLOR = '#f47378';
@@ -202,6 +203,7 @@ export function useSlopeMeasure(map: OlMap | null, active: boolean) {
         },
         zIndex: 999,
       });
+      layer.set('mapSplitNoMirror', true);
       map.addLayer(layer);
       layerRef.current = layer;
     }
@@ -244,10 +246,26 @@ export function useSlopeMeasure(map: OlMap | null, active: boolean) {
     removeDraw();
     if (!active) return;
 
+    const pointerOverRef = { current: false };
     const draw = new Draw({
       source: sourceRef.current,
       type: 'LineString',
-      style: createSlopeStyle(),
+      style: () => (pointerOverRef.current ? createSlopeStyle() : []),
+    });
+
+    const setSketchVisible = (visible: boolean) => {
+      pointerOverRef.current = visible;
+      try {
+        draw.getOverlay()?.setVisible(visible);
+      } catch {
+        /* ignore */
+      }
+      map.render();
+    };
+    setSketchVisible(false);
+    const unbindPresence = bindMapViewportPointerPresence(map, {
+      onEnter: () => setSketchVisible(true),
+      onLeave: () => setSketchVisible(false),
     });
 
     // 더블클릭 종료 시 지도 확대 방지
@@ -300,6 +318,7 @@ export function useSlopeMeasure(map: OlMap | null, active: boolean) {
     drawRef.current = draw;
 
     return () => {
+      unbindPresence();
       removeDraw();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

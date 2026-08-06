@@ -37,6 +37,7 @@ type MapSplitLayoutProps = {
   controlOffsetDraggable?: boolean;
   /** false면 Lock·기능 버튼 숨김 */
   controlsExpanded?: boolean;
+  onControlsExpandedChange?: (expanded: boolean) => void;
 };
 
 function clampRatio(r: number) {
@@ -48,12 +49,35 @@ function queryRoadviewStage(content: HTMLElement | null): HTMLElement | null {
 }
 
 /**
- * 좌우 분할: 좌측 메뉴·패널(mapPaddingLeft)을 제외한 가용 너비의 정중앙에 분할선.
- * primaryRatio = (containerW + paddingLeft) / (2 × containerW)
+ * 좌우 분할: 좌측 메뉴·패널(mapPaddingLeft)을 제외한 가용 너비 기준 분할.
+ * usableFraction 0.5 = 가용 영역 정중앙(보이는 지도 1:1).
+ * primaryRatio = (padding + usableFraction × (W − padding)) / W
  */
-function computeHorizontalPrimaryRatio(containerWidth: number, mapPaddingLeft: number) {
+function primaryRatioFromUsableFraction(
+  containerWidth: number,
+  mapPaddingLeft: number,
+  usableFraction: number
+) {
   if (containerWidth <= 0) return MAP_SPLIT_DEFAULT_PRIMARY_RATIO;
-  return clampRatio((containerWidth + mapPaddingLeft) / (2 * containerWidth));
+  const padding = Math.max(0, Math.min(mapPaddingLeft, containerWidth));
+  const usable = containerWidth - padding;
+  if (usable <= 0) return clampRatio(1);
+  const f = Math.min(1, Math.max(0, usableFraction));
+  return clampRatio((padding + f * usable) / containerWidth);
+}
+
+/** primary flex 비율 → 가용 영역 내 분할선 위치(0~1) */
+function usableFractionFromPrimaryRatio(
+  containerWidth: number,
+  mapPaddingLeft: number,
+  primaryRatio: number
+) {
+  if (containerWidth <= 0) return 0.5;
+  const padding = Math.max(0, Math.min(mapPaddingLeft, containerWidth));
+  const usable = containerWidth - padding;
+  if (usable <= 0) return 0.5;
+  const gutter = clampRatio(primaryRatio) * containerWidth;
+  return Math.min(1, Math.max(0, (gutter - padding) / usable));
 }
 
 /**
@@ -74,6 +98,7 @@ export function MapSplitLayout({
   onControlOffsetRatioChange,
   controlOffsetDraggable = false,
   controlsExpanded,
+  onControlsExpandedChange,
 }: MapSplitLayoutProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [orientation, setOrientation] = useState<MapSplitOrientation>('horizontal');
@@ -120,18 +145,28 @@ export function MapSplitLayout({
   onPrimaryRatioChangeRef.current = onPrimaryRatioChange;
   const onOrientationChangeRef = useRef(onOrientationChange);
   onOrientationChangeRef.current = onOrientationChange;
-  /** 한 번 시드(최초 가로 중앙) 또는 사용자 드래그 후 — 방향 전환·패널 폭 변경 시 비율 유지 */
-  const ratioSettledRef = useRef(false);
+  /** 가용 영역 기준 분할 위치(0.5 = 보이는 지도 1:1). 패널 폭 변동 시 유지 */
+  const usableSplitFractionRef = useRef(0.5);
+  const primaryRatioRef = useRef(primaryRatio);
+  primaryRatioRef.current = primaryRatio;
 
-  const applyHorizontalInitialRatio = useCallback(() => {
+  /** 가용 분율 → primaryRatio 반영 (패널·리사이즈 시). 드래그 중에는 스킵 */
+  const syncHorizontalRatioFromUsable = useCallback(() => {
     if (primaryRatioPropRef.current != null) return;
-    if (ratioSettledRef.current) return;
     const el = containerRef.current;
-    if (!el || orientationRef.current !== 'horizontal') return;
-    const ratio = computeHorizontalPrimaryRatio(el.clientWidth, mapPaddingLeftRef.current);
-    ratioSettledRef.current = true;
-    setPrimaryRatio(ratio);
-    onPrimaryRatioChangeRef.current?.(ratio);
+    if (!el || !splitActiveRef.current) return;
+    if (orientationRef.current !== 'horizontal') return;
+    if (draggingRef.current) return;
+
+    const next = primaryRatioFromUsableFraction(
+      el.clientWidth,
+      mapPaddingLeftRef.current,
+      usableSplitFractionRef.current
+    );
+    if (Math.abs(next - primaryRatioRef.current) < 1e-4) return;
+    primaryRatioRef.current = next;
+    setPrimaryRatio(next);
+    onPrimaryRatioChangeRef.current?.(next);
   }, []);
 
   useEffect(() => {
@@ -140,7 +175,15 @@ export function MapSplitLayout({
 
   const setRatio = useCallback((r: number) => {
     const next = clampRatio(r);
-    ratioSettledRef.current = true;
+    const el = containerRef.current;
+    if (el && orientationRef.current === 'horizontal') {
+      usableSplitFractionRef.current = usableFractionFromPrimaryRatio(
+        el.clientWidth,
+        mapPaddingLeftRef.current,
+        next
+      );
+    }
+    primaryRatioRef.current = next;
     setPrimaryRatio(next);
     onPrimaryRatioChangeRef.current?.(next);
   }, []);
@@ -463,6 +506,8 @@ export function MapSplitLayout({
   scheduleOrientationRoadviewRecreateRef.current = scheduleOrientationRoadviewRecreate;
   const beginSecondaryStretchRef = useRef(beginSecondaryStretch);
   beginSecondaryStretchRef.current = beginSecondaryStretch;
+  const syncHorizontalRatioFromUsableRef = useRef(syncHorizontalRatioFromUsable);
+  syncHorizontalRatioFromUsableRef.current = syncHorizontalRatioFromUsable;
 
   /**
    * 손 뗌: flex 반영 후 unlock → 재생성.
@@ -545,6 +590,8 @@ export function MapSplitLayout({
         }
         return;
       }
+      // 방향 유지·컨테이너 리사이즈: 가용 분율 기준으로 primaryRatio 재계산
+      syncHorizontalRatioFromUsableRef.current();
     };
     apply();
     const ro = new ResizeObserver(apply);
@@ -560,10 +607,11 @@ export function MapSplitLayout({
     onOrientationChangeRef.current?.(orientation);
   }, [orientation]);
 
-  useEffect(() => {
+  // 패널 폭·분할 ON·가로 방향 변경 시 가용 영역 비율 유지
+  useLayoutEffect(() => {
     if (!splitActive || orientation !== 'horizontal') return;
-    applyHorizontalInitialRatio();
-  }, [splitActive, orientation, applyHorizontalInitialRatio]);
+    syncHorizontalRatioFromUsable();
+  }, [splitActive, orientation, mapPaddingLeft, syncHorizontalRatioFromUsable]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setAnimReady(true));
@@ -731,6 +779,7 @@ export function MapSplitLayout({
             }
             controlOffsetDraggable={controlOffsetDraggable}
             controlsExpanded={controlsExpanded}
+            onControlsExpandedChange={onControlsExpandedChange}
             onDragStart={(clientPos) => {
               if (ratioLocked) return;
               draggingRef.current = true;

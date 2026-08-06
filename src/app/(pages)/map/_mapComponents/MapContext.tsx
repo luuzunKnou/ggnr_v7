@@ -120,6 +120,14 @@ export type MapContextValue = {
   /** 거리/면적 등 측정 도구가 켜져 있는지. OpenLayersMap에서 동기화. 레이어 목록 도형 그리기와 배타 */
   measurementActive: boolean;
   setMeasurementActive: Dispatch<SetStateAction<boolean>>;
+  /** 활성 측정 도구 id. 지도분할 우측도 동일 메뉴로 독립 입력 */
+  mapMeasureTool: 'distance' | 'area' | 'altitude' | 'slope' | null;
+  setMapMeasureTool: Dispatch<
+    SetStateAction<'distance' | 'area' | 'altitude' | 'slope' | null>
+  >;
+  /** 측정 초기화 패널 등 — 지도 Draw·측정 입력 일시 중단 (메뉴 선택 상태는 유지) */
+  mapDrawInputSuspended: boolean;
+  setMapDrawInputSuspended: Dispatch<SetStateAction<boolean>>;
   /** 뷰 왼쪽 패딩(px). 레이아웃에서 설정. 크로스헤어 위치 재계산용 */
   mapPaddingLeft: number;
   setMapPaddingLeft: Dispatch<SetStateAction<number>>;
@@ -142,6 +150,23 @@ export type MapContextValue = {
   /** 거리뷰 등: 보조 칸 이동 시 주 칸 지도 중심 동기화 (기본 true) */
   mapSplitMapSync: boolean;
   setMapSplitMapSync: Dispatch<SetStateAction<boolean>>;
+  /** 지도분할: 좌·우 배경지도 동기화 (기본 true) */
+  mapSplitBasemapSync: boolean;
+  setMapSplitBasemapSync: Dispatch<SetStateAction<boolean>>;
+  /** 지도분할: 배경 패널이 적용될 쪽 (싱크 OFF일 때) */
+  mapSplitBasemapFocus: 'primary' | 'secondary';
+  setMapSplitBasemapFocus: Dispatch<SetStateAction<'primary' | 'secondary'>>;
+  /** 지도분할 보조(우측) OL 맵 */
+  mapSplitSecondaryMapRef: MutableRefObject<Map | null>;
+  /** 보조 맵 배경 id (싱크 OFF·우측 포커스 시). 싱크 ON이면 주 맵과 동일하게 맞춤 */
+  mapSplitSecondaryBackgroundId: string;
+  setMapSplitSecondaryBackgroundId: Dispatch<SetStateAction<string>>;
+  /**
+   * 우측 분할지도 클릭 식별 결과.
+   * OpenLayersMap이 좌측 클릭(popupState)과 동일 파이프라인으로 패널을 연다.
+   */
+  mapSplitIdentifyPopup: IdentifyPopupState | null;
+  setMapSplitIdentifyPopup: Dispatch<SetStateAction<IdentifyPopupState | null>>;
   /** VWorld API 키 (주소 검색·역지오코딩). 서버 getMapConfig로 조회 후 설정 */
   vworldApiKey: string;
   setVworldApiKey: Dispatch<SetStateAction<string>>;
@@ -427,12 +452,24 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     onComplete: (wkt5181: string) => void;
   } | null>(null);
   const [measurementActive, setMeasurementActive] = useState(false);
+  const [mapMeasureTool, setMapMeasureTool] = useState<
+    'distance' | 'area' | 'altitude' | 'slope' | null
+  >(null);
+  const [mapDrawInputSuspended, setMapDrawInputSuspended] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
   const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapSplitSecondaryKind, setMapSplitSecondaryKind] = useState<MapSplitSecondaryKind>(null);
   const [mapSplitMapSync, setMapSplitMapSync] = useState(true);
+  const [mapSplitBasemapSync, setMapSplitBasemapSync] = useState(true);
+  const [mapSplitBasemapFocus, setMapSplitBasemapFocus] =
+    useState<'primary' | 'secondary'>('primary');
+  const mapSplitSecondaryMapRef = useRef<Map | null>(null);
+  const [mapSplitSecondaryBackgroundId, setMapSplitSecondaryBackgroundId] =
+    useState<string>('aerial-2022');
+  const [mapSplitIdentifyPopup, setMapSplitIdentifyPopup] =
+    useState<IdentifyPopupState | null>(null);
   const [vworldApiKey, setVworldApiKey] = useState('');
   const [riverBasicPlanPanelOpen, setRiverBasicPlanPanelOpen] = useState(false);
   const [riverBasicPlanSelectedRiver, setRiverBasicPlanSelectedRiver] = useState('');
@@ -592,6 +629,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSpatialDrawRequest,
         measurementActive,
         setMeasurementActive,
+        mapMeasureTool,
+        setMapMeasureTool,
+        mapDrawInputSuspended,
+        setMapDrawInputSuspended,
         mapPaddingLeft,
         setMapPaddingLeft,
         applyMapViewPaddingRef,
@@ -602,6 +643,15 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setMapSplitSecondaryKind,
         mapSplitMapSync,
         setMapSplitMapSync,
+        mapSplitBasemapSync,
+        setMapSplitBasemapSync,
+        mapSplitBasemapFocus,
+        setMapSplitBasemapFocus,
+        mapSplitSecondaryMapRef,
+        mapSplitSecondaryBackgroundId,
+        setMapSplitSecondaryBackgroundId,
+        mapSplitIdentifyPopup,
+        setMapSplitIdentifyPopup,
         vworldApiKey,
         setVworldApiKey,
         riverBasicPlanPanelOpen,
