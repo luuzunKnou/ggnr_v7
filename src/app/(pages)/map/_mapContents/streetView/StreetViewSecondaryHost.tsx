@@ -28,8 +28,6 @@ export function StreetViewSecondaryHost({ active, mapSync }: StreetViewSecondary
         onRoadviewPan={streetView.onPanFromRoadview}
         onRoadviewPanCommit={streetView.onPanChange}
         onRoadviewTilt={streetView.onTiltChange}
-        walkerIconMode={streetView.walkerIconMode}
-        onWalkerIconModeChange={streetView.onWalkerIconModeChange}
       />
     </div>
   );

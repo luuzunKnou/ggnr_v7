@@ -30,14 +30,15 @@ import { WALKER_GROUND_SY, type WalkerViewBasis } from './mapWalkerHatCylinder';
  *   그대로 «귀가 머리에 붙는 선» 이 된다.
  *
  * [테두리]
- *   밑면 원은 머리 구 표면 위에 있으므로, 실루엣의 밑면 호는 언제나
- *   «귀가 머리에 붙는 이음선» 이다. 여기엔 stroke 를 넣지 않는다.
- *   그래서 채움과 테두리가 서로 다른 path 를 쓴다.
+ *   밑면 원은 머리 구 표면 위에 있으므로, 실루엣의 밑면 호는
+ *   «귀가 머리에 붙는 이음선» 이다. 채움과 테두리는 서로 다른 path 를 쓴다.
  *     채움   = 사면 + 깎인 끝 + 밑면 호  (닫힌 도형)
- *     테두리 = 사면 + 깎인 끝            (열린 선)
- *   d ≤ 1 이면 실루엣 전체가 밑면 타원, 즉 전부 이음선이라 그릴 테두리가
- *   없다. EAR_VIS_MARGIN 으로 단축률에 상한을 둬 그 상태에 들어가지
- *   않게 하므로, 어느 각도에서도 테두리가 사라지지 않는다.
+ *     테두리 = 사면 + 깎인 끝            (열린 선, 수직각 0°~90°)
+ *   위를 볼 때(수직각 음수) 만 접점에서 밑면 장호 쪽으로 테두리를
+ *   양쪽으로 연장한다. 위 봄 정도(upAmt)·EAR_UP_BASE_STROKE_MAX 로
+ *   감싸는 범위를 키우며, 선 굵기는 바꾸지 않는다.
+ *   d ≤ 1 이면 실루엣 전체가 밑면 타원이라 그릴 테두리가 없다.
+ *   EAR_VIS_MARGIN 으로 단축률에 상한을 둬 그 상태에 들어가지 않게 한다.
  *
  * [귀 끝]
  *   두 사면에서 같은 길이만큼 물러난 뒤 꼭짓점을 제어점으로 하는 2차 베지에로
@@ -124,6 +125,13 @@ const EAR_DOWN_TUCK_PX = 2;
  */
 const EAR_UP_TILT_DROP_PX = 3;
 
+/**
+ * 위를 볼 때 밑면 장호를 테두리에 넣는 최대 비율(0…1).
+ * upAmt(= −tiltNorm) 에 곱해 접점 양쪽에서 장호 쪽으로 연장한다.
+ * 1 이면 양끝이 장호 가운데에서 만나 닫히므로 0.6 으로 틈을 남긴다.
+ */
+const EAR_UP_BASE_STROKE_MAX = 0.6;
+
 /** 약한 투시 가상 카메라 거리(px). 0 이하면 순수 정사영 */
 const CAM_DIST_PX = 420;
 
@@ -158,6 +166,8 @@ export type CatEarState = {
   underHead: boolean;
   /** 머리(2)·몸통(1) 사이에서의 최종 쌓임 순서 */
   zIndex: number;
+  /** 위를 보는 정도(0…1). 0 이면 밑면 호 테두리 연장 없음 */
+  upAmt: number;
 };
 
 export type CatEarsState = {
@@ -253,6 +263,7 @@ function computeEar(basis: WalkerViewBasis, side: 1 | -1): CatEarState {
   const ia = at(seat + earH * INNER_TIP_T);
 
   const innerR = EAR_R * INNER_R_RATIO;
+  const upAmt = Math.max(0, -basis.tiltNorm);
 
   return {
     side,
@@ -278,6 +289,7 @@ function computeEar(basis: WalkerViewBasis, side: 1 | -1): CatEarState {
     },
     underHead: vis < 0,
     zIndex: 3,
+    upAmt,
   };
 }
 
@@ -365,22 +377,41 @@ function ellipsePaths(c: ConeGeom, rot: number): ConePaths {
 type ConePaths = {
   /** 닫힌 실루엣 — 채움용 */
   fill: string;
-  /** 사면 + 깎인 끝만. 빈 문자열이면 그릴 테두리가 없다 */
+  /** 사면 + 깎인 끝(+ 위 봄 시 밑면 호 일부). 빈 문자열이면 그릴 테두리가 없다 */
   stroke: string;
 };
+
+/** 밑면 타원 위 점 — θ=0 은 e_maj, θ=π/2 는 꼭짓점 방향(e_min) */
+function ellipsePointAt(
+  c: ConeGeom,
+  majX: number,
+  majY: number,
+  rx: number,
+  ry: number,
+  theta: number
+): [number, number] {
+  const ct = Math.cos(theta);
+  const st = Math.sin(theta);
+  return [
+    c.bx + rx * ct * majX + ry * st * -majY,
+    c.by + rx * ct * majY + ry * st * majX,
+  ];
+}
 
 /**
  * 원뿔 실루엣.
  * 접점 T± = 밑면중심 ∓ rx·sinα·e_maj + ry·cosα·e_min   (α = acos(1/d))
  * 끝은 두 사면에서 cut 만큼 물러난 뒤 2차 베지에로 잇는다.
  * 마지막 밑면 호는 꼭짓점 반대편 장호이므로 large-arc = 1,
- * 진행이 t 감소 방향이라 sweep = 0. 이 호는 채움에만 들어간다.
+ * 진행이 t 감소 방향이라 sweep = 0. 이 호는 채움에 들어가고,
+ * baseStrokeAmt > 0 이면 테두리에도 접점 양쪽에서 일부만 넣는다.
  */
 function conePaths(
   c: ConeGeom,
   rot: number,
   majX: number,
-  majY: number
+  majY: number,
+  baseStrokeAmt = 0
 ): ConePaths {
   const rx = Math.max(0.05, c.rx);
   const ry = Math.max(0.02, c.ry);
@@ -417,16 +448,37 @@ function conePaths(
   const q2x = c.ax + (e2x / l2) * cut;
   const q2y = c.ay + (e2y / l2) * cut;
 
-  const open =
-    `M ${f(t1x)} ${f(t1y)}` +
-    ` L ${f(q1x)} ${f(q1y)}` +
+  const flanks =
+    `L ${f(q1x)} ${f(q1y)}` +
     ` Q ${f(c.ax)} ${f(c.ay)} ${f(q2x)} ${f(q2y)}` +
     ` L ${f(t2x)} ${f(t2y)}`;
 
-  return {
-    fill: open + ` A ${f(rx)} ${f(ry)} ${f(rot)} 1 0 ${f(t1x)} ${f(t1y)} Z`,
-    stroke: open,
-  };
+  const fill =
+    `M ${f(t1x)} ${f(t1y)} ` +
+    flanks +
+    ` A ${f(rx)} ${f(ry)} ${f(rot)} 1 0 ${f(t1x)} ${f(t1y)} Z`;
+
+  // 접점 θ = π/2 ± α. 장호는 θ 감소(sweep=0) 방향.
+  const amt = Math.min(1, Math.max(0, baseStrokeAmt));
+  if (!(amt > 1e-4)) {
+    return { fill, stroke: `M ${f(t1x)} ${f(t1y)} ` + flanks };
+  }
+
+  const halfLong = Math.PI - alpha;
+  const ext = amt * halfLong;
+  const theta1 = Math.PI / 2 + alpha;
+  const theta2 = Math.PI / 2 - alpha;
+  const [e1xExt, e1yExt] = ellipsePointAt(c, majX, majY, rx, ry, theta1 + ext);
+  const [e2xExt, e2yExt] = ellipsePointAt(c, majX, majY, rx, ry, theta2 - ext);
+  const laf = ext > Math.PI ? 1 : 0;
+
+  const stroke =
+    `M ${f(e1xExt)} ${f(e1yExt)}` +
+    ` A ${f(rx)} ${f(ry)} ${f(rot)} ${laf} 0 ${f(t1x)} ${f(t1y)} ` +
+    flanks +
+    ` A ${f(rx)} ${f(ry)} ${f(rot)} ${laf} 0 ${f(e2xExt)} ${f(e2yExt)}`;
+
+  return { fill, stroke };
 }
 
 function applyEar(svg: SVGSVGElement, s: CatEarState) {
@@ -438,11 +490,12 @@ function applyEar(svg: SVGSVGElement, s: CatEarState) {
   const stroke = svg.querySelector('.catEarStroke');
   if (!fill || !inner || !stroke) return;
 
-  const outer = conePaths(s.outer, s.rot, s.majX, s.majY);
+  const baseStrokeAmt = s.upAmt * EAR_UP_BASE_STROKE_MAX;
+  const outer = conePaths(s.outer, s.rot, s.majX, s.majY, baseStrokeAmt);
   fill.setAttribute('d', outer.fill);
-  inner.setAttribute('d', conePaths(s.inner, s.rot, s.majX, s.majY).fill);
+  inner.setAttribute('d', conePaths(s.inner, s.rot, s.majX, s.majY, 0).fill);
 
-  // 밑면 호는 머리와의 이음선이라 테두리에서 빠진다
+  // 수직각 0~90°: 밑면 호 제외. 위 봄: 접점에서 밑면 장호 쪽으로 연장
   if (outer.stroke) {
     stroke.setAttribute('d', outer.stroke);
     stroke.removeAttribute('visibility');

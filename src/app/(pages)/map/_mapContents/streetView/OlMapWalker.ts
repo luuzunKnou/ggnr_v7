@@ -19,7 +19,7 @@ import {
 } from './mapWalkerCatEars';
 import './mapWalker.css';
 
-/** 로드뷰 HUD 라디오 — 워커 아이콘 형태 */
+/** 워커 아이콘 형태 — 기본값은 고양이(cat) */
 export type WalkerIconMode = 'default' | 'hat' | 'ggnr' | 'cat' | 'ggnrCat';
 
 /** 시야 부채꼴 각도(도) */
@@ -221,7 +221,7 @@ export class OlMapWalker {
   private fovRing: HTMLDivElement;
   private hatCylinder: SVGSVGElement | null = null;
   private catEars: CatEarsElements | null = null;
-  private iconMode: WalkerIconMode = 'default';
+  private iconMode: WalkerIconMode = 'cat';
   private panDeg = 0;
   private tiltDeg = 0;
   private mapRef: Map | null = null;
