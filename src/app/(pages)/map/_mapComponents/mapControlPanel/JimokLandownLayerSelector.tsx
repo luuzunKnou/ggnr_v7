@@ -19,6 +19,8 @@ interface JimokLandownLayerSelectorProps {
   onSelectionChange: (next: Set<string>) => void;
   onClose?: () => void;
   className?: string;
+  /** false면 전체 선택·해제 숨김 (인쇄 등) */
+  showBulkActions?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function JimokLandownLayerSelector({
   onSelectionChange,
   onClose,
   className,
+  showBulkActions = true,
 }: JimokLandownLayerSelectorProps) {
   const toggle = (tableName: string, checked: boolean) => {
     const next = new Set(selectedTableNames);
@@ -71,23 +74,25 @@ export function JimokLandownLayerSelector({
           </button>
         )}
       </div>
-      <div className="flex shrink-0 gap-1 border-b border-slate-100 px-2 py-1">
-        <button
-          type="button"
-          onClick={selectAll}
-          className="text-[11px] text-blue-600 hover:underline"
-        >
-          전체 선택
-        </button>
-        <span className="text-slate-300">|</span>
-        <button
-          type="button"
-          onClick={selectNone}
-          className="text-[11px] text-slate-500 hover:underline"
-        >
-          전체 해제
-        </button>
-      </div>
+      {showBulkActions ? (
+        <div className="flex shrink-0 gap-1 border-b border-slate-100 px-2 py-1">
+          <button
+            type="button"
+            onClick={selectAll}
+            className="text-[11px] text-blue-600 hover:underline"
+          >
+            전체 선택
+          </button>
+          <span className="text-slate-300">|</span>
+          <button
+            type="button"
+            onClick={selectNone}
+            className="text-[11px] text-slate-500 hover:underline"
+          >
+            전체 해제
+          </button>
+        </div>
+      ) : null}
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
         {layers.length === 0 ? (
           <div className="px-3 py-3 text-[11px] leading-snug text-slate-500">

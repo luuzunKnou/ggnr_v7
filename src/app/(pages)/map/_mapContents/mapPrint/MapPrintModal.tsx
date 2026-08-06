@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import tables from '@/config/defineLayer/tables.json';
 import { BackgroundMapSelector, type BackgroundMapGroup } from '@/app/(pages)/map/_mapComponents/mapControlPanel/backgroundMapSelector';
-import { getLegendGraphicUrl } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
 import {
   DEFAULT_PRINT_COLOR,
   type MapPrintSidePanel,
@@ -17,7 +16,15 @@ import { useMapPrintMap } from './useMapPrintMap';
 import { useMapPrintTools } from './useMapPrintTools';
 import { MapPrintToolbar } from './MapPrintToolbar';
 import { MapPrintCoordPanel } from './MapPrintCoordPanel';
+import {
+  MapPrintLayerPanel,
+  type PrintControlLayerId,
+} from './MapPrintLayerPanel';
 import './mapPrint.css';
+
+function setFromSnapshot(names: string[] | null | undefined): Set<string> {
+  return new Set(names ?? []);
+}
 
 type DefineTableRow = {
   define_table_name?: string;
@@ -61,42 +68,56 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
   const [activeLayerControls, setActiveLayerControls] = useState<string[]>(
     () => snapshot?.activeLayerControls ?? []
   );
+  const [visibleCadastral, setVisibleCadastral] = useState<Set<string>>(() =>
+    setFromSnapshot(snapshot?.visibleCadastralLayerNames)
+  );
+  const [visibleBuildingRoad, setVisibleBuildingRoad] = useState<Set<string>>(() =>
+    setFromSnapshot(snapshot?.visibleBuildingRoadLayerNames)
+  );
+  const [visibleJimok, setVisibleJimok] = useState<Set<string>>(() =>
+    setFromSnapshot(snapshot?.visibleJimokLayerNames)
+  );
+  const [visibleLandown, setVisibleLandown] = useState<Set<string>>(() =>
+    setFromSnapshot(snapshot?.visibleLandownLayerNames)
+  );
+  const [visibleThematic, setVisibleThematic] = useState<Set<string>>(() =>
+    setFromSnapshot(snapshot?.visibleThematicLayerNames)
+  );
+  const [openControlId, setOpenControlId] = useState<PrintControlLayerId | null>(null);
   const [scaleText, setScaleText] = useState('—');
   const [printedAt, setPrintedAt] = useState(() => formatPrintDateTime());
   const [busy, setBusy] = useState(false);
 
-  const visibleCadastral = useMemo(
-    () => (snapshot?.visibleCadastralLayerNames ? new Set(snapshot.visibleCadastralLayerNames) : null),
-    [snapshot]
-  );
-  const visibleBuildingRoad = useMemo(
-    () =>
-      snapshot?.visibleBuildingRoadLayerNames
-        ? new Set(snapshot.visibleBuildingRoadLayerNames)
-        : null,
-    [snapshot]
-  );
-  const visibleJimok = useMemo(
-    () => (snapshot?.visibleJimokLayerNames ? new Set(snapshot.visibleJimokLayerNames) : null),
-    [snapshot]
-  );
-  const visibleLandown = useMemo(
-    () => (snapshot?.visibleLandownLayerNames ? new Set(snapshot.visibleLandownLayerNames) : null),
-    [snapshot]
-  );
-  const visibleThematic = useMemo(
-    () =>
-      snapshot?.visibleThematicLayerNames ? new Set(snapshot.visibleThematicLayerNames) : null,
-    [snapshot]
-  );
+  const syncControlActive = useCallback((controlId: string, selected: Set<string>) => {
+    setActiveLayerControls((prev) => {
+      if (selected.size === 0) return prev.filter((x) => x !== controlId);
+      return prev.includes(controlId) ? prev : [...prev, controlId];
+    });
+  }, []);
 
   useEffect(() => {
     if (!open || !snapshot) return;
     setBackgroundMapId(snapshot.backgroundMapId);
     setVisibleNames(new Set(snapshot.visibleLayerNames));
-    setActiveLayerControls(snapshot.activeLayerControls);
+    setVisibleCadastral(setFromSnapshot(snapshot.visibleCadastralLayerNames));
+    setVisibleBuildingRoad(setFromSnapshot(snapshot.visibleBuildingRoadLayerNames));
+    setVisibleJimok(setFromSnapshot(snapshot.visibleJimokLayerNames));
+    setVisibleLandown(setFromSnapshot(snapshot.visibleLandownLayerNames));
+    setVisibleThematic(setFromSnapshot(snapshot.visibleThematicLayerNames));
+    // 메인에서 실제로 선택된 컨트롤만 유지 (null=전체 켜기 해석 금지)
+    const nextControls = (snapshot.activeLayerControls ?? []).filter((id) => {
+      if (id === 'basic-section') return true;
+      if (id === 'cadastral') return (snapshot.visibleCadastralLayerNames?.length ?? 0) > 0;
+      if (id === 'building-road') return (snapshot.visibleBuildingRoadLayerNames?.length ?? 0) > 0;
+      if (id === 'land-category') return (snapshot.visibleJimokLayerNames?.length ?? 0) > 0;
+      if (id === 'ownership') return (snapshot.visibleLandownLayerNames?.length ?? 0) > 0;
+      if (id === 'thematic-map') return (snapshot.visibleThematicLayerNames?.length ?? 0) > 0;
+      return true;
+    });
+    setActiveLayerControls(nextControls);
     setActiveTool(null);
     setSidePanel(null);
+    setOpenControlId(null);
     setColor(DEFAULT_PRINT_COLOR);
     setPrintedAt(formatPrintDateTime());
   }, [open, snapshot]);
@@ -115,7 +136,11 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     visibleThematic
   );
 
-  const { deleteSelected, undo, redo, clearAll } = useMapPrintTools(map, activeTool, color);
+  const { deleteSelected, undo, redo, clearAll, applyCoordInput5181 } = useMapPrintTools(
+    map,
+    activeTool,
+    color
+  );
 
   useEffect(() => {
     if (!map) return;
@@ -154,15 +179,6 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     }, 100);
   }, [map]);
 
-  const toggleLayerName = (name: string) => {
-    setVisibleNames((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
-
   const layerList = useMemo(() => {
     const names = new Set(snapshot?.visibleLayerNames ?? []);
     visibleNames.forEach((n) => names.add(n));
@@ -174,6 +190,55 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
   const clearAllLayers = useCallback(() => {
     setVisibleNames(new Set());
     setActiveLayerControls([]);
+    setVisibleCadastral(new Set());
+    setVisibleBuildingRoad(new Set());
+    setVisibleJimok(new Set());
+    setVisibleLandown(new Set());
+    setVisibleThematic(new Set());
+    setOpenControlId(null);
+  }, []);
+
+  const handleCadastralChange = useCallback(
+    (next: Set<string>) => {
+      setVisibleCadastral(next);
+      syncControlActive('cadastral', next);
+    },
+    [syncControlActive]
+  );
+  const handleBuildingRoadChange = useCallback(
+    (next: Set<string>) => {
+      setVisibleBuildingRoad(next);
+      syncControlActive('building-road', next);
+    },
+    [syncControlActive]
+  );
+  const handleJimokChange = useCallback(
+    (next: Set<string>) => {
+      setVisibleJimok(next);
+      syncControlActive('land-category', next);
+    },
+    [syncControlActive]
+  );
+  const handleLandownChange = useCallback(
+    (next: Set<string>) => {
+      setVisibleLandown(next);
+      syncControlActive('ownership', next);
+    },
+    [syncControlActive]
+  );
+  const handleThematicChange = useCallback(
+    (next: Set<string>) => {
+      setVisibleThematic(next);
+      syncControlActive('thematic-map', next);
+    },
+    [syncControlActive]
+  );
+  const handleToggleBasicSection = useCallback(() => {
+    setActiveLayerControls((prev) =>
+      prev.includes('basic-section')
+        ? prev.filter((x) => x !== 'basic-section')
+        : [...prev, 'basic-section']
+    );
   }, []);
 
   if (!open || !snapshot) return null;
@@ -202,8 +267,19 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
           onSaveImage={() => void handleSaveImage()}
           onPrint={handlePrint}
           onClearLayers={clearAllLayers}
-          onToggleLayers={() => setSidePanel((p) => (p === 'layer' ? null : 'layer'))}
-          onToggleBackground={() => setSidePanel((p) => (p === 'background' ? null : 'background'))}
+          onToggleLayers={() => {
+            setSidePanel((p) => {
+              if (p === 'layer') {
+                setOpenControlId(null);
+                return null;
+              }
+              return 'layer';
+            });
+          }}
+          onToggleBackground={() => {
+            setOpenControlId(null);
+            setSidePanel((p) => (p === 'background' ? null : 'background'));
+          }}
           onClose={onClose}
           layerPanelOpen={sidePanel === 'layer'}
           backgroundPanelOpen={sidePanel === 'background'}
@@ -221,91 +297,33 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
             </div>
           )}
           {sidePanel === 'layer' && (
-            <div className="map-print-side-panel map-print-ignore">
-              <div className="w-56 rounded-[5px] bg-white/95 p-2 shadow-xl dark:bg-black/50">
-                <div className="mb-2 flex gap-2 px-1">
-                  <button
-                    type="button"
-                    className="text-xs text-blue-600"
-                    onClick={() => setVisibleNames(new Set(layerList))}
-                  >
-                    전체 선택
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs text-slate-500"
-                    onClick={() => setVisibleNames(new Set())}
-                  >
-                    전체 해제
-                  </button>
-                </div>
-                <div className="max-h-72 overflow-y-auto scrollbar-thin">
-                  {layerList.length === 0 ? (
-                    <p className="px-2 py-3 text-xs text-slate-500">켜진 업무 레이어가 없습니다.</p>
-                  ) : (
-                    layerList.map((name) => (
-                      <label
-                        key={name}
-                        className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs hover:bg-slate-50"
-                      >
-                        <span className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-transparent">
-                          <img
-                            src={getLegendGraphicUrl(name)}
-                            alt=""
-                            className="h-full w-full object-contain"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        </span>
-                        <span className="min-w-0 flex-1 truncate" title={name}>
-                          {layerKorName(name)}
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={visibleNames.has(name)}
-                          onChange={() => toggleLayerName(name)}
-                          className="shrink-0"
-                        />
-                      </label>
-                    ))
-                  )}
-                </div>
-                <div className="mt-2 border-t border-slate-100 pt-2">
-                  <p className="mb-1 px-1 text-[11px] text-slate-400">지도 컨트롤 레이어</p>
-                  {(
-                    [
-                      ['cadastral', '지적도'],
-                      ['building-road', '건물·도로'],
-                      ['basic-section', '기초구간'],
-                      ['land-category', '지목'],
-                      ['ownership', '소유구분'],
-                      ['thematic-map', '주제도'],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <label
-                      key={id}
-                      className="flex cursor-pointer items-center gap-2 px-2 py-1 text-xs hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={activeLayerControls.includes(id)}
-                        onChange={() => {
-                          setActiveLayerControls((prev) =>
-                            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-                          );
-                        }}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <MapPrintLayerPanel
+              layerList={layerList}
+              visibleNames={visibleNames}
+              onServiceSelectionChange={setVisibleNames}
+              layerKorName={layerKorName}
+              activeLayerControls={activeLayerControls}
+              openControlId={openControlId}
+              onOpenControl={setOpenControlId}
+              visibleCadastral={visibleCadastral}
+              visibleBuildingRoad={visibleBuildingRoad}
+              visibleJimok={visibleJimok}
+              visibleLandown={visibleLandown}
+              visibleThematic={visibleThematic}
+              onCadastralChange={handleCadastralChange}
+              onBuildingRoadChange={handleBuildingRoadChange}
+              onJimokChange={handleJimokChange}
+              onLandownChange={handleLandownChange}
+              onThematicChange={handleThematicChange}
+              onToggleBasicSection={handleToggleBasicSection}
+            />
           )}
           {sidePanel === 'coord' && (
             <div className="map-print-side-panel map-print-ignore" style={{ left: 12, right: 'auto' }}>
-              <MapPrintCoordPanel map={map} onClose={() => setSidePanel(null)} />
+              <MapPrintCoordPanel
+                onClose={() => setSidePanel(null)}
+                onApplyCoords={applyCoordInput5181}
+              />
             </div>
           )}
 

@@ -14,10 +14,13 @@ import Overlay from 'ol/Overlay';
 import { Point, MultiPoint, LineString, Polygon } from 'ol/geom';
 import type Geometry from 'ol/geom/Geometry';
 import { transform } from 'ol/proj';
+import { getCenter } from 'ol/extent';
 import { call } from '@/lib/api';
 import { useMeasure, type MeasureType } from '@/app/(pages)/map/_mapComponents/hooks/useMeasure';
 import { useSlopeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useSlopeMeasure';
 import type { MapPrintTool } from './mapPrintTypes';
+
+const PRINT_COORD_INPUT_KEY = 'printCoordInput';
 
 // ol-ext has no bundled types in this project
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -497,5 +500,56 @@ export function useMapPrintTools(
     undoRedoRef.current?.clear();
   }, [map, clearMeasurements, clearSlopeMeasurements]);
 
-  return { deleteSelected, undo, redo, clearAll, clearMeasurements };
+  /**
+   * 좌표 입력 패널 — EPSG:5181 점 목록.
+   * 1개: 점 / 2개 이상: 각 점 + 연결 선. 이전 좌표입력 도형은 교체.
+   */
+  const applyCoordInput5181 = useCallback(
+    (coords5181: [number, number][]) => {
+      if (!map) return;
+      const source = diagramSourceRef.current;
+      const view = map.getView();
+      const projection = view.getProjection();
+      if (!source || !projection) return;
+
+      const prev = source.getFeatures().filter((f) => f.get(PRINT_COORD_INPUT_KEY));
+      prev.forEach((f) => source.removeFeature(f));
+
+      if (coords5181.length === 0) return;
+
+      const color = colorRef.current;
+      const mapCoords = coords5181.map(([x, y]) =>
+        transform([x, y], 'EPSG:5181', projection)
+      );
+
+      for (const c of mapCoords) {
+        const pt = new Feature({ geometry: new Point(c) });
+        pt.set(PRINT_COORD_INPUT_KEY, true);
+        pt.setStyle(diagramFinishedStyle(color, true));
+        source.addFeature(pt);
+      }
+
+      if (mapCoords.length >= 2) {
+        const line = new Feature({ geometry: new LineString(mapCoords) });
+        line.set(PRINT_COORD_INPUT_KEY, true);
+        line.setStyle(diagramFinishedStyle(color, false));
+        source.addFeature(line);
+      }
+
+      if (mapCoords.length === 1) {
+        view.setCenter(mapCoords[0]);
+        return;
+      }
+      const lineGeom = new LineString(mapCoords);
+      const extent = lineGeom.getExtent();
+      if (extent.every((v) => Number.isFinite(v))) {
+        view.fit(extent, { padding: [48, 48, 48, 48], maxZoom: 18, duration: 200 });
+      } else {
+        view.setCenter(getCenter(extent));
+      }
+    },
+    [map]
+  );
+
+  return { deleteSelected, undo, redo, clearAll, clearMeasurements, applyCoordInput5181 };
 }
