@@ -1,19 +1,16 @@
 <layer>
   <name>rdl_nsprov_0610_ls</name>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-f8f</id>
+  <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7ff3</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-f8e</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7fff</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-f90</id>
+    <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7ff4</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-14 05:17:36.781 UTC</dateCreated>
-  <dateModified>2026-07-14 05:17:36.893 UTC</dateModified>
+  <dateCreated>2026-08-06 07:30:59.471 UTC</dateCreated>
 </layer>

@@ -1,19 +1,16 @@
 <layer>
   <name>pub_roadname_ps</name>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-bfe</id>
+  <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7fcf</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-bfd</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-8000</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-bff</id>
+    <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7fd0</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-14 06:03:55.497 UTC</dateCreated>
-  <dateModified>2026-07-14 06:03:55.565 UTC</dateModified>
+  <dateCreated>2026-08-06 07:31:05.95 UTC</dateCreated>
 </layer>

@@ -1,19 +1,16 @@
 <layer>
   <name>rdl_prov_0610_ls</name>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-f95</id>
+  <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7fef</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-f94</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7fff</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-f96</id>
+    <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7ff0</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-14 05:17:35.584 UTC</dateCreated>
-  <dateModified>2026-07-14 05:17:35.655 UTC</dateModified>
+  <dateCreated>2026-08-06 07:31:00.260 UTC</dateCreated>
 </layer>
