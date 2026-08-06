@@ -15,8 +15,8 @@ import { Point, MultiPoint, LineString, Polygon } from 'ol/geom';
 import type Geometry from 'ol/geom/Geometry';
 import { transform } from 'ol/proj';
 import { getCenter } from 'ol/extent';
-import { call } from '@/lib/api';
 import { useMeasure, type MeasureType } from '@/app/(pages)/map/_mapComponents/hooks/useMeasure';
+import { useAltitudeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useAltitudeMeasure';
 import { useSlopeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useSlopeMeasure';
 import type { MapPrintTool } from './mapPrintTypes';
 
@@ -104,33 +104,14 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-async function fetchElevation(map: OlMap, coordinate: number[]): Promise<number | null> {
-  const projection = map.getView().getProjection();
-  if (!projection) return null;
-  const [lon, lat] = transform(coordinate, projection, 'EPSG:4326');
-  try {
-    const res = await call('', 'POST', {
-      service: 'elevationService',
-      action: 'getElevation',
-      params: { lon, lat },
-    });
-    const data = (res?.data ?? res) as { elevation?: number | null };
-    const elev = data?.elevation;
-    return elev == null || !Number.isFinite(Number(elev)) ? null : Number(elev);
-  } catch {
-    return null;
-  }
-}
-
 export function useMapPrintTools(
   map: OlMap | null,
   activeTool: MapPrintTool,
   color: string,
+  onStopElevation: () => void,
 ) {
   const diagramSourceRef = useRef<VectorSource | null>(null);
   const diagramLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
-  const elevSourceRef = useRef<VectorSource | null>(null);
-  const elevLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const drawRef = useRef<Draw | null>(null);
   const selectRef = useRef<Select | null>(null);
   const undoRedoRef = useRef<(Interaction & { undo: () => void; redo: () => void; clear: () => void }) | null>(
@@ -139,13 +120,23 @@ export function useMapPrintTools(
   const overlaysRef = useRef<Overlay[]>([]);
   const colorRef = useRef(color);
   colorRef.current = color;
+  const onStopElevationRef = useRef(onStopElevation);
+  onStopElevationRef.current = onStopElevation;
+  const stopElevation = useCallback(() => {
+    onStopElevationRef.current();
+  }, []);
 
   const measureType: MeasureType | null =
     activeTool === 'distance' ? 'distance' : activeTool === 'area' ? 'area' : null;
   const { clearMeasurements } = useMeasure(map, measureType);
+  const { clearAltitudeMarkers } = useAltitudeMeasure(
+    map,
+    activeTool === 'elevation',
+    stopElevation
+  );
   const { clearSlopeMeasurements } = useSlopeMeasure(map, activeTool === 'slope');
 
-  // diagram + elevation layers + undo
+  // diagram layer + undo (고도는 지도와 동일하게 useAltitudeMeasure 재사용)
   useEffect(() => {
     if (!map) return;
     const diagramSource = new VectorSource();
@@ -154,40 +145,21 @@ export function useMapPrintTools(
       zIndex: 200,
       properties: { name: 'MapPrintDiagram' },
     });
-    const elevSource = new VectorSource();
-    const elevLayer = new VectorLayer({
-      source: elevSource,
-      zIndex: 201,
-      style: new Style({
-        image: new CircleStyle({
-          radius: 5,
-          fill: new Fill({ color: '#22c55e' }),
-          stroke: new Stroke({ color: '#fff', width: 2 }),
-        }),
-      }),
-      properties: { name: 'MapPrintElevation' },
-    });
     map.addLayer(diagramLayer);
-    map.addLayer(elevLayer);
     diagramSourceRef.current = diagramSource;
     diagramLayerRef.current = diagramLayer;
-    elevSourceRef.current = elevSource;
-    elevLayerRef.current = elevLayer;
 
-    const undo = new UndoRedo({ layers: [diagramLayer, elevLayer] });
+    const undo = new UndoRedo({ layers: [diagramLayer] });
     map.addInteraction(undo);
     undoRedoRef.current = undo;
 
     return () => {
       map.removeInteraction(undo);
       map.removeLayer(diagramLayer);
-      map.removeLayer(elevLayer);
       overlaysRef.current.forEach((o) => map.removeOverlay(o));
       overlaysRef.current = [];
       diagramSourceRef.current = null;
       diagramLayerRef.current = null;
-      elevSourceRef.current = null;
-      elevLayerRef.current = null;
       undoRedoRef.current = null;
     };
   }, [map]);
@@ -393,35 +365,9 @@ export function useMapPrintTools(
         };
         window.setTimeout(() => input.focus(), 30);
       });
-    } else if (activeTool === 'elevation' && elevSourceRef.current) {
-      attachDraw(
-        'Point',
-        undefined,
-        (feature) => {
-          const geom = feature.getGeometry() as Point;
-          const coord = geom.getCoordinates();
-          void fetchElevation(map, coord).then((elev) => {
-            const label = elev == null ? '고도 없음' : `${elev.toLocaleString('ko-KR')} m`;
-            const el = document.createElement('div');
-            el.className = 'map-print-comment-done';
-            el.style.color = '#166534';
-            el.textContent = label;
-            const overlay = new Overlay({
-              element: el,
-              position: coord,
-              positioning: 'bottom-center',
-              offset: [0, -10],
-            });
-            map.addOverlay(overlay);
-            overlaysRef.current.push(overlay);
-            feature.set('printOverlay', overlay);
-          });
-        },
-        elevSourceRef.current
-      );
     } else if (activeTool === 'select') {
       const select = new Select({
-        layers: [diagramLayerRef.current!, elevLayerRef.current!].filter(Boolean),
+        layers: [diagramLayerRef.current!].filter(Boolean),
         style: new Style({
           stroke: new Stroke({ color: '#ef4444', width: 3 }),
           fill: new Fill({ color: hexToRgba('#ef4444', 0.2) }),
@@ -476,7 +422,6 @@ export function useMapPrintTools(
         overlaysRef.current = overlaysRef.current.filter((o) => o !== ov);
       }
       diagramSourceRef.current?.removeFeature(f);
-      elevSourceRef.current?.removeFeature(f);
     });
     selected.clear();
   }, [map]);
@@ -492,13 +437,13 @@ export function useMapPrintTools(
   const clearAll = useCallback(() => {
     if (!map) return;
     diagramSourceRef.current?.clear();
-    elevSourceRef.current?.clear();
     overlaysRef.current.forEach((o) => map.removeOverlay(o));
     overlaysRef.current = [];
     clearMeasurements();
+    clearAltitudeMarkers();
     clearSlopeMeasurements();
     undoRedoRef.current?.clear();
-  }, [map, clearMeasurements, clearSlopeMeasurements]);
+  }, [map, clearMeasurements, clearAltitudeMarkers, clearSlopeMeasurements]);
 
   /**
    * 좌표 입력 패널 — EPSG:5181 점 목록.

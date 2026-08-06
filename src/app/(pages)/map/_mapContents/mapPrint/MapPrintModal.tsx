@@ -136,10 +136,15 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     visibleThematic
   );
 
+  const stopElevationTool = useCallback(() => {
+    setActiveTool((prev) => (prev === 'elevation' ? null : prev));
+  }, []);
+
   const { deleteSelected, undo, redo, clearAll, applyCoordInput5181 } = useMapPrintTools(
     map,
     activeTool,
-    color
+    color,
+    stopElevationTool
   );
 
   useEffect(() => {
