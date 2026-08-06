@@ -1,12 +1,12 @@
 import './mapWalkerCatEars.css';
-import { WALKER_GROUND_SY, type WalkerViewBasis } from './mapWalkerHatCylinder';
+import { WALKER_GROUND_SY, type WalkerViewBasis } from './mapWalkerViewBasis';
 
 /* ============================================================================
  * MapWalker 고양이 귀 — 원뿔 2개 (단축법 / 투시도법)
  * ----------------------------------------------------------------------------
- * 좌표계·카메라·머리 pitch 는 mapWalkerHatCylinder 와 완전히 동일하다.
+ * 좌표계·카메라·머리 pitch 는 mapWalkerViewBasis 와 동일하다.
  * computeWalkerViewBasis 로 만든 같은 시선 기저를 그대로 받아 쓰므로
- * 모자·시야점·귀가 서로 어긋날 수 없다.
+ * 시야점·귀가 서로 어긋날 수 없다.
  *
  * [단축법 — 밑면]
  *   귀 밑면은 반지름 EAR_R 인 원이다. 정사영에서 원은
@@ -48,12 +48,12 @@ import { WALKER_GROUND_SY, type WalkerViewBasis } from './mapWalkerHatCylinder';
  *   깊이에 따른 약한 원근. 카메라에 가까운 귀가 살짝 커진다.
  * ========================================================================== */
 
-/** 카메라 고도각 — 모자와 같은 값을 쓴다 (mapWalker.css --mw-ground-sy) */
+/** 카메라 고도각 — mapWalker.css --mw-ground-sy 와 동일 */
 const CAM_SIN = WALKER_GROUND_SY;
 const CAM_COS = Math.sqrt(Math.max(1e-6, 1 - CAM_SIN * CAM_SIN));
 
 /* ---------------------------------------------------------------------------
- * 머리 기준점 (catEar SVG 유저 좌표, 1 unit = 1px) — 모자 SVG 와 동일 앵커
+ * 머리 기준점 (catEar SVG 유저 좌표, 1 unit = 1px)
  *   .head   : 27×27, figure 기준 top:0 → 머리 중심 = figure(13.5, 13.5)
  *   .catEar : viewBox "-8 -12 56 64", 56×64px, top:-21px, margin-left:-28px
  * ------------------------------------------------------------------------- */
@@ -186,7 +186,7 @@ const UP_COMP = Math.sqrt(
  * 귀 축(월드 단위벡터).
  * 머리 국소 기저 forward / up / right 를 만든 뒤 좌우·앞으로 기울인다.
  *   forward = ( sinψ·cosθ,  cosψ·cosθ, −sinθ )
- *   up      = ( sinψ·sinθ,  cosψ·sinθ,  cosθ )   ← 모자 축과 동일
+ *   up      = ( sinψ·sinθ,  cosψ·sinθ,  cosθ )   ← 머리 위쪽 축
  *   right   = ( cosψ,      −sinψ,       0     )
  */
 function earAxis(

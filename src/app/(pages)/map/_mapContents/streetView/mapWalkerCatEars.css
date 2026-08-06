@@ -2,7 +2,7 @@
 
 /*
  * 앵커 규칙 (mapWalkerCatEars.ts 의 HEAD_CX / HEAD_CY 와 한 세트)
- * mapWalkerHatCylinder.css 와 완전히 같은 박스를 쓴다.
+ * 귀 SVG 박스(viewBox·크기·앵커) 규칙.
  *   viewBox "minX minY W H" + width/height = W×H  → 1 user unit = 1px
  *   유저좌표 (x, y) 의 화면 위치
  *     = figure중앙 - W/2 + (x - minX),  top + (y - minY)

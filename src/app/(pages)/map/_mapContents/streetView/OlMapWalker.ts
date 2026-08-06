@@ -4,12 +4,9 @@ import type { Coordinate } from 'ol/coordinate';
 import { getPointResolution } from 'ol/proj';
 import { getMapVisualCenterCoordinate } from '../../_mapComponents/config/mapVisualCenter';
 import {
-  applyHatCylinder,
-  computeHatCylinder,
   computeWalkerViewBasis,
-  createHatCylinder,
   WALKER_TILT_UP_CAP_DEG,
-} from './mapWalkerHatCylinder';
+} from './mapWalkerViewBasis';
 import {
   applyCatEars,
   computeCatEars,
@@ -20,7 +17,7 @@ import {
 import './mapWalker.css';
 
 /** 워커 아이콘 형태 — 기본값은 고양이(cat) */
-export type WalkerIconMode = 'default' | 'hat' | 'ggnr' | 'cat' | 'ggnrCat';
+export type WalkerIconMode = 'default' | 'ggnr' | 'cat' | 'ggnrCat';
 
 /** 시야 부채꼴 각도(도) */
 const FOV_DEG = 70;
@@ -219,7 +216,6 @@ export class OlMapWalker {
   private overlay: Overlay;
   private content: HTMLDivElement;
   private fovRing: HTMLDivElement;
-  private hatCylinder: SVGSVGElement | null = null;
   private catEars: CatEarsElements | null = null;
   private iconMode: WalkerIconMode = 'cat';
   private panDeg = 0;
@@ -265,8 +261,6 @@ export class OlMapWalker {
     head.appendChild(headMark);
     figure.appendChild(createBodySvg());
     figure.appendChild(head);
-    this.hatCylinder = createHatCylinder();
-    figure.appendChild(this.hatCylinder);
     this.catEars = createCatEars();
     figure.appendChild(this.catEars.far);
     figure.appendChild(this.catEars.near);
@@ -557,14 +551,6 @@ export class OlMapWalker {
     this.setCss('--mw-sr', `${gradR.toFixed(0)}px`);
     this.setCss('--mw-ss', `${softCore.toFixed(0)}%`);
     this.setCss('--mw-sm', `${softMid.toFixed(0)}%`);
-
-    if (this.hatCylinder) {
-      const showHat = this.iconMode === 'hat';
-      this.hatCylinder.style.display = showHat ? '' : 'none';
-      if (showHat) {
-        applyHatCylinder(this.hatCylinder, computeHatCylinder(basis));
-      }
-    }
 
     if (this.catEars) {
       const showCat = this.iconMode === 'cat' || this.iconMode === 'ggnrCat';
