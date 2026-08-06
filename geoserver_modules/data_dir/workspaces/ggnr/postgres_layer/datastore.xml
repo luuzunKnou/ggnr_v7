@@ -18,6 +18,7 @@
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>
+    <entry key="Expose primary keys">true</entry>
     <entry key="user">build_uj</entry>
   </connectionParameters>
   <__default>false</__default>

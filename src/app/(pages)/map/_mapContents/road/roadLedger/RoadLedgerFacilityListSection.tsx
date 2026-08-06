@@ -26,6 +26,23 @@ function facilityTableExpandKey(groupKey: string, defineTableName: string): stri
   return `${groupKey}::${defineTableName}`;
 }
 
+/** 미리보기 행 기준 열 비율 — 더보기(말줄임) 시에만 적용해 접힌 열 비율에 맞춤 */
+function facilityColumnWidthPercents(
+  columnKeys: string[],
+  rows: Record<string, unknown>[]
+): number[] {
+  const sample = rows.slice(0, FACILITY_LIST_PREVIEW_ROWS);
+  const weights = columnKeys.map((col) => {
+    let maxLen = Math.max(col.length, 1);
+    for (const r of sample) {
+      maxLen = Math.max(maxLen, formatRoadLedgerFacilityCellValue(col, r).length);
+    }
+    return maxLen;
+  });
+  const sum = weights.reduce((a, b) => a + b, 0) || 1;
+  return weights.map((w) => (w / sum) * 100);
+}
+
 type FacilitySection = {
   groupKey: string;
   tables: {
@@ -278,6 +295,8 @@ export function RoadLedgerFacilityListSection({
               {selectedSection.tables.map((t) => {
                 const columnKeys =
                   t.rows.length > 0 ? getRoadLedgerFacilityColumnKeys(t.defineTableName, t.rows[0]!) : [];
+                const colWidthPercents =
+                  columnKeys.length > 0 ? facilityColumnWidthPercents(columnKeys, t.rows) : [];
                 const tableExpandKey = facilityTableExpandKey(
                   selectedSection.groupKey,
                   t.defineTableName
@@ -318,18 +337,39 @@ export function RoadLedgerFacilityListSection({
                       <>
                         <div
                           className={cn(
-                            "max-w-full overflow-x-auto",
+                            "min-w-0 w-full overflow-x-hidden",
                             tableExpanded && `${FACILITY_LIST_EXPANDED_MAX_H} overflow-y-auto overscroll-contain`,
                           )}
                         >
-                        <table className="w-max min-w-full border-collapse text-left text-[10px] text-slate-700">
+                        <table
+                          className={cn(
+                            "border-collapse text-left text-[10px] text-slate-700",
+                            tableExpanded ? "w-full table-fixed" : "w-max min-w-full",
+                          )}
+                        >
+                          {tableExpanded ? (
+                            <colgroup>
+                              {columnKeys.map((col, i) => (
+                                <col
+                                  key={col}
+                                  style={{ width: `${colWidthPercents[i] ?? 0}%` }}
+                                />
+                              ))}
+                            </colgroup>
+                          ) : null}
                           <thead className={tableExpanded ? "sticky top-0 z-[1]" : undefined}>
                             <tr className="border-b border-slate-200 bg-slate-100">
                               {columnKeys.map((col) => (
                                 <th
                                   key={col}
                                   scope="col"
-                                  className="max-w-[7.5rem] min-w-0 whitespace-normal break-words px-1.5 py-1 text-left align-top font-medium leading-tight text-slate-700"
+                                  title={tableExpanded ? col : undefined}
+                                  className={cn(
+                                    "px-1.5 py-1 text-left align-middle font-medium leading-tight text-slate-700",
+                                    tableExpanded
+                                      ? "min-w-0 truncate"
+                                      : "whitespace-nowrap",
+                                  )}
                                 >
                                   {col}
                                 </th>
@@ -375,14 +415,27 @@ export function RoadLedgerFacilityListSection({
                                 }
                               }}
                             >
-                                {columnKeys.map((col) => (
+                                {columnKeys.map((col) => {
+                                  const cellText = formatRoadLedgerFacilityCellValue(col, r);
+                                  return (
                                   <td
                                     key={col}
-                                    className="max-w-none whitespace-nowrap px-1.5 py-1"
+                                    title={
+                                      tableExpanded && cellText !== "—"
+                                        ? cellText
+                                        : undefined
+                                    }
+                                    className={cn(
+                                      "px-1.5 py-1",
+                                      tableExpanded
+                                        ? "min-w-0 truncate"
+                                        : "whitespace-nowrap",
+                                    )}
                                   >
-                                    {formatRoadLedgerFacilityCellValue(col, r)}
+                                    {cellText}
                                   </td>
-                              ))}
+                                  );
+                                })}
                             </tr>
                             );
                           })}

@@ -190,22 +190,16 @@ export function RoadRewardParcelModal({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-slate-100 bg-white px-4 py-2.5">
-          {readOnly ? (
-            <button type="button" className={btnGhost} onClick={onClose}>
-              닫기
+        {!readOnly ? (
+          <div className="flex shrink-0 items-center justify-end gap-1 border-t border-slate-100 bg-white px-4 py-2.5">
+            <button type="button" className={btnPrimary} onClick={onSave}>
+              저장
             </button>
-          ) : (
-            <>
-              <button type="button" className={btnPrimary} onClick={onSave}>
-                저장
-              </button>
-              <button type="button" className={btnGhost} onClick={onClose}>
-                취소
-              </button>
-            </>
-          )}
-        </div>
+            <button type="button" className={btnGhost} onClick={onClose}>
+              취소
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body

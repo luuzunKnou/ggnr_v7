@@ -28,6 +28,10 @@ export function buildPendingChangeLabel(
   rowKey: PendingRowKey | null
 ): string {
   if (kind === 'insert') return `${layerName} · 신규`;
+  if (kind === 'delete') {
+    if (rowKey) return `${layerName} · ${rowKey.keyField}=${rowKey.keyValue} 삭제`;
+    return `${layerName} · 삭제`;
+  }
   if (rowKey) return `${layerName} · ${rowKey.keyField}=${rowKey.keyValue}`;
   return `${layerName} · 수정`;
 }
@@ -70,11 +74,11 @@ export function upsertPendingChange(
   list: PendingShapeChange[],
   item: PendingShapeChange
 ): PendingShapeChange[] {
-  if (item.kind === 'update' && item.rowKey) {
+  if ((item.kind === 'update' || item.kind === 'delete') && item.rowKey) {
     const rid = pendingRowKeyId(item.rowKey);
     const idx = list.findIndex(
       (p) =>
-        p.kind === 'update' &&
+        (p.kind === 'update' || p.kind === 'delete') &&
         p.layer.tableName === item.layer.tableName &&
         p.rowKey &&
         pendingRowKeyId(p.rowKey) === rid

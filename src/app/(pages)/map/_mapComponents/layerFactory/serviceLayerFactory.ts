@@ -55,19 +55,49 @@ function escapeCqlString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-export function buildExcludeFeatureKeysCql(items: HiddenWmsFeatureKey[]): string | null {
+/**
+ * GeoServer PostGIS는 기본으로 PK를 attribute로 노출하지 않음.
+ * `{layer}_key` / ogc_fid 등은 attribute CQL이 실패하므로 FID(`NOT IN ('layer.1')`)로 숨김.
+ */
+function isFidBasedHideKeyField(layerName: string, keyField: string): boolean {
+  const layer = layerName.trim().toLowerCase();
+  const field = keyField.trim().toLowerCase();
+  if (!layer || !field) return false;
+  return (
+    field === `${layer}_key` ||
+    field === 'ogc_fid' ||
+    field === 'fid' ||
+    field === 'gid'
+  );
+}
+
+export function buildExcludeFeatureKeysCql(
+  items: HiddenWmsFeatureKey[],
+  layerName?: string
+): string | null {
   if (items.length === 0) return null;
+  const layer = layerName?.trim() ?? '';
+  const fidValues: string[] = [];
   const byField = new Map<string, string[]>();
   for (const { keyField, keyValue } of items) {
     const field = String(keyField).trim();
     const val = String(keyValue).trim();
     if (!field || !val) continue;
+    if (layer && isFidBasedHideKeyField(layer, field)) {
+      fidValues.push(val);
+      continue;
+    }
     const list = byField.get(field) ?? [];
     list.push(val);
     byField.set(field, list);
   }
 
   const clauses: string[] = [];
+  if (fidValues.length > 0 && layer) {
+    const unique = [...new Set(fidValues)];
+    const list = unique.map((v) => `'${escapeCqlString(`${layer}.${v}`)}'`).join(',');
+    clauses.push(`NOT IN (${list})`);
+  }
   for (const [field, values] of byField) {
     const unique = [...new Set(values)];
     if (unique.length === 0) continue;
@@ -99,11 +129,18 @@ function mergeCqlParts(...parts: Array<string | null | undefined>): string {
   return clauses.join(' AND ');
 }
 
+/** fetch 실패 시 empty src 대신 사용 — OL decode 가 Image load error 로 reject 되는 것 방지 */
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 /**
  * WMS GetMap 로드를 POST로 수행 (CQL_FILTER 등으로 URL이 길어져 414 방지)
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
   const img = image.getImage() as HTMLImageElement;
+  const fail = () => {
+    img.src = TRANSPARENT_PIXEL;
+  };
   try {
     const url = new URL(src);
     const baseUrl = url.origin + url.pathname;
@@ -115,16 +152,21 @@ function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
     })
       .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.statusText))))
       .then((blob) => {
+        const type = String(blob.type || '').toLowerCase();
+        if (type.includes('xml') || type.includes('text')) {
+          throw new Error('WMS exception');
+        }
         const blobUrl = URL.createObjectURL(blob);
         img.onload = () => URL.revokeObjectURL(blobUrl);
-        img.onerror = () => URL.revokeObjectURL(blobUrl);
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          fail();
+        };
         img.src = blobUrl;
       })
-      .catch(() => {
-        img.src = '';
-      });
+      .catch(fail);
   } catch {
-    img.src = '';
+    fail();
   }
 }
 
@@ -143,7 +185,8 @@ export function createServiceLayer(): ImageLayer<ImageWMS> {
       params: {
         LAYERS: '',
         STYLES: '',
-        EXCEPTIONS: 'application/vnd.ogc.se_inimage',
+        // inimage 예외는 PNG로 에러 문구가 그려져 실패 감지 불가 → xml로 받아 투명 픽셀로 대체
+        EXCEPTIONS: 'application/vnd.ogc.se_xml',
       },
       serverType: 'geoserver',
       ratio: WMS_VIEWPORT_IMAGE_RATIO,
@@ -215,12 +258,19 @@ export function useServiceLayerSync(
     if (!source) return;
     const params = source.getParams();
 
+    const update =
+      typeof source.updateParams === 'function'
+        ? (next: Record<string, string | undefined>) => source.updateParams!(next)
+        : (next: Record<string, string | undefined>) => {
+            Object.assign(params, next);
+            source.changed();
+          };
+
     if (visibleLayerNames.size === 0) {
       const syncKey = 'empty';
       if (lastSyncKeyRef.current === syncKey && !serviceLayer.getVisible()) return;
       lastSyncKeyRef.current = syncKey;
-      params.LAYERS = '';
-      params.STYLES = '';
+      update({ LAYERS: '', STYLES: '', CQL_FILTER: undefined });
       delete params.CQL_FILTER;
       serviceLayer.setVisible(false);
       return;
@@ -239,10 +289,11 @@ export function useServiceLayerSync(
     const cqlArr = names.map((n) => {
       const base = filterRowsToCql(filters?.get(n) ?? []);
       const spatialCql = wkt ? `INTERSECTS(geom, ${wkt})` : null;
-      const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? []);
+      const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? [], n);
       return mergeCqlParts(base, spatialCql, excludeCql);
     });
-    const cqlParam = cqlArr.join(';');
+    const allInclude = cqlArr.every((c) => c === 'INCLUDE');
+    const cqlParam = allInclude ? '' : cqlArr.join(';');
     const syncKey = `${layersParam}|${stylesParam}|${cqlParam}`;
 
     if (
@@ -256,11 +307,13 @@ export function useServiceLayerSync(
     }
     lastSyncKeyRef.current = syncKey;
 
-    params.LAYERS = layersParam;
-    params.STYLES = stylesParam;
-    params.CQL_FILTER = cqlParam;
+    if (allInclude) {
+      update({ LAYERS: layersParam, STYLES: stylesParam, CQL_FILTER: undefined });
+      delete params.CQL_FILTER;
+    } else {
+      update({ LAYERS: layersParam, STYLES: stylesParam, CQL_FILTER: cqlParam });
+    }
     serviceLayer.setVisible(true);
-    source.changed();
   }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);
 }
 

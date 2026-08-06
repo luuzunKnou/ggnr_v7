@@ -723,6 +723,8 @@ export async function insertTableRow(params: {
   if (keyCol && !insertedColSet.has(keyCol.toLowerCase())) {
     let keyRaw = values[keyField] ?? values[keyCol];
     let keyVal = normalizeChangeValue(keyRaw);
+    /** 업무 채번으로 만든 키는 DB default(serial)가 있어도 명시 INSERT */
+    let forceKeyInsert = false;
     if ((keyVal == null || !String(keyVal).trim()) && (tableGuess === 'usage_data_as' || tableGuess === 'cons_data_as')) {
       if (tableGuess === 'usage_data_as') {
         const { getNextUsageDataAsConsCode } = await import('./usageDataAsService');
@@ -740,11 +742,19 @@ export async function insertTableRow(params: {
         keyVal = generated.consCode;
       }
       values[keyField] = keyVal;
+      forceKeyInsert = true;
     }
     if (keyVal != null && String(keyVal).trim()) {
-      insertCols.push(quoteIdent(keyCol));
-      insertVals.push(`'${esc(String(keyVal).trim())}'`);
-      insertedColSet.add(keyCol.toLowerCase());
+      const rawKey = String(keyVal).trim();
+      const keyMeta = columnMeta.find((c) => c.name.toLowerCase() === keyCol.toLowerCase());
+      // serial 등 기본값 있는 PK는 클라이언트가 넘긴 키를 쓰지 않음(중복·잘못된 값 방지)
+      if (keyMeta?.hasDefault && !forceKeyInsert) {
+        // skip — nextval 등에 맡김
+      } else {
+        insertCols.push(quoteIdent(keyCol));
+        insertVals.push(`'${esc(rawKey)}'`);
+        insertedColSet.add(keyCol.toLowerCase());
+      }
     }
   }
 

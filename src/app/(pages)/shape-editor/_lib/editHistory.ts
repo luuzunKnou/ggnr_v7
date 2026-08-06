@@ -41,6 +41,8 @@ function historyActionLabel(
       return moveIndex != null && moveIndex > 0 ? `위치 변경 ${moveIndex}` : '위치 변경';
     case 'delete':
       return '삭제';
+    case 'attribute':
+      return '속성 변경';
     default:
       return '편집';
   }
@@ -61,6 +63,8 @@ export function buildHistoryEntryLabel(
       return `${layer.name} (신규)`;
     case 'delete':
       return `${layer.name} (${keyPart}) 삭제`;
+    case 'attribute':
+      return `${layer.name} (${keyPart}) 속성`;
     case 'select':
       return `${layer.name} · ${historyActionLabel(action, kind, moveIndex)}`;
     default:
@@ -126,7 +130,7 @@ export function buildDeleteHistoryEntry(
   return baseHistoryFields(layer, draft, 'delete', null);
 }
 
-function attributesEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+export function attributesEqual(a: Record<string, string>, b: Record<string, string>): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of keys) {
     if ((a[key] ?? '') !== (b[key] ?? '')) return false;
@@ -185,10 +189,10 @@ function sessionBaseline(
 }
 
 function buildDeletePendingChange(entry: EditHistoryEntry): PendingShapeChange | null {
-  if (entry.kind !== 'update' || !entry.rowKey) return null;
+  if (!entry.rowKey) return null;
   return {
     id: entry.id,
-    kind: 'update',
+    kind: 'delete',
     layer: entry.layer,
     wkt5181: '',
     attributeValues: { ...entry.attributeValues },
@@ -242,8 +246,10 @@ export function collectDirtySaveItems(
     if (!effective) continue;
 
     if (effective.action === 'delete') {
-      if (baseline.kind === 'insert') continue;
-      const pending = buildDeletePendingChange(effective);
+      const rowKey = effective.rowKey ?? baseline.rowKey;
+      // 키 없는 신규 삭제 = 미저장 취소 → DB 반영 없음
+      if (!rowKey) continue;
+      const pending = buildDeletePendingChange({ ...effective, rowKey });
       if (pending) out.push(pending);
       continue;
     }
