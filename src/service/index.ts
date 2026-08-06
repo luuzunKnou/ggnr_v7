@@ -17,6 +17,7 @@ import * as excelHistoryService from './excelHistoryService';
 import * as excelUploadService from './excelUploadService';
 import * as layerHistoryService from './layerHistoryService';
 import * as dataHistoryService from './dataHistoryService';
+import * as changeHistoryService from './changeHistoryService';
 import * as dataLogService from './dataLogService';
 import * as permissionService from './permissionService';
 import * as usrService from './usrService';
@@ -61,6 +62,7 @@ export {
   excelHistoryService,
   layerHistoryService,
   dataHistoryService,
+  changeHistoryService,
   dataLogService,
   permissionService,
   usrService,

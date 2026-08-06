@@ -71,12 +71,6 @@ export type ComplaintDetail = {
   }[];
 } | null;
 
-export type DataFlowReportSnapshot = {
-  extentWkt5181: string;
-  preReportVisibleLayerNames: string[];
-  preReportBackgroundMapId: string;
-};
-
 export type MapContextValue = {
   mapInstanceRef: RefObject<Map | null>;
   showDebugUi: boolean;
@@ -197,17 +191,8 @@ export type MapContextValue = {
   /** emd envelope WGS84 — CCTV 목록·통행 타일 요청에 동일 적용 */
   roadCctvExtentWgs84: RoadCctvExtentWgs84 | null;
   setRoadCctvExtentWgs84: Dispatch<SetStateAction<RoadCctvExtentWgs84 | null>>;
-  /** OpenLayersMap이 배경지도 id를 매 갱신 — 변동이력 분석 직전 스냅샷용 */
+  /** OpenLayersMap이 배경지도 id를 매 갱신 */
   mapBackgroundMapIdRef: MutableRefObject<string>;
-  /** 변동이력 분석 보고서(사각형 완료 후) */
-  dataFlowReport: DataFlowReportSnapshot | null;
-  setDataFlowReport: Dispatch<SetStateAction<DataFlowReportSnapshot | null>>;
-  /** 보고서에서 타임라인 시점 외, 분석 전 켜 두었던 레이어를 겹쳐 표시 */
-  dataFlowCompareWithCurrentLayers: boolean;
-  setDataFlowCompareWithCurrentLayers: Dispatch<SetStateAction<boolean>>;
-  /** 변동이력 분석이 배경지도를 강제할 때(타임라인·복원). OpenLayersMap에서 소비 */
-  dataFlowForcedBackgroundMapId: string | null;
-  setDataFlowForcedBackgroundMapId: Dispatch<SetStateAction<string | null>>;
   /** 레이어 행 등록/수정 — 지도 도형 그리기·수정 모드 */
   layerRowGeomEdit: LayerRowGeomEditState;
   setLayerRowGeomEdit: Dispatch<SetStateAction<LayerRowGeomEditState>>;
@@ -333,9 +318,6 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
-  const [dataFlowReport, setDataFlowReport] = useState<DataFlowReportSnapshot | null>(null);
-  const [dataFlowCompareWithCurrentLayers, setDataFlowCompareWithCurrentLayers] = useState(false);
-  const [dataFlowForcedBackgroundMapId, setDataFlowForcedBackgroundMapId] = useState<string | null>(null);
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
   const layerRowGeomEditDirtyRef = useRef(false);
@@ -438,12 +420,6 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         roadCctvExtentWgs84,
         setRoadCctvExtentWgs84,
         mapBackgroundMapIdRef,
-        dataFlowReport,
-        setDataFlowReport,
-        dataFlowCompareWithCurrentLayers,
-        setDataFlowCompareWithCurrentLayers,
-        dataFlowForcedBackgroundMapId,
-        setDataFlowForcedBackgroundMapId,
         layerRowGeomEdit,
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,
