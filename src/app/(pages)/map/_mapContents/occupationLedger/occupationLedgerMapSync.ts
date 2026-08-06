@@ -1,6 +1,7 @@
 import type Map from 'ol/Map';
 import { call } from '@/lib/api';
 import {
+  getForeignOccupationLedgerTableIds,
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
 } from '@/lib/occupationLedgerBinding';
@@ -21,6 +22,24 @@ export function clearOccupationLedgerWmsLayers(
   });
   if (!binding) return;
   const ids = new Set(getOccupationLedgerWmsLayerIds(binding));
+  setVisibleLayerNames((prev) => {
+    let changed = false;
+    const next = new Set(prev);
+    for (const id of ids) {
+      if (next.delete(id)) changed = true;
+    }
+    return changed ? next : prev;
+  });
+}
+
+/** 시스템 전환 시 — 현재 시스템이 아닌 점용대장 레이어만 끄기 */
+export function clearForeignOccupationLedgerWmsLayers(
+  setVisibleLayerNames: SetVisible | null | undefined,
+  system?: string | null
+) {
+  if (!setVisibleLayerNames) return;
+  const ids = getForeignOccupationLedgerTableIds(system);
+  if (ids.length === 0) return;
   setVisibleLayerNames((prev) => {
     let changed = false;
     const next = new Set(prev);

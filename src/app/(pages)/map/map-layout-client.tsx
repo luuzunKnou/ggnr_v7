@@ -71,7 +71,10 @@ import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMo
 import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
 import { OccupationLedgerListPanel } from "./_mapContents/occupationLedger/OccupationLedgerListPanel"
 import { OccupationLedgerDetailPanel } from "./_mapContents/occupationLedger/OccupationLedgerDetailPanel"
-import { clearOccupationLedgerWmsLayers } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
+import {
+  clearForeignOccupationLedgerWmsLayers,
+  clearOccupationLedgerWmsLayers,
+} from "./_mapContents/occupationLedger/occupationLedgerMapSync"
 import {
   findOpenedOccupationLedgerSerEng,
   isOccupationLedgerOpenedToken,
@@ -378,6 +381,7 @@ function MapLayoutContent({
   }
   const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
   const openedWindows = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+  const systemKeyFromUrl = searchParams.get("system") ?? ""
   const serviceMenuKey = useMemo(
     () => openedWindows.find((w) => w !== LIST_VIEW_OPENED_KEY && w !== "layerSetting") ?? "",
     [rawOpened.join(",")]
@@ -788,6 +792,11 @@ function MapLayoutContent({
     setVisibleLayerNames,
     occupationLedgerSerEng,
   ])
+
+  /** 시스템 전환 시 — 다른 시스템 점용대장(하천·도로·국공유지) WMS만 끄기 */
+  useEffect(() => {
+    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
+  }, [systemKeyFromUrl, setVisibleLayerNames])
 
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)

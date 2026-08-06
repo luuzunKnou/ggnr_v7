@@ -22,6 +22,7 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess';
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
+import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 
 type SystemOption = {
   sys_key: string;
@@ -269,6 +270,7 @@ export function MapSearchBar({
     const current = new URLSearchParams(Array.from(searchParams.entries()));
     if (sysKey) current.set('system', sysKey);
     else current.delete('system');
+    scrubOccupationLedgerFromMapSearchParams(current, sysKey);
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };
