@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useRef, useState, useCallback, type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import type Map from 'ol/Map';
+import type { MapSplitSecondaryKind } from './mapSplit/mapSplitTypes';
 import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
 import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
@@ -124,6 +125,23 @@ export type MapContextValue = {
   setMapPaddingLeft: Dispatch<SetStateAction<number>>;
   /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
   applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
+  /**
+   * view.padding 덮어쓰기. null이면 기본(왼쪽 패널 폭).
+   * 상하 분할 시 [0,0,0,0] — 레이아웃 왼쪽 스페이서와 이중 패딩되어 워커가 사라지지 않게 함
+   */
+  mapViewPaddingOverrideRef: MutableRefObject<[number, number, number, number] | null>;
+  /** OpenLayers 맵 인스턴스 준비 여부 */
+  mapReady: boolean;
+  setMapReady: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도 영역 보조 칸 종류. null이면 분할 OFF.
+   * streetView | map | panorama 등 — 공통 분할 셸과 연동
+   */
+  mapSplitSecondaryKind: MapSplitSecondaryKind;
+  setMapSplitSecondaryKind: Dispatch<SetStateAction<MapSplitSecondaryKind>>;
+  /** 거리뷰 등: 보조 칸 이동 시 주 칸 지도 중심 동기화 (기본 true) */
+  mapSplitMapSync: boolean;
+  setMapSplitMapSync: Dispatch<SetStateAction<boolean>>;
   /** VWorld API 키 (주소 검색·역지오코딩). 서버 getMapConfig로 조회 후 설정 */
   vworldApiKey: string;
   setVworldApiKey: Dispatch<SetStateAction<string>>;
@@ -411,6 +429,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
+  const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapSplitSecondaryKind, setMapSplitSecondaryKind] = useState<MapSplitSecondaryKind>(null);
+  const [mapSplitMapSync, setMapSplitMapSync] = useState(true);
   const [vworldApiKey, setVworldApiKey] = useState('');
   const [riverBasicPlanPanelOpen, setRiverBasicPlanPanelOpen] = useState(false);
   const [riverBasicPlanSelectedRiver, setRiverBasicPlanSelectedRiver] = useState('');
@@ -573,6 +595,13 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapPaddingLeft,
         setMapPaddingLeft,
         applyMapViewPaddingRef,
+        mapViewPaddingOverrideRef,
+        mapReady,
+        setMapReady,
+        mapSplitSecondaryKind,
+        setMapSplitSecondaryKind,
+        mapSplitMapSync,
+        setMapSplitMapSync,
         vworldApiKey,
         setVworldApiKey,
         riverBasicPlanPanelOpen,

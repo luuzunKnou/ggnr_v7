@@ -152,14 +152,25 @@ function parseYmdRange(dateYmd: string): { start: Date; end: Date } | null {
   return { start, end };
 }
 
+const LIST_LIMIT_CAP = 200;
+const EXPORT_LIMIT_CAP = 10000;
+
 export async function listVersionHistory(params: {
   filter: VersionHistoryFilter;
   dateYmd?: string;
   /** 통합검색 키워드 (날짜·기능구분·성공실패·IP·선택·메모·본문·버전) */
   q?: string;
   limit?: number;
+  offset?: number;
+  /** true면 엑셀 export용 상한(10000) 적용, offset 무시 */
+  forExport?: boolean;
 }): Promise<{ success: boolean; data: VersionHistoryRow[]; error?: string }> {
-  const limit = Math.min(200, Math.max(1, params.limit ?? 50));
+  const cap = params.forExport ? EXPORT_LIMIT_CAP : LIST_LIMIT_CAP;
+  const defaultLimit = params.forExport ? EXPORT_LIMIT_CAP : 100;
+  const limit = Math.min(cap, Math.max(1, params.limit ?? defaultLimit));
+  const offset = params.forExport
+    ? 0
+    : Math.max(0, Number.isFinite(params.offset) ? Math.floor(params.offset ?? 0) : 0);
   try {
     await ensureVersionHistoryTable();
     const conditions = [];
@@ -215,7 +226,8 @@ export async function listVersionHistory(params: {
       .from(mvh)
       .where(whereClause)
       .orderBy(desc(mvh.mvhKey))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
     return {
       success: true,

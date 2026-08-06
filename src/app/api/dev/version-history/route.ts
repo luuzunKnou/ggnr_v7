@@ -29,18 +29,25 @@ export async function GET(req: NextRequest) {
     const dateYmd = sp.get('date')?.trim() ?? '';
     const q = sp.get('q')?.trim() ?? '';
     const limitRaw = Number(sp.get('limit'));
-    const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
+    const limit = Number.isFinite(limitRaw) ? limitRaw : 100;
+    const offsetRaw = Number(sp.get('offset'));
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
 
     const result = await listVersionHistory({
       filter,
       dateYmd: dateYmd || undefined,
       q: q || undefined,
       limit,
+      offset,
     });
     if (!result.success) {
       return NextResponse.json({ error: result.error ?? '조회 실패' }, { status: 500 });
     }
-    return NextResponse.json({ items: result.data });
+    const items = result.data;
+    return NextResponse.json({
+      items,
+      hasMore: items.length >= limit,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'history query failed';
     return NextResponse.json({ error: message }, { status: 500 });
