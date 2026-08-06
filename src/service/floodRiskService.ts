@@ -7,7 +7,7 @@ import { interpolateElevationFromCandidates } from '@/service/elevationService';
 
 const JIJUK_SCHEMA = 'public_layer';
 const JIJUK_GEOM_SRID = 5181;
-const ELEVATION_SCHEMA = 'layer';
+const ELEVATION_SCHEMA = 'public_layer';
 const ELEVATION_TABLE = 'elevation';
 const SEARCH_RADIUS_M = 300;
 const CANDIDATE_DISTINCT_ELEV = 12;

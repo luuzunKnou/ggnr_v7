@@ -204,6 +204,42 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "cus_cctv_ps",
+    "define_table_kor_name": "CCTV",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "침수/홍수현황",
+    "define_table_idx": "0",
+    "define_table_etc": "침수/홍수현황 API 오버레이",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "cus_rainfall_ps",
+    "define_table_kor_name": "강수량 관측소",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "침수/홍수현황",
+    "define_table_idx": "0",
+    "define_table_etc": "침수/홍수현황 API 오버레이",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "cus_waves_ps",
+    "define_table_kor_name": "수위 관측소",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "침수/홍수현황",
+    "define_table_idx": "0",
+    "define_table_etc": "침수/홍수현황 API 오버레이",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "elevation",
     "define_table_kor_name": "등고선",
     "define_table_shp_type": "LINE",
@@ -212,7 +248,7 @@
     "define_table_group": "",
     "define_table_idx": "0",
     "define_table_etc": "",
-    "define_table_schema": "layer",
+    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   },
   {

@@ -1,10 +1,10 @@
 /**
- * 고도 측정 — layer.elevation 상·하 인접 등고 보간, 시군구(sgg) 범위 검사
+ * 고도 측정 — public_layer.elevation 상·하 인접 등고 보간, 시군구(sgg) 범위 검사
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 
-const ELEVATION_SCHEMA = 'layer';
+const ELEVATION_SCHEMA = 'public_layer';
 const ELEVATION_TABLE = 'elevation';
 const SGG_SCHEMA = 'public_layer';
 const SGG_TABLE = 'sgg';

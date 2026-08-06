@@ -20,8 +20,11 @@ export const SAFETY_WATER_LAYER_Z = {
   waterStation: 120,
 } as const;
 
-const WATER_STATION_ICON = '/symbol/cus_waves_ps.svg';
-const RAIN_STATION_ICON = '/symbol/cus_rainfall_ps.svg';
+/** OL 레이어 id = public/symbol 파일 stem */
+const WATER_STATION_LAYER_ID = 'cus_waves_ps';
+const RAIN_STATION_LAYER_ID = 'cus_rainfall_ps';
+const WATER_STATION_ICON = `/symbol/${WATER_STATION_LAYER_ID}.svg`;
+const RAIN_STATION_ICON = `/symbol/${RAIN_STATION_LAYER_ID}.svg`;
 const STATION_ICON_PX = 18;
 
 /** 토글칩에 안 맞는 관측소 심볼 불투명도 */
@@ -117,7 +120,7 @@ function createStationLayer(kind: SafetyWaterStationKind, zIndex: number) {
   return new VectorLayer({
     source: new VectorSource(),
     zIndex,
-    properties: { id: kind === 'water' ? 'safetyWaterStationWater' : 'safetyWaterStationRain' },
+    properties: { id: kind === 'water' ? WATER_STATION_LAYER_ID : RAIN_STATION_LAYER_ID },
   });
 }
 

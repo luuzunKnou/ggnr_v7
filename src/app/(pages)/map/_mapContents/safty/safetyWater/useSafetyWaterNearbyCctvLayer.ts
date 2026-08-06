@@ -11,9 +11,11 @@ import { Style, Icon } from 'ol/style';
 import type { ItsCctvItem } from '../../road/roadCCTV/itsCctvTypes';
 import { SAFETY_WATER_LAYER_Z } from './useSafetyWaterMapLayer';
 
-const CCTV_ICON = '/symbol/cus_cctv_ps.svg';
+/** OL 레이어 id = public/symbol 파일 stem (선택 테두리는 별도 파일) */
+const CCTV_LAYER_ID = 'cus_cctv_ps';
+const CCTV_ICON = `/symbol/${CCTV_LAYER_ID}.svg`;
 /** 침수/홍수 현황 전용 — 선택 시 바깥쪽 빨간 테두리(22px 캔버스) */
-const CCTV_ICON_SELECTED = '/symbol/cus_cctv_ps_selected.svg';
+const CCTV_ICON_SELECTED = `/symbol/${CCTV_LAYER_ID}_selected.svg`;
 const CCTV_BASE_PX = 18;
 const CCTV_SELECTED_PX = 22;
 /** 토글칩·목록에 안 맞는 CCTV 심볼 불투명도 */
@@ -59,7 +61,7 @@ export function useSafetyWaterNearbyCctvLayer(
     const layer = new VectorLayer({
       source,
       zIndex: SAFETY_WATER_LAYER_Z.cctv,
-      properties: { id: 'safetyWaterNearbyCctv' },
+      properties: { id: CCTV_LAYER_ID },
       style: (feature) => {
         const k = String((feature as Feature).get('cctvKey') ?? '');
         return cctvStyle(selectedKey, listKeySet, k);
