@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Map } from "ol";
+import { getMapVisualCenterPixel } from "../config/mapVisualCenter";
 
-/** view.padding(좌측 패널) 반영 "시각적 중심" 픽셀 좌표 (크로스헤어·안내 문구 등) */
+/** view.padding 반영 "시각적 중심" 픽셀 좌표 (크로스헤어·안내 문구 등) */
 export function useMapVisualCenterPixel(
   map: Map | null,
   mapReady: boolean,
@@ -15,11 +16,21 @@ export function useMapVisualCenterPixel(
     const update = () => {
       const size = map.getSize();
       if (!size) return;
-      const padding = (view as unknown as { padding?: number[] }).padding ?? [0, 0, 0, 0];
-      const [top, , bottom] = padding;
-      // layout의 mapPaddingLeft를 기준으로 계산 — view.padding 반영 전에도 패널 폭 반영
-      const x = (size[0] + mapPaddingLeft) / 2;
-      const y = (size[1] - bottom + top) / 2;
+      const padding = (view as unknown as { padding?: number[] }).padding;
+      // padding 미적용 시 layout mapPaddingLeft로 보정, 적용 시엔 유틸 사용
+      if (padding == null) {
+        const x = (size[0] + mapPaddingLeft) / 2;
+        const y = size[1] / 2;
+        setCenterPixel((prev) => {
+          if (prev && prev.x === x && prev.y === y) return prev;
+          return { x, y };
+        });
+        return;
+      }
+      const pixel = getMapVisualCenterPixel(map);
+      if (!pixel) return;
+      const x = pixel[0];
+      const y = pixel[1];
       setCenterPixel((prev) => {
         if (prev && prev.x === x && prev.y === y) return prev;
         return { x, y };
