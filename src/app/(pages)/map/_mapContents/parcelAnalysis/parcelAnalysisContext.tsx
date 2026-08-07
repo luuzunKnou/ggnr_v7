@@ -439,7 +439,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setEnriching(false);
   }, []);
 
-  // 재설정: 영역만 비우고 모드는 유지. 모달은 닫아 두고 패널 «영역 지정»으로 다시 연다.
+  // 재설정: 영역만 비우고 모드는 유지. 분석 영역 지정 모달을 바로 연다.
   const resetArea = useCallback(() => {
     cancelAnalyze();
     clearArea();
@@ -453,7 +453,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     clearDrawToolbarAnchor();
     setPanelEngaged(true);
     setModalStep('choose');
-    setModalOpen(false);
+    setModalOpen(true);
     syncBoundaryEmdFromCache();
   }, [
     clearArea,

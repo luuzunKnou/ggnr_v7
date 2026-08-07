@@ -92,62 +92,76 @@ export function AdminConsoleLayout({
   const selectedMenuStorageKey = stateStorageKey ? `${stateStorageKey}:selectedMenu` : null
   const collapsedStorageKey = stateStorageKey ? `${stateStorageKey}:sidebarCollapsed` : null
 
-  // localStorage는 useState lazy init에서 동기 복원.
-  // effect 복원+저장 조합은 마운트 시 기본값으로 저장값을 덮어쓰는 레이스가 난다.
-  const [selectedMenu, setSelectedMenu] = useState(() => {
-    if (typeof window === "undefined" || !selectedMenuStorageKey) return validDefault
-    const savedMenu = window.localStorage.getItem(selectedMenuStorageKey)
-    if (savedMenu && menus.some((menu) => menu.id === savedMenu)) return savedMenu
-    return validDefault
-  })
-  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>(() => {
-    const firstDefault = (): string[] => {
-      const first = menuGroups?.[0]?.id ?? null
-      return first ? [first] : []
-    }
-    if (typeof window === "undefined" || !expandedGroupStorageKey || !menuGroups?.length) {
-      return firstDefault()
-    }
-    const saved = window.localStorage.getItem(expandedGroupStorageKey)
-    if (!saved) return firstDefault()
-    try {
-      const parsed = JSON.parse(saved) as unknown
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((value): value is string => typeof value === "string")
-          .filter((id) => menuGroups.some((group) => group.id === id))
-      }
-    } catch {
-      // Backward compatibility: older value was a single group id string.
-      if (menuGroups.some((group) => group.id === saved)) return [saved]
-      if (saved === "") return []
-    }
-    return firstDefault()
-  })
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === "undefined" || !collapsedStorageKey) return false
-    return window.localStorage.getItem(collapsedStorageKey) === "1"
-  })
+  const defaultExpandedGroupIds = (): string[] => {
+    const first = menuGroups?.[0]?.id ?? null
+    return first ? [first] : []
+  }
+
+  // SSR·클라 첫 렌더는 동일 기본값. localStorage는 마운트 후 복원 (hydration 불일치 방지).
+  // 저장 effect는 storageReady 이후에만 동작해 기본값으로 저장값을 덮어쓰지 않음.
+  const [selectedMenu, setSelectedMenu] = useState(validDefault)
+  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>(defaultExpandedGroupIds)
+  const [collapsed, setCollapsed] = useState(false)
+  const [storageReady, setStorageReady] = useState(!stateStorageKey)
 
   const currentLabel = menus.find((m) => m.id === selectedMenu)?.label ?? selectedMenu
   const menuById = new Map(menus.map((m) => [m.id, m]))
 
   useEffect(() => {
-    if (!selectedMenuStorageKey || typeof window === "undefined") return
+    if (!stateStorageKey) {
+      setStorageReady(true)
+      return
+    }
+    if (selectedMenuStorageKey) {
+      const savedMenu = window.localStorage.getItem(selectedMenuStorageKey)
+      if (savedMenu && menus.some((menu) => menu.id === savedMenu)) {
+        setSelectedMenu(savedMenu)
+      }
+    }
+    if (expandedGroupStorageKey && menuGroups?.length) {
+      const saved = window.localStorage.getItem(expandedGroupStorageKey)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as unknown
+          if (Array.isArray(parsed)) {
+            setExpandedGroupIds(
+              parsed
+                .filter((value): value is string => typeof value === "string")
+                .filter((id) => menuGroups.some((group) => group.id === id))
+            )
+          }
+        } catch {
+          // Backward compatibility: older value was a single group id string.
+          if (menuGroups.some((group) => group.id === saved)) setExpandedGroupIds([saved])
+          else if (saved === "") setExpandedGroupIds([])
+        }
+      }
+    }
+    if (collapsedStorageKey) {
+      setCollapsed(window.localStorage.getItem(collapsedStorageKey) === "1")
+    }
+    setStorageReady(true)
+    // mount 1회 복원만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!storageReady || !selectedMenuStorageKey) return
     if (!selectedMenu) return
     window.localStorage.setItem(selectedMenuStorageKey, selectedMenu)
-  }, [selectedMenu, selectedMenuStorageKey])
+  }, [selectedMenu, selectedMenuStorageKey, storageReady])
 
   useEffect(() => {
+    if (!storageReady) return
     if (!menuGroups || menuGroups.length === 0) return
-    if (!expandedGroupStorageKey || typeof window === "undefined") return
+    if (!expandedGroupStorageKey) return
     window.localStorage.setItem(expandedGroupStorageKey, JSON.stringify(expandedGroupIds))
-  }, [expandedGroupIds, menuGroups, expandedGroupStorageKey])
+  }, [expandedGroupIds, menuGroups, expandedGroupStorageKey, storageReady])
 
   useEffect(() => {
-    if (!collapsedStorageKey || typeof window === "undefined") return
+    if (!storageReady || !collapsedStorageKey) return
     window.localStorage.setItem(collapsedStorageKey, collapsed ? "1" : "0")
-  }, [collapsed, collapsedStorageKey])
+  }, [collapsed, collapsedStorageKey, storageReady])
 
   useEffect(() => {
     if (!autoCollapseMenuIds?.length) return

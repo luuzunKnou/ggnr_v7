@@ -19,38 +19,54 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
+import { SignUpApplyForm } from '@/app/(pages)/(index)/SignUpApplyForm';
 
 type LoginModalContextValue = {
   openLogin: () => void;
+  openSignUp: () => void;
 };
 
 const LoginModalContext = createContext<LoginModalContextValue | null>(null);
 
 export function useLoginModal() {
   const ctx = useContext(LoginModalContext);
-  if (!ctx) return { openLogin: () => {} };
+  if (!ctx) return { openLogin: () => {}, openSignUp: () => {} };
   return ctx;
 }
 
 function OpenFromUrlEffect({
-  setOpen,
+  setLoginOpen,
+  setSignUpOpen,
   setPendingNext,
 }: {
-  setOpen: (v: boolean) => void;
+  setLoginOpen: (v: boolean) => void;
+  setSignUpOpen: (v: boolean) => void;
   setPendingNext: (v: string) => void;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
-    if (searchParams.get('openLogin') !== '1') return;
+    const openLogin = searchParams.get('openLogin') === '1';
+    const openSignUp = searchParams.get('openSignUp') === '1';
+    if (!openLogin && !openSignUp) return;
+
     const next = searchParams.get('next') ?? '';
     if (next.startsWith('/')) setPendingNext(next);
-    setOpen(true);
+
+    if (openSignUp) {
+      setSignUpOpen(true);
+      setLoginOpen(false);
+    } else {
+      setLoginOpen(true);
+      setSignUpOpen(false);
+    }
+
     const u = new URL(window.location.href);
     u.searchParams.delete('openLogin');
+    u.searchParams.delete('openSignUp');
     router.replace(u.pathname + (u.search ? u.search : ''), { scroll: false });
-  }, [searchParams, router, setOpen, setPendingNext]);
+  }, [searchParams, router, setLoginOpen, setSignUpOpen, setPendingNext]);
 
   return null;
 }
@@ -60,11 +76,13 @@ function LoginModalDialog({
   onOpenChange,
   pendingNext,
   onClearNext,
+  onOpenSignUp,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   pendingNext: string;
   onClearNext: () => void;
+  onOpenSignUp: () => void;
 }) {
   const { data: session } = useSession();
   const [usrId, setUsrId] = useState('');
@@ -79,6 +97,15 @@ function LoginModalDialog({
     }
   }, [session, open, onOpenChange, onClearNext]);
 
+  useEffect(() => {
+    if (!open) {
+      setUsrId('');
+      setPassword('');
+      setError('');
+      setLoading(false);
+    }
+  }, [open]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -90,7 +117,15 @@ function LoginModalDialog({
         redirect: false,
       });
       if (res?.error) {
-        setError('아이디 또는 비밀번호가 올바르지 않습니다.');
+        if (res.code === 'signup_rejected') {
+          setError(
+            '반려가 되었으니 재가입신청을 하시거나 담당자에게 문의하세요.'
+          );
+        } else if (res.code === 'signup_pending') {
+          setError('승인대기중입니다.');
+        } else {
+          setError('아이디 또는 비밀번호가 올바르지 않습니다.');
+        }
         setLoading(false);
         return;
       }
@@ -137,14 +172,59 @@ function LoginModalDialog({
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? '처리 중…' : '로그인'}
           </Button>
+          <p className="text-center text-sm text-muted-foreground">
+            계정이 없으신가요?{' '}
+            <button
+              type="button"
+              className="text-foreground underline-offset-4 hover:underline"
+              onClick={onOpenSignUp}
+            >
+              가입신청
+            </button>
+          </p>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
+function SignUpModalDialog({
+  open,
+  onOpenChange,
+  onOpenLogin,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onOpenLogin: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader className="items-center text-center">
+          <DialogTitle className="text-xl">가입신청</DialogTitle>
+          <DialogDescription>
+            신청 후 관리자 승인이 완료되면 로그인할 수 있습니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="pt-1">
+          {open ? (
+            <SignUpApplyForm
+              key="signup-modal"
+              variant="modal"
+              uiVariant={2}
+              onRequestLogin={onOpenLogin}
+              onClose={() => onOpenChange(false)}
+            />
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function LoginModalProvider({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [signUpOpen, setSignUpOpen] = useState(false);
   const [pendingNext, setPendingNext] = useState('');
 
   const openLogin = useCallback(() => {
@@ -152,22 +232,38 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
       const n = new URLSearchParams(window.location.search).get('next');
       if (n && n.startsWith('/')) setPendingNext(n);
     }
-    setOpen(true);
+    setSignUpOpen(false);
+    setLoginOpen(true);
+  }, []);
+
+  const openSignUp = useCallback(() => {
+    setLoginOpen(false);
+    setSignUpOpen(true);
   }, []);
 
   const onClearNext = useCallback(() => setPendingNext(''), []);
 
   return (
-    <LoginModalContext.Provider value={{ openLogin }}>
+    <LoginModalContext.Provider value={{ openLogin, openSignUp }}>
       {children}
       <Suspense fallback={null}>
-        <OpenFromUrlEffect setOpen={setOpen} setPendingNext={setPendingNext} />
+        <OpenFromUrlEffect
+          setLoginOpen={setLoginOpen}
+          setSignUpOpen={setSignUpOpen}
+          setPendingNext={setPendingNext}
+        />
       </Suspense>
       <LoginModalDialog
-        open={open}
-        onOpenChange={setOpen}
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
         pendingNext={pendingNext}
         onClearNext={onClearNext}
+        onOpenSignUp={openSignUp}
+      />
+      <SignUpModalDialog
+        open={signUpOpen}
+        onOpenChange={setSignUpOpen}
+        onOpenLogin={openLogin}
       />
     </LoginModalContext.Provider>
   );

@@ -619,14 +619,6 @@ export default function OpenLayersMap({
         }
       : undefined;
 
-  /** 변동이력 분석 타임라인 등에서 배경 강제 */
-  useEffect(() => {
-    const forced = mapContext?.dataFlowForcedBackgroundMapId;
-    if (forced != null && String(forced).length > 0) {
-      setSelectedBackgroundMap(forced);
-    }
-  }, [mapContext?.dataFlowForcedBackgroundMapId]);
-
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
