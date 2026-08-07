@@ -29,7 +29,6 @@ import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsj
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
 import { RoadCctvPanel } from "./_mapContents/road/roadCCTV/RoadCctvPanel"
 import { RoadInfraPanel } from "./_mapContents/road/roadInfra/RoadInfraPanel"
-import { RoadDataFlowAnalysisOrchestrator } from "./_mapContents/road/roadDataFlow/RoadDataFlowAnalysisOrchestrator"
 import {
   ParcelAnalysisOrchestrator,
   ParcelAnalysisMapSidePanel,
@@ -42,6 +41,20 @@ import {
   ParcelAnalysisProvider,
   useParcelAnalysis,
 } from "./_mapContents/parcelAnalysis/parcelAnalysisContext"
+import {
+  ChangeHistoryOrchestrator,
+  ChangeHistorySidePanel,
+} from "./_mapContents/changeHistory/ChangeHistory.shell"
+import {
+  CHANGE_HISTORY_OPENED_KEY,
+  CHANGE_HISTORY_PANEL_DEFAULT_WIDTH,
+  CHANGE_HISTORY_PANEL_MAX_WIDTH,
+  CHANGE_HISTORY_PANEL_MIN_WIDTH,
+} from "./_mapContents/changeHistory/changeHistory.types"
+import {
+  ChangeHistoryProvider,
+  useChangeHistory,
+} from "./_mapContents/changeHistory/changeHistoryContext"
 import { RoadUseLedgerListPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerListPanel"
 import { RoadUseLedgerDetailPanel } from "./_mapContents/road/roadUseLedger/RoadUseLedgerDetailPanel"
 import { RiverUseLedgerListPanel } from "./_mapContents/river/riverUseLedger/RiverUseLedgerListPanel"
@@ -421,6 +434,8 @@ function MapLayoutContent({
   const roadInfraOpen = openedWindows.includes(ROAD_INFRA_OPENED_KEY)
   const parcelAnalysisOpen = openedWindows.includes(PARCEL_ANALYSIS_OPENED_KEY)
   const { sidePanelOpen: parcelAnalysisSidePanelOpen } = useParcelAnalysis()
+  const changeHistoryOpen = openedWindows.includes(CHANGE_HISTORY_OPENED_KEY)
+  const { sidePanelOpen: changeHistorySidePanelOpen } = useChangeHistory()
   const buildPublicLandOpen = openedWindows.includes(BUILD_PUBLIC_LAND_OPENED_KEY)
   const roadUseLedgerOpen = openedWindows.includes(ROAD_USE_LEDGER_OPENED_KEY)
   const riverUseLedgerOpen = openedWindows.includes(RIVER_USE_LEDGER_OPENED_KEY)
@@ -566,6 +581,7 @@ function MapLayoutContent({
   const [roadCctvPanelWidth, setRoadCctvPanelWidth] = useState(ROAD_CCTV_PANEL_DEFAULT_WIDTH)
   const [roadInfraPanelWidth, setRoadInfraPanelWidth] = useState(ROAD_INFRA_PANEL_DEFAULT_WIDTH)
   const [parcelAnalysisPanelWidth, setParcelAnalysisPanelWidth] = useState(PARCEL_ANALYSIS_PANEL_DEFAULT_WIDTH)
+  const [changeHistoryPanelWidth, setChangeHistoryPanelWidth] = useState(CHANGE_HISTORY_PANEL_DEFAULT_WIDTH)
   const [buildPublicLandPanelWidth, setBuildPublicLandPanelWidth] = useState(BUILD_PUBLIC_LAND_PANEL_DEFAULT_WIDTH)
   const [buildPublicLandDetailWidth, setBuildPublicLandDetailWidth] = useState(BUILD_PUBLIC_LAND_DETAIL_DEFAULT_WIDTH)
   const [roadUseLedgerPanelWidth, setRoadUseLedgerPanelWidth] = useState(ROAD_USE_LEDGER_PANEL_DEFAULT_WIDTH)
@@ -615,6 +631,7 @@ function MapLayoutContent({
   const totalListPanelWidth =
     (roadInfraOpen ? roadInfraPanelWidth : 0) +
     (parcelAnalysisOpen && parcelAnalysisSidePanelOpen ? parcelAnalysisPanelWidth : 0) +
+    (changeHistoryOpen && changeHistorySidePanelOpen ? changeHistoryPanelWidth : 0) +
     (layerListVisible ? standardListPanelWidth : 0) +
     (layerDataPanelOpen ? layerDataPanelWidth : 0) +
     (riverBasicPlanOpen ? riverBasicPlanListWidth : 0) +
@@ -669,9 +686,12 @@ function MapLayoutContent({
   /** 패널별 왼쪽 경계(px). 드래그 시 해당 패널 너비 = clientX - leftOffset */
   const roadInfraPanelLeftPx = SIDEBAR_WIDTH
   const parcelAnalysisPanelLeftPx = SIDEBAR_WIDTH + (roadInfraOpen ? roadInfraPanelWidth : 0)
-  const standardListLeftPx =
+  const changeHistoryPanelLeftPx =
     parcelAnalysisPanelLeftPx +
     (parcelAnalysisOpen && parcelAnalysisSidePanelOpen ? parcelAnalysisPanelWidth : 0)
+  const standardListLeftPx =
+    changeHistoryPanelLeftPx +
+    (changeHistoryOpen && changeHistorySidePanelOpen ? changeHistoryPanelWidth : 0)
   const layerDataPanelLeftPx =
     standardListLeftPx + (layerListVisible ? standardListPanelWidth : 0)
   const riverBasicPlanListLeftPx = layerDataPanelLeftPx + (layerDataPanelOpen ? layerDataPanelWidth : 0)
@@ -1359,8 +1379,8 @@ function MapLayoutContent({
 
         <MapSidebar indexLogoSrc={indexLogoSrc} />
         <UsageDataAsNotifBootstrap />
-        <RoadDataFlowAnalysisOrchestrator />
         <ParcelAnalysisOrchestrator />
+        <ChangeHistoryOrchestrator />
 
         <div className="relative z-10 pl-[65px] flex h-full pointer-events-none">
           {roadInfraOpen && (
@@ -1407,6 +1427,19 @@ function MapLayoutContent({
                 onWidthChange={setParcelAnalysisPanelWidth}
               >
                 <ParcelAnalysisMapSidePanel />
+              </MapSideListPanel>
+            </div>
+          )}
+          {changeHistoryOpen && changeHistorySidePanelOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={changeHistoryPanelWidth}
+                minWidth={CHANGE_HISTORY_PANEL_MIN_WIDTH}
+                maxWidth={CHANGE_HISTORY_PANEL_MAX_WIDTH}
+                leftOffsetPx={changeHistoryPanelLeftPx}
+                onWidthChange={setChangeHistoryPanelWidth}
+              >
+                <ChangeHistorySidePanel />
               </MapSideListPanel>
             </div>
           )}
@@ -2279,9 +2312,11 @@ export default function MapLayoutClient({
   return (
     <MapContextProvider>
       <ParcelAnalysisProvider>
-        <Suspense fallback={<div className="relative w-full h-screen overflow-hidden bg-slate-100 pl-[65px]" />}>
-          <MapLayoutContent indexLogoSrc={indexLogoSrc}>{children}</MapLayoutContent>
-        </Suspense>
+        <ChangeHistoryProvider>
+          <Suspense fallback={<div className="relative w-full h-screen overflow-hidden bg-slate-100 pl-[65px]" />}>
+            <MapLayoutContent indexLogoSrc={indexLogoSrc}>{children}</MapLayoutContent>
+          </Suspense>
+        </ChangeHistoryProvider>
       </ParcelAnalysisProvider>
     </MapContextProvider>
   )

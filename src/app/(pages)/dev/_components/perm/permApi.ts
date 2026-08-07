@@ -1,6 +1,6 @@
 import { call } from '@/lib/api';
 
-export type PermMappingTab = 'ser' | 'sys' | 'console';
+export type PermMappingTab = 'ser' | 'sys';
 
 export type SerRow = { serEng: string; serKor: string | null };
 export type SysRow = {

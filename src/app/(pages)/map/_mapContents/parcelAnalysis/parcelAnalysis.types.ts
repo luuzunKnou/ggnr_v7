@@ -1,9 +1,11 @@
 export type ParcelAreaMethod = 'draw' | 'boundary';
 
-export type ParcelAnalysisRegion = {
-  sido: string;
-  sigungu: string;
-};
+export type {
+  BoundaryEmdSelection,
+  EmdRiOption,
+  ParcelAnalysisRegion,
+} from '../../_mapComponents/analysisArea';
+export { cloneBoundarySelection } from '../../_mapComponents/analysisArea';
 
 export type DrawProjectScope = 'inside' | 'partially_outside' | 'fully_outside';
 
@@ -26,30 +28,15 @@ export type ParcelModalStep = 'choose' | 'draw' | 'boundary';
 
 export type DrawTool = 'rectangle' | 'polygon' | 'circle';
 
-/** 읍·면·동 선택 + 리 체크 상태 (모달 복원용) */
-export type BoundaryEmdSelection = {
-  emdCode: string;
-  emdName: string;
-  allRi: boolean;
-  riCodes: string[];
-  /** 리 일부 선택 시 표시명 (riCodes 순서와 대응) */
-  riNames?: string[];
-};
-
-export type EmdRiOption = { code: string; name: string };
-
-export function cloneBoundarySelection(selection: BoundaryEmdSelection[]): BoundaryEmdSelection[] {
-  return selection.map((s) => ({
-    emdCode: s.emdCode,
-    emdName: s.emdName,
-    allRi: s.allRi,
-    riCodes: [...s.riCodes],
-    riNames: s.riNames ? [...s.riNames] : undefined,
-  }));
-}
-
 /** PostgreSQL statement_timeout — analyzeParcels DB 집계 (서버 한도, 클라이언트는 기다림) */
 export const PARCEL_ANALYZE_DB_STATEMENT_TIMEOUT = '600s';
+
+/** 넓은 영역 판별에 쓰는 공통 필드 (필지분석·변동이력 등) */
+export type LargeAnalysisAreaLike = {
+  method: 'draw' | 'boundary';
+  areaSqm: number;
+  itemCount: number;
+};
 
 /** 면적 기준 대형 영역(㎡) — 약 100만㎡(1㎢) 이상이면 사전 경고 */
 export const PARCEL_ANALYZE_LARGE_AREA_SQM = 1_000_000;
@@ -68,7 +55,7 @@ export function delayForMinElapsed(startedAtMs: number, minMs: number): Promise<
   });
 }
 
-export function isLargeParcelAnalysisArea(area: ParcelAnalysisArea): boolean {
+export function isLargeParcelAnalysisArea(area: LargeAnalysisAreaLike): boolean {
   if (area.areaSqm >= PARCEL_ANALYZE_LARGE_AREA_SQM) return true;
   if (area.method === 'boundary' && area.itemCount >= PARCEL_ANALYZE_LARGE_BOUNDARY_ITEMS) {
     return true;
@@ -76,7 +63,10 @@ export function isLargeParcelAnalysisArea(area: ParcelAnalysisArea): boolean {
   return false;
 }
 
-export function buildLargeAreaConfirmMessage(area: ParcelAnalysisArea): string {
+export function buildLargeAreaConfirmMessage(
+  area: LargeAnalysisAreaLike,
+  opts?: { feature?: 'parcel' | 'changeHistory' }
+): string {
   const areaLine =
     area.areaSqm > 0
       ? `분석 영역 면적: 약 ${area.areaSqm.toLocaleString('ko-KR')} ㎡`
@@ -85,8 +75,21 @@ export function buildLargeAreaConfirmMessage(area: ParcelAnalysisArea): string {
     area.method === 'boundary' && area.itemCount > 1
       ? `\n행정경계 선택: ${area.itemCount}개 단위`
       : '';
+  const head = areaLine + boundaryLine;
+
+  if (opts?.feature === 'changeHistory') {
+    return [
+      head,
+      '',
+      '영역이 넓으면 이력·시점 도형 조회에 시간이 오래 걸릴 수 있습니다.',
+      '가능하면 영역을 나누어 조회하세요.',
+      '',
+      '이력 보기를 진행하시겠습니까?',
+    ].join('\n');
+  }
+
   return [
-    areaLine + boundaryLine,
+    head,
     '',
     '필지가 많으면 수 분 이상 걸릴 수 있습니다. 토지현황·토지이용계획은 100건씩 순차 표시됩니다.',
     '분석 중 «취소»로 중단할 수 있습니다.',

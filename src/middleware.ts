@@ -12,6 +12,7 @@ export default auth((req) => {
 
   if (!loggedIn) {
     if (path === '/') return NextResponse.next();
+    if (path === '/signup' || path.startsWith('/signup/')) return NextResponse.next();
     if (path === '/notice' || path.startsWith('/notice/')) return NextResponse.next();
     if (path === '/library' || path.startsWith('/library/')) return NextResponse.next();
     const home = new URL('/', req.nextUrl);

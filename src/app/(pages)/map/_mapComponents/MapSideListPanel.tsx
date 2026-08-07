@@ -48,7 +48,6 @@ export function MapSideListPanel({
 
   const handleResizeEnd = useCallback(() => {
     window.removeEventListener('mousemove', handleResize);
-    window.removeEventListener('mouseup', handleResize);
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   }, [handleResize]);
@@ -59,7 +58,8 @@ export function MapSideListPanel({
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
       window.addEventListener('mousemove', handleResize);
-      window.addEventListener('mouseup', handleResizeEnd);
+      // once: 드래그 종료 시 브라우저가 해제 → 종료 핸들러가 자기 자신을 참조하지 않는다
+      window.addEventListener('mouseup', handleResizeEnd, { once: true });
     },
     [handleResize, handleResizeEnd]
   );
