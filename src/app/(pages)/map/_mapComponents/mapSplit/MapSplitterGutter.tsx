@@ -399,7 +399,8 @@ export function MapSplitterGutter({
       ref={gutterRef}
       className={cn(
         'relative z-[5] shrink-0',
-        isHorizontal ? 'w-[3px] self-stretch' : 'h-[3px] w-full self-center'
+        // h-full: 부모(래퍼·flex 행) 높이를 채워 pill top:50%가 세로 중앙에 오도록
+        isHorizontal ? 'h-full w-[3px]' : 'h-[3px] w-full self-center'
       )}
       role="separator"
       aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}

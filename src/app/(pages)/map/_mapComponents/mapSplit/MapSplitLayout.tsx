@@ -107,6 +107,8 @@ export function MapSplitLayout({
   );
   const [animReady, setAnimReady] = useState(false);
   const [ratioLocked, setRatioLocked] = useState(false);
+  /** 분할선 드래그 중 — flexGrow transition 끄고 지도 updateSize 강제 */
+  const [isRatioDragging, setIsRatioDragging] = useState(false);
   const dragRef = useRef<{ startPos: number; startRatio: number } | null>(null);
   const draggingRef = useRef(false);
   const pendingRatioRef = useRef<number | null>(null);
@@ -188,16 +190,26 @@ export function MapSplitLayout({
     onPrimaryRatioChangeRef.current?.(next);
   }, []);
 
+  const clearPaneInlineFlex = useCallback(() => {
+    for (const el of [primaryPaneRef.current, secondaryPaneRef.current]) {
+      if (!el) continue;
+      el.style.transition = '';
+      el.style.transitionDuration = '';
+      el.style.transitionProperty = '';
+      // flex 값은 React style이 다시 적용. 여기서 비우면 다음 페인트 전 0폭이 됨.
+    }
+  }, []);
+
   const applyPaneFlex = useCallback((ratio: number) => {
     const next = clampRatio(ratio);
     const primary = primaryPaneRef.current;
     const secondary = secondaryPaneRef.current;
     if (primary) {
-      primary.style.transitionDuration = '0ms';
+      primary.style.transition = 'none';
       primary.style.flex = `${next} 1 0%`;
     }
     if (secondary) {
-      secondary.style.transitionDuration = '0ms';
+      secondary.style.transition = 'none';
       secondary.style.flex = `${1 - next} 1 0%`;
     }
   }, []);
@@ -631,7 +643,8 @@ export function MapSplitLayout({
       const next = clampRatio(drag.startRatio + (pos - drag.startPos) / size);
       pendingRatioRef.current = next;
       applyPaneFlex(next);
-      scheduleSizeTick(false);
+      // 드래그 중엔 throttle 없이 매 이동마다 지도 크기 맞춤 (흰 화면 방지)
+      scheduleSizeTick(true);
       scheduleStretch();
     };
     const onUp = () => {
@@ -643,10 +656,13 @@ export function MapSplitLayout({
         pendingRatioRef.current = null;
         setRatio(pending);
       }
+      clearPaneInlineFlex();
+      setIsRatioDragging(false);
       if (stretchRafRef.current) {
         cancelAnimationFrame(stretchRafRef.current);
         stretchRafRef.current = 0;
       }
+      scheduleSizeTick(true);
       scheduleEndSecondaryStretch();
     };
     window.addEventListener('pointermove', onMove);
@@ -670,6 +686,7 @@ export function MapSplitLayout({
   }, [
     setRatio,
     applyPaneFlex,
+    clearPaneInlineFlex,
     scheduleSizeTick,
     scheduleStretch,
     scheduleEndSecondaryStretch,
@@ -733,6 +750,10 @@ export function MapSplitLayout({
   const primaryFlex = splitActive ? primaryRatio : 1;
   const secondaryFlex = splitActive ? 1 - primaryRatio : 0;
   const useLeftInset = splitActive && !isH && mapPaddingLeft > 0;
+  const paneAnimOn = animReady && !isRatioDragging;
+  const paneTransitionMs = paneAnimOn ? `${MAP_SPLIT_ANIM_MS}ms` : '0ms';
+  // flex 단축 전환 — flexGrow만 쓰면 분할 OFF 시 주 칸이 0폭으로 무너지는 환경이 있음
+  const paneTransitionClass = paneAnimOn ? 'transition-[flex] ease-out' : undefined;
 
   return (
     <div
@@ -755,19 +776,34 @@ export function MapSplitLayout({
       >
         <div
           ref={primaryPaneRef}
-          className={cn(
-            'relative min-h-0 min-w-0 overflow-hidden',
-            animReady && 'transition-[flex] ease-out'
-          )}
+          className={cn('relative min-h-0 min-w-0 overflow-hidden', paneTransitionClass)}
           style={{
-            flex: `${primaryFlex} 1 0%`,
-            transitionDuration: animReady ? `${MAP_SPLIT_ANIM_MS}ms` : '0ms',
+            // 분할 OFF: flex-1과 동일하게 전체 폭 확보 (flexGrow+basis 0%만 쓰면 0폭 되는 경우 있음)
+            flex: splitActive ? `${primaryFlex} 1 0%` : '1 1 auto',
+            transitionDuration: paneTransitionMs,
+            transitionProperty: isRatioDragging ? 'none' : 'flex',
           }}
         >
           {primary}
         </div>
 
-        {splitActive && (
+        {/* 거터 항상 유지 — OFF 시 폭 0. ON일 때 overflow-visible 로 컨트롤러 잘림 방지.
+            self-stretch로 세로 높이를 확보해야 pill top:50%가 화면 중앙에 맞음 */}
+        <div
+          className={cn(
+            'relative shrink-0',
+            isH ? 'self-stretch' : 'w-full self-center',
+            animReady && (isH ? 'transition-[width] ease-out' : 'transition-[height] ease-out'),
+            splitActive ? 'overflow-visible' : 'overflow-hidden pointer-events-none'
+          )}
+          style={{
+            width: isH ? (splitActive ? 3 : 0) : '100%',
+            height: isH ? undefined : splitActive ? 3 : 0,
+            opacity: splitActive ? 1 : 0,
+            transitionDuration: paneTransitionMs,
+          }}
+          aria-hidden={!splitActive}
+        >
           <MapSplitterGutter
             orientation={orientation}
             controls={gutterControls}
@@ -781,24 +817,26 @@ export function MapSplitLayout({
             controlsExpanded={controlsExpanded}
             onControlsExpandedChange={onControlsExpandedChange}
             onDragStart={(clientPos) => {
-              if (ratioLocked) return;
+              if (!splitActive || ratioLocked) return;
               draggingRef.current = true;
+              setIsRatioDragging(true);
               dragRef.current = { startPos: clientPos, startRatio: primaryRatio };
               beginSecondaryStretch();
             }}
           />
-        )}
+        </div>
 
         <div
           ref={secondaryPaneRef}
           className={cn(
             'relative min-h-0 min-w-0 overflow-hidden bg-[#888888]',
-            animReady && 'transition-[flex] ease-out',
+            paneTransitionClass,
             !splitActive && 'pointer-events-none'
           )}
           style={{
-            flex: `${secondaryFlex} 1 0%`,
-            transitionDuration: animReady ? `${MAP_SPLIT_ANIM_MS}ms` : '0ms',
+            flex: splitActive ? `${secondaryFlex} 1 0%` : '0 0 0px',
+            transitionDuration: paneTransitionMs,
+            transitionProperty: isRatioDragging ? 'none' : 'flex',
             opacity: splitActive ? 1 : 0,
           }}
           aria-hidden={!splitActive}
