@@ -9,7 +9,6 @@ import { LineString } from 'ol/geom';
 import type Geometry from 'ol/geom/Geometry';
 import { Style, Stroke, Circle as CircleStyle, Fill } from 'ol/style';
 import Overlay from 'ol/Overlay';
-import { transform } from 'ol/proj';
 import { call } from '@/lib/api';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import styles from '../measure/measureElevationTooltip.module.css';
@@ -65,17 +64,22 @@ async function fetchElevationMeters(
   map: OlMap,
   coordinate: [number, number]
 ): Promise<number | null> {
-  const projection = map.getView().getProjection();
-  if (!projection) return null;
-  const [lon, lat] = transform(coordinate, projection, 'EPSG:4326');
+  const code = map.getView().getProjection()?.getCode() ?? 'EPSG:3857';
+  const m = code.match(/EPSG:(\d+)/i);
+  const srid = m ? Number(m[1]) : 3857;
   try {
+    // 지도 고도와 동일 API (getElevation 액션은 없음)
     const res = await call('', 'POST', {
       service: 'elevationService',
-      action: 'getElevation',
-      params: { lon, lat },
+      action: 'getElevationAtPoint',
+      params: { x: coordinate[0], y: coordinate[1], srid },
     });
-    const data = (res?.data ?? res) as { elevation?: number | null; error?: string };
-    if (data?.error) return null;
+    const data = (res?.data ?? res) as {
+      success?: boolean;
+      elevation?: number | null;
+      error?: string;
+    };
+    if (data?.error || data?.success === false) return null;
     const elev = data?.elevation;
     return elev == null || !Number.isFinite(Number(elev)) ? null : Number(elev);
   } catch {
