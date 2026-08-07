@@ -15,9 +15,14 @@ import {
   useLayerParcelNavigation,
   useLayerRowFormFields,
   type LayerRowDetailAttr,
+  type LayerRowEditPresetKey,
   type LayerRowParcelItem,
 } from "../../../_mapComponents/layerRowEdit";
-import { RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID, RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID } from "./riverUseLedgerLayerId";
+import {
+  RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID,
+  RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID,
+  RIVER_USAGE_DATA_SOLO_WMS_LAYER_ID,
+} from "./riverUseLedgerLayerId";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 
 type Props = {
@@ -28,6 +33,25 @@ type Props = {
   onDeleted?: () => void;
 };
 
+type ModeConfig = {
+  editPresetKey: LayerRowEditPresetKey;
+  parcelsEditable: boolean;
+  showMulgunji: boolean;
+  jijukLayerId: string;
+  mulgunjiLayerId: string | null;
+};
+
+const DEFAULT_MODE: ModeConfig = {
+  editPresetKey: "riverUseLedger",
+  parcelsEditable: true,
+  showMulgunji: true,
+  jijukLayerId: RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID,
+  mulgunjiLayerId: RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID,
+};
+
+/** 매 렌더 `[]` 새 참조 → useLayerRowEdit 무한 setState 방지 */
+const EMPTY_PARCELS: LayerRowParcelItem[] = [];
+
 export function RiverUseLedgerDetailPanel({
   detailId,
   onClose,
@@ -36,8 +60,10 @@ export function RiverUseLedgerDetailPanel({
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
-  const preset = LAYER_ROW_EDIT_PRESETS.riverUseLedger;
   const isCreateMode = detailId === LAYER_ROW_NEW_ID;
+
+  const [mode, setMode] = useState<ModeConfig>(DEFAULT_MODE);
+  const [modeReady, setModeReady] = useState(false);
 
   const [loading, setLoading] = useState(!isCreateMode);
   const [error, setError] = useState<string | null>(null);
@@ -46,18 +72,62 @@ export function RiverUseLedgerDetailPanel({
   const [mulgunjiItems, setMulgunjiItems] = useState<LayerRowParcelItem[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
 
-  // 물건지 draft 상태 (수정모드에서 사용)
   const [draftMulgunji, setDraftMulgunji] = useState<LayerRowParcelItem[]>([]);
   const draftMulgunjiRef = useRef<LayerRowParcelItem[]>([]);
   const mulgunjiDirtyRef = useRef(false);
   const [mulgunjiAddModalOpen, setMulgunjiAddModalOpen] = useState(false);
 
-  const { navigateToParcel: navigateToJijukParcel, movingParcelIdx: movingJijukIdx } =
-    useLayerParcelNavigation(RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID);
-  const { navigateToParcel: navigateToMulgunjiParcel, movingParcelIdx: movingMulgunjiIdx } =
-    useLayerParcelNavigation(RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await call("", "POST", {
+          service: "riverUseLedgerService",
+          action: "getRiverUseLedgerConfig",
+          params: {},
+        });
+        const data = res?.data ?? res;
+        if (cancelled || data?.error) {
+          if (!cancelled) setModeReady(true);
+          return;
+        }
+        const presetKey =
+          data?.editPresetKey === "riverUsageData" ? "riverUsageData" : "riverUseLedger";
+        setMode({
+          editPresetKey: presetKey,
+          parcelsEditable: Boolean(data?.parcelsEditable),
+          showMulgunji: Boolean(data?.showMulgunji),
+          jijukLayerId: String(
+            data?.jijukLayerId ??
+              (presetKey === "riverUsageData"
+                ? RIVER_USAGE_DATA_SOLO_WMS_LAYER_ID
+                : RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID)
+          ),
+          mulgunjiLayerId: data?.mulgunjiLayerId
+            ? String(data.mulgunjiLayerId)
+            : presetKey === "riverUsageData"
+              ? null
+              : RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID,
+        });
+      } catch {
+        /* defaults */
+      } finally {
+        if (!cancelled) setModeReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const { formAttributes, formFieldsLoading } = useLayerRowFormFields(preset, isCreateMode);
+  const preset = LAYER_ROW_EDIT_PRESETS[mode.editPresetKey];
+
+  const { navigateToParcel: navigateToJijukParcel, movingParcelIdx: movingJijukIdx } =
+    useLayerParcelNavigation(mode.jijukLayerId);
+  const { navigateToParcel: navigateToMulgunjiParcel, movingParcelIdx: movingMulgunjiIdx } =
+    useLayerParcelNavigation(mode.mulgunjiLayerId ?? RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID);
+
+  const { formAttributes, formFieldsLoading } = useLayerRowFormFields(preset, isCreateMode && modeReady);
 
   const loadDetail = useCallback(async () => {
     const id = String(detailId ?? "").trim();
@@ -94,7 +164,9 @@ export function RiverUseLedgerDetailPanel({
             if (!address) return null;
             const extRaw = x?.extent3857 as unknown;
             const extent3857: [number, number, number, number] | null =
-              Array.isArray(extRaw) && extRaw.length === 4 && extRaw.every((v) => Number.isFinite(Number(v)))
+              Array.isArray(extRaw) &&
+              extRaw.length === 4 &&
+              extRaw.every((v) => Number.isFinite(Number(v)))
                 ? (extRaw.map((v) => Number(v)) as [number, number, number, number])
                 : null;
             return { address, extent3857 };
@@ -115,13 +187,19 @@ export function RiverUseLedgerDetailPanel({
   }, [detailId]);
 
   useEffect(() => {
+    if (!modeReady) return;
     void loadDetail();
-  }, [loadDetail, reloadToken]);
+  }, [loadDetail, reloadToken, modeReady]);
 
-  // 물건지 sync 후 reload
   const handleReload = useCallback(async () => {
     const id = String(detailId ?? "").trim();
-    if (!isCreateMode && id && id !== LAYER_ROW_NEW_ID && mulgunjiDirtyRef.current) {
+    if (
+      !isCreateMode &&
+      id &&
+      id !== LAYER_ROW_NEW_ID &&
+      mode.showMulgunji &&
+      mulgunjiDirtyRef.current
+    ) {
       try {
         await call("", "POST", {
           service: "riverUseLedgerService",
@@ -136,13 +214,13 @@ export function RiverUseLedgerDetailPanel({
           },
         });
       } catch {
-        // 물건지 저장 실패는 로그만
+        /* ignore */
       }
       mulgunjiDirtyRef.current = false;
     }
     setReloadToken((t) => t + 1);
     onSaved?.();
-  }, [detailId, isCreateMode, onSaved]);
+  }, [detailId, isCreateMode, mode.showMulgunji, onSaved]);
 
   const formAttributesForEdit = useMemo(
     () => (isCreateMode ? formAttributes : attributes),
@@ -169,29 +247,27 @@ export function RiverUseLedgerDetailPanel({
     preset,
     rowKey: isCreateMode ? "" : detailId,
     attributes: formAttributesForEdit,
-    initialParcels: parcels,
+    initialParcels: mode.parcelsEditable ? parcels : EMPTY_PARCELS,
     isCreateMode,
     onReload: handleReload,
     onCreated: (newKey) => onCreated?.(newKey),
     onDeleted: () => onDeleted?.(),
     onCancelCreate: onClose,
-    wmsLayerId: RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID,
+    wmsLayerId: mode.jijukLayerId,
   });
 
-  // 수정 모드 진입 시 물건지 draft 초기화
   useEffect(() => {
-    if (isEditing) {
+    if (isEditing && mode.showMulgunji) {
       const base = [...mulgunjiItems];
       setDraftMulgunji(base);
       draftMulgunjiRef.current = base;
       mulgunjiDirtyRef.current = false;
     } else {
-      setDraftMulgunji([]);
+      setDraftMulgunji((prev) => (prev.length === 0 ? prev : []));
       draftMulgunjiRef.current = [];
     }
-  }, [isEditing, mulgunjiItems]);
+  }, [isEditing, mulgunjiItems, mode.showMulgunji]);
 
-  // draftMulgunji ref 동기화
   useEffect(() => {
     draftMulgunjiRef.current = draftMulgunji;
   }, [draftMulgunji]);
@@ -215,9 +291,12 @@ export function RiverUseLedgerDetailPanel({
   }, []);
 
   const vworldApiKey = mapContext?.vworldApiKey ?? "";
-  const showLoading = (loading && !isCreateMode) || (isCreateMode && formFieldsLoading);
+  const showLoading =
+    !modeReady || (loading && !isCreateMode) || (isCreateMode && formFieldsLoading);
   const showBody = !showLoading && !error && formAttributesForEdit.length > 0;
   const mulgunjiList = isEditing ? draftMulgunji : mulgunjiItems;
+  const showParcelSection = isEditing || !isCreateMode;
+  const parcelEditing = isEditing && mode.parcelsEditable;
 
   return (
     <div className="flex min-h-0 h-full flex-col bg-white">
@@ -249,7 +328,6 @@ export function RiverUseLedgerDetailPanel({
         )}
         {showBody && (
           <>
-            {/* 속성 */}
             <LayerRowAttributeSection
               attributes={formAttributesForEdit}
               isEditing={isEditing}
@@ -259,11 +337,10 @@ export function RiverUseLedgerDetailPanel({
               onDraftChange={handleDraftChange}
             />
 
-            {/* 필지목록 — 도형수정 포함 */}
-            {(isEditing || !isCreateMode) && (
+            {showParcelSection && (
               <LayerParcelTextSection
-                isEditing={isEditing}
-                draftParcels={draftParcels}
+                isEditing={parcelEditing}
+                draftParcels={parcelEditing ? draftParcels : parcels}
                 onAddParcel={addDraftParcel}
                 onRemoveParcel={removeDraftParcel}
                 parcels={parcels}
@@ -272,8 +349,7 @@ export function RiverUseLedgerDetailPanel({
               />
             )}
 
-            {/* 물건지목록 — 주소검색+자동도형만, 도형수정 없음 */}
-            {!isCreateMode && (
+            {mode.showMulgunji && !isCreateMode && (
               <div className="mt-4">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -351,20 +427,25 @@ export function RiverUseLedgerDetailPanel({
             )}
           </>
         )}
-        {!showLoading && !error && isCreateMode && !formFieldsLoading && formAttributesForEdit.length === 0 && (
-          <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
-            등록할 필드 정의를 불러오지 못했습니다.
-          </div>
-        )}
+        {!showLoading &&
+          !error &&
+          isCreateMode &&
+          !formFieldsLoading &&
+          formAttributesForEdit.length === 0 && (
+            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+              등록할 필드 정의를 불러오지 못했습니다.
+            </div>
+          )}
       </div>
 
-      {/* 물건지 주소 검색 모달 */}
-      <LayerParcelAddModal
-        open={mulgunjiAddModalOpen}
-        onOpenChange={setMulgunjiAddModalOpen}
-        vworldApiKey={vworldApiKey}
-        onAdd={handleAddMulgunji}
-      />
+      {mode.showMulgunji && (
+        <LayerParcelAddModal
+          open={mulgunjiAddModalOpen}
+          onOpenChange={setMulgunjiAddModalOpen}
+          vworldApiKey={vworldApiKey}
+          onAdd={handleAddMulgunji}
+        />
+      )}
     </div>
   );
 }

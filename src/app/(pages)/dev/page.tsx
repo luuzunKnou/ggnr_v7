@@ -213,6 +213,7 @@ export default function DevPage() {
       onClose={() => setHistoryOpen(false)}
       defaultFilter={historyMenuId === "versionManager" ? "apply_latest" : "source_all"}
       showFeatureFilter={historyMenuId === "sourceCodeUploader"}
+      exportFilePrefix={historyMenuId === "versionManager" ? "최신소스적용" : "소스코드관리"}
     />
     </>
   )

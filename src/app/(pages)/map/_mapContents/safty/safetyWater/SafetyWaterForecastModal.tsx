@@ -1,0 +1,232 @@
+'use client';
+
+import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ChevronDown, X } from 'lucide-react';
+import { MapFloatingPanel } from '@/app/(pages)/map/_mapComponents/MapFloatingPanel';
+import { useSearchBarOffset } from '@/app/(pages)/map/searchBarOffsetContext';
+import { cn } from '@/lib/utils';
+import { useSafetyWater } from './safetyWaterContext';
+import { safetyWaterForecastFloatTop } from './safetyWaterFloatLayout';
+import type { SafetyWaterForecast } from './safetyWaterTypes';
+
+type ForecastChip = '주의보' | '경보';
+
+const FORECAST_CHIPS: { id: ForecastChip; label: string }[] = [
+  { id: '주의보', label: '홍수주의보' },
+  { id: '경보', label: '홍수경보' },
+];
+
+function formatForecastDt(raw: string) {
+  const s = raw.replace(/\D/g, '');
+  if (s.length >= 12) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}`;
+  }
+  if (s.length >= 8) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+  return '—';
+}
+
+function displayOrDash(v: string) {
+  return v.trim() ? v : '—';
+}
+
+function matchesChip(kind: string, chip: ForecastChip) {
+  return kind.includes(chip);
+}
+
+function ForecastDetailRows({ f }: { f: SafetyWaterForecast }) {
+  const rows: { label: string; value: string }[] = [
+    { label: '발표자', value: displayOrDash(f.ancnm) },
+    { label: '수위 도달 예상일시', value: formatForecastDt(f.fctdt) },
+    { label: '홍수예보 번호', value: displayOrDash(f.no) },
+    { label: '현재 일시', value: formatForecastDt(f.sttcurdt) },
+    { label: '현재 수위표수위', value: f.sttcurhgt.trim() ? `${f.sttcurhgt} m` : '—' },
+    { label: '현재 해발수위', value: f.sttcursealvl.trim() ? `${f.sttcursealvl} m` : '—' },
+  ];
+  return (
+    <dl className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
+      {rows.map((row) => (
+        <div key={row.label} className="flex justify-between gap-2 text-[12px]">
+          <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
+          <dd className="min-w-0 text-right tabular-nums text-foreground/90">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+export function SafetyWaterForecastModal() {
+  const {
+    forecastOpen,
+    setForecastOpen,
+    forecasts,
+    forecastLoading,
+    setForecastPanelBottomPx,
+  } = useSafetyWater();
+  const { leftPx, topPx } = useSearchBarOffset();
+  const [selectedChips, setSelectedChips] = useState<ForecastChip[]>(['주의보', '경보']);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const filtered = useMemo(
+    () =>
+      forecasts.filter((f) =>
+        selectedChips.some((chip) => matchesChip(f.kind || '', chip))
+      ),
+    [forecasts, selectedChips]
+  );
+
+  const toggleChip = (chip: ForecastChip) => {
+    setSelectedChips((prev) => {
+      if (prev.includes(chip)) {
+        const next = prev.filter((c) => c !== chip);
+        return next.length === 0 ? prev : next;
+      }
+      return [...prev, chip];
+    });
+  };
+
+  const anchorPosition = useMemo(
+    () => ({ top: safetyWaterForecastFloatTop(topPx), left: leftPx }),
+    [leftPx, topPx]
+  );
+
+  useEffect(() => {
+    if (!forecastOpen) {
+      setForecastPanelBottomPx(null);
+      return;
+    }
+    const el = panelRef.current;
+    if (!el) return;
+
+    const report = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.height > 0) setForecastPanelBottomPx(rect.bottom);
+    };
+
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    const mo = new MutationObserver(report);
+    mo.observe(el, { attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('resize', report);
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener('resize', report);
+    };
+  }, [forecastOpen, filtered.length, expandedKey, setForecastPanelBottomPx]);
+
+  if (!forecastOpen || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <MapFloatingPanel
+      className="rounded-[5px]"
+      width="360px"
+      maxHeight="min(70vh, 420px)"
+      defaultPosition={anchorPosition}
+      panelRef={panelRef}
+      style={{ position: 'fixed', zIndex: 210 }}
+      header={
+        <>
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden />
+            <span className="truncate text-[13px] font-medium text-foreground">홍수 예보 발령</span>
+          </div>
+          <button
+            type="button"
+            title="닫기"
+            aria-label="닫기"
+            onClick={() => setForecastOpen(false)}
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </>
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
+        <div className="space-y-0.5">
+          <p className="text-[11px] text-muted-foreground">현재 시간 기준 최근 24시간 자료 제공</p>
+          <p className="text-[10px] text-muted-foreground/70">정보제공: 한강 홍수통제소</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5 border-b border-border/80 pb-2">
+          {FORECAST_CHIPS.map(({ id, label }) => {
+            const on = selectedChips.includes(id);
+            const isWatch = id === '주의보';
+            return (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                onClick={() => toggleChip(id)}
+                className={cn(
+                  'cursor-pointer rounded-full px-3 py-1 text-[12px] font-medium transition-colors',
+                  !on && 'bg-muted text-muted-foreground',
+                  on && isWatch && 'bg-amber-100 text-amber-800',
+                  on && !isWatch && 'bg-rose-100 text-rose-800'
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="min-h-0 max-h-[240px] flex-1 overflow-y-auto">
+          {forecastLoading ? (
+            <p className="py-4 text-center text-[12px] text-muted-foreground/70">불러오는 중…</p>
+          ) : filtered.length === 0 ? (
+            <p className="py-4 text-center text-[12px] text-muted-foreground/70">해당 예보 없음</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {filtered.map((f, i) => {
+                const key = `${f.sttnm}-${f.ancdt}-${f.no}-${i}`;
+                const open = expandedKey === key;
+                return (
+                  <li key={key} className="rounded border border-border/60 bg-muted/40">
+                    <button
+                      type="button"
+                      title={open ? '접기' : '펼치기'}
+                      aria-expanded={open}
+                      onClick={() => setExpandedKey(open ? null : key)}
+                      className="flex w-full cursor-pointer items-start gap-1.5 px-2.5 py-2 text-left"
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5 text-[12px]">
+                        <div className="font-medium text-foreground">
+                          {displayOrDash(f.kind)}
+                          {f.obsnm ? ` · ${f.obsnm}` : ''}
+                        </div>
+                        <div className="tabular-nums text-muted-foreground">
+                          {formatForecastDt(f.ancdt)}
+                          {f.rvrnm ? ` · ${f.rvrnm}` : ''}
+                        </div>
+                        {f.wrnaranm ? (
+                          <div className="truncate text-muted-foreground">주의 지역 · {f.wrnaranm}</div>
+                        ) : null}
+                      </div>
+                      <ChevronDown
+                        className={cn(
+                          'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform',
+                          open && 'rotate-180'
+                        )}
+                        aria-hidden
+                      />
+                    </button>
+                    {open ? (
+                      <div className="px-2.5 pb-2">
+                        <ForecastDetailRows f={f} />
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    </MapFloatingPanel>,
+    document.body
+  );
+}

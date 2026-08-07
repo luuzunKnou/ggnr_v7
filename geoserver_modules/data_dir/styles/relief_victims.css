@@ -7,5 +7,6 @@
     stroke-width: 1.5;
     stroke-opacity: 0.5;
     fill-opacity: 0.5;
-  }
+  };
+  z-index: 0;
 }

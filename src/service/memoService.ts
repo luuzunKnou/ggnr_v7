@@ -19,7 +19,51 @@ function quoteIdent(name: string): string {
 
 function findColumn(columns: string[], name: string): string | null {
   const lower = name.toLowerCase();
-  return columns.find((c) => c.toLowerCase() === lower) ?? null;
+  const exact = columns.find((c) => c.toLowerCase() === lower);
+  if (exact) return exact;
+  // SHP/DBF 필드명 10자 제한 (memo_contents → memo_conte)
+  if (lower.length > 10) {
+    const trunc = lower.slice(0, 10);
+    return columns.find((c) => c.toLowerCase() === trunc) ?? null;
+  }
+  return null;
+}
+
+/** memo_key 기본값(시퀀스)이 없을 때 MAX+1 채번 */
+async function allocateMemoKey(
+  schema: string,
+  table: string,
+  keyCol: string,
+): Promise<number> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT COALESCE(MAX(${quoteIdent(keyCol)})::bigint, 0) + 1 AS n
+       FROM ${quoteIdent(schema)}.${quoteIdent(table)}`,
+    ),
+  );
+  const n = Number((res.rows?.[0] as { n?: number | string } | undefined)?.n);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
+}
+
+/** serial/identity/default 있으면 INSERT 시 키 생략 */
+async function keyColumnHasDefault(
+  schema: string,
+  table: string,
+  keyCol: string,
+): Promise<boolean> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT
+         (column_default IS NOT NULL OR COALESCE(is_identity, 'NO') = 'YES') AS has_def
+       FROM information_schema.columns
+       WHERE table_schema = '${esc(schema)}'
+         AND table_name = '${esc(table)}'
+         AND column_name = '${esc(keyCol)}'
+       LIMIT 1`,
+    ),
+  );
+  const v = (res.rows?.[0] as { has_def?: boolean | string } | undefined)?.has_def;
+  return v === true || v === 't' || v === 'true';
 }
 
 async function resolvePhysicalTable(tableGuess: string): Promise<{ schema: string; table: string } | null> {
@@ -394,6 +438,15 @@ export async function createMemo(params?: {
     insertVals.push(v ? `'${esc(v)}'` : 'NULL');
   };
 
+  // serial/default 있으면 DB 채번, 없으면 MAX+1
+  const keyHasDefault = await keyColumnHasDefault(resolved.schema, resolved.table, keyCol);
+  let fallbackKey: number | null = null;
+  if (!keyHasDefault) {
+    fallbackKey = await allocateMemoKey(resolved.schema, resolved.table, keyCol);
+    insertCols.push(quoteIdent(keyCol));
+    insertVals.push(String(fallbackKey));
+  }
+
   setText('memo_title', params?.title);
   setText('memo_contents', params?.contents);
   setText('memo_create_date', params?.createDate || formatToYmdOrText(new Date()));
@@ -422,8 +475,11 @@ export async function createMemo(params?: {
 
   try {
     const res = await db.execute(sql.raw(q));
-    const newKey = String((res.rows?.[0] as { new_key?: string })?.new_key ?? '').trim();
-    if (!newKey) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+    const row0 = res.rows?.[0] as Record<string, unknown> | undefined;
+    const newKey = String(row0?.new_key ?? row0?.newKey ?? fallbackKey ?? '').trim();
+    if (!newKey || newKey === 'null') {
+      return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+    }
     return { success: true, memoKey: newKey };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -461,7 +517,14 @@ export async function updateMemo(params?: {
 
   if (params?.title !== undefined) setText('memo_title', params.title);
   if (params?.contents !== undefined) setText('memo_contents', params.contents);
-  if (params?.createDate !== undefined) setText('memo_create_date', params.createDate);
+  if (params?.createDate !== undefined) {
+    const dateCol = findColumn(columns, 'memo_create_date');
+    if (dateCol) {
+      const d = String(params.createDate ?? '').trim();
+      // date 컬럼에 '' 넣으면 Postgres 오류 — 빈 값은 NULL
+      sets.push(d ? `${quoteIdent(dateCol)} = '${esc(d)}'` : `${quoteIdent(dateCol)} = NULL`);
+    }
+  }
 
   const geomCol = await resolveGeomColumn(resolved.schema, resolved.table, columns);
   if (geomCol && params?.clearGeom) {

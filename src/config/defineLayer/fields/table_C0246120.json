@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "rdid",
-    "define_field_kor_name": "rdid",
+    "define_field_kor_name": "관리번호",
     "define_field_type": "text",
     "define_field_idx": 1000001,
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "ufid",
-    "define_field_kor_name": "ufid",
+    "define_field_kor_name": "일련번호",
     "define_field_type": "text",
     "define_field_idx": 1000002,
     "define_field_is_required": false,
@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "road_name",
-    "define_field_kor_name": "road_name",
+    "define_field_kor_name": "노선명",
     "define_field_type": "text",
     "define_field_idx": 1000003,
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "road_no",
-    "define_field_kor_name": "road_no",
+    "define_field_kor_name": "노선번호",
     "define_field_type": "text",
     "define_field_idx": 1000004,
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "sect",
-    "define_field_kor_name": "sect",
+    "define_field_kor_name": "구간",
     "define_field_type": "text",
     "define_field_idx": 1000005,
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "sect_st",
-    "define_field_kor_name": "sect_st",
+    "define_field_kor_name": "위치시점",
     "define_field_type": "number",
     "define_field_idx": 1000006,
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "sect_ed",
-    "define_field_kor_name": "sect_ed",
+    "define_field_kor_name": "위치종점",
     "define_field_type": "number",
     "define_field_idx": 1000007,
     "define_field_is_required": false,
@@ -326,7 +326,7 @@
   },
   {
     "define_field_name": "dip_size",
-    "define_field_kor_name": "dip_size",
+    "define_field_kor_name": "규격",
     "define_field_type": "text",
     "define_field_idx": 1000008,
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "dip_hit",
-    "define_field_kor_name": "dip_hit",
+    "define_field_kor_name": "매설깊이",
     "define_field_type": "number",
     "define_field_idx": 1000009,
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "ea",
-    "define_field_kor_name": "ea",
+    "define_field_kor_name": "수량",
     "define_field_type": "number",
     "define_field_idx": 1000010,
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "eqp_len",
-    "define_field_kor_name": "eqp_len",
+    "define_field_kor_name": "연장",
     "define_field_type": "number",
     "define_field_idx": 1000011,
     "define_field_is_required": false,
@@ -426,7 +426,7 @@
   },
   {
     "define_field_name": "dip_day",
-    "define_field_kor_name": "dip_day",
+    "define_field_kor_name": "설치일",
     "define_field_type": "text",
     "define_field_idx": 1000012,
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "remark",
-    "define_field_kor_name": "remark",
+    "define_field_kor_name": "비고",
     "define_field_type": "text",
     "define_field_idx": 1000013,
     "define_field_is_required": false,
@@ -604,6 +604,31 @@
     "define_field_kor_name": "geom",
     "define_field_type": "text",
     "define_field_idx": 1000019,
+    "define_field_is_required": false,
+    "define_field_show_search": false,
+    "define_field_show_list": true,
+    "define_field_show_detail": true,
+    "define_field_read_only": false,
+    "define_field_is_key": false,
+    "define_field_show_search_detail": false,
+    "define_field_max_length": "",
+    "define_field_sort_idx": "",
+    "define_field_sort_type": "",
+    "define_field_sel_list": "",
+    "define_field_sel_table": "",
+    "define_field_sel_query": "",
+    "define_field_sel_url": "",
+    "define_field_show_detail_list": false,
+    "define_field_sel_key_field": "",
+    "define_field_sel_label_field": "",
+    "define_field_default_value": "",
+    "define_field_show_title": false
+  },
+  {
+    "define_field_name": "sern",
+    "define_field_kor_name": "시스템관리ID",
+    "define_field_type": "text",
+    "define_field_idx": 1000020,
     "define_field_is_required": false,
     "define_field_show_search": false,
     "define_field_show_list": true,

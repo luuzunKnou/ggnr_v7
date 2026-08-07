@@ -1,0 +1,189 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
+import { Input } from '@/app/shadcnComponents/ui/input';
+import { cn } from '@/lib/utils';
+import type { AerialKind, WorkUnitItem } from './aerialMediaTypes';
+import { mockUnitsForKind } from './aerialMediaMockData';
+import { deriveOrthoUnitStatus } from './aerialMediaTypes';
+
+const KIND_TABS: { id: AerialKind; label: string }[] = [
+  { id: 'ortho', label: '드론영상' },
+  { id: 'drone', label: '사진,동영상' },
+  { id: 'panorama', label: '파노라마' },
+];
+
+type Props = {
+  checkedUnitIds: Set<string>;
+  onCheckedChange: (next: Set<string>) => void;
+  onClose?: () => void;
+  className?: string;
+};
+
+function unitsForView(kind: AerialKind): WorkUnitItem[] {
+  const list = mockUnitsForKind(kind);
+  if (kind === 'ortho') {
+    return list.filter((u) => {
+      const st = u.status ?? deriveOrthoUnitStatus(u.files);
+      return st === 'done' || u.files.some((f) => f.status === 'done' || f.status === 'registered');
+    });
+  }
+  return list;
+}
+
+function matchesKeyword(unit: WorkUnitItem, keyword: string): boolean {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return true;
+  return unit.workName.toLowerCase().includes(q);
+}
+
+/** 우측 컨트롤 «드론영상» — 레이어형 종류 탭 + 검색 + 작업단위 체크 */
+export function AerialViewLayerPanel({
+  checkedUnitIds,
+  onCheckedChange,
+  onClose,
+  className,
+}: Props) {
+  const [kind, setKind] = useState<AerialKind>('ortho');
+  const [keyword, setKeyword] = useState('');
+
+  const units = useMemo(() => unitsForView(kind), [kind]);
+  const filtered = useMemo(
+    () => units.filter((u) => matchesKeyword(u, keyword)),
+    [units, keyword]
+  );
+
+  const checkedInList = filtered.filter((u) => checkedUnitIds.has(u.id)).length;
+  const allChecked = filtered.length > 0 && checkedInList === filtered.length;
+  const someChecked = checkedInList > 0 && !allChecked;
+
+  const toggle = (id: string, checked: boolean) => {
+    const next = new Set(checkedUnitIds);
+    if (checked) next.add(id);
+    else next.delete(id);
+    onCheckedChange(next);
+  };
+
+  const toggleAll = (checked: boolean) => {
+    const next = new Set(checkedUnitIds);
+    for (const u of filtered) {
+      if (checked) next.add(u.id);
+      else next.delete(u.id);
+    }
+    onCheckedChange(next);
+  };
+
+  return (
+    <div
+      className={cn(
+        'flex w-64 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        className
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <span className="text-[13px] font-medium text-slate-800">드론영상</span>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs text-slate-500 hover:text-slate-700"
+            aria-label="닫기"
+          >
+            닫기
+          </button>
+        ) : null}
+      </div>
+
+      <div className="grid shrink-0 grid-cols-3 gap-0.5 border-b border-slate-100 bg-slate-50/80 p-1">
+        {KIND_TABS.map((t) => {
+          const active = kind === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setKind(t.id)}
+              className={cn(
+                'rounded px-0.5 py-1.5 text-[10px] leading-tight transition-colors',
+                active
+                  ? 'bg-white font-semibold text-sky-800 shadow-sm ring-1 ring-sky-200'
+                  : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+              )}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="shrink-0 border-b border-slate-100 px-2.5 py-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="작업단위명"
+            className="h-8 border-slate-200 bg-slate-50/80 pl-7 text-[11px] focus-visible:bg-white"
+          />
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center border-b border-slate-100 px-2.5 py-1.5">
+        <label
+          className={cn(
+            'flex items-center gap-2',
+            filtered.length === 0 ? 'pointer-events-none opacity-40' : 'cursor-pointer'
+          )}
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300"
+            checked={allChecked}
+            disabled={filtered.length === 0}
+            ref={(el) => {
+              if (el) el.indeterminate = someChecked;
+            }}
+            onChange={(e) => toggleAll(e.target.checked)}
+            aria-label="전체"
+          />
+          <span className="text-[11px] text-slate-600">전체</span>
+        </label>
+        <span className="ml-auto text-[10px] text-slate-400">{filtered.length}건</span>
+      </div>
+
+      <div className="min-h-0 max-h-[min(420px,calc(100vh-260px))] flex-1 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-6 text-center text-[11px] text-slate-400">
+            {units.length === 0
+              ? '표시할 작업단위가 없습니다.'
+              : '검색 조건에 맞는 작업단위가 없습니다.'}
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {filtered.map((u) => {
+              const checked = checkedUnitIds.has(u.id);
+              return (
+                <li key={u.id}>
+                  <label className="flex cursor-pointer items-start gap-2 px-2.5 py-2 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300"
+                      checked={checked}
+                      onChange={(e) => toggle(u.id, e.target.checked)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium text-slate-800">
+                        {u.workName}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] text-slate-400">{u.workDate}</span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}

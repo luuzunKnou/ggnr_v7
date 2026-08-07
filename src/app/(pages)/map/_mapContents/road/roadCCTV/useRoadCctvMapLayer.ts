@@ -1,31 +1,31 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type Map from 'ol/Map';
+import type OlMap from 'ol/Map';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
-import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style';
+import { Style, Icon } from 'ol/style';
 import type { ItsCctvItem } from './itsCctvTypes';
+
+const CCTV_ICON = '/symbol/cus_cctv_ps.svg';
 
 function cctvStyle(selectedKey: string | null, featureKey: string) {
   const selected = selectedKey === featureKey;
   return new Style({
-    image: new CircleStyle({
-      radius: selected ? 10 : 7,
-      fill: new Fill({
-        color: selected ? 'rgba(239, 68, 68, 0.7)' : 'rgba(59, 130, 246, 0.7)',
-      }),
-      stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.7)', width: 2 }),
+    image: new Icon({
+      src: CCTV_ICON,
+      scale: selected ? 1.15 : 1,
+      anchor: [0.5, 0.5],
     }),
   });
 }
 
 export function useRoadCctvMapLayer(
   mapReady: boolean,
-  map: Map | null,
+  map: OlMap | null,
   active: boolean,
   items: ItsCctvItem[],
   selectedKey: string | null,

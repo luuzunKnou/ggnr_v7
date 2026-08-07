@@ -34,7 +34,7 @@ export function LayerRowAttributeSection({
             return (
               <div
                 key={row.field}
-                className="grid grid-cols-[minmax(0,38%)_1fr] gap-x-2 gap-y-0.5 px-2 py-1.5"
+                className="grid grid-cols-detail-30 gap-x-2 gap-y-0.5 px-2 py-1.5"
               >
                 <dt className="shrink-0 font-medium text-slate-600">{row.label}</dt>
                 <dd className="min-w-0 break-words text-slate-800">

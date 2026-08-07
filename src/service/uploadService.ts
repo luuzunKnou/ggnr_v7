@@ -108,6 +108,7 @@ export async function initServiceFileDataUpload(params: {
   keyValue: string;
   ownerUsrId: string;
   serEng: string;
+  subfolder?: string | null;
 }): Promise<InitChunkedUploadResult> {
   if (!(await userCanAccessServiceFileData(params.ownerUsrId, params.serEng.trim(), 'write'))) {
     throw new Error('Forbidden');
@@ -116,7 +117,7 @@ export async function initServiceFileDataUpload(params: {
   if (!safeName) {
     throw new Error('유효하지 않은 파일명입니다.');
   }
-  const relDir = fileDataRelativeDir(params.layerName, params.keyValue);
+  const relDir = fileDataRelativeDir(params.layerName, params.keyValue, params.subfolder);
   if (!relDir) {
     throw new Error('유효하지 않은 layer 또는 key 입니다.');
   }

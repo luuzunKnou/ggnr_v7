@@ -2,13 +2,28 @@ import { useEffect } from 'react';
 import ImageLayer from 'ol/layer/Image';
 import ImageWMS from 'ol/source/ImageWMS';
 import type { Map } from 'ol';
+import tables from '@/config/defineLayer/tables.json';
 import { WORKSPACE } from './serviceLayerFactory';
+import { BUILDING_ROAD_LAYER_DEFS } from './buildingRoadLayerConfig';
+
+export { BUILDING_ROAD_LAYER_DEFS } from './buildingRoadLayerConfig';
 
 function getGeoServerBase(): string {
   if (typeof window !== 'undefined') {
     return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
   }
   return 'http://localhost:8080/geoserver';
+}
+
+/** defineLayer tables.json 에 등록된 테이블명 (소문자) */
+const DEFINE_TABLE_NAMES_LOWER = new Set(
+  (tables as Array<{ define_table_name?: string }>)
+    .map((t) => String(t.define_table_name ?? '').trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isDefinedTable(tableName: string): boolean {
+  return DEFINE_TABLE_NAMES_LOWER.has(tableName.trim().toLowerCase());
 }
 
 /** GeoServer jijuk.sld — 지번 TextSymbolizer MaxScaleDenominator (이 축척 이하에서만 지번 표시) */
@@ -32,20 +47,15 @@ export const CADASTRAL_LAYERS: {
   { tableName: 'emd', layerName: '읍면동', minZoom: 8, maxZoom: 18 },
 ];
 
-/** 건물·도로 레이어 목록 — 상세 패널·동기화용 export */
-export const BUILDING_ROAD_LAYERS: {
-  tableName: string;
-  layerName: string;
-  minZoom: number;
-  maxZoom: number;
-}[] = [
-  { tableName: 'tl_sgco_rnadr_mst', layerName: '건물군', minZoom: 8, maxZoom: 30 },
-  { tableName: 'tl_spbd_entrc', layerName: '건물군 출입구', minZoom: 8, maxZoom: 30 },
-  { tableName: 'tl_sgco_rnadr_dong', layerName: '건물', minZoom: 8, maxZoom: 30 },
-  { tableName: 'tl_spbd_entrc_dong', layerName: '건물 출입구', minZoom: 8, maxZoom: 30 },
-  { tableName: 'tl_sprd_rw', layerName: '실폭도로', minZoom: 8, maxZoom: 30 },
-  { tableName: 'tl_sprd_manage', layerName: '도로구간', minZoom: 8, maxZoom: 30 },
-];
+/** 건물·도로 레이어 목록 — tables.json 에 있는 항목만 (패널 후보) */
+export const BUILDING_ROAD_LAYERS = BUILDING_ROAD_LAYER_DEFS.filter((l) =>
+  isDefinedTable(l.tableName)
+);
+
+/** tables.json 기준 건물·도로 가용 테이블명 */
+export const BUILDING_ROAD_DEFINED_TABLE_NAMES = new Set(
+  BUILDING_ROAD_LAYERS.map((l) => l.tableName)
+);
 
 /**
  * 지적도 관련 GeoServer WMS 레이어 (jijuk, ri, emd)
@@ -135,23 +145,28 @@ export function useCadastralLayerSync(
 
 /**
  * activeControls + visibleTableNames 기준으로 건물·도로 레이어 표시.
+ * availableTableNames null = 카탈로그 미조회(전부 끔). Set이면 그 안의 레이어만 가능.
  */
 export function useBuildingRoadLayerSync(
   map: Map | null,
   mapReady: boolean,
   activeControls: string[],
   visibleTableNames?: Set<string> | null,
+  availableTableNames?: Set<string> | null,
 ) {
   useEffect(() => {
     if (!mapReady || !map) return;
     const groupOn = activeControls.includes('building-road');
+    const catalogReady = availableTableNames != null;
     const showAll = visibleTableNames == null;
     map.getLayers().getArray().forEach((l) => {
       if (!l.get('buildingRoadLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
-      const allowed =
+      const inCatalog =
+        catalogReady && tableName != null && availableTableNames.has(tableName);
+      const selected =
         showAll || (tableName != null && (visibleTableNames?.has(tableName) ?? false));
-      l.setVisible(groupOn && allowed);
+      l.setVisible(groupOn && inCatalog && selected);
     });
-  }, [map, mapReady, activeControls, visibleTableNames]);
+  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames]);
 }

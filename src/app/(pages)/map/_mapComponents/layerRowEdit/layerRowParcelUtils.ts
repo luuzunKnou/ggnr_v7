@@ -1,6 +1,7 @@
 import { formatAddressStripSidoSigungu } from "@/lib/formatAddressStripAdmin";
 import GeoJSON from "ol/format/GeoJSON";
 import type Map from "ol/Map";
+import { createEmpty, extend, isEmpty as isEmptyExtent } from "ol/extent";
 import { transform } from "ol/proj";
 import type { VWorldAddressItem } from "../addressSearch/vworldAddressSearch";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../config/mapDefaults";
@@ -74,6 +75,29 @@ export function fitMapToLayerRowParcel(
   }
 
   scheduleFitMapToExtent3857(map, ext, {
+    maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+    pointZoom: 16,
+    applyMapViewPadding: () => opts?.applyMapViewPadding?.(),
+  });
+  return true;
+}
+
+/** 여러 필지 extent를 합쳐 한 번에 fit — 목록에서 건 선택 시 전체 필지 위치로 이동 */
+export function fitMapToLayerRowParcels(
+  map: Map,
+  items: LayerRowParcelItem[],
+  opts?: {
+    applyMapViewPadding?: (() => void) | null;
+  }
+): boolean {
+  const union = createEmpty();
+  for (const item of items) {
+    const ext = getParcelExtent3857(item);
+    if (ext) extend(union, ext);
+  }
+  if (isEmptyExtent(union)) return false;
+
+  scheduleFitMapToExtent3857(map, union as [number, number, number, number], {
     maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
     pointZoom: 16,
     applyMapViewPadding: () => opts?.applyMapViewPadding?.(),

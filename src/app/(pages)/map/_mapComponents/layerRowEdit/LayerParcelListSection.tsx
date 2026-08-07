@@ -12,17 +12,22 @@ type Props = {
 export function LayerParcelListSection({ parcels, movingParcelIdx, onParcelClick }: Props) {
   return (
     <>
-      <div className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">필지목록</div>
+      <div className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        필지목록
+        {parcels.length > 0 ? (
+          <span className="ml-1 font-normal normal-case text-slate-400">({parcels.length})</span>
+        ) : null}
+      </div>
       {parcels.length === 0 ? (
         <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
           등록된 필지가 없습니다.
         </div>
       ) : (
-        <ul className="list-none space-y-0 rounded border border-slate-200 bg-white">
+        <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide">
           {parcels.map((item, i) => (
             <li
               key={`${i}-${item.address.slice(0, 24)}`}
-              className="border-b border-slate-100 px-2 py-2 text-slate-800 last:border-b-0 break-words"
+              className="border-b border-slate-100 px-2 py-1.5 text-slate-800 last:border-b-0 break-words"
             >
               <button
                 type="button"

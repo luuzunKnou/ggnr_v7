@@ -1,0 +1,19 @@
+<layer>
+  <name>tl_sgco_rnadr_mst_gun</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-140a</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-1409</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-140b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 00:49:16.746 UTC</dateCreated>
+  <dateModified>2026-07-14 00:49:16.789 UTC</dateModified>
+</layer>

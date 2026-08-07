@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { BizNotifPrefetch } from '@/app/(pages)/(index)/BizNotifPrefetch';
 import { DevModeFooterTrigger } from '@/app/(pages)/(index)/dev-mode-footer-trigger';
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { HeaderAuthLinks } from '@/app/(pages)/(index)/header-auth-links';
@@ -18,6 +19,7 @@ export function SiteIndexShell({ children, mainClassName }: SiteIndexShellProps)
 
   return (
     <div className="min-h-screen bg-background pb-[20px]">
+      <BizNotifPrefetch />
       <header className="border-b bg-card shrink-0">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">

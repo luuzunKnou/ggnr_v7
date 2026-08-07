@@ -1,0 +1,19 @@
+<layer>
+  <name>landown_foreign</name>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-61e3</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--5fabfce7:19fca79c611:-5c2d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-61e4</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-04 07:13:46.19 UTC</dateCreated>
+  <dateModified>2026-08-04 07:18:11.614 UTC</dateModified>
+</layer>

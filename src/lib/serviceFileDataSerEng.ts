@@ -7,6 +7,7 @@ export const SER_FILE_ENG = {
   dataQuery: 'dataQuery',
   riverBasicPlan: 'riverBasicPlan',
   riverUseLedger: 'riverUseLedger',
+  riverConstructionLedger: 'riverConstructionLedger',
   smallRiverUseLedger: 'smallRiverUseLedger',
   roadUseLedger: 'roadUseLedger',
   waterworksLedger: 'waterworksLedger',

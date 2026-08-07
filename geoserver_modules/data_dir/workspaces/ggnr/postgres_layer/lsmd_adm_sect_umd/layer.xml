@@ -1,0 +1,19 @@
+<layer>
+  <name>lsmd_adm_sect_umd</name>
+  <id>LayerInfoImpl-6ad12bdb:19fb0d2380b:-78ac</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6ad12bdb:19fb0d2380b:-78ab</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6ad12bdb:19fb0d2380b:-78ad</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-03 06:59:51.145 UTC</dateCreated>
+  <dateModified>2026-08-03 06:59:51.193 UTC</dateModified>
+</layer>

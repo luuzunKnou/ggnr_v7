@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_frl_0610_ls</name>
+  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-c41</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-c40</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-c42</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-07-14 05:48:23.428 UTC</dateCreated>
+  <dateModified>2026-07-14 05:48:23.506 UTC</dateModified>
+</layer>

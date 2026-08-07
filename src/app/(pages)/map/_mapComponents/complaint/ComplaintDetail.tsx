@@ -8,6 +8,7 @@ import { ComplaintDetailPanel } from './complaint-detail-panel';
 import type { CompUI, CompdUI } from './types';
 import type { ComplaintFormValues } from './complaint-info';
 import { call } from '@/lib/api';
+import { fitMapToComplaintExtent3857 } from './fitComplaintMap';
 
 type Props = {
   onListRefresh?: () => void;
@@ -129,7 +130,7 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
       if (!complaintDetail || !setComplaintDetail) return;
       setSaving(true);
       try {
-        await call('', 'POST', {
+        const res = await call('', 'POST', {
           service: 'complaintService',
           action: 'update',
           params: {
@@ -142,22 +143,27 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
             compCu: values.compCu || null,
             compAdr: values.compAdr || null,
             compContent: values.compContent || null,
+            lon: values.lon ?? null,
+            lat: values.lat ?? null,
           },
         });
-        const res = await call('', 'POST', {
-          service: 'complaintService',
-          action: 'get',
-          params: { compKey: complaintDetail.compKey },
-        });
         if (res?.success && res?.data) {
-          setComplaintDetail(res.data as typeof complaintDetail);
+          const data = res.data as typeof complaintDetail & {
+            extent3857?: [number, number, number, number] | null;
+          };
+          setComplaintDetail(data);
           bumpList();
+          fitMapToComplaintExtent3857(
+            mapContext?.mapInstanceRef?.current,
+            data.extent3857,
+            () => mapContext?.applyMapViewPaddingRef?.current?.()
+          );
         }
       } finally {
         setSaving(false);
       }
     },
-    [complaintDetail, setComplaintDetail, bumpList]
+    [complaintDetail, setComplaintDetail, bumpList, mapContext]
   );
 
   const handleDelete = useCallback(async () => {

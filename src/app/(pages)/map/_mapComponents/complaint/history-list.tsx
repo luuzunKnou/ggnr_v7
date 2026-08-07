@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { CompdUI } from './types';
 import { Button } from '@/app/shadcnComponents/ui/button';
-import { CheckCircle2, Wrench, CircleDot, ClipboardList, Plus } from 'lucide-react';
+import { CheckCircle2, Wrench, CircleDot, ClipboardList, ClipboardCheck, Plus } from 'lucide-react';
 import { HistoryAddDialog, type HistoryAddFormData } from './history-add-dialog';
 import { cn } from '@/lib/utils';
 import { getStateStyle } from './state-options';
@@ -18,7 +18,7 @@ interface HistoryListProps {
 
 const stateIconMap: Record<string, React.ReactNode> = {
   접수: <ClipboardList className="h-4 w-4 text-[#1D6AE3]" />,
-  점검: <CheckCircle2 className="h-4 w-4 text-emerald-600" />,
+  점검: <ClipboardCheck className="h-4 w-4 text-violet-600" />,
   처리중: <Wrench className="h-4 w-4 text-orange-600" />,
   완료: <CheckCircle2 className="h-4 w-4 text-green-600" />,
 };

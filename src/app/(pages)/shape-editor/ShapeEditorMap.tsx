@@ -7,7 +7,10 @@ import {
   useBuildingRoadLayerSync,
 } from '../map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { useJimokLayerSync } from '../map/_mapComponents/layerFactory/jimokLayerFactory';
-import { useLandownLayerSync } from '../map/_mapComponents/layerFactory/landownLayerFactory';
+import { useOwnershipLayerSync } from '../map/_mapComponents/layerFactory/ownershipLayerFactory';
+import { useThematicMapLayerSync } from '../map/_mapComponents/layerFactory/thematicMapLayerFactory';
+import { useThematicMapCatalog } from '../map/_mapComponents/hooks/useThematicMapCatalog';
+import { useOwnershipCatalog } from '../map/_mapComponents/hooks/useOwnershipCatalog';
 import { useServiceLayerSync } from '../map/_mapComponents/layerFactory/serviceLayerFactory';
 import type { ShapeEditorOverlayControls } from './_hooks/useShapeEditorOverlayControls';
 import { useShapeEditorMapInstance } from './_hooks/useShapeEditorMapInstance';
@@ -37,7 +40,14 @@ export function ShapeEditorMap({
     visibleJimokLayerNames,
     visibleLandownLayerNames,
     visibleBuildingRoadLayerNames,
+    visibleThematicLayerNames,
   } = overlayControls;
+  const { availableLayerTableNames: thematicAvailableTableNames, loading: thematicCatalogLoading } =
+    useThematicMapCatalog();
+  const {
+    availableLayerTableNames: ownershipAvailableTableNames,
+    loading: ownershipCatalogLoading,
+  } = useOwnershipCatalog();
 
   useEffect(() => {
     registerMap(mapInstanceRef.current);
@@ -53,7 +63,20 @@ export function ShapeEditorMap({
     visibleBuildingRoadLayerNames
   );
   useJimokLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleJimokLayerNames);
-  useLandownLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleLandownLayerNames);
+  useOwnershipLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleLandownLayerNames,
+    ownershipCatalogLoading ? null : ownershipAvailableTableNames
+  );
+  useThematicMapLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleThematicLayerNames,
+    thematicCatalogLoading ? null : thematicAvailableTableNames
+  );
   useOfficialLandPriceMapLayer(
     mapInstanceRef.current,
     mapReady,

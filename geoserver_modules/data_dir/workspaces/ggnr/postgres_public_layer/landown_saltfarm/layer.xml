@@ -1,12 +1,12 @@
 <layer>
   <name>landown_saltfarm</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc802047a:3064</id>
+  <id>LayerInfoImpl--5fabfce7:19fca79c611:-4d99</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-243c</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc802047a:3063</id>
+    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-4d9a</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:15:04.424 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:15.31 UTC</dateModified>
+  <dateCreated>2026-08-04 07:52:35.873 UTC</dateCreated>
+  <dateModified>2026-08-04 07:52:38.56 UTC</dateModified>
 </layer>

@@ -22,7 +22,7 @@ export type LandInfoMapConfig = {
 };
 
 const DEFAULT_DATA_PORTAL_KEY =
-  'aiP4epT7GQrb64StfWRp3NF1Ng%2BIC%2Fg4pdDz%2BpKuU4Dh31MWXIyhos7HT6puzyJjWC0UuCugVMapD1bm9D7pTA%3D%3D';
+  'dpeDzr70q5P1mLRdtcj1YVE3Po0OCaBEf6Wyi1SSErnKBu3XzCLnQiYxknChirRI9LybE2vSMEn0SZ/rRYytdw==';
 
 function toStr(value: unknown): string {
   if (value == null) return '';

@@ -29,6 +29,25 @@ import type { ParcelLandRowSource } from '@/lib/parcelLandNormalize';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
 
+/** 주소 문자열로 외부 지도 검색 */
+function openExternalMapByAddress(
+  provider: 'naver' | 'kakao' | 'google',
+  address: string
+) {
+  const q = String(address ?? '').trim();
+  if (!q || q === '-') {
+    window.alert('검색할 주소가 없습니다.');
+    return;
+  }
+  const enc = encodeURIComponent(q);
+  const urls = {
+    naver: `https://map.naver.com/p/search/${enc}`,
+    kakao: `https://map.kakao.com/?q=${enc}`,
+    google: `https://www.google.com/maps/search/?api=1&query=${enc}`,
+  } as const;
+  window.open(urls[provider], '_blank', 'noopener,noreferrer');
+}
+
 type TabId = 'parcel' | 'buildingLedger' | 'buildingPermit';
 type ModalKind = 'price' | null;
 
@@ -301,6 +320,9 @@ export function LandInfoPanelContent({
 
   useEffect(() => {
     let alive = true;
+    /** 새 우클릭 시 부모 pnu가 null로 리셋되므로, 이전 필지 resolved 잔존 방지 */
+    if (!pnuFromContext) setResolvedPnu(null);
+    setResolvedParcelJibun(null);
     fetchParcelIdentityAtPoint(coordinate, viewProjection).then((id) => {
       if (!alive) return;
       if (!pnuFromContext) setResolvedPnu(id.pnu);
@@ -310,6 +332,22 @@ export function LandInfoPanelContent({
       alive = false;
     };
   }, [coordinate, viewProjection, pnuFromContext]);
+
+  /** 다른 필지 우클릭 시 — 이전 필지 캐시로 지번·표가 남는 것 방지 (탭이 필지정보가 아니어도) */
+  useEffect(() => {
+    setParcelData({
+      characteristics: [],
+      landUses: [],
+      prices: [],
+      possessions: [],
+    });
+    setParcelError(null);
+    setBuildingRows([]);
+    setBuildingLedgerNotice(null);
+    setPermitRows([]);
+    setPermitSource(null);
+    setResolvedRoad(null);
+  }, [effectivePnu]);
 
   useEffect(() => {
     if (activeTab !== 'parcel') return;
@@ -376,13 +414,13 @@ export function LandInfoPanelContent({
       setPermitFetching(false);
       return;
     }
-    if (!effectivePnu || !dataPortalKey) return;
+    if (!effectivePnu) return;
     setPermitFetching(true);
-  }, [activeTab, effectivePnu, dataPortalKey]);
+  }, [activeTab, effectivePnu]);
 
   useEffect(() => {
     if (activeTab !== 'buildingPermit') return;
-    if (!effectivePnu || !dataPortalKey) return;
+    if (!effectivePnu) return;
     let alive = true;
     fetchPermitRows({ pnu: effectivePnu, dataPortalKey })
       .then((res) => {
@@ -464,6 +502,20 @@ export function LandInfoPanelContent({
     if (!raw) return '-';
     return formatAddressStripSidoSigungu(raw) || raw;
   }, [road, resolvedRoad]);
+
+  /** 외부 지도 검색용 — 지번만 (도로명은 검색 결과가 여러 개 뜸) */
+  const externalMapSearchQuery = useMemo(() => {
+    const fromTab =
+      composeFullJibunFromRow(parcelData.characteristics[0]) ||
+      composeFullJibunFromRow(parcelData.possessions[0]) ||
+      composeFullJibunFromRow(parcelData.prices[0]) ||
+      composeFullJibunFromRow(parcelData.landUses[0]);
+    return (
+      fromTab ||
+      String(jibun ?? '').trim() ||
+      String(resolvedParcelJibun ?? '').trim()
+    );
+  }, [parcelData, jibun, resolvedParcelJibun]);
 
   const modalRows = useMemo(() => {
     if (modalKind !== 'price') return [];
@@ -677,15 +729,8 @@ export function LandInfoPanelContent({
         <div className="flex w-full gap-1">
           <button
             type="button"
-            onClick={() =>
-              wgs84 &&
-              window.open(
-                `https://map.naver.com/v5/search/?c=${wgs84[1]},${wgs84[0]},15,0,0,0,dh`,
-                '_blank',
-                'noopener,noreferrer'
-              )
-            }
-            disabled={!wgs84}
+            onClick={() => openExternalMapByAddress('naver', externalMapSearchQuery)}
+            disabled={!externalMapSearchQuery}
             className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
             aria-label="네이버 지도"
           >
@@ -693,11 +738,8 @@ export function LandInfoPanelContent({
           </button>
           <button
             type="button"
-            onClick={() =>
-              wgs84 &&
-              window.open(`https://map.kakao.com/link/map/${wgs84[1]},${wgs84[0]}`, '_blank', 'noopener,noreferrer')
-            }
-            disabled={!wgs84}
+            onClick={() => openExternalMapByAddress('kakao', externalMapSearchQuery)}
+            disabled={!externalMapSearchQuery}
             className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
             aria-label="카카오 지도"
           >
@@ -705,11 +747,8 @@ export function LandInfoPanelContent({
           </button>
           <button
             type="button"
-            onClick={() =>
-              wgs84 &&
-              window.open(`https://www.google.com/maps?q=${wgs84[1]},${wgs84[0]}`, '_blank', 'noopener,noreferrer')
-            }
-            disabled={!wgs84}
+            onClick={() => openExternalMapByAddress('google', externalMapSearchQuery)}
+            disabled={!externalMapSearchQuery}
             className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
             aria-label="구글 지도"
           >

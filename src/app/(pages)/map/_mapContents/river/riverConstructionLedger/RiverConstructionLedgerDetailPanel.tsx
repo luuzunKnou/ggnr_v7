@@ -1,0 +1,1531 @@
+"use client";
+
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  Download,
+  FileText,
+  MapPin,
+  Paperclip,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import "../../../_mapComponents/config/projections";
+import Draw from "ol/interaction/Draw";
+import Modify from "ol/interaction/Modify";
+import VectorLayer from "ol/layer/Vector";
+import VectorSource from "ol/source/Vector";
+import Feature from "ol/Feature";
+import Polygon from "ol/geom/Polygon";
+import GeoJSONFormat from "ol/format/GeoJSON";
+import WKT from "ol/format/WKT";
+import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
+import { isEmpty as isEmptyExtent } from "ol/extent";
+import { cn } from "@/lib/utils";
+import { call } from "@/lib/api";
+import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
+import {
+  ServiceFileImagePreview,
+  type ServiceFilePreviewItem,
+} from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import {
+  requestServiceFileDataDelete,
+  serviceFileDataDownloadUrl,
+  triggerServiceFileDownload,
+  useServiceFileChunkedUpload,
+  useServiceFileData,
+} from "../../../_mapComponents/standard/useServiceFileData";
+import { useMapContext } from "../../../_mapComponents/MapContext";
+import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
+import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
+import {
+  LayerRowEditToolbar,
+  LayerRowPanelButton,
+  useLayerParcelNavigation,
+  type LayerRowParcelItem,
+} from "../../../_mapComponents/layerRowEdit";
+import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
+import {
+  GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
+  useSearchBarOffset,
+} from "../../../searchBarOffsetContext";
+import {
+  CONS_ATTACH_ROOT_FOLDER,
+  CONS_DATA_AS_FILE_LAYER,
+  isNewRiverConstructionLedgerRow,
+  ledgerRowToConsDataAsValues,
+  mapConsDataAsApiToLedgerRow,
+  mapServiceFileToAttachment,
+  normalizeRiverNames,
+  withRiverNameFallback,
+  type ConsDataAsApiRow,
+  type RiverConstructionLedgerAttachment,
+  type RiverConstructionLedgerRow,
+} from "./riverConstructionLedgerMock";
+import { RiverNameSelect } from "./RiverNameSelect";
+
+type Props = {
+  row: RiverConstructionLedgerRow;
+  onClose: () => void;
+};
+
+const fieldClass =
+  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+const textareaClass =
+  "min-h-[2.75rem] w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+const btnPrimary =
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+
+type AttrDraft = {
+  name: string;
+  location: string;
+  quantity: string;
+  contractDate: string;
+  startDate: string;
+  endDate: string;
+  actualEndDate: string;
+  companyName: string;
+  representative: string;
+  phone: string;
+  companyAddress: string;
+  supervisor: string;
+  supervisorName: string;
+  budgetBefore: string;
+  budgetIncrease: string;
+  budgetDecrease: string;
+  budgetAfter: string;
+  changeReason: string;
+  remark: string;
+};
+
+function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
+  return {
+    name: row.name,
+    location: row.location,
+    quantity: row.quantity,
+    contractDate: row.contractDate,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    actualEndDate: row.actualEndDate,
+    companyName: row.companyName,
+    representative: row.representative,
+    phone: row.phone,
+    companyAddress: row.companyAddress,
+    supervisor: row.supervisor,
+    supervisorName: row.supervisorName,
+    budgetBefore: row.budgetBefore,
+    budgetIncrease: row.budgetIncrease,
+    budgetDecrease: row.budgetDecrease,
+    budgetAfter: row.budgetAfter,
+    changeReason: row.changeReason,
+    remark: row.remark,
+  };
+}
+
+/**
+ * 필지(개별 구간) 도형(GeoJSON, EPSG:3857) → 저장용 WKT(5181).
+ * 지도에서 직접 그린 좌표라 3857 → 5181 변환만 하면 된다(4326 경유 불필요).
+ */
+function parcelGeomToWkt5181(
+  geometry3857: Record<string, unknown> | null | undefined
+): string | null {
+  if (!geometry3857) return null;
+  try {
+    const olGeom = new GeoJSONFormat().readGeometry(geometry3857, {
+      dataProjection: "EPSG:3857",
+      featureProjection: "EPSG:3857",
+    });
+    if (!olGeom) return null;
+    olGeom.transform("EPSG:3857", "EPSG:5181");
+    const wkt = new WKT().writeGeometry(olGeom);
+    return wkt?.trim() ? wkt : null;
+  } catch (e) {
+    console.error("[riverConstructionLedger] parcelGeomToWkt5181 failed", e);
+    return null;
+  }
+}
+
+type AttrEntry = {
+  fieldKey: string;
+  label: string;
+  value: ReactNode;
+  fullWidth?: boolean;
+};
+
+/** 반칸에서 말줄임이 날 길이면 한 줄 전체 폭으로 표시 */
+const ATTR_FULL_WIDTH_MIN_LEN = 12;
+
+function withFullWidthIfLong(
+  entries: AttrEntry[],
+  textByKey?: Record<string, string>
+): AttrEntry[] {
+  return entries.map((e) => {
+    if (e.fullWidth) return e;
+    const raw =
+      textByKey?.[e.fieldKey] ??
+      (typeof e.value === "string" ? e.value : "");
+    const t = String(raw ?? "").trim();
+    if (t && t !== "—" && [...t].length >= ATTR_FULL_WIDTH_MIN_LEN) {
+      return { ...e, fullWidth: true };
+    }
+    return e;
+  });
+}
+
+function AttrValue({ value }: { value: ReactNode }) {
+  if (typeof value === "string") {
+    return (
+      <span
+        className="block truncate text-[11px] leading-snug text-slate-700"
+        title={value && value !== "—" ? value : undefined}
+      >
+        {value || "—"}
+      </span>
+    );
+  }
+  return value;
+}
+
+function AttrLabelCell({
+  label,
+  borderBottom,
+  borderRight,
+  roundedCorner,
+}: {
+  label: string;
+  borderBottom: boolean;
+  borderRight: boolean;
+  roundedCorner?: "tl" | "bl";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center bg-slate-100 px-2 py-1",
+        borderBottom && "border-b border-slate-200",
+        borderRight && "border-r border-slate-200",
+        roundedCorner === "tl" && "rounded-tl-[5px]",
+        roundedCorner === "bl" && "rounded-bl-[5px]"
+      )}
+    >
+      <span className="whitespace-nowrap text-[11px] font-medium leading-snug text-slate-600">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function AttrValueCell({
+  value,
+  borderBottom,
+  borderRight,
+  gridColumn,
+}: {
+  value: ReactNode;
+  borderBottom: boolean;
+  borderRight: boolean;
+  gridColumn?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 px-2 py-1",
+        borderBottom && "border-b border-slate-200",
+        borderRight && "border-r border-slate-200"
+      )}
+      style={gridColumn ? { gridColumn } : undefined}
+    >
+      <AttrValue value={value} />
+    </div>
+  );
+}
+
+/**
+ * 진짜 <table>처럼 라벨 칸 폭이 내용(최대 라벨 길이)에 맞춰지고,
+ * 값 칸이 남는 폭을 전부 쓰도록 하나의 CSS grid로 전체 행을 묶어 렌더링한다.
+ * (행마다 별도 grid를 쓰면 칸 폭이 행끼리 안 맞아 라벨이 잘리거나 값 칸이 좁아짐)
+ */
+function AttrTable({ entries }: { entries: AttrEntry[] }) {
+  const rows: { left: AttrEntry; right?: AttrEntry }[] = [];
+  let i = 0;
+  while (i < entries.length) {
+    const left = entries[i]!;
+    if (left.fullWidth) {
+      rows.push({ left });
+      i += 1;
+      continue;
+    }
+    const next = entries[i + 1];
+    if (next && !next.fullWidth) {
+      rows.push({ left, right: next });
+      i += 2;
+    } else {
+      rows.push({ left });
+      i += 1;
+    }
+  }
+
+  return (
+    <div
+      className="grid overflow-visible rounded-[5px] border border-slate-200"
+      style={{ gridTemplateColumns: "max-content minmax(0,1fr) max-content minmax(0,1fr)" }}
+    >
+      {rows.map((pair, rowIdx) => {
+        const isLast = rowIdx === rows.length - 1;
+        const borderBottom = !isLast;
+        const roundedCorner = rowIdx === 0 ? "tl" : isLast ? "bl" : undefined;
+        if (!pair.right) {
+          return (
+            <Fragment key={pair.left.fieldKey}>
+              <AttrLabelCell
+                label={pair.left.label}
+                borderBottom={borderBottom}
+                borderRight
+                roundedCorner={roundedCorner}
+              />
+              <AttrValueCell
+                value={pair.left.value}
+                borderBottom={borderBottom}
+                borderRight={false}
+                gridColumn="2 / -1"
+              />
+            </Fragment>
+          );
+        }
+        return (
+          <Fragment key={`${pair.left.fieldKey}-${pair.right.fieldKey}`}>
+            <AttrLabelCell
+              label={pair.left.label}
+              borderBottom={borderBottom}
+              borderRight
+              roundedCorner={roundedCorner}
+            />
+            <AttrValueCell value={pair.left.value} borderBottom={borderBottom} borderRight />
+            <AttrLabelCell label={pair.right.label} borderBottom={borderBottom} borderRight />
+            <AttrValueCell value={pair.right.value} borderBottom={borderBottom} borderRight={false} />
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 첨부 썸네일 — 클릭=미리보기, 호버 시 다운로드·삭제 (PDF는 아이콘만 — 그리드 pdfjs 렌더 렉 방지) */
+function AttachmentThumb({
+  att,
+  onPreview,
+  onDownload,
+  onDelete,
+}: {
+  att: RiverConstructionLedgerAttachment;
+  onPreview: () => void;
+  onDownload: () => void;
+  onDelete: () => void;
+}) {
+  const isImage = att.previewKind === "image" && !!att.previewUrl;
+  const isPdf = att.previewKind === "pdf";
+  return (
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onPreview}
+        className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
+        title={`${att.name} 미리보기`}
+      >
+        {isImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={att.previewUrl} alt={att.name} className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+            <FileText className="h-5 w-5" />
+            <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
+          </div>
+        )}
+      </button>
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-1 p-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload();
+          }}
+          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-slate-700 shadow-md ring-1 ring-slate-200/80 hover:bg-slate-50 hover:text-primary"
+          title="다운로드"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-red-600 shadow-md ring-1 ring-slate-200/80 hover:bg-red-50"
+          title="삭제"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mt-0.5 truncate text-[10px] text-slate-500" title={att.name}>
+        {att.name}
+      </p>
+    </div>
+  );
+}
+
+function AttachmentThumbGrid({
+  items,
+  onPreview,
+  onDownload,
+  onDelete,
+  emptyLabel,
+}: {
+  items: RiverConstructionLedgerAttachment[];
+  onPreview: (att: RiverConstructionLedgerAttachment) => void;
+  onDownload: (att: RiverConstructionLedgerAttachment) => void;
+  onDelete: (att: RiverConstructionLedgerAttachment) => void;
+  emptyLabel: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="flex h-full min-h-[6rem] items-center justify-center">
+        <p className="text-center text-[11px] text-slate-400">{emptyLabel}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {items.map((att) => (
+        <AttachmentThumb
+          key={att.id}
+          att={att}
+          onPreview={() => onPreview(att)}
+          onDownload={() => onDownload(att)}
+          onDelete={() => onDelete(att)}
+        />
+      ))}
+    </div>
+  );
+}
+
+const RIVER_TABLE_PREVIEW_MAX = 2;
+
+export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
+  const mapContext = useMapContext();
+  const attachInputRef = useRef<HTMLInputElement>(null);
+  const isNewRow = isNewRiverConstructionLedgerRow(row);
+  const [editing, setEditing] = useState(isNewRow || !row.name.trim());
+  const [draft, setDraft] = useState<AttrDraft>(() => toDraft(row));
+  /** 대상 하천 — 단일 값 입력 (기존에 여러 개가 저장돼 있으면 첫 번째만 표시) */
+  const [riverNamesText, setRiverNamesText] = useState(
+    () => normalizeRiverNames(row.riverNames)[0] ?? ""
+  );
+  /** 필지(개별 구간) 도형 편집 대상 — draftParcels 배열 인덱스, null이면 비활성 */
+  const [parcelGeomEditIdx, setParcelGeomEditIdx] = useState<number | null>(null);
+  /** draw: 도형 없는 필지에 새로 그리기 / modify: 기존 도형 정점 수정 */
+  const [parcelGeomEditMode, setParcelGeomEditMode] = useState<"draw" | "modify" | null>(null);
+  // 초기화처럼 모드 값은 그대로("modify")인데 도형만 바뀌는 경우 수정 세션을 강제로 다시 시작시키는 토큰
+  const [parcelGeomModifyResetToken, setParcelGeomModifyResetToken] = useState(0);
+  /** modify 세션 시작 시점의 도형·범위 스냅샷 — «초기화»용 */
+  const parcelGeomSnapshotRef = useRef<{
+    geometry3857: Record<string, unknown>;
+    extent3857: [number, number, number, number] | null;
+  } | null>(null);
+  const parcelsSnapshotRef = useRef<LayerRowParcelItem[]>([]);
+  /** 편집 중 필지 도형들을 계속 지도에 표시하는 참고 레이어(현재 그리는 중인 필지는 제외) */
+  const draftParcelLayerRef = useRef<{
+    layer: VectorLayer<VectorSource>;
+    source: VectorSource;
+  } | null>(null);
+  const [attachmentFolders, setAttachmentFolders] = useState<string[]>([]);
+  const [attachmentTab, setAttachmentTab] = useState<string>(CONS_ATTACH_ROOT_FOLDER);
+  const [attachRefreshNonce, setAttachRefreshNonce] = useState(0);
+  const [foldersRefreshNonce, setFoldersRefreshNonce] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [preview, setPreview] = useState<{
+    items: ServiceFilePreviewItem[];
+    index: number;
+  } | null>(null);
+  /** 편집 중 필지목록 — 도로점용처럼 로컬 state로 즉시 반영 (context round-trip 대기하지 않음) */
+  const [draftParcels, setDraftParcels] = useState<LayerRowParcelItem[]>(() => row.parcels ?? []);
+  const draftParcelsRef = useRef(draftParcels);
+  draftParcelsRef.current = draftParcels;
+  const { selectParcel, movingParcelIdx } = useLayerParcelNavigation();
+
+  const fileSerEng = SER_FILE_ENG.riverConstructionLedger;
+  const fileKey = isNewRow ? "" : row.id;
+  const { upload: uploadChunked } = useServiceFileChunkedUpload();
+  const { files: folderFiles, loading: filesLoading } = useServiceFileData({
+    serEng: fileSerEng,
+    enabled: Boolean(fileKey) && Boolean(attachmentTab),
+    layerSegment: CONS_DATA_AS_FILE_LAYER,
+    keyValue: fileKey || null,
+    subfolder: attachmentTab,
+    refreshNonce: attachRefreshNonce,
+  });
+
+  const attachments = useMemo(() => {
+    return folderFiles.map((f) => {
+      const base = mapServiceFileToAttachment(f, attachmentTab);
+      const url = serviceFileDataDownloadUrl(fileSerEng, CONS_DATA_AS_FILE_LAYER, fileKey, f.name, {
+        subfolder: attachmentTab,
+      });
+      return {
+        ...base,
+        previewUrl: base.previewKind === "image" || base.previewKind === "pdf" ? url : undefined,
+      };
+    });
+  }, [attachmentTab, fileKey, fileSerEng, folderFiles]);
+
+  useEffect(() => {
+    if (!fileKey) {
+      setAttachmentFolders([]);
+      return;
+    }
+    let cancelled = false;
+    const qs = new URLSearchParams({
+      serEng: fileSerEng,
+      layer: CONS_DATA_AS_FILE_LAYER,
+      key: fileKey,
+      folders: "1",
+    });
+    void fetch(`/api/service-files?${qs.toString()}`, { credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) return { folders: [] as string[] };
+        return r.json() as Promise<{ folders?: string[] }>;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const folders = Array.isArray(data.folders) ? data.folders : [];
+        setAttachmentFolders(folders);
+        setAttachmentTab((prev) => {
+          if (folders.includes(prev)) return prev;
+          return folders[0] ?? CONS_ATTACH_ROOT_FOLDER;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setAttachmentFolders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileKey, fileSerEng, foldersRefreshNonce]);
+
+  const setRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus;
+  const setGeomEditingId = mapContext?.setRiverConstructionLedgerGeomEditingId;
+
+  const { inputBottomPx } = useSearchBarOffset();
+  const geomHintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
+  const mapInstance = mapContext?.mapInstanceRef?.current ?? null;
+  const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
+  const geomCenterPixel = useMapVisualCenterPixel(
+    mapInstance,
+    Boolean(mapInstance) && parcelGeomEditIdx != null,
+    mapPaddingLeft
+  );
+
+  useEffect(() => {
+    setDraft(toDraft(row));
+    setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
+    parcelsSnapshotRef.current = [...(row.parcels ?? [])];
+    setDraftParcels(withRiverNameFallback(row.parcels ?? []));
+    setParcelGeomEditIdx(null);
+    setParcelGeomEditMode(null);
+    parcelGeomSnapshotRef.current = null;
+    setGeomEditingId?.(null);
+
+    const isNew = isNewRiverConstructionLedgerRow(row) || !row.name.trim();
+    setEditing(isNew);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- row.id 전환 시에만
+  }, [row.id, setGeomEditingId]);
+
+  useEffect(() => {
+    return () => {
+      setParcelGeomEditIdx(null);
+      setParcelGeomEditMode(null);
+      parcelGeomSnapshotRef.current = null;
+      setGeomEditingId?.(null);
+    };
+  }, [setGeomEditingId]);
+
+  /** 편집 중엔 공사구간 전체 도형(오버레이)을 숨기고, 대신 필지별 도형 참고 레이어를 보여준다 */
+  useEffect(() => {
+    setGeomEditingId?.(editing ? row.id : null);
+  }, [editing, row.id, setGeomEditingId]);
+
+  /** 편집 중엔 입력창의 값을, 아닐 땐 저장된 값을 기준으로 표시 (단일 값) */
+  const riverNames = editing
+    ? riverNamesText.trim()
+      ? [riverNamesText.trim()]
+      : []
+    : normalizeRiverNames(row.riverNames);
+
+  const patchRow = (updater: (prev: RiverConstructionLedgerRow) => RiverConstructionLedgerRow) => {
+    mapContext?.setRiverConstructionLedgerRows?.((rows) =>
+      rows.map((r) => (r.id === row.id ? updater(r) : r))
+    );
+  };
+
+  const parcels = row.parcels ?? [];
+
+  /** 필지 목록에 하천명·비고 입력용 빈 행 추가 */
+  const handleAddParcelRow = () => {
+    const next: LayerRowParcelItem = {
+      address: "",
+      riverName: "",
+      remark: "",
+      extent3857: null,
+    };
+    const list = [...draftParcelsRef.current, next];
+    draftParcelsRef.current = list;
+    setDraftParcels(list);
+    patchRow((r) => ({ ...r, parcels: list }));
+  };
+
+  /** 필지 목록 특정 행의 하천명·비고 값 갱신 */
+  const handleUpdateParcelField = (
+    index: number,
+    field: "riverName" | "remark",
+    value: string
+  ) => {
+    const list = draftParcelsRef.current.map((p, i) => {
+      if (i !== index) return p;
+      const riverName = field === "riverName" ? value : (p.riverName ?? "");
+      const remark = field === "remark" ? value : (p.remark ?? "");
+      const displayText = [riverName, remark]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        ...p,
+        riverName,
+        remark,
+        address: displayText || "",
+        displayText: displayText || undefined,
+      };
+    });
+    draftParcelsRef.current = list;
+    setDraftParcels(list);
+    patchRow((r) => ({ ...r, parcels: list }));
+  };
+
+  const handleRemoveParcel = (index: number) => {
+    const next = draftParcelsRef.current.filter((_, i) => i !== index);
+    draftParcelsRef.current = next;
+    setDraftParcels(next);
+    patchRow((r) => ({ ...r, parcels: next }));
+    if (parcelGeomEditIdx === index) {
+      setParcelGeomEditIdx(null);
+      setParcelGeomEditMode(null);
+    }
+  };
+
+  /** 필지 행에 지도에서 그린 도형 반영(비우려면 둘 다 null) */
+  const handleSetParcelGeom = (
+    index: number,
+    geometry3857: Record<string, unknown> | null,
+    extent3857: [number, number, number, number] | null
+  ) => {
+    const list = draftParcelsRef.current.map((p, i) =>
+      i === index ? { ...p, geometry3857, extent3857 } : p
+    );
+    draftParcelsRef.current = list;
+    setDraftParcels(list);
+    patchRow((r) => ({ ...r, parcels: list }));
+  };
+
+  /** 도형 편집 종료 — 도형추가/수정 세션을 닫고 목록으로 돌아감 */
+  const finishParcelGeomEdit = () => {
+    setParcelGeomEditIdx(null);
+    setParcelGeomEditMode(null);
+    parcelGeomSnapshotRef.current = null;
+  };
+
+  /** 필지 도형 편집 버튼 — 도형 없으면 그리기(draw), 있으면 정점 수정(modify) 세션 시작. 같은 행을 다시 누르면 종료 */
+  const toggleParcelGeomEdit = (index: number) => {
+    if (parcelGeomEditIdx === index) {
+      finishParcelGeomEdit();
+      return;
+    }
+    const item = draftParcelsRef.current[index];
+    if (item?.geometry3857) {
+      parcelGeomSnapshotRef.current = {
+        geometry3857: item.geometry3857,
+        extent3857: item.extent3857 ?? null,
+      };
+      setParcelGeomEditMode("modify");
+    } else {
+      parcelGeomSnapshotRef.current = null;
+      setParcelGeomEditMode("draw");
+    }
+    setParcelGeomEditIdx(index);
+  };
+
+  /** 수정 세션 시작 시점 도형으로 되돌리기 (세션은 계속 유지) */
+  const resetParcelGeomToSnapshot = () => {
+    const idx = parcelGeomEditIdx;
+    const snap = parcelGeomSnapshotRef.current;
+    if (idx == null || !snap) return;
+    handleSetParcelGeom(idx, snap.geometry3857, snap.extent3857);
+    setParcelGeomModifyResetToken((t) => t + 1);
+  };
+
+  /** 수정 세션 중 도형 삭제 — 세션도 함께 종료(다음엔 다시 «도형추가»부터 시작) */
+  const deleteParcelGeomAndFinish = () => {
+    const idx = parcelGeomEditIdx;
+    if (idx == null) return;
+    handleSetParcelGeom(idx, null, null);
+    finishParcelGeomEdit();
+  };
+
+  /** 편집 중엔 필지 도형들을 계속 지도에 표시 — 공사구간 전체 도형은 필지 도형들의 합으로 자동 계산되므로 별도 오버레이 대신 이 참고 레이어로 확인 */
+  useEffect(() => {
+    if (!editing) {
+      draftParcelLayerRef.current = null;
+      return;
+    }
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
+    const source = new VectorSource();
+    const layer = new VectorLayer({
+      source,
+      zIndex: 9997,
+      style: new Style({
+        fill: new Fill({ color: "rgba(37, 99, 235, 0.15)" }),
+        stroke: new Stroke({ color: "#2563eb", width: 1.5 }),
+      }),
+    });
+    map.addLayer(layer);
+    draftParcelLayerRef.current = { layer, source };
+
+    return () => {
+      map.removeLayer(layer);
+      source.clear();
+      draftParcelLayerRef.current = null;
+    };
+  }, [editing, mapContext?.mapInstanceRef]);
+
+  useEffect(() => {
+    const ref = draftParcelLayerRef.current;
+    if (!ref) return;
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
+    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
+    const format = new GeoJSONFormat();
+    ref.source.clear();
+    draftParcels.forEach((p, i) => {
+      if (i === parcelGeomEditIdx || !p.geometry3857) return;
+      try {
+        const feats = format.readFeatures(p.geometry3857, {
+          dataProjection: viewProj,
+          featureProjection: viewProj,
+        });
+        ref.source.addFeatures(feats);
+      } catch {
+        // ignore
+      }
+    });
+  }, [draftParcels, parcelGeomEditIdx, editing, mapContext?.mapInstanceRef]);
+
+  /** 필지(개별 구간) 도형 그리기 — 도형이 없는 필지에 폴리곤 하나를 그려 geometry3857/extent3857에 반영 */
+  useEffect(() => {
+    if (parcelGeomEditIdx == null || parcelGeomEditMode !== "draw") return;
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) {
+      finishParcelGeomEdit();
+      return;
+    }
+    if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) {
+      finishParcelGeomEdit();
+      return;
+    }
+    mapContext?.clearMapDrawInteractionsRef?.current?.();
+    setRiverFocus?.(null);
+
+    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
+    const format = new GeoJSONFormat();
+
+    const source = new VectorSource();
+    const layer = new VectorLayer({
+      source,
+      zIndex: 9999,
+      style: new Style({
+        fill: new Fill({ color: "rgba(22, 163, 74, 0.25)" }),
+        stroke: new Stroke({ color: "#15803d", width: 2.5 }),
+      }),
+    });
+    const draw = new Draw({ source, type: "Polygon", stopClick: true });
+    map.addLayer(layer);
+    map.addInteraction(draw);
+
+    const onEnd = (evt: { feature: Feature }) => {
+      const geom = evt.feature.getGeometry();
+      const coords = geom?.getType() === "Polygon" ? (geom as Polygon).getCoordinates()[0] : null;
+      if (!geom || !coords || coords.length < 4) {
+        window.alert("다각형은 세 점 이상이어야 합니다.");
+        return;
+      }
+      const geojson = format.writeGeometryObject(geom, {
+        dataProjection: viewProj,
+        featureProjection: viewProj,
+      }) as unknown as Record<string, unknown>;
+      const extent = geom.getExtent();
+      handleSetParcelGeom(
+        parcelGeomEditIdx,
+        geojson,
+        extent.every((v) => Number.isFinite(v))
+          ? (extent as [number, number, number, number])
+          : null
+      );
+      finishParcelGeomEdit();
+    };
+    draw.on("drawend", onEnd as never);
+
+    return () => {
+      draw.un("drawend", onEnd as never);
+      map.removeInteraction(draw);
+      map.removeLayer(layer);
+      source.clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw session keyed by index·모드
+  }, [parcelGeomEditIdx, parcelGeomEditMode]);
+
+  /** 필지(개별 구간) 도형 정점 수정 — 이미 그려진 도형을 지도에서 드래그로 수정 */
+  useEffect(() => {
+    if (parcelGeomEditIdx == null || parcelGeomEditMode !== "modify") return;
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) {
+      finishParcelGeomEdit();
+      return;
+    }
+    if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) {
+      finishParcelGeomEdit();
+      return;
+    }
+    mapContext?.clearMapDrawInteractionsRef?.current?.();
+    setRiverFocus?.(null);
+
+    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
+    const format = new GeoJSONFormat();
+    const geometry3857 = draftParcelsRef.current[parcelGeomEditIdx]?.geometry3857;
+    let features: Feature[] = [];
+    if (geometry3857) {
+      try {
+        features = format.readFeatures(geometry3857, {
+          dataProjection: viewProj,
+          featureProjection: viewProj,
+        });
+      } catch {
+        features = [];
+      }
+    }
+    if (features.length === 0) {
+      finishParcelGeomEdit();
+      return;
+    }
+
+    const source = new VectorSource({ features });
+    const layer = new VectorLayer({
+      source,
+      zIndex: 9999,
+      style: new Style({
+        fill: new Fill({ color: "rgba(22, 163, 74, 0.25)" }),
+        stroke: new Stroke({ color: "#15803d", width: 2.5 }),
+        image: new CircleStyle({
+          radius: 5,
+          fill: new Fill({ color: "#15803d" }),
+          stroke: new Stroke({ color: "#fff", width: 1.5 }),
+        }),
+      }),
+    });
+    const modify = new Modify({ source });
+    map.addLayer(layer);
+    map.addInteraction(modify);
+
+    const extent = source.getExtent();
+    if (!isEmptyExtent(extent)) {
+      map.getView().fit(extent, {
+        padding: [80, 80, 80, 80],
+        maxZoom: 18,
+        duration: 280,
+      });
+    }
+
+    const onModifyEnd = () => {
+      const feature = source.getFeatures()[0];
+      const geom = feature?.getGeometry();
+      if (!geom) return;
+      const geojson = format.writeGeometryObject(geom, {
+        dataProjection: viewProj,
+        featureProjection: viewProj,
+      }) as unknown as Record<string, unknown>;
+      const ext = geom.getExtent();
+      handleSetParcelGeom(
+        parcelGeomEditIdx,
+        geojson,
+        ext.every((v) => Number.isFinite(v)) ? (ext as [number, number, number, number]) : null
+      );
+    };
+    modify.on("modifyend", onModifyEnd);
+
+    return () => {
+      modify.un("modifyend", onModifyEnd);
+      map.removeInteraction(modify);
+      map.removeLayer(layer);
+      source.clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- modify session keyed by index·모드·리셋 토큰
+  }, [parcelGeomEditIdx, parcelGeomEditMode, parcelGeomModifyResetToken]);
+
+  const beginEdit = () => {
+    setDraft(toDraft(row));
+    setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
+    const filled = withRiverNameFallback(row.parcels ?? []);
+    draftParcelsRef.current = filled;
+    setDraftParcels(filled);
+    parcelsSnapshotRef.current = filled;
+    setEditing(true);
+  };
+
+  const handleParcelClick = (item: LayerRowParcelItem, idx: number) => {
+    void selectParcel(item, idx);
+  };
+
+  const handleSave = async () => {
+    if (!draft.name.trim()) {
+      window.alert("공사명을 입력하세요.");
+      return;
+    }
+    const values = ledgerRowToConsDataAsValues({
+      ...draft,
+      riverNames,
+    });
+    // 공사구간 전체 도형은 별도 입력 없이 필지 도형들의 합집합으로 서버에서 자동 계산됨
+    const parcels = draftParcelsRef.current
+      .map((p) => ({
+        riverName: (p.riverName ?? "").trim(),
+        remark: (p.remark ?? "").trim(),
+        geomWkt5181: parcelGeomToWkt5181(p.geometry3857),
+      }))
+      .filter((p) => p.riverName || p.remark || p.geomWkt5181);
+    setSaving(true);
+    try {
+      const res = await call("", "POST", {
+        service: "consDataAsService",
+        action: "saveRow",
+        params: {
+          consCode: isNewRow ? undefined : row.id,
+          isNew: isNewRow,
+          values,
+          parcels,
+        },
+      });
+      const data = res?.data ?? res;
+      if (!data?.success) {
+        window.alert(String(data?.error ?? "저장에 실패했습니다."));
+        return;
+      }
+      const consCode = String(data.consCode ?? row.id).trim();
+      const detailRes = await call("", "POST", {
+        service: "consDataAsService",
+        action: "getDetailByConsCode",
+        params: { consCode },
+      });
+      const detailData = detailRes?.data ?? detailRes;
+      const mapped = detailData?.row
+        ? mapConsDataAsApiToLedgerRow(detailData.row as ConsDataAsApiRow)
+        : {
+            ...row,
+            id: consCode,
+            ...draft,
+            name: draft.name.trim(),
+            riverNames,
+            parcels: draftParcelsRef.current,
+          };
+
+      mapContext?.setRiverConstructionLedgerRows?.((rows) => {
+        const withoutDraft = rows.filter((r) => r.id !== row.id);
+        const others = withoutDraft.filter((r) => r.id !== consCode);
+        return [mapped, ...others];
+      });
+      mapContext?.setRiverConstructionLedgerSelectedId?.(consCode);
+      mapContext?.setRiverConstructionLedgerOverlayRows?.((prev) =>
+        prev.map((r) => (r.id === row.id || r.id === consCode ? { ...mapped } : r))
+      );
+
+      finishParcelGeomEdit();
+      setEditing(false);
+      setFoldersRefreshNonce((n) => n + 1);
+      if (data.error) window.alert(String(data.error));
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : "저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(toDraft(row));
+    setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
+    const snapParcels = [...parcelsSnapshotRef.current];
+    setDraftParcels(snapParcels);
+    patchRow((prev) => ({ ...prev, parcels: snapParcels }));
+    finishParcelGeomEdit();
+    if (isNewRiverConstructionLedgerRow(row) || !row.name.trim()) {
+      mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
+      mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      return;
+    }
+    setEditing(false);
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`「${row.name || "신규 공사"}」을(를) 삭제할까요?`)) return;
+    if (isNewRow) {
+      mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
+      mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await call("", "POST", {
+        service: "consDataAsService",
+        action: "deleteRow",
+        params: { consCode: row.id },
+      });
+      const data = res?.data ?? res;
+      if (!data?.success) {
+        window.alert(String(data?.error ?? "삭제에 실패했습니다."));
+        return;
+      }
+      mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
+      mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleUploadFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    if (!fileKey) {
+      window.alert("저장한 뒤 첨부파일을 등록할 수 있습니다.");
+      if (attachInputRef.current) attachInputRef.current.value = "";
+      return;
+    }
+    const folder = attachmentTab || CONS_ATTACH_ROOT_FOLDER;
+    for (const file of Array.from(files)) {
+      const result = await uploadChunked({
+        file,
+        serEng: fileSerEng,
+        layerSegment: CONS_DATA_AS_FILE_LAYER,
+        keyValue: fileKey,
+        subfolder: folder,
+      });
+      if (result?.error) {
+        window.alert(result.error);
+        break;
+      }
+    }
+    if (attachInputRef.current) attachInputRef.current.value = "";
+    setAttachRefreshNonce((n) => n + 1);
+    setFoldersRefreshNonce((n) => n + 1);
+  };
+
+  const handleDeleteAttachment = async (att: RiverConstructionLedgerAttachment) => {
+    if (!window.confirm(`«${att.name}»을(를) 삭제할까요?`)) return;
+    if (!fileKey) return;
+    const result = await requestServiceFileDataDelete({
+      serEng: fileSerEng,
+      layerSegment: CONS_DATA_AS_FILE_LAYER,
+      keyValue: fileKey,
+      fileName: att.name,
+      subfolder: att.category,
+    });
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    setAttachRefreshNonce((n) => n + 1);
+    setFoldersRefreshNonce((n) => n + 1);
+  };
+
+  const downloadAttachment = (att: RiverConstructionLedgerAttachment) => {
+    if (!fileKey) return;
+    const url = serviceFileDataDownloadUrl(
+      fileSerEng,
+      CONS_DATA_AS_FILE_LAYER,
+      fileKey,
+      att.name,
+      { subfolder: att.category }
+    );
+    triggerServiceFileDownload(url, att.name);
+  };
+
+  const openPreview = (att: RiverConstructionLedgerAttachment) => {
+    const scoped = attachments.filter((a) => a.category === att.category);
+    const items: ServiceFilePreviewItem[] = scoped
+      .filter((a) => a.previewUrl && (a.previewKind === "image" || a.previewKind === "pdf"))
+      .map((a) => ({
+        url: a.previewUrl!,
+        fileName: a.name,
+        kind: a.previewKind === "pdf" ? ("pdf" as const) : ("image" as const),
+      }));
+    const idx = items.findIndex((i) => i.fileName === att.name);
+    if (idx < 0) {
+      if (att.previewUrl) downloadAttachment(att);
+      else window.alert("미리볼 수 있는 첨부파일이 없습니다.");
+      return;
+    }
+    setPreview({ items, index: idx });
+  };
+
+  const riverPreview = riverNames.slice(0, RIVER_TABLE_PREVIEW_MAX);
+  const riverMoreCount = Math.max(0, riverNames.length - RIVER_TABLE_PREVIEW_MAX);
+
+  const riverNamesCell = editing ? (
+    <RiverNameSelect
+      className={fieldClass}
+      value={riverNamesText}
+      onChange={setRiverNamesText}
+      placeholder="하천명 검색/선택"
+    />
+  ) : riverNames.length === 0 ? (
+    <span className="text-[11px] leading-snug text-[#666]">—</span>
+  ) : (
+    <p className="truncate text-[11px] leading-snug text-[#666]" title={riverNames.join(", ")}>
+      {riverPreview.join(", ")}
+      {riverMoreCount > 0 ? <span className="text-slate-400"> 외 {riverMoreCount}</span> : null}
+    </p>
+  );
+
+  const withRiverEntry = (entries: AttrEntry[]): AttrEntry[] => {
+    const riverEntry: AttrEntry = {
+      fieldKey: "riverNames",
+      label: "대상 하천",
+      // 하천명 하나만 선택하는 값이라 다른 항목처럼 반칸이면 충분함
+      value: riverNamesCell,
+    };
+    // 공사명·공사위치 다음에 한 줄로 배치
+    return [entries[0]!, entries[1]!, riverEntry, ...entries.slice(2)];
+  };
+
+  const viewEntries = useMemo(
+    () =>
+      withRiverEntry(
+        withFullWidthIfLong([
+          { fieldKey: "name", label: "공사명", value: row.name || "—" },
+          { fieldKey: "location", label: "공사위치", value: row.location || "—" },
+          { fieldKey: "quantity", label: "공사량", value: row.quantity || "—" },
+          { fieldKey: "contractDate", label: "계약일", value: row.contractDate || "—" },
+          { fieldKey: "startDate", label: "착수일자", value: row.startDate || "—" },
+          { fieldKey: "endDate", label: "준공일자", value: row.endDate || "—" },
+          { fieldKey: "actualEndDate", label: "실준공일자", value: row.actualEndDate || "—" },
+          { fieldKey: "companyName", label: "업체명", value: row.companyName || "—" },
+          { fieldKey: "representative", label: "대표자명", value: row.representative || "—" },
+          { fieldKey: "phone", label: "전화번호", value: row.phone || "—" },
+          { fieldKey: "supervisor", label: "감독관", value: row.supervisor || "—" },
+          { fieldKey: "supervisorName", label: "감독관명", value: row.supervisorName || "—" },
+          { fieldKey: "budgetBefore", label: "사업비_전", value: row.budgetBefore || "—" },
+          { fieldKey: "budgetIncrease", label: "사업비_증가", value: row.budgetIncrease || "—" },
+          { fieldKey: "budgetDecrease", label: "사업비_감소", value: row.budgetDecrease || "—" },
+          { fieldKey: "budgetAfter", label: "사업비_후", value: row.budgetAfter || "—" },
+          { fieldKey: "companyAddress", label: "업체주소", value: row.companyAddress || "—" },
+          { fieldKey: "changeReason", label: "변경사유", value: row.changeReason || "—" },
+          { fieldKey: "remark", label: "비고", value: row.remark || "—" },
+        ])
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- riverNamesCell follows riverNames
+    [row, riverNames]
+  );
+
+  const setField = <K extends keyof AttrDraft>(key: K, value: AttrDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const textInput = (key: keyof AttrDraft) => (
+    <input
+      className={fieldClass}
+      value={draft[key]}
+      onChange={(e) => setField(key, e.target.value)}
+    />
+  );
+
+  const dateInput = (key: keyof AttrDraft) => (
+    <input
+      type="date"
+      className={fieldClass}
+      value={draft[key]}
+      onChange={(e) => setField(key, e.target.value)}
+    />
+  );
+
+  const editEntries = useMemo(
+    () =>
+      withRiverEntry(
+        withFullWidthIfLong(
+          [
+            { fieldKey: "name", label: "공사명", value: textInput("name") },
+            { fieldKey: "location", label: "공사위치", value: textInput("location") },
+            { fieldKey: "quantity", label: "공사량", value: textInput("quantity") },
+            { fieldKey: "contractDate", label: "계약일", value: dateInput("contractDate") },
+            { fieldKey: "startDate", label: "착수일자", value: dateInput("startDate") },
+            { fieldKey: "endDate", label: "준공일자", value: dateInput("endDate") },
+            { fieldKey: "actualEndDate", label: "실준공일자", value: dateInput("actualEndDate") },
+            { fieldKey: "companyName", label: "업체명", value: textInput("companyName") },
+            { fieldKey: "representative", label: "대표자명", value: textInput("representative") },
+            { fieldKey: "phone", label: "전화번호", value: textInput("phone") },
+            { fieldKey: "supervisor", label: "감독관", value: textInput("supervisor") },
+            { fieldKey: "supervisorName", label: "감독관명", value: textInput("supervisorName") },
+            { fieldKey: "budgetBefore", label: "사업비_전", value: textInput("budgetBefore") },
+            { fieldKey: "budgetIncrease", label: "사업비_증가", value: textInput("budgetIncrease") },
+            { fieldKey: "budgetDecrease", label: "사업비_감소", value: textInput("budgetDecrease") },
+            { fieldKey: "budgetAfter", label: "사업비_후", value: textInput("budgetAfter") },
+            { fieldKey: "companyAddress", label: "업체주소", value: textInput("companyAddress") },
+            {
+              fieldKey: "changeReason",
+              label: "변경사유",
+              value: (
+                <textarea
+                  className={textareaClass}
+                  value={draft.changeReason}
+                  onChange={(e) => setField("changeReason", e.target.value)}
+                />
+              ),
+            },
+            {
+              fieldKey: "remark",
+              label: "비고",
+              value: (
+                <textarea
+                  className={textareaClass}
+                  value={draft.remark}
+                  onChange={(e) => setField("remark", e.target.value)}
+                />
+              ),
+            },
+          ],
+          draft
+        )
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draft + river cell
+    [draft, riverNames, riverNamesText]
+  );
+
+  const geomBannerHost =
+    mapContext?.mapInstanceRef?.current?.getTargetElement()?.parentElement ?? null;
+
+  const mapEditBanner =
+    geomBannerHost && parcelGeomEditIdx != null
+      ? createPortal(
+          <div
+            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-emerald-300 bg-emerald-50/95 px-3 py-1.5 text-[11px] font-medium text-emerald-700 shadow-sm"
+            style={
+              geomCenterPixel
+                ? { left: geomCenterPixel.x, top: geomHintTopPx }
+                : { left: "50%", top: geomHintTopPx }
+            }
+          >
+            <span className="whitespace-nowrap text-center">
+              {parcelGeomEditMode === "draw"
+                ? `${parcelGeomEditIdx + 1}번 필지 도형을 지도에서 그려 주세요.`
+                : `${parcelGeomEditIdx + 1}번 필지 도형 정점을 지도에서 수정하세요.`}
+            </span>
+            <div className="pointer-events-none flex flex-wrap items-center justify-center gap-2">
+              {parcelGeomEditMode === "draw" ? (
+                <button
+                  type="button"
+                  className={layerRowPanelButtonClass(
+                    "default",
+                    "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  )}
+                  onClick={finishParcelGeomEdit}
+                >
+                  취소
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={layerRowPanelButtonClass(
+                      "default",
+                      "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    )}
+                    onClick={finishParcelGeomEdit}
+                  >
+                    완료
+                  </button>
+                  <button
+                    type="button"
+                    className={layerRowPanelButtonClass(
+                      "default",
+                      "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    )}
+                    onClick={resetParcelGeomToSnapshot}
+                  >
+                    초기화
+                  </button>
+                  <button
+                    type="button"
+                    className={layerRowPanelButtonClass("danger", "pointer-events-auto shrink-0")}
+                    onClick={deleteParcelGeomAndFinish}
+                  >
+                    삭제
+                  </button>
+                </>
+              )}
+            </div>
+          </div>,
+          geomBannerHost
+        )
+      : null;
+
+  const titleText = row.name.trim() || "공사대장 상세";
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3">
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-slate-800"
+          title={titleText}
+        >
+          {titleText}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          title="닫기"
+          aria-label="닫기"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* 본문 전체가 하나로 스크롤 — 상세 속성 · 필지 · 첨부파일 순서로 자연스럽게 이어짐 */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-2 text-xs scrollbar-hide">
+        <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-white py-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            상세 속성
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <LayerRowEditToolbar
+              isEditing={editing}
+              isCreateMode={isNewRow}
+              saving={saving}
+              deleting={deleting}
+              onEdit={beginEdit}
+              onSave={() => void handleSave()}
+              onCancel={handleCancel}
+              onDelete={() => void handleDelete()}
+            />
+          </div>
+        </div>
+        <AttrTable entries={editing ? editEntries : viewEntries} />
+
+        <div className="mt-4">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              필지목록
+              {(editing ? draftParcels : parcels).length > 0 ? (
+                <span className="ml-1 font-normal normal-case text-slate-400">
+                  ({(editing ? draftParcels : parcels).length})
+                </span>
+              ) : null}
+            </div>
+            {editing && (
+              <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={handleAddParcelRow}>
+                <Plus className="h-3 w-3 shrink-0" aria-hidden />
+                추가
+              </LayerRowPanelButton>
+            )}
+          </div>
+
+          {(editing ? draftParcels : parcels).length === 0 ? (
+            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-2 text-slate-500">
+              {editing
+                ? "「추가」로 하천명·비고를 입력하고, 필요하면 도형도 그릴 수 있습니다."
+                : "등록된 필지가 없습니다."}
+            </div>
+          ) : editing ? (
+            <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white p-1.5 scrollbar-hide">
+              {draftParcels.map((item, i) => (
+                <li key={i} className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50/60 p-1">
+                  <button
+                    type="button"
+                    className="w-4 shrink-0 text-center text-[10px] tabular-nums text-slate-400 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                    onClick={() => handleParcelClick(item, i)}
+                    title="클릭 시 위치 이동"
+                  >
+                    {i + 1}
+                  </button>
+                  <RiverNameSelect
+                    className={cn(fieldClass, "flex-1")}
+                    placeholder="하천명 검색/선택"
+                    value={item.riverName ?? ""}
+                    onChange={(v) => handleUpdateParcelField(i, "riverName", v)}
+                  />
+                  <input
+                    className={cn(fieldClass, "flex-1")}
+                    placeholder="비고"
+                    value={item.remark ?? ""}
+                    onChange={(e) => handleUpdateParcelField(i, "remark", e.target.value)}
+                  />
+                  {movingParcelIdx === i && (
+                    <span className="shrink-0 text-[10px] text-slate-500">이동중</span>
+                  )}
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded",
+                      parcelGeomEditIdx === i
+                        ? "bg-emerald-100 text-emerald-700"
+                        : item.geometry3857
+                          ? "text-emerald-600 hover:bg-emerald-50"
+                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    )}
+                    onClick={() => toggleParcelGeomEdit(i)}
+                    aria-label={item.geometry3857 ? "필지 도형 수정" : "필지 도형추가"}
+                    title={
+                      parcelGeomEditIdx === i
+                        ? "편집 중 (다시 클릭 시 종료)"
+                        : item.geometry3857
+                          ? "도형 수정·삭제"
+                          : "도형추가"
+                    }
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    onClick={() => handleRemoveParcel(i)}
+                    aria-label="필지 삭제"
+                    title="삭제"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide">
+              {parcels.map((item, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-1 border-b border-slate-100 px-2 py-1.5 text-slate-800 last:border-b-0"
+                >
+                  <button
+                    type="button"
+                    className="flex w-full min-w-0 items-start gap-1 text-left hover:text-primary disabled:cursor-default disabled:opacity-70"
+                    onClick={() => handleParcelClick(item, i)}
+                    title="클릭 시 위치 이동"
+                  >
+                    <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className="min-w-0 flex-1 break-words">
+                      {item.displayText?.trim() ||
+                        [item.riverName, item.remark].filter(Boolean).join(" · ") ||
+                        item.address ||
+                        "—"}
+                    </span>
+                    {movingParcelIdx === i && (
+                      <span className="ml-1 shrink-0 text-[11px] text-slate-500">이동 중…</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* 첨부파일 — 남는 세로 공간을 채우되, 속성·필지목록이 길어도 최소 높이 밑으로는 안 줄어듦(그 이상은 패널 전체 스크롤) */}
+        <div className="mt-4 flex min-h-[12rem] flex-1 flex-col">
+          <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
+            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <Paperclip className="h-3.5 w-3.5" />
+              첨부파일
+            </div>
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={!fileKey}
+              title={fileKey ? "첨부 업로드" : "저장 후 첨부할 수 있습니다"}
+              onClick={() => attachInputRef.current?.click()}
+            >
+              <Plus className="h-3 w-3" />
+              첨부
+            </button>
+            <input
+              ref={attachInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => void handleUploadFiles(e.target.files)}
+            />
+          </div>
+
+          {fileKey ? (
+            <>
+              <div className="mb-2 flex shrink-0 flex-wrap gap-0.5 rounded border border-slate-200 bg-slate-50 p-0.5">
+                {(attachmentFolders.length > 0 ? attachmentFolders : [CONS_ATTACH_ROOT_FOLDER]).map(
+                  (folder) => (
+                    <button
+                      key={folder}
+                      type="button"
+                      className={cn(
+                        "min-w-0 flex-1 rounded px-1 py-1 text-[10px] font-medium transition-colors",
+                        attachmentTab === folder
+                          ? "bg-white text-slate-800 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      )}
+                      onClick={() => setAttachmentTab(folder)}
+                    >
+                      {folder}
+                      {attachmentTab === folder ? ` (${attachments.length})` : ""}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide">
+                {filesLoading ? (
+                  <p className="py-3 text-center text-[11px] text-slate-400">첨부 목록 불러오는 중…</p>
+                ) : (
+                  <AttachmentThumbGrid
+                    items={attachments}
+                    onPreview={openPreview}
+                    onDownload={downloadAttachment}
+                    onDelete={(att) => void handleDeleteAttachment(att)}
+                    emptyLabel={`등록된 ${attachmentTab} 첨부파일이 없습니다.`}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 text-center text-[11px] text-slate-500">
+              저장한 뒤 폴더별 첨부파일을 등록할 수 있습니다.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {preview ? (
+        <ServiceFileImagePreview
+          items={preview.items}
+          initialIndex={preview.index}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
+      {mapEditBanner}
+    </div>
+  );
+}
