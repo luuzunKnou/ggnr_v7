@@ -411,9 +411,17 @@ function ResultTable({
   );
 
   if (!scrollable) {
+    // 가로 스크롤 시 푸터가 표와 함께 움직이도록 같은 overflow 안에 둠
     return (
       <div className="w-full max-w-full overflow-x-auto">
-        {table}
+        <div className={cn(fullWidth ? 'w-max min-w-full' : 'w-full')}>
+          {table}
+          {footer ? (
+            <div className="shrink-0 border-t border-border bg-primary/5 px-3 py-2.5 text-center">
+              {footer}
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -926,6 +934,24 @@ function formatParcelLoadProgress(
   return null;
 }
 
+/** 토지현황 진행 한 줄 — 조회·연계를 합쳐 스피너 1개 */
+function formatLandSectionProgress(
+  progress: MockParcelAnalysisResult['landRowsProgress'] | undefined,
+  landEnriching: boolean
+): { text: string; loading: boolean } | null {
+  const parcel = formatParcelLoadProgress(progress, 'land');
+  if (parcel?.loading) {
+    return {
+      text: landEnriching ? `${parcel.text} · 소유·공시 연계` : parcel.text,
+      loading: true,
+    };
+  }
+  if (landEnriching) {
+    return { text: '소유·공시지가 등 연계 정보', loading: true };
+  }
+  return null;
+}
+
 function formatLoadedTotalLabel(loaded: number, total: number): string {
   return `${loaded.toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}건`;
 }
@@ -939,24 +965,35 @@ function formatBuildingLedgerProgress(
   const foundStr = found.toLocaleString('ko-KR');
   if (progress?.loading && total > 0) {
     return {
-      text: `필지 ${formatLoadedTotalLabel(queried, total)} 조회 · 건축물 발견 ${foundStr}건`,
+      text: `필지 ${formatLoadedTotalLabel(queried, total)} · 건축물 ${foundStr}건`,
       loading: true,
     };
   }
   if (total > 0) {
     return {
-      text: `필지 ${total.toLocaleString('ko-KR')}건 조회 완료 · 건축물 발견 ${foundStr}건`,
+      text: `필지 ${total.toLocaleString('ko-KR')}건 · 건축물 ${foundStr}건`,
       loading: false,
     };
   }
-  return { text: `건축물 발견 ${foundStr}건`, loading: false };
+  return { text: `건축물 ${foundStr}건`, loading: false };
 }
 
 function SectionProgressLine({ text, loading }: { text: string; loading: boolean }) {
   return (
-    <p className={cn('mb-2 text-[11px]', loading ? 'text-primary' : 'text-muted-foreground')}>
-      {text}
-      {loading ? ' · 불러오는 중…' : ''}
+    <p
+      className={cn(
+        'mb-2 inline-flex items-center gap-1.5 text-[11px]',
+        loading ? 'text-primary' : 'text-muted-foreground'
+      )}
+    >
+      {loading ? (
+        <span
+          className="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/25 border-t-primary"
+          aria-hidden
+          title="불러오는 중"
+        />
+      ) : null}
+      <span>{text}</span>
     </p>
   );
 }
@@ -1087,7 +1124,13 @@ function renderSectionBody(
           maxHeight={RESULT_SCROLL_TABLE_MAX_HEIGHT_PX}
           outerScrollRef={opts.outerScrollRef}
           footer={
-            loading ? <TableProgressFooter label="불러오는 중…" /> : undefined
+            loading ? (
+              <TableProgressFooter
+                label="건축물대장"
+                loaded={progress?.loaded}
+                total={progress?.total}
+              />
+            ) : undefined
           }
         >
           <thead>
@@ -1107,7 +1150,7 @@ function renderSectionBody(
             {found === 0 && loading ? (
               <tr>
                 <td colSpan={9} className="border border-border px-2 py-6 text-center text-[11px] text-muted-foreground">
-                  표에 건축물이 있으면 여기에 표시됩니다.
+                  조회된 건축물이 있으면 여기에 표시됩니다.
                 </td>
               </tr>
             ) : (
@@ -1213,13 +1256,12 @@ function renderSectionBody(
       if (result.landUseProgress?.loading) {
         return (
           <div className="rounded-md border border-dashed border-primary/25 bg-primary/5 px-3 py-6 text-center text-xs text-primary">
-            토지이용계획을 순차 집계하는 중입니다…
-            {parcelProgress ? (
-              <p className="mt-1 text-[11px]">
-                {parcelProgress.text}
-                {parcelProgress.loading ? ' · 불러오는 중…' : ''}
-              </p>
-            ) : null}
+            <LoadingProgressBlock
+              label="토지이용계획"
+              loaded={result.landUseProgress.loaded}
+              total={result.landUseProgress.total}
+              loading
+            />
           </div>
         );
       }
@@ -1234,7 +1276,17 @@ function renderSectionBody(
         {parcelProgress ? (
           <SectionProgressLine text={parcelProgress.text} loading={parcelProgress.loading} />
         ) : null}
-        <ResultTable>
+        <ResultTable
+          footer={
+            parcelProgress?.loading ? (
+              <TableProgressFooter
+                label="토지이용계획"
+                loaded={result.landUseProgress?.loaded}
+                total={result.landUseProgress?.total}
+              />
+            ) : undefined
+          }
+        >
           <thead>
             <tr className="bg-muted text-left">
               <th className={TH_CELL}>용도지역</th>
@@ -1252,9 +1304,6 @@ function renderSectionBody(
                 <td className={TD_CELL}>{row.ratio}</td>
               </tr>
             ))}
-            {result.landUseProgress?.loading ? (
-              <TableLoadingMoreRow colSpan={4} label="집계 중…" />
-            ) : null}
           </tbody>
         </ResultTable>
       </>
@@ -1262,14 +1311,17 @@ function renderSectionBody(
   }
 
   if (section.kind === 'land') {
-    const parcelProgress = formatParcelLoadProgress(result.landRowsProgress, 'land');
+    const landSectionProgress = formatLandSectionProgress(
+      result.landRowsProgress,
+      landEnriching
+    );
     if (result.landRows.length === 0) {
       if (result.landRowsProgress?.loading) {
         const landProgress = result.landRowsProgress;
         return (
           <div className="rounded-md border border-dashed border-primary/25 bg-primary/5 px-3 py-6 text-center text-xs text-primary">
             <LoadingProgressBlock
-              label="토지현황 불러오는 중"
+              label="토지현황"
               loaded={landProgress.loaded}
               total={landProgress.total}
               loading={landProgress.loading}
@@ -1293,17 +1345,12 @@ function renderSectionBody(
           r.publicPrice !== '-' &&
           r.publicPrice !== PARCEL_LAND_LINKAGE_FAIL_LABEL
       );
-      const landProgress = result.landRowsProgress;
-      const landLoading = landProgress?.loading ?? false;
       return (
         <>
-          {parcelProgress ? (
-            <SectionProgressLine text={parcelProgress.text} loading={parcelProgress.loading} />
-          ) : null}
-          {landEnriching ? (
+          {landSectionProgress ? (
             <SectionProgressLine
-              text="소유·공시지가 등 연계 정보를 불러오는 중"
-              loading
+              text={landSectionProgress.text}
+              loading={landSectionProgress.loading}
             />
           ) : null}
           {result.linkageNotice ? (
@@ -1314,14 +1361,12 @@ function renderSectionBody(
             maxHeight={RESULT_SCROLL_TABLE_MAX_HEIGHT_PX}
             outerScrollRef={opts.outerScrollRef}
             footer={
-              landLoading ? (
+              landSectionProgress?.loading ? (
                 <TableProgressFooter
-                  label="불러오는 중…"
-                  loaded={landProgress?.loaded}
-                  total={landProgress?.total}
+                  label={landEnriching && !(result.landRowsProgress?.loading) ? '연계 정보' : '토지현황'}
+                  loaded={result.landRowsProgress?.loaded}
+                  total={result.landRowsProgress?.total}
                 />
-              ) : landEnriching ? (
-                <TableProgressFooter label="연계 정보 반영 중…" />
               ) : undefined
             }
           >

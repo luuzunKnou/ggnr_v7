@@ -1,13 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/shadcnComponents/ui/dialog"
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
-import { Building2, CalendarClock, Check, FileText, IdCard, Lock, Mail, Phone, User, Users, X } from "lucide-react"
+import { Building2, CalendarClock, Check, FileText, IdCard, Lock, Mail, Phone, Plus, User, Users, X } from "lucide-react"
 import { PermRoleMappingPanel } from "./perm/PermRoleMappingPanel"
+import { UgUtManageModal } from "./UgUtManageModal"
+import { USER_MANAGER_UI_STYLE } from "./userManagerUiVariants"
 
 type UserRow = {
   usrId: string
@@ -101,6 +103,46 @@ const emptyForm = (): FormState => ({
   usr_cancle_time: "",
 })
 
+/** 한글 초성 ※음절 맨 앞 자음 (ㄱ…ㅎ). 타입어헤드 초성 검색용 */
+const HANGUL_CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+const HANGUL_BASE = 0xac00
+const HANGUL_END = 0xd7a3
+
+function toChoseongKey(text: string): string {
+  let out = ""
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0
+    if (code >= HANGUL_BASE && code <= HANGUL_END) {
+      out += HANGUL_CHOSEONG[Math.floor((code - HANGUL_BASE) / 588)] ?? ""
+      continue
+    }
+    if (HANGUL_CHOSEONG.includes(ch)) {
+      out += ch
+      continue
+    }
+    out += ch.toLowerCase()
+  }
+  return out
+}
+
+function isChoseongOnlyQuery(q: string): boolean {
+  return q.length > 0 && [...q].every((ch) => HANGUL_CHOSEONG.includes(ch))
+}
+
+/** 부분 문자열·초성(예: ㅌ → 토지과) 매칭 */
+function matchesSuggestQuery(label: string, query: string): boolean {
+  const q = query.trim()
+  if (!q) return true
+  const lower = label.toLowerCase()
+  const qLower = q.toLowerCase()
+  if (lower.includes(qLower)) return true
+  const labelCho = toChoseongKey(label)
+  const queryCho = toChoseongKey(q)
+  if (labelCho.includes(queryCho)) return true
+  if (isChoseongOnlyQuery(q) && labelCho.startsWith(queryCho)) return true
+  return false
+}
+
 function LabeledInput({
   label,
   icon,
@@ -109,7 +151,6 @@ function LabeledInput({
   placeholder,
   type = "text",
   disabled = false,
-  list,
 }: {
   label: string
   icon?: React.ReactNode
@@ -118,7 +159,6 @@ function LabeledInput({
   placeholder?: string
   type?: "text" | "password" | "email"
   disabled?: boolean
-  list?: string
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -126,7 +166,6 @@ function LabeledInput({
       <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">{label}</span>
       <Input
         type={type}
-        list={list}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder ?? "-"}
@@ -134,6 +173,99 @@ function LabeledInput({
         style={{ fontSize: "12px" }}
         className="h-8 flex-1 min-w-0 border-border/80 bg-muted/30 placeholder:text-[12px]"
       />
+    </div>
+  )
+}
+
+/** 직접 입력 + 목록 선택(타입어헤드 ※입력 중 연관 목록 자동 제안) */
+function LabeledSuggestInput({
+  label,
+  icon,
+  value,
+  onChange,
+  options,
+  placeholder = "직접 입력 또는 선택",
+  disabled = false,
+}: {
+  label: string
+  icon?: React.ReactNode
+  value: string
+  onChange: (value: string) => void
+  options: string[]
+  placeholder?: string
+  disabled?: boolean
+}) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+
+  const suggestions = useMemo(() => {
+    const seen = new Set<string>()
+    const list: string[] = []
+    for (const raw of options) {
+      const name = raw.trim()
+      if (!name || seen.has(name)) continue
+      if (!matchesSuggestQuery(name, value)) continue
+      seen.add(name)
+      list.push(name)
+    }
+    return list.slice(0, 40)
+  }, [options, value])
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
+
+  return (
+    <div className="flex items-center gap-2" ref={rootRef}>
+      <span className="flex h-8 shrink-0 items-center text-muted-foreground/80">{icon}</span>
+      <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">{label}</span>
+      <div className="relative flex-1 min-w-0">
+        <Input
+          type="text"
+          value={value ?? ""}
+          onChange={(e) => {
+            onChange(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder}
+          disabled={disabled}
+          autoComplete="off"
+          style={{ fontSize: "12px" }}
+          className="h-8 w-full border-border/80 bg-muted/30 placeholder:text-[12px]"
+          title={`${label}: ${placeholder}`}
+        />
+        {open && !disabled && suggestions.length > 0 ? (
+          <ul
+            className="absolute left-0 right-0 top-[calc(100%+2px)] z-50 max-h-44 overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+            role="listbox"
+          >
+            {suggestions.map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={name === value}
+                  className="flex w-full px-2.5 py-1.5 text-left text-[12px] hover:bg-muted"
+                  title={name}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onChange(name)
+                    setOpen(false)
+                  }}
+                >
+                  {name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -159,11 +291,24 @@ export function UserManager() {
   const [permMappingKey, setPermMappingKey] = useState<number | null>(null)
   const [permMappingName, setPermMappingName] = useState<string>("")
   const [permMappingError, setPermMappingError] = useState<string | null>(null)
+  const [ugUtManageOpen, setUgUtManageOpen] = useState(false)
+  /** 모달 닫힌 직후 표로 클릭이 새어 상세가 다시 열리는 것 방지 */
+  const suppressRowClickUntilRef = useRef(0)
+  const uiStyle = USER_MANAGER_UI_STYLE
 
   const filteredUtList = useMemo(() => {
     if (!form.ug_name) return utList
     return utList.filter((x) => x.ugName === form.ug_name)
   }, [utList, form.ug_name])
+
+  const ugSuggestOptions = useMemo(
+    () => ugList.map((x) => x.ugName).filter(Boolean),
+    [ugList]
+  )
+  const utSuggestOptions = useMemo(
+    () => filteredUtList.map((x) => x.utName).filter(Boolean),
+    [filteredUtList]
+  )
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -255,7 +400,13 @@ export function UserManager() {
     setModalOpen(true)
   }
 
+  const closeModalAfterSave = () => {
+    suppressRowClickUntilRef.current = Date.now() + 400
+    setModalOpen(false)
+  }
+
   const startEdit = async (row: UserRow) => {
+    if (Date.now() < suppressRowClickUntilRef.current) return
     setEditingUsrId(row.usrId)
     setForm({
       usr_id: row.usrId,
@@ -271,7 +422,6 @@ export function UserManager() {
       usr_ok_time: row.usrOkTime ?? "",
       usr_cancle_time: row.usrCancleTime ?? "",
     })
-    setMessage(null)
     setError(null)
     setModalError(null)
     setModalMode("detail")
@@ -335,7 +485,7 @@ export function UserManager() {
       setMessage(editingUsrId ? "사용자를 수정했습니다." : "사용자를 추가했습니다.")
       await loadAll()
       if (!editingUsrId) setForm(emptyForm())
-      setModalOpen(false)
+      closeModalAfterSave()
     } catch (e: unknown) {
       setModalError(e instanceof Error ? e.message : "저장 실패")
     } finally {
@@ -362,7 +512,7 @@ export function UserManager() {
       if (editingUsrId === usrId) {
         setEditingUsrId(null)
         setForm(emptyForm())
-        setModalOpen(false)
+        closeModalAfterSave()
       }
       await loadAll()
     } catch (e: unknown) {
@@ -373,52 +523,73 @@ export function UserManager() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
+    <div className={uiStyle.page}>
+      <div className={uiStyle.toolbar}>
         <Button
           type="button"
-          variant="outline"
+          size="sm"
           onClick={startAdd}
           disabled={saving}
-          className="border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className={cn("rounded-none gap-1", uiStyle.primaryButton)}
+          title="사용자 추가"
         >
+          <Plus className="h-4 w-4" />
           사용자 추가
         </Button>
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="통합검색 (아이디, 이름, 부서/팀, 연락처, 이메일, 비고, 권한, 상태)"
-          className="max-w-md"
+          className={uiStyle.search}
+          title="통합검색"
         />
+        {error ? (
+          <p className="min-w-0 max-w-[280px] shrink truncate text-sm text-red-600" title={error}>
+            {error}
+          </p>
+        ) : message ? (
+          <p className="min-w-0 max-w-[280px] shrink truncate text-sm text-emerald-600" title={message}>
+            {message}
+          </p>
+        ) : null}
         {loading && <span className="text-sm text-muted-foreground">조회 중...</span>}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn("ml-auto shrink-0 rounded-none", uiStyle.secondaryButton)}
+          onClick={() => setUgUtManageOpen(true)}
+          disabled={saving}
+          title="부서/팀 관리"
+        >
+          부서/팀 관리
+        </Button>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {message && <p className="text-sm text-emerald-600">{message}</p>}
 
-      <div className="overflow-auto border rounded-md max-h-[50vh]">
-        <table className="w-full text-sm">
-          <thead className="bg-muted sticky top-0">
+      <div className={uiStyle.tableWrap}>
+        <table className={uiStyle.table}>
+          <thead className={cn("sticky top-0", uiStyle.tableHead)}>
             <tr>
-              <th className="text-left p-2">아이디</th>
-              <th className="text-left p-2">이름</th>
-              <th className="text-left p-2">부서/팀</th>
-              <th className="text-left p-2">연락처</th>
-              <th className="text-left p-2 w-[28%]">권한</th>
-              <th className="text-left p-2 w-[22%]">비고</th>
+              <th className={cn("text-left", uiStyle.tableCell)}>아이디</th>
+              <th className={cn("text-left", uiStyle.tableCell)}>이름</th>
+              <th className={cn("text-left", uiStyle.tableCell)}>부서/팀</th>
+              <th className={cn("text-left", uiStyle.tableCell)}>연락처</th>
+              <th className={cn("text-left w-[28%]", uiStyle.tableCell)}>권한</th>
+              <th className={cn("text-left w-[22%]", uiStyle.tableCell)}>비고</th>
             </tr>
           </thead>
           <tbody>
             {filteredItems.map((row) => (
               <tr
                 key={row.usrId}
-                className="border-t cursor-pointer hover:bg-muted/40 transition-colors"
+                className={uiStyle.tableRow}
                 onClick={() => void startEdit(row)}
               >
-                <td className="p-2">{row.usrId}</td>
-                <td className="p-2">{row.usrName ?? "-"}</td>
-                <td className="p-2">{row.ugName} / {row.utName}</td>
-                <td className="p-2">{row.usrTel ?? "-"}</td>
-                <td className="p-2 w-[28%]">
+                <td className={uiStyle.tableCell}>{row.usrId}</td>
+                <td className={uiStyle.tableCell}>{row.usrName ?? "-"}</td>
+                <td className={uiStyle.tableCell}>{row.ugName} / {row.utName}</td>
+                <td className={uiStyle.tableCell}>{row.usrTel ?? "-"}</td>
+                <td className={cn("w-[28%]", uiStyle.tableCell)}>
                   <span
                     className="block truncate"
                     title={(row.permNames?.length ? row.permNames.join(", ") : "") || "권한 없음"}
@@ -426,7 +597,7 @@ export function UserManager() {
                     {row.permNames?.length ? row.permNames.join(", ") : "-"}
                   </span>
                 </td>
-                <td className="p-2 w-[22%]">
+                <td className={cn("w-[22%]", uiStyle.tableCell)}>
                   <span className="block truncate" title={row.usrEtc ?? ""}>
                     {row.usrEtc ?? "-"}
                   </span>
@@ -435,7 +606,7 @@ export function UserManager() {
             ))}
             {!filteredItems.length && (
               <tr>
-                <td className="p-3 text-muted-foreground" colSpan={6}>
+                <td className={cn("text-muted-foreground", uiStyle.tableCell)} colSpan={6}>
                   검색 결과가 없습니다.
                 </td>
               </tr>
@@ -445,11 +616,11 @@ export function UserManager() {
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[980px] p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col" showCloseButton={false}>
+        <DialogContent className={uiStyle.dialog} showCloseButton={false}>
           <DialogHeader className="sr-only">
             <DialogTitle>{modalMode === "add" ? "사용자 추가" : "사용자 상세보기"}</DialogTitle>
           </DialogHeader>
-          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 shrink-0 bg-slate-50/40">
+          <div className={cn("flex shrink-0 items-center justify-between", uiStyle.dialogHeader)}>
             <span className="text-xs font-medium text-slate-600">{modalMode === "add" ? "사용자 추가" : "사용자 상세보기"}</span>
             <button
               type="button"
@@ -460,8 +631,8 @@ export function UserManager() {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <div className="flex min-h-0 overflow-hidden p-3 gap-3">
-            <div className="flex-1 min-w-0 overflow-auto rounded-xl border border-border bg-card px-3 pt-3 pb-[15px]">
+          <div className={cn("flex min-h-0 overflow-hidden", uiStyle.dialogBody)}>
+            <div className={cn("flex-1 min-w-0 overflow-auto", uiStyle.formPanel)}>
               <div className="flex flex-col gap-3.5">
                 <div className="grid grid-cols-1 gap-y-3.5 sm:grid-cols-2 sm:gap-x-4">
                   <LabeledInput
@@ -477,21 +648,21 @@ export function UserManager() {
                     value={form.usr_name}
                     onChange={(v) => setForm((p) => ({ ...p, usr_name: v }))}
                   />
-                  <LabeledInput
+                  <LabeledSuggestInput
                     label="부서"
                     icon={<Building2 className="h-3.5 w-3.5" />}
-                    list="user-manager-ug-list"
                     value={form.ug_name}
                     onChange={(v) => setForm((p) => ({ ...p, ug_name: v, ut_name: "" }))}
-                    placeholder="직접 입력"
+                    options={ugSuggestOptions}
+                    placeholder="직접 입력 또는 선택"
                   />
-                  <LabeledInput
+                  <LabeledSuggestInput
                     label="팀"
                     icon={<Users className="h-3.5 w-3.5" />}
-                    list="user-manager-ut-list"
                     value={form.ut_name}
                     onChange={(v) => setForm((p) => ({ ...p, ut_name: v }))}
-                    placeholder="직접 입력"
+                    options={utSuggestOptions}
+                    placeholder="직접 입력 또는 선택"
                   />
                   <LabeledInput
                     label="연락처"
@@ -562,7 +733,7 @@ export function UserManager() {
               </div>
             </div>
             {modalMode === "detail" && (
-              <div className="w-[280px] shrink-0 rounded-xl border border-border bg-card flex flex-col min-h-0 overflow-hidden">
+              <div className={cn("w-[280px] shrink-0 flex flex-col min-h-0 overflow-hidden", uiStyle.sidePanel)}>
                 <div className="px-3 py-2 border-b bg-muted/30 text-xs font-medium text-muted-foreground">권한 목록</div>
                 <div className="flex-1 min-h-0 overflow-auto p-0 space-y-0">
                   {permLoading ? (
@@ -607,7 +778,7 @@ export function UserManager() {
               </div>
             )}
           </div>
-          <div className="px-3 pb-3">
+          <div className={uiStyle.footer}>
             <div className="flex items-center justify-between gap-2 pt-1">
               <div className="min-h-[20px] text-sm text-red-600 px-1 truncate">
                 {modalError ?? ""}
@@ -715,6 +886,12 @@ export function UserManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UgUtManageModal
+        open={ugUtManageOpen}
+        onOpenChange={setUgUtManageOpen}
+        onChanged={() => void loadAll()}
+      />
     </div>
   )
 }

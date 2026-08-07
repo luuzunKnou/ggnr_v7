@@ -9,7 +9,7 @@ import type { Extent } from 'ol/extent';
 import { getCenter } from 'ol/extent';
 import type { Tile } from 'ol';
 import ImageTile from 'ol/ImageTile';
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
+import { Fill, Stroke, Style } from 'ol/style';
 import { XYZ } from 'ol/source';
 import {
   PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS,
@@ -22,6 +22,13 @@ import {
   themeFillColor,
   type ParcelThemeMapKind,
 } from '@/lib/parcelAnalysisTheme';
+
+export {
+  PARCEL_ANALYSIS_AREA_BLUE,
+  PARCEL_ANALYSIS_AREA_STYLE,
+  PARCEL_ANALYSIS_DRAW_STYLE,
+  PARCEL_ANALYSIS_SIGUNGU_BOUNDARY_STYLE,
+} from '../../_mapComponents/analysisArea';
 
 /** 분석 영역 바깥 반투명 마스크 (기본분석지도·테마 지도 공통) */
 export const PARCEL_ANALYSIS_OUTSIDE_MASK_FILL = 'rgba(0, 0, 0, 0.7)';
@@ -110,36 +117,6 @@ export function createParcelAnalysisStaticMapOptions(): {
     interactions: new Collection<Interaction>(),
   };
 }
-
-/** 메인 지도 분석 영역 강조색 (확정·그리기·행정경계 공통) */
-export const PARCEL_ANALYSIS_AREA_BLUE = '37, 99, 235';
-
-function areaBlueRgba(alpha: number): string {
-  return `rgba(${PARCEL_ANALYSIS_AREA_BLUE}, ${alpha})`;
-}
-
-/** 확정 분석 영역 — 실선 + 반투명 채움 */
-export const PARCEL_ANALYSIS_AREA_STYLE = new Style({
-  stroke: new Stroke({ color: areaBlueRgba(1), width: 2.5 }),
-  fill: new Fill({ color: areaBlueRgba(0.18) }),
-});
-
-/** 도형 그리기 중 — 확정과 동일 + 꼭짓점 */
-export const PARCEL_ANALYSIS_DRAW_STYLE = new Style({
-  stroke: new Stroke({ color: areaBlueRgba(1), width: 2.5 }),
-  fill: new Fill({ color: areaBlueRgba(0.18) }),
-  image: new CircleStyle({
-    radius: 5,
-    fill: new Fill({ color: areaBlueRgba(1) }),
-    stroke: new Stroke({ color: '#fff', width: 1.5 }),
-  }),
-});
-
-/** 시군구 참고 경계 — 점선 + 연한 채움 (색만 확정과 공유) */
-export const PARCEL_ANALYSIS_SIGUNGU_BOUNDARY_STYLE = new Style({
-  stroke: new Stroke({ color: areaBlueRgba(0.9), width: 2.5, lineDash: [6, 4] }),
-  fill: new Fill({ color: areaBlueRgba(0.05) }),
-});
 
 /** 지도 캡처·테마 지도 — WKT·GeoServer·v6와 동일 (중부원점 GRS80) */
 export const PARCEL_ANALYSIS_CAPTURE_PROJECTION = 'EPSG:5181';

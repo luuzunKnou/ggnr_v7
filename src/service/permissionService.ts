@@ -22,11 +22,19 @@ import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { upMap } from '@/database/schema/up_map';
 import { usr } from '@/database/schema/usr';
-import { getServiceList, getSystemList, getSystemListAll } from '@/service/configService';
+import { getServiceList, getSystemList, getSystemListAll, getEnabledSystemsRaw } from '@/service/configService';
 import { loadUserAccess } from '@/lib/auth/access';
 import { listConsoleMenuCatalog as buildConsoleMenuCatalog } from '@/lib/consoleMenuAccess/registry';
 
 type Params = Record<string, unknown> & { _sessionUsrId?: string };
+
+/** runtime ENABLED_SYSTEMS 키 집합. 비어 있으면 필터 없음(null). */
+function enabledSysKeySet(): Set<string> | null {
+  const raw = getEnabledSystemsRaw();
+  if (!raw) return null;
+  const keys = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+  return keys.size > 0 ? keys : null;
+}
 
 function normalizePermSysKey(v: unknown): string | null {
   if (v == null) return null;
@@ -180,6 +188,9 @@ export async function listPrivateSers(_p: Params) {
 
 export async function listPrivateSys(_p: Params) {
   requireSession(_p);
+  /** 메인과 동일: ENABLED_SYSTEMS가 있으면 그 키만. 없으면 전체. */
+  const enabledKeys = enabledSysKeySet();
+
   const dbRows = await db
     .select({
       sysKey: sys.sysKey,
@@ -204,6 +215,7 @@ export async function listPrivateSys(_p: Params) {
   const byKey = new Map<string, Row>();
   for (const r of dbRows) {
     const k = String(r.sysKey);
+    if (enabledKeys && !enabledKeys.has(k)) continue;
     byKey.set(k, {
       sysKey: k,
       sysKor: r.sysKor,
@@ -216,6 +228,7 @@ export async function listPrivateSys(_p: Params) {
   for (const s of getSystemListAll().systems) {
     const k = s.sys_key?.trim();
     if (!k || s.sys_is_private !== true) continue;
+    if (enabledKeys && !enabledKeys.has(k)) continue;
     const cfgDetail =
       s.sys_detail != null && String(s.sys_detail).trim() ? String(s.sys_detail).trim() : null;
     const existing = byKey.get(k);
@@ -319,6 +332,29 @@ export async function submitAccessRequest(p: Params) {
   }
 
   const now = new Date().toISOString();
+
+  // 동일 대상 승인대기 중이면 중복 신청 방지 (반려·승인 후 재신청은 허용)
+  const pendingConds =
+    targetType === TARGET_SER
+      ? and(
+          eq(usrAccessRequest.usrId, usrId),
+          eq(usrAccessRequest.targetType, TARGET_SER),
+          eq(usrAccessRequest.serEng, serEng!),
+          eq(usrAccessRequest.state, ACCESS_REQ_PENDING)
+        )
+      : and(
+          eq(usrAccessRequest.usrId, usrId),
+          eq(usrAccessRequest.targetType, TARGET_SYS),
+          eq(usrAccessRequest.sysKey, sysKeyStr!),
+          eq(usrAccessRequest.state, ACCESS_REQ_PENDING)
+        );
+  const [pending] = await db
+    .select({ uarKey: usrAccessRequest.uarKey })
+    .from(usrAccessRequest)
+    .where(pendingConds!)
+    .limit(1);
+  if (pending) throw new Error('이미 신청 대기 중입니다.');
+
   const [row] = await db
     .insert(usrAccessRequest)
     .values({
@@ -335,6 +371,39 @@ export async function submitAccessRequest(p: Params) {
   return row;
 }
 
+/** 내 신청 중 해당 대상의 최신 1건 (모달 반려 안내·재신청용) */
+export async function getMyLatestAccessRequest(p: Params) {
+  const usrId = requireSession(p);
+  const targetType = String(p.targetType ?? '');
+  if (targetType !== TARGET_SER && targetType !== TARGET_SYS) throw new Error('targetType ser|sys');
+  const serEng = p.serEng != null ? String(p.serEng).trim() : '';
+  const sysKeyStr = targetType === TARGET_SYS ? normalizePermSysKey(p.sysKey) : null;
+  if (targetType === TARGET_SER && !serEng) throw new Error('serEng required');
+  if (targetType === TARGET_SYS && !sysKeyStr) throw new Error('sysKey required');
+
+  const cond =
+    targetType === TARGET_SER
+      ? and(
+          eq(usrAccessRequest.usrId, usrId),
+          eq(usrAccessRequest.targetType, TARGET_SER),
+          eq(usrAccessRequest.serEng, serEng)
+        )
+      : and(
+          eq(usrAccessRequest.usrId, usrId),
+          eq(usrAccessRequest.targetType, TARGET_SYS),
+          eq(usrAccessRequest.sysKey, sysKeyStr!)
+        );
+
+  const [row] = await db
+    .select()
+    .from(usrAccessRequest)
+    .where(cond!)
+    .orderBy(desc(usrAccessRequest.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/** 관리자 큐: 승인대기만 (새 처리 UI 확정 전 — 팀 공유는 대기 목록 유지) */
 export async function listPendingAccessRequests(_p: Params) {
   requireSession(_p);
   return db

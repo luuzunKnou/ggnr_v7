@@ -53,9 +53,14 @@ async function fetchConfigLists(): Promise<{ systems: ConfigSystemRow[]; service
 
 type ResourceKind = 'system' | 'service';
 
-const DENIED_MESSAGES: Record<ResourceKind, string> = {
-  system: '시스템에 접속할 수 있는 권한이 없습니다. 권한을 신청하신 후 관리자에게 문의해 주세요.',
-  service: '서비스를 이용할 수 있는 권한이 없습니다. 권한을 신청하신 후 관리자에게 문의해 주세요.',
+const DENIED_BASE: Record<ResourceKind, string> = {
+  system: '시스템에 접속할 수 있는 권한이 없습니다.',
+  service: '서비스를 이용할 수 있는 권한이 없습니다.',
+};
+
+type LatestAccessReq = {
+  state: string;
+  rejectReason?: string | null;
 };
 
 type ResourceAccessDeniedDialogProps = {
@@ -79,6 +84,7 @@ export function ResourceAccessDeniedDialog({
   const [requestReason, setRequestReason] = useState('');
   const [level, setLevel] = useState(3);
   const [msg, setMsg] = useState('');
+  const [latest, setLatest] = useState<LatestAccessReq | null>(null);
 
   const sk = (sysKey ?? '').trim();
   const se = (serEng ?? '').trim();
@@ -87,21 +93,63 @@ export function ResourceAccessDeniedDialog({
     if (!open) {
       setRequestReason('');
       setMsg('');
+      setLatest(null);
       return;
     }
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { systems, services } = await fetchConfigLists();
-      if (cancelled) return;
-      setConfigSystems(systems);
-      setConfigServices(services);
-      setLoading(false);
+      try {
+        const [{ systems, services }, latestRow] = await Promise.all([
+          fetchConfigLists(),
+          (async () => {
+            try {
+              if (resource === 'system') {
+                if (!sk) return null;
+                return (await permCall('getMyLatestAccessRequest', {
+                  targetType: 'sys',
+                  sysKey: sk,
+                })) as LatestAccessReq | null;
+              }
+              if (!se) return null;
+              return (await permCall('getMyLatestAccessRequest', {
+                targetType: 'ser',
+                serEng: se,
+              })) as LatestAccessReq | null;
+            } catch {
+              return null;
+            }
+          })(),
+        ]);
+        if (cancelled) return;
+        setConfigSystems(systems);
+        setConfigServices(services);
+        setLatest(latestRow);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, resource, sk, se]);
+
+  const isPending = latest?.state === 'pending';
+  const isRejected = latest?.state === 'rejected';
+  const rejectReasonText = latest?.rejectReason?.trim() ?? '';
+
+  const statusNotice = useMemo(() => {
+    if (isRejected) {
+      if (rejectReasonText) {
+        return `${rejectReasonText}로 반려되었습니다. 관리자에게 문의 또는 재신청을 해주세요.`;
+      }
+      return '반려가 되었습니다.';
+    }
+    if (isPending) {
+      return '이미 권한 신청이 접수되어 대기 중입니다.';
+    }
+    return '권한을 신청하신 후 관리자에게 문의해 주세요.';
+  }, [isRejected, isPending, rejectReasonText]);
 
   const targetDisplay = useMemo(() => {
     if (resource === 'system') {
@@ -135,11 +183,14 @@ export function ResourceAccessDeniedDialog({
       }
       setMsg('신청되었습니다.');
       setRequestReason('');
+      setLatest({ state: 'pending', rejectReason: null });
       window.setTimeout(() => onOpenChange(false), 1400);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : '오류');
     }
   }
+
+  const canSubmit = !loading && !isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -158,7 +209,10 @@ export function ResourceAccessDeniedDialog({
             접근권한 신청
           </DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground leading-relaxed py-1">{DENIED_MESSAGES[resource]}</p>
+        <div className="space-y-1 py-1 text-sm leading-relaxed text-muted-foreground">
+          <p>{DENIED_BASE[resource]}</p>
+          <p className={isRejected ? 'text-red-600 dark:text-red-400' : undefined}>{statusNotice}</p>
+        </div>
 
         {loading ? (
           <p className="text-sm text-muted-foreground py-1">불러오는 중…</p>
@@ -168,7 +222,7 @@ export function ResourceAccessDeniedDialog({
               <span className="text-sm font-medium shrink-0 text-foreground">신청대상</span>
               <span className="min-w-0 flex-1 text-sm text-foreground">{targetDisplay}</span>
             </div>
-            {resource === 'service' && (
+            {resource === 'service' && !isPending && (
               <div className="space-y-1.5">
                 <label htmlFor="denied-level" className="text-sm font-medium">
                   요청 단계
@@ -184,42 +238,48 @@ export function ResourceAccessDeniedDialog({
                 </select>
               </div>
             )}
-            <div className="space-y-1.5 w-full">
-              <label htmlFor="denied-reason" className="text-sm font-medium">
-                신청사유
-              </label>
-              <textarea
-                id="denied-reason"
-                rows={7}
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-                placeholder="신청 사유를 입력해 주세요"
-                className={TEXTAREA_FIELD_CLASS}
-                maxLength={4000}
-              />
-            </div>
+            {!isPending && (
+              <div className="space-y-1.5 w-full">
+                <label htmlFor="denied-reason" className="text-sm font-medium">
+                  신청사유
+                </label>
+                <textarea
+                  id="denied-reason"
+                  rows={7}
+                  value={requestReason}
+                  onChange={(e) => setRequestReason(e.target.value)}
+                  placeholder="신청 사유를 입력해 주세요"
+                  className={TEXTAREA_FIELD_CLASS}
+                  maxLength={4000}
+                />
+              </div>
+            )}
           </div>
         )}
 
         {msg ? <p className="text-sm text-muted-foreground">{msg}</p> : null}
 
         <DialogFooter className="flex flex-col gap-2 items-end sm:flex-row sm:justify-end sm:items-center sm:gap-2 sm:pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            className={ACCESS_MODAL_OUTLINE_BTN_CLASS}
-            onClick={() => void submitDenied()}
-            disabled={loading}
-          >
-            <Check className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-            권한신청
-          </Button>
+          {canSubmit ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={ACCESS_MODAL_OUTLINE_BTN_CLASS}
+              onClick={() => void submitDenied()}
+              disabled={loading}
+              title="권한신청"
+            >
+              <Check className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+              {isRejected ? '재신청' : '권한신청'}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
             className={ACCESS_MODAL_OUTLINE_BTN_CLASS}
             onClick={() => onOpenChange(false)}
             disabled={loading}
+            title="닫기"
           >
             <X className="h-4 w-4 shrink-0" aria-hidden />
             닫기

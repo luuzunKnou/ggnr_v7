@@ -13,6 +13,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import {
+  DrawToolbarActions,
   ParcelAnalysisAreaSummary,
   useParcelAnalysisAreaLayer,
   useParcelAnalysisDraw,
@@ -437,70 +438,6 @@ function DrawScopeBanner({
   }
 
   return null;
-}
-
-type DrawToolbarActionsProps = {
-  drawPhase: 'drawing' | 'editing';
-  confirmDraw: () => void;
-  redrawShape: () => void;
-  cancelDraw: () => void;
-  applyDisabled: boolean;
-};
-
-function DrawToolbarActions({
-  drawPhase,
-  confirmDraw,
-  redrawShape,
-  cancelDraw,
-  applyDisabled,
-}: DrawToolbarActionsProps) {
-  const pillShell =
-    'pointer-events-auto flex max-w-[min(100vw-16px,560px)] flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 py-2 pr-2 pl-4 text-foreground shadow-lg backdrop-blur';
-
-  if (drawPhase === 'drawing') {
-    return (
-      <div className={pillShell}>
-        <span className="text-[12px] leading-snug sm:text-sm">지도에 도형을 그리세요.</span>
-        <button
-          type="button"
-          onClick={cancelDraw}
-          className="flex cursor-pointer items-center gap-1 rounded-full bg-muted py-1 pr-2.5 pl-2 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:text-sm"
-        >
-          <X className="size-3.5" />
-          취소
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className={pillShell}>
-      <span className="text-[12px] leading-snug sm:text-sm">꼭짓점을 드래그해 모양을 수정하세요.</span>
-      <button
-        type="button"
-        onClick={confirmDraw}
-        disabled={applyDisabled}
-        className="rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:hover:bg-muted enabled:cursor-pointer sm:text-sm"
-      >
-        적용
-      </button>
-      <button
-        type="button"
-        onClick={redrawShape}
-        className="cursor-pointer rounded-full bg-muted px-3 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:text-sm"
-      >
-        다시 그리기
-      </button>
-      <button
-        type="button"
-        onClick={cancelDraw}
-        className="flex cursor-pointer items-center gap-1 rounded-full bg-muted py-1 pr-2.5 pl-2 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:text-sm"
-      >
-        <X className="size-3.5" />
-        취소
-      </button>
-    </div>
-  );
 }
 
 export function ParcelAnalysisOrchestrator() {

@@ -1,6 +1,16 @@
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import type { NextAuthConfig } from 'next-auth';
+
+/** 가입 반려 계정 로그인 시도 — 클라이언트에서 code로 안내 문구 분기 */
+class SignUpRejectedError extends CredentialsSignin {
+  code = 'signup_rejected';
+}
+
+/** 가입 승인 대기 계정 로그인 시도 */
+class SignUpPendingError extends CredentialsSignin {
+  code = 'signup_pending';
+}
 
 declare module 'next-auth' {
   interface Session {
@@ -69,6 +79,15 @@ export const authConfig = {
 
         const ok = await verifyPassword(u.usrPwd ?? null, password);
         if (!ok) return null;
+
+        // 가입 반려 — 전용 안내 (비밀번호는 맞은 경우)
+        if (u.usrCancleTime) {
+          throw new SignUpRejectedError();
+        }
+        // 가입신청 후 미승인 — 승인대기 안내 (관리자 직접 생성은 usrReqTime 없음 → 통과)
+        if (u.usrReqTime && !u.usrOkTime) {
+          throw new SignUpPendingError();
+        }
 
         if (isPlaintextPassword(u.usrPwd ?? null)) {
           const hashed = await hashPassword(password);

@@ -5,7 +5,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnComponents/ui/dialog';
 import { cn } from '@/lib/utils';
-import { Check, FileText, IdCard, Layers, LayoutGrid, PanelRight, Plus, Search, Server, Shield, X } from 'lucide-react';
+import { Check, FileText, IdCard, Layers, PanelRight, Plus, Search, Server, Shield, X } from 'lucide-react';
 import { permCall } from './perm/permApi';
 import { PermRoleMappingPanel } from './perm/PermRoleMappingPanel';
 
@@ -15,14 +15,13 @@ type PermDetailUserRow = { usrId: string; utName: string; usrName: string | null
 const PERM_TABS = [
   { id: 'ser' as const, label: '기능별 권한관리', icon: Layers },
   { id: 'sys' as const, label: '시스템별 접속권한 관리', icon: Server },
-  { id: 'console' as const, label: '콘솔 메뉴 권한', icon: LayoutGrid },
 ];
 
 /** 레이어 속성관리(`LayerAttrManager`) 왼쪽 목록과 동일 폭 */
 const PERM_LIST_WIDTH = 280;
 
 export function PermissionFeatureManager() {
-  const [tab, setTab] = useState<'ser' | 'sys' | 'console'>('ser');
+  const [tab, setTab] = useState<'ser' | 'sys'>('ser');
   const [perms, setPerms] = useState<Perm[]>([]);
   const [selPerm, setSelPerm] = useState<number | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
