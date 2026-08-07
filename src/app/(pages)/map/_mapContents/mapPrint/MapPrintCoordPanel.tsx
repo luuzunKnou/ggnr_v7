@@ -1,75 +1,125 @@
 'use client';
 
-import { useState } from 'react';
-import type { Map as OlMap } from 'ol';
-import { transform } from 'ol/proj';
+import { useEffect, useRef, useState } from 'react';
 
 type Props = {
-  map: OlMap | null;
   onClose: () => void;
+  /** EPSG:5181 점 목록 — 1개 점 / 2개 이상 점+선 */
+  onApplyCoords: (coords5181: [number, number][]) => void;
 };
 
-export function MapPrintCoordPanel({ map, onClose }: Props) {
-  const [x, setX] = useState('');
-  const [y, setY] = useState('');
-  const [error, setError] = useState<string | null>(null);
+/**
+ * 숫자 토큰을 짝으로 묶어 EPSG:5181 좌표 목록.
+ * 한 줄·여러 줄·쉼표 구분 모두 허용. 타이핑 중 홀수 개는 무시.
+ */
+function parseCoords5181List(raw: string): {
+  coords: [number, number][];
+  rejectedWgs84: boolean;
+  incomplete: boolean;
+} {
+  const tokens = raw
+    .trim()
+    .split(/[\s,;]+/)
+    .filter(Boolean);
+  if (tokens.length === 0) {
+    return { coords: [], rejectedWgs84: false, incomplete: false };
+  }
+  if (tokens.length % 2 !== 0) {
+    return { coords: [], rejectedWgs84: false, incomplete: true };
+  }
 
-  const move = () => {
-    if (!map) return;
-    const lon = Number(x.trim());
-    const lat = Number(y.trim());
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-      setError('숫자 좌표를 입력하세요. (경도·위도)');
+  const coords: [number, number][] = [];
+  let rejectedWgs84 = false;
+  for (let i = 0; i < tokens.length; i += 2) {
+    const x = Number(tokens[i]);
+    const y = Number(tokens[i + 1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return { coords: [], rejectedWgs84: false, incomplete: true };
+    }
+    if (Math.abs(x) <= 180 && Math.abs(y) <= 90) {
+      rejectedWgs84 = true;
+      continue;
+    }
+    coords.push([x, y]);
+  }
+  return { coords, rejectedWgs84, incomplete: false };
+}
+
+const AUTO_APPLY_MS = 400;
+
+export function MapPrintCoordPanel({ onClose, onApplyCoords }: Props) {
+  const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [appliedHint, setAppliedHint] = useState<string | null>(null);
+  const lastAppliedRef = useRef('');
+  const onApplyRef = useRef(onApplyCoords);
+  onApplyRef.current = onApplyCoords;
+
+  useEffect(() => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setError(null);
+      setAppliedHint(null);
+      if (lastAppliedRef.current !== '') {
+        lastAppliedRef.current = '';
+        onApplyRef.current([]);
+      }
       return;
     }
-    if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-      setError('경도는 -180~180, 위도는 -90~90 범위여야 합니다.');
-      return;
-    }
-    setError(null);
-    const view = map.getView();
-    const projection = view.getProjection();
-    if (!projection) return;
-    const center = transform([lon, lat], 'EPSG:4326', projection);
-    view.setCenter(center);
-  };
+
+    const t = window.setTimeout(() => {
+      const { coords, rejectedWgs84, incomplete } = parseCoords5181List(trimmed);
+      if (incomplete) {
+        setError(null);
+        setAppliedHint(null);
+        return;
+      }
+      if (coords.length === 0) {
+        setError(
+          rejectedWgs84
+            ? '경위도가 아닌 EPSG:5181 좌표를 입력하세요.'
+            : 'EPSG:5181 좌표를 입력하세요. 예: 418091.2282 372519.5629'
+        );
+        setAppliedHint(null);
+        return;
+      }
+      if (trimmed === lastAppliedRef.current) return;
+
+      setError(null);
+      onApplyRef.current(coords);
+      lastAppliedRef.current = trimmed;
+      setAppliedHint(
+        coords.length === 1
+          ? `점 1개 (${coords[0][0].toFixed(2)}, ${coords[0][1].toFixed(2)})`
+          : `점 ${coords.length}개 · 선으로 연결`
+      );
+    }, AUTO_APPLY_MS);
+
+    return () => window.clearTimeout(t);
+  }, [text]);
 
   return (
     <div className="map-print-coord-panel map-print-ignore">
-      <div className="mb-2 font-medium text-slate-800">좌표 입력 (WGS84)</div>
-      <label className="mb-2 flex items-center gap-2">
-        <span className="w-10 shrink-0 text-slate-500">경도</span>
-        <input
-          className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-          value={x}
-          onChange={(e) => setX(e.target.value)}
-          placeholder="예: 129.4"
-        />
-      </label>
-      <label className="mb-2 flex items-center gap-2">
-        <span className="w-10 shrink-0 text-slate-500">위도</span>
-        <input
-          className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-          value={y}
-          onChange={(e) => setY(e.target.value)}
-          placeholder="예: 36.99"
-        />
-      </label>
+      <div className="mb-2 font-medium text-slate-800">좌표 입력 (EPSG:5181)</div>
+      <p className="mb-2 text-[11px] text-slate-500">
+        X Y 한 쌍이면 점, 여러 쌍이면 점으로 찍고 선으로 연결합니다. 입력 시 자동 적용됩니다.
+      </p>
+      <textarea
+        className="mb-2 h-28 w-full resize-y rounded border border-slate-300 px-2 py-1.5 font-mono text-sm outline-none focus:border-blue-400"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={'예:\n418091.2282 372519.5629\n420100.0 373200.0'}
+        spellCheck={false}
+      />
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
-      <div className="flex justify-end gap-2">
+      {!error && appliedHint && <p className="mb-2 text-xs text-emerald-700">{appliedHint}</p>}
+      <div className="flex justify-end">
         <button
           type="button"
           className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
           onClick={onClose}
         >
           닫기
-        </button>
-        <button
-          type="button"
-          className="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
-          onClick={move}
-        >
-          이동
         </button>
       </div>
     </div>

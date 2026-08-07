@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { History, Loader2, Search, X } from "lucide-react";
 import { Input } from "@/app/shadcnComponents/ui/input";
 import { searchAddress, type VWorldAddressItem } from "./vworldAddressSearch";
@@ -38,6 +38,8 @@ type Props = {
   initialQuery?: string;
   /** 검색어 지우기 시 (폼 주소 비우기 등) */
   onClear?: () => void;
+  /** field: 타이핑한 값을 폼에 그대로 반영 (선택 없이 직접 입력) */
+  onQueryChange?: (query: string) => void;
   /**
    * default: 지도용 전체 패널
    * field: 폼 Input 한 칸 대체(결과만 드롭다운)
@@ -52,6 +54,7 @@ export function AddressSearchPanel({
   placeholder = "주소/지번 검색",
   initialQuery = '',
   onClear,
+  onQueryChange,
   layout = 'default',
 }: Props) {
   const [query, setQuery] = useState(initialQuery);
@@ -61,9 +64,17 @@ export function AddressSearchPanel({
   /** field: 선택·초기값 반영 직후 재검색·드롭다운 억제 */
   const [dropdownClosed, setDropdownClosed] = useState(true);
   const isField = layout === 'field';
+  /** onQueryChange로 올린 값 — 같은 값이 initialQuery로 돌아오면 드롭다운을 닫지 않음 */
+  const lastEmittedQueryRef = useRef(initialQuery ?? '');
 
   useEffect(() => {
-    setQuery(initialQuery ?? '');
+    const next = initialQuery ?? '';
+    if (next === lastEmittedQueryRef.current) {
+      setQuery(next);
+      return;
+    }
+    lastEmittedQueryRef.current = next;
+    setQuery(next);
     if (isField) {
       setAddressResults([]);
       setDropdownClosed(true);
@@ -115,7 +126,10 @@ export function AddressSearchPanel({
         (item.roadAddress ?? '').trim() ||
         (item.jibunAddress ?? '').trim() ||
         (item.address ?? '').trim();
-      if (display) setQuery(display);
+      if (display) {
+        lastEmittedQueryRef.current = display;
+        setQuery(display);
+      }
       setAddressResults([]);
       setDropdownClosed(true);
       onSelect(item);
@@ -124,11 +138,13 @@ export function AddressSearchPanel({
   );
 
   const clearQuery = useCallback(() => {
+    lastEmittedQueryRef.current = '';
     setQuery('');
     setAddressResults([]);
     setDropdownClosed(true);
+    onQueryChange?.('');
     onClear?.();
-  }, [onClear]);
+  }, [onClear, onQueryChange]);
 
   const showResultsPanel = isField
     ? !dropdownClosed && (loading || addressResults.length > 0 || Boolean(query.trim()))
@@ -159,8 +175,11 @@ export function AddressSearchPanel({
         <Input
           value={query}
           onChange={(e) => {
+            const next = e.target.value;
+            lastEmittedQueryRef.current = next;
             setDropdownClosed(false);
-            setQuery(e.target.value);
+            setQuery(next);
+            onQueryChange?.(next);
           }}
           placeholder={placeholder}
           style={isField ? { fontSize: '12px' } : undefined}

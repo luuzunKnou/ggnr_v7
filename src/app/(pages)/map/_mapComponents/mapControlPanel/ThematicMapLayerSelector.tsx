@@ -51,7 +51,8 @@ function ThematicMapGroupSection({
   onToggleGroup,
   failedLegendLayers,
   onLegendError,
-  defaultExpanded = true,
+  defaultExpanded = false,
+  showGroupBulk = true,
 }: {
   group: ThematicMapLayerGroup;
   selectedTableNames: Set<string>;
@@ -60,6 +61,7 @@ function ThematicMapGroupSection({
   failedLegendLayers: Set<string>;
   onLegendError: (tableName: string) => void;
   defaultExpanded?: boolean;
+  showGroupBulk?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const selectedCount = group.layers.filter((l) => selectedTableNames.has(l.tableName)).length;
@@ -91,11 +93,13 @@ function ThematicMapGroupSection({
             </span>
           </span>
         </button>
-        <GroupSelectCheckbox
-          checked={allSelected}
-          indeterminate={someSelected}
-          onChange={(checked) => onToggleGroup(groupTableNames, checked)}
-        />
+        {showGroupBulk ? (
+          <GroupSelectCheckbox
+            checked={allSelected}
+            indeterminate={someSelected}
+            onChange={(checked) => onToggleGroup(groupTableNames, checked)}
+          />
+        ) : null}
       </div>
 
       {isExpanded && (
@@ -163,6 +167,8 @@ export interface ThematicMapLayerSelectorProps {
   className?: string;
   /** 패널 제목 (기본: 주제도) */
   title?: string;
+  /** false면 전체 선택·그룹 일괄 체크 숨김 (인쇄 등) */
+  showBulkActions?: boolean;
 }
 
 /**
@@ -176,6 +182,7 @@ export function ThematicMapLayerSelector({
   onClose,
   className,
   title = '주제도',
+  showBulkActions = true,
 }: ThematicMapLayerSelectorProps) {
   const allTableNames = useMemo(
     () => groups.flatMap((g) => g.layers.map((l) => l.tableName)),
@@ -230,23 +237,25 @@ export function ThematicMapLayerSelector({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-3 py-1.5 dark:border-white/10">
-        <button
-          type="button"
-          onClick={selectAll}
-          className="text-[11px] text-blue-600 hover:underline dark:text-blue-400"
-        >
-          전체 선택
-        </button>
-        <span className="text-slate-300 dark:text-white/30">|</span>
-        <button
-          type="button"
-          onClick={selectNone}
-          className="text-[11px] text-slate-500 hover:underline dark:text-white/60"
-        >
-          전체 해제
-        </button>
-      </div>
+      {showBulkActions ? (
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-3 py-1.5 dark:border-white/10">
+          <button
+            type="button"
+            onClick={selectAll}
+            className="text-[11px] text-blue-600 hover:underline dark:text-blue-400"
+          >
+            전체 선택
+          </button>
+          <span className="text-slate-300 dark:text-white/30">|</span>
+          <button
+            type="button"
+            onClick={selectNone}
+            className="text-[11px] text-slate-500 hover:underline dark:text-white/60"
+          >
+            전체 해제
+          </button>
+        </div>
+      ) : null}
 
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {groups.length === 0 ? (
@@ -263,6 +272,7 @@ export function ThematicMapLayerSelector({
               onToggleGroup={toggleGroup}
               failedLegendLayers={failedLegendLayers}
               onLegendError={onLegendError}
+              showGroupBulk={showBulkActions}
             />
           ))
         )}

@@ -133,8 +133,14 @@ function mergeCqlParts(...parts: Array<string | null | undefined>): string {
 const TRANSPARENT_PIXEL =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
+/** 이 길이 초과 시에만 POST (CQL 등으로 414 방지). 그 외는 GET — GeoServer가 POST body의 REQUEST를 못 읽는 환경 회피 */
+const WMS_GET_URL_MAX_LEN = 1800;
+
 /**
- * WMS GetMap 로드를 POST로 수행 (CQL_FILTER 등으로 URL이 길어져 414 방지)
+ * WMS GetMap 로드.
+ * - 기본: GET (img.src) — `MissingParameterValue request` 방지
+ * - URL이 길 때만 POST. AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지
+ * - 응답이 이미지인지 확인 (ServiceExceptionReport XML을 이미지로 넣지 않음)
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
   const img = image.getImage() as HTMLImageElement;
@@ -142,15 +148,42 @@ function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
     img.src = TRANSPARENT_PIXEL;
   };
   try {
+    if (!src || src.length <= WMS_GET_URL_MAX_LEN) {
+      img.src = src;
+      return;
+    }
+
     const url = new URL(src);
-    const baseUrl = url.origin + url.pathname;
     const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
+    if (!body) {
+      img.src = src;
+      return;
+    }
+
+    const params = new URLSearchParams(body);
+    const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
+    const request = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
+    const baseUrl =
+      `${url.origin}${url.pathname}` +
+      `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(request)}`;
+
     fetch(baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     })
-      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.statusText))))
+      .then(async (r) => {
+        const ct = (r.headers.get('content-type') ?? '').toLowerCase();
+        if (!r.ok || ct.includes('xml') || ct.includes('text/')) {
+          throw new Error(r.statusText || 'WMS error');
+        }
+        const blob = await r.blob();
+        const blobType = (blob.type || ct).toLowerCase();
+        if (blobType && !blobType.startsWith('image/') && blobType !== 'application/octet-stream') {
+          throw new Error(`unexpected WMS content-type: ${blobType}`);
+        }
+        return blob;
+      })
       .then((blob) => {
         const type = String(blob.type || '').toLowerCase();
         if (type.includes('xml') || type.includes('text')) {
@@ -185,6 +218,8 @@ export function createServiceLayer(): ImageLayer<ImageWMS> {
       params: {
         LAYERS: '',
         STYLES: '',
+        // 미설정 시 GeoServer가 흰 배경 이미지를 내려 배경지도·타일을 통째로 가림
+        TRANSPARENT: true,
         // inimage 예외는 PNG로 에러 문구가 그려져 실패 감지 불가 → xml로 받아 투명 픽셀로 대체
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       },
@@ -308,10 +343,22 @@ export function useServiceLayerSync(
     lastSyncKeyRef.current = syncKey;
 
     if (allInclude) {
-      update({ LAYERS: layersParam, STYLES: stylesParam, CQL_FILTER: undefined });
+      update({
+        LAYERS: layersParam,
+        STYLES: stylesParam,
+        CQL_FILTER: undefined,
+        TRANSPARENT: true,
+        EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      });
       delete params.CQL_FILTER;
     } else {
-      update({ LAYERS: layersParam, STYLES: stylesParam, CQL_FILTER: cqlParam });
+      update({
+        LAYERS: layersParam,
+        STYLES: stylesParam,
+        CQL_FILTER: cqlParam,
+        TRANSPARENT: true,
+        EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      });
     }
     serviceLayer.setVisible(true);
   }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);

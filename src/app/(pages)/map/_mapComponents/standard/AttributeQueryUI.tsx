@@ -65,6 +65,19 @@ const SPATIAL_SHAPE_SEARCH_HEADER = '도형검색 결과';
 const KEYWORD_SEARCH_HEADER = '통합검색 결과';
 const BOUNDARY_SEARCH_HEADER = '행정경계 검색 결과';
 
+/**
+ * 데이터 조회 «기타»에서 숨길 레이어.
+ * (그룹 미지정·tables.json 미등록으로 기타에 모이는 항목 중 UI에 노출하지 않을 것)
+ */
+const DATA_QUERY_ETC_BLOCKLIST = new Set([
+  'abpd_bunit_job_detl_jibn_map',
+  'abpd_land_mov_adj_bef_aft',
+  'f_fac_building',
+  'lard_adm_sect_sgg',
+  'lsmd_adm_sect_ri',
+  'lsmd_adm_sect_umd',
+]);
+
 type BoundaryBadgeItem = { key: string; kind: 'emd' | 'ri'; code: string; label: string };
 
 type PersistedSearchForm = {
@@ -319,6 +332,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (parentTablesWithSplitDefs.has(tblName)) continue;
           const meta = metaMap.get(tblName);
           const groupName = meta?.define_table_group?.trim() || '기타';
+          if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(tblName)) continue;
           const korName = meta?.define_table_kor_name?.trim() || tblName;
           if (!groupMap.has(groupName)) {
             groupMap.set(groupName, []);
@@ -347,6 +361,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (!dbSet.has(parentLower)) continue;
           if (dbSet.has(engLower)) continue;
           const groupName = String(m.define_table_group ?? '').trim() || '기타';
+          if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(engLower)) continue;
           const korName = String(m.define_table_kor_name ?? '').trim() || eng;
           if (!groupMap.has(groupName)) {
             groupMap.set(groupName, []);
@@ -362,12 +377,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           });
         }
 
-        // DB에는 있지만 tables.json에 없는 레이어도 '기타' 그룹에 포함
-        const groups: LayerGroupMeta[] = groupOrder.map((gName) => ({
-          id: gName,
-          name: gName,
-          layers: groupMap.get(gName)!.sort((a, b) => a.name.localeCompare(b.name)),
-        }));
+        // DB에는 있지만 tables.json에 없는 레이어도 '기타' 그룹에 포함(차단 목록 제외)
+        const groups: LayerGroupMeta[] = groupOrder
+          .map((gName) => ({
+            id: gName,
+            name: gName,
+            layers: groupMap.get(gName)!.sort((a, b) => a.name.localeCompare(b.name)),
+          }))
+          .filter((g) => g.layers.length > 0);
         setLayerGroups(groups);
       })
       .catch(() => {

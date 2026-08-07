@@ -17,8 +17,8 @@ import {
   type LayerRowEditPresetKey,
   type LayerRowParcelItem,
 } from '../../_mapComponents/layerRowEdit';
-import { UsageDataAsAttributeSection } from '../river/usageDataAs/UsageDataAsAttributeSection';
 import { UsageDataAsAddressList } from '../river/usageDataAs/UsageDataAsAddressList';
+import { OccupationLedgerAttributeSection } from './OccupationLedgerAttributeSection';
 import { fitMapToLayerRowParcel } from '../../_mapComponents/layerRowEdit/layerRowParcelUtils';
 import { resolveParcelGeoms } from '../../_mapComponents/layerRowEdit/resolveParcelGeoms';
 import {
@@ -34,6 +34,17 @@ import {
   refreshOccupationLedgerMapView,
 } from './occupationLedgerMapSync';
 import { useOccupationLedgerParentGeomHighlight } from './useOccupationLedgerParentGeomHighlight';
+import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
+
+function draftFieldValue(draft: Record<string, string>, fieldLower: string): string {
+  if (fieldLower in draft) return draft[fieldLower] ?? '';
+  const key = Object.keys(draft).find((k) => k.toLowerCase() === fieldLower);
+  return key ? (draft[key] ?? '') : '';
+}
+
+function draftFieldKey(draft: Record<string, string>, fieldLower: string): string {
+  return Object.keys(draft).find((k) => k.toLowerCase() === fieldLower) ?? fieldLower;
+}
 
 type Props = {
   detailId: string;
@@ -261,6 +272,29 @@ export function OccupationLedgerDetailPanel({
     wmsLayerId: jijukTable,
   });
 
+  const handleOccupationDraftChange = useCallback(
+    (field: string, value: string) => {
+      handleDraftChange(field, value);
+      const fl = field.toLowerCase();
+      if (fl !== 'perm_end_date' && fl !== 'perm_start_date') return;
+      const endVal =
+        fl === 'perm_end_date' ? value : draftFieldValue(draft, 'perm_end_date');
+      handleDraftChange(draftFieldKey(draft, 'state'), deriveOccupationPeriodState(endVal));
+    },
+    [draft, handleDraftChange]
+  );
+
+  /** 편집 진입·건 전환 시 종료일 기준으로 상태 맞춤 */
+  useEffect(() => {
+    if (!isEditing) return;
+    const endVal = draftFieldValue(draft, 'perm_end_date');
+    const stateKey = draftFieldKey(draft, 'state');
+    const next = deriveOccupationPeriodState(endVal);
+    if ((draft[stateKey] ?? '') === next) return;
+    handleDraftChange(stateKey, next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집 모드·건 전환 시에만
+  }, [isEditing, detailId]);
+
   useLayerRowParcelHighlight(showParentGeom ? null : highlightParcel, highlightVariant);
   useLayerRowParcelDraftPreview(draftMgj, 'yellow', isEditing);
   const { parentExtentRef } = useOccupationLedgerParentGeomHighlight(
@@ -436,13 +470,14 @@ export function OccupationLedgerDetailPanel({
         )}
         {showBody && (
           <>
-            <UsageDataAsAttributeSection
+            <OccupationLedgerAttributeSection
               attributes={formAttributesForEdit}
               isEditing={isEditing}
               draft={draft}
               readOnlyFields={readOnlyFields}
               dateFields={dateFields}
-              onDraftChange={handleDraftChange}
+              vworldApiKey={mapContext?.vworldApiKey ?? ''}
+              onDraftChange={handleOccupationDraftChange}
               resetKey={detailId}
             />
 

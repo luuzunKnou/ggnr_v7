@@ -40,6 +40,16 @@ export function prepareMapForPanelAwareNavigation(
 ): void {
   applyMapViewPadding?.();
   map.updateSize();
+  // 좌측 패널 padding이 지도 폭보다 크면 fit/타일 요청이 깨져 흰 화면이 될 수 있음
+  const size = map.getSize();
+  const view = map.getView();
+  const padding = view.padding;
+  if (!size || !padding) return;
+  const mapW = size[0] ?? 0;
+  const left = Number(padding[3] ?? 0);
+  if (mapW > 0 && left >= mapW - 40) {
+    view.padding = [padding[0] ?? 0, padding[1] ?? 0, padding[2] ?? 0, Math.max(0, mapW - 80)];
+  }
 }
 
 /**

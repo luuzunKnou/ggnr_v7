@@ -136,3 +136,79 @@ export function isOccupationLedgerWmsLayerId(
   const set = new Set(getOccupationLedgerWmsLayerIds(binding));
   return set.has(String(tableName ?? '').trim().toLowerCase());
 }
+
+const OCCUPATION_LEDGER_PREFIXES = ['water', 'road', 'public'] as const;
+type OccupationLedgerPrefix = (typeof OCCUPATION_LEDGER_PREFIXES)[number];
+
+/** water|road|public_occupationledger(+_jijuk|_mgj) 여부 */
+export function isOccupationLedgerTableName(tableName: string): boolean {
+  const t = String(tableName ?? '').trim().toLowerCase();
+  if (!t) return false;
+  return OCCUPATION_LEDGER_PREFIXES.some(
+    (p) => t === `${p}_occupationledger` || t.startsWith(`${p}_occupationledger_`)
+  );
+}
+
+/** system(river|road|build) → 테이블 접두 */
+export function getOccupationLedgerPrefixForSystem(
+  system: string | null | undefined
+): OccupationLedgerPrefix | null {
+  const s = String(system ?? '').trim().toLowerCase();
+  if (s === 'river') return 'water';
+  if (s === 'road') return 'road';
+  if (s === 'build') return 'public';
+  return null;
+}
+
+/**
+ * 데이터 조회 등 — 점용대장 테이블은 현재 시스템 접두만 허용.
+ * 점용대장이 아닌 테이블은 항상 true.
+ */
+export function isOccupationLedgerTableAllowedForSystem(
+  tableName: string,
+  system: string | null | undefined
+): boolean {
+  if (!isOccupationLedgerTableName(tableName)) return true;
+  const prefix = getOccupationLedgerPrefixForSystem(system);
+  if (!prefix) return false;
+  const t = String(tableName ?? '').trim().toLowerCase();
+  return t === `${prefix}_occupationledger` || t.startsWith(`${prefix}_occupationledger_`);
+}
+
+/** 현재 시스템에 속하지 않는 점용대장 WMS 테이블 id 목록 */
+export function getForeignOccupationLedgerTableIds(
+  system: string | null | undefined
+): string[] {
+  const allowed = getOccupationLedgerPrefixForSystem(system);
+  const ids: string[] = [];
+  for (const p of OCCUPATION_LEDGER_PREFIXES) {
+    if (allowed && p === allowed) continue;
+    ids.push(
+      `${p}_occupationledger`,
+      `${p}_occupationledger_jijuk`,
+      `${p}_occupationledger_mgj`
+    );
+  }
+  return ids;
+}
+
+/** 시스템 전환 시 opened·dataTable 에서 다른 시스템 점용대장 토큰 제거 */
+export function scrubOccupationLedgerFromMapSearchParams(
+  params: URLSearchParams,
+  system: string | null | undefined
+): void {
+  const allowedSerEng = getOccupationLedgerBinding({ system })?.serEng ?? null;
+  const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
+  const nextOpened = opened.filter((token) => {
+    if (!isOccupationLedgerOpenedToken(token)) return true;
+    return allowedSerEng != null && token === allowedSerEng;
+  });
+  if (nextOpened.length > 0) params.set('opened', nextOpened.join(','));
+  else params.delete('opened');
+
+  const dataTable = String(params.get('dataTable') ?? '').trim();
+  if (dataTable && !isOccupationLedgerTableAllowedForSystem(dataTable, system)) {
+    params.delete('dataTable');
+    params.delete('dataKey');
+  }
+}

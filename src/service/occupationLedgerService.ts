@@ -17,6 +17,7 @@ import {
   syncChildParcelsByParentId,
 } from './layerRowService';
 import { labelForOccupationLedgerField } from '@/app/(pages)/map/_mapContents/occupationLedger/occupationLedgerFieldLabels';
+import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
 
 const DEFAULT_SCHEMA = 'layer';
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
@@ -28,6 +29,8 @@ export type OccupationLedgerListRow = {
   place: string;
   startDate: string;
   endDate: string;
+  /** 점용 종료일 기준 진행중/종료 */
+  status: string;
 };
 
 export type OccupationLedgerDetailAttr = {
@@ -268,6 +271,7 @@ export async function getOccupationLedgerList(params?: {
         place: formatAddressStripSidoSigungu(String(row.place ?? '')),
         startDate,
         endDate,
+        status: deriveOccupationPeriodState(endDate),
       };
     });
     return { rows: sortListRows(rows), title: binding.title };
@@ -422,12 +426,24 @@ export async function getOccupationLedgerDetailByKey(params: {
     }
 
     const metaByField = new Map(fieldDefs.fields.map((f) => [f.field.toLowerCase(), f]));
+    const endField = binding.fields.endField ?? 'perm_end_date';
+    const endKey =
+      Object.keys(row).find((k) => k.toLowerCase() === endField.toLowerCase()) ?? endField;
+    const endRaw = row[endKey];
+    const endYmd =
+      tryFormatToYmd(endRaw) ?? (endRaw == null ? '' : String(endRaw).trim());
+    const periodState = deriveOccupationPeriodState(endYmd);
     const attributes: OccupationLedgerDetailAttr[] = dataFields.map((field) => {
       const def = metaByField.get(field.toLowerCase());
+      const isState = field.toLowerCase() === 'state';
       return {
         field,
         label: labelForOccupationLedgerField(field),
-        value: row[field] == null ? '' : String(row[field]),
+        value: isState
+          ? periodState
+          : row[field] == null
+            ? ''
+            : String(row[field]),
         showDetail: def?.showDetail !== false,
       };
     });
