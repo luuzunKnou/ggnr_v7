@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { MapSplitControlItem } from '../../_mapComponents/mapSplit/MapSplitterGutter';
-import type { MapSplitOrientation } from '../../_mapComponents/mapSplit/mapSplitTypes';
+import {
+  MAP_SPLIT_CONTROL_OFFSET_MAX,
+  MAP_SPLIT_CONTROL_OFFSET_MIN,
+  type MapSplitOrientation,
+} from '../../_mapComponents/mapSplit/mapSplitTypes';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { MapSplitSecondaryHost } from './MapSplitSecondaryHost';
 import { MapSplitSplitterControls } from './MapSplitSplitterControls';
@@ -20,6 +24,14 @@ export function useMapSplitSecondary({ active }: MapSplitSecondaryProps) {
   const setBasemapSync = mapContext?.setMapSplitBasemapSync;
   const setKind = mapContext?.setMapSplitSecondaryKind;
   const [controlsExpanded, setControlsExpanded] = useState(true);
+  const [controlOffsetRatio, setControlOffsetRatio] = useState(0.5);
+
+  const clampControlOffset = useCallback((ratio: number) => {
+    return Math.min(
+      MAP_SPLIT_CONTROL_OFFSET_MAX,
+      Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, ratio)
+    );
+  }, []);
 
   // 지도분할 ON: 거터 펼침 + 이동·배경 싱크 기본 ON
   useEffect(() => {
@@ -51,6 +63,9 @@ export function useMapSplitSecondary({ active }: MapSplitSecondaryProps) {
   return {
     panel,
     controls,
+    controlOffsetRatio,
+    onControlOffsetRatioChange: (ratio: number) =>
+      setControlOffsetRatio(clampControlOffset(ratio)),
     controlsExpanded,
     onControlsExpandedChange: setControlsExpanded,
   };

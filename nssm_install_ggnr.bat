@@ -91,6 +91,8 @@ if errorlevel 1 (
 "%NSSM%" set %SERVICE_NAME% AppDirectory "%ROOT%"
 "%NSSM%" set %SERVICE_NAME% AppExit Default Restart
 "%NSSM%" set %SERVICE_NAME% AppRestartDelay 3000
+:: ggnr_start.bat 실패 시 pause 방지 (서비스가 키 입력 대기하지 않도록)
+"%NSSM%" set %SERVICE_NAME% AppEnvironmentExtra GGNR_START_NO_PAUSE=1
 "%NSSM%" set %SERVICE_NAME% AppStdout "%LOG_OUT%"
 "%NSSM%" set %SERVICE_NAME% AppStderr "%LOG_ERR%"
 :: 로그 회전(약 10MB, 5개 백업)

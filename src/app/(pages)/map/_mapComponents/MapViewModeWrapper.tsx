@@ -378,6 +378,8 @@ export default function MapViewModeWrapper({
   } else if (secondaryKind === 'map') {
     secondaryPanel = mapSplit.panel;
     gutterControls = mapSplit.controls;
+    splitControlOffsetRatio = mapSplit.controlOffsetRatio;
+    onSplitControlOffsetChange = mapSplit.onControlOffsetRatioChange;
     splitControlsExpanded = mapSplit.controlsExpanded;
     onSplitControlsExpandedChange = mapSplit.onControlsExpandedChange;
   }
@@ -454,7 +456,7 @@ export default function MapViewModeWrapper({
           gutterControls={gutterControls}
           controlOffsetRatio={splitControlOffsetRatio}
           onControlOffsetRatioChange={onSplitControlOffsetChange}
-          controlOffsetDraggable={false}
+          controlOffsetDraggable={Boolean(onSplitControlOffsetChange)}
           controlsExpanded={splitControlsExpanded}
           onControlsExpandedChange={onSplitControlsExpandedChange}
           onSizeTick={onSplitSizeTick}

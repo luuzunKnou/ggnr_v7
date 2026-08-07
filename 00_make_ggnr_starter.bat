@@ -149,7 +149,17 @@ if "!SKIP_WRITE!"=="0" (
   echo set "GGNR_ENV=%ENV_NAME%"
   echo.
   echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
+  echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)
   echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
+  echo set "GGNR_START_EC=%%ERRORLEVEL%%"
+  echo if "%%GGNR_START_EC%%"=="0" exit /b 0
+  echo echo.
+  echo echo [오류] 기동 실패 ^(exit=%%GGNR_START_EC%%^). 위 로그를 확인하세요.
+  echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
+  echo   echo 아무 키나 누르면 창이 닫힙니다.
+  echo   pause ^>nul
+  echo ^)
+  echo exit /b %%GGNR_START_EC%%
   )
 
   if not exist "%OUT%" (

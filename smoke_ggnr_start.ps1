@@ -199,13 +199,24 @@ try {
 
   Start-SmokeCleanupWatchdog
 
-  $p = Start-Process -FilePath 'cmd.exe' `
-    -ArgumentList @('/c', 'call', "`"$StartBat`"") `
-    -WorkingDirectory $Root `
-    -RedirectStandardOutput $logOut `
-    -RedirectStandardError $logErr `
-    -PassThru `
-    -WindowStyle Hidden
+  # ggnr_start.bat 실패 시 pause 방지 (스모크가 키 입력 대기에 걸리지 않도록)
+  $prevNoPause = $env:GGNR_START_NO_PAUSE
+  $env:GGNR_START_NO_PAUSE = '1'
+  try {
+    $p = Start-Process -FilePath 'cmd.exe' `
+      -ArgumentList @('/c', 'call', "`"$StartBat`"") `
+      -WorkingDirectory $Root `
+      -RedirectStandardOutput $logOut `
+      -RedirectStandardError $logErr `
+      -PassThru `
+      -WindowStyle Hidden
+  } finally {
+    if ($null -eq $prevNoPause) {
+      Remove-Item Env:\GGNR_START_NO_PAUSE -ErrorAction SilentlyContinue
+    } else {
+      $env:GGNR_START_NO_PAUSE = $prevNoPause
+    }
+  }
   $script:smokeProc = $p
 
   Write-Smoke "테스트 프로세스 PID=$($p.Id)"

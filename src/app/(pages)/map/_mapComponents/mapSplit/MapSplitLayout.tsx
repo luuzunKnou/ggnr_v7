@@ -756,7 +756,8 @@ export function MapSplitLayout({
   const primaryFlex = splitActive ? primaryRatio : 1;
   const secondaryFlex = splitActive ? 1 - primaryRatio : 0;
   const useLeftInset = splitActive && !isH && mapPaddingLeft > 0;
-  const paneAnimOn = animReady && !isRatioDragging;
+  /** 분할 OFF 시 transition 끔 — 상하 분할 종료 때 하단 칸이 커지며 흰 화면 되는 현상 방지 */
+  const paneAnimOn = animReady && !isRatioDragging && splitActive;
   const paneTransitionMs = paneAnimOn ? `${MAP_SPLIT_ANIM_MS}ms` : '0ms';
   // flex 단축 전환 — flexGrow만 쓰면 분할 OFF 시 주 칸이 0폭으로 무너지는 환경이 있음
   const paneTransitionClass = paneAnimOn ? 'transition-[flex] ease-out' : undefined;
@@ -777,7 +778,8 @@ export function MapSplitLayout({
       <div
         className={cn(
           'relative flex min-h-0 min-w-0 flex-1 overflow-hidden',
-          isH || !splitActive ? 'flex-row' : 'flex-col'
+          /* splitActive 여부와 무관하게 방향 유지 — OFF 순간 flex-row 로 바뀌면 상단(주) 지도가 줄어듦 */
+          isH ? 'flex-row' : 'flex-col'
         )}
       >
         <div
