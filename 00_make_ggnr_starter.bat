@@ -7,6 +7,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - 실행 위치 root = 이 bat이 있는 폴더
 :: - node PATH = where node 결과의 디렉터리
 :: - root에 node_modules 없으면 고지 후 npm install (Y/N)
+:: - ggnr_start.bat: .next 없으면 npm run build 후 start
 :: - 프로젝트명·환경 = 실행 시 입력
 :: - 생성 후 Y/N: 기동 검사 → nssm_install_ggnr.bat → open_ggnr_logs.bat
 :: =============================================================================
@@ -147,6 +148,22 @@ if "!SKIP_WRITE!"=="0" (
   echo :: [프로젝트 설정]
   echo set "GGNR_PROJECT=%PROJECT_NAME%"
   echo set "GGNR_ENV=%ENV_NAME%"
+  echo.
+  echo :: [빌드] .next 없으면 next build 선행
+  echo if not exist ".next\" ^(
+  echo   echo [진행] .next 없음 — npm run build 실행...
+  echo   call npm run build
+  echo   set "GGNR_BUILD_EC=%%ERRORLEVEL%%"
+  echo   if not "%%GGNR_BUILD_EC%%"=="0" ^(
+  echo     echo [오류] npm run build 실패 ^(exit=%%GGNR_BUILD_EC%%^)
+  echo     if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
+  echo       echo 아무 키나 누르면 창이 닫힙니다.
+  echo       pause ^>nul
+  echo     ^)
+  echo     exit /b %%GGNR_BUILD_EC%%
+  echo   ^)
+  echo   echo [완료] npm run build 완료.
+  echo ^)
   echo.
   echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
   echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)

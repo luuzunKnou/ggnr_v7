@@ -1,4 +1,4 @@
-# ggnr_start.bat 기동 스모크: 기동 확인 후 프로세스 트리·GeoServer 종료
+﻿# ggnr_start.bat 기동 스모크: 기동 확인 후 프로세스 트리·GeoServer 종료
 # 사용: powershell -NoProfile -File smoke_ggnr_start.ps1 -StartBat "..." -Root "..."
 #
 # GeoServer: npm run start → ensureGeoServer → start-geoserver.bat (detached).
