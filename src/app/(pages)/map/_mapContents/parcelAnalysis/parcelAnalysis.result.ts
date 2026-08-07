@@ -650,9 +650,6 @@ async function fetchBuildingChunk(
     : data?.portalQuotaExceeded
       ? '공공데이터포털 호출이 제한되어 전부 가져오지 못했습니다. 잠시 후 다시 조회해 주세요'
       : undefined;
-  if (notice && typeof console !== 'undefined') {
-    console.warn('[필지분석·건축물대장]', notice);
-  }
   return {
     rows: data?.ok && data.rows ? data.rows : [],
     notice,
@@ -812,7 +809,8 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
 
     allLandRows = [...allLandRows, ...pageRows];
     offset += pageRows.length;
-    patchProgress(offset < totalCount);
+    // 청크 보강·건축물 조회가 끝날 때까지 로드 중 유지 (마지막 청크에서 조기 false 방지)
+    patchProgress(true);
 
     const chunkTasks: Promise<void>[] = [];
 
@@ -824,13 +822,13 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
             const enriched = await enrichRows(pageRows);
             if (!isCancelled()) {
               allLandRows = mergeEnrichedRows(allLandRows, enriched);
-              patchProgress(offset < totalCount);
+              patchProgress(true);
             }
           } catch {
             enrichFailChunks += 1;
-            patchProgress(offset < totalCount);
+            patchProgress(true);
           } finally {
-            if (!isCancelled()) onEnriching(offset < totalCount);
+            if (!isCancelled()) onEnriching(true);
           }
         })()
       );
@@ -845,10 +843,10 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
             if (!isCancelled() && chunkBld.rows.length) {
               allBuildingRows = [...allBuildingRows, ...chunkBld.rows];
             }
-            if (!isCancelled()) patchProgress(offset < totalCount);
+            if (!isCancelled()) patchProgress(true);
           } catch {
             buildingFailChunks += 1;
-            patchProgress(offset < totalCount);
+            patchProgress(true);
           }
         })()
       );
@@ -870,17 +868,18 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
                 zonesByPnu
               );
               landUseStats = landUseBucketToStats(landUseBuckets, totalAreaSqm);
-              patchProgress(offset < totalCount);
+              patchProgress(true);
             }
           } catch {
             landUseFailChunks += 1;
-            patchProgress(offset < totalCount);
+            patchProgress(true);
           }
         })()
       );
     }
 
     if (chunkTasks.length) await Promise.all(chunkTasks);
+    if (!isCancelled()) patchProgress(offset < totalCount);
 
     if (pageRows.length < PARCEL_ANALYSIS_LAND_CHUNK) break;
   }

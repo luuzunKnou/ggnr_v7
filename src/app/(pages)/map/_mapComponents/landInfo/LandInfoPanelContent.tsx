@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnComponents/ui/dialog';
 import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
@@ -272,6 +272,11 @@ export function LandInfoPanelContent({
 
   const [resolvedPnu, setResolvedPnu] = useState<string | null>(pnuFromContext ?? null);
   const [resolvedParcelJibun, setResolvedParcelJibun] = useState<string | null>(null);
+  /** 건축물대장 재조회 트리거에서 제외 — 표시용 힌트만 (PNU로 조회) */
+  const resolvedParcelJibunRef = useRef<string | null>(null);
+  const jibunPropRef = useRef(jibun);
+  resolvedParcelJibunRef.current = resolvedParcelJibun;
+  jibunPropRef.current = jibun;
   /** 우클릭 prop 도로명이 비었을 때 패널이 키로 재조회한 값 */
   const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
@@ -293,6 +298,7 @@ export function LandInfoPanelContent({
 
   const [permitRows, setPermitRows] = useState<BuildingLedgerRow[]>([]);
   const [permitSource, setPermitSource] = useState<BuildingPermitSource>(null);
+  const [permitNotice, setPermitNotice] = useState<string | null>(null);
   const [permitFetching, setPermitFetching] = useState(false);
   const effectivePnu = pnuFromContext ?? resolvedPnu;
 
@@ -346,6 +352,7 @@ export function LandInfoPanelContent({
     setBuildingLedgerNotice(null);
     setPermitRows([]);
     setPermitSource(null);
+    setPermitNotice(null);
     setResolvedRoad(null);
   }, [effectivePnu]);
 
@@ -386,9 +393,13 @@ export function LandInfoPanelContent({
     if (activeTab !== 'buildingLedger') return;
     if (!effectivePnu) return;
     let alive = true;
+    const jibunHint =
+      String(resolvedParcelJibunRef.current ?? '').trim() ||
+      String(jibunPropRef.current ?? '').trim() ||
+      undefined;
     fetchBuildingLedgerRows({
       pnu: effectivePnu,
-      jibun: resolvedParcelJibun ?? undefined,
+      jibun: jibunHint,
     })
       .then((res) => {
         if (!alive) return;
@@ -407,7 +418,7 @@ export function LandInfoPanelContent({
       alive = false;
       setBuildingLedgerFetching(false);
     };
-  }, [activeTab, effectivePnu, resolvedParcelJibun]);
+  }, [activeTab, effectivePnu]);
 
   useLayoutEffect(() => {
     if (activeTab !== 'buildingPermit') {
@@ -427,11 +438,13 @@ export function LandInfoPanelContent({
         if (!alive) return;
         setPermitRows(res.rows);
         setPermitSource(res.source);
+        setPermitNotice(res.notice ?? null);
       })
       .catch(() => {
         if (!alive) return;
         setPermitRows([]);
         setPermitSource(null);
+        setPermitNotice(null);
       })
       .finally(() => {
         if (alive) setPermitFetching(false);
@@ -650,11 +663,28 @@ export function LandInfoPanelContent({
         </div>
       );
     }
-    if (permitFetching) return <p className="text-xs text-slate-500">건축인허가 조회 중...</p>;
-    if (!permitRows.length) return <p className="text-xs text-slate-500">건축/주택 인허가 데이터가 없습니다.</p>;
+    if (permitFetching) return <p className="text-xs text-muted-foreground">건축인허가 조회 중...</p>;
+    if (!permitRows.length) {
+      return (
+        <div className="space-y-2">
+          {permitNotice ? (
+            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+              {permitNotice}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">건축/주택 인허가 데이터가 없습니다.</p>
+          )}
+        </div>
+      );
+    }
     const permitLinkage = buildingPermitLinkageSource(permitSource);
     return (
       <div className="space-y-2">
+        {permitNotice ? (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            {permitNotice}
+          </p>
+        ) : null}
         <BuildingPermitLinkageLegend source={permitSource} />
         <DataTable
           headers={['용도명', '허가일', '착공일', '사용승인(검사)일', '연면적(㎡)', '세대수']}
@@ -685,6 +715,7 @@ export function LandInfoPanelContent({
     parcelData.source,
     parcelError,
     permitFetching,
+    permitNotice,
     permitRows,
     permitSource,
   ]);
