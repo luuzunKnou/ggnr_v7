@@ -5,7 +5,7 @@
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { applyEnrichmentToLandRows, type AnalyzeLandRow } from '@/lib/parcelLandNormalize';
-import { fetchBuildingLedgersByPnus, type BuildingLedgerDisplayRow } from '@/lib/buildingLedgerFetch';
+import { fetchBuildingLedgersByPnus, type BuildingLedgerDisplayRow, type BuildingLedgerFetchDebug } from '@/lib/buildingLedgerFetch';
 import {
   buildParcelAnalysisFacilityCatalogFromDbTables,
   resolveParcelAnalysisLayers,
@@ -379,6 +379,7 @@ export type BuildingLedgerResult = {
   error?: string;
   notice?: string;
   portalQuotaExceeded?: boolean;
+  debug?: BuildingLedgerFetchDebug;
 };
 
 /** 시설목록 동적 카탈로그 (4-E) — 데이터조회와 동일하게 DB layer 테이블 기준 그룹 */
