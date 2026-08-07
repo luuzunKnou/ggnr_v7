@@ -1605,7 +1605,10 @@ export default function OpenLayersMap({
       return;
     }
 
-    setOpenSubPanel(null);
+    // 배경지도·영상조회는 지적도 등 목록과 동시 표시 — 토글 시 목록을 닫지 않음
+    if (id !== 'background-map' && id !== 'aerial-view') {
+      setOpenSubPanel(null);
+    }
 
     if (MULTI_SELECT_IDS.includes(id)) {
       setActiveControls((prev) =>

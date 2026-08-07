@@ -108,7 +108,7 @@ export function createVWorldLayer(type: VWorldLayerType): WebGLTileLayer {
   const layerMap: Record<VWorldLayerType, { path: string; ext: string }> = {
     base: { path: 'Base', ext: 'png' }, // 일반지도
     satellite: { path: 'Satellite', ext: 'jpeg' }, // 항공영상
-    white: { path: 'gray', ext: 'png' }, // 백색지도 (gray 사용)
+    white: { path: 'white', ext: 'png' }, // 백색지도
     night: { path: 'midnight', ext: 'png' }, // 야간지도
   };
 
@@ -197,14 +197,15 @@ export function createGoogleLayer(type: GoogleLayerType): WebGLTileLayer {
   const layerMap: Record<GoogleLayerType, string> = {
     base: 'm',
     satellite: 's',
-    terrain: 't',
+    /** 지형만(t)은 너무 어두움 → 지형+라벨(p) */
+    terrain: 'p',
   };
 
   const layer = layerMap[type];
 
   return new WebGLTileLayer({
     source: new ImageTile({
-      url: `http://mt0.google.com/vt/lyrs=${layer}&hl=en&x={x}&y={y}&z={z}`,
+      url: `https://mt0.google.com/vt/lyrs=${layer}&hl=en&x={x}&y={y}&z={z}`,
       attributions: '© Google',
       tileSize: 256,
       crossOrigin: 'anonymous',
@@ -368,7 +369,7 @@ export function getCesiumRasterBasemapSpecForId(id: string): CesiumRasterBasemap
     const layerMap: Record<VWorldLayerType, { path: string; ext: string }> = {
       base: { path: 'Base', ext: 'png' },
       satellite: { path: 'Satellite', ext: 'jpeg' },
-      white: { path: 'gray', ext: 'png' },
+      white: { path: 'white', ext: 'png' },
       night: { path: 'midnight', ext: 'png' },
     };
     const info = layerMap[layerType as VWorldLayerType];
@@ -386,7 +387,7 @@ export function getCesiumRasterBasemapSpecForId(id: string): CesiumRasterBasemap
     const layerMap: Record<GoogleLayerType, string> = {
       base: 'm',
       satellite: 's',
-      terrain: 't',
+      terrain: 'p',
     };
     const lyrs = layerMap[layerType as GoogleLayerType];
     return {

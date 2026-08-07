@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38ee</id>
+  <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7ffa</id>
   <name>tl_sgco_rnadr_mst</name>
   <nativeName>tl_sgco_rnadr_mst</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>129963.0</minx>
-    <maxx>425154.0625</maxx>
-    <miny>-28489.259765625</miny>
-    <maxy>524931.625</maxy>
+    <minx>385695.32784854</minx>
+    <maxx>421262.11753023</maxx>
+    <miny>352195.13542031</miny>
+    <maxy>407819.73327481</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>126.20019716206262</minx>
-    <maxx>129.57011702669467</maxx>
-    <miny>33.21334061101717</miny>
-    <maxy>38.2246042410403</maxy>
+    <minx>129.07658262252235</minx>
+    <maxx>129.49023206252406</maxx>
+    <miny>36.64253116321884</miny>
+    <maxy>37.15102567517955</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

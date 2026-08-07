@@ -204,6 +204,37 @@
   overflow: auto;
 }
 
+/* 인쇄 레이어 패널 — 컨트롤 목록은 레이어 패널 왼쪽 10px */
+.map-print-layer-dock {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.map-print-control-list {
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 인쇄 지도 영역 높이 기준 — 메인용 100vh max-h 덮어씀 */
+.map-print-layer-dock .map-print-layer-selector {
+  max-height: 100% !important;
+  opacity: 0.95;
+}
+
+.map-print-layer-dock .map-print-service-layer-selector {
+  max-height: min(240px, 100%) !important;
+}
+
 .map-print-coord-panel {
   width: 280px;
   padding: 12px;
