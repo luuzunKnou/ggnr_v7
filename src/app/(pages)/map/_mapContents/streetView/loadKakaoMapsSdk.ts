@@ -55,7 +55,69 @@ declare global {
   }
 }
 
+export type KakaoSdkFailureDetail = {
+  kakaoOfficialMsg?: string;
+  kakaoCode?: number;
+  httpStatus?: number;
+  /** script onerror — 네트워크 401(도메인 미등록) 가능성 높음 */
+  scriptLoadFailed?: boolean;
+};
+
+/** loadKakaoMapsSdk reject — message 는 앱 내부 구분용 */
+export class KakaoMapsSdkLoadError extends Error {
+  readonly kakaoOfficialMsg?: string;
+  readonly kakaoCode?: number;
+  readonly httpStatus?: number;
+  readonly scriptLoadFailed?: boolean;
+
+  constructor(message: string, detail?: KakaoSdkFailureDetail) {
+    super(message);
+    this.name = 'KakaoMapsSdkLoadError';
+    this.kakaoOfficialMsg = detail?.kakaoOfficialMsg;
+    this.kakaoCode = detail?.kakaoCode;
+    this.httpStatus = detail?.httpStatus;
+    this.scriptLoadFailed = detail?.scriptLoadFailed;
+  }
+}
+
+export function isKakaoDomainMismatch(detail?: {
+  kakaoOfficialMsg?: string;
+  kakaoCode?: number;
+  httpStatus?: number;
+  scriptLoadFailed?: boolean;
+}): boolean {
+  if (detail?.scriptLoadFailed) return true;
+  const msg = detail?.kakaoOfficialMsg ?? '';
+  return (
+    detail?.kakaoCode === -401 ||
+    detail?.httpStatus === 401 ||
+    /domain mismatched/i.test(msg) ||
+    /registered web domains/i.test(msg) ||
+    /잘못된 접근/i.test(msg)
+  );
+}
+
+/** script onerror 시 CORS 로 본문을 읽을 수 없음 — 카카오 공식 응답 형식으로 caller 치환 */
+function buildScriptUnauthorizedDetail(): KakaoSdkFailureDetail {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return {
+    scriptLoadFailed: true,
+    httpStatus: 401,
+    kakaoCode: -401,
+    kakaoOfficialMsg: `domain mismatched! caller=${origin}. check out registered web domains.`,
+  };
+}
+
 let loadPromise: Promise<KakaoMapsNs> | null = null;
+
+function rejectSdkLoad(
+  message: string,
+  reject: (reason: Error) => void,
+  detail?: KakaoSdkFailureDetail
+) {
+  loadPromise = null;
+  reject(new KakaoMapsSdkLoadError(message, detail));
+}
 
 export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
   if (typeof window === 'undefined') {
@@ -70,18 +132,18 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
   }
   if (loadPromise) return loadPromise;
 
+  const scriptUrl = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`;
+
   loadPromise = new Promise((resolve, reject) => {
     const finish = () => {
       const kakao = window.kakao;
       if (!kakao?.maps?.load) {
-        reject(new Error('카카오 지도 SDK 로드 실패'));
-        loadPromise = null;
+        rejectSdkLoad('카카오 지도 SDK 로드 실패', reject);
         return;
       }
       kakao.maps.load(() => {
         if (!window.kakao?.maps?.Roadview) {
-          reject(new Error('카카오 로드뷰 모듈 없음'));
-          loadPromise = null;
+          rejectSdkLoad('카카오 로드뷰 모듈 없음', reject);
           return;
         }
         resolve(window.kakao);
@@ -96,8 +158,7 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
       }
       existing.addEventListener('load', finish);
       existing.addEventListener('error', () => {
-        loadPromise = null;
-        reject(new Error('카카오 지도 스크립트 오류'));
+        rejectSdkLoad('카카오 지도 스크립트 오류', reject, buildScriptUnauthorizedDetail());
       });
       return;
     }
@@ -105,11 +166,10 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
     const script = document.createElement('script');
     script.dataset.kakaoMapsSdk = '1';
     script.async = true;
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`;
+    script.src = scriptUrl;
     script.onload = finish;
     script.onerror = () => {
-      loadPromise = null;
-      reject(new Error('카카오 지도 스크립트 오류'));
+      rejectSdkLoad('카카오 지도 스크립트 오류', reject, buildScriptUnauthorizedDetail());
     };
     document.head.appendChild(script);
   });
