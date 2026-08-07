@@ -129,7 +129,7 @@ function parseJsonRows(text: string): BuildingLedgerRow[] {
   try {
     type Envelope = {
       header?: { resultCode?: string };
-      body?: { items?: { item?: Record<string, unknown> | Record<string, unknown>[] } | string };
+      body?: { items?: unknown };
     };
     const json = JSON.parse(trimmed) as Envelope & {
       response?: Envelope;
@@ -141,15 +141,23 @@ function parseJsonRows(text: string): BuildingLedgerRow[] {
     if (code && code !== '00' && code !== '03') return [];
     const rawItems = root.body?.items;
     if (rawItems == null || rawItems === '') return [];
-    const item =
-      typeof rawItems === 'object' && !Array.isArray(rawItems)
-        ? rawItems.item
-        : undefined;
-    if (!item) return [];
-    const list = Array.isArray(item) ? item : [item];
+
+    // items 가 배열이거나 { item: 단건|배열 } 모두 허용
+    let list: unknown[] = [];
+    if (Array.isArray(rawItems)) {
+      list = rawItems;
+    } else if (typeof rawItems === 'object') {
+      const item = (rawItems as { item?: unknown }).item;
+      if (item == null) return [];
+      list = Array.isArray(item) ? item : [item];
+    } else {
+      return [];
+    }
+
     return list.map((row) => {
       const out: BuildingLedgerRow = {};
-      for (const [k, v] of Object.entries(row)) {
+      if (!row || typeof row !== 'object') return out;
+      for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
         if (v == null) continue;
         const s = String(v).trim();
         if (s) out[k] = s;
