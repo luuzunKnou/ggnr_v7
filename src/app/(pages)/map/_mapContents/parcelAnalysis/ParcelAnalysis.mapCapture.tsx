@@ -387,6 +387,7 @@ function waitForBasemapTiles(
     onReady();
     return () => {};
   }
+  const tileSource = source;
 
   let pending = 0;
   let done = false;
@@ -398,9 +399,9 @@ function waitForBasemapTiles(
     done = true;
     if (idleTimer) window.clearTimeout(idleTimer);
     window.clearTimeout(maxTimer);
-    source.un('tileloadstart', onStart);
-    source.un('tileloadend', onEnd);
-    source.un('tileloaderror', onEnd);
+    tileSource.un('tileloadstart', onStart);
+    tileSource.un('tileloadend', onEnd);
+    tileSource.un('tileloaderror', onEnd);
     onReady();
   }
 
@@ -416,9 +417,9 @@ function waitForBasemapTiles(
     }, BASEMAP_TILE_IDLE_MS);
   }
 
-  source.on('tileloadstart', onStart);
-  source.on('tileloadend', onEnd);
-  source.on('tileloaderror', onEnd);
+  tileSource.on('tileloadstart', onStart);
+  tileSource.on('tileloadend', onEnd);
+  tileSource.on('tileloaderror', onEnd);
 
   map.renderSync();
   idleTimer = window.setTimeout(() => {

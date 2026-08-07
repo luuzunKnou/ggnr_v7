@@ -1367,11 +1367,14 @@ export function ShpWizardModal({
         );
       } else if (d?.error) {
         setLayersError(String(d.error));
-      } else if (!allReady) {
-        // 배치 성공으로 보이지만 상태 재조회 후 아직 누락이면 안내
-        setLayersError(
-          `생성 후 상태 확인: 아직 ${needAfter.length}개 파일에 Table·Layer·Style·Define 누락이 있습니다.`
-        );
+      } else {
+        const needAfter = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
+        if (needAfter.length > 0) {
+          // 배치 성공으로 보이지만 상태 재조회 후 아직 누락이면 안내
+          setLayersError(
+            `생성 후 상태 확인: 아직 ${needAfter.length}개 파일에 Table·Layer·Style·Define 누락이 있습니다.`
+          );
+        }
       }
     } catch (e: unknown) {
       // #region agent log

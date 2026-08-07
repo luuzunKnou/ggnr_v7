@@ -57,29 +57,31 @@ type Props = {
 
 function toParcelItems(arr: unknown): LayerRowParcelItem[] {
   if (!Array.isArray(arr)) return [];
-  return arr
-    .map((x: Record<string, unknown>) => {
-      const address = String(x?.address ?? '').trim();
-      if (!address) return null;
-      const extRaw = x?.extent3857 as unknown;
-      const extent3857: [number, number, number, number] | null =
-        Array.isArray(extRaw) &&
-        extRaw.length === 4 &&
-        extRaw.every((v) => Number.isFinite(Number(v)))
-          ? (extRaw.map((v) => Number(v)) as [number, number, number, number])
-          : null;
-      const wmsRaw = x?.wmsRowKey as { keyField?: string; keyValue?: string } | undefined;
-      const keyField = String(wmsRaw?.keyField ?? '').trim();
-      const keyValue = String(wmsRaw?.keyValue ?? '').trim();
-      const wmsRowKey = keyField && keyValue ? { keyField, keyValue } : undefined;
-      return {
-        address,
-        pnu: x?.pnu != null ? String(x.pnu) : undefined,
-        extent3857,
-        ...(wmsRowKey ? { wmsRowKey } : {}),
-      };
-    })
-    .filter((x): x is LayerRowParcelItem => x != null);
+  const out: LayerRowParcelItem[] = [];
+  for (const raw of arr) {
+    const x = raw as Record<string, unknown>;
+    const address = String(x?.address ?? '').trim();
+    if (!address) continue;
+    const extRaw = x?.extent3857 as unknown;
+    const extent3857: [number, number, number, number] | null =
+      Array.isArray(extRaw) &&
+      extRaw.length === 4 &&
+      extRaw.every((v) => Number.isFinite(Number(v)))
+        ? (extRaw.map((v) => Number(v)) as [number, number, number, number])
+        : null;
+    const wmsRaw = x?.wmsRowKey as { keyField?: string; keyValue?: string } | undefined;
+    const keyField = String(wmsRaw?.keyField ?? '').trim();
+    const keyValue = String(wmsRaw?.keyValue ?? '').trim();
+    const wmsRowKey = keyField && keyValue ? { keyField, keyValue } : undefined;
+    const item: LayerRowParcelItem = {
+      address,
+      extent3857,
+      ...(x?.pnu != null ? { pnu: String(x.pnu) } : {}),
+      ...(wmsRowKey ? { wmsRowKey } : {}),
+    };
+    out.push(item);
+  }
+  return out;
 }
 
 export function OccupationLedgerDetailPanel({

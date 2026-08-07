@@ -38,14 +38,13 @@ export function useMapVisualCenterPixel(
     };
     update();
     // postrender는 매 프레임 setState를 유발해 Maximum update depth를 만들 수 있음
+    // size는 Map 이벤트만 존재 (View에는 change:size 없음)
     map.on("change:size", update);
-    view.on("change:size", update);
     view.on("change:resolution", update);
     view.on("change:center", update);
     window.addEventListener("resize", update);
     return () => {
       map.un("change:size", update);
-      view.un("change:size", update);
       view.un("change:resolution", update);
       view.un("change:center", update);
       window.removeEventListener("resize", update);

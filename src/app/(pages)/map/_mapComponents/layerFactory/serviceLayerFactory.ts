@@ -284,7 +284,11 @@ export function useServiceLayerSync(
     const serviceLayer = map.getLayers().getArray().find((l) => l.get('serviceLayer')) as
       | {
           getVisible(): boolean;
-          getSource(): { getParams(): Record<string, string | undefined>; changed(): void } | null;
+          getSource(): {
+            getParams(): Record<string, string | undefined>;
+            updateParams?(p: Record<string, string | undefined>): void;
+            changed(): void;
+          } | null;
           setVisible(v: boolean): void;
         }
       | undefined;
@@ -347,7 +351,7 @@ export function useServiceLayerSync(
         LAYERS: layersParam,
         STYLES: stylesParam,
         CQL_FILTER: undefined,
-        TRANSPARENT: true,
+        TRANSPARENT: 'true',
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       });
       delete params.CQL_FILTER;
@@ -356,7 +360,7 @@ export function useServiceLayerSync(
         LAYERS: layersParam,
         STYLES: stylesParam,
         CQL_FILTER: cqlParam,
-        TRANSPARENT: true,
+        TRANSPARENT: 'true',
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       });
     }
