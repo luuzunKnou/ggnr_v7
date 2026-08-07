@@ -411,14 +411,17 @@ function ResultTable({
   );
 
   if (!scrollable) {
+    // 가로 스크롤 시 푸터가 표와 함께 움직이도록 같은 overflow 안에 둠
     return (
-      <div className="w-full max-w-full overflow-hidden">
-        <div className="overflow-x-auto">{table}</div>
-        {footer ? (
-          <div className="shrink-0 border-t border-border bg-primary/5 px-3 py-2.5 text-center">
-            {footer}
-          </div>
-        ) : null}
+      <div className="w-full max-w-full overflow-x-auto">
+        <div className={cn(fullWidth ? 'w-max min-w-full' : 'w-full')}>
+          {table}
+          {footer ? (
+            <div className="shrink-0 border-t border-border bg-primary/5 px-3 py-2.5 text-center">
+              {footer}
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }

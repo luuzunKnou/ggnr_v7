@@ -828,7 +828,8 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
             enrichFailChunks += 1;
             patchProgress(true);
           } finally {
-            if (!isCancelled()) onEnriching(true);
+            // 마지막 청크면 스피너 해제 — true 고정 시 완료 후에도 남음
+            if (!isCancelled()) onEnriching(offset < totalCount);
           }
         })()
       );
