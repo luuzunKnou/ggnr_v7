@@ -21,10 +21,13 @@ export function useMapSplitSecondary({ active }: MapSplitSecondaryProps) {
   const setKind = mapContext?.setMapSplitSecondaryKind;
   const [controlsExpanded, setControlsExpanded] = useState(true);
 
-  // 거리뷰↔지도분할 전환·재진입 시 거터는 항상 펼침
+  // 지도분할 ON: 거터 펼침 + 이동·배경 싱크 기본 ON
   useEffect(() => {
-    if (active) setControlsExpanded(true);
-  }, [active]);
+    if (!active) return;
+    setControlsExpanded(true);
+    setMapSync?.(true);
+    setBasemapSync?.(true);
+  }, [active, setMapSync, setBasemapSync]);
 
   const onExit = useCallback(() => {
     setKind?.(null);

@@ -109,6 +109,12 @@ export function MapSplitLayout({
   const [ratioLocked, setRatioLocked] = useState(false);
   /** 분할선 드래그 중 — flexGrow transition 끄고 지도 updateSize 강제 */
   const [isRatioDragging, setIsRatioDragging] = useState(false);
+
+  // 분할 ON 시 비율 잠금 해제(거터 «분할선 이동» 활성 기본)
+  useEffect(() => {
+    if (splitActive) setRatioLocked(false);
+  }, [splitActive]);
+
   const dragRef = useRef<{ startPos: number; startRatio: number } | null>(null);
   const draggingRef = useRef(false);
   const pendingRatioRef = useRef<number | null>(null);

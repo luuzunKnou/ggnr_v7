@@ -13,6 +13,11 @@ param(
   [int]$GeoPort = 8080
 )
 
+# Node/tsx·chcp 65001 출력(UTF-8)을 CP949로 읽지 않도록 콘솔·로그 인코딩 고정
+try { chcp 65001 | Out-Null } catch { }
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 $ErrorActionPreference = 'Continue'
 $logOut = Join-Path $env:TEMP 'ggnr_start_smoke.out.log'
 $logErr = Join-Path $env:TEMP 'ggnr_start_smoke.err.log'
@@ -37,7 +42,7 @@ function Get-SmokeLogText {
   $parts = @()
   foreach ($f in @($logOut, $logErr)) {
     if (Test-Path -LiteralPath $f) {
-      $t = Get-Content -LiteralPath $f -Raw -ErrorAction SilentlyContinue
+      $t = Get-Content -LiteralPath $f -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
       if ($t) { $parts += $t }
     }
   }
@@ -48,7 +53,7 @@ function Get-SmokeLogTail([int]$LineCount = 2) {
   $tail = @()
   foreach ($f in @($logOut, $logErr)) {
     if (Test-Path -LiteralPath $f) {
-      $chunk = @(Get-Content -LiteralPath $f -Tail $LineCount -ErrorAction SilentlyContinue)
+      $chunk = @(Get-Content -LiteralPath $f -Tail $LineCount -Encoding UTF8 -ErrorAction SilentlyContinue)
       if ($chunk.Count -gt 0) { $tail += $chunk }
     }
   }
@@ -275,7 +280,7 @@ if (-not $ok) {
   foreach ($f in @($logOut, $logErr)) {
     if (Test-Path -LiteralPath $f) {
       Write-Host "----- $f -----"
-      Get-Content -LiteralPath $f -Tail 40
+      Get-Content -LiteralPath $f -Tail 40 -Encoding UTF8
     }
   }
   if (Test-Path -LiteralPath $cleanupPs1) {
