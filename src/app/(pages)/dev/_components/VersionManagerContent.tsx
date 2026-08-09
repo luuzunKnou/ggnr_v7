@@ -47,6 +47,8 @@ import {
   versionOptionBase,
   versionOptionLabel,
 } from '@/lib/gnmsVersionLabel';
+import { SchemaSyncPreviewModal } from './SchemaSyncPreviewModal';
+import type { SchemaSyncPreviewResult } from '@/lib/schemaSyncPreviewTypes';
 
 type SideProgress = {
   message: string;
@@ -78,6 +80,10 @@ export function VersionManagerContent() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [appliedVersion, setAppliedVersion] = useState<string | null>(null);
+  const [schemaModalOpen, setSchemaModalOpen] = useState(false);
+  const [schemaPreview, setSchemaPreview] = useState<SchemaSyncPreviewResult | null>(null);
+  const [schemaPreviewLoading, setSchemaPreviewLoading] = useState(false);
+  const schemaConfirmRef = useRef<(() => void) | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
@@ -178,6 +184,50 @@ export function VersionManagerContent() {
     ].slice(-60);
     logRef.current = next;
     setProgress((p) => ({ ...p, logs: next }));
+  };
+
+  /** 병합 반영 후 스키마 집계 모달 → 확인 시 재기동 대기 진행 */
+  const waitSchemaPreviewAck = async (): Promise<void> => {
+    setSchemaPreviewLoading(true);
+    setSchemaPreview(null);
+    setSchemaModalOpen(true);
+    pushLog('스키마 변경 미리보기 조회 중…');
+    try {
+      const res = await fetch('/api/dev/schema-sync/preview', { cache: 'no-store' });
+      const json = (await res.json()) as SchemaSyncPreviewResult & { error?: string };
+      if (!res.ok && !json.counts) {
+        setSchemaPreview({
+          ok: false,
+          error: json.error ?? `HTTP ${res.status}`,
+          counts: { create: 0, drop: 0, delete: 0, alter: 0 },
+          items: [],
+          warnings: [],
+          hasDataLoss: false,
+        });
+      } else {
+        setSchemaPreview(json);
+      }
+    } catch (e: unknown) {
+      setSchemaPreview({
+        ok: false,
+        error: e instanceof Error ? e.message : '미리보기 실패',
+        counts: { create: 0, drop: 0, delete: 0, alter: 0 },
+        items: [],
+        warnings: [],
+        hasDataLoss: false,
+      });
+    } finally {
+      setSchemaPreviewLoading(false);
+    }
+
+    await new Promise<void>((resolve) => {
+      schemaConfirmRef.current = () => {
+        schemaConfirmRef.current = null;
+        setSchemaModalOpen(false);
+        resolve();
+      };
+    });
+    pushLog('스키마 안내 확인 — 재기동 단계 진행');
   };
 
   const runUpdate = async () => {
@@ -370,18 +420,17 @@ export function VersionManagerContent() {
           doneOpts
         )
       );
-      const restartHint =
-        doneMode === 'exit'
-          ? '적용 완료. 서버 재기동 대기 중… (새로고침하지 마세요)'
-          : doneMode === 'launcher'
-            ? '적용 완료. Next 재기동 대기 중… (새로고침하지 마세요)'
-            : '최신 소스 적용 완료. 화면을 새로고침합니다…';
       setProgress({
-        message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료. 화면을 새로고침합니다…',
+        message: json.restart?.scheduled
+          ? '적용 완료. 스키마 변경 안내 확인 후 재기동합니다…'
+          : '최신 소스 적용 완료. 스키마 변경 안내…',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
+
+      await waitSchemaPreviewAck();
+
       if (json.restart?.scheduled) {
         pushLog(
           doneMode === 'exit'
@@ -704,6 +753,14 @@ export function VersionManagerContent() {
           <LiveLogsPanel logs={progress.logs} />
         </div>
       </div>
+      <SchemaSyncPreviewModal
+        open={schemaModalOpen}
+        preview={schemaPreview}
+        loading={schemaPreviewLoading}
+        onConfirm={() => {
+          schemaConfirmRef.current?.();
+        }}
+      />
     </div>
   );
 }
