@@ -4,7 +4,19 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { RefreshCw, ChevronDown, ChevronRight, Check, X, RotateCcw, Search, Loader2 } from 'lucide-react';
+import {
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronsRight,
+  Check,
+  X,
+  RotateCcw,
+  Search,
+  Loader2,
+} from 'lucide-react';
 import { SyncDetailModal } from './SyncDetailModal';
 import { registerShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 
@@ -160,27 +172,39 @@ export function ShpHistoryTab({
       </div>
 
       <section className="flex-1 min-h-[36rem] overflow-auto border rounded">
-        {loading ? (
-          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">로딩 중…</div>
-        ) : error ? (
-          <div className="flex items-center justify-center h-full text-xs text-red-500">{error}</div>
-        ) : rows.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">이력이 없습니다.</div>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10">
-              <tr className="text-left">
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-8" />
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-28 text-center whitespace-nowrap">업데이트 날짜</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-36 text-center whitespace-nowrap">작업자</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-24 text-center whitespace-nowrap">레이어 수</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">성공</th>
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">실패</th>
-                <th className="py-1 px-2 text-xs font-medium bg-muted">업데이트 내용</th>
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="text-left">
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-8" />
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-28 text-center whitespace-nowrap">업데이트 날짜</th>
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-36 text-center whitespace-nowrap">작업자</th>
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-24 text-center whitespace-nowrap">레이어 수</th>
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">성공</th>
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-20 text-center whitespace-nowrap">실패</th>
+              <th className="py-1 px-2 text-xs font-medium bg-muted">업데이트 내용</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  로딩 중…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
+            ) : error ? (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-red-500">
+                  {error}
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  이력이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
                 const isExpanded = expandedKey === row.lhKey;
                 const layerCount = (row.lhSuccessCount ?? 0) + (row.lhFailCount ?? 0);
                 return (
@@ -275,16 +299,60 @@ export function ShpHistoryTab({
                     )}
                   </Fragment>
                 );
-              })}
-            </tbody>
-          </table>
-        )}
+              })
+            )}
+          </tbody>
+        </table>
       </section>
 
-      <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
-        <span>{page} / {totalPages}</span>
-        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
+      <div className="shrink-0 flex items-center justify-center gap-1 text-xs">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage(1)}
+          title="처음"
+          aria-label="처음"
+        >
+          <ChevronsLeft className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage((p) => p - 1)}
+          title="이전"
+          aria-label="이전"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="px-2 tabular-nums">
+          {page} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage((p) => p + 1)}
+          title="다음"
+          aria-label="다음"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage(totalPages)}
+          title="끝"
+          aria-label="끝"
+        >
+          <ChevronsRight className="w-4 h-4" />
+        </Button>
       </div>
 
       {syncModal && (

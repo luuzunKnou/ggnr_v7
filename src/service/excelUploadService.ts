@@ -19,15 +19,18 @@ import {
   coerceExcelDateCellsInAoa,
   SHEET_TO_JSON_HEADER1_DISPLAY,
 } from '@/lib/excelSheetParse';
+import { isSpreadsheetFileName, readWorkbookFromBuffer, stripSpreadsheetExt } from '@/lib/excelWorkbookRead';
 import {
   insertExcelSyncLogGeomFromLayer,
   insertExcelSyncLogGeomFromLonLat,
   insertExcelSyncLogGeomFromWkt,
+  fillExcelSyncLogNewGeoms,
   fillPendingExcelSyncLogOldGeoms,
   fillPendingExcelSyncLogNewGeomsFromCoords,
   syncExcelSyncLogJsonGeomFromSideTable,
   excelLayerRowJsonbSql,
 } from '@/lib/syncLogGeom';
+import { broadcastExcelWizardLog } from '@/lib/excelWizardEvents';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
@@ -79,7 +82,7 @@ export async function parseExcelFile(params: { pathOrResult: string; titleRowLin
 
   try {
     const buf = await fs.readFile(absolutePath);
-    const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+    const { workbook: wb } = readWorkbookFromBuffer(buf, path.basename(absolutePath));
     const sheetNames = wb.SheetNames;
     const sheetCount = sheetNames.length;
     const hasSingleSheet = sheetCount === 1;
@@ -123,7 +126,7 @@ export type ExlStatusRow = {
 };
 
 /**
- * excel_data 내 .xlsx 파일 목록 및 테이블/레이어/define 상태.
+ * excel_data 내 .xlsx/.xls/.csv 파일 목록 및 테이블/레이어/define 상태.
  */
 export async function getExlStatusList(params?: { relativePath?: string }): Promise<{ success: boolean; rows?: ExlStatusRow[]; path?: string; error?: string }> {
   const baseExcel = path.join(GGNR_DATA_DIR, 'excel_data');
@@ -146,8 +149,7 @@ export async function getExlStatusList(params?: { relativePath?: string }): Prom
     const list = await fs.readdir(dir, { withFileTypes: true });
     for (const e of list) {
       if (!e.isFile()) continue;
-      const ext = path.extname(e.name).toLowerCase();
-      if (ext !== '.xlsx' && ext !== '.xls') continue;
+      if (!isSpreadsheetFileName(e.name)) continue;
       const fullPath = path.join(dir, e.name);
       const st = await fs.stat(fullPath).catch(() => null);
       entries.push({ name: e.name, mtime: st?.mtime ?? new Date(0) });
@@ -451,6 +453,27 @@ type ResolvedParcelGeom = {
   parcelAddr: string;
 };
 
+/** 엑셀 geom WKT 좌표 크기로 입력 SRID 추정 (TM≈5181, 경위도≈4326) */
+export function inferExcelGeomSrid(wkt: string): 4326 | 5181 {
+  const nums = wkt.match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g);
+  if (!nums?.length) return 5181;
+  for (const s of nums.slice(0, 12)) {
+    const n = Math.abs(Number(s));
+    if (!Number.isFinite(n)) continue;
+    if (n > 1000) return 5181;
+  }
+  return 4326;
+}
+
+/** 저장 테이블은 항상 5181. 입력이 4326이면 변환, 5181이면 그대로. 그 외 EPSG는 미지원(자동 시 TM으로 오인 가능). */
+export function resolveExcelGeomInputSrid(
+  wkt: string,
+  override?: 4326 | 5181 | 'auto' | null
+): 4326 | 5181 {
+  if (override === 4326 || override === 5181) return override;
+  return inferExcelGeomSrid(wkt);
+}
+
 /** Excel 디노멀라이징 시 각 필지 주소(필지이름) 저장용 고정 컬럼명 */
 const PARCEL_ADDRESS_COL = 'parcel_address';
 
@@ -590,6 +613,14 @@ export async function createTableFromExcel(params: {
   excelRowNumber?: number;
   /** 키값 힌트 — PNU 폴백 .log 식별용 */
   rowKeyHint?: string;
+  /**
+   * parcels.geom WKT 입력 좌표계.
+   * - auto(기본): 좌표 크기로 4326|5181 추정
+   * - 4326: ST_Transform → 5181 저장
+   * - 5181: 변환 없이 저장
+   * 5179·5186 등 다른 TM은 미지원(자동이면 5181로 오인될 수 있음)
+   */
+  geomInputSrid?: 4326 | 5181 | 'auto';
 }): Promise<{
   success: boolean;
   error?: string;
@@ -606,6 +637,7 @@ export async function createTableFromExcel(params: {
   const geometryType = params.geometryType ?? 'Point';
   const rows = params.rows ?? [];
   const appendOnly = params.appendOnly === true;
+  const geomSridOverride = params.geomInputSrid ?? 'auto';
   const separateJijukTable = params.separateJijukTable === true;
   const jijukTableName = separateJijukTable ? safeTableName(`${tableName}_jijuk`) : null;
   const jijukTableComment =
@@ -616,8 +648,13 @@ export async function createTableFromExcel(params: {
     (params.mulgunjiTableComment ?? `${params.tableKorName || tableName}_물건지`).trim() || `${tableName}_물건지`;
 
   // 동일 영문명이 여러 Excel 열에 매핑되면 중복 컬럼 방지 (첫 번째만 사용)
+  // id·geom·parcel_address 는 시스템 컬럼 — INSERT 컬럼 목록에서 제외 (geom은 parcels.geom)
   const colNames = Array.from(
-    new Set(columns.map((c) => safeColumnName(c.define_field_name)).filter(Boolean))
+    new Set(
+      columns
+        .map((c) => safeColumnName(c.define_field_name))
+        .filter((c): c is string => !!c && !EXCEL_LAYER_SYSTEM_COLUMNS.has(c.toLowerCase()))
+    )
   ) as string[];
   if (!colNames.includes(keyField)) return { success: false, error: 'keyField가 columns에 없습니다.' };
 
@@ -732,7 +769,7 @@ export async function createTableFromExcel(params: {
       path.join(
         GGNR_DATA_DIR,
         path.dirname(pathOrResult.replace(/\//g, path.sep)),
-        path.basename(pathOrResult).replace(/\.xlsx?$/i, '') + '.log'
+        stripSpreadsheetExt(path.basename(pathOrResult)) + '.log'
       );
     const appendPnuLog = async (line: string) => {
       if (!logPath) return;
@@ -800,7 +837,10 @@ export async function createTableFromExcel(params: {
       let geomInputSrid: 4326 | 5181 = 4326;
       if (parcel.geom) {
         geomWkt = String(parcel.geom);
-        geomInputSrid = 4326;
+        geomInputSrid = resolveExcelGeomInputSrid(geomWkt, geomSridOverride);
+        if (geometryType === 'Polygon' && geomWkt.trim()) {
+          polygonMatchedCount++;
+        }
       } else if (parcel.x != null && parcel.y != null) {
         if (geometryType === 'Point') {
           geomWkt = `POINT(${Number(parcel.x)} ${Number(parcel.y)})`;
@@ -999,7 +1039,7 @@ export async function writeExcelWizardLog(params: {
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
   const relative = pathOrResult.replace(/\//g, path.sep);
   const absoluteDir = path.join(GGNR_DATA_DIR, path.dirname(relative));
-  const base = path.basename(relative).replace(/\.xlsx?$/i, '');
+  const base = stripSpreadsheetExt(path.basename(relative));
   const logPath = path.join(absoluteDir, `${base}.log`);
 
   let serverSection = '';
@@ -1794,6 +1834,15 @@ export async function prepareExcelIntegritySync(params: {
   rows: ExcelRowInput[];
   /** 이번 업로드 도형 모드 — Point↔Polygon 등 도형 타입 변경 감지에 사용 */
   geometryType?: 'Point' | 'Polygon';
+  /**
+   * 청크 업로드 시 전체 엑셀 키 목록.
+   * 있으면 remove/append 판정에 사용하고, rows는 해당 배치만 처리.
+   */
+  excelKeysUniverse?: string[];
+  /** 0-based 청크 인덱스 (첫 청크에서만 미결 discard) */
+  chunkIndex?: number;
+  /** 총 청크 수 (마지막 청크에서만 remove 로그 작성) */
+  chunkTotal?: number;
 }): Promise<
   CompareExcelResult & {
     columns: string[];
@@ -1815,6 +1864,14 @@ export async function prepareExcelIntegritySync(params: {
   const keyField = safeColumnName(params.keyField ?? '');
   const rows = params.rows ?? [];
   const geometryType = params.geometryType;
+  const chunkIndex = Math.max(0, Number(params.chunkIndex) || 0);
+  const chunkTotal = Math.max(1, Number(params.chunkTotal) || 1);
+  const universeRaw = Array.isArray(params.excelKeysUniverse)
+    ? params.excelKeysUniverse.map((k) => String(k ?? '').trim()).filter(Boolean)
+    : null;
+  const isChunked = universeRaw != null && universeRaw.length > 0;
+  const isFirstChunk = !isChunked || chunkIndex === 0;
+  const isLastChunk = !isChunked || chunkIndex >= chunkTotal - 1;
   if (!tableName || !keyField) {
     return { ...empty, error: 'tableName과 keyField가 필요합니다.' };
   }
@@ -1824,7 +1881,9 @@ export async function prepareExcelIntegritySync(params: {
 
   try {
     // 이전 위저드 미결·미반영 의도 제거 (과거 이력에 묶인 확정 로그는 유지)
-    await discardExcelIntegrityReview({ tableName });
+    if (isFirstChunk) {
+      await discardExcelIntegrityReview({ tableName });
+    }
 
     const dbRes = await db.execute(sql.raw(
       `SELECT (COALESCE(row_to_json(t.*)::jsonb, '{}'::jsonb) - 'geom') AS j
@@ -1869,23 +1928,33 @@ export async function prepareExcelIntegritySync(params: {
       if (!excelMap.has(kv)) excelMap.set(kv, attrs);
     }
 
-    const excelKeys = [...excelMap.keys()];
+    const excelKeysInChunk = [...excelMap.keys()];
+    const excelKeysUniverse = isChunked ? [...new Set(universeRaw!)] : excelKeysInChunk;
     const dbKeys = [...dbMap.keys()];
-    const excelSet = new Set(excelKeys);
+    const excelSet = new Set(excelKeysUniverse);
     const dbSet = new Set(dbKeys);
 
-    const appendKeys = excelKeys.filter((k) => !dbSet.has(k));
-    const removeKeys = dbKeys.filter((k) => !excelSet.has(k));
-    const bothKeys = excelKeys.filter((k) => dbSet.has(k));
+    const appendKeysAll = excelKeysUniverse.filter((k) => !dbSet.has(k));
+    const appendKeysThisChunk = appendKeysAll.filter((k) => excelMap.has(k));
+    const removeKeys = isLastChunk ? dbKeys.filter((k) => !excelSet.has(k)) : [];
+    const bothKeys = excelKeysInChunk.filter((k) => dbSet.has(k));
 
     const excelCoordsByKey = new Map<string, { x: number; y: number } | { wkt: string; srid?: number }>();
+    const excelAddressByKey = new Map<string, string>();
     for (const row of rows) {
       const attrs = normalizeAttrMap((row.attrs ?? {}) as Record<string, unknown>);
       const kv = String(attrs[keyField] ?? '').trim();
-      if (!kv || excelCoordsByKey.has(kv)) continue;
+      if (!kv) continue;
       const parcels = Array.isArray(row.parcels) ? row.parcels : [];
       const mulgunjis = Array.isArray(row.mulgunjis) ? row.mulgunjis : [];
       const candidates = [...parcels, ...mulgunjis];
+      if (!excelAddressByKey.has(kv)) {
+        const withAddr = candidates.find((p) => p?.address && String(p.address).trim());
+        if (withAddr?.address) {
+          excelAddressByKey.set(kv, String(withAddr.address).trim());
+        }
+      }
+      if (excelCoordsByKey.has(kv)) continue;
       const withGeom = candidates.find((p) => p?.geom && String(p.geom).trim());
       if (withGeom?.geom) {
         const g = String(withGeom.geom).trim();
@@ -1902,12 +1971,24 @@ export async function prepareExcelIntegritySync(params: {
       }
     }
 
+    /** 폴리곤 이력 미리보기: 경위도 교차 → 실패 시 주소→PNU→지적 (적재 경로와 동일) */
     const ensurePolygonPreviewWkt = async (kv: string) => {
       const coord = excelCoordsByKey.get(kv);
-      if (!coord) return;
-      if ('wkt' in coord && coord.wkt) return;
-      if (!('x' in coord)) return;
-      const wkt = await resolveJijukWktFromLonLat(coord.x, coord.y);
+      if (coord && 'wkt' in coord && coord.wkt) return;
+
+      if (coord && 'x' in coord) {
+        const wkt = await resolveJijukWktFromLonLat(coord.x, coord.y);
+        if (wkt) {
+          excelCoordsByKey.set(kv, { wkt, srid: 5181 });
+          return;
+        }
+      }
+
+      const address = excelAddressByKey.get(kv)?.trim();
+      if (!address) return;
+      const pnu = await getPnuFromAddress(address);
+      if (!pnu) return;
+      const wkt = await getJijukGeomByPnu(pnu, 5181);
       if (wkt) excelCoordsByKey.set(kv, { wkt, srid: 5181 });
     };
 
@@ -1987,7 +2068,7 @@ export async function prepareExcelIntegritySync(params: {
         if (oldTypeLabel) {
           dbValues.geom = geomTypeOnlyPlaceholder(oldTypeLabel);
         } else if (dbFam === 'empty') {
-          dbValues.geom = geomTypeOnlyPlaceholder('Geometry');
+          dbValues.geom = geomTypeOnlyPlaceholder('도형 없음');
         }
         if (newTypeLabel) {
           excelValues.geom = geomTypeOnlyPlaceholder(newTypeLabel);
@@ -2013,7 +2094,7 @@ export async function prepareExcelIntegritySync(params: {
       }
     }
 
-    for (const kv of appendKeys) {
+    for (const kv of appendKeysThisChunk) {
       const excelAttrs = excelMap.get(kv)!;
       const newTypeLabel = uploadGeomTypeLabel(uploadFam);
       const excelValues: Record<string, unknown> = { ...excelAttrs };
@@ -2047,7 +2128,7 @@ export async function prepareExcelIntegritySync(params: {
               ? 'Polygon'
               : dbFam === 'line'
                 ? 'LineString'
-                : (meta?.gtype ? String(meta.gtype).replace(/^ST_/i, '') : 'Geometry');
+                : (meta?.gtype ? String(meta.gtype).replace(/^ST_/i, '') : '도형 없음');
         dbValues.geom = geomTypeOnlyPlaceholder(oldTypeLabel);
       }
       removes.push({ key: kv, values: dbValues });
@@ -2080,14 +2161,14 @@ export async function prepareExcelIntegritySync(params: {
       success: true,
       tableName,
       keyField,
-      appendCount: appendKeys.length,
+      appendCount: appendKeysThisChunk.length,
       conflictCount: conflicts.length,
       removeCount: removeKeys.length,
       unchangedCount,
       conflicts: conflicts.slice(0, 500),
       removes: removes.slice(0, 500),
       columns,
-      appendKeys,
+      appendKeys: appendKeysAll,
     };
   } catch (e: unknown) {
     return { ...empty, error: e instanceof Error ? e.message : String(e) };
@@ -2228,6 +2309,11 @@ export async function applyExcelIntegritySync(params: {
       `DELETE FROM excel_sync_log
        WHERE esl_table_name = '${tableName}' AND esl_operation IS NULL`
     ));
+    // 반영 직후 레이어 geom → 이력 도형(new) 적재 (주소→지적 등 준비 시점 미적재 보완)
+    if (ehKey != null) {
+      await fillExcelSyncLogNewGeoms({ ehKey, tableName, keyField });
+      await syncExcelSyncLogJsonGeomFromSideTable({ tableName, ehKey });
+    }
   } catch {
     /* 로그 마킹 실패는 본 반영과 분리 */
   }
@@ -2239,4 +2325,225 @@ export async function applyExcelIntegritySync(params: {
     updatedCount: conflictUse.size,
     keptCount: keepDb.size,
   };
+}
+
+const EXCEL_GEOM_BULK_BATCH_DEFAULT = 300;
+
+/**
+ * 저장된 엑셀/CSV에서 geom(WKT) 열을 읽어 서버에서 배치 INSERT.
+ * 브라우저 행단위 HTTP를 피하기 위한 대용량 경로.
+ */
+export async function bulkLoadExcelGeomFromFile(params: {
+  pathOrResult: string;
+  tableName: string;
+  tableKorName: string;
+  keyField: string;
+  columns: ExcelColumnDef[];
+  geometryType: 'Point' | 'Polygon';
+  geomHeader: string;
+  fieldMappings: Array<{ originalHeader: string; headerEng: string }>;
+  geomInputSrid?: 4326 | 5181 | 'auto';
+  titleRowLines?: 1 | 2 | 3;
+  batchSize?: number;
+  jobId?: string;
+  syntheticKeyField?: string | null;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  rowCount?: number;
+  totalRows?: number;
+  polygonMatchedCount?: number;
+  polygonNullCount?: number;
+}> {
+  const pathOrResult = params.pathOrResult?.trim();
+  const geomHeader = params.geomHeader?.trim();
+  if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+  if (!geomHeader) return { success: false, error: 'geomHeader가 필요합니다.' };
+
+  const parseRes = await parseExcelFile({
+    pathOrResult,
+    titleRowLines: params.titleRowLines,
+  });
+  if (!parseRes.success || !parseRes.rows) {
+    return { success: false, error: parseRes.error ?? '파일 파싱 실패' };
+  }
+
+  const fileRows = parseRes.rows;
+  const batchSize = Math.min(1000, Math.max(50, Number(params.batchSize) || EXCEL_GEOM_BULK_BATCH_DEFAULT));
+  const geomSrid = params.geomInputSrid ?? 'auto';
+  const syntheticKey = params.syntheticKeyField ? safeColumnName(params.syntheticKeyField) : null;
+  const mappings = params.fieldMappings ?? [];
+
+  const log = (message: string) => {
+    const jobId = params.jobId?.trim();
+    if (!jobId) return;
+    broadcastExcelWizardLog({ jobId, message, at: Date.now() });
+  };
+
+  log(`서버 geom bulk 시작: ${fileRows.length.toLocaleString('ko-KR')}행, 배치 ${batchSize}, SRID=${geomSrid}`);
+
+  let totalInsert = 0;
+  let polygonMatchedCount = 0;
+  let polygonNullCount = 0;
+
+  for (let i = 0; i < fileRows.length; i += batchSize) {
+    const slice = fileRows.slice(i, i + batchSize);
+    const excelRows: ExcelRowInput[] = slice.map((row, idx) => {
+      const attrs: Record<string, unknown> = {};
+      for (const m of mappings) {
+        const eng = safeColumnName(m.headerEng);
+        if (!eng || EXCEL_LAYER_SYSTEM_COLUMNS.has(eng)) continue;
+        attrs[eng] = row[m.originalHeader];
+      }
+      if (syntheticKey) {
+        attrs[syntheticKey] = `k${String(i + idx + 1).padStart(8, '0')}`;
+      }
+      const wkt = String(row[geomHeader] ?? '').trim();
+      return {
+        attrs,
+        parcels: wkt ? [{ address: '', geom: wkt }] : [{ address: '' }],
+        mulgunjis: [],
+      };
+    });
+
+    const res = await createTableFromExcel({
+      pathOrResult,
+      tableName: params.tableName,
+      tableKorName: params.tableKorName,
+      keyField: params.keyField,
+      columns: params.columns,
+      geometryType: params.geometryType,
+      rows: excelRows,
+      appendOnly: i > 0,
+      geomInputSrid: geomSrid,
+    });
+    if (!res.success) {
+      log(`서버 geom bulk 실패 @${i + 1}: ${res.error ?? '알 수 없음'}`);
+      return {
+        success: false,
+        error: res.error ?? 'bulk 삽입 실패',
+        rowCount: totalInsert,
+        totalRows: fileRows.length,
+        polygonMatchedCount,
+        polygonNullCount,
+      };
+    }
+    totalInsert += res.rowCount ?? 0;
+    polygonMatchedCount += res.polygonMatchedCount ?? 0;
+    polygonNullCount += res.polygonNullCount ?? 0;
+
+    const done = Math.min(i + batchSize, fileRows.length);
+    if (i === 0 || done === fileRows.length || Math.floor(i / batchSize) % 5 === 0) {
+      log(`서버 geom bulk 진행 ${done.toLocaleString('ko-KR')}/${fileRows.length.toLocaleString('ko-KR')} (삽입 ${totalInsert.toLocaleString('ko-KR')})`);
+    }
+  }
+
+  log(`서버 geom bulk 완료: 삽입 ${totalInsert.toLocaleString('ko-KR')}건`);
+  return {
+    success: true,
+    rowCount: totalInsert,
+    totalRows: fileRows.length,
+    polygonMatchedCount,
+    polygonNullCount,
+  };
+}
+
+const MAX_CSV_TABLE_EXPORT_ROWS = 100_000;
+
+/**
+ * layer / public_layer 테이블 전체를 CSV로 내보낸다.
+ * geometry 컬럼은 ST_AsText(WKT)로 변환하며 셀 길이를 자르지 않는다.
+ */
+export async function exportLayerTableToCsv(params: {
+  tableName: string;
+  schema?: 'layer' | 'public_layer';
+}): Promise<{ success: boolean; buffer?: Buffer; fileName?: string; error?: string }> {
+  const rawName = (params?.tableName ?? '').trim();
+  if (!rawName) return { success: false, error: 'tableName이 필요합니다.' };
+  const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
+
+  const { resolveLayerPhysicalRelName } = await import('./standardService');
+  const physical = await resolveLayerPhysicalRelName(schema, rawName);
+  if (!physical) return { success: false, error: '테이블을 찾을 수 없습니다.' };
+
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const qIdent = (s: string) => `"${s.replace(/"/g, '""')}"`;
+
+  try {
+    const colRes = await db.execute(
+      sql.raw(
+        `SELECT column_name AS name FROM information_schema.columns
+         WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(physical)}'
+         ORDER BY ordinal_position`
+      )
+    );
+    const columns = (colRes.rows as { name?: string }[])
+      .map((r) => String(r?.name ?? '').trim())
+      .filter(Boolean);
+    if (columns.length === 0) return { success: false, error: '컬럼이 없습니다.' };
+
+    const geomCols = new Set<string>();
+    try {
+      const gcRes = await db.execute(
+        sql.raw(
+          `SELECT f_geometry_column AS name FROM geometry_columns
+           WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(physical)}'`
+        )
+      );
+      for (const row of gcRes.rows as { name?: string }[]) {
+        const n = String(row?.name ?? '').trim();
+        if (n) geomCols.add(n);
+      }
+    } catch {
+      /* geometry_columns 없음 */
+    }
+
+    const countRes = await db.execute(
+      sql.raw(`SELECT COUNT(*)::int AS cnt FROM ${qIdent(schema)}.${qIdent(physical)}`)
+    );
+    const rowCount = Number((countRes.rows as { cnt?: number }[])[0]?.cnt ?? 0);
+    if (rowCount > MAX_CSV_TABLE_EXPORT_ROWS) {
+      return {
+        success: false,
+        error: `행이 너무 많습니다(${rowCount.toLocaleString('ko-KR')}). 최대 ${MAX_CSV_TABLE_EXPORT_ROWS.toLocaleString('ko-KR')}행까지 내보냅니다.`,
+      };
+    }
+
+    const selectList = columns
+      .map((c) => {
+        const q = qIdent(c);
+        if (geomCols.has(c)) return `ST_AsText(${q}) AS ${q}`;
+        return q;
+      })
+      .join(', ');
+
+    const dataRes = await db.execute(
+      sql.raw(`SELECT ${selectList} FROM ${qIdent(schema)}.${qIdent(physical)}`)
+    );
+    const rawRows = (dataRes.rows ?? []) as Record<string, unknown>[];
+
+    const sheetRows = rawRows.map((row) => {
+      const out: Record<string, string | number | boolean> = {};
+      for (const c of columns) {
+        const v = row[c];
+        if (v == null) out[c] = '';
+        else if (typeof v === 'number' || typeof v === 'boolean') out[c] = v;
+        else if (typeof v === 'string') out[c] = v;
+        else if (v instanceof Date) out[c] = v.toISOString();
+        else out[c] = String(v);
+      }
+      return out;
+    });
+
+    const ws =
+      sheetRows.length > 0
+        ? XLSX.utils.json_to_sheet(sheetRows)
+        : XLSX.utils.aoa_to_sheet([columns]);
+    const csvBody = XLSX.utils.sheet_to_csv(ws);
+    const buffer = Buffer.from(`\uFEFF${csvBody}`, 'utf8');
+    const safeFile = physical.replace(/[^a-zA-Z0-9_가-힣-]/g, '_');
+    return { success: true, buffer, fileName: `${safeFile}.csv` };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

@@ -41,6 +41,8 @@ export async function checkGeoServerHealth(baseUrl = getGeoServerBaseUrl()): Pro
     const res = await fetch(url, {
       method: 'GET',
       cache: 'no-store',
+      // Node fetch는 302를 따라가며 redirect loop → fetch failed. 상태만 본다.
+      redirect: 'manual',
       signal: fetchTimeoutSignal(5000),
     });
     if (res.status === 200 || res.status === 401 || res.status === 403 || res.status === 302) {

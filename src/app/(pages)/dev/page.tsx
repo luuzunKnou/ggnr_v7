@@ -168,9 +168,7 @@ export default function DevPage() {
       getDescription={getDevMenuDescription}
       renderContent={renderDevMenuContent}
       renderTitleExtra={(menuId) =>
-        menuId === "layerManager" ? (
-          <LayerManagerUploadButtons />
-        ) : menuId === "lasFileUploader" ? (
+        menuId === "lasFileUploader" ? (
           <>
             <Button
               type="button"
@@ -190,7 +188,9 @@ export default function DevPage() {
         ) : null
       }
       renderHeaderActions={(menuId) =>
-        menuId === "sourceCodeUploader" || menuId === "versionManager" ? (
+        menuId === "layerManager" ? (
+          <LayerManagerUploadButtons />
+        ) : menuId === "sourceCodeUploader" || menuId === "versionManager" ? (
           <Button
             type="button"
             variant="outline"
