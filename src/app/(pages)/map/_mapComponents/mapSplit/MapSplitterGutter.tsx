@@ -469,7 +469,7 @@ export function MapSplitterGutter({
 
   const expandToggleTitle = controlsExpanded ? '컨트롤 접기' : '컨트롤 펼치기';
   const expandButtonTitle = offsetMoveEnabled
-    ? `${expandToggleTitle} · ${EXPAND_DRAG_TITLE_SUFFIX}`
+    ? `클릭: ${expandToggleTitle}\n드래그: ${EXPAND_DRAG_TITLE_SUFFIX}`
     : expandToggleTitle;
 
   const handleExpandPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
