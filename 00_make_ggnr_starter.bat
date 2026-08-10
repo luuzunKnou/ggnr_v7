@@ -154,48 +154,55 @@ if "!SKIP_WRITE!"=="0" (
   echo set "GGNR_PROJECT=%PROJECT_NAME%"
   echo set "GGNR_ENV=%ENV_NAME%"
   echo.
-  echo :: [빌드] .next\BUILD_ID 없으면 next build 선행 ^(폴더만 있고 BUILD_ID 없는 경우 포함^)
+  echo :: [빌드] .next\BUILD_ID 없으면 next build 선행
+  echo :: ^(^) else 블록 안 %%ERRORLEVEL%% 은 파싱 시 비어 오판되므로 if errorlevel / goto 사용
   echo if exist ".next\BUILD_ID" ^(
   echo   echo [진행] .next\BUILD_ID 확인됨 — 빌드 생략
-  echo ^) else ^(
-  echo   if exist ".next\" ^(
-  echo     echo [경고] .next 폴더는 있으나 BUILD_ID 없음 — 불완전 빌드로 보고 npm run build 실행...
-  echo   ^) else ^(
-  echo     echo [진행] .next\BUILD_ID 없음 — npm run build 실행...
-  echo   ^)
-  echo   call npm run build
-  echo   set "GGNR_BUILD_EC=%%ERRORLEVEL%%"
-  echo   if not "%%GGNR_BUILD_EC%%"=="0" ^(
-  echo     echo [오류] npm run build 실패 ^(exit=%%GGNR_BUILD_EC%%^)
-  echo     if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
-  echo       echo 아무 키나 누르면 창이 닫힙니다.
-  echo       pause ^>nul
-  echo     ^)
-  echo     exit /b %%GGNR_BUILD_EC%%
-  echo   ^)
-  echo   if not exist ".next\BUILD_ID" ^(
-  echo     echo [오류] npm run build 후 .next\BUILD_ID 가 없습니다. production 기동을 중단합니다.
-  echo     if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
-  echo       echo 아무 키나 누르면 창이 닫힙니다.
-  echo       pause ^>nul
-  echo     ^)
-  echo     exit /b 1
-  echo   ^)
-  echo   echo [완료] npm run build 완료 ^(.next\BUILD_ID 확인^).
+  echo   goto after_build
   echo ^)
+  echo if exist ".next\" ^(
+  echo   echo [경고] .next 폴더는 있으나 BUILD_ID 없음 — 불완전 빌드로 보고 npm run build 실행...
+  echo ^) else ^(
+  echo   echo [진행] .next\BUILD_ID 없음 — npm run build 실행...
+  echo ^)
+  echo call npm run build
+  echo if errorlevel 1 goto build_fail
+  echo if not exist ".next\BUILD_ID" goto build_no_id
+  echo echo [완료] npm run build 완료 ^(.next\BUILD_ID 확인^).
+  echo goto after_build
   echo.
-  echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
-  echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)
-  echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
-  echo set "GGNR_START_EC=%%ERRORLEVEL%%"
-  echo if "%%GGNR_START_EC%%"=="0" exit /b 0
-  echo echo.
-  echo echo [오류] 기동 실패 ^(exit=%%GGNR_START_EC%%^). 위 로그를 확인하세요.
+  echo :build_fail
+  echo echo [오류] npm run build 실패.
   echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
   echo   echo 아무 키나 누르면 창이 닫힙니다.
   echo   pause ^>nul
   echo ^)
-  echo exit /b %%GGNR_START_EC%%
+  echo exit /b 1
+  echo.
+  echo :build_no_id
+  echo echo [오류] npm run build 후 .next\BUILD_ID 가 없습니다. production 기동을 중단합니다.
+  echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
+  echo   echo 아무 키나 누르면 창이 닫힙니다.
+  echo   pause ^>nul
+  echo ^)
+  echo exit /b 1
+  echo.
+  echo :after_build
+  echo.
+  echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
+  echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)
+  echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
+  echo if errorlevel 1 goto start_fail
+  echo exit /b 0
+  echo.
+  echo :start_fail
+  echo echo.
+  echo echo [오류] 기동 실패. 위 로그를 확인하세요.
+  echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
+  echo   echo 아무 키나 누르면 창이 닫힙니다.
+  echo   pause ^>nul
+  echo ^)
+  echo exit /b 1
   )
 
   if not exist "%OUT%" (

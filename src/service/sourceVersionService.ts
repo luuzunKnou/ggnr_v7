@@ -996,7 +996,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const stopMessage = stopResult.message;
     let startMessage: string | undefined;
     let started = false;
-    /** 병합 후 재시작 여부와 관계없이 기동. run.ts ensure는 이중 안전망 */
+    /** 병합 후 재시작 여부와 관계없이 기동 시도. 응답 판정 실패해도 소스 롤백하지 않음(경고만). */
     await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
     let startResult = await ensureGeoServerRunning({ forceRestart: false });
     if (!startResult.success) {
@@ -1011,10 +1011,11 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         : startResult.action === 'restarted'
           ? '기동 OK(재기동·응답)'
           : '기동 OK(응답)'
-      : `기동 실패: ${startResult.error ?? 'unknown'}`;
+      : `기동 경고(응답 미확인): ${startResult.error ?? 'unknown'}`;
     if (!startResult.success) {
-      console.error(`[SourceCodeUpload] GeoServer 기동 실패: ${startMessage}`);
-      throw new Error(`GeoServer ${startMessage}`);
+      console.warn(
+        `[SourceCodeUpload] GeoServer ${startMessage} — 소스 적용은 계속(롤백하지 않음). 프로세스·8080·GEOSERVER_URL 확인 권장`
+      );
     }
     await emit('geoserver-start', `GeoServer ${startMessage}`);
 

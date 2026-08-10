@@ -9,6 +9,16 @@ const cesiumStatic = path.join(__dirname, "public/cesiumStatic");
 const nextConfig: NextConfig = {
   devIndicators: false,
   turbopack: {},
+  /** conda env 등 대량 파일이 Turbopack 파일 추적에 잡히지 않게 */
+  outputFileTracingExcludes: {
+    '*': [
+      './python/env/**',
+      './python/**/__pycache__/**',
+      './geoserver_modules/geoserver/**',
+      './geoserver_modules/java/**',
+      './.next/**',
+    ],
+  },
   serverExternalPackages: [
     '@napi-rs/canvas',
     '@napi-rs/canvas-win32-x64-msvc',
