@@ -73,32 +73,56 @@ export function buildApplySuccessHistoryMessage(opts: {
   return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
-function spawnInheritAsync(command: string, args: string[]): Promise<void> {
+function tailTextLines(text: string, maxLines = 20, maxChars = 3500): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.length > 0);
+  if (lines.length === 0) return '';
+  let tail = lines.slice(-maxLines).join('\n');
+  if (tail.length > maxChars) tail = `…\n${tail.slice(-maxChars)}`;
+  return tail;
+}
+
+function npmFailureDetail(output: string, code: number | null, label: string): string {
+  const moduleHint =
+    output.match(/Cannot find module[^\n]*/)?.[0] ??
+    output.match(/Cannot find package[^\n]*/)?.[0] ??
+    output.match(/MODULE_NOT_FOUND[^\n]*/)?.[0] ??
+    output.match(/npm ERR![^\n]*/)?.[0];
+  const tail = tailTextLines(output);
+  const parts = [`${label} 실패 (exit code ${code ?? '?'})`];
+  if (moduleHint) parts.push(moduleHint);
+  if (tail) parts.push(tail);
+  return parts.join('\n');
+}
+
+/** npm stdout/stderr → UI 로그·실패 원인 (stdio inherit 대신 캡처) */
+async function spawnNpmWithApplyLog(
+  args: string[],
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn('npm', args, {
       cwd: process.cwd(),
-      stdio: 'inherit',
       shell: true,
+      windowsHide: true,
       env: process.env,
     });
+    let combined = '';
+    const handleData = (buf: Buffer) => {
+      const chunk = buf.toString('utf-8');
+      combined += chunk;
+      for (const line of chunk.split(/\r?\n/)) {
+        const trimmed = line.trimEnd();
+        if (trimmed) void Promise.resolve(onLine(trimmed)).catch(() => {});
+      }
+    };
+    child.stdout?.on('data', handleData);
+    child.stderr?.on('data', handleData);
     child.on('error', reject);
     child.on('close', (code) => {
       if ((code ?? 1) === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+      else reject(new Error(npmFailureDetail(combined, code, `npm ${args.join(' ')}`)));
     });
   });
-}
-
-async function runNpmInstallAsyncInProcess(): Promise<void> {
-  console.log('[SourceCodeUpload] npm install 시작 (사전·개방망)');
-  await spawnInheritAsync('npm', ['install', '--no-audit', '--no-fund']);
-  console.log('[SourceCodeUpload] npm install 완료');
-}
-
-async function runNpmBuildAsyncInProcess(): Promise<void> {
-  console.log('[SourceCodeUpload] 사전 빌드 시작');
-  await spawnInheritAsync('npm', ['run', 'build']);
-  console.log('[SourceCodeUpload] 사전 빌드 완료');
 }
 
 export type ApplyLatestSourceOptions = {
@@ -1044,21 +1068,36 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 롤백 후 종료하지 않음 */
     if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
-      try {
-        if (!includeNodeModules && rollback) {
-          await emit('npm-install', 'node_modules 백업 중...');
-          await snapshotNodeModulesInto(rollback, workspaceRoot);
-          await emit('npm-install', 'npm install (개방망) 시작');
-          await runNpmInstallAsyncInProcess();
-          await emit('npm-install', 'npm install 완료');
+      if (!includeNodeModules && rollback) {
+        await emit('npm-install', 'node_modules 백업 중...');
+        await snapshotNodeModulesInto(rollback, workspaceRoot);
+        await emit('npm-install', 'npm install (개방망) 시작');
+        try {
+          await spawnNpmWithApplyLog(['install', '--no-audit', '--no-fund'], async (line) => {
+            await emit('npm-install', line, { logLine: `[npm install] ${line}` });
+          });
+        } catch (installErr: unknown) {
+          const detail = installErr instanceof Error ? installErr.message : String(installErr);
+          await emit('npm-install', 'npm install 실패', {
+            logLine: `[SourceCodeUpload] npm install 실패 (개방망):\n${detail}`,
+          });
+          throw new Error(`npm install 실패 (version=${version}, 개방망):\n${detail}`);
         }
-        await emit('build', '사전 빌드 시작');
-        await runNpmBuildAsyncInProcess();
-        await emit('build', '사전 빌드 완료');
-      } catch (buildErr: unknown) {
-        const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
-        throw new Error(`사전 빌드 실패 (version=${version}): ${msg}`);
+        await emit('npm-install', 'npm install 완료');
       }
+      await emit('build', '사전 빌드 시작');
+      try {
+        await spawnNpmWithApplyLog(['run', 'build'], async (line) => {
+          await emit('build', line, { logLine: `[npm run build] ${line}` });
+        });
+      } catch (buildErr: unknown) {
+        const detail = buildErr instanceof Error ? buildErr.message : String(buildErr);
+        await emit('build', '사전 빌드 실패', {
+          logLine: `[SourceCodeUpload] 사전 빌드 실패:\n${detail}`,
+        });
+        throw new Error(`사전 빌드 실패 (version=${version}):\n${detail}`);
+      }
+      await emit('build', '사전 빌드 완료');
     }
 
     /** 사전 빌드 완료분 — 재기동은 스키마 모달 [진행] 이후로 미룸 */
@@ -1122,6 +1161,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     console.error(`[SourceCodeUpload] 적용 실패:`, raw);
+    await Promise.resolve(
+      onProgress?.({
+        phase: 'build',
+        message: raw.split('\n')[0]?.trim() || '적용 실패',
+        logLine: `[SourceCodeUpload] 적용 실패:\n${raw}`,
+      })
+    ).catch(() => {});
 
     let failMessage = raw;
     let historyRecorded = false;

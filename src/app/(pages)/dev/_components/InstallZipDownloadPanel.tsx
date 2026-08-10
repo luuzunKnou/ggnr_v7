@@ -24,11 +24,6 @@ import {
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
-import {
-  estimateRemainingByBytes,
-  estimateRemainingSeconds,
-  formatEtaMinutes,
-} from '@/lib/sourceProgressEta';
 
 const INSTALL_MANUAL_URL =
   process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
@@ -55,24 +50,6 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
   return `${(n / (1024 * 1024)).toFixed(1)}MB`;
-}
-
-function estimateInstallZipTotalSeconds(
-  fileCount: number,
-  zipSizeBytes: number | undefined,
-  profile: SourcePackageProfile
-): number {
-  if (fileCount <= 0) return 0;
-  const closed = profile === 'closed';
-  const scanSec = Math.max(2, fileCount * 0.004);
-  const estZipBytes = zipSizeBytes ?? fileCount * (closed ? 100_000 : 6_000);
-  const zipSec = Math.max(
-    3,
-    fileCount * (closed ? 0.018 : 0.01) + (estZipBytes / (1024 * 1024)) * (closed ? 1.8 : 0.9)
-  );
-  const dlBytes = zipSizeBytes ?? estZipBytes * (closed ? 0.28 : 0.4);
-  const downloadSec = Math.max(2, (dlBytes / (1024 * 1024)) * 0.7);
-  return scanSec + zipSec + downloadSec;
 }
 
 function buildGnmsInstallBaseStages(): StageItem[] {
@@ -183,20 +160,16 @@ function ModeDescription({ mode }: { mode: DownloadSourceMode }) {
 function ProgressBar({
   pct,
   busy,
-  etaLabel,
 }: {
   pct: number | null;
   busy: boolean;
-  etaLabel?: string | null;
 }) {
   if (!busy || pct == null) return null;
   return (
     <div className="mt-2 rounded border bg-muted/20 px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-2 text-xs">
         <span className="flex shrink-0 items-center gap-1">진행 중</span>
-        {etaLabel ? (
-          <span className="truncate text-muted-foreground">(예상 소요 시간: {etaLabel})</span>
-        ) : null}
+        <span className="shrink-0 text-muted-foreground">{pct}%</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
@@ -221,27 +194,15 @@ export function InstallZipDownloadPanel() {
   const lastLogMessageRef = useRef('');
   const lastSkipLoggedRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const startedAtRef = useRef(0);
-  const downloadBytesRef = useRef<{ done: number; total: number } | null>(null);
-  const downloadStartedAtRef = useRef(0);
-  const [installMeta, setInstallMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
-  const [etaTick, setEtaTick] = useState(0);
 
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
 
-  useEffect(() => {
-    if (!busy) return;
-    const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [busy]);
-
   // 소스 모드 전환 시에만 단계·로그 초기화 (다운로드 완료로 busy가 꺼질 때는 유지)
   useEffect(() => {
     setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
     setProgress(emptySideProgress());
-    setInstallMeta({});
     logRef.current = [];
     lastLogMessageRef.current = '';
   }, [sourceMode]);
@@ -266,12 +227,6 @@ export function InstallZipDownloadPanel() {
 
   const applyInstallProgress = (p: InstallZipProgress) => {
     setProgress((prev) => ({ ...prev, message: p.message, pct: p.progressPct }));
-    if (p.fileCount != null || p.zipSize != null) {
-      setInstallMeta((prev) => ({
-        fileCount: p.fileCount ?? prev.fileCount,
-        zipSize: p.zipSize ?? prev.zipSize,
-      }));
-    }
     setStages(buildInstallStagesFromProgress(p, infoDetailRef.current));
     if (p.phase !== lastPhaseRef.current && p.phase !== 'idle') {
       lastPhaseRef.current = p.phase;
@@ -348,12 +303,6 @@ export function InstallZipDownloadPanel() {
         downloadRes,
         fileName,
         (received, total) => {
-          if (total && total > 0) {
-            if (downloadStartedAtRef.current <= 0 && received > 0) {
-              downloadStartedAtRef.current = Date.now();
-            }
-            downloadBytesRef.current = { done: received, total };
-          }
           const pct =
             total && total > 0 ? Math.min(99, 10 + Math.round((received / total) * 89)) : 50;
           const msg = total
@@ -438,8 +387,6 @@ export function InstallZipDownloadPanel() {
 
   const downloadFromLocal = async (signal: AbortSignal) => {
     infoDetailRef.current = '';
-    startedAtRef.current = Date.now();
-    setInstallMeta({});
     lastPhaseRef.current = '';
     lastLogMessageRef.current = '';
     lastSkipLoggedRef.current = null;
@@ -527,10 +474,6 @@ export function InstallZipDownloadPanel() {
       pushLog(
         `ZIP 생성 완료: ${buildJson.zipName ?? ''} (포함 ${buildJson.fileCount ?? '?'} / 제외 ${skipCount})`
       );
-      setInstallMeta({
-        fileCount: buildJson.fileCount,
-        zipSize: buildJson.zipSize,
-      });
       setStages((prev) =>
         patchStages(setStageActive(prev, 'download'), {
           scan: {
@@ -625,10 +568,6 @@ export function InstallZipDownloadPanel() {
     lastLogMessageRef.current = '';
     lastSkipLoggedRef.current = null;
     lastPhaseRef.current = '';
-    startedAtRef.current = Date.now();
-    downloadBytesRef.current = null;
-    downloadStartedAtRef.current = 0;
-    setInstallMeta({});
     setProgress(emptySideProgress());
     setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
 
@@ -643,31 +582,8 @@ export function InstallZipDownloadPanel() {
     } finally {
       abortRef.current = null;
       setBusy(false);
-      downloadBytesRef.current = null;
-      downloadStartedAtRef.current = 0;
     }
   };
-
-  const etaLabel = (() => {
-    void etaTick;
-    if (!busy || startedAtRef.current <= 0) return null;
-    if (sourceMode === 'gnms') {
-      const bytes = downloadBytesRef.current;
-      if (bytes && bytes.total > 0 && bytes.done > 0 && downloadStartedAtRef.current > 0) {
-        const remain = estimateRemainingByBytes(bytes.done, bytes.total, downloadStartedAtRef.current);
-        if (remain != null) return formatEtaMinutes(remain);
-      }
-      if (progress.pct != null && progress.pct > 2) {
-        return formatEtaMinutes(estimateRemainingSeconds(180, progress.pct, startedAtRef.current));
-      }
-      return '산출 중...';
-    }
-    const fc = installMeta.fileCount;
-    if (fc == null || fc <= 0) return '산출 중...';
-    const total = estimateInstallZipTotalSeconds(fc, installMeta.zipSize, profile);
-    const remain = estimateRemainingSeconds(total, progress.pct, startedAtRef.current);
-    return formatEtaMinutes(remain);
-  })();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded border p-3">
@@ -709,7 +625,7 @@ export function InstallZipDownloadPanel() {
             취소
           </Button>
         </div>
-        <ProgressBar pct={progress.pct} busy={busy} etaLabel={etaLabel} />
+        <ProgressBar pct={progress.pct} busy={busy} />
         <p className="text-xs text-muted-foreground">{progress.message}</p>
         {progress.error && <p className="text-xs text-red-600">{progress.error}</p>}
         <ProgressStagesList stages={stages} />
