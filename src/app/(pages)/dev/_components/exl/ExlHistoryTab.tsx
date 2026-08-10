@@ -10,7 +10,19 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/app/shadcnComponents/ui/dialog';
-import { RefreshCw, Search, FileText, Check, X, Loader2, RotateCcw } from 'lucide-react';
+import {
+  RefreshCw,
+  Search,
+  FileText,
+  Check,
+  X,
+  Loader2,
+  RotateCcw,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+} from 'lucide-react';
 import { registerExcelHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ExcelProcessLogLines } from './ExcelProcessLogLines';
 import { SyncDetailModal } from '../shp/SyncDetailModal';
@@ -225,28 +237,40 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
       </div>
 
       <section className="flex-1 min-h-0 overflow-auto border rounded">
-        {loading ? (
-          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">로딩 중…</div>
-        ) : error ? (
-          <div className="flex items-center justify-center h-full text-xs text-red-500">{error}</div>
-        ) : rows.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">이력이 없습니다.</div>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10">
-              <tr className="text-left">
-                <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-14 text-center">결과</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-36 whitespace-nowrap">업로드 날짜</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-44">테이블명</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-48">한글명</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-20 text-right" title="TRUNCATE 직전 행 수">이전</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-20 text-right" title="삽입 후 행 수">현재</th>
-                <th className="py-1 px-2 text-xs font-medium border-r bg-muted min-w-[12rem]">업데이트 내용</th>
-                <th className="py-1 px-2 text-xs font-medium bg-muted w-36 text-center">액션</th>
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="text-left">
+              <th className="py-1 px-1 text-xs font-medium border-r bg-muted w-14 text-center">결과</th>
+              <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-36 whitespace-nowrap">업로드 날짜</th>
+              <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-44">테이블명</th>
+              <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-48">한글명</th>
+              <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-20 text-right" title="TRUNCATE 직전 행 수">이전</th>
+              <th className="py-1 px-2 text-xs font-medium border-r bg-muted w-20 text-right" title="삽입 후 행 수">현재</th>
+              <th className="py-1 px-2 text-xs font-medium border-r bg-muted min-w-[12rem]">업데이트 내용</th>
+              <th className="py-1 px-2 text-xs font-medium bg-muted w-36 text-center">액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                  로딩 중…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
+            ) : error ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-red-500">
+                  {error}
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                  이력이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
                 <tr
                   key={r.ehKey}
                   className={`border-t hover:bg-muted/40 ${
@@ -302,26 +326,59 @@ export function ExlHistoryTab({ embedded = false }: { embedded?: boolean } = {})
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </section>
 
-      <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-          이전
+      <div className="shrink-0 flex items-center justify-center gap-1 text-xs">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage(1)}
+          title="처음"
+          aria-label="처음"
+        >
+          <ChevronsLeft className="w-4 h-4" />
         </Button>
-        <span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage((p) => p - 1)}
+          title="이전"
+          aria-label="이전"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="px-2 tabular-nums">
           {page} / {totalPages}
         </span>
         <Button
           variant="outline"
           size="sm"
-          disabled={page >= totalPages}
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
           onClick={() => setPage((p) => p + 1)}
+          title="다음"
+          aria-label="다음"
         >
-          다음
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage(totalPages)}
+          title="끝"
+          aria-label="끝"
+        >
+          <ChevronsRight className="w-4 h-4" />
         </Button>
       </div>
 

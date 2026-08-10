@@ -12,14 +12,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/app/shadcnComponents/ui/dialog"
-import { HelpCircle, Search, RotateCcw, Loader2 } from "lucide-react"
+import {
+  HelpCircle,
+  Search,
+  RotateCcw,
+  Undo2,
+  Loader2,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+} from "lucide-react"
 import { call } from "@/lib/api"
 
 const WORK_TYPES = ["전체", "되돌리기", "삭제", "수정", "저장", "조회", "추가"] as const
 type WorkType = (typeof WORK_TYPES)[number]
 
-/** 구분 상단 고정 — 전체 / SHP 업로드 / Excel 업로드 (+ 하단 동적 서비스) */
-const PINNED_CATEGORIES = ["전체", "SHP 업로드", "Excel 업로드"] as const
+/** 구분 상단 고정 — 전체 / SHP·Excel 업로드 / 레이어 관리 (+ 하단 동적 서비스) */
+const PINNED_CATEGORIES = [
+  "전체",
+  "SHP 업로드",
+  "Excel 업로드",
+  "레이어 관리(개발자모드)",
+] as const
 type PinnedCategory = (typeof PINNED_CATEGORIES)[number]
 type CategoryFilter = PinnedCategory | string
 
@@ -28,6 +43,9 @@ type DetailAttr = {
   before?: string
   after?: string
   value?: string
+  ddKey?: number
+  colName?: string
+  canRevert?: boolean
 }
 
 type HistoryRow = {
@@ -44,6 +62,8 @@ type HistoryRow = {
   workType: Exclude<WorkType, "전체">
   source: "지도" | "SHP" | "Excel"
   canDetail: boolean
+  batchKey?: string | null
+  canRevertAll?: boolean
   details?: DetailAttr[]
 }
 
@@ -68,6 +88,12 @@ function toInputDate(ymd: string): string {
   return ymd
 }
 
+/** 빈 메타 값 → em dash (레이어 관리 목록과 동일) */
+function cellText(v: string | null | undefined): string {
+  const s = String(v ?? "").trim()
+  return s || "—"
+}
+
 export function LayerManageHistoryTab() {
   const initial = defaultRange()
   const [startDate, setStartDate] = useState(initial.startDate)
@@ -90,6 +116,7 @@ export function LayerManageHistoryTab() {
   const [error, setError] = useState<string | null>(null)
   const [detailRow, setDetailRow] = useState<HistoryRow | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
 
   const loadList = useCallback(async () => {
     setLoading(true)
@@ -192,6 +219,77 @@ export function LayerManageHistoryTab() {
     }
   }
 
+  const handleRevertAll = async () => {
+    if (!detailRow) return
+    if (!detailRow.canRevertAll && !(detailRow.details ?? []).some((d) => d.canRevert && d.ddKey)) {
+      return
+    }
+    if (
+      !confirm(
+        detailRow.workType === "추가"
+          ? "전체 되돌리기를 실행합니다.\n이 이력으로 추가된 행을 삭제합니다. 계속할까요?"
+          : "전체 되돌리기를 실행합니다.\n이 이력에 표시된 속성을 모두 변경 전 값으로 되돌립니다. 계속할까요?"
+      )
+    ) {
+      return
+    }
+    const target = detailRow
+    setActionLoading(true)
+    setError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "dataHistoryService",
+        action: "revertDataHistoryRow",
+        params: { id: target.id },
+      })
+      const data = res?.data ?? res
+      if (!data?.success) {
+        setError(data?.error ?? "전체 되돌리기에 실패했습니다.")
+        return
+      }
+      const n = Number(data.revertedCount ?? 0)
+      alert(
+        target.workType === "추가"
+          ? "추가된 행을 삭제했습니다."
+          : n > 0
+            ? `전체 되돌리기 완료 (${n}개 속성)`
+            : "전체 되돌리기를 완료했습니다."
+      )
+      setDetailRow(null)
+      void loadList()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRevertField = async (d: DetailAttr) => {
+    if (!d.ddKey || !d.canRevert) return
+    if (!confirm("되돌리겠습니까?")) return
+    setActionLoading(true)
+    setError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "dataHistoryService",
+        action: "revertDataHistoryField",
+        params: { ddKey: d.ddKey },
+      })
+      const data = res?.data ?? res
+      if (!data?.success) {
+        setError(data?.error ?? "되돌리기에 실패했습니다.")
+        return
+      }
+      alert("되돌리기를 완료했습니다.")
+      if (detailRow) void openDetail(detailRow)
+      void loadList()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const handleSearch = () => {
@@ -271,7 +369,7 @@ export function LayerManageHistoryTab() {
             ))}
             {serviceOptions.length > 0 ? (
               <option disabled value="__sep__">
-                ────────
+                ──────── 서비스명
               </option>
             ) : null}
             {serviceOptions.map((name) => (
@@ -304,7 +402,7 @@ export function LayerManageHistoryTab() {
           </Button>
         </div>
         <p className="w-full text-[10px] text-muted-foreground">
-          SHP·Excel 업로드 및 서비스(구분)별 확정 이력 통합 조회
+          SHP·Excel 업로드·레이어 관리(개발자모드) 및 서비스(구분)별 이력 통합 조회
         </p>
       </div>
 
@@ -315,40 +413,42 @@ export function LayerManageHistoryTab() {
       </div>
 
       <section className="flex-1 min-h-0 overflow-auto border rounded">
-        {!loading && rows.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-            이력이 없습니다.
-          </div>
-        ) : (
-          <table className="w-full text-xs table-fixed min-w-[80rem]">
-            <colgroup>
-              <col className="w-[4.5rem]" />
-              <col className="w-[11rem]" />
-              <col className="w-[8rem]" />
-              <col className="w-[7.5rem]" />
-              <col className="w-[7.5rem]" />
-              <col className="w-[8.5rem]" />
-              <col className="w-[8.5rem]" />
-              <col />
-              <col className="w-[6rem]" />
-              <col className="w-[5.5rem]" />
-            </colgroup>
-            <thead className="sticky top-0 z-10">
-              <tr className="text-center">
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">순번</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">일자</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">사용자 아이디</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">사용자 이름</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">그룹명</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">레이어명</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">구분</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">내용</th>
-                <th className="py-1.5 px-3 font-medium border-r bg-muted">작업분류</th>
-                <th className="py-1.5 px-3 font-medium bg-muted">상세보기</th>
+        <table className="w-full text-xs table-fixed min-w-[80rem]">
+          <colgroup>
+            <col className="w-[4.5rem]" />
+            <col className="w-[11rem]" />
+            <col className="w-[8rem]" />
+            <col className="w-[8.5rem]" />
+            <col className="w-[8.5rem]" />
+            <col className="w-[9.5rem]" />
+            <col className="w-[9.5rem]" />
+            <col />
+            <col className="w-[5rem]" />
+            <col className="w-[5rem]" />
+          </colgroup>
+          <thead className="sticky top-0 z-10">
+            <tr className="text-center">
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">순번</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">일자</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">사용자 아이디</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">사용자 이름</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">그룹명</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">레이어명</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">구분</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">내용</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted">작업분류</th>
+              <th className="py-1.5 px-3 font-medium bg-muted">상세보기</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!loading && rows.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="py-8 text-center text-muted-foreground">
+                  이력이 없습니다.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
+            ) : (
+              rows.map((r, idx) => (
                 <tr
                   key={r.id}
                   className={`border-t text-center hover:bg-muted/40 ${
@@ -361,28 +461,45 @@ export function LayerManageHistoryTab() {
                   <td className="h-[32px] px-3 align-middle tabular-nums">
                     {(page - 1) * PAGE_SIZE + idx + 1}
                   </td>
-                  <td className="h-[32px] px-3 align-middle whitespace-nowrap">{r.date}</td>
-                  <td className="h-[32px] px-3 align-middle truncate" title={r.userId}>
-                    {r.userId}
+                  <td className="h-[32px] px-3 align-middle whitespace-nowrap">
+                    {cellText(r.date)}
                   </td>
-                  <td className="h-[32px] px-3 align-middle truncate" title={r.userName}>
-                    {r.userName}
+                  <td
+                    className="h-[32px] px-3 align-middle truncate"
+                    title={r.userId || undefined}
+                  >
+                    {cellText(r.userId)}
                   </td>
-                  <td className="h-[32px] px-3 align-middle truncate" title={r.groupName}>
-                    {r.groupName}
+                  <td
+                    className="h-[32px] px-3 align-middle truncate"
+                    title={r.userName || undefined}
+                  >
+                    {cellText(r.userName)}
                   </td>
-                  <td className="h-[32px] px-3 align-middle truncate" title={r.layerName}>
-                    {r.layerName}
+                  <td
+                    className="h-[32px] px-3 align-middle truncate"
+                    title={r.groupName || undefined}
+                  >
+                    {cellText(r.groupName)}
                   </td>
-                  <td className="h-[32px] px-3 align-middle truncate" title={r.category}>
-                    {r.category}
+                  <td
+                    className="h-[32px] px-3 align-middle truncate"
+                    title={r.layerName || undefined}
+                  >
+                    {cellText(r.layerName)}
+                  </td>
+                  <td
+                    className="h-[32px] px-3 align-middle truncate"
+                    title={r.category || undefined}
+                  >
+                    {cellText(r.category)}
                   </td>
                   <td
                     className="h-[32px] px-3 align-middle"
                     title={
                       r.workType === "저장" && r.saveType
-                        ? `${r.saveType} | ${r.keyField} | ${r.keyValue}`
-                        : `${r.keyField} | ${r.keyValue}`
+                        ? `${r.saveType} | ${cellText(r.keyField)} | ${cellText(r.keyValue)}`
+                        : `${cellText(r.keyField)} | ${cellText(r.keyValue)}`
                     }
                   >
                     <div className="flex items-center min-w-0 gap-0 justify-center">
@@ -397,17 +514,19 @@ export function LayerManageHistoryTab() {
                         </>
                       ) : null}
                       <span className="truncate text-muted-foreground max-w-[38%] text-right">
-                        {r.keyField}
+                        {cellText(r.keyField)}
                       </span>
                       <span className="shrink-0 px-1.5 text-muted-foreground/60" aria-hidden>
                         |
                       </span>
                       <span className="truncate font-medium max-w-[38%] text-left">
-                        {r.keyValue}
+                        {cellText(r.keyValue)}
                       </span>
                     </div>
                   </td>
-                  <td className="h-[32px] px-3 align-middle whitespace-nowrap">{r.workType}</td>
+                  <td className="h-[32px] px-3 align-middle whitespace-nowrap">
+                    {cellText(r.workType)}
+                  </td>
                   <td className="h-[32px] px-3 align-middle">
                     {r.canDetail ? (
                       <button
@@ -426,31 +545,59 @@ export function LayerManageHistoryTab() {
                     )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </section>
 
-      <div className="shrink-0 flex items-center justify-center gap-2 text-xs pb-2">
+      <div className="shrink-0 flex items-center justify-center gap-1 text-xs pb-2">
         <Button
           variant="outline"
           size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage(1)}
+          title="처음"
+          aria-label="처음"
+        >
+          <ChevronsLeft className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
           disabled={page <= 1 || loading}
           onClick={() => setPage((p) => p - 1)}
+          title="이전"
+          aria-label="이전"
         >
-          이전
+          <ChevronLeft className="w-4 h-4" />
         </Button>
-        <span>
+        <span className="px-2 tabular-nums">
           {page} / {totalPages}
         </span>
         <Button
           variant="outline"
           size="sm"
+          className="h-8 w-8 p-0"
           disabled={page >= totalPages || loading}
           onClick={() => setPage((p) => p + 1)}
+          title="다음"
+          aria-label="다음"
         >
-          다음
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage(totalPages)}
+          title="끝"
+          aria-label="끝"
+        >
+          <ChevronsRight className="w-4 h-4" />
         </Button>
       </div>
 
@@ -460,10 +607,31 @@ export function LayerManageHistoryTab() {
             <DialogTitle className="text-base">데이터 상세보기</DialogTitle>
             {detailRow ? (
               <p className="text-xs text-muted-foreground break-words">
-                {detailRow.groupName} / {detailRow.layerName} · {detailRow.category} ·{" "}
-                {detailRow.keyField} | {detailRow.keyValue} · {detailRow.workType}
+                {cellText(detailRow.groupName)} / {cellText(detailRow.layerName)} ·{" "}
+                {cellText(detailRow.category)} · {cellText(detailRow.keyField)} |{" "}
+                {cellText(detailRow.keyValue)} · {cellText(detailRow.workType)}
                 <span className="ml-1 text-[10px] opacity-70">({detailRow.source})</span>
               </p>
+            ) : null}
+            {detailRow?.canRevertAll ||
+            (detailRow?.details ?? []).some((d) => d.canRevert && d.ddKey) ? (
+              <div className="pt-1 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actionLoading || detailLoading}
+                  onClick={() => void handleRevertAll()}
+                  className="h-7 text-xs gap-1"
+                  title="전체 되돌리기"
+                >
+                  {actionLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Undo2 className="w-3.5 h-3.5" />
+                  )}
+                  전체 되돌리기
+                </Button>
+              </div>
             ) : null}
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border rounded">
@@ -475,21 +643,23 @@ export function LayerManageHistoryTab() {
               (detailRow.workType === "수정" || detailRow.workType === "되돌리기") ? (
               <table className="w-full table-fixed text-xs">
                 <colgroup>
-                  <col className="w-[22%]" />
-                  <col className="w-[39%]" />
-                  <col className="w-[39%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[32%]" />
+                  <col className="w-[32%]" />
+                  <col className="w-[16%]" />
                 </colgroup>
                 <thead className="sticky top-0 bg-muted">
                   <tr className="text-center">
                     <th className="py-1.5 px-2 font-medium border-r">속성명</th>
                     <th className="py-1.5 px-2 font-medium border-r">변경 전</th>
-                    <th className="py-1.5 px-2 font-medium">변경 후</th>
+                    <th className="py-1.5 px-2 font-medium border-r">변경 후</th>
+                    <th className="py-1.5 px-2 font-medium">되돌리기</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(detailRow.details ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="py-4 text-center text-muted-foreground">
+                      <td colSpan={4} className="py-4 text-center text-muted-foreground">
                         변경된 속성이 없습니다.
                       </td>
                     </tr>
@@ -501,6 +671,23 @@ export function LayerManageHistoryTab() {
                           {d.before ?? "—"}
                         </td>
                         <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.after ?? "—"}</td>
+                        <td className="py-1.5 px-2">
+                          {d.canRevert && d.ddKey ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-1.5"
+                              disabled={actionLoading}
+                              onClick={() => void handleRevertField(d)}
+                              title="되돌리기"
+                              aria-label="되돌리기"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </Button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -509,21 +696,23 @@ export function LayerManageHistoryTab() {
             ) : detailRow ? (
               <table className="w-full table-fixed text-xs">
                 <colgroup>
-                  <col className="w-[30%]" />
-                  <col className="w-[70%]" />
+                  <col className="w-[28%]" />
+                  <col className="w-[56%]" />
+                  <col className="w-[16%]" />
                 </colgroup>
                 <thead className="sticky top-0 bg-muted">
                   <tr className="text-center">
                     <th className="py-1.5 px-2 font-medium border-r">속성명</th>
-                    <th className="py-1.5 px-2 font-medium">
+                    <th className="py-1.5 px-2 font-medium border-r">
                       {detailRow.workType === "추가" ? "추가" : "값"}
                     </th>
+                    <th className="py-1.5 px-2 font-medium">되돌리기</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(detailRow.details ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="py-4 text-center text-muted-foreground">
+                      <td colSpan={3} className="py-4 text-center text-muted-foreground">
                         속성 값이 없습니다.
                       </td>
                     </tr>
@@ -533,6 +722,23 @@ export function LayerManageHistoryTab() {
                         <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
                         <td className="py-1.5 px-2 break-all whitespace-pre-wrap">
                           {d.value ?? d.after ?? "—"}
+                        </td>
+                        <td className="py-1.5 px-2">
+                          {d.canRevert && d.ddKey ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-1.5"
+                              disabled={actionLoading}
+                              onClick={() => void handleRevertField(d)}
+                              title="되돌리기"
+                              aria-label="되돌리기"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </Button>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       </tr>
                     ))

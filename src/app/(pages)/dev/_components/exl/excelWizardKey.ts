@@ -18,6 +18,15 @@ export function isExcelSystemKeyColumn(headerEng: string): boolean {
   return EXCEL_LAYER_SYSTEM_COLS.has(n);
 }
 
+/** 속성 컬럼·INSERT columns에서 제외 (geom은 parcels.geom 경로로만) */
+export function isExcelSystemAttrField(headerEng: string, originalHeader?: string): boolean {
+  if (isExcelSystemKeyColumn(headerEng)) return true;
+  if (originalHeader != null && String(originalHeader).trim() !== '' && isExcelSystemKeyColumn(originalHeader)) {
+    return true;
+  }
+  return false;
+}
+
 /** 키 구성 열 값들을 이어 붙여 비교용 키 문자열 생성 */
 export function buildExcelCompositeKeyValue(parts: unknown[]): string {
   return parts.map((p) => String(p ?? '').trim()).join(EXCEL_COMPOSITE_KEY_SEP);
