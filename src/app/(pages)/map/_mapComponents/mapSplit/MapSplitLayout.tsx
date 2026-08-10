@@ -14,6 +14,8 @@ import { MapSplitterGutter } from './MapSplitterGutter';
 import {
   MAP_SPLIT_ANIM_MS,
   MAP_SPLIT_DEFAULT_PRIMARY_RATIO,
+  MAP_SPLIT_GUTTER_HIT_CROSS_PX,
+  MAP_SPLIT_GUTTER_Z_INDEX,
   MAP_SPLIT_MAX_RATIO,
   MAP_SPLIT_MIN_RATIO,
   type MapSplitOrientation,
@@ -753,6 +755,7 @@ export function MapSplitLayout({
   ]);
 
   const isH = orientation === 'horizontal';
+  const gutterHitHalf = MAP_SPLIT_GUTTER_HIT_CROSS_PX / 2;
   const primaryFlex = splitActive ? primaryRatio : 1;
   const secondaryFlex = splitActive ? 1 - primaryRatio : 0;
   const useLeftInset = splitActive && !isH && mapPaddingLeft > 0;
@@ -765,7 +768,10 @@ export function MapSplitLayout({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full w-full min-h-0 min-w-0 flex-row overflow-hidden"
+      className={cn(
+        'relative flex h-full w-full min-h-0 min-w-0 flex-row',
+        splitActive ? 'overflow-visible' : 'overflow-hidden'
+      )}
     >
       {useLeftInset && (
         <div
@@ -777,7 +783,8 @@ export function MapSplitLayout({
 
       <div
         className={cn(
-          'relative flex min-h-0 min-w-0 flex-1 overflow-hidden',
+          'relative flex min-h-0 min-w-0 flex-1',
+          splitActive ? 'overflow-visible' : 'overflow-hidden',
           /* splitActive 여부와 무관하게 방향 유지 — OFF 순간 flex-row 로 바뀌면 상단(주) 지도가 줄어듦 */
           isH ? 'flex-row' : 'flex-col'
         )}
@@ -802,11 +809,18 @@ export function MapSplitLayout({
             'relative shrink-0',
             isH ? 'self-stretch' : 'w-full self-center',
             animReady && (isH ? 'transition-[width] ease-out' : 'transition-[height] ease-out'),
-            splitActive ? 'overflow-visible' : 'overflow-hidden pointer-events-none'
+            splitActive
+              ? 'overflow-visible pointer-events-none'
+              : 'overflow-hidden pointer-events-none'
           )}
           style={{
-            width: isH ? (splitActive ? 3 : 0) : '100%',
-            height: isH ? undefined : splitActive ? 3 : 0,
+            zIndex: splitActive ? MAP_SPLIT_GUTTER_Z_INDEX : undefined,
+            width: isH ? (splitActive ? MAP_SPLIT_GUTTER_HIT_CROSS_PX : 0) : '100%',
+            height: isH ? undefined : splitActive ? MAP_SPLIT_GUTTER_HIT_CROSS_PX : 0,
+            marginLeft: isH && splitActive ? -gutterHitHalf : undefined,
+            marginRight: isH && splitActive ? -gutterHitHalf : undefined,
+            marginTop: !isH && splitActive ? -gutterHitHalf : undefined,
+            marginBottom: !isH && splitActive ? -gutterHitHalf : undefined,
             opacity: splitActive ? 1 : 0,
             transitionDuration: paneTransitionMs,
           }}

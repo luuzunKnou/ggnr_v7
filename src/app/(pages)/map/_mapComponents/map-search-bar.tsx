@@ -376,8 +376,8 @@ export function MapSearchBar({
       className="fixed top-4 right-4 left-0 z-40 flex items-center pointer-events-none transition-[left] duration-200"
       style={{ left: `${leftOffset}px` }}
     >
-      <div className="pointer-events-auto flex items-start gap-6 w-full min-w-0">
-        <div className="flex items-start gap-2 shrink-0">
+      <div className="pointer-events-none flex items-start gap-6 w-full min-w-0">
+        <div className="pointer-events-auto flex items-start gap-2 shrink-0">
         <div ref={addressSearchWrapperRef} className="relative shrink-0">
           <form
             onSubmit={(e) => {
@@ -549,11 +549,11 @@ export function MapSearchBar({
         </MapSearchBarIconButton>
         </div>
 
-        {/* 레이어 그룹: 남는 공간만 사용 */}
-        <div className="min-w-0 flex-1 flex overflow-hidden" aria-hidden />
+        {/* 레이어 그룹: 남는 공간 — pointer-events 없음(분할 거터 등 지도 UI 클릭 통과) */}
+        <div className="min-w-0 flex-1 flex overflow-hidden pointer-events-none" aria-hidden />
 
         {/* 우측: 테마 변경 + GeoServer 로그(권한자) + 시스템 선택 */}
-        <div className="shrink-0 flex items-center gap-2">
+        <div className="pointer-events-auto shrink-0 flex items-center gap-2">
           
           {canToggleGeoserverLog && (
             <MapSearchBarIconButton

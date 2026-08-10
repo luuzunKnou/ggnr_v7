@@ -610,6 +610,24 @@ export default function OpenLayersMap({
     mapContext?.setMapSplitSecondaryBackgroundId,
   ]);
 
+  /** 지도분할 — 배경 동기화 OFF 전환 시 배경지도 패널 자동 열기 */
+  const prevMapSplitBasemapSyncRef = useRef(mapContext?.mapSplitBasemapSync ?? true);
+  useEffect(() => {
+    const kind = mapContext?.mapSplitSecondaryKind;
+    const sync = mapContext?.mapSplitBasemapSync ?? true;
+    const wasSync = prevMapSplitBasemapSyncRef.current;
+    prevMapSplitBasemapSyncRef.current = sync;
+
+    if (kind !== 'map' || wasSync === sync || sync) return;
+
+    setIsBackgroundPanelExiting(false);
+    setIsAerialViewPanelExiting(false);
+    setActiveControls((prev) => {
+      const next = prev.filter((item) => item !== 'aerial-view');
+      return next.includes('background-map') ? next : [...next, 'background-map'];
+    });
+  }, [mapContext?.mapSplitSecondaryKind, mapContext?.mapSplitBasemapSync]);
+
   const backgroundSplitSelect =
     mapContext?.mapSplitSecondaryKind === 'map' &&
     !(mapContext?.mapSplitBasemapSync ?? true)
