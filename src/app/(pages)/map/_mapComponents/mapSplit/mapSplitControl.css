@@ -45,3 +45,43 @@
 .map-split-control-shake-y {
   animation: map-split-control-shake-y 180ms ease-in-out;
 }
+
+/* 거터 컨트롤 펼침 — 세로 스택(좌우 분할) */
+.map-split-control-expand-y {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: 0;
+  transition-property: grid-template-rows, opacity, margin-top;
+  transition-timing-function: ease-out;
+  pointer-events: none;
+}
+.map-split-control-expand-y[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 4px;
+  pointer-events: auto;
+}
+
+/* 거터 컨트롤 펼침 — 가로 스택(상하 분할) */
+.map-split-control-expand-x {
+  display: grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  margin-left: 0;
+  transition-property: grid-template-columns, opacity, margin-left;
+  transition-timing-function: ease-out;
+  pointer-events: none;
+}
+.map-split-control-expand-x[data-open='true'] {
+  grid-template-columns: 1fr;
+  opacity: 1;
+  margin-left: 4px;
+  pointer-events: auto;
+}
+
+.map-split-control-expand-inner {
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+}

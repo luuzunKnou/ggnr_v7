@@ -22,7 +22,46 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess';
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
+import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
+
+/** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
+const mapSearchBarIconShell = cn(
+  'shrink-0 opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border overflow-hidden',
+  'bg-white/95 border-slate-200',
+  'dark:bg-black/55 dark:border-white/10'
+);
+
+const mapSearchBarIconBtnInner = cn(
+  'box-border flex items-center justify-center w-[30px] h-[30px] p-0 cursor-pointer transition-colors',
+  'text-slate-600 dark:text-white/90',
+  'hover:bg-slate-100 hover:text-blue-600',
+  'dark:hover:bg-white/10 dark:hover:text-white'
+);
+
+const mapSearchBarIconBtnActive = cn(
+  'bg-slate-100 text-blue-600',
+  'dark:bg-white/20 dark:text-white'
+);
+
+/** 검색바 공통 표면 — 시스템 선택 등 넓은 컨트롤 */
+const mapSearchBarSurface = cn(
+  'opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border transition-colors',
+  'bg-white/95 border-slate-200',
+  'dark:bg-black/55 dark:border-white/10'
+);
+
+const mapSearchBarSurfaceHover = cn(
+  'hover:bg-slate-100 hover:text-blue-600',
+  'dark:hover:bg-white/10 dark:hover:text-white'
+);
+
+/** 시스템 선택 트리거 */
+const mapSearchBarSystemSelectBtn = cn(
+  'shrink-0 flex items-center gap-2.5 h-[30px] w-[230px] cursor-pointer pl-3 pr-3 text-left',
+  mapSearchBarSurface,
+  mapSearchBarSurfaceHover
+);
 
 type SystemOption = {
   sys_key: string;
@@ -66,6 +105,33 @@ function saveRecentQueries(queries: string[]) {
   } catch {
     // ignore
   }
+}
+
+function MapSearchBarIconButton({
+  title,
+  active,
+  onClick,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={mapSearchBarIconShell}>
+      <button
+        type="button"
+        title={title}
+        aria-label={title}
+        aria-pressed={active}
+        onClick={onClick}
+        className={cn(mapSearchBarIconBtnInner, active && mapSearchBarIconBtnActive)}
+      >
+        <span className="flex shrink-0 items-center justify-center leading-none">{children}</span>
+      </button>
+    </div>
+  );
 }
 
 export function MapSearchBar({
@@ -319,11 +385,18 @@ export function MapSearchBar({
               submit(query);
               runAddressSearch();
             }}
-            className="flex items-center gap-2 w-[350px] rounded-[5px] bg-white backdrop-blur-md border border-slate-200 shadow-lg px-1 py-1 opacity-90"
+            className={cn(
+              'flex items-center gap-2 w-[350px] rounded-[5px] px-1 py-1',
+              mapSearchBarSurface
+            )}
           >
             <button
               type="submit"
-              className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-[5px] hover:bg-slate-100 text-slate-600 -mr-1 min-h-[20px]"
+              className={cn(
+                'inline-flex items-center justify-center w-[20px] h-[20px] rounded-[5px] -mr-1 min-h-[20px] cursor-pointer',
+                'text-slate-600 hover:bg-slate-100',
+                'dark:text-white/90 dark:hover:bg-white/10'
+              )}
               aria-label="검색"
               title="검색"
             >
@@ -335,7 +408,11 @@ export function MapSearchBar({
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setAddressPanelOpen(true)}
               placeholder={centerPlaceholder}
-              className="h-[20px] min-h-[20px] text-[12px] border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-0"
+              className={cn(
+                'h-[20px] min-h-[20px] text-[12px] border-0 bg-transparent shadow-none',
+                'text-foreground placeholder:text-muted-foreground',
+                'focus-visible:ring-0 focus-visible:border-0 dark:bg-transparent'
+              )}
             />
 
             {query.trim().length > 0 && (
@@ -347,7 +424,11 @@ export function MapSearchBar({
                   setAddressResults([]);
                   setAddressPanelOpen(false);
                 }}
-                className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-md hover:bg-slate-100 text-slate-500"
+                className={cn(
+                  'inline-flex items-center justify-center w-[20px] h-[20px] rounded-md cursor-pointer',
+                  'text-slate-500 hover:bg-slate-100',
+                  'dark:text-white/60 dark:hover:bg-white/10'
+                )}
                 aria-label="검색어 지우기"
                 title="지우기"
               >
@@ -358,9 +439,15 @@ export function MapSearchBar({
 
           {/* 주소 검색 결과 목록 + 최근 검색어 */}
           {addressPanelOpen && (
-            <div className="absolute top-full left-0 mt-1 w-[350px] rounded-[5px] opacity-90 bg-white border border-slate-200 shadow-lg overflow-hidden z-50">
+            <div
+              className={cn(
+                'absolute top-full left-0 mt-1 w-[350px] rounded-[5px] opacity-90 shadow-lg overflow-hidden z-50 border',
+                'bg-white border-slate-200',
+                'dark:bg-black/80 dark:border-white/10 dark:backdrop-blur-sm'
+              )}
+            >
               {addressSearchLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-slate-500 text-[12px]">
+                <div className="flex items-center justify-center gap-2 py-6 text-slate-500 dark:text-white/50 text-[12px]">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   검색 중...
                 </div>
@@ -370,15 +457,20 @@ export function MapSearchBar({
                     <li key={`${item.address}-${idx}`}>
                       <button
                         type="button"
+                        title={item.address}
                         onClick={() => handleSelectAddress(item)}
-                        className="w-full text-left px-4 py-1.5 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 transition-colors min-h-[44px] flex flex-col justify-center gap-0.5"
+                        className={cn(
+                          'w-full cursor-pointer text-left px-4 py-1.5 transition-colors min-h-[44px] flex flex-col justify-center gap-0.5',
+                          'border-b border-slate-100 last:border-b-0 hover:bg-slate-50',
+                          'dark:border-white/10 dark:hover:bg-white/10'
+                        )}
                       >
                         {item.roadAddress && (
                           <div className="flex items-center gap-2 min-h-[1.25rem]">
-                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700">
+                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-500/25 dark:text-blue-300">
                               도로명
                             </span>
-                            <span className="text-[12px] text-slate-800 truncate flex-1 min-w-0">
+                            <span className="text-[12px] text-slate-800 dark:text-white/90 truncate flex-1 min-w-0">
                               {item.roadAddress}
                               {item.buildingName ? ` (${item.buildingName})` : ''}
                             </span>
@@ -386,16 +478,16 @@ export function MapSearchBar({
                         )}
                         {item.jibunAddress && (
                           <div className="flex items-center gap-2 min-h-[1.25rem]">
-                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800">
+                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200">
                               지번
                             </span>
-                            <span className="text-[12px] text-slate-800 truncate flex-1 min-w-0">
+                            <span className="text-[12px] text-slate-800 dark:text-white/90 truncate flex-1 min-w-0">
                               {item.jibunAddress}
                             </span>
                           </div>
                         )}
                         {!item.roadAddress && !item.jibunAddress && (
-                          <span className="text-[12px] text-slate-800 line-clamp-2">
+                          <span className="text-[12px] text-slate-800 dark:text-white/90 line-clamp-2">
                             {item.address}
                           </span>
                         )}
@@ -404,7 +496,7 @@ export function MapSearchBar({
                   ))}
                 </ul>
               ) : query.trim() ? (
-                <div className="py-4 text-center text-[12px] text-slate-500">
+                <div className="py-4 text-center text-[12px] text-slate-500 dark:text-white/50">
                   검색 결과가 없습니다
                 </div>
               ) : recentQueries.length === 0 ? (
@@ -416,10 +508,10 @@ export function MapSearchBar({
               {recentQueries.length > 0 && (
                 <>
                   {(addressSearchLoading || addressResults.length > 0 || Boolean(query.trim())) && (
-                    <div className="border-t border-slate-100" />
+                    <div className="border-t border-slate-100 dark:border-white/10" />
                   )}
                   <div className="px-3 py-2">
-                    <p className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 mb-1.5">
+                    <p className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-white/50 mb-1.5">
                       <History className="w-3.5 h-3.5" />
                       최근 검색어
                     </p>
@@ -428,6 +520,7 @@ export function MapSearchBar({
                         <li key={q}>
                           <button
                             type="button"
+                            title={q}
                             onClick={() => {
                               setQuery(q);
                               if (!vworldApiKey) return;
@@ -436,7 +529,11 @@ export function MapSearchBar({
                                 .then((items) => setAddressResults(items))
                                 .finally(() => setAddressSearchLoading(false));
                             }}
-                            className="text-[12px] px-2.5 py-1.5 rounded-[5px] bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                            className={cn(
+                              'text-[12px] px-2.5 py-1.5 rounded-[5px] cursor-pointer transition-colors',
+                              'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                              'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15'
+                            )}
                           >
                             {q}
                           </button>
@@ -450,40 +547,32 @@ export function MapSearchBar({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => mapContext?.allLayersOffRef?.current?.()}
-          className="shrink-0 flex items-center justify-center w-[30px] h-[30px] opacity-90 rounded-[5px] bg-white backdrop-blur-md border border-slate-200 shadow-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
-          aria-label="전체 레이어 끄기"
+        <MapSearchBarIconButton
           title="전체 레이어 끄기 (지적도·건물도로·기초구간 포함)"
+          onClick={() => mapContext?.allLayersOffRef?.current?.()}
         >
-          <EyeOff className="w-5 h-5 text-slate-600" strokeWidth={2} />
-        </button>
+          <EyeOff className="w-5 h-5" strokeWidth={2} />
+        </MapSearchBarIconButton>
         </div>
 
         {/* 레이어 그룹: 남는 공간만 사용 */}
         <div className="min-w-0 flex-1 flex overflow-hidden" aria-hidden />
 
-        {/* 우측: GeoServer 로그(권한자) + 시스템 선택 */}
+        {/* 우측: 테마 변경 + GeoServer 로그(권한자) + 시스템 선택 */}
         <div className="shrink-0 flex items-center gap-2">
+          
           {canToggleGeoserverLog && (
-            <button
-              type="button"
-              onClick={() => mapContext?.setShowDebugUi(!showDebugUi)}
-              className={cn(
-                'shrink-0 flex items-center justify-center w-[30px] h-[30px] opacity-90 rounded-[5px] bg-white backdrop-blur-md border border-slate-200 shadow-lg transition-colors',
-                showDebugUi
-                  ? 'bg-slate-100 text-blue-600'
-                  : 'text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-blue-600'
-              )}
-              aria-label={showDebugUi ? 'GeoServer 로그 끄기' : 'GeoServer 로그 켜기'}
-              aria-pressed={showDebugUi}
+            <MapSearchBarIconButton
               title={showDebugUi ? 'GeoServer 로그 끄기' : 'GeoServer 로그 켜기'}
+              active={showDebugUi}
+              onClick={() => mapContext?.setShowDebugUi(!showDebugUi)}
             >
               <ScrollText className="w-5 h-5" strokeWidth={2} />
-            </button>
+            </MapSearchBarIconButton>
           )}
-
+          <div className={mapSearchBarIconShell}>
+            <ThemeToggle variant="mapIcon" iconBtnClassName={mapSearchBarIconBtnInner} />
+          </div>
         {/* 시스템 선택: 오른쪽 끝 고정, 셀렉트박스 스타일, 클릭 시 모달 */}
         {systemList.length > 0 && (() => {
           const selectedSystem = systemList.find((s) => s.sys_key === selectedSystemKey);
@@ -493,8 +582,9 @@ export function MapSearchBar({
               <button
                 type="button"
                 onClick={() => setSystemModalOpen(true)}
-                className="shrink-0 flex items-center gap-2.5 h-[30px] opacity-90 rounded-[5px] bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-md pl-3 pr-3 text-left hover:shadow-lg hover:border-slate-300 hover:bg-white transition-all duration-200 w-[230px]"
+                className={mapSearchBarSystemSelectBtn}
                 aria-label="시스템 선택"
+                title="시스템 선택"
               >
                 <div
                   className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
@@ -502,16 +592,16 @@ export function MapSearchBar({
                 >
                   <LayoutGrid className="w-4 h-4 shrink-0" aria-hidden />
                 </div>
-                <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-slate-700">
+                <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-slate-700 dark:text-white/90">
                   {selectedSystem?.sys_kor ?? (selectedSystemKey || '시스템 선택')}
                 </span>
-                <ChevronDown className="w-4 h-4 shrink-0 text-slate-400" aria-hidden />
+                <ChevronDown className="w-4 h-4 shrink-0 text-slate-400 dark:text-white/50" aria-hidden />
               </button>
 
               <Dialog open={systemModalOpen} onOpenChange={setSystemModalOpen}>
-                <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl" showCloseButton={false}>
-                  <DialogHeader className="px-3 py-2 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
-                    <DialogTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90" showCloseButton={false}>
+                  <DialogHeader className="px-3 py-2 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white dark:border-white/10 dark:from-white/5 dark:to-black/90">
+                    <DialogTitle className="text-sm font-semibold text-slate-800 dark:text-white/90 flex items-center gap-2">
                       <div className="flex items-center justify-center w-6 h-6 rounded-[5px] bg-primary/10 text-primary">
                         <LayoutGrid className="w-3.5 h-3.5" />
                       </div>
@@ -531,7 +621,7 @@ export function MapSearchBar({
                               'w-full flex items-center gap-4 rounded-xl px-4 py-3 text-left transition-all duration-200 border',
                               isSelected
                                 ? 'border-transparent shadow-md ring-1 ring-primary/20'
-                                : 'border-slate-100 bg-slate-50/50 hover:bg-slate-100/80 hover:border-slate-200'
+                                : 'border-slate-100 bg-slate-50/50 hover:bg-slate-100/80 hover:border-slate-200 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:hover:border-white/15'
                             )}
                             style={isSelected ? { backgroundColor: `${accentColor}12`, borderColor: `${accentColor}30` } : undefined}
                           >
@@ -541,11 +631,11 @@ export function MapSearchBar({
                               aria-hidden
                             />
                             <div className="flex-1 min-w-0 text-left">
-                              <span className={cn('block truncate text-sm', isSelected ? 'font-semibold text-slate-800' : 'font-medium text-slate-700')}>
+                              <span className={cn('block truncate text-sm', isSelected ? 'font-semibold text-slate-800 dark:text-white' : 'font-medium text-slate-700 dark:text-white/90')}>
                                 {sys.sys_kor}
                               </span>
                               {sys.sys_detail && (
-                                <span className="block text-xs text-slate-500 mt-1 leading-relaxed">{sys.sys_detail}</span>
+                                <span className="block text-xs text-slate-500 dark:text-white/50 mt-1 leading-relaxed">{sys.sys_detail}</span>
                               )}
                             </div>
                             {isSelected && (

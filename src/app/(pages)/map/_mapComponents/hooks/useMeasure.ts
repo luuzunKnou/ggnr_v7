@@ -11,6 +11,7 @@ import { get as getProjection, transform } from 'ol/proj';
 import { getCenter } from 'ol/extent';
 import Overlay from 'ol/Overlay';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
+import { bindMapViewportPointerPresence } from './mapViewportPointerPresence';
 
 export type MeasureType = 'distance' | 'area';
 
@@ -79,6 +80,7 @@ export function useMeasure(
           return type ? createStyle(type) : undefined;
         },
       });
+      measureLayer.set('mapSplitNoMirror', true);
       map.addLayer(measureLayer);
       measureLayerRef.current = measureLayer;
     }
@@ -200,15 +202,40 @@ export function useMeasure(
     // measureType이 없으면 Draw를 추가하지 않음
     if (!measureType) return;
 
+    let unbindPresence: (() => void) | null = null;
+
     // 약간의 지연을 두어 이전 Draw가 완전히 정리되도록 함
     const timeoutId = setTimeout(() => {
       if (!map || !measureSourceRef.current) return;
 
       const drawType = measureType === 'distance' ? 'LineString' : 'Polygon';
+      const pointerOverRef = { current: false };
       const draw = new Draw({
         source: measureSourceRef.current,
         type: drawType,
-        style: () => createStyle(measureType),
+        style: () => (pointerOverRef.current ? createStyle(measureType) : []),
+      });
+
+      const setSketchVisible = (visible: boolean) => {
+        pointerOverRef.current = visible;
+        try {
+          draw.getOverlay()?.setVisible(visible);
+        } catch {
+          /* ignore */
+        }
+        if (!visible && overlayRef.current) {
+          overlayRef.current.setPosition(undefined);
+        }
+        sketchFeatureRef.current?.changed();
+        map.render();
+      };
+
+      // 분할 시 양쪽 Draw가 동시에 켜지므로, 포인터가 올라온 맵만 스케치 표시
+      setSketchVisible(false);
+
+      unbindPresence = bindMapViewportPointerPresence(map, {
+        onEnter: () => setSketchVisible(true),
+        onLeave: () => setSketchVisible(false),
       });
 
       // 임시 오버레이 생성 함수
@@ -467,7 +494,9 @@ export function useMeasure(
     // cleanup 함수: Draw 인터랙션 제거 및 timeout 정리
     return () => {
       clearTimeout(timeoutId);
-      
+      unbindPresence?.();
+      unbindPresence = null;
+
       // pointermove 핸들러 제거
       if (pointerMoveHandlerRef.current && map) {
         map.un('pointermove', pointerMoveHandlerRef.current);

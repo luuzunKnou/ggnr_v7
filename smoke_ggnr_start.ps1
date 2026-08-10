@@ -1,4 +1,4 @@
-# ggnr_start.bat 기동 스모크: 기동 확인 후 프로세스 트리·GeoServer 종료
+﻿# ggnr_start.bat 기동 스모크: 기동 확인 후 프로세스 트리·GeoServer 종료
 # 사용: powershell -NoProfile -File smoke_ggnr_start.ps1 -StartBat "..." -Root "..."
 #
 # GeoServer: npm run start → ensureGeoServer → start-geoserver.bat (detached).
@@ -12,6 +12,11 @@ param(
   [int]$TimeoutSec = 180,
   [int]$GeoPort = 8080
 )
+
+# Node/tsx·chcp 65001 출력(UTF-8)을 CP949로 읽지 않도록 콘솔·로그 인코딩 고정
+try { chcp 65001 | Out-Null } catch { }
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ErrorActionPreference = 'Continue'
 $logOut = Join-Path $env:TEMP 'ggnr_start_smoke.out.log'
@@ -37,7 +42,7 @@ function Get-SmokeLogText {
   $parts = @()
   foreach ($f in @($logOut, $logErr)) {
     if (Test-Path -LiteralPath $f) {
-      $t = Get-Content -LiteralPath $f -Raw -ErrorAction SilentlyContinue
+      $t = Get-Content -LiteralPath $f -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
       if ($t) { $parts += $t }
     }
   }
@@ -48,7 +53,7 @@ function Get-SmokeLogTail([int]$LineCount = 2) {
   $tail = @()
   foreach ($f in @($logOut, $logErr)) {
     if (Test-Path -LiteralPath $f) {
-      $chunk = @(Get-Content -LiteralPath $f -Tail $LineCount -ErrorAction SilentlyContinue)
+      $chunk = @(Get-Content -LiteralPath $f -Tail $LineCount -Encoding UTF8 -ErrorAction SilentlyContinue)
       if ($chunk.Count -gt 0) { $tail += $chunk }
     }
   }
@@ -194,13 +199,24 @@ try {
 
   Start-SmokeCleanupWatchdog
 
-  $p = Start-Process -FilePath 'cmd.exe' `
-    -ArgumentList @('/c', 'call', "`"$StartBat`"") `
-    -WorkingDirectory $Root `
-    -RedirectStandardOutput $logOut `
-    -RedirectStandardError $logErr `
-    -PassThru `
-    -WindowStyle Hidden
+  # ggnr_start.bat 실패 시 pause 방지 (스모크가 키 입력 대기에 걸리지 않도록)
+  $prevNoPause = $env:GGNR_START_NO_PAUSE
+  $env:GGNR_START_NO_PAUSE = '1'
+  try {
+    $p = Start-Process -FilePath 'cmd.exe' `
+      -ArgumentList @('/c', 'call', "`"$StartBat`"") `
+      -WorkingDirectory $Root `
+      -RedirectStandardOutput $logOut `
+      -RedirectStandardError $logErr `
+      -PassThru `
+      -WindowStyle Hidden
+  } finally {
+    if ($null -eq $prevNoPause) {
+      Remove-Item Env:\GGNR_START_NO_PAUSE -ErrorAction SilentlyContinue
+    } else {
+      $env:GGNR_START_NO_PAUSE = $prevNoPause
+    }
+  }
   $script:smokeProc = $p
 
   Write-Smoke "테스트 프로세스 PID=$($p.Id)"
@@ -275,7 +291,7 @@ if (-not $ok) {
   foreach ($f in @($logOut, $logErr)) {
     if (Test-Path -LiteralPath $f) {
       Write-Host "----- $f -----"
-      Get-Content -LiteralPath $f -Tail 40
+      Get-Content -LiteralPath $f -Tail 40 -Encoding UTF8
     }
   }
   if (Test-Path -LiteralPath $cleanupPs1) {
