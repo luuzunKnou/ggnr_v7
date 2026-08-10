@@ -88,7 +88,7 @@ function effectiveRestartMode(opts?: RelayStageOptions): RestartMode | 'off' {
 /** 재시작 방법·패키지 프로필에 따른 단계 목록 */
 export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
   const mode = effectiveRestartMode(opts);
-  /** 병합 후 GeoServer 기동은 재시작 여부와 무관하게 적용 경로에서 수행 */
+  /** «재시작 안 함»일 때만 병합 후 GeoServer 기동. 재기동은 run.ts ensure */
   if (mode === 'off') return [...RELAY_COMMON_STAGES, 'geoserver-start'];
 
   const withNpm =
@@ -96,7 +96,7 @@ export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
   /** exit·launcher 공통: 사전 install(개방망)·사전 빌드 → 앱 종료. 런처만 재기동 안내 단계 */
   const restartTail: RelayStageId[] =
     mode === 'launcher' ? ['app-stop', 'app-start'] : ['app-stop'];
-  return [...RELAY_COMMON_STAGES, 'geoserver-start', ...withNpm, 'build', ...restartTail];
+  return [...RELAY_COMMON_STAGES, ...withNpm, 'build', ...restartTail];
 }
 
 export function relayStageLabel(id: RelayStageId, opts?: RelayStageOptions): string {
