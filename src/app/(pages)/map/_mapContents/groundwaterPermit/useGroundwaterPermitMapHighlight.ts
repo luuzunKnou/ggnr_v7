@@ -22,8 +22,8 @@ import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
 /** 데이터조회 레이더 + 중심 점(레이더만 있으면 위치가 흐려 보임) */
 function createGroundwaterPermitHighlightStyle(getPulsePhase: () => number): StyleFunction {
   const radarStyleFn = createDataQuerySelectionRowHighlightStyle(getPulsePhase)
-  return (feature: FeatureLike) => {
-    const radar = radarStyleFn(feature)
+  return (feature: FeatureLike, resolution: number) => {
+    const radar = radarStyleFn(feature, resolution)
     const center = new Style({
       image: new CircleStyle({
         radius: 7,
