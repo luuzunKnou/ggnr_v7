@@ -36,6 +36,11 @@ import {
   type ChangeHistoryDayDiffFeature,
   type ChangeHistoryLayerGroup,
 } from './changeHistory.types';
+import {
+  peekCompareLegendInfo,
+  prefetchCompareStyles,
+  type ChangeHistoryLegendInfo,
+} from './changeHistory.styleCache';
 import { PARCEL_ANALYSIS_ANALYZING_SPINNER } from '../parcelAnalysis/ParcelAnalysis.themeMap';
 import type { OrthophotoTileOutputsPayload } from '@/app/(pages)/map/_mapComponents/mapControlPanel/backgroundMapSelector';
 
@@ -44,6 +49,8 @@ const RESULT_MODAL_WIDTH = 'min(1100px, calc(100vw - 2rem))';
 const RESULT_MODAL_HEIGHT = 'min(720px, 85vh)';
 const RESULT_MODAL_Z = 'z-[1300]';
 const OUTSIDE_CLICK_MOVE_THRESHOLD_PX = 6;
+/** 시점·당일 diff 조회 상한 — hung API 시 스피너 무한 방지 */
+const CHANGE_HISTORY_ASOF_TIMEOUT_MS = 90_000;
 /** 좌측 세로 타임라인 폭 */
 const TIMELINE_WIDTH_PX = 200;
 
@@ -60,6 +67,8 @@ type ChangeItem = {
   id: string;
   name: string;
   group: string;
+  /** GeoServer 스타일 조회용 테이블명 */
+  tableName?: string;
 };
 
 /** 타임라인 날짜 표시 — YYYY-MM-DD */
@@ -68,6 +77,12 @@ function formatTimelineDate(date: string) {
 }
 
 const TIMELINE_YEAR_ALL = 'all';
+
+const LEGEND_FALLBACK: ChangeHistoryLegendInfo = {
+  kind: 'polygon',
+  fillColor: '#94a3b8',
+  strokeColor: '#64748b',
+};
 
 function buildChangeItems(
   event: HistoryEvent,
@@ -97,12 +112,18 @@ function buildChangeItems(
   for (const key of keys) {
     const hit = byTable.get(String(key).toLowerCase()) ?? byName.get(key);
     if (hit) {
-      items.push({ id: `${event.date}-${hit.id}`, name: hit.name, group: hit.group });
+      items.push({
+        id: `${event.date}-${hit.id}`,
+        name: hit.name,
+        group: hit.group,
+        tableName: hit.tableName || undefined,
+      });
     } else {
       items.push({
         id: `${event.date}-hist-${key}`,
         name: key,
         group: event.source === 'syncLog' ? '동기화이력' : '기타',
+        tableName: String(key),
       });
     }
   }
@@ -120,16 +141,99 @@ function groupChangeItems(items: ChangeItem[]) {
   return [...map.entries()].map(([title, rows]) => ({ title, rows }));
 }
 
-function ChangeChip({ name }: { name: string }) {
+function legendKindLabel(kind: ChangeHistoryLegendInfo['kind']) {
+  if (kind === 'point') return '점';
+  if (kind === 'line') return '선';
+  return '면';
+}
+
+/** 지도 도형 종류·색에 맞춘 작은 범례 */
+function LayerLegendSwatch({
+  legend,
+  layerName,
+}: {
+  legend: ChangeHistoryLegendInfo;
+  layerName: string;
+}) {
+  const title = `${layerName} (${legendKindLabel(legend.kind)})`;
+  if (legend.kind === 'line') {
+    return (
+      <span
+        className="inline-flex h-2.5 w-3 shrink-0 items-center"
+        title={title}
+        aria-label={title}
+      >
+        <span
+          className="block h-[2px] w-full rounded-full"
+          style={{ backgroundColor: legend.strokeColor }}
+        />
+      </span>
+    );
+  }
+  if (legend.kind === 'point') {
+    return (
+      <span
+        className="inline-block size-2 shrink-0 rounded-full"
+        title={title}
+        aria-label={title}
+        style={{
+          backgroundColor: legend.fillColor,
+          boxShadow: `inset 0 0 0 1px ${legend.strokeColor}`,
+        }}
+      />
+    );
+  }
   return (
-    <span className="inline-flex max-w-full items-center truncate rounded-md border border-border bg-background px-2 py-0.5 text-[11px] text-foreground shadow-sm">
-      {name}
+    <span
+      className="inline-block size-2 shrink-0 rounded-[1px]"
+      title={title}
+      aria-label={title}
+      style={{
+        backgroundColor: legend.fillColor,
+        boxShadow: `inset 0 0 0 1px ${legend.strokeColor}`,
+      }}
+    />
+  );
+}
+
+function ChangeChip({ name, tableName }: { name: string; tableName?: string }) {
+  const legend =
+    (tableName ? peekCompareLegendInfo(tableName) : null) ?? LEGEND_FALLBACK;
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-md border border-border bg-background px-2 py-0.5 text-[11px] text-foreground shadow-sm">
+      <LayerLegendSwatch legend={legend} layerName={name} />
+      <span className="min-w-0 truncate">{name}</span>
     </span>
   );
 }
 
 function MidUiE({ items }: { items: ChangeItem[] }) {
   const groups = useMemo(() => groupChangeItems(items), [items]);
+  const [, setLegendTick] = useState(0);
+
+  const tableKey = useMemo(
+    () =>
+      [
+        ...new Set(
+          items.map((i) => i.tableName?.trim().toLowerCase()).filter(Boolean) as string[]
+        ),
+      ]
+        .sort()
+        .join('|'),
+    [items]
+  );
+
+  useEffect(() => {
+    if (!tableKey) return;
+    const tables = tableKey.split('|');
+    let cancelled = false;
+    void prefetchCompareStyles(tables).then(() => {
+      if (!cancelled) setLegendTick((n) => n + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tableKey]);
 
   if (groups.length === 0) {
     return <p className="text-[11px] text-muted-foreground">표시할 변경 레이어가 없습니다.</p>;
@@ -141,7 +245,7 @@ function MidUiE({ items }: { items: ChangeItem[] }) {
         <div key={g.title} className="flex flex-wrap items-center gap-1 border-l-2 border-primary/70 pl-2">
           <span className="shrink-0 text-[11px] font-semibold text-muted-foreground">{g.title}</span>
           {g.rows.map((row) => (
-            <ChangeChip key={row.id} name={row.name} />
+            <ChangeChip key={row.id} name={row.name} tableName={row.tableName} />
           ))}
         </div>
       ))}
@@ -246,6 +350,9 @@ export function ChangeHistoryResult() {
     if (!resultOpen) {
       setContentReady(false);
       setTimelineSettled(false);
+      setAsOfLoading(false);
+      setAsOfFeatures([]);
+      setDayDiffFeatures([]);
       return;
     }
   }, [resultOpen]);
@@ -383,16 +490,31 @@ export function ChangeHistoryResult() {
 
   const asOfTablesKey = asOfTableNames.join('|');
   const asOfDate = event?.date ?? '';
+  const asOfRequestRef = useRef(0);
 
   useEffect(() => {
     if (!resultOpen || !asOfDate || !asOfTablesKey) {
       setAsOfFeatures([]);
       setDayDiffFeatures([]);
+      setAsOfLoading(false);
       return;
     }
     const tables = asOfTablesKey.split('|');
+    const reqId = ++asOfRequestRef.current;
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const finishLoading = () => {
+      if (cancelled || reqId !== asOfRequestRef.current) return;
+      setAsOfLoading(false);
+    };
+
     setAsOfLoading(true);
+    setAsOfFeatures([]);
+    setDayDiffFeatures([]);
+
+    timeoutId = setTimeout(finishLoading, CHANGE_HISTORY_ASOF_TIMEOUT_MS);
+
     void Promise.all([
       call('', 'POST', {
         service: 'changeHistoryService',
@@ -461,19 +583,20 @@ export function ChangeHistoryResult() {
         }
       })
       .finally(() => {
-        if (!cancelled) setAsOfLoading(false);
+        if (timeoutId) clearTimeout(timeoutId);
+        finishLoading();
       });
     return () => {
       cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      asOfRequestRef.current += 1;
+      setAsOfLoading(false);
     };
   }, [resultOpen, asOfDate, asOfTablesKey, area?.wkt]);
 
   useEffect(() => {
     if (!resultOpen || contentReady || !timelineSettled || timelineLoading) return;
-    if (historyEvents.length > 0) {
-      if (!event) return;
-      if (asOfLoading) return;
-    }
+    if (historyEvents.length > 0 && !event) return;
     setContentReady(true);
   }, [
     resultOpen,
@@ -482,7 +605,6 @@ export function ChangeHistoryResult() {
     timelineLoading,
     historyEvents.length,
     event,
-    asOfLoading,
   ]);
 
   const emptyTimeline = !timelineLoading && historyEvents.length === 0;
@@ -882,7 +1004,7 @@ export function ChangeHistoryResult() {
                 wmsTableNames={wmsTableNames}
                 asOfFeatures={asOfFeatures}
                 dayDiffFeatures={dayDiffFeatures}
-                mapLoading={timelineLoading || asOfLoading}
+                mapLoading={asOfLoading}
                 onBackgroundResolved={onMapBackgroundResolved}
               />
             </div>
