@@ -1,3 +1,4 @@
+import { randomId } from '@/lib/randomId';
 import type {
   PendingChangeKind,
   PendingRowKey,
@@ -45,7 +46,7 @@ export function draftToPendingChange(
 
   const kind = draft.changeKind;
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     kind,
     layer: {
       id: layer.id,

@@ -1,3 +1,4 @@
+import { randomId } from '@/lib/randomId';
 import type {
   EditHistoryAction,
   EditHistoryEntry,
@@ -89,7 +90,7 @@ function baseHistoryFields(
 
   const sessionKey = buildSessionKey(layer, draft);
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     action,
     kind,
     layer: {
