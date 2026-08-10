@@ -25,6 +25,7 @@ import {
 import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
 import { DEFAULT_CAMERA_HEIGHT_3D, DEFAULT_ZOOM_2D } from './config/mapDefaults';
 import { MapSplitLayout } from './mapSplit/MapSplitLayout';
+import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
 import { useStreetViewSecondary } from '../_mapContents/streetView/useStreetViewSecondary';
 import { useMapSplitSecondary } from '../_mapContents/mapSplit/useMapSplitSecondary';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
@@ -462,6 +463,9 @@ export default function MapViewModeWrapper({
           onControlsExpandedChange={onSplitControlsExpandedChange}
           onSizeTick={onSplitSizeTick}
           mapPaddingLeft={mapContext?.mapPaddingLeft ?? 0}
+          mapPaddingRight={
+            mapContext?.mapPaddingRight ?? MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX
+          }
           onOrientationChange={setSplitOrientation}
         />
       )}

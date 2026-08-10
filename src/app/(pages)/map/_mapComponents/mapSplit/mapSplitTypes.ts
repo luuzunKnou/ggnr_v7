@@ -13,12 +13,8 @@ export const MAP_SPLIT_ANIM_MS = 320;
 /** 분할선 컨트롤 pill 위치 (0~1, 양끝 여백 — 버튼 1개 기준 fallback) */
 export const MAP_SPLIT_CONTROL_OFFSET_MIN = 0.04;
 export const MAP_SPLIT_CONTROL_OFFSET_MAX = 0.96;
-/** 상하 분할 시 좌측 사이드바(65px) — pill 좌측이 닿을 수 있는 기준 */
-export const MAP_SPLIT_CONTROL_LEFT_SIDEBAR_PX = 65;
-/** 상하 분할 시 우측 지도 메뉴 열(45px) + right-4(16px) — pill이 넘지 않도록 */
+/** 상하 분할 시 우측 지도 메뉴 열(45px) + right-4(16px) — 확장 패널 없을 때 fallback */
 export const MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX = 61;
-/** 접힘 상태에서 좌측 패널·사이드바 쪽으로 추가 허용할 이동(px) */
-export const MAP_SPLIT_CONTROL_LEFT_EXTEND_PX = 100;
 /** 버튼 1개 크기(px) — h-6 w-6 */
 export const MAP_SPLIT_CONTROL_BTN_PX = 24;
 /** 버튼 간격(px) — gap-1 */

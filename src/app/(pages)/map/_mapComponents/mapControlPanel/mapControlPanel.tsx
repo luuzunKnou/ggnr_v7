@@ -122,7 +122,7 @@ export function MapControlPanel({
               return (
                 <div key={item.id} className="relative shrink-0">
                   {itemPanel != null && (
-                    <div className="pointer-events-auto absolute right-[calc(100%+12px)] bottom-0 z-10">
+                    <div className="pointer-events-auto absolute right-[calc(100%+12px)] bottom-0 z-10" data-map-control-expand-panel>
                       {itemPanel}
                     </div>
                   )}

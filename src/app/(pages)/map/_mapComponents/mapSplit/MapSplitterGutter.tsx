@@ -9,10 +9,8 @@ import {
   MAP_SPLIT_CONTROL_BTN_PX,
   MAP_SPLIT_CONTROL_OFFSET_MAX,
   MAP_SPLIT_CONTROL_OFFSET_MIN,
-  MAP_SPLIT_GUTTER_Z_INDEX,
-  MAP_SPLIT_CONTROL_LEFT_EXTEND_PX,
-  MAP_SPLIT_CONTROL_LEFT_SIDEBAR_PX,
   MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
+  MAP_SPLIT_GUTTER_Z_INDEX,
   type MapSplitOrientation,
 } from './mapSplitTypes';
 import { MAP_SPLIT_GUTTER_ICON_COLOR } from './mapSplitGutterIconColor';
@@ -41,6 +39,9 @@ type MapSplitterGutterProps = {
    */
   controlsExpanded?: boolean;
   onControlsExpandedChange?: (expanded: boolean) => void;
+  /** 상하 분할 pill 가용 범위 — 좌측 패널·우측 확장 패널 제외 */
+  mapPaddingLeft?: number;
+  mapPaddingRight?: number;
 };
 
 export type MapSplitControlItem = {
@@ -161,7 +162,9 @@ function pillDragAnchorOnAxis(rect: DOMRect, isHorizontal: boolean) {
 function computeOffsetBounds(
   gutterEl: HTMLElement | null,
   pillSize: { width: number; height: number },
-  isHorizontal: boolean
+  isHorizontal: boolean,
+  mapPaddingLeft: number,
+  mapPaddingRight: number
 ): OffsetBounds {
   const fallback: OffsetBounds = {
     min: MAP_SPLIT_CONTROL_OFFSET_MIN,
@@ -182,22 +185,21 @@ function computeOffsetBounds(
     return { min: 0, max, baseMax: max };
   }
 
-  /** ratio = pill 좌측. 좌측은 사이드바·패널 옆까지, 우측은 메뉴 패딩 유지 */
+  /** ratio = pill 좌측. 좌·우 패널(mapPadding) 안에서만 이동 */
   const pillFull = pillSize.width;
-  const menuLeft = window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
+  const leftEdge = Math.max(0, mapPaddingLeft);
+  const rightReserve = Math.max(
+    MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
+    mapPaddingRight
+  );
 
-  const minAtPanelEdge =
-    (MAP_SPLIT_CONTROL_LEFT_SIDEBAR_PX - rect.left) / travel;
-  const extendLeftRatio = MAP_SPLIT_CONTROL_LEFT_EXTEND_PX / travel;
-  const min = minAtPanelEdge - extendLeftRatio;
+  const minRaw = (leftEdge - rect.left) / travel;
+  const min = Math.max(0, minRaw);
 
-  const maxForMenu = (menuLeft - rect.left - pillFull) / travel;
-  const byGutter =
-    (travel - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX - pillFull) / travel;
-  const baseRaw = Math.min(maxForMenu, byGutter, MAP_SPLIT_CONTROL_OFFSET_MAX);
+  const maxRaw = (window.innerWidth - rightReserve - rect.left - pillFull) / travel;
   const max = Math.max(
     min,
-    Math.min(MAP_SPLIT_CONTROL_OFFSET_MAX, Math.max(0, baseRaw))
+    Math.min(MAP_SPLIT_CONTROL_OFFSET_MAX, Math.max(0, maxRaw))
   );
   return { min, max, baseMax: max };
 }
@@ -218,6 +220,8 @@ export function MapSplitterGutter({
   controlOffsetDraggable = false,
   controlsExpanded = true,
   onControlsExpandedChange,
+  mapPaddingLeft = 0,
+  mapPaddingRight = MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
 }: MapSplitterGutterProps) {
   const isHorizontal = orientation === 'horizontal';
   /** 좌우 분할 → 세로 거터 → 버튼 세로 나열 / 상하 분할 → 가로 나열 */
@@ -279,13 +283,24 @@ export function MapSplitterGutter({
     });
   };
 
+  const mapPaddingLeftRef = useRef(mapPaddingLeft);
+  const mapPaddingRightRef = useRef(mapPaddingRight);
+  mapPaddingLeftRef.current = mapPaddingLeft;
+  mapPaddingRightRef.current = mapPaddingRight;
+
   const refreshBounds = () => {
     const measured = pillRef.current?.getBoundingClientRect();
     const pillSize =
       measured && measured.width > 0 && measured.height > 0
         ? { width: measured.width, height: measured.height }
         : estimatedPill;
-    const next = computeOffsetBounds(gutterRef.current, pillSize, isHorizontal);
+    const next = computeOffsetBounds(
+      gutterRef.current,
+      pillSize,
+      isHorizontal,
+      mapPaddingLeftRef.current,
+      mapPaddingRightRef.current
+    );
     const prev = boundsRef.current;
     boundsRef.current = next;
     if (
@@ -314,8 +329,8 @@ export function MapSplitterGutter({
         refreshBoundsRafRef.current = 0;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- buttonCount/expanded로 재측정
-  }, [isHorizontal, buttonCount, hasExtraControls, controlsExpanded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buttonCount/expanded·패딩으로 재측정
+  }, [isHorizontal, buttonCount, hasExtraControls, controlsExpanded, mapPaddingLeft, mapPaddingRight]);
 
   useEffect(() => {
     if (!offsetMoveEnabled || isOffsetDragging) return;
