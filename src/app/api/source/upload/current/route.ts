@@ -31,6 +31,8 @@ import {
 import {
   buildSourceUploadFailBody,
   buildSourceUploadSuccessBody,
+  formatBuildCheckSkippedWarning,
+  formatDbSchemaMismatchWarning,
 } from '@/lib/sourceUploadHistoryMessage';
 import { recordUploadFlowHistory } from '@/service/sourceUploadHistoryService';
 import {
@@ -47,7 +49,7 @@ import {
 export const dynamic = 'force-dynamic';
 export const maxDuration = 1800;
 
-type ItemStatus = 'ok' | 'skipped' | 'fail';
+type ItemStatus = 'ok' | 'skipped' | 'fail' | 'warn';
 type UploadItem = {
   file: string;
   category: 'core' | 'runtime' | 'data';
@@ -64,6 +66,7 @@ type IncludedFile = {
 type LocalStageReport = {
   id: 'scan' | 'dbCompare' | 'zip' | 'finalize';
   ok: boolean;
+  warn?: boolean;
   detail?: string;
   error?: string;
 };
@@ -195,6 +198,7 @@ export async function POST(req: NextRequest) {
     changeNote = typeof body.changeNote === 'string' ? body.changeNote.trim() : '';
     const skipPreflight = body.skipPreflight === true;
     const confirmDbMismatch = body.confirmDbMismatch === true;
+    const buildCheckSkipped = body.buildCheckSkipped === true;
     includeNodeModules = body.includeNodeModules === true;
     progressId =
       typeof body.progressId === 'string' && body.progressId.trim()
@@ -306,28 +310,53 @@ export async function POST(req: NextRequest) {
       ok: true,
       detail: formatScanDetail(scanSummary),
     });
-    localStages.push({
-      id: 'dbCompare',
-      ok: dbCompare.diffCount === 0,
-      detail: dbCompare.summaryText,
-      error: dbCompare.diffCount > 0 ? formatDbCompareDialogSummary(dbCompare) : undefined,
-    });
 
-    if (dbCompare.diffCount > 0 && !confirmDbMismatch) {
-      failUploadProgress(progressId, 'dbCompare', 'DB 스키마 불일치 — 사용자 확인 필요');
+    if (dbCompare.error) {
+      localStages.push({
+        id: 'dbCompare',
+        ok: false,
+        detail: dbCompare.summaryText,
+        error: dbCompare.error,
+      });
+      failUploadProgress(progressId, 'dbCompare', dbCompare.error);
       const historyRecorded = await recordUploadFlowHistory({
         includeNodeModules,
         changeNote,
         status: 'fail',
-        body: buildSourceUploadFailBody(`DB 스키마 불일치 (${dbCompare.diffCount}건)`),
+        body: buildSourceUploadFailBody(dbCompare.error),
         ip: clientIp,
+      });
+      return uploadErrorResponse({
+        message: dbCompare.error,
+        failedStage: 'dbCompare',
+        localStages,
+        remoteStages,
+        historyRecorded,
+        partial: { progressId, scanSummary },
+      });
+    }
+
+    const schemaMismatch = dbCompare.diffCount > 0;
+    localStages.push({
+      id: 'dbCompare',
+      ok: true,
+      warn: schemaMismatch || undefined,
+      detail: dbCompare.summaryText,
+      error: schemaMismatch ? formatDbCompareDialogSummary(dbCompare) : undefined,
+    });
+
+    if (schemaMismatch && !confirmDbMismatch) {
+      /** 경고(확인 대기) — 실패 이력·error phase 금지 */
+      setUploadProgressPhase(progressId, 'dbCompare', 'DB 스키마 불일치 — 사용자 확인 필요', {
+        progressPct: 12,
+        schemaDbDiffCount: dbCompare.diffCount,
       });
       return uploadErrorResponse({
         message: '접속 DB와 스키마 SQL이 다릅니다.',
         failedStage: 'dbCompare',
         localStages,
         remoteStages,
-        historyRecorded,
+        historyRecorded: false,
         dbCompareRequired: true,
         dbCompare: {
           diffCount: dbCompare.diffCount,
@@ -439,6 +468,14 @@ export async function POST(req: NextRequest) {
     for (const f of included) {
       items.push({ file: f.relPath, category: f.category, status: 'ok' });
     }
+    if (schemaMismatch) {
+      items.unshift({
+        file: '(스키마 비교)',
+        category: 'core',
+        status: 'warn',
+        error: formatDbSchemaMismatchWarning(dbCompare.diffCount),
+      });
+    }
 
     const npmInstall = remoteResult.complete?.npmInstall as
       | { ok?: boolean; message?: string; skipped?: boolean }
@@ -454,11 +491,24 @@ export async function POST(req: NextRequest) {
     const okCount = items.filter((x) => x.status === 'ok').length;
     const skippedCount = items.filter((x) => x.status === 'skipped').length;
     const failCount = items.filter((x) => x.status === 'fail').length;
+    const historyWarnings: string[] = [];
+    if (schemaMismatch) {
+      historyWarnings.push(formatDbSchemaMismatchWarning(dbCompare.diffCount));
+    }
+    if (buildCheckSkipped) {
+      historyWarnings.push(formatBuildCheckSkippedWarning());
+    }
     const historyRecorded = await recordUploadFlowHistory({
       includeNodeModules,
       changeNote,
       status: 'success',
-      body: buildSourceUploadSuccessBody(okCount, skippedCount, failCount, npmInstallNote(includeNodeModules, npmInstall)),
+      body: buildSourceUploadSuccessBody(
+        okCount,
+        skippedCount,
+        failCount,
+        npmInstallNote(includeNodeModules, npmInstall),
+        historyWarnings
+      ),
       version: bundleRoot,
       ip: clientIp,
     });
@@ -473,10 +523,12 @@ export async function POST(req: NextRequest) {
       includeNodeModules,
       scanSummary,
       dbCompare: { diffCount: dbCompare.diffCount, summaryText: dbCompare.summaryText },
+      warnings: historyWarnings,
       total: items.length,
       ok: items.filter((x) => x.status === 'ok').length,
       skipped: items.filter((x) => x.status === 'skipped').length,
       fail: items.filter((x) => x.status === 'fail').length,
+      warn: items.filter((x) => x.status === 'warn').length,
       remoteResult,
       localStages,
       remoteStages,

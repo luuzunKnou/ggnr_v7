@@ -20,6 +20,7 @@ export type VersionRelayPhase =
   | 'build'
   | 'app-start'
   | 'geoserver-start'
+  | 'schema-wait'
   | 'restart';
 
 export type VersionRelayProgress = {
@@ -334,7 +335,8 @@ async function readRelayCompleteNdjson(
       result = {
         ok: false,
         error: String(parsed.error ?? 'relay complete 실패'),
-      } as VersionRelayResult & { error?: string; ok?: boolean };
+        historyRecorded: parsed.historyRecorded === true,
+      } as VersionRelayResult & { error?: string; ok?: boolean; historyRecorded?: boolean };
       return;
     }
     if (type === 'result') {
@@ -1112,7 +1114,10 @@ export async function relayLatestSourceFromGnms(options: {
     if (completeJson.error || completeJson.ok === false) {
       const msg = completeJson.error ?? 'relay complete 실패';
       log(`ERROR: ${msg}`);
-      throw new Error(msg);
+      const err = new Error(msg) as Error & { historyRecorded?: boolean };
+      err.historyRecorded =
+        (completeJson as { historyRecorded?: boolean }).historyRecorded === true;
+      throw err;
     }
 
     relayCompleted = true;
@@ -1147,9 +1152,15 @@ export async function relayLatestSourceFromGnms(options: {
       await cleanupRelaySession(activeUploadId, log);
       activeUploadId = null;
     }
-    /** 재시작 정상 끊김·적용 완료 후는 UI와 같이 실패 이력 생략 (성공은 서버 flush) */
+    /** 재시작 정상 끊김·적용 완료·서버가 이미 실패 이력 남긴 경우 클라이언트 중복 기록 생략 */
+    const serverHistoryRecorded =
+      e instanceof Error &&
+      'historyRecorded' in e &&
+      (e as Error & { historyRecorded?: boolean }).historyRecorded === true;
     const skipFailHistory =
-      relayCompleted || (restart && isRestartDisconnectError(e));
+      relayCompleted ||
+      serverHistoryRecorded ||
+      (restart && isRestartDisconnectError(e));
     if (!isUserAbortError(e) && !skipFailHistory) {
       const msg = e instanceof Error ? e.message : String(e);
       const failVer =

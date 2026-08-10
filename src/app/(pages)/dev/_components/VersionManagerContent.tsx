@@ -231,14 +231,11 @@ export function VersionManagerContent() {
       };
     });
 
-    if (!pendingId) {
+    if (!pendingId?.trim()) {
       setSchemaModalOpen(false);
-      pushLog(
-        action === 'abort'
-          ? '스키마 안내 중단 (대기 세션 없음)'
-          : '스키마 안내 확인 (대기 세션 없음)'
+      throw new Error(
+        '스키마 안내 대기 세션이 없습니다. 적용을 다시 시도하거나 서버 로그를 확인하세요.'
       );
-      return action;
     }
 
     setSchemaActionBusy(true);
@@ -318,8 +315,10 @@ export function VersionManagerContent() {
       pct: 2,
     });
     setStages(buildRelayBaseStages(opts));
-    /** 사전 빌드·앱 종료 진행 중 이후 끊김은 재시작으로 간주 */
-    let reachedRestartCommit = false;
+    /** 스키마 확인 후 재시작이 예약된 뒤에만 soft-disconnect(정상 끊김) 허용 */
+    let restartCommitAfterSchema = false;
+    /** 재기동 대기·하드 리로드 중에는 busy 유지 */
+    let keepBusyUntilReload = false;
 
     try {
       const versionLabel = versionOptionBase(selectedEntry);
@@ -332,9 +331,6 @@ export function VersionManagerContent() {
         isLatest: selectedEntry.isLatest,
         signal,
         onProgress: (p: VersionRelayProgress) => {
-          if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
-            reachedRestartCommit = true;
-          }
           if (p.phase === 'merge-apply') {
             const step: MergeApplyEtaStep =
               p.mergeStep ??
@@ -395,13 +391,21 @@ export function VersionManagerContent() {
                           ? 94
                           : p.phase === 'build'
                             ? 97
-                            : p.phase === 'app-stop'
-                              ? 99
-                              : null;
+                            : p.phase === 'schema-wait'
+                              ? 98
+                              : p.phase === 'app-stop'
+                                ? 99
+                                : p.phase === 'download'
+                                  ? 20
+                                  : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
             versionDetailRef.current = p.message.replace(/^latest:\s*/i, '');
           }
-          setProgress((prev) => ({ ...prev, message: p.message, pct }));
+          setProgress((prev) => ({
+            ...prev,
+            message: p.message,
+            pct: pct ?? prev.pct,
+          }));
           setStages(
             buildRelayStagesFromProgress(
               {
@@ -418,6 +422,21 @@ export function VersionManagerContent() {
                       ? `병합 ${p.appliedFiles}/${p.totalFiles}`
                       : `병합 ${p.appliedFiles}건`
                     : undefined,
+                npmInstallDetail:
+                  p.phase === 'npm-install' || p.phase === 'schema-wait' || p.phase === 'build'
+                    ? profile === 'open'
+                      ? '사전 npm install 완료'
+                      : undefined
+                    : undefined,
+                buildDetail:
+                  p.phase === 'build' || p.phase === 'schema-wait'
+                    ? '사전 빌드 완료'
+                    : undefined,
+                schemaWaiting: p.phase === 'schema-wait',
+                preRestartCompleted:
+                  p.phase === 'schema-wait' ||
+                  p.phase === 'npm-install' ||
+                  p.phase === 'build',
               },
               opts
             )
@@ -447,28 +466,37 @@ export function VersionManagerContent() {
         buildRelayStagesFromProgress(
           {
             phase: 'done',
-            message: json.restart?.scheduled
-              ? '적용 완료 · 재시작 파이프라인 예약'
-              : '적용 완료',
+            message: json.pendingSchemaConfirm
+              ? '적용 완료 · 스키마 안내 대기'
+              : json.restart?.scheduled
+                ? '적용 완료 · 재시작 파이프라인 예약'
+                : '적용 완료',
             versionDetail: versionDetailRef.current,
             applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
             geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
             geoserverStartDetail: json.geoserver?.startMessage,
-            appStopDetail: json.restart?.scheduled
-              ? doneMode === 'exit'
-                ? '앱 종료 단계 완료 · process.exit 예약'
-                : '앱 종료 단계 완료 · 런처가 Next 종료'
-              : undefined,
+            appStopDetail: json.pendingSchemaConfirm
+              ? '스키마 안내 대기'
+              : json.restart?.scheduled
+                ? doneMode === 'exit'
+                  ? '앱 종료 단계 완료 · process.exit 예약'
+                  : '앱 종료 단계 완료 · 런처가 Next 종료'
+                : undefined,
             npmInstallDetail:
-              json.restart?.scheduled && profile === 'open'
+              (json.pendingSchemaConfirm || json.restart?.scheduled) && profile === 'open'
                 ? '사전 npm install 완료'
                 : undefined,
-            buildDetail: json.restart?.scheduled ? '사전 빌드 완료' : undefined,
+            buildDetail:
+              json.pendingSchemaConfirm || json.restart?.scheduled
+                ? '사전 빌드 완료'
+                : undefined,
             appStartDetail:
               json.restart?.scheduled && doneMode === 'launcher'
                 ? '콘솔(런처)에서 Next 재기동'
                 : json.restart?.message,
             restartScheduled: Boolean(json.restart?.scheduled),
+            schemaWaiting: Boolean(json.pendingSchemaConfirm),
+            preRestartCompleted: Boolean(json.pendingSchemaConfirm) || doneMode !== 'none',
             geoserverStartOk: !(
               json.geoserver?.started === false && !json.geoserver?.deferredStart
             ),
@@ -524,9 +552,37 @@ export function VersionManagerContent() {
         );
         await refreshAppliedVersion();
         notifyDevVersionHistoryRefresh();
-        busyRef.current = false;
-        setBusy(false);
         return;
+      }
+
+      if (json.restart?.requested || doneMode !== 'none') {
+        restartCommitAfterSchema = true;
+        setStages(
+          buildRelayStagesFromProgress(
+            {
+              phase: 'done',
+              message: '적용 확정 · 재시작 예약',
+              versionDetail: versionDetailRef.current,
+              applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
+              geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
+              geoserverStartDetail: json.geoserver?.startMessage,
+              npmInstallDetail: profile === 'open' ? '사전 npm install 완료' : undefined,
+              buildDetail: '사전 빌드 완료',
+              appStopDetail:
+                doneMode === 'exit'
+                  ? '앱 종료 단계 완료 · process.exit 예약'
+                  : '앱 종료 단계 완료 · 런처가 Next 종료',
+              appStartDetail:
+                doneMode === 'launcher' ? '콘솔(런처)에서 Next 재기동' : undefined,
+              restartScheduled: true,
+              preRestartCompleted: true,
+              geoserverStartOk: !(
+                json.geoserver?.started === false && !json.geoserver?.deferredStart
+              ),
+            },
+            doneOpts
+          )
+        );
       }
 
       if (json.restart?.requested || json.pendingSchemaConfirm) {
@@ -540,6 +596,7 @@ export function VersionManagerContent() {
       }
 
       if (json.restart?.requested || doneMode !== 'none') {
+        keepBusyUntilReload = true;
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
@@ -561,18 +618,22 @@ export function VersionManagerContent() {
             }
           },
         });
-      } else {
-        await refreshAppliedVersion();
-        notifyDevVersionHistoryRefresh();
-        pushLog('화면 새로고침(세션 유지)…');
-        void hardReloadKeepSessionAfterDelay(1000);
+        return;
       }
+
+      await refreshAppliedVersion();
+      notifyDevVersionHistoryRefresh();
+      pushLog('화면 새로고침(세션 유지)…');
+      keepBusyUntilReload = true;
+      void hardReloadKeepSessionAfterDelay(1000);
+      return;
     } catch (e: unknown) {
       const isAbort = isUserAbortError(e);
       const isTimeout = isRelayTimeoutError(e);
       const isDisconnect = isRestartDisconnectError(e);
-      /** 재시작 예약 후 서버 종료로 끊긴 경우 — 실패 UI 대신 안내 */
-      if (!isAbort && isDisconnect && restart && reachedRestartCommit) {
+      /** 스키마 확인·재시작 예약 후 서버 종료로 끊긴 경우 — 실패 UI 대신 안내 */
+      if (!isAbort && isDisconnect && restart && restartCommitAfterSchema) {
+        keepBusyUntilReload = true;
         const softOpts = {
           restart: true,
           restartMode,
@@ -590,6 +651,7 @@ export function VersionManagerContent() {
               appStartDetail:
                 restartMode === 'launcher' ? '콘솔(런처)에서 Next 재기동' : undefined,
               restartScheduled: true,
+              preRestartCompleted: true,
               geoserverStartOk: true,
             },
             softOpts
@@ -652,8 +714,10 @@ export function VersionManagerContent() {
       }
     } finally {
       abortRef.current = null;
-      busyRef.current = false;
-      setBusy(false);
+      if (!keepBusyUntilReload) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   };
 
@@ -837,8 +901,11 @@ export function VersionManagerContent() {
           <p className="text-xs text-muted-foreground">{progress.message}</p>
           {progress.error && <p className="text-xs text-red-600">{progress.error}</p>}
         </div>
-        <div className="min-h-0 shrink space-y-2">
-          <ProgressStagesList stages={stages} />
+        <div className="min-h-0 max-h-[35%] shrink overflow-y-auto space-y-2">
+          <ProgressStagesList
+            stages={stages}
+            className="rounded border px-3 py-2 text-xs"
+          />
           {relayResult && (
             <div className="rounded border bg-muted/10 p-2 text-xs">
               <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
@@ -852,7 +919,7 @@ export function VersionManagerContent() {
             </div>
           )}
         </div>
-        <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-[8rem] flex-1 flex-col overflow-hidden">
           <LiveLogsPanel logs={progress.logs} />
         </div>
       </div>
