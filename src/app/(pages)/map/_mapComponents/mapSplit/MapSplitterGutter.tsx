@@ -16,7 +16,7 @@ import {
 import { MAP_SPLIT_GUTTER_ICON_COLOR } from './mapSplitGutterIconColor';
 import './mapSplitControl.css';
 
-const EXPAND_DRAG_TITLE_SUFFIX = ' · 드래그로 위치 이동';
+const EXPAND_DRAG_TITLE_SUFFIX = '드래그로 위치 이동';
 const EXPAND_DRAG_THRESHOLD_PX = 4;
 /** lock 버튼 1개 + 기능 버튼 */
 const LOCK_BUTTON_COUNT = 1;
@@ -74,12 +74,11 @@ function visibleControlButtonCount(opts: {
   pinnedCount: number;
   canCollapse: boolean;
   controlsExpanded: boolean;
-  showExpandHandle: boolean;
 }): number {
   const lock = LOCK_BUTTON_COUNT;
-  const expand = opts.showExpandHandle ? 1 : 0;
+  const expand = opts.canCollapse ? 1 : 0;
   if (!opts.canCollapse) {
-    return expand + lock + opts.foldableCount + opts.pinnedCount;
+    return lock + opts.foldableCount + opts.pinnedCount;
   }
   if (opts.controlsExpanded) {
     return expand + lock + opts.foldableCount + opts.pinnedCount;
@@ -254,17 +253,14 @@ export function MapSplitterGutter({
     !controls ? [] : typeof controls === 'function' ? controls(orientation) : controls;
   const pinnedControls = resolvedControls.filter(isPinnedOutsideCollapse);
   const foldableControls = resolvedControls.filter((c) => !isPinnedOutsideCollapse(c));
-  /** 접을 foldable 1개 이상이면 접기/펼치기. 없고 위치 드래그만 가능하면 드래그 핸들만 */
-  const canCollapse = foldableControls.length >= 1;
-  const expandDragOnly = offsetMoveEnabled && !canCollapse;
-  const showExpandHandle = canCollapse || expandDragOnly;
-  const hasExtraControls = resolvedControls.length > 0 || showExpandHandle;
+  /** foldable 1개 이상, 또는 닫기만 있어도(거리뷰) 잠금·기능 접기 */
+  const canCollapse = foldableControls.length >= 1 || resolvedControls.length > 0;
+  const hasExtraControls = resolvedControls.length > 0 || canCollapse;
   const buttonCount = visibleControlButtonCount({
     foldableCount: foldableControls.length,
     pinnedCount: pinnedControls.length,
     canCollapse,
     controlsExpanded,
-    showExpandHandle,
   });
   const estimatedPill = estimatePillSizePx(
     buttonCount,
@@ -472,11 +468,9 @@ export function MapSplitterGutter({
   };
 
   const expandToggleTitle = controlsExpanded ? '컨트롤 접기' : '컨트롤 펼치기';
-  const expandButtonTitle = expandDragOnly
-    ? `컨트롤 위치 이동${EXPAND_DRAG_TITLE_SUFFIX}`
-    : offsetMoveEnabled
-      ? `${expandToggleTitle}${EXPAND_DRAG_TITLE_SUFFIX}`
-      : expandToggleTitle;
+  const expandButtonTitle = offsetMoveEnabled
+    ? `${expandToggleTitle} · ${EXPAND_DRAG_TITLE_SUFFIX}`
+    : expandToggleTitle;
 
   const handleExpandPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -495,7 +489,6 @@ export function MapSplitterGutter({
   };
 
   const handleExpandClick = () => {
-    if (expandDragOnly) return;
     if (suppressExpandClickRef.current) {
       suppressExpandClickRef.current = false;
       return;
@@ -569,7 +562,7 @@ export function MapSplitterGutter({
       >
         <div className="inline-grid items-center">
           <div className={cn('col-start-1 row-start-1', stackClass, 'gap-1')}>
-            {showExpandHandle ? (
+            {canCollapse ? (
               <div className="relative z-[1] shrink-0">
                 <MapSplitControlButton
                   title={expandButtonTitle}

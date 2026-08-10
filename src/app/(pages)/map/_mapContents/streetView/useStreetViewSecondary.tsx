@@ -46,8 +46,6 @@ export function useStreetViewSecondary({
   return {
     panel,
     controls,
-    controlOffsetRatio: splitterPrefs.controlOffsetRatio,
-    onControlOffsetRatioChange: splitterPrefs.setControlOffsetRatio,
     controlsExpanded: splitterPrefs.controlsExpanded,
     onControlsExpandedChange: setControlsExpanded,
   };
