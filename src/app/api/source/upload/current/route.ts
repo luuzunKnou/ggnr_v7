@@ -22,6 +22,7 @@ import {
 import {
   compareSchemaWithConnectedDb,
   formatDbCompareDialogSummary,
+  formatSchemaDiffItemsTitle,
 } from '@/service/sourceUploadDbCompareService';
 import {
   bumpScanSummary,
@@ -55,6 +56,8 @@ type UploadItem = {
   category: 'core' | 'runtime' | 'data';
   status: ItemStatus;
   error?: string;
+  /** 비고 옆 도움말(title) — 스키마 불일치 n건 상세 등 */
+  errorTitle?: string;
 };
 
 type IncludedFile = {
@@ -474,6 +477,7 @@ export async function POST(req: NextRequest) {
         category: 'core',
         status: 'warn',
         error: formatDbSchemaMismatchWarning(dbCompare.diffCount),
+        errorTitle: formatSchemaDiffItemsTitle(dbCompare.items) || undefined,
       });
     }
 

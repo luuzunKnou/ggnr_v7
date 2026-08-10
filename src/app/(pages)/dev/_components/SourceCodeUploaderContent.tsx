@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Hammer, Upload } from 'lucide-react';
+import { CircleQuestionMark, Loader2, Hammer, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
@@ -12,6 +12,10 @@ import {
   formatBuildCheckSkippedWarning,
   formatDbSchemaMismatchWarning,
 } from '@/lib/sourceUploadHistoryMessage';
+import {
+  formatSchemaDiffItemsTitle,
+  type SchemaDiffItemLike,
+} from '@/lib/sourceUploadDbCompareFormat';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { InstallZipDownloadPanel } from './InstallZipDownloadPanel';
 import { ProgressStagesList, type StageState } from './ProgressStagesList';
@@ -33,6 +37,8 @@ type UploadRow = {
   category: SourceUploadCategory;
   status: 'ok' | 'fail' | 'skipped' | 'warn';
   error?: string;
+  /** 비고 옆 도움말 title — 스키마 불일치 n건 상세 등 */
+  errorTitle?: string;
 };
 
 type StageId = 'preflight' | 'scan' | 'dbCompare' | 'zip' | 'init' | 'chunk' | 'complete' | 'npmInstall' | 'finalize';
@@ -843,8 +849,18 @@ export function SourceCodeUploaderContent() {
       }
 
       if (res.status === 409 && json.dbCompareRequired) {
-        const dbCompare = json.dbCompare as { diffCount?: number; dialogSummary?: string } | undefined;
+        const dbCompare = json.dbCompare as
+          | {
+              diffCount?: number;
+              dialogSummary?: string;
+              items?: SchemaDiffItemLike[];
+            }
+          | undefined;
         const diffCount = dbCompare?.diffCount ?? 0;
+        const errorTitle =
+          formatSchemaDiffItemsTitle(dbCompare?.items ?? []) ||
+          (typeof dbCompare?.dialogSummary === 'string' ? dbCompare.dialogSummary : '') ||
+          undefined;
         setUploading(false);
         setDbConfirm({
           open: true,
@@ -864,6 +880,7 @@ export function SourceCodeUploaderContent() {
             category: 'core',
             status: 'warn',
             error: formatDbSchemaMismatchWarning(diffCount),
+            errorTitle,
           },
         ]);
         /** 확인 대기는 실패 이력 남기지 않음 */
@@ -1437,7 +1454,7 @@ export function SourceCodeUploaderContent() {
                                 : '대기'}
                       </td>
                       <td
-                        className={`truncate px-2 py-1 ${
+                        className={`px-2 py-1 ${
                           r.status === 'warn'
                             ? 'text-amber-700 dark:text-amber-400'
                             : r.status === 'fail'
@@ -1445,7 +1462,24 @@ export function SourceCodeUploaderContent() {
                               : ''
                         }`}
                       >
-                        {r.error ?? ''}
+                        <span className="inline-flex max-w-full items-center gap-1">
+                          <span className="min-w-0 truncate" title={r.error}>
+                            {r.error ?? ''}
+                          </span>
+                          {r.errorTitle ? (
+                            <span
+                              className="inline-flex shrink-0 cursor-help"
+                              title={r.errorTitle}
+                              aria-label="불일치 상세"
+                            >
+                              <CircleQuestionMark
+                                className="h-3.5 w-3.5 opacity-80"
+                                strokeWidth={1.75}
+                                aria-hidden
+                              />
+                            </span>
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   ))

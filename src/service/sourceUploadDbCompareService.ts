@@ -1,4 +1,5 @@
 import { getSchemaDefinedTables } from '@/database/schemaSyncRegistry';
+import { formatSchemaDiffItemsTitle } from '@/lib/sourceUploadDbCompareFormat';
 import {
   getDefaultDbConfig,
   getSchemaSyncComparison,
@@ -137,9 +138,7 @@ export async function compareSchemaWithConnectedDb(): Promise<DbCompareSummary> 
 
 export function formatDbCompareDialogSummary(summary: DbCompareSummary): string {
   if (summary.diffCount === 0) return '차이 없음';
-  const lines = summary.items.slice(0, 8).map((i) => {
-    const col = i.column ? `.${i.column}` : '';
-    return `${i.schema}.${i.table}${col} — ${i.detail ?? i.kind}`;
-  });
-  return lines.join('\n');
+  return formatSchemaDiffItemsTitle(summary.items, 8);
 }
+
+export { formatSchemaDiffItemsTitle };
