@@ -11,6 +11,7 @@ import {
   assertSafeServiceFileBasename,
   fileDataRelativeDir,
   isServiceFileDataTmpMarkedFileName,
+  shouldHideServiceFileDataFileName,
 } from '@/lib/serviceFileData';
 import { GGNR_BASE_STRUCTURE, GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
@@ -88,16 +89,29 @@ const TILES_B3DM_ROOT_REL = GGNR_DATA_PATHS.dtilesB3dm;
 /** 베이스 아래 고정 폴더 구조. 없으면 생성. (이력 파일은 .meta/upload_convert_history.json) */
 const BASE_STRUCTURE = GGNR_BASE_STRUCTURE;
 
+/** ensureBaseStructure 한 프로세스당 1회 */
+let baseStructureOnce: Promise<void> | null = null;
+
 export async function ensureBaseStructure(): Promise<void> {
-  const base = getBaseDir();
-  for (const rel of BASE_STRUCTURE) {
-    const dir = path.join(base, rel);
-    try {
-      await fs.mkdir(dir, { recursive: true });
-    } catch {
-      // 이미 존재하거나 권한 문제 등은 무시
-    }
+  if (!baseStructureOnce) {
+    baseStructureOnce = (async () => {
+      const base = getBaseDir();
+      await Promise.all(
+        BASE_STRUCTURE.map(async (rel) => {
+          const dir = path.join(base, rel);
+          try {
+            await fs.mkdir(dir, { recursive: true });
+          } catch {
+            // 이미 존재하거나 권한 문제 등은 무시
+          }
+        })
+      );
+    })().catch((err) => {
+      baseStructureOnce = null;
+      throw err;
+    });
   }
+  await baseStructureOnce;
 }
 
 /**
@@ -155,32 +169,34 @@ export async function listDirectory(params: {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const directoryEntries: { name: string; modified?: string }[] = [];
   const files: { name: string; size: number; modified?: string }[] = [];
-  for (const e of entries) {
-    if (e.isDirectory()) {
-      try {
-        const p = path.join(dir, e.name);
-        const s = await fs.stat(p);
-        directoryEntries.push({
-          name: e.name,
-          modified: s.mtime?.toISOString?.() ?? undefined,
-        });
-      } catch {
-        directoryEntries.push({ name: e.name });
+  await Promise.all(
+    entries.map(async (e) => {
+      if (e.isDirectory()) {
+        try {
+          const p = path.join(dir, e.name);
+          const s = await fs.stat(p);
+          directoryEntries.push({
+            name: e.name,
+            modified: s.mtime?.toISOString?.() ?? undefined,
+          });
+        } catch {
+          directoryEntries.push({ name: e.name });
+        }
+      } else if (e.isFile()) {
+        try {
+          const p = path.join(dir, e.name);
+          const s = await fs.stat(p);
+          files.push({
+            name: e.name,
+            size: s.size,
+            modified: s.mtime?.toISOString?.() ?? undefined,
+          });
+        } catch {
+          files.push({ name: e.name, size: 0 });
+        }
       }
-    } else if (e.isFile()) {
-      try {
-        const p = path.join(dir, e.name);
-        const s = await fs.stat(p);
-        files.push({
-          name: e.name,
-          size: s.size,
-          modified: s.mtime?.toISOString?.() ?? undefined,
-        });
-      } catch {
-        files.push({ name: e.name, size: 0 });
-      }
-    }
-  }
+    })
+  );
   directoryEntries.sort((a, b) => a.name.localeCompare(b.name));
   const directories = directoryEntries.map((d) => d.name);
   files.sort((a, b) => a.name.localeCompare(b.name));
@@ -399,28 +415,58 @@ export async function createFileManagerZipStream(params: {
  * file_data/{layerName}/{keyValue}/ 내 파일 목록 (첨부 공통).
  * optional subfolder → file_data/{layer}/{key}/{subfolder}/
  * 폴더가 없으면 빈 배열. 하위 디렉터리의 파일은 포함하지 않음(직접 자식만).
+ * @param includeMeta - false면 readdir만(이름). 대량 첨부 그리드용. true면 size·mtime 병렬 조회.
  */
 export async function listServiceFileDataFiles(params: {
   layerName: string;
   keyValue: string;
   subfolder?: string | null;
+  includeMeta?: boolean;
 }): Promise<ListDirectoryResult['files']> {
   const rel = fileDataRelativeDir(params.layerName, params.keyValue, params.subfolder);
   if (!rel) return [];
+  const resolved = resolveWithinBase(rel);
+  if (!resolved) return [];
 
-  const filterTmp = (files: ListDirectoryResult['files']) =>
-    files.filter((f) => !isServiceFileDataTmpMarkedFileName(f.name));
-
+  let entries: import('node:fs').Dirent[];
   try {
-    const r = await listDirectory({ relativePath: rel });
-    return filterTmp(r.files);
+    entries = await fs.readdir(resolved.abs, { withFileTypes: true });
   } catch {
     return [];
   }
+
+  const fileEntries = entries.filter(
+    (e) => e.isFile() && !shouldHideServiceFileDataFileName(e.name)
+  );
+  const includeMeta = params.includeMeta !== false;
+
+  if (!includeMeta) {
+    return fileEntries
+      .map((e) => ({ name: e.name, size: 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }
+
+  const files = await Promise.all(
+    fileEntries.map(async (e) => {
+      try {
+        const s = await fs.stat(path.join(resolved.abs, e.name));
+        return {
+          name: e.name,
+          size: s.size,
+          modified: s.mtime?.toISOString?.() ?? undefined,
+        };
+      } catch {
+        return { name: e.name, size: 0 };
+      }
+    })
+  );
+  files.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  return files;
 }
 
 /**
  * file_data/{layer}/{key}/ 하위 폴더명 + 루트에 파일이 있는지.
+ * size/mtime 없이 readdir만 사용 (대량 루트 파일에도 빠름).
  */
 export async function listServiceFileDataFolders(params: {
   layerName: string;
@@ -428,20 +474,27 @@ export async function listServiceFileDataFolders(params: {
 }): Promise<{ folders: string[]; hasRootFiles: boolean }> {
   const rel = fileDataRelativeDir(params.layerName, params.keyValue);
   if (!rel) return { folders: [], hasRootFiles: false };
+  const resolved = resolveWithinBase(rel);
+  if (!resolved) return { folders: [], hasRootFiles: false };
 
+  let entries: import('node:fs').Dirent[];
   try {
-    const r = await listDirectory({ relativePath: rel });
-    const folders = (r.directories ?? []).filter((name) => {
-      const t = String(name ?? '').trim();
-      return Boolean(t) && t !== '.' && t !== '..';
-    });
-    const hasRootFiles = (r.files ?? []).some(
-      (f) => f?.name && !isServiceFileDataTmpMarkedFileName(f.name)
-    );
-    return { folders, hasRootFiles };
+    entries = await fs.readdir(resolved.abs, { withFileTypes: true });
   } catch {
     return { folders: [], hasRootFiles: false };
   }
+
+  const folders: string[] = [];
+  let hasRootFiles = false;
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      const t = String(e.name ?? '').trim();
+      if (t && t !== '.' && t !== '..') folders.push(t);
+    } else if (e.isFile() && !shouldHideServiceFileDataFileName(e.name)) {
+      hasRootFiles = true;
+    }
+  }
+  return { folders, hasRootFiles };
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Circle,
@@ -20,13 +20,16 @@ import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/m
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { exportRoadNetworkExcel } from "./exportRoadNetworkExcel";
+import { formatRoadNetworkListTitle } from "./roadNetworkFormat";
 import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
 import {
+  ROAD_NETWORK_NEW_ID,
   ROAD_NETWORK_OPEN_STATUS_BADGE,
   ROAD_NETWORK_OPEN_STATUS_FILTERS,
   ROAD_NETWORK_TYPE_BADGE,
   ROAD_NETWORK_TYPE_FILTERS,
   createEmptyRoadNetworkRow,
+  isNewRoadNetworkRowId,
   matchesRoadNetworkTypeFilter,
   type RoadNetworkOpenStatusFilter,
   type RoadNetworkTypeFilter,
@@ -81,9 +84,44 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     []
   );
   const [boundaryLoading, setBoundaryLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const listLoadSeqRef = useRef(0);
 
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   const isSpatialActive = !!(spatialWkt || spatialDrawRequest);
+
+  const reloadList = useCallback(async () => {
+    const seq = ++listLoadSeqRef.current;
+    setListLoading(true);
+    setListError(null);
+    try {
+      const res = await call("", "POST", {
+        service: "roadNetworkService",
+        action: "getRoadNetworkList",
+        params: {},
+      });
+      if (seq !== listLoadSeqRef.current) return;
+      const data = res?.data ?? res;
+      const next = Array.isArray(data?.rows) ? data.rows : [];
+      // API 목록으로 덮되, 미저장·로컬 추가 행은 유지 (로드 중 추가 시 사라짐 방지)
+      setRoadNetworkRows?.((prev) => {
+        const clientRows = prev.filter(
+          (r) => isNewRoadNetworkRowId(r.id) || String(r.id).startsWith("local-")
+        );
+        return [...clientRows, ...next];
+      });
+    } catch (e: unknown) {
+      if (seq !== listLoadSeqRef.current) return;
+      setListError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+    } finally {
+      if (seq === listLoadSeqRef.current) setListLoading(false);
+    }
+  }, [setRoadNetworkRows]);
+
+  useEffect(() => {
+    void reloadList();
+  }, [reloadList]);
 
   useEffect(() => {
     let cancelled = false;
@@ -296,6 +334,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   const items = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     return filterRoadNetworkRowsByWkt5181(rows, spatialWkt).filter((row) => {
+      // 미저장 신규는 목록에 표시하지 않음
+      if (isNewRoadNetworkRowId(row.id)) return false;
       if (typeFilter !== "전체" && !matchesRoadNetworkTypeFilter(row.roadType, typeFilter))
         return false;
       if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
@@ -321,9 +361,17 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   }, [items, setRoadNetworkOverlayRows]);
 
   const handleAdd = () => {
-    const created = createEmptyRoadNetworkRow(String(historyUser));
-    setRoadNetworkRows?.((prev) => [created, ...prev]);
-    setRoadNetworkSelectedId?.(created.id);
+    // 목록 행은 만들지 않고 상세 등록만 연다(저장 시 목록에 반영)
+    setRoadNetworkRows?.((prev) => {
+      const withoutDraft = prev.filter((r) => !isNewRoadNetworkRowId(r.id));
+      return [createEmptyRoadNetworkRow(String(historyUser), ROAD_NETWORK_NEW_ID), ...withoutDraft];
+    });
+    setRoadNetworkSelectedId?.(ROAD_NETWORK_NEW_ID);
+  };
+
+  const handleSelectRow = (id: string) => {
+    setRoadNetworkRows?.((prev) => prev.filter((r) => !isNewRoadNetworkRowId(r.id)));
+    setRoadNetworkSelectedId?.(id);
   };
 
   const handleExport = () => {
@@ -358,7 +406,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
           <button
             type="button"
             onClick={handleAdd}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+            disabled={isNewRoadNetworkRowId(selectedId)}
+            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
             title="도로 추가"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -436,7 +485,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 <input
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="도로명·노선번호·종류·관리기관"
+                  placeholder="도로명·도로번호·종류·관리기관"
                   className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
                 />
               </div>
@@ -655,7 +704,11 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
-        {items.length === 0 ? (
+        {listLoading ? (
+          <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중...</p>
+        ) : listError ? (
+          <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
+        ) : items.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
         ) : (
           <table className="w-full table-fixed border-collapse text-xs">
@@ -665,8 +718,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
             </colgroup>
             <tbody>
               {items.map((item) => {
-                const displayName = item.roadName.trim() || "(이름 없음)";
-                const titleLine = `${displayName} (${item.roadNo || "—"})`;
+                const titleLine = formatRoadNetworkListTitle(item.roadName, item.roadNo);
+                const hasName = Boolean(item.roadName.trim());
                 const isSelected = selectedId === item.id;
                 const badge = ROAD_NETWORK_TYPE_BADGE[item.roadType];
                 const openBadge =
@@ -678,11 +731,11 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                     key={item.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setRoadNetworkSelectedId?.(item.id)}
+                    onClick={() => handleSelectRow(item.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setRoadNetworkSelectedId?.(item.id);
+                        handleSelectRow(item.id);
                       }
                     }}
                     className={cn(
@@ -723,19 +776,12 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         <p
                           className={cn(
                             "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
-                            item.roadName.trim()
-                              ? "text-slate-800"
-                              : "text-slate-400"
+                            hasName ? "text-slate-800" : "text-slate-400"
                           )}
                           title={titleLine}
                         >
                           {titleLine}
                         </p>
-                        {!item.geom ? (
-                          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-800">
-                            노선미정
-                          </span>
-                        ) : null}
                       </div>
                     </td>
                     <td

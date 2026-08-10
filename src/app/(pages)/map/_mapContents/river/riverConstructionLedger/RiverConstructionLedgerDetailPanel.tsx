@@ -7,11 +7,13 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import {
   Download,
   FileText,
+  Image as ImageIcon,
   MapPin,
   Paperclip,
   Plus,
@@ -42,6 +44,7 @@ import {
   triggerServiceFileDownload,
   useServiceFileChunkedUpload,
   useServiceFileData,
+  withServiceFileThumbQuery,
 } from "../../../_mapComponents/standard/useServiceFileData";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
@@ -317,7 +320,13 @@ function AttrTable({ entries }: { entries: AttrEntry[] }) {
   );
 }
 
-/** 첨부 썸네일 — 클릭=미리보기, 호버 시 다운로드·삭제 (PDF는 아이콘만 — 그리드 pdfjs 렌더 렉 방지) */
+const ATTACH_GRID_GAP_PX = 8;
+/** 파일명 한 줄 + margin */
+const ATTACH_GRID_LABEL_PX = 14;
+/** 위·아래 여분 행 — 스크롤 시 빈칸 깜빡임 완화 */
+const ATTACH_GRID_OVERSCAN_ROWS = 2;
+
+/** 첨부 썸네일 — 이미지는 서버 저화질 JPEG, PDF/기타는 아이콘. 원본 미리보기는 클릭 시 */
 function AttachmentThumb({
   att,
   onPreview,
@@ -329,8 +338,13 @@ function AttachmentThumb({
   onDownload: () => void;
   onDelete: () => void;
 }) {
-  const isImage = att.previewKind === "image" && !!att.previewUrl;
+  const isImage = att.previewKind === "image";
   const isPdf = att.previewKind === "pdf";
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const thumbSrc =
+    isImage && att.previewUrl && !thumbFailed
+      ? withServiceFileThumbQuery(att.previewUrl, 160)
+      : null;
   return (
     <div className="group relative">
       <button
@@ -339,13 +353,25 @@ function AttachmentThumb({
         className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
         title={`${att.name} 미리보기`}
       >
-        {isImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={att.previewUrl} alt={att.name} className="h-full w-full object-cover" loading="lazy" />
+        {thumbSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 인증 쿠키 포함 동일출처 썸네일
+          <img
+            src={thumbSrc}
+            alt=""
+            decoding="async"
+            className="h-full w-full object-cover"
+            onError={() => setThumbFailed(true)}
+          />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
-            <FileText className="h-5 w-5" />
-            <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
+            {isImage ? (
+              <ImageIcon className="h-5 w-5" />
+            ) : (
+              <FileText className="h-5 w-5" />
+            )}
+            <span className="text-[10px] font-semibold">
+              {isImage ? "이미지" : isPdf ? "PDF" : "파일"}
+            </span>
           </div>
         )}
       </button>
@@ -380,19 +406,89 @@ function AttachmentThumb({
   );
 }
 
+type AttachGridWindow = {
+  cols: number;
+  rowH: number;
+  totalH: number;
+  offsetY: number;
+  start: number;
+  end: number;
+};
+
+/** 수백 건이어도 보이는 칸(+여분)만 마운트 — 썸네일 요청·DOM을 스크롤에 맞춤 */
 function AttachmentThumbGrid({
   items,
+  scrollRootRef,
   onPreview,
   onDownload,
   onDelete,
   emptyLabel,
 }: {
   items: RiverConstructionLedgerAttachment[];
+  scrollRootRef: RefObject<HTMLDivElement | null>;
   onPreview: (att: RiverConstructionLedgerAttachment) => void;
   onDownload: (att: RiverConstructionLedgerAttachment) => void;
   onDelete: (att: RiverConstructionLedgerAttachment) => void;
   emptyLabel: string;
 }) {
+  const [win, setWin] = useState<AttachGridWindow>({
+    cols: 3,
+    rowH: 96,
+    totalH: 0,
+    offsetY: 0,
+    start: 0,
+    end: 0,
+  });
+
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    if (!root || items.length === 0) {
+      setWin((prev) => ({ ...prev, totalH: 0, start: 0, end: 0, offsetY: 0 }));
+      return;
+    }
+
+    const measure = () => {
+      const el = scrollRootRef.current;
+      if (!el) return;
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      const cols = window.matchMedia("(min-width: 640px)").matches ? 4 : 3;
+      const cellW = (w - ATTACH_GRID_GAP_PX * (cols - 1)) / cols;
+      const rowH = cellW + ATTACH_GRID_LABEL_PX;
+      const stride = rowH + ATTACH_GRID_GAP_PX;
+      const rows = Math.ceil(items.length / cols);
+      const totalH = rows > 0 ? rows * rowH + Math.max(0, rows - 1) * ATTACH_GRID_GAP_PX : 0;
+      const firstRow = Math.max(
+        0,
+        Math.floor(el.scrollTop / stride) - ATTACH_GRID_OVERSCAN_ROWS
+      );
+      const lastRow = Math.min(
+        rows - 1,
+        Math.ceil((el.scrollTop + el.clientHeight) / stride) + ATTACH_GRID_OVERSCAN_ROWS
+      );
+      setWin({
+        cols,
+        rowH,
+        totalH,
+        offsetY: firstRow * stride,
+        start: firstRow * cols,
+        end: Math.min(items.length, (lastRow + 1) * cols),
+      });
+    };
+
+    measure();
+    root.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    const mq = window.matchMedia("(min-width: 640px)");
+    mq.addEventListener("change", measure);
+    return () => {
+      root.removeEventListener("scroll", measure);
+      ro.disconnect();
+      mq.removeEventListener("change", measure);
+    };
+  }, [items.length, scrollRootRef]);
+
   if (items.length === 0) {
     return (
       <div className="flex h-full min-h-[6rem] items-center justify-center">
@@ -400,17 +496,28 @@ function AttachmentThumbGrid({
       </div>
     );
   }
+
+  const visible = items.slice(win.start, win.end);
+
   return (
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-      {items.map((att) => (
-        <AttachmentThumb
-          key={att.id}
-          att={att}
-          onPreview={() => onPreview(att)}
-          onDownload={() => onDownload(att)}
-          onDelete={() => onDelete(att)}
-        />
-      ))}
+    <div className="relative w-full" style={{ height: win.totalH }}>
+      <div
+        className="absolute left-0 right-0 grid gap-2"
+        style={{
+          top: win.offsetY,
+          gridTemplateColumns: `repeat(${win.cols}, minmax(0, 1fr))`,
+        }}
+      >
+        {visible.map((att) => (
+          <AttachmentThumb
+            key={att.id}
+            att={att}
+            onPreview={() => onPreview(att)}
+            onDownload={() => onDownload(att)}
+            onDelete={() => onDelete(att)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -420,6 +527,7 @@ const RIVER_TABLE_PREVIEW_MAX = 2;
 export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const mapContext = useMapContext();
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const attachScrollRef = useRef<HTMLDivElement>(null);
   const isNewRow = isNewRiverConstructionLedgerRow(row);
   const [editing, setEditing] = useState(isNewRow || !row.name.trim());
   const [draft, setDraft] = useState<AttrDraft>(() => toDraft(row));
@@ -459,17 +567,81 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const draftParcelsRef = useRef(draftParcels);
   draftParcelsRef.current = draftParcels;
   const { selectParcel, movingParcelIdx } = useLayerParcelNavigation();
+  const [detailLoading, setDetailLoading] = useState(false);
+  const detailLoadGenRef = useRef(0);
+  const parcelGeomEditIdxRef = useRef(parcelGeomEditIdx);
+  parcelGeomEditIdxRef.current = parcelGeomEditIdx;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+
+  /** 목록 클릭은 extent만 — 상세·필지 도형은 패널에서 보강 */
+  useEffect(() => {
+    if (isNewRiverConstructionLedgerRow(row)) return;
+    const consCode = row.id;
+    const gen = ++detailLoadGenRef.current;
+    setDetailLoading(true);
+    let cancelled = false;
+    void call("", "POST", {
+      service: "consDataAsService",
+      action: "getDetailByConsCode",
+      params: { consCode, includeParcelGeometry: true },
+    })
+      .then((res) => {
+        if (cancelled || detailLoadGenRef.current !== gen) return;
+        const data = res?.data ?? res;
+        if (data?.error || !data?.row) return;
+        const mapped = mapConsDataAsApiToLedgerRow(data.row as ConsDataAsApiRow);
+        mapContext?.setRiverConstructionLedgerRows?.((prev) =>
+          prev.map((r) =>
+            r.id === consCode
+              ? {
+                  ...mapped,
+                  geom: mapped.geom ?? r.geom,
+                  attachments: r.attachments,
+                  history: r.history,
+                }
+              : r
+          )
+        );
+        // 사용자가 이미 편집 중이면 폼 덮어쓰지 않음
+        if (!editingRef.current) {
+          setDraft(toDraft(mapped));
+          setRiverNamesText(normalizeRiverNames(mapped.riverNames)[0] ?? "");
+        }
+        if (parcelGeomEditIdxRef.current == null) {
+          const filled = withRiverNameFallback(mapped.parcels ?? []);
+          parcelsSnapshotRef.current = [...filled];
+          setDraftParcels(filled);
+        }
+      })
+      .catch(() => {
+        /* 목록 행으로 계속 표시 */
+      })
+      .finally(() => {
+        if (!cancelled && detailLoadGenRef.current === gen) {
+          setDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- row.id 전환 시만
+  }, [row.id]);
 
   const fileSerEng = SER_FILE_ENG.riverConstructionLedger;
   const fileKey = isNewRow ? "" : row.id;
   const { upload: uploadChunked } = useServiceFileChunkedUpload();
+  /** 상세 보강이 끝난 뒤 첨부 목록 조회 — 클릭 직후 원본 이미지 다운로드와 경합 방지 */
+  const attachmentsReady = Boolean(fileKey) && !detailLoading;
   const { files: folderFiles, loading: filesLoading } = useServiceFileData({
     serEng: fileSerEng,
-    enabled: Boolean(fileKey) && Boolean(attachmentTab),
+    enabled: attachmentsReady && Boolean(attachmentTab),
     layerSegment: CONS_DATA_AS_FILE_LAYER,
     keyValue: fileKey || null,
     subfolder: attachmentTab,
     refreshNonce: attachRefreshNonce,
+    /** 그리드는 파일명만 필요 — 천 건 stat 생략 */
+    includeMeta: false,
   });
 
   const attachments = useMemo(() => {
@@ -486,8 +658,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   }, [attachmentTab, fileKey, fileSerEng, folderFiles]);
 
   useEffect(() => {
-    if (!fileKey) {
-      setAttachmentFolders([]);
+    if (!attachmentsReady || !fileKey) {
+      if (!fileKey) setAttachmentFolders([]);
       return;
     }
     let cancelled = false;
@@ -517,7 +689,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [fileKey, fileSerEng, foldersRefreshNonce]);
+  }, [attachmentsReady, fileKey, fileSerEng, foldersRefreshNonce]);
 
   const setRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus;
   const setGeomEditingId = mapContext?.setRiverConstructionLedgerGeomEditingId;
@@ -1316,6 +1488,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-white py-0.5">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             상세 속성
+            {detailLoading ? (
+              <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">
+                불러오는 중…
+              </span>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <LayerRowEditToolbar
@@ -1487,7 +1664,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
                       )}
-                      onClick={() => setAttachmentTab(folder)}
+                      onClick={() => {
+                        setAttachmentTab(folder);
+                        attachScrollRef.current?.scrollTo({ top: 0 });
+                      }}
                     >
                       {folder}
                       {attachmentTab === folder ? ` (${attachments.length})` : ""}
@@ -1496,12 +1676,17 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide">
-                {filesLoading ? (
+              <div
+                ref={attachScrollRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
+              >
+                {!attachmentsReady || filesLoading ? (
                   <p className="py-3 text-center text-[11px] text-slate-400">첨부 목록 불러오는 중…</p>
                 ) : (
                   <AttachmentThumbGrid
+                    key={attachmentTab}
                     items={attachments}
+                    scrollRootRef={attachScrollRef}
                     onPreview={openPreview}
                     onDownload={downloadAttachment}
                     onDelete={(att) => void handleDeleteAttachment(att)}

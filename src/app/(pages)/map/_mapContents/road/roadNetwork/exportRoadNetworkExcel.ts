@@ -7,7 +7,7 @@ export function exportRoadNetworkExcel(rows: RoadNetworkRow[], fileName?: string
     도로명: r.roadName,
     도로종류: r.roadType,
     개설여부: r.openStatus ?? "",
-    노선번호: r.roadNo,
+    도로번호: r.roadNo,
     관리기관: r.dept,
     담당자: r.manager,
     유지보수건수: r.maintenance.length,

@@ -120,9 +120,16 @@ function cell(raw: unknown): string {
   return ymd ?? s;
 }
 
+const tableMetaCache = new Map<string, { tableName: string; schema: string } | null>();
+const tableColumnsCache = new Map<string, string[]>();
+
 async function resolveTableWithSchema(
   wantedLower: string
 ): Promise<{ tableName: string; schema: string } | null> {
+  const cacheKey = wantedLower.toLowerCase();
+  if (tableMetaCache.has(cacheKey)) {
+    return tableMetaCache.get(cacheKey) ?? null;
+  }
   const schemasIn = SEARCH_SCHEMAS.map((s) => `'${esc(s)}'`).join(',');
   const res = await db.execute(
     sql.raw(
@@ -134,14 +141,22 @@ async function resolveTableWithSchema(
     )
   );
   const row = res.rows?.[0] as { table_schema?: string; table_name?: string } | undefined;
-  if (!row?.table_name) return null;
-  return {
+  if (!row?.table_name) {
+    tableMetaCache.set(cacheKey, null);
+    return null;
+  }
+  const meta = {
     tableName: String(row.table_name).trim(),
     schema: String(row.table_schema ?? DEFAULT_SCHEMA).trim(),
   };
+  tableMetaCache.set(cacheKey, meta);
+  return meta;
 }
 
 async function getTableColumns(schema: string, table: string): Promise<string[]> {
+  const cacheKey = `${schema}.${table}`.toLowerCase();
+  const hit = tableColumnsCache.get(cacheKey);
+  if (hit) return hit;
   const res = await db.execute(
     sql.raw(
       `SELECT column_name AS name
@@ -150,9 +165,11 @@ async function getTableColumns(schema: string, table: string): Promise<string[]>
        ORDER BY ordinal_position`
     )
   );
-  return (res.rows as { name?: string }[])
+  const cols = (res.rows as { name?: string }[])
     .map((r) => String(r?.name ?? '').trim())
     .filter(Boolean);
+  tableColumnsCache.set(cacheKey, cols);
+  return cols;
 }
 
 function findColumn(columns: string[], name: string): string | null {
@@ -301,12 +318,15 @@ export async function listRows(params?: {
   }
 }
 
-/** 상세 1건 */
+/** 상세 1건 — includeParcelGeometry false면 필지 속성·extent만 (목록 클릭 성능) */
 export async function getDetailByConsCode(params: {
   consCode?: string;
+  /** 기본 true — 상세 편집용. false면 필지 GeoJSON 생략 */
+  includeParcelGeometry?: boolean;
 }): Promise<{ row: ConsDataAsRow | null; error?: string }> {
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { row: null, error: '공사코드가 필요합니다.' };
+  const includeParcelGeometry = params?.includeParcelGeometry !== false;
 
   const meta = await resolveTableWithSchema(MAIN_TABLE);
   if (!meta) return { row: null, error: `${MAIN_TABLE} 테이블이 없습니다.` };
@@ -344,7 +364,10 @@ export async function getDetailByConsCode(params: {
     const res = await db.execute(sql.raw(sqlText));
     const row = res.rows?.[0] as Record<string, unknown> | undefined;
     if (!row) return { row: null, error: '해당 건을 찾을 수 없습니다.' };
-    const parcels = await listParcelsByConsCode({ consCode });
+    const parcels = await listParcelsByConsCode({
+      consCode,
+      includeGeometry: includeParcelGeometry,
+    });
     return {
       row: {
         ...mapDbRow(row, consCode),
@@ -360,9 +383,12 @@ export async function getDetailByConsCode(params: {
 /** 필지(solo) 목록 */
 export async function listParcelsByConsCode(params: {
   consCode?: string;
+  /** 기본 false — GeoJSON 생략. 상세 편집 시에만 true */
+  includeGeometry?: boolean;
 }): Promise<{ items: ConsDataAsParcelItem[]; error?: string }> {
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { items: [] };
+  const includeGeometry = params?.includeGeometry === true;
 
   const meta = await resolveTableWithSchema(SOLO_TABLE);
   if (!meta) return { items: [] };
@@ -402,8 +428,13 @@ export async function listParcelsByConsCode(params: {
       ST_YMin(ST_Envelope(ST_Transform(r.${quoteIdent('geom')}, 3857)))::float8 AS ymin,
       ST_XMax(ST_Envelope(ST_Transform(r.${quoteIdent('geom')}, 3857)))::float8 AS xmax,
       ST_YMax(ST_Envelope(ST_Transform(r.${quoteIdent('geom')}, 3857)))::float8 AS ymax,
-      ST_AsGeoJSON(ST_Transform(r.${quoteIdent('geom')}, 3857))::text AS geom3857`
-    : `,NULL::float8 AS xmin,NULL::float8 AS ymin,NULL::float8 AS xmax,NULL::float8 AS ymax,NULL::text AS geom3857`;
+      (r.${quoteIdent('geom')} IS NOT NULL) AS has_geom
+      ${
+        includeGeometry
+          ? `, ST_AsGeoJSON(ST_Transform(r.${quoteIdent('geom')}, 3857))::text AS geom3857`
+          : `, NULL::text AS geom3857`
+      }`
+    : `,NULL::float8 AS xmin,NULL::float8 AS ymin,NULL::float8 AS xmax,NULL::float8 AS ymax,false AS has_geom,NULL::text AS geom3857`;
 
   const sqlText = `
     SELECT
@@ -437,16 +468,29 @@ export async function listParcelsByConsCode(params: {
           : null;
         let geometry3857: Record<string, unknown> | null = null;
         const geom3857Raw = row.geom3857;
-        if (typeof geom3857Raw === 'string' && geom3857Raw.trim()) {
+        if (includeGeometry && typeof geom3857Raw === 'string' && geom3857Raw.trim()) {
           try {
             geometry3857 = JSON.parse(geom3857Raw) as Record<string, unknown>;
           } catch {
             geometry3857 = null;
           }
         }
-        return { address, riverName, remark, extent3857, geometry3857 };
+        return {
+          address,
+          riverName,
+          remark,
+          extent3857,
+          ...(geometry3857 ? { geometry3857 } : {}),
+        };
       })
-      .filter((x) => x.address || x.riverName || x.remark || x.geometry3857);
+      .filter(
+        (x) =>
+          x.address ||
+          x.riverName ||
+          x.remark ||
+          x.geometry3857 ||
+          x.extent3857
+      );
     return { items };
   } catch (e: unknown) {
     return { items: [], error: e instanceof Error ? e.message : String(e) };

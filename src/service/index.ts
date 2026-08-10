@@ -23,6 +23,7 @@ import * as permissionService from './permissionService';
 import * as usrService from './usrService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as roadLedgerService from './roadLedgerService';
+import * as roadNetworkService from './roadNetworkService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
@@ -83,6 +84,7 @@ export {
   usrService,
   riverBasicPlanService,
   roadLedgerService,
+  roadNetworkService,
   roadUseLedgerService,
   riverUseLedgerService,
   usageDataAsService,

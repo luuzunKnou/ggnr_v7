@@ -393,6 +393,7 @@ function MapLayoutContent({
   const setSafetyMapLayerVisibility = mapContext?.setSafetyMapLayerVisibility
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt
   const setSpatialFilteredLayerNames = mapContext?.setSpatialFilteredLayerNames
+  const setServiceWmsCqlByLayer = mapContext?.setServiceWmsCqlByLayer
   /** 색인도 식별 시 하천·탭을 동기 갱신 (상세 패널 effect보다 먼저 반영되도록 ref에 등록) */
   if (mapContext?.applyRiverBasicPlanMapPickRef) {
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
@@ -532,6 +533,7 @@ function MapLayoutContent({
       setSafetyMapLayerVisibility,
       setSpatialFilterWkt,
       setSpatialFilteredLayerNames,
+      setServiceWmsCqlByLayer,
       setIdentifyResultList,
       setIdentifySelectedRow,
     }
@@ -555,6 +557,7 @@ function MapLayoutContent({
     setSafetyMapLayerVisibility,
     setSpatialFilterWkt,
     setSpatialFilteredLayerNames,
+    setServiceWmsCqlByLayer,
     setIdentifyResultList,
     setIdentifySelectedRow,
   ])

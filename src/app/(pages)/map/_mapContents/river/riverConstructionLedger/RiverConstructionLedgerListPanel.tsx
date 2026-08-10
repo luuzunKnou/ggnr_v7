@@ -192,17 +192,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       setSelectedId?.(rowId);
       setRiverFocus?.(null);
       if (isNewRiverConstructionLedgerRow({ id: rowId })) return;
+      // 클릭 즉시 지도만 이동 — 상세·필지 GeoJSON은 DetailPanel에서 비동기 로드
       try {
-        const res = await call("", "POST", {
-          service: "consDataAsService",
-          action: "getDetailByConsCode",
-          params: { consCode: rowId },
-        });
-        const data = res?.data ?? res;
-        if (data?.error || !data?.row) return;
-        const mapped = mapConsDataAsApiToLedgerRow(data.row as ConsDataAsApiRow);
-        setRows?.((prev) => prev.map((r) => (r.id === rowId ? { ...mapped, geom: r.geom ?? mapped.geom } : r)));
-
         const map = mapContext?.mapInstanceRef?.current;
         if (!map) return;
         const extRes = await call("", "POST", {
@@ -219,10 +210,10 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
           });
         }
       } catch {
-        /* 상세 보강 실패 시 목록 행으로 표시 */
+        /* extent 실패 시 목록 행 geom 강조에 맡김 */
       }
     },
-    [mapContext, setRiverFocus, setRows, setSelectedId]
+    [mapContext, setRiverFocus, setSelectedId]
   );
 
   useEffect(() => {

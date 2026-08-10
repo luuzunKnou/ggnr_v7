@@ -7,7 +7,6 @@ import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
 import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
-import { cloneRoadNetworkRows } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
 
 export type RoadCctvOverlayState = {
@@ -102,6 +101,12 @@ export type MapContextValue = {
   /** 공간 필터 적용 시 레이어 목록에 표시할 테이블 이름 집합. null이면 전체 표시 */
   spatialFilteredLayerNames: Set<string> | null;
   setSpatialFilteredLayerNames: Dispatch<SetStateAction<Set<string> | null>>;
+  /**
+   * 서비스 WMS 레이어별 추가 CQL (예: 기본계획도 선택 하천 river_name='…').
+   * null/빈 객체면 속성 조건 없음. 키는 define_table_name.
+   */
+  serviceWmsCqlByLayer: Record<string, string> | null;
+  setServiceWmsCqlByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
   spatialDrawRequest: {
     type: 'rectangle' | 'polygon' | 'circle';
@@ -432,6 +437,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
+  const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
   const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
     type: 'rectangle' | 'polygon' | 'circle';
     onComplete: (wkt5181: string) => void;
@@ -497,7 +503,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     defineTableTitle: string;
     pickFromMap?: boolean;
   } | null>(null);
-  const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>(() => cloneRoadNetworkRows());
+  const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
   const [roadNetworkOverlayVisible, setRoadNetworkOverlayVisible] = useState(false);
@@ -607,6 +613,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSpatialFilterWkt,
         spatialFilteredLayerNames,
         setSpatialFilteredLayerNames,
+        serviceWmsCqlByLayer,
+        setServiceWmsCqlByLayer,
         spatialDrawRequest,
         setSpatialDrawRequest,
         measurementActive,

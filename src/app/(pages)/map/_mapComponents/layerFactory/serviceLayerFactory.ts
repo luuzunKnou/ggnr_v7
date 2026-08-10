@@ -258,8 +258,10 @@ export function refreshServiceWmsLayer(map: OLMap | null | undefined): void {
 }
 
 /**
- * visibleLayerNames / layerFilterRows / spatialFilterWkt 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
+ * visibleLayerNames / layerFilterRows / spatialFilterWkt / serviceWmsCqlByLayer 변경 시
+ * serviceLayer WMS 파라미터를 자동 동기화하는 훅.
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.
+ * serviceWmsCqlByLayer는 레이어별 추가 속성 CQL(기본계획도 선택 하천 등).
  * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점(아래→위)으로 맞춘다.
  */
 export function useServiceLayerSync(
@@ -271,11 +273,15 @@ export function useServiceLayerSync(
   layerGeometryTypes?: Record<string, LayerDbGeometryKind>,
   /** 레이어별 WMS에서 숨길 feature key (도형편집기 등) */
   hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
+  /** 레이어별 추가 CQL (define_table_name → CQL). null이면 없음 */
+  serviceWmsCqlByLayer?: Record<string, string> | null,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
   const hiddenRef = useRef(hiddenFeaturesByLayer);
   hiddenRef.current = hiddenFeaturesByLayer;
+  const extraCqlRef = useRef(serviceWmsCqlByLayer);
+  extraCqlRef.current = serviceWmsCqlByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -325,11 +331,20 @@ export function useServiceLayerSync(
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
+    const extraByLayer = extraCqlRef.current;
     const cqlArr = names.map((n) => {
       const base = filterRowsToCql(filters?.get(n) ?? []);
       const spatialCql = wkt ? `INTERSECTS(geom, ${wkt})` : null;
       const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? [], n);
-      return mergeCqlParts(base, spatialCql, excludeCql);
+      const extraRaw =
+        extraByLayer?.[n] ??
+        extraByLayer?.[n.toLowerCase()] ??
+        null;
+      const extraCql =
+        typeof extraRaw === 'string' && extraRaw.trim() && extraRaw.trim() !== 'INCLUDE'
+          ? extraRaw.trim()
+          : null;
+      return mergeCqlParts(base, spatialCql, excludeCql, extraCql);
     });
     const allInclude = cqlArr.every((c) => c === 'INCLUDE');
     const cqlParam = allInclude ? '' : cqlArr.join(';');
@@ -365,7 +380,15 @@ export function useServiceLayerSync(
       });
     }
     serviceLayer.setVisible(true);
-  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);
+  }, [
+    map,
+    mapReady,
+    visibleLayerNames,
+    spatialFilterWkt,
+    layerGeometryTypes,
+    hiddenFeaturesByLayer,
+    serviceWmsCqlByLayer,
+  ]);
 }
 
 export { WORKSPACE };

@@ -691,6 +691,7 @@ export default function OpenLayersMap({
     projectName
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+  const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
 
   useEffect(() => {
     if (!mapReady) return;
@@ -736,7 +737,9 @@ export default function OpenLayersMap({
     visibleLayerNames,
     undefined,
     spatialFilterWkt,
-    layerGeometryTypes
+    layerGeometryTypes,
+    undefined,
+    serviceWmsCqlByLayer
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -1139,7 +1142,7 @@ export default function OpenLayersMap({
           const r = withFeat[wi];
           const tn = String(r.tableName ?? '').trim();
           if (!tn) continue;
-          if (isRiverBasicPlanIndexDefineTable(tn) && openScanLayers.has(tn)) {
+          if (isRiverBasicPlanIndexDefineTable(tn)) {
             cands.push({
               tableName: tn,
               rank: riverBasicPlanIdentifyGeometryRank(tn),
