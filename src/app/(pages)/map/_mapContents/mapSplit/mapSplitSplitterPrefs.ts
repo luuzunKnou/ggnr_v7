@@ -1,15 +1,8 @@
-import {
-  MAP_SPLIT_CONTROL_OFFSET_MAX,
-  MAP_SPLIT_CONTROL_OFFSET_MIN,
-} from '../../_mapComponents/mapSplit/mapSplitTypes';
-
 export type MapSplitSplitterPrefs = {
-  controlOffsetRatio: number;
   expanded: boolean;
 };
 
 export const MAP_SPLIT_SPLITTER_PREFS_DEFAULT: MapSplitSplitterPrefs = {
-  controlOffsetRatio: 0.5,
   expanded: true,
 };
 
@@ -20,10 +13,6 @@ export function getMapSplitSplitterStorageKey(projectName?: string): string {
   return name ? `${STORAGE_PREFIX}:${name}` : STORAGE_PREFIX;
 }
 
-function clampOffsetRatio(r: number): number {
-  return Math.min(MAP_SPLIT_CONTROL_OFFSET_MAX, Math.max(MAP_SPLIT_CONTROL_OFFSET_MIN, r));
-}
-
 export function loadMapSplitSplitterPrefs(projectName?: string): MapSplitSplitterPrefs {
   if (typeof window === 'undefined') return { ...MAP_SPLIT_SPLITTER_PREFS_DEFAULT };
   try {
@@ -31,10 +20,6 @@ export function loadMapSplitSplitterPrefs(projectName?: string): MapSplitSplitte
     if (!raw) return { ...MAP_SPLIT_SPLITTER_PREFS_DEFAULT };
     const parsed = JSON.parse(raw) as Partial<MapSplitSplitterPrefs>;
     return {
-      controlOffsetRatio:
-        typeof parsed.controlOffsetRatio === 'number'
-          ? clampOffsetRatio(parsed.controlOffsetRatio)
-          : MAP_SPLIT_SPLITTER_PREFS_DEFAULT.controlOffsetRatio,
       expanded:
         typeof parsed.expanded === 'boolean'
           ? parsed.expanded
@@ -53,10 +38,7 @@ export function saveMapSplitSplitterPrefs(
   try {
     localStorage.setItem(
       getMapSplitSplitterStorageKey(projectName),
-      JSON.stringify({
-        controlOffsetRatio: clampOffsetRatio(prefs.controlOffsetRatio),
-        expanded: prefs.expanded,
-      })
+      JSON.stringify({ expanded: prefs.expanded })
     );
   } catch {
     /* quota 등 — 무시 */

@@ -25,6 +25,8 @@ import {
 import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
 import { DEFAULT_CAMERA_HEIGHT_3D, DEFAULT_ZOOM_2D } from './config/mapDefaults';
 import { MapSplitLayout } from './mapSplit/MapSplitLayout';
+import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
+import { useSplitGutterControlOffset } from './mapSplit/useSplitGutterControlOffset';
 import { useStreetViewSecondary } from '../_mapContents/streetView/useStreetViewSecondary';
 import { useMapSplitSecondary } from '../_mapContents/mapSplit/useMapSplitSecondary';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
@@ -362,25 +364,24 @@ export default function MapViewModeWrapper({
     projectName,
   });
 
+  const {
+    controlOffsetRatio: splitControlOffsetRatio,
+    setControlOffsetRatio: onSplitControlOffsetChange,
+  } = useSplitGutterControlOffset(projectName);
+
   // 보조 칸 스위치 — streetView | map
   let secondaryPanel = null as ReactNode;
   let gutterControls: ReturnType<typeof useStreetViewSecondary>['controls'] = undefined;
-  let splitControlOffsetRatio: number | undefined;
-  let onSplitControlOffsetChange: ((ratio: number) => void) | undefined;
   let splitControlsExpanded: boolean | undefined;
   let onSplitControlsExpandedChange: ((expanded: boolean) => void) | undefined;
   if (secondaryKind === 'streetView') {
     secondaryPanel = streetView.panel;
     gutterControls = streetView.controls;
-    splitControlOffsetRatio = streetView.controlOffsetRatio;
-    onSplitControlOffsetChange = streetView.onControlOffsetRatioChange;
     splitControlsExpanded = streetView.controlsExpanded;
     onSplitControlsExpandedChange = streetView.onControlsExpandedChange;
   } else if (secondaryKind === 'map') {
     secondaryPanel = mapSplit.panel;
     gutterControls = mapSplit.controls;
-    splitControlOffsetRatio = mapSplit.controlOffsetRatio;
-    onSplitControlOffsetChange = mapSplit.onControlOffsetRatioChange;
     splitControlsExpanded = mapSplit.controlsExpanded;
     onSplitControlsExpandedChange = mapSplit.onControlsExpandedChange;
   }
@@ -462,6 +463,9 @@ export default function MapViewModeWrapper({
           onControlsExpandedChange={onSplitControlsExpandedChange}
           onSizeTick={onSplitSizeTick}
           mapPaddingLeft={mapContext?.mapPaddingLeft ?? 0}
+          mapPaddingRight={
+            mapContext?.mapPaddingRight ?? MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX
+          }
           onOrientationChange={setSplitOrientation}
         />
       )}
