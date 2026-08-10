@@ -14,6 +14,9 @@ import { MapSplitterGutter } from './MapSplitterGutter';
 import {
   MAP_SPLIT_ANIM_MS,
   MAP_SPLIT_DEFAULT_PRIMARY_RATIO,
+  MAP_SPLIT_GUTTER_HIT_CROSS_PX,
+  MAP_SPLIT_GUTTER_Z_INDEX,
+  MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
   MAP_SPLIT_MAX_RATIO,
   MAP_SPLIT_MIN_RATIO,
   type MapSplitOrientation,
@@ -28,6 +31,8 @@ type MapSplitLayoutProps = {
   onSizeTick?: () => void;
   /** 좌측 사이드바·패널 폭(px) */
   mapPaddingLeft?: number;
+  /** 우측 메뉴·확장 패널 폭(px) */
+  mapPaddingRight?: number;
   /** 좌우/상하 전환 알림 */
   onOrientationChange?: (orientation: MapSplitOrientation) => void;
   /** 분할선 컨트롤 pill 위치 (0~1) */
@@ -49,35 +54,39 @@ function queryRoadviewStage(content: HTMLElement | null): HTMLElement | null {
 }
 
 /**
- * 좌우 분할: 좌측 메뉴·패널(mapPaddingLeft)을 제외한 가용 너비 기준 분할.
+ * 좌우 분할: 좌·우 패널(mapPaddingLeft·Right)을 제외한 가용 너비 기준 분할.
  * usableFraction 0.5 = 가용 영역 정중앙(보이는 지도 1:1).
- * primaryRatio = (padding + usableFraction × (W − padding)) / W
+ * primaryRatio = (padL + usableFraction × usable) / W
  */
 function primaryRatioFromUsableFraction(
   containerWidth: number,
   mapPaddingLeft: number,
+  mapPaddingRight: number,
   usableFraction: number
 ) {
   if (containerWidth <= 0) return MAP_SPLIT_DEFAULT_PRIMARY_RATIO;
-  const padding = Math.max(0, Math.min(mapPaddingLeft, containerWidth));
-  const usable = containerWidth - padding;
+  const padL = Math.max(0, Math.min(mapPaddingLeft, containerWidth));
+  const padR = Math.max(0, Math.min(mapPaddingRight, containerWidth - padL));
+  const usable = containerWidth - padL - padR;
   if (usable <= 0) return clampRatio(1);
   const f = Math.min(1, Math.max(0, usableFraction));
-  return clampRatio((padding + f * usable) / containerWidth);
+  return clampRatio((padL + f * usable) / containerWidth);
 }
 
 /** primary flex 비율 → 가용 영역 내 분할선 위치(0~1) */
 function usableFractionFromPrimaryRatio(
   containerWidth: number,
   mapPaddingLeft: number,
+  mapPaddingRight: number,
   primaryRatio: number
 ) {
   if (containerWidth <= 0) return 0.5;
-  const padding = Math.max(0, Math.min(mapPaddingLeft, containerWidth));
-  const usable = containerWidth - padding;
+  const padL = Math.max(0, Math.min(mapPaddingLeft, containerWidth));
+  const padR = Math.max(0, Math.min(mapPaddingRight, containerWidth - padL));
+  const usable = containerWidth - padL - padR;
   if (usable <= 0) return 0.5;
   const gutter = clampRatio(primaryRatio) * containerWidth;
-  return Math.min(1, Math.max(0, (gutter - padding) / usable));
+  return Math.min(1, Math.max(0, (gutter - padL) / usable));
 }
 
 /**
@@ -93,6 +102,7 @@ export function MapSplitLayout({
   onPrimaryRatioChange,
   onSizeTick,
   mapPaddingLeft = 0,
+  mapPaddingRight = MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
   onOrientationChange,
   controlOffsetRatio,
   onControlOffsetRatioChange,
@@ -113,6 +123,23 @@ export function MapSplitLayout({
   // 분할 ON 시 비율 잠금 해제(거터 «분할선 이동» 활성 기본)
   useEffect(() => {
     if (splitActive) setRatioLocked(false);
+  }, [splitActive]);
+
+  /** 분할 ON 직후 가용 분율 스냅샷 — 저장된 primaryRatio → usableFraction */
+  useLayoutEffect(() => {
+    if (!splitActive) return;
+    const el = containerRef.current;
+    if (!el) return;
+    if (orientationRef.current === 'horizontal') {
+      usableSplitFractionRef.current = usableFractionFromPrimaryRatio(
+        el.clientWidth,
+        mapPaddingLeftRef.current,
+        mapPaddingRightRef.current,
+        primaryRatioRef.current
+      );
+    } else {
+      usableSplitFractionRef.current = primaryRatioRef.current;
+    }
   }, [splitActive]);
 
   const dragRef = useRef<{ startPos: number; startRatio: number } | null>(null);
@@ -145,6 +172,8 @@ export function MapSplitLayout({
   const secondaryContentRef = useRef<HTMLDivElement>(null);
   const mapPaddingLeftRef = useRef(mapPaddingLeft);
   mapPaddingLeftRef.current = mapPaddingLeft;
+  const mapPaddingRightRef = useRef(mapPaddingRight);
+  mapPaddingRightRef.current = mapPaddingRight;
   const orientationRef = useRef(orientation);
   orientationRef.current = orientation;
   const primaryRatioPropRef = useRef(primaryRatioProp);
@@ -169,6 +198,7 @@ export function MapSplitLayout({
     const next = primaryRatioFromUsableFraction(
       el.clientWidth,
       mapPaddingLeftRef.current,
+      mapPaddingRightRef.current,
       usableSplitFractionRef.current
     );
     if (Math.abs(next - primaryRatioRef.current) < 1e-4) return;
@@ -188,8 +218,11 @@ export function MapSplitLayout({
       usableSplitFractionRef.current = usableFractionFromPrimaryRatio(
         el.clientWidth,
         mapPaddingLeftRef.current,
+        mapPaddingRightRef.current,
         next
       );
+    } else if (el && orientationRef.current === 'vertical') {
+      usableSplitFractionRef.current = next;
     }
     primaryRatioRef.current = next;
     setPrimaryRatio(next);
@@ -591,12 +624,40 @@ export function MapSplitLayout({
     const el = containerRef.current;
     if (!el) return;
     const apply = () => {
-      const usableW = Math.max(0, el.clientWidth - mapPaddingLeftRef.current);
+      const usableW = Math.max(
+        0,
+        el.clientWidth - mapPaddingLeftRef.current - mapPaddingRightRef.current
+      );
       const next: MapSplitOrientation =
         usableW < window.innerWidth / 2 ? 'vertical' : 'horizontal';
 
       if (orientationRef.current !== next) {
-        // 방향 전환 전 css-fill 기준 크기 확보 → 전환 중 scale → 재생성
+        // 방향 전환: 가용 분율(패널 제외) 유지 → 새 축 primaryRatio 로 변환
+        const elW = el.clientWidth;
+        if (orientationRef.current === 'horizontal') {
+          usableSplitFractionRef.current = usableFractionFromPrimaryRatio(
+            elW,
+            mapPaddingLeftRef.current,
+            mapPaddingRightRef.current,
+            primaryRatioRef.current
+          );
+        } else {
+          usableSplitFractionRef.current = primaryRatioRef.current;
+        }
+        const f = usableSplitFractionRef.current;
+        const ratioForOrientation =
+          next === 'vertical'
+            ? clampRatio(f)
+            : primaryRatioFromUsableFraction(
+                elW,
+                mapPaddingLeftRef.current,
+                mapPaddingRightRef.current,
+                f
+              );
+        primaryRatioRef.current = ratioForOrientation;
+        setPrimaryRatio(ratioForOrientation);
+        onPrimaryRatioChangeRef.current?.(ratioForOrientation);
+
         if (splitActiveRef.current) {
           beginSecondaryStretchRef.current();
         }
@@ -619,7 +680,7 @@ export function MapSplitLayout({
       ro.disconnect();
       window.removeEventListener('resize', apply);
     };
-  }, [mapPaddingLeft]);
+  }, [mapPaddingLeft, mapPaddingRight]);
 
   useEffect(() => {
     onOrientationChangeRef.current?.(orientation);
@@ -629,7 +690,7 @@ export function MapSplitLayout({
   useLayoutEffect(() => {
     if (!splitActive || orientation !== 'horizontal') return;
     syncHorizontalRatioFromUsable();
-  }, [splitActive, orientation, mapPaddingLeft, syncHorizontalRatioFromUsable]);
+  }, [splitActive, orientation, mapPaddingLeft, mapPaddingRight, syncHorizontalRatioFromUsable]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setAnimReady(true));
@@ -646,7 +707,19 @@ export function MapSplitLayout({
       const size = isH ? rect.width : rect.height;
       if (size <= 0) return;
       const pos = isH ? e.clientX : e.clientY;
-      const next = clampRatio(drag.startRatio + (pos - drag.startPos) / size);
+      let next: number;
+      if (isH) {
+        const padL = mapPaddingLeftRef.current;
+        const padR = mapPaddingRightRef.current;
+        const usable = size - padL - padR;
+        if (usable <= 0) return;
+        const f = Math.min(1, Math.max(0, (pos - rect.left - padL) / usable));
+        usableSplitFractionRef.current = f;
+        next = primaryRatioFromUsableFraction(size, padL, padR, f);
+      } else {
+        next = clampRatio(drag.startRatio + (pos - drag.startPos) / size);
+        usableSplitFractionRef.current = next;
+      }
       pendingRatioRef.current = next;
       applyPaneFlex(next);
       // 드래그 중엔 throttle 없이 매 이동마다 지도 크기 맞춤 (흰 화면 방지)
@@ -753,6 +826,7 @@ export function MapSplitLayout({
   ]);
 
   const isH = orientation === 'horizontal';
+  const gutterHitHalf = MAP_SPLIT_GUTTER_HIT_CROSS_PX / 2;
   const primaryFlex = splitActive ? primaryRatio : 1;
   const secondaryFlex = splitActive ? 1 - primaryRatio : 0;
   const useLeftInset = splitActive && !isH && mapPaddingLeft > 0;
@@ -765,7 +839,10 @@ export function MapSplitLayout({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full w-full min-h-0 min-w-0 flex-row overflow-hidden"
+      className={cn(
+        'relative flex h-full w-full min-h-0 min-w-0 flex-row',
+        splitActive ? 'overflow-visible' : 'overflow-hidden'
+      )}
     >
       {useLeftInset && (
         <div
@@ -777,7 +854,8 @@ export function MapSplitLayout({
 
       <div
         className={cn(
-          'relative flex min-h-0 min-w-0 flex-1 overflow-hidden',
+          'relative flex min-h-0 min-w-0 flex-1',
+          splitActive ? 'overflow-visible' : 'overflow-hidden',
           /* splitActive 여부와 무관하게 방향 유지 — OFF 순간 flex-row 로 바뀌면 상단(주) 지도가 줄어듦 */
           isH ? 'flex-row' : 'flex-col'
         )}
@@ -802,11 +880,18 @@ export function MapSplitLayout({
             'relative shrink-0',
             isH ? 'self-stretch' : 'w-full self-center',
             animReady && (isH ? 'transition-[width] ease-out' : 'transition-[height] ease-out'),
-            splitActive ? 'overflow-visible' : 'overflow-hidden pointer-events-none'
+            splitActive
+              ? 'overflow-visible pointer-events-none'
+              : 'overflow-hidden pointer-events-none'
           )}
           style={{
-            width: isH ? (splitActive ? 3 : 0) : '100%',
-            height: isH ? undefined : splitActive ? 3 : 0,
+            zIndex: splitActive ? MAP_SPLIT_GUTTER_Z_INDEX : undefined,
+            width: isH ? (splitActive ? MAP_SPLIT_GUTTER_HIT_CROSS_PX : 0) : '100%',
+            height: isH ? undefined : splitActive ? MAP_SPLIT_GUTTER_HIT_CROSS_PX : 0,
+            marginLeft: isH && splitActive ? -gutterHitHalf : undefined,
+            marginRight: isH && splitActive ? -gutterHitHalf : undefined,
+            marginTop: !isH && splitActive ? -gutterHitHalf : undefined,
+            marginBottom: !isH && splitActive ? -gutterHitHalf : undefined,
             opacity: splitActive ? 1 : 0,
             transitionDuration: paneTransitionMs,
           }}
@@ -824,6 +909,8 @@ export function MapSplitLayout({
             controlOffsetDraggable={controlOffsetDraggable}
             controlsExpanded={controlsExpanded}
             onControlsExpandedChange={onControlsExpandedChange}
+            mapPaddingLeft={mapPaddingLeft}
+            mapPaddingRight={mapPaddingRight}
             onDragStart={(clientPos) => {
               if (!splitActive || ratioLocked) return;
               draggingRef.current = true;

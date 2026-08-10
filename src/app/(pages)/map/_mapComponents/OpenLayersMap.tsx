@@ -75,6 +75,7 @@ import { useSpatialDrawOnMap } from './hooks/useSpatialDrawOnMap';
 import { MapPrintModal } from '../_mapContents/mapPrint/MapPrintModal';
 import type { MapPrintSnapshot } from '../_mapContents/mapPrint/mapPrintTypes';
 import { MapSplitResetMeasurementsPanel } from '../_mapContents/mapSplit/MapSplitResetMeasurementsPanel';
+import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
 import {
   MAP_MEASUREMENTS_RESET_EVENT,
   parseMapMeasurementsResetTarget,
@@ -406,6 +407,8 @@ export default function OpenLayersMap({
   const { lines: consoleLines } = useConsoleCapture();
   const consoleLogRef = useRef<HTMLDivElement>(null);
   const backgroundPanelRef = useRef<HTMLDivElement>(null);
+  const mapControlFixedRef = useRef<HTMLDivElement>(null);
+  const mapControlOverlayRowRef = useRef<HTMLDivElement>(null);
   const [backgroundPanelHeight, setBackgroundPanelHeight] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
   /** PostGIS geometry_columns 기반 — WMS 다중 레이어 시 면→선→점 순으로 쌓기 */
@@ -426,6 +429,49 @@ export default function OpenLayersMap({
     setBackgroundPanelHeight(el.offsetHeight);
     return () => ro.disconnect();
   }, [backgroundPanelVisible]);
+
+  /** 우측 메뉴·확장 패널 폭 — 상하 분할 거터 pill 가용 범위 */
+  useEffect(() => {
+    const setPaddingRight = mapContext?.setMapPaddingRight;
+    const fixed = mapControlFixedRef.current;
+    if (!setPaddingRight || !fixed) return;
+
+    const syncPaddingRight = () => {
+      let leftEdge = window.innerWidth;
+      const row = mapControlOverlayRowRef.current;
+      if (row) {
+        leftEdge = Math.min(leftEdge, row.getBoundingClientRect().left);
+      }
+      fixed.querySelectorAll('[data-map-control-expand-panel]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width > 1 && r.height > 1) {
+          leftEdge = Math.min(leftEdge, r.left);
+        }
+      });
+      const next = Math.max(
+        MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
+        Math.ceil(window.innerWidth - leftEdge)
+      );
+      setPaddingRight((prev) => (prev === next ? prev : next));
+    };
+
+    syncPaddingRight();
+    const ro = new ResizeObserver(syncPaddingRight);
+    ro.observe(fixed);
+    if (mapControlOverlayRowRef.current) ro.observe(mapControlOverlayRowRef.current);
+    window.addEventListener('resize', syncPaddingRight);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', syncPaddingRight);
+    };
+  }, [
+    mapContext?.setMapPaddingRight,
+    activeControls,
+    openSubPanel,
+    resetMeasurementsPanelVisible,
+    backgroundPanelVisible,
+    isAerialViewPanelExiting,
+  ]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   useEffect(() => {
@@ -609,6 +655,24 @@ export default function OpenLayersMap({
     selectedBackgroundMap,
     mapContext?.setMapSplitSecondaryBackgroundId,
   ]);
+
+  /** 지도분할 — 배경 동기화 OFF 전환 시 배경지도 패널 자동 열기 */
+  const prevMapSplitBasemapSyncRef = useRef(mapContext?.mapSplitBasemapSync ?? true);
+  useEffect(() => {
+    const kind = mapContext?.mapSplitSecondaryKind;
+    const sync = mapContext?.mapSplitBasemapSync ?? true;
+    const wasSync = prevMapSplitBasemapSyncRef.current;
+    prevMapSplitBasemapSyncRef.current = sync;
+
+    if (kind !== 'map' || wasSync === sync || sync) return;
+
+    setIsBackgroundPanelExiting(false);
+    setIsAerialViewPanelExiting(false);
+    setActiveControls((prev) => {
+      const next = prev.filter((item) => item !== 'aerial-view');
+      return next.includes('background-map') ? next : [...next, 'background-map'];
+    });
+  }, [mapContext?.mapSplitSecondaryKind, mapContext?.mapSplitBasemapSync]);
 
   const backgroundSplitSelect =
     mapContext?.mapSplitSecondaryKind === 'map' &&
@@ -1813,6 +1877,7 @@ export default function OpenLayersMap({
       if (itemId !== 'reset-measurements' || !resetMeasurementsPanelVisible) return null;
       return (
         <div
+          data-map-control-expand-panel
           className={
             isResetPanelExiting
               ? 'pointer-events-auto animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
@@ -1854,14 +1919,16 @@ export default function OpenLayersMap({
           래퍼는 pointer-events-none: 배경지도 등 하위 패널이 버튼열보다 짧을 때
           flex 행의 빈 영역이 지도 클릭·측정·그리기를 가로채지 않도록 함 */}
       <div
+        ref={mapControlFixedRef}
         className="pointer-events-none fixed right-4 z-10 flex flex-col items-end gap-3"
         style={{ top: '60px' }}
       >
-        <div className="pointer-events-none flex items-start gap-3">
+        <div ref={mapControlOverlayRowRef} className="pointer-events-none flex items-start gap-3">
           {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
           {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
             <div
               ref={backgroundPanelRef}
+              data-map-control-expand-panel
               className={
                 isBackgroundPanelExiting
                   ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
@@ -1879,6 +1946,7 @@ export default function OpenLayersMap({
 
           {aerialViewPanelOpen && (
             <div
+              data-map-control-expand-panel
               className={
                 isAerialViewPanelExiting
                   ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
@@ -1897,7 +1965,7 @@ export default function OpenLayersMap({
           )}
 
           {openSubPanel === 'land-category' && (
-            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="지목"
                 layers={jimokPanelLayers}
@@ -1920,7 +1988,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'ownership' && (
-            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="소유구분"
                 layers={ownershipPanelLayers}
@@ -1943,7 +2011,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'cadastral' && (
-            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="지적도"
                 layers={CADASTRAL_LAYERS}
@@ -1963,7 +2031,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'building-road' && (
-            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="건물·도로"
                 layers={buildingRoadPanelLayers}
@@ -1986,7 +2054,7 @@ export default function OpenLayersMap({
             </div>
           )}
           {openSubPanel === 'thematic-map' && (
-            <div className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <ThematicMapLayerSelector
                 title="주제도"
                 groups={thematicPanelGroups}
