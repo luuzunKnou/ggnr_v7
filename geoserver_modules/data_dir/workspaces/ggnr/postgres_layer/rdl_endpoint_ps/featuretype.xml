@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-eed</id>
+  <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7fea</id>
   <name>rdl_endpoint_ps</name>
   <nativeName>rdl_endpoint_ps</nativeName>
   <namespace>
@@ -28,7 +28,7 @@
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
   <store class="dataStore">
-    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+    <id>DataStoreInfoImpl--7d7f4649:19fd5fa9345:-8000</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
   <maxFeatures>0</maxFeatures>

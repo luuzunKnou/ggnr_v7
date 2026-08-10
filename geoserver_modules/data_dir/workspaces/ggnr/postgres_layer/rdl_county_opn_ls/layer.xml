@@ -1,19 +1,16 @@
 <layer>
   <name>rdl_county_opn_ls</name>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-ee6</id>
+  <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7fed</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-4f3eec4a:19f5e05f5aa:-ee5</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7fff</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-4f3eec4a:19f5e05f5aa:-ee7</id>
+    <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7fee</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-14 05:24:31.927 UTC</dateCreated>
-  <dateModified>2026-07-14 05:24:31.996 UTC</dateModified>
+  <dateCreated>2026-08-06 07:31:00.487 UTC</dateCreated>
 </layer>

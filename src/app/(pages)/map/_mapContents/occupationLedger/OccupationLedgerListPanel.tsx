@@ -1,9 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import {
+  OCCUPATION_PERIOD_STATE_ENDED,
+  OCCUPATION_PERIOD_STATE_IN_PROGRESS,
+  deriveOccupationPeriodState,
+} from '@/lib/occupationLedgerPeriodState';
 import { getOccupationLedgerBinding } from './occupationLedgerBinding';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
@@ -20,7 +25,14 @@ type ListRow = {
   place: string;
   startDate: string;
   endDate: string;
+  status: string;
 };
+
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: '전체' },
+  { value: OCCUPATION_PERIOD_STATE_IN_PROGRESS, label: OCCUPATION_PERIOD_STATE_IN_PROGRESS },
+  { value: OCCUPATION_PERIOD_STATE_ENDED, label: OCCUPATION_PERIOD_STATE_ENDED },
+] as const;
 
 type Props = {
   serEng: string;
@@ -48,6 +60,7 @@ export function OccupationLedgerListPanel({
   const title = binding?.title ?? '점용대장';
 
   const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ListRow[]>([]);
@@ -126,22 +139,6 @@ export function OccupationLedgerListPanel({
   }, [mapContext, onSelectDetailId, fitMapAfterDetailLayout, handleRowClick]);
 
   useEffect(() => {
-    if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;
-    const scroller = listScrollRef.current;
-    if (!scroller) return;
-    const el = scroller.querySelector(
-      `[data-occupation-ledger-row="${CSS.escape(selectedDetailId)}"]`
-    );
-    if (!(el instanceof HTMLElement)) return;
-    const scrollerRect = scroller.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    const delta =
-      elRect.top + elRect.height / 2 - (scrollerRect.top + scrollerRect.height / 2);
-    if (Math.abs(delta) < 4) return;
-    scroller.scrollBy({ top: delta, behavior: 'smooth' });
-  }, [selectedDetailId, items]);
-
-  useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
       setError(null);
@@ -157,7 +154,15 @@ export function OccupationLedgerListPanel({
           setItems([]);
           return;
         }
-        setItems(Array.isArray(data?.rows) ? data.rows : []);
+        const rows = Array.isArray(data?.rows) ? data.rows : [];
+        setItems(
+          rows.map((r: ListRow) => ({
+            ...r,
+            status:
+              r.status ||
+              deriveOccupationPeriodState(String(r.endDate ?? '')),
+          }))
+        );
       } catch {
         setError('목록을 불러오지 못했습니다.');
         setItems([]);
@@ -167,6 +172,27 @@ export function OccupationLedgerListPanel({
     }, 250);
     return () => clearTimeout(t);
   }, [keyword, refreshKey, serEng]);
+
+  const filteredItems = useMemo(() => {
+    if (!statusFilter) return items;
+    return items.filter((row) => row.status === statusFilter);
+  }, [items, statusFilter]);
+
+  useEffect(() => {
+    if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;
+    const scroller = listScrollRef.current;
+    if (!scroller) return;
+    const el = scroller.querySelector(
+      `[data-occupation-ledger-row="${CSS.escape(selectedDetailId)}"]`
+    );
+    if (!(el instanceof HTMLElement)) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const delta =
+      elRect.top + elRect.height / 2 - (scrollerRect.top + scrollerRect.height / 2);
+    if (Math.abs(delta) < 4) return;
+    scroller.scrollBy({ top: delta, behavior: 'smooth' });
+  }, [selectedDetailId, filteredItems]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -192,7 +218,7 @@ export function OccupationLedgerListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -202,6 +228,26 @@ export function OccupationLedgerListPanel({
             placeholder="검색 (점용명, 장소, 기간 등)"
             className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
           />
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {STATUS_FILTER_OPTIONS.map((opt) => {
+            const active = statusFilter === opt.value;
+            return (
+              <button
+                key={opt.value || '__all__'}
+                type="button"
+                onClick={() => setStatusFilter(opt.value)}
+                className={cn(
+                  'rounded border px-2 py-1 text-[11px] font-medium transition-colors',
+                  active
+                    ? 'border-primary bg-primary/10 text-slate-800'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -214,20 +260,26 @@ export function OccupationLedgerListPanel({
         <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-hide">
           {loading ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
-          ) : items.length === 0 && !error ? (
+          ) : filteredItems.length === 0 && !error ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">
-              목록이 비어 있습니다. 데이터 적재 후 새로고침하세요.
+              {items.length === 0
+                ? '목록이 비어 있습니다. 데이터 적재 후 새로고침하세요.'
+                : '선택한 상태에 해당하는 목록이 없습니다.'}
             </div>
           ) : (
-            <table className="w-full min-w-[466px] table-fixed border-collapse text-left text-xs">
+            <table className="w-full min-w-[450px] table-fixed border-collapse text-left text-xs">
               <colgroup>
-                <col className="w-[120px]" />
-                <col className="w-[170px]" />
+                <col className="w-[52px]" />
+                <col className="w-[88px]" />
+                <col className="w-[110px]" />
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>
               <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
                 <tr>
+                  <th className="whitespace-nowrap border-b border-slate-200 px-1.5 py-2 font-semibold text-slate-700">
+                    상태
+                  </th>
                   <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
                     점용명
                   </th>
@@ -243,7 +295,7 @@ export function OccupationLedgerListPanel({
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => {
+                {filteredItems.map((row) => {
                   const isSelected = selectedDetailId === row.rowKey;
                   return (
                     <tr
@@ -263,6 +315,18 @@ export function OccupationLedgerListPanel({
                         isSelected && 'bg-primary/10'
                       )}
                     >
+                      <td className="px-1.5 py-1.5">
+                        <span
+                          className={cn(
+                            'inline-block rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
+                            row.status === OCCUPATION_PERIOD_STATE_ENDED
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          )}
+                        >
+                          {row.status || OCCUPATION_PERIOD_STATE_IN_PROGRESS}
+                        </span>
+                      </td>
                       <td className="max-w-0 truncate px-2 py-1.5 text-slate-800" title={row.name}>
                         {row.name || row.rowKey}
                       </td>
@@ -289,7 +353,8 @@ export function OccupationLedgerListPanel({
           )}
         </div>
         <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
-          {items.length.toLocaleString()}건
+          {filteredItems.length.toLocaleString()}건
+          {statusFilter ? ` / 전체 ${items.length.toLocaleString()}건` : ''}
         </div>
       </div>
     </div>

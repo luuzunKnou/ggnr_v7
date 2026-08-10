@@ -1,7 +1,11 @@
 /**
  * 필지분석 외부 API 동시 호출 수·단건 타임아웃 (소스 상수, 단일 출처).
  */
-export const PARCEL_ANALYSIS_BUILDING_CONCURRENCY = 8;
+/** 건축물대장 포털 동시 호출 수 (초당 한도 고려) */
+export const PARCEL_ANALYSIS_BUILDING_CONCURRENCY = 3;
+
+/** 건축물대장 포털 요청 시작 최소 간격(ms) */
+export const PARCEL_ANALYSIS_BUILDING_GAP_MS = 200;
 
 /** 행망(KRAS·KOREPS) 연계 동시 조회 수 (필지분석 보강·토지이용계획) */
 export const PARCEL_ANALYSIS_LINKAGE_CONCURRENCY = 8;

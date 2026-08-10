@@ -64,27 +64,6 @@ function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly, cla
  * 좌측 고정 사이드바 (65px)
  * - 클릭 시 URL query param `opened`에 window key를 토글 (MapControls와 동일 패턴)
  */
-function renderMaskIcon(iconFile: string) {
-  const iconSrc = `/image/serviceListIcon/${iconFile}.svg`;
-  return (
-    <span
-      className="inline-block h-5 w-5 shrink-0 bg-current"
-      style={{
-        WebkitMaskImage: `url(${iconSrc})`,
-        maskImage: `url(${iconSrc})`,
-        WebkitMaskSize: 'contain',
-        maskSize: 'contain',
-        WebkitMaskRepeat: 'no-repeat',
-        maskRepeat: 'no-repeat',
-        WebkitMaskPosition: 'center',
-        maskPosition: 'center',
-      }}
-      role="img"
-      aria-hidden
-    />
-  );
-}
-
 export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -229,7 +208,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   });
 
   // master(jdong): roadDataFlow 열림 시 다른 메뉴 잠금 제거
-  const hasUseFeeInList = sidebarItems.some((s) => s.ser_eng === 'useFee');
 
   useEffect(() => {
     updateNavScrollState();
@@ -349,41 +327,20 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                       ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
                       : () => toggleWindow(openedKey);
               return (
-                <React.Fragment key={serEng}>
-                  <SidebarButton
-                    icon={renderServiceIcon(item)}
-                    label={label}
-                    onClick={onSvcClick}
-                    isActive={
-                      policy !== 'block' &&
-                      serEng !== 'shapeEditor' &&
-                      openedWindows.includes(openedKey)
-                    }
-                    disabled={false}
-                  />
-                  {serEng === 'usageDataAs' &&
-                    bootProject === 'build_uj' &&
-                    !hasUseFeeInList && (
-                      <SidebarButton
-                        icon={renderMaskIcon('useFee')}
-                        label="점사용료"
-                        onClick={() => toggleWindow('useFee')}
-                        isActive={openedWindows.includes('useFee')}
-                      />
-                    )}
-                </React.Fragment>
+                <SidebarButton
+                  key={serEng}
+                  icon={renderServiceIcon(item)}
+                  label={label}
+                  onClick={onSvcClick}
+                  isActive={
+                    policy !== 'block' &&
+                    serEng !== 'shapeEditor' &&
+                    openedWindows.includes(openedKey)
+                  }
+                  disabled={false}
+                />
               );
             })}
-            {bootProject === 'build_uj' &&
-              !hasUseFeeInList &&
-              !sidebarItems.some((s) => s.ser_eng === 'usageDataAs') && (
-                <SidebarButton
-                  icon={renderMaskIcon('useFee')}
-                  label="점사용료"
-                  onClick={() => toggleWindow('useFee')}
-                  isActive={openedWindows.includes('useFee')}
-                />
-              )}
           </div>
           {navHover && canScrollDown && (
             <button
