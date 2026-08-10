@@ -1761,14 +1761,21 @@ export default function OpenLayersMap({
             : prev;
         return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
       });
-    } else if ((id === 'background-map' || id === 'aerial-view') && isActive) {
-      // 배경지도·영상조회 패널 닫기: exit 애니메이션 먼저
-      if (id === 'background-map') setIsBackgroundPanelExiting(true);
-      else setIsAerialViewPanelExiting(true);
-      setActiveControls((prev) => {
-        const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
-        return withoutSingle;
-      });
+    } else if (id === 'background-map' || id === 'aerial-view') {
+      // 배경지도·드론영상: 서로만 배타. 초기화 패널·측정·레이어 선택은 유지
+      const peer = id === 'background-map' ? 'aerial-view' : 'background-map';
+      if (isActive) {
+        if (id === 'background-map') setIsBackgroundPanelExiting(true);
+        else setIsAerialViewPanelExiting(true);
+        setActiveControls((prev) => prev.filter((item) => item !== id));
+      } else {
+        if (id === 'background-map') setIsAerialViewPanelExiting(false);
+        else setIsBackgroundPanelExiting(false);
+        setActiveControls((prev) => {
+          const withoutPeer = prev.filter((item) => item !== peer);
+          return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
+        });
+      }
     } else {
       // 단일 선택 항목: 배타적 토글
       // 측정 도구는 서로 배타적 (거리/면적 동시 선택 불가) · 초기화 패널과도 배타
@@ -1786,7 +1793,9 @@ export default function OpenLayersMap({
         });
       } else {
         setActiveControls((prev) => {
-          const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
+          const withoutSingle = prev.filter(
+            (item) => MULTI_SELECT_IDS.includes(item) || item === 'reset-measurements'
+          );
           return isActive ? withoutSingle : [...withoutSingle, id];
         });
       }

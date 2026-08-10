@@ -359,6 +359,7 @@ export default function MapViewModeWrapper({
 
   const mapSplit = useMapSplitSecondary({
     active: mapSplitActive && viewMode === '2d',
+    projectName,
   });
 
   // 보조 칸 스위치 — streetView | map
