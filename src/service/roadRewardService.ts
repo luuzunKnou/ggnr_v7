@@ -653,18 +653,17 @@ export async function listRows(params?: {
       LIMIT 5000`;
 
     const res = await db.execute(sql.raw(sqlText));
-    const rows: RoadRewardCaseDto[] = (res.rows ?? [])
-      .map((raw) => {
-        const row = raw as Record<string, unknown>;
-        const ogcFid = Number(row.ogc_fid);
-        if (!Number.isFinite(ogcFid)) return null;
-        return {
-          ...mapCaseAttrs(row, ogcFid),
-          parcels: [],
-          parcelCount: num(row.parcel_count),
-        };
-      })
-      .filter((x): x is RoadRewardCaseDto => x != null);
+    const rows: RoadRewardCaseDto[] = [];
+    for (const raw of res.rows ?? []) {
+      const row = raw as Record<string, unknown>;
+      const ogcFid = Number(row.ogc_fid);
+      if (!Number.isFinite(ogcFid)) continue;
+      rows.push({
+        ...mapCaseAttrs(row, ogcFid),
+        parcels: [],
+        parcelCount: num(row.parcel_count),
+      });
+    }
     return { rows };
   } catch (e: unknown) {
     return { rows: [], error: e instanceof Error ? e.message : String(e) };

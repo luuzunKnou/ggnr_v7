@@ -7,7 +7,7 @@ export function incrementSuffixCode(code: string): string {
   const numStr = m[2] ?? "";
   if (!numStr) return s;
   try {
-    const next = BigInt(numStr) + 1n;
+    const next = BigInt(numStr) + BigInt(1);
     return `${prefix}${String(next).padStart(numStr.length, "0")}`;
   } catch {
     const next = Number(numStr) + 1;

@@ -334,11 +334,11 @@ export function beginMediaRegistration(
 
   const srKey = Number(id);
   if (Number.isFinite(srKey)) {
-    void srCall('startRegister', {
+    void srCall<{ detail?: Record<string, unknown> }>('startRegister', {
       srKey,
       ...(label ? { linkedWorkUnitLabel: label } : {}),
     })
-      .then((data: { detail?: Record<string, unknown> }) => {
+      .then((data) => {
         if (data?.detail) {
           upsertLocal(mapDetail(data.detail));
           emit();
@@ -373,8 +373,11 @@ export function completeMediaRegistration(
 
   const srKey = Number(id);
   if (Number.isFinite(srKey)) {
-    void srCall('completeRegister', { srKey, linkedWorkUnitLabel: workUnitLabel })
-      .then((data: { detail?: Record<string, unknown> }) => {
+    void srCall<{ detail?: Record<string, unknown> }>('completeRegister', {
+      srKey,
+      linkedWorkUnitLabel: workUnitLabel,
+    })
+      .then((data) => {
         if (data?.detail) {
           upsertLocal(mapDetail(data.detail));
           emit();

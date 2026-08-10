@@ -193,6 +193,7 @@ $portsCleared = $false
 try {
   Write-Smoke "기동 시작: $StartBat"
   Write-Smoke "대기 한도 ${TimeoutSec}초 · Next 포트 $Port · GeoServer 포트 $GeoPort"
+  Write-Smoke "참고: npm run start 는 GeoServer 설정(최대 ~120초) 뒤에 Next 를 엽니다. 그동안 포트${Port}=False 일 수 있습니다."
   Write-Smoke "로그 out=$logOut"
   Write-Smoke "로그 err=$logErr"
   Write-Smoke "취소(Ctrl+C) 시 Next·GeoServer 를 정리합니다."
@@ -262,7 +263,12 @@ try {
       $lastProgressAt = Get-Date
       $portBusy = [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
       $remain = [Math]::Max(0, $TimeoutSec - $elapsed)
-      Write-Smoke "대기 중 ${elapsed}s / 남은 ~${remain}s · 포트${Port}=$portBusy · $(Get-SmokeLogTail 1)"
+      $tail = Get-SmokeLogTail 1
+      $hint = ''
+      if (-not $portBusy -and ($tail -match 'GeoServer')) {
+        $hint = ' · (GeoServer 단계 — Next listen 전)'
+      }
+      Write-Smoke "대기 중 ${elapsed}s / 남은 ~${remain}s · 포트${Port}=$portBusy · ${tail}${hint}"
     }
   }
 } finally {

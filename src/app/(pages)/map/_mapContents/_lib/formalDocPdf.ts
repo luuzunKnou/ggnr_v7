@@ -131,11 +131,13 @@ export async function downloadHtmlAsPdf(
       backgroundColor: '#ffffff',
       logging: false,
       windowWidth: 794,
-      letterRendering,
       onclone: (doc) => {
         const cloned = doc.querySelector('.formal-pdf-page') as HTMLElement | null;
         if (cloned) {
           cloned.style.fontFamily = FORMAL_SERIF;
+          if (letterRendering) {
+            cloned.style.textRendering = 'geometricPrecision';
+          }
         }
       },
     });

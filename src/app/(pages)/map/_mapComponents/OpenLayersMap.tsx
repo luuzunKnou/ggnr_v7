@@ -293,8 +293,11 @@ export default function OpenLayersMap({
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [isResetPanelExiting, setIsResetPanelExiting] = useState(false);
-  const resetMeasurementsPanelOpen =
-    activeControls.includes('reset-measurements') || isResetPanelExiting;
+  /** 초기화 패널이 실제로 열려 입력·측정을 막는 상태 (퇴장 애니메이션 제외) */
+  const resetMeasurementsPanelOpen = activeControls.includes('reset-measurements');
+  /** 퇴장 애니메이션용 표시 여부 */
+  const resetMeasurementsPanelVisible =
+    resetMeasurementsPanelOpen || isResetPanelExiting;
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState(FALLBACK_BACKGROUND_MAP_ID);
   const [backgroundMapGroups, setBackgroundMapGroups] = useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
@@ -1471,8 +1474,6 @@ export default function OpenLayersMap({
     return () => clearTimeout(t);
   }, [isResetPanelExiting]);
 
-  const resetMeasurementsPanelVisible = resetMeasurementsPanelOpen;
-
   const closeResetMeasurementsPanel = useCallback(() => {
     setIsResetPanelExiting(true);
     setActiveControls((prev) => prev.filter((item) => item !== 'reset-measurements'));
@@ -1483,6 +1484,18 @@ export default function OpenLayersMap({
     setActiveControls((prev) => prev.filter((item) => item !== 'reset-measurements'));
     setIsResetPanelExiting(false);
   }, [mapContext?.mapSplitSecondaryKind]);
+
+  // 도형 그리기 시작 시 초기화 패널 닫기 (측정·도형 입력과 배타)
+  useEffect(() => {
+    if (!spatialDrawRequest && !layerRowGeomEdit) return;
+    if (!resetMeasurementsPanelOpen) return;
+    closeResetMeasurementsPanel();
+  }, [
+    spatialDrawRequest,
+    layerRowGeomEdit,
+    resetMeasurementsPanelOpen,
+    closeResetMeasurementsPanel,
+  ]);
 
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
@@ -1658,10 +1671,15 @@ export default function OpenLayersMap({
         if (isActive) {
           closeResetMeasurementsPanel();
         } else {
+          // 측정·도형 입력과 배타 — 패널 열 때 직접 입력 모드 해제
+          setSpatialDrawRequest?.(null);
           setIsResetPanelExiting(false);
-          setActiveControls((prev) =>
-            prev.includes('reset-measurements') ? prev : [...prev, 'reset-measurements']
-          );
+          setActiveControls((prev) => {
+            const withoutMeasure = prev.filter((item) => !MEASUREMENT_IDS.includes(item));
+            return withoutMeasure.includes('reset-measurements')
+              ? withoutMeasure
+              : [...withoutMeasure, 'reset-measurements'];
+          });
         }
         return;
       }
@@ -1743,25 +1761,41 @@ export default function OpenLayersMap({
             : prev;
         return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
       });
-    } else if ((id === 'background-map' || id === 'aerial-view') && isActive) {
-      // 배경지도·영상조회 패널 닫기: exit 애니메이션 먼저
-      if (id === 'background-map') setIsBackgroundPanelExiting(true);
-      else setIsAerialViewPanelExiting(true);
-      setActiveControls((prev) => {
-        const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
-        return withoutSingle;
-      });
+    } else if (id === 'background-map' || id === 'aerial-view') {
+      // 배경지도·드론영상: 서로만 배타. 초기화 패널·측정·레이어 선택은 유지
+      const peer = id === 'background-map' ? 'aerial-view' : 'background-map';
+      if (isActive) {
+        if (id === 'background-map') setIsBackgroundPanelExiting(true);
+        else setIsAerialViewPanelExiting(true);
+        setActiveControls((prev) => prev.filter((item) => item !== id));
+      } else {
+        if (id === 'background-map') setIsAerialViewPanelExiting(false);
+        else setIsBackgroundPanelExiting(false);
+        setActiveControls((prev) => {
+          const withoutPeer = prev.filter((item) => item !== peer);
+          return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
+        });
+      }
     } else {
       // 단일 선택 항목: 배타적 토글
-      // 측정 도구는 서로 배타적 (거리/면적 동시 선택 불가)
+      // 측정 도구는 서로 배타적 (거리/면적 동시 선택 불가) · 초기화 패널과도 배타
       if (MEASUREMENT_IDS.includes(id)) {
+        if (!isActive && activeControls.includes('reset-measurements')) {
+          setIsResetPanelExiting(true);
+        }
         setActiveControls((prev) => {
           const withoutMeasurements = prev.filter((item) => !MEASUREMENT_IDS.includes(item));
-          return isActive ? withoutMeasurements : [...withoutMeasurements, id];
+          if (isActive) return withoutMeasurements;
+          return [
+            ...withoutMeasurements.filter((item) => item !== 'reset-measurements'),
+            id,
+          ];
         });
       } else {
         setActiveControls((prev) => {
-          const withoutSingle = prev.filter((item) => MULTI_SELECT_IDS.includes(item));
+          const withoutSingle = prev.filter(
+            (item) => MULTI_SELECT_IDS.includes(item) || item === 'reset-measurements'
+          );
           return isActive ? withoutSingle : [...withoutSingle, id];
         });
       }

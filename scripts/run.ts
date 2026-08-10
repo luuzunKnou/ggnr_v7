@@ -55,6 +55,9 @@ async function setupDb(): Promise<void> {
 
   if (!database || !user) {
     console.warn('[run] DATABASE_NAME or DATABASE_USER not set; skipping DB setup.');
+    if (COMMAND === 'start') {
+      console.warn('[drizzle-additive] skip(env) — DB env 없음, additive sync 생략');
+    }
     return;
   }
 
@@ -71,6 +74,19 @@ async function setupDb(): Promise<void> {
     throw err;
   } finally {
     await client.end();
+  }
+
+  // start(ggnr_start/nssm): 고정 정책 additive — DROP 대화형 Abort로 기동 실패 방지
+  // dev: 기존 대화형 drizzle-kit push
+  if (COMMAND === 'start') {
+    try {
+      const { runAdditiveSchemaSync } = await import('./drizzle-push-additive');
+      await runAdditiveSchemaSync();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[drizzle-additive] fail(pushSchema) —', msg, '— additive 중단, 기동은 계속');
+    }
+    return;
   }
 
   // drizzle.config.ts 의 extensionsFilters/tablesFilter 로 PostGIS 테이블 제외

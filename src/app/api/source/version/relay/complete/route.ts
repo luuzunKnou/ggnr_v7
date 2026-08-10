@@ -8,7 +8,7 @@ export const maxDuration = 1800;
 
 type NdjsonProgressLine = ApplySourceProgressEvent & { type: 'progress' };
 type NdjsonResultLine = { type: 'result'; ok: true } & Record<string, unknown>;
-type NdjsonErrorLine = { type: 'error'; error: string };
+type NdjsonErrorLine = { type: 'error'; error: string; historyRecorded?: boolean };
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,8 +40,17 @@ export async function POST(req: NextRequest) {
           controller.close();
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'relay complete failed';
+          const historyRecorded =
+            err instanceof Error &&
+            'historyRecorded' in err &&
+            (err as Error & { historyRecorded?: boolean }).historyRecorded === true;
+          console.error(`[SourceCodeUpload] relay complete 실패: ${message}`, err);
           try {
-            await send({ type: 'error', error: message });
+            await send({
+              type: 'error',
+              error: message,
+              historyRecorded,
+            } as NdjsonErrorLine & { historyRecorded?: boolean });
             controller.close();
           } catch {
             try {

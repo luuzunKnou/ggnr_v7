@@ -17,7 +17,14 @@ export async function POST(req: NextRequest) {
     const version = String(body.version ?? '').trim() || new Date().toISOString();
     const restart = body.restart === true;
     const restartMode = normalizeRestartMode(body.restartMode);
-    const includeNodeModules = body.includeNodeModules !== false;
+    const includeNodeModules =
+      typeof body.includeNodeModules === 'boolean' ? body.includeNodeModules : null;
+    if (includeNodeModules == null) {
+      return NextResponse.json(
+        { error: 'includeNodeModules 필요 (개방망=false / 폐쇄망=true)' },
+        { status: 400 }
+      );
+    }
     const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
     const clientIp = pickClientIpFromRequest(req, bodyIp);
 
@@ -29,6 +36,7 @@ export async function POST(req: NextRequest) {
       clientIp,
       restart,
       restartMode,
+      includeNodeModules,
     });
 
     return NextResponse.json({ ok: true, ...result });
