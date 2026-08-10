@@ -132,7 +132,10 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
   }
   if (loadPromise) return loadPromise;
 
-  const scriptUrl = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`;
+  // 경로에 dapi.kakao.com/v2/maps/sdk.js 유지 — SDK 콜백 경로 검사용. Referer 는 서버 프록시에서 dggs.kr 고정.
+  const scriptUrl =
+    `/proxy/dapi.kakao.com/v2/maps/sdk.js` +
+    `?appkey=${encodeURIComponent(key)}&autoload=false`;
 
   loadPromise = new Promise((resolve, reject) => {
     const finish = () => {
@@ -150,20 +153,14 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
       });
     };
 
-    const existing = document.querySelector<HTMLScriptElement>('script[data-kakao-maps-sdk]');
-    if (existing) {
-      if (window.kakao?.maps) {
-        finish();
-        return;
-      }
-      existing.addEventListener('load', finish);
-      existing.addEventListener('error', () => {
-        rejectSdkLoad('카카오 지도 스크립트 오류', reject, buildScriptUnauthorizedDetail());
+    document
+      .querySelectorAll('script[src*="/dapi.kakao.com/v2/maps/sdk.js"]')
+      .forEach((existingScript) => {
+        existingScript.remove();
       });
-      return;
-    }
 
     const script = document.createElement('script');
+    script.id = 'kakao-map-sdk';
     script.dataset.kakaoMapsSdk = '1';
     script.async = true;
     script.src = scriptUrl;

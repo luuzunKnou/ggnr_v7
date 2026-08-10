@@ -83,7 +83,8 @@ export function VersionManagerContent() {
   const [schemaModalOpen, setSchemaModalOpen] = useState(false);
   const [schemaPreview, setSchemaPreview] = useState<SchemaSyncPreviewResult | null>(null);
   const [schemaPreviewLoading, setSchemaPreviewLoading] = useState(false);
-  const schemaConfirmRef = useRef<(() => void) | null>(null);
+  const [schemaActionBusy, setSchemaActionBusy] = useState(false);
+  const schemaDecisionRef = useRef<((action: 'continue' | 'abort') => void) | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
@@ -186,10 +187,13 @@ export function VersionManagerContent() {
     setProgress((p) => ({ ...p, logs: next }));
   };
 
-  /** 병합 반영 후 스키마 집계 모달 → 확인 시 재기동 대기 진행 */
-  const waitSchemaPreviewAck = async (): Promise<void> => {
+  /** 병합 반영 후 스키마 집계 모달 → 진행=재기동 / 중단=백업 롤백 */
+  const waitSchemaPreviewAck = async (
+    pendingId: string | undefined
+  ): Promise<'continue' | 'abort'> => {
     setSchemaPreviewLoading(true);
     setSchemaPreview(null);
+    setSchemaActionBusy(false);
     setSchemaModalOpen(true);
     pushLog('스키마 변경 미리보기 조회 중…');
     try {
@@ -220,14 +224,66 @@ export function VersionManagerContent() {
       setSchemaPreviewLoading(false);
     }
 
-    await new Promise<void>((resolve) => {
-      schemaConfirmRef.current = () => {
-        schemaConfirmRef.current = null;
-        setSchemaModalOpen(false);
-        resolve();
+    const action = await new Promise<'continue' | 'abort'>((resolve) => {
+      schemaDecisionRef.current = (a) => {
+        schemaDecisionRef.current = null;
+        resolve(a);
       };
     });
-    pushLog('스키마 안내 확인 — 재기동 단계 진행');
+
+    if (!pendingId) {
+      setSchemaModalOpen(false);
+      pushLog(
+        action === 'abort'
+          ? '스키마 안내 중단 (대기 세션 없음)'
+          : '스키마 안내 확인 (대기 세션 없음)'
+      );
+      return action;
+    }
+
+    setSchemaActionBusy(true);
+    try {
+      if (action === 'abort') {
+        pushLog('적용 중단 — 직전 소스로 롤백 중…');
+        const res = await fetch('/api/dev/schema-sync/abort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pendingId }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          rollbackDetail?: string;
+        };
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error ?? `중단 실패 (HTTP ${res.status})`);
+        }
+        pushLog(`롤백 완료${json.rollbackDetail ? ` — ${json.rollbackDetail}` : ''}`);
+      } else {
+        pushLog('스키마 안내 확인 — 재기동 예약 중…');
+        const res = await fetch('/api/dev/schema-sync/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pendingId }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          restart?: { message?: string; scheduled?: boolean };
+        };
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error ?? `진행 확정 실패 (HTTP ${res.status})`);
+        }
+        if (json.restart?.message) {
+          pushLog(`재시작: ${json.restart.message}`);
+        }
+      }
+    } finally {
+      setSchemaActionBusy(false);
+      setSchemaModalOpen(false);
+    }
+
+    return action;
   };
 
   const runUpdate = async () => {
@@ -423,20 +479,67 @@ export function VersionManagerContent() {
       setProgress({
         message: json.restart?.scheduled
           ? '적용 완료. 스키마 변경 안내 확인 후 재기동합니다…'
-          : '최신 소스 적용 완료. 스키마 변경 안내…',
+          : json.pendingSchemaConfirm
+            ? '적용 완료. 스키마 변경 안내에서 진행 또는 중단을 선택하세요…'
+            : '최신 소스 적용 완료. 스키마 변경 안내…',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
 
-      await waitSchemaPreviewAck();
+      let schemaAction: 'continue' | 'abort' = 'continue';
+      try {
+        schemaAction = await waitSchemaPreviewAck(json.pendingId);
+      } catch (schemaErr: unknown) {
+        const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
+        pushLog(`스키마 안내 처리 실패: ${msg}`);
+        setProgress((p) => ({
+          ...p,
+          message: '취소됨 — 스키마 안내 처리 실패',
+          error: msg,
+        }));
+        busyRef.current = false;
+        setBusy(false);
+        return;
+      }
 
-      if (json.restart?.scheduled) {
+      if (schemaAction === 'abort') {
+        setProgress({
+          message: '취소됨 — 적용 직전 소스로 되돌렸습니다.',
+          pct: 100,
+          logs: logRef.current,
+          error: null,
+        });
+        setStages(
+          buildRelayStagesFromProgress(
+            {
+              phase: 'done',
+              message: '적용 취소',
+              versionDetail: versionDetailRef.current,
+              applyDetail: '사용자가 스키마 안내에서 중단 · 백업 롤백',
+              restartScheduled: false,
+            },
+            { ...doneOpts, restart: false, restartMode: 'none' }
+          )
+        );
+        await refreshAppliedVersion();
+        notifyDevVersionHistoryRefresh();
+        busyRef.current = false;
+        setBusy(false);
+        return;
+      }
+
+      if (json.restart?.requested || json.pendingSchemaConfirm) {
         pushLog(
           doneMode === 'exit'
             ? '재시작 예약: 사전 빌드·앱 종료 완료 → process.exit → nssm/런처 재기동'
-            : '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
+            : doneMode === 'launcher'
+              ? '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
+              : '적용 확정 완료'
         );
+      }
+
+      if (json.restart?.requested || doneMode !== 'none') {
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
@@ -757,8 +860,12 @@ export function VersionManagerContent() {
         open={schemaModalOpen}
         preview={schemaPreview}
         loading={schemaPreviewLoading}
-        onConfirm={() => {
-          schemaConfirmRef.current?.();
+        busyAction={schemaActionBusy}
+        onContinue={() => {
+          schemaDecisionRef.current?.('continue');
+        }}
+        onAbort={() => {
+          schemaDecisionRef.current?.('abort');
         }}
       />
     </div>

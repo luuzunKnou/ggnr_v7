@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
       { source: '/vworldIndvdLandPriceAttr_https.api', destination: '/api/vworld/land-price' },
       { source: '/vworldPossessionAttr.api', destination: '/api/vworld/possession' },
       { source: '/vworldPossessionAttr_https.api', destination: '/api/vworld/possession' },
+      {
+        source: '/proxy/dapi.kakao.com/v2/maps/sdk.js',
+        destination: '/api/kakao/maps-sdk',
+      },
     ];
   },
   // 개발 서버에서 /api 요청 로그 비표시 (POST /api 200 in ... 제거)

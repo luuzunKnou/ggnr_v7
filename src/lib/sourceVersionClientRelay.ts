@@ -63,6 +63,8 @@ export type VersionRelayResult = {
     signalFile: string;
   };
   skippedSamples?: string[];
+  pendingSchemaConfirm?: boolean;
+  pendingId?: string;
 };
 
 type GnmsConfigResponse = {

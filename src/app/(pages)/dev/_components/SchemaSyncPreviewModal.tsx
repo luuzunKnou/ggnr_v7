@@ -14,7 +14,9 @@ type Props = {
   open: boolean;
   preview: SchemaSyncPreviewResult | null;
   loading?: boolean;
-  onConfirm: () => void;
+  busyAction?: boolean;
+  onContinue: () => void;
+  onAbort: () => void;
 };
 
 function ItemList({
@@ -43,18 +45,26 @@ function ItemList({
 }
 
 /**
- * 최신소스 병합 후 스키마 변경 안내 (입력 없음 · ALTER 빨간색)
+ * 최신소스 병합 후 스키마 변경 안내 ([중단]=롤백 · [진행]=재기동)
  */
-export function SchemaSyncPreviewModal({ open, preview, loading, onConfirm }: Props) {
+export function SchemaSyncPreviewModal({
+  open,
+  preview,
+  loading,
+  busyAction,
+  onContinue,
+  onAbort,
+}: Props) {
   const counts = preview?.counts ?? { create: 0, drop: 0, delete: 0, alter: 0 };
   const items = preview?.items ?? [];
   const creates = items.filter((i) => i.category === 'create');
   const drops = items.filter((i) => i.category === 'drop' || i.category === 'delete');
   const alters = items.filter((i) => i.category === 'alter');
   const failed = preview != null && !preview.ok;
+  const actionsDisabled = Boolean(loading || busyAction);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onConfirm()}>
+    <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
         className="sm:max-w-lg max-h-[85vh] flex flex-col"
         showCloseButton={false}
@@ -66,13 +76,12 @@ export function SchemaSyncPreviewModal({ open, preview, loading, onConfirm }: Pr
         </DialogHeader>
 
         <div className="flex-1 space-y-3 overflow-y-auto text-sm">
-          {loading && (
-            <p className="text-muted-foreground">스키마 비교 중…</p>
-          )}
+          {loading && <p className="text-muted-foreground">스키마 비교 중…</p>}
 
           {!loading && failed && (
             <p className="rounded border border-destructive/40 bg-destructive/10 p-2 text-destructive">
-              미리보기에 실패했습니다. 고정 정책(생성 적용 · 삭제·수정 스킵)으로 재기동합니다.
+              미리보기에 실패했습니다. [진행] 시 고정 규칙으로 재기동하고, [중단] 시 적용 직전
+              소스로 되돌립니다.
               {preview?.error ? (
                 <span className="mt-1 block text-xs opacity-90">{preview.error}</span>
               ) : null}
@@ -82,7 +91,12 @@ export function SchemaSyncPreviewModal({ open, preview, loading, onConfirm }: Pr
           {!loading && (
             <>
               <p className="text-xs text-muted-foreground">
-                재기동 시 생성만 자동 반영됩니다. 삭제·데이터 비우기·ALTER(수정)는 실행하지 않습니다.
+                스키마 반영 시 대화형 확인 대신 고정 규칙으로 자동 처리합니다. 생성은 적용하고,
+                삭제·데이터 비우기는 실행하지 않으며, 컬럼 수정·타입 변경 등은 건너뜁니다.
+              </p>
+              <p className="text-xs text-destructive">
+                건너뛴 변경은 자동 반영되지 않습니다. 목록을 확인한 뒤 필요하면 개발 환경에서
+                수동으로 스키마를 맞추세요.
               </p>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -114,7 +128,7 @@ export function SchemaSyncPreviewModal({ open, preview, loading, onConfirm }: Pr
               <ItemList title="생성 (적용 예정)" items={creates} />
               <ItemList title="DROP·DELETE (거부)" items={drops} />
               <ItemList
-                title="ALTER (스킵 · 수동 반영 필요)"
+                title="ALTER (스킵 · 수동 확인·동기화 필요)"
                 items={alters}
                 className="text-destructive [&_ul]:border-destructive/40 [&_li]:text-destructive"
               />
@@ -130,15 +144,25 @@ export function SchemaSyncPreviewModal({ open, preview, loading, onConfirm }: Pr
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:justify-end">
           <Button
             type="button"
-            title="확인"
+            title="중단"
+            variant="outline"
             className="cursor-pointer"
-            disabled={loading}
-            onClick={onConfirm}
+            disabled={actionsDisabled}
+            onClick={onAbort}
           >
-            확인
+            중단
+          </Button>
+          <Button
+            type="button"
+            title="진행"
+            className="cursor-pointer"
+            disabled={actionsDisabled}
+            onClick={onContinue}
+          >
+            진행
           </Button>
         </DialogFooter>
       </DialogContent>
