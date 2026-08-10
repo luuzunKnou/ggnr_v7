@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { call } from '@/lib/api';
 import {
   loadKakaoMapsSdk,
+  KakaoMapsSdkLoadError,
+  isKakaoDomainMismatch,
   type KakaoRoadview,
   type KakaoRoadviewClient,
 } from './loadKakaoMapsSdk';
@@ -63,8 +65,25 @@ function emitRoadviewSnapReady(host: HTMLElement | null) {
   host?.dispatchEvent(new Event('roadview-snap-ready'));
 }
 
+const KAKAO_DOMAIN_HINT = '(API 키에 등록된 도메인 확인 필요)';
+
 /** 카카오 오류 문구 → 사용자 안내 */
 export function explainKakaoRoadviewFailure(raw: unknown): string | null {
+  if (raw instanceof KakaoMapsSdkLoadError) {
+    const lines = ['카카오 지도 SDK 로드에 실패했습니다.'];
+    if (isKakaoDomainMismatch(raw)) {
+      if (raw.scriptLoadFailed) {
+        lines.push('사용 중인 API 키에 등록되지 않은 도메인에서 접속했을 가능성이 높습니다.');
+      }
+      if (raw.kakaoOfficialMsg) lines.push(raw.kakaoOfficialMsg);
+      lines.push(`현재 접속: ${currentOrigin()}`);
+      lines.push(KAKAO_DOMAIN_HINT);
+    } else if (raw.kakaoOfficialMsg) {
+      lines.push(raw.kakaoOfficialMsg);
+    }
+    return lines.join('\n');
+  }
+
   const text =
     typeof raw === 'string'
       ? raw
@@ -88,6 +107,7 @@ export function explainKakaoRoadviewFailure(raw: unknown): string | null {
       '카카오 디벨로퍼스 → 앱 → 플랫폼 키 → JavaScript 키',
       '→ JavaScript SDK 도메인에 위 주소를 등록하세요.',
       '(예: http://localhost:3000)',
+      KAKAO_DOMAIN_HINT,
     ].join('\n');
   }
 
@@ -102,6 +122,7 @@ export function explainKakaoRoadviewFailure(raw: unknown): string | null {
       '',
       '도메인 미등록 또는 앱키 오류일 수 있습니다.',
       '플랫폼 키 → JavaScript SDK 도메인을 확인하세요.',
+      KAKAO_DOMAIN_HINT,
     ].join('\n');
   }
 
@@ -262,6 +283,22 @@ export function StreetViewPanel({
         }
       } catch (e) {
         if (!cancelled) {
+          console.warn('[KakaoRoadview] sdk bootstrap failed', {
+            origin: currentOrigin(),
+            explained: explainKakaoRoadviewFailure(e),
+            errorMessage: e instanceof Error ? e.message : String(e),
+            kakaoOfficialMsg: e instanceof KakaoMapsSdkLoadError ? e.kakaoOfficialMsg : undefined,
+            kakaoCode: e instanceof KakaoMapsSdkLoadError ? e.kakaoCode : undefined,
+            kakaoHttpStatus: e instanceof KakaoMapsSdkLoadError ? e.httpStatus : undefined,
+            errorStatus:
+              e != null && typeof e === 'object' && 'status' in e
+                ? (e as { status?: unknown }).status
+                : undefined,
+            errorHttpStatus:
+              e != null && typeof e === 'object' && 'httpStatus' in e
+                ? (e as { httpStatus?: unknown }).httpStatus
+                : undefined,
+          });
           reportFailure(e, '카카오 지도 SDK 로드에 실패했습니다.');
         }
       }

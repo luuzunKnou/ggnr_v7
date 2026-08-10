@@ -72,13 +72,12 @@ function toParcelItems(arr: unknown): LayerRowParcelItem[] {
     const wmsRaw = x?.wmsRowKey as { keyField?: string; keyValue?: string } | undefined;
     const keyField = String(wmsRaw?.keyField ?? '').trim();
     const keyValue = String(wmsRaw?.keyValue ?? '').trim();
-    const wmsRowKey = keyField && keyValue ? { keyField, keyValue } : undefined;
     const item: LayerRowParcelItem = {
       address,
       extent3857,
-      ...(x?.pnu != null ? { pnu: String(x.pnu) } : {}),
-      ...(wmsRowKey ? { wmsRowKey } : {}),
     };
+    if (x?.pnu != null && String(x.pnu).trim()) item.pnu = String(x.pnu);
+    if (keyField && keyValue) item.wmsRowKey = { keyField, keyValue };
     out.push(item);
   }
   return out;

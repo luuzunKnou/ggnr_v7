@@ -372,10 +372,16 @@ export function VersionHistoryDialog({
                   className={
                     row.mvhStatus === 'success'
                       ? 'shrink-0 text-green-700 dark:text-green-400'
-                      : 'shrink-0 text-red-600 dark:text-red-400'
+                      : row.mvhStatus === 'cancel'
+                        ? 'shrink-0 text-amber-700 dark:text-amber-400'
+                        : 'shrink-0 text-red-600 dark:text-red-400'
                   }
                 >
-                  {row.mvhStatus === 'success' ? '성공' : '실패'}
+                  {row.mvhStatus === 'success'
+                    ? '성공'
+                    : row.mvhStatus === 'cancel'
+                      ? '취소'
+                      : '실패'}
                 </span>
                 <span
                   className="min-w-0 flex-1 truncate text-muted-foreground"

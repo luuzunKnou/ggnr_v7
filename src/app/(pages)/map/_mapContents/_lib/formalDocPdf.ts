@@ -137,6 +137,9 @@ export async function downloadHtmlAsPdf(
         const cloned = doc.querySelector('.formal-pdf-page') as HTMLElement | null;
         if (cloned) {
           cloned.style.fontFamily = FORMAL_SERIF;
+          if (letterRendering) {
+            cloned.style.textRendering = 'geometricPrecision';
+          }
         }
       },
     });
