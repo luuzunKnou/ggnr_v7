@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7faf</id>
+  <name>lsmd_cont_uq113</name>
+  <nativeName>lsmd_cont_uq113</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>lsmd_cont_uq113</title>
+  <keywords>
+    <string>features</string>
+    <string>lsmd_cont_uq113</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>385133.1037852637</minx>
+    <maxx>421221.4448698348</maxx>
+    <miny>352291.95494584367</miny>
+    <maxy>407874.12913307786</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.07032249141471</minx>
+    <maxx>129.4897907590964</maxx>
+    <miny>36.64341226573864</miny>
+    <maxy>37.15162690701932</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

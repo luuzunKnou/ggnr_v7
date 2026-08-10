@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-6ad12bdb:19fb0d2380b:-79e1</id>
+  <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7ffc</id>
   <name>lard_lawst_umd_budr</name>
   <nativeName>lard_lawst_umd_budr</nativeName>
   <namespace>
@@ -28,7 +28,7 @@
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
   <store class="dataStore">
-    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+    <id>DataStoreInfoImpl--7d7f4649:19fd5fa9345:-8000</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
   <maxFeatures>0</maxFeatures>
