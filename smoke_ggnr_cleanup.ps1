@@ -1,4 +1,4 @@
-# 스모크/기동 잔여 프로세스 수동 정리 (콘솔 강제 종료 후 폴더 삭제 전 등)
+﻿# 스모크/기동 잔여 프로세스 수동 정리 (콘솔 강제 종료 후 폴더 삭제 전 등)
 # 사용: powershell -NoProfile -File smoke_ggnr_cleanup.ps1 -Root "C:\path\to\install" [-Port 3000] [-GeoPort 8080]
 param(
   [Parameter(Mandatory = $true)][string]$Root,

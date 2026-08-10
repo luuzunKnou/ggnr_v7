@@ -71,8 +71,14 @@ import { useMeasure, MeasureType } from './hooks/useMeasure';
 import { useAltitudeMeasure } from './hooks/useAltitudeMeasure';
 import { useForwardOverlayPointerMoveToMap } from './hooks/useForwardOverlayPointerMoveToMap';
 import { useSlopeMeasure } from './hooks/useSlopeMeasure';
+import { useSpatialDrawOnMap } from './hooks/useSpatialDrawOnMap';
 import { MapPrintModal } from '../_mapContents/mapPrint/MapPrintModal';
 import type { MapPrintSnapshot } from '../_mapContents/mapPrint/mapPrintTypes';
+import { MapSplitResetMeasurementsPanel } from '../_mapContents/mapSplit/MapSplitResetMeasurementsPanel';
+import {
+  MAP_MEASUREMENTS_RESET_EVENT,
+  parseMapMeasurementsResetTarget,
+} from '../_mapContents/mapSplit/mapMeasurementsReset';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
 import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
@@ -100,12 +106,10 @@ import {
 } from '@/lib/occupationLedgerBinding';
 import { Crosshair } from 'lucide-react';
 import './config/projections';
-import Draw, { createBox } from 'ol/interaction/Draw';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import WKT from 'ol/format/WKT';
 import GeoJSON from 'ol/format/GeoJSON';
-import { fromCircle } from 'ol/geom/Polygon';
 import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
@@ -211,8 +215,12 @@ const MULTI_SELECT_IDS = [
   'land-category',
   'ownership',
   'street-view',
+  'map-split',
   'official-land-price',
 ];
+
+/** 서로 배타 — 지도 분할 보조 칸은 한 종류만 */
+const MAP_SPLIT_EXCLUSIVE_IDS = ['street-view', 'map-split'] as const;
 
 /** 좌클릭으로 목록 패널을 여는 레이어 그룹 (체크는 패널에서만) */
 const PANEL_LAYER_IDS = [
@@ -284,6 +292,9 @@ export default function OpenLayersMap({
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const [activeControls, setActiveControls] = useState<string[]>([]);
+  const [isResetPanelExiting, setIsResetPanelExiting] = useState(false);
+  const resetMeasurementsPanelOpen =
+    activeControls.includes('reset-measurements') || isResetPanelExiting;
   const [selectedBackgroundMap, setSelectedBackgroundMap] = useState(FALLBACK_BACKGROUND_MAP_ID);
   const [backgroundMapGroups, setBackgroundMapGroups] = useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
@@ -299,13 +310,35 @@ export default function OpenLayersMap({
     | null
   >(null);
 
-  // 거리뷰(보조 칸) ↔ 우측 «거리뷰» 토글
+  // 거리뷰·지도분할(보조 칸) ↔ 우측 토글 (상호 배타)
   useEffect(() => {
     const setKind = mapContext?.setMapSplitSecondaryKind;
     if (!setKind) return;
-    const on = activeControls.includes('street-view');
-    setKind(on ? 'streetView' : null);
+    if (activeControls.includes('map-split')) {
+      setKind('map');
+    } else if (activeControls.includes('street-view')) {
+      setKind('streetView');
+    } else {
+      setKind(null);
+    }
   }, [activeControls, mapContext?.setMapSplitSecondaryKind]);
+
+  // 거터 «분할 종료» 등 Context kind가 먼저 꺼진 경우 activeControls 정리
+  useEffect(() => {
+    const kind = mapContext?.mapSplitSecondaryKind ?? null;
+    if (kind === 'map') return;
+    setActiveControls((prev) =>
+      prev.includes('map-split') ? prev.filter((id) => id !== 'map-split') : prev
+    );
+  }, [mapContext?.mapSplitSecondaryKind]);
+
+  useEffect(() => {
+    const kind = mapContext?.mapSplitSecondaryKind ?? null;
+    if (kind === 'streetView') return;
+    setActiveControls((prev) =>
+      prev.includes('street-view') ? prev.filter((id) => id !== 'street-view') : prev
+    );
+  }, [mapContext?.mapSplitSecondaryKind]);
 
   /** null = 전체 표시, 빈 Set = 전체 숨김 */
   const [visibleJimokLayerNames, setVisibleJimokLayerNames] = useState<Set<string> | null>(null);
@@ -531,6 +564,61 @@ export default function OpenLayersMap({
     if (r) r.current = selectedBackgroundMap;
   }, [mapContext?.mapBackgroundMapIdRef, selectedBackgroundMap]);
 
+  // 지도분할 ON: 좌측 맵 클릭 시 배경 포커스 = primary
+  useEffect(() => {
+    const map = mapReady ? mapInstanceRef.current : null;
+    if (!map || mapContext?.mapSplitSecondaryKind !== 'map') return;
+    const onPointer = () => {
+      mapContext?.setMapSplitBasemapFocus?.('primary');
+    };
+    map.getViewport().addEventListener('pointerdown', onPointer);
+    return () => map.getViewport().removeEventListener('pointerdown', onPointer);
+  }, [
+    mapReady,
+    mapInstanceRef,
+    mapContext?.mapSplitSecondaryKind,
+    mapContext?.setMapSplitBasemapFocus,
+  ]);
+
+  const handleBackgroundMapChange = (id: string) => {
+    setSelectedBackgroundMap(id);
+    if (mapContext?.mapSplitSecondaryKind === 'map') {
+      mapContext?.setMapSplitSecondaryBackgroundId?.(id);
+    }
+  };
+
+  const handleBackgroundMapLeftChange = (id: string) => {
+    setSelectedBackgroundMap(id);
+  };
+
+  const handleBackgroundMapRightChange = (id: string) => {
+    mapContext?.setMapSplitSecondaryBackgroundId?.(id);
+  };
+
+  // 배경 싱크를 다시 켜면 좌 배경을 우에 맞춤
+  useEffect(() => {
+    if (mapContext?.mapSplitSecondaryKind !== 'map') return;
+    if (!(mapContext?.mapSplitBasemapSync ?? true)) return;
+    mapContext?.setMapSplitSecondaryBackgroundId?.(selectedBackgroundMap);
+  }, [
+    mapContext?.mapSplitSecondaryKind,
+    mapContext?.mapSplitBasemapSync,
+    selectedBackgroundMap,
+    mapContext?.setMapSplitSecondaryBackgroundId,
+  ]);
+
+  const backgroundSplitSelect =
+    mapContext?.mapSplitSecondaryKind === 'map' &&
+    !(mapContext?.mapSplitBasemapSync ?? true)
+      ? {
+          leftValue: selectedBackgroundMap,
+          rightValue:
+            mapContext?.mapSplitSecondaryBackgroundId ?? selectedBackgroundMap,
+          onLeftChange: handleBackgroundMapLeftChange,
+          onRightChange: handleBackgroundMapRightChange,
+        }
+      : undefined;
+
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -645,8 +733,7 @@ export default function OpenLayersMap({
     visibleLayerNames,
     undefined,
     spatialFilterWkt,
-    layerGeometryTypes,
-    mapContext?.hiddenWmsFeaturesByLayer
+    layerGeometryTypes
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -706,63 +793,37 @@ export default function OpenLayersMap({
 
   // 측정(거리/면적 등) 켜짐 여부를 MapContext에 동기화 (레이어 목록 도형 그리기와 배타 처리용)
   useEffect(() => {
-    const active = activeControls.some((id) => MEASUREMENT_IDS.includes(id));
-    mapContext?.setMeasurementActive?.(active);
-  }, [activeControls, mapContext?.setMeasurementActive]);
+    const tool =
+      (MEASUREMENT_IDS.find((id) => activeControls.includes(id)) as
+        | 'distance'
+        | 'area'
+        | 'altitude'
+        | 'slope'
+        | undefined) ?? null;
+    mapContext?.setMapMeasureTool?.(tool);
+    mapContext?.setMeasurementActive?.(tool != null && !resetMeasurementsPanelOpen);
+  }, [
+    activeControls,
+    resetMeasurementsPanelOpen,
+    mapContext?.setMeasurementActive,
+    mapContext?.setMapMeasureTool,
+  ]);
 
-  // 레이어 목록 도형(사각형/다각형/원형) 그리기: spatialDrawRequest 시 Draw 추가, 완료 시 WKT(5181)로 onComplete 호출
+  useEffect(() => {
+    mapContext?.setMapDrawInputSuspended?.(resetMeasurementsPanelOpen);
+  }, [resetMeasurementsPanelOpen, mapContext?.setMapDrawInputSuspended]);
+
+  // 레이어 목록 도형(사각형/다각형/원형) 그리기 — 좌측 맵 (우측은 MapSplitSecondaryMapInputs)
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
   const layerRowGeomEdit = mapContext?.layerRowGeomEdit ?? null;
-  useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current || !spatialDrawRequest || !setSpatialDrawRequest) return;
-    if (layerRowGeomEdit) return;
-    const map = mapInstanceRef.current;
-    const source = new VectorSource();
-    const layer = new VectorLayer({
-      source,
-      visible: true,
-      renderOrder: compareFeaturesByGeometryStackOrder,
-    });
-    layer.set('spatialDrawLayer', true);
-    const { type, onComplete } = spatialDrawRequest;
-    // stopClick: 그리기 종료 클릭이 singleclick(식별·오버레이 선택)으로 이어지지 않게 함
-    const draw =
-      type === 'rectangle'
-        ? new Draw({ source, type: 'Circle', geometryFunction: createBox(), stopClick: true })
-        : type === 'polygon'
-          ? new Draw({ source, type: 'Polygon', stopClick: true })
-          : new Draw({ source, type: 'Circle', stopClick: true });
-    const onDrawEnd = (e: unknown) => {
-      const evt = e as { feature: { getGeometry(): import('ol/geom').Geometry } };
-      const rawGeom = evt.feature.getGeometry();
-      if (!rawGeom) return;
-      try {
-        // WKT는 Circle을 지원하지 않으므로 원형은 다각형으로 변환 후 저장
-        const geom =
-          rawGeom.getType() === 'Circle'
-            ? fromCircle(rawGeom as import('ol/geom/Circle').default)
-            : rawGeom;
-        const cloned = geom.clone();
-        cloned.transform('EPSG:3857', 'EPSG:5181');
-        const wkt = new WKT().writeGeometry(cloned);
-        onComplete(wkt);
-      } catch (err) {
-        console.error('[SpatialDraw] WKT write failed', err);
-      }
-      setSpatialDrawRequest(null);
-      map.removeInteraction(draw);
-      map.removeLayer(layer);
-    };
-    draw.on('drawend', onDrawEnd);
-    map.addLayer(layer);
-    map.addInteraction(draw);
-    return () => {
-      map.removeInteraction(draw);
-      map.removeLayer(layer);
-    };
-  }, [mapReady, spatialDrawRequest, setSpatialDrawRequest, layerRowGeomEdit]);
-
+  useSpatialDrawOnMap(
+    mapReady ? mapInstanceRef.current : null,
+    mapReady,
+    spatialDrawRequest,
+    setSpatialDrawRequest,
+    Boolean(layerRowGeomEdit) || resetMeasurementsPanelOpen
+  );
   // 지적도 레이어 동기화 (activeControls + visibleCadastralLayerNames)
   useCadastralLayerSync(
     mapInstanceRef.current,
@@ -886,6 +947,17 @@ export default function OpenLayersMap({
       roadNetworkOverlayPickActive ||
       activeControls.some((id) => MEASUREMENT_IDS.includes(id))
   );
+
+  // 좌측 새 식별이 오면 우측 대기분 제거(좌측 우선)
+  useEffect(() => {
+    if (popupState != null) {
+      mapContext?.setMapSplitIdentifyPopup?.(null);
+    }
+  }, [popupState, mapContext]);
+
+  // 우측 분할지도 식별 → 좌측과 동일 파이프라인
+  const mapSplitIdentifyPopup = mapContext?.mapSplitIdentifyPopup ?? null;
+  const identifyIntakePopup = mapSplitIdentifyPopup ?? popupState;
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
   const handleContextMenu = useCallback(
@@ -1018,16 +1090,22 @@ export default function OpenLayersMap({
     checkedUnitIds: aerialViewCheckedIds,
   });
 
-  const totalIdentifyCount = popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
+  const totalIdentifyCount = identifyIntakePopup?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
 
   // 지도 클릭 시 목록창(팝업) 없이 바로 '지도에서 선택된 항목' 데이터 패널로 열기
+  // (좌측 popupState · 우측 mapSplitIdentifyPopup 공통)
   useEffect(() => {
-    if (totalIdentifyCount === 0 || !popupState?.results?.length || !mapContext) return;
+    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length || !mapContext) return;
     let cancelled = false;
 
     const run = async () => {
-      const withFeat = popupState.results.filter((r) => r.features.length > 0);
+      const withFeat = identifyIntakePopup.results.filter((r) => r.features.length > 0);
       if (withFeat.length === 0) return;
+
+      const clearIdentifyIntake = () => {
+        closePopup();
+        mapContext.setMapSplitIdentifyPopup?.(null);
+      };
 
       const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
       const openedTokens = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
@@ -1087,7 +1165,7 @@ export default function OpenLayersMap({
             if (fid == null) {
               if (cancelled) return;
               window.alert('식별된 색인도 도형의 고유 ID(ogc_fid)를 읽을 수 없습니다.');
-              closePopup();
+              clearIdentifyIntake();
               return;
             }
             try {
@@ -1103,7 +1181,7 @@ export default function OpenLayersMap({
                 window.alert(
                   '클릭한 색인도와 겹치는 기본계획(폴리곤)을 찾지 못했습니다. 하천·연도 데이터를 확인해 주세요.',
                 );
-                closePopup();
+                clearIdentifyIntake();
                 return;
               }
               const tab = pdata?.tab === 'smallRiver' ? 'smallRiver' : 'river';
@@ -1120,7 +1198,7 @@ export default function OpenLayersMap({
               if (cancelled) return;
               window.alert(e instanceof Error ? e.message : '색인도 연계 정보를 불러오지 못했습니다.');
             }
-            closePopup();
+            clearIdentifyIntake();
             return;
           }
 
@@ -1143,7 +1221,7 @@ export default function OpenLayersMap({
             const fileKey = String(pick?.fileKey ?? '').trim();
             if (!fileLayer || !fileKey) {
               window.alert('첨부 경로를 확인할 수 없습니다. 피처 속성·키 필드 설정을 확인해 주세요.');
-              closePopup();
+              clearIdentifyIntake();
               return;
             }
             mapContext.setRiverBasicPlanDrawingFromMap({ fileLayer, fileKey });
@@ -1151,7 +1229,7 @@ export default function OpenLayersMap({
             if (cancelled) return;
             window.alert(e instanceof Error ? e.message : '도면 첨부 정보를 불러오지 못했습니다.');
           }
-          closePopup();
+          clearIdentifyIntake();
           return;
         }
       }
@@ -1184,14 +1262,14 @@ export default function OpenLayersMap({
             if (!cancelled) {
               window.alert('클릭한 점용 도형의 대장번호(cons_code)를 읽을 수 없습니다.');
             }
-            closePopup();
+            clearIdentifyIntake();
             return;
           }
           mapContext.applyUsageDataAsMapPickRef.current?.({
             consCode,
             extent3857: pickIdentifyExtent3857(hitData),
           });
-          closePopup();
+          clearIdentifyIntake();
           return;
         }
       }
@@ -1228,14 +1306,14 @@ export default function OpenLayersMap({
               if (!cancelled) {
                 window.alert('클릭한 점용 도형의 대장번호를 읽을 수 없습니다.');
               }
-              closePopup();
+              clearIdentifyIntake();
               return;
             }
             mapContext.applyOccupationLedgerMapPickRef.current?.({
               rowKey,
               extent3857: pickIdentifyExtent3857(hitData),
             });
-            closePopup();
+            clearIdentifyIntake();
             return;
           }
         }
@@ -1306,7 +1384,7 @@ export default function OpenLayersMap({
                 );
               }
             }
-            closePopup();
+            clearIdentifyIntake();
             return;
           }
         }
@@ -1323,7 +1401,7 @@ export default function OpenLayersMap({
           if (row && typeof row === 'object') {
             mapContext.setRoadLedgerIdentifyRow(row as Record<string, unknown>);
           }
-          closePopup();
+          clearIdentifyIntake();
           return;
         }
       }
@@ -1331,20 +1409,20 @@ export default function OpenLayersMap({
       if (hitOpenScan) {
         if (cancelled) return;
         window.alert('하천 기본계획 패널이 열린 상태입니다. 스캔 보기는 추후 구현 예정입니다.');
-        closePopup();
+        clearIdentifyIntake();
         return;
       }
 
       const isDataQueryMenu = openedTokens.includes('standardList');
       if (!isDataQueryMenu || mapContext.dataQueryMapPickEnabled === false) {
-        closePopup();
+        clearIdentifyIntake();
         return;
       }
 
       const layer = withFeat.find((r) => r.isSplitLayer) ?? withFeat[0];
       if (!layer) return;
       const feature = totalIdentifyCount === 1 ? layer.features[0].data : null;
-      mapContext.setIdentifyResultList(popupState);
+      mapContext.setIdentifyResultList(identifyIntakePopup);
       mapContext.setIdentifySelectedRow(feature);
       const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
       const next = new URLSearchParams(Array.from(searchParams.entries()));
@@ -1352,14 +1430,14 @@ export default function OpenLayersMap({
       next.set('dataTable', layer.tableName);
       next.delete('dataKey');
       router.push(`/map?${next.toString()}`);
-      closePopup();
+      clearIdentifyIntake();
     };
 
     void run();
     return () => {
       cancelled = true;
     };
-  }, [totalIdentifyCount, popupState, mapContext, searchParams, router, closePopup]);
+  }, [totalIdentifyCount, identifyIntakePopup, mapContext, searchParams, router, closePopup]);
 
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
   const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);
@@ -1387,19 +1465,39 @@ export default function OpenLayersMap({
     return () => clearTimeout(t);
   }, [isAerialViewPanelExiting]);
 
+  useEffect(() => {
+    if (!isResetPanelExiting) return;
+    const t = setTimeout(() => setIsResetPanelExiting(false), 400);
+    return () => clearTimeout(t);
+  }, [isResetPanelExiting]);
+
+  const resetMeasurementsPanelVisible = resetMeasurementsPanelOpen;
+
+  const closeResetMeasurementsPanel = useCallback(() => {
+    setIsResetPanelExiting(true);
+    setActiveControls((prev) => prev.filter((item) => item !== 'reset-measurements'));
+  }, []);
+
+  useEffect(() => {
+    if (mapContext?.mapSplitSecondaryKind === 'map') return;
+    setActiveControls((prev) => prev.filter((item) => item !== 'reset-measurements'));
+    setIsResetPanelExiting(false);
+  }, [mapContext?.mapSplitSecondaryKind]);
+
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
 
   // 측정 기능
   const { clearMeasurements } = useMeasure(
     mapInstanceRef.current,
-    measureType,
+    resetMeasurementsPanelOpen ? null : measureType,
     (result) => {
       console.log('측정 완료:', result);
     }
   );
 
-  const altitudeActive = activeControls.includes('altitude');
+  const altitudeActive =
+    !resetMeasurementsPanelOpen && activeControls.includes('altitude');
   const stopAltitudeMeasure = useCallback(() => {
     setActiveControls((prev) => prev.filter((id) => id !== 'altitude'));
   }, []);
@@ -1411,7 +1509,7 @@ export default function OpenLayersMap({
 
   const { clearSlopeMeasurements } = useSlopeMeasure(
     mapInstanceRef.current,
-    activeControls.includes('slope')
+    !resetMeasurementsPanelOpen && activeControls.includes('slope')
   );
 
   const clearAllMeasurements = useCallback(() => {
@@ -1419,6 +1517,19 @@ export default function OpenLayersMap({
     clearAltitudeMarkers();
     clearSlopeMeasurements();
   }, [clearMeasurements, clearAltitudeMarkers, clearSlopeMeasurements]);
+
+  useEffect(() => {
+    const onReset = (e: Event) => {
+      const target = parseMapMeasurementsResetTarget(e);
+      if (!target || target === 'secondary') return;
+      if (target === 'both') {
+        setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
+      }
+      clearAllMeasurements();
+    };
+    window.addEventListener(MAP_MEASUREMENTS_RESET_EVENT, onReset);
+    return () => window.removeEventListener(MAP_MEASUREMENTS_RESET_EVENT, onReset);
+  }, [clearAllMeasurements]);
 
   const clearMapDrawInteractions = useCallback(
     (except?: MapDrawInteractionKind) => {
@@ -1541,11 +1652,21 @@ export default function OpenLayersMap({
       return;
     }
 
-    // 초기화 버튼: 측정 관련 버튼 모두 선택 해제 및 측정 결과 초기화
+    // 초기화: 지도분할 시 우측 확장 패널, 아니면 즉시 좌측 측정 초기화
     if (id === 'reset-measurements') {
+      if (mapContext?.mapSplitSecondaryKind === 'map') {
+        if (isActive) {
+          closeResetMeasurementsPanel();
+        } else {
+          setIsResetPanelExiting(false);
+          setActiveControls((prev) =>
+            prev.includes('reset-measurements') ? prev : [...prev, 'reset-measurements']
+          );
+        }
+        return;
+      }
       setActiveControls((prev) => prev.filter((item) => !MEASUREMENT_IDS.includes(item)));
       clearAllMeasurements();
-      console.log(`[v0] Reset measurements triggered`);
       return;
     }
 
@@ -1611,9 +1732,17 @@ export default function OpenLayersMap({
     }
 
     if (MULTI_SELECT_IDS.includes(id)) {
-      setActiveControls((prev) =>
-        isActive ? prev.filter((item) => item !== id) : [...prev, id]
-      );
+      setActiveControls((prev) => {
+        if (isActive) return prev.filter((item) => item !== id);
+        const exclusivePeer = (MAP_SPLIT_EXCLUSIVE_IDS as readonly string[]).includes(id)
+          ? MAP_SPLIT_EXCLUSIVE_IDS.filter((x) => x !== id)
+          : [];
+        const withoutPeer =
+          exclusivePeer.length > 0
+            ? prev.filter((item) => !exclusivePeer.includes(item as (typeof MAP_SPLIT_EXCLUSIVE_IDS)[number]))
+            : prev;
+        return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
+      });
     } else if ((id === 'background-map' || id === 'aerial-view') && isActive) {
       // 배경지도·영상조회 패널 닫기: exit 애니메이션 먼저
       if (id === 'background-map') setIsBackgroundPanelExiting(true);
@@ -1644,6 +1773,24 @@ export default function OpenLayersMap({
     mapContext?.measurementActive || spatialDrawRequest || layerRowGeomEdit
       ? 'pointer-events-none'
       : 'pointer-events-auto';
+
+  const renderMapControlItemPanel = useCallback(
+    (itemId: string) => {
+      if (itemId !== 'reset-measurements' || !resetMeasurementsPanelVisible) return null;
+      return (
+        <div
+          className={
+            isResetPanelExiting
+              ? 'pointer-events-auto animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
+              : 'pointer-events-auto animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+          }
+        >
+          <MapSplitResetMeasurementsPanel onClose={closeResetMeasurementsPanel} />
+        </div>
+      );
+    },
+    [resetMeasurementsPanelVisible, isResetPanelExiting, closeResetMeasurementsPanel]
+  );
 
   return (
     <div className="relative w-full h-full">
@@ -1690,7 +1837,8 @@ export default function OpenLayersMap({
               <BackgroundMapSelector
                 groups={backgroundMapGroups}
                 value={selectedBackgroundMap}
-                onValueChange={setSelectedBackgroundMap}
+                onValueChange={handleBackgroundMapChange}
+                splitSelect={backgroundSplitSelect}
               />
             </div>
           )}
@@ -1838,6 +1986,7 @@ export default function OpenLayersMap({
               onItemClick={handleControlClick}
               onItemRightClick={handleItemRightClick}
               extraAfterFirstGroup={extraControls}
+              renderItemPanel={renderMapControlItemPanel}
             />
           </div>
         </div>

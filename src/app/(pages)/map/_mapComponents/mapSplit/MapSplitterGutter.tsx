@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { UnfoldHorizontal } from 'lucide-react';
+import { ListChevronsUpDown, UnfoldHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   MAP_SPLIT_ANIM_MS,
@@ -14,6 +14,7 @@ import {
   MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
   type MapSplitOrientation,
 } from './mapSplitTypes';
+import { MAP_SPLIT_GUTTER_ICON_COLOR } from './mapSplitGutterIconColor';
 import './mapSplitControl.css';
 
 const PILL_DRAG_TITLE = '버튼 위치 조절';
@@ -33,31 +34,70 @@ type MapSplitterGutterProps = {
   onControlOffsetRatioChange?: (ratio: number) => void;
   /** false면 pill 위치 드래그 비활성·가운데(0.5) 고정. 기본 false */
   controlOffsetDraggable?: boolean;
-  /** false면 Lock·기능 버튼 숨기고 controls(펼치기)만 */
+  /**
+   * 기능 버튼 2개 이상일 때 펼침 여부.
+   * false면 Lock + 펼치기만, true면 Lock + 기능 + 접기.
+   */
   controlsExpanded?: boolean;
+  onControlsExpandedChange?: (expanded: boolean) => void;
 };
 
 export type MapSplitControlItem = {
   key: string;
   title: string;
   active: boolean;
-  activeClassName: string;
+  /** 활성 시 아이콘 색 (hex 등 CSS color) */
+  iconActiveColor: string;
+  /** 비활성 시 아이콘 색. 기본 slate-400 */
+  iconInactiveColor?: string;
   onClick: () => void;
   icon: ReactNode;
+  /**
+   * true면 접기 영역 밖(잠금·접기 토글과 함께)에 항상 표시.
+   * key가 exit/close 이면 기본 true.
+   */
+  pinOutsideCollapse?: boolean;
 };
+
+const DEFAULT_ICON_INACTIVE = '#94a3b8';
+
+/** 종료·닫기 — 접기 밖 고정 */
+function isPinnedOutsideCollapse(item: MapSplitControlItem): boolean {
+  if (item.pinOutsideCollapse != null) return item.pinOutsideCollapse;
+  return item.key === 'exit' || item.key === 'close';
+}
+
+function visibleControlButtonCount(opts: {
+  foldableCount: number;
+  pinnedCount: number;
+  canCollapse: boolean;
+  controlsExpanded: boolean;
+}): number {
+  const lock = LOCK_BUTTON_COUNT;
+  const expand = opts.canCollapse ? 1 : 0;
+  if (!opts.canCollapse) {
+    return lock + opts.foldableCount + opts.pinnedCount;
+  }
+  if (opts.controlsExpanded) {
+    return expand + lock + opts.foldableCount + opts.pinnedCount;
+  }
+  // 접힘: 펼치기 + 닫기(고정)만
+  return expand + opts.pinnedCount;
+}
 
 /** 공통: 어두운 원 + 아이콘 색만 활성 표시 (전부 파란 채우기 지양) */
 export function MapSplitControlButton({
   title,
   active,
-  activeClassName,
+  iconActiveColor,
+  iconInactiveColor = DEFAULT_ICON_INACTIVE,
   onClick,
   children,
 }: {
   title: string;
   active: boolean;
-  /** 활성 시 아이콘 색 (예: text-blue-400, text-amber-300) */
-  activeClassName: string;
+  iconActiveColor: string;
+  iconInactiveColor?: string;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -67,9 +107,9 @@ export function MapSplitControlButton({
       title={title}
       className={cn(
         'flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors',
-        'bg-slate-800/90 hover:bg-slate-700',
-        active ? activeClassName : 'text-slate-400'
+        'bg-slate-800/90 hover:bg-slate-700'
       )}
+      style={{ color: active ? iconActiveColor : iconInactiveColor }}
       onClick={onClick}
     >
       {children}
@@ -84,25 +124,22 @@ type OffsetBounds = {
   baseMax: number;
 };
 
-function visibleControlButtonCount(
-  extraCount: number,
-  controlsExpanded: boolean
-): number {
-  if (extraCount <= 0) return LOCK_BUTTON_COUNT;
-  if (extraCount === 1) return LOCK_BUTTON_COUNT + 1;
-  if (controlsExpanded) return LOCK_BUTTON_COUNT + extraCount;
-  return LOCK_BUTTON_COUNT + 1;
-}
-
-function estimatePillSizePx(buttonCount: number, hasExtra: boolean) {
+/** stackAlongGutter: 좌우 분할(세로 거터)이면 버튼을 세로로 쌓음 */
+function estimatePillSizePx(
+  buttonCount: number,
+  hasExtra: boolean,
+  stackAlongGutter: boolean
+) {
   const pad = hasExtra ? 6 : 2;
   const count = Math.max(1, buttonCount);
-  const width =
+  const main =
     pad * 2 +
     count * MAP_SPLIT_CONTROL_BTN_PX +
     Math.max(0, count - 1) * MAP_SPLIT_CONTROL_BTN_GAP_PX;
-  const height = pad * 2 + MAP_SPLIT_CONTROL_BTN_PX;
-  return { width, height };
+  const cross = pad * 2 + MAP_SPLIT_CONTROL_BTN_PX;
+  return stackAlongGutter
+    ? { width: cross, height: main }
+    : { width: main, height: cross };
 }
 
 function clamp(r: number, min: number, max: number) {
@@ -173,8 +210,11 @@ export function MapSplitterGutter({
   onControlOffsetRatioChange,
   controlOffsetDraggable = false,
   controlsExpanded = true,
+  onControlsExpandedChange,
 }: MapSplitterGutterProps) {
   const isHorizontal = orientation === 'horizontal';
+  /** 좌우 분할 → 세로 거터 → 버튼 세로 나열 / 상하 분할 → 가로 나열 */
+  const stackAlongGutter = isHorizontal;
   const offsetMoveEnabled = controlOffsetDraggable && Boolean(onControlOffsetRatioChange);
   const effectiveOffsetRatio = offsetMoveEnabled ? controlOffsetRatio : 0.5;
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -192,13 +232,22 @@ export function MapSplitterGutter({
 
   const resolvedControls =
     !controls ? [] : typeof controls === 'function' ? controls(orientation) : controls;
-  const hasExtraControls = resolvedControls.length > 0;
-  const hasManyExtraControls = resolvedControls.length > 1;
-  const buttonCount = visibleControlButtonCount(
-    resolvedControls.length,
-    controlsExpanded
+  const pinnedControls = resolvedControls.filter(isPinnedOutsideCollapse);
+  const foldableControls = resolvedControls.filter((c) => !isPinnedOutsideCollapse(c));
+  /** 닫기·분할선 이동(잠금) 제외 나머지가 1개 이상이면 접기 */
+  const canCollapse = foldableControls.length >= 1;
+  const hasExtraControls = resolvedControls.length > 0 || canCollapse;
+  const buttonCount = visibleControlButtonCount({
+    foldableCount: foldableControls.length,
+    pinnedCount: pinnedControls.length,
+    canCollapse,
+    controlsExpanded,
+  });
+  const estimatedPill = estimatePillSizePx(
+    buttonCount,
+    hasExtraControls,
+    stackAlongGutter
   );
-  const estimatedPill = estimatePillSizePx(buttonCount, hasExtraControls);
 
   const [bounds, setBounds] = useState<OffsetBounds>(boundsRef.current);
   const [dragOffsetRatio, setDragOffsetRatio] = useState<number | null>(null);
@@ -321,61 +370,66 @@ export function MapSplitterGutter({
     ? clampedOffset > ANCHOR_SWITCH_RATIO
     : clampedOffset > bounds.baseMax || clampedOffset > ANCHOR_SWITCH_RATIO;
 
-  const expandOriginClass = useOppositeAnchor ? 'origin-right' : 'origin-left';
   /** 좌우 분할(가로 배치) → 좌우 진동, 상하 분할 → 세로 진동 */
   const shakeAxisClass = isHorizontal
     ? 'map-split-control-shake-x'
     : 'map-split-control-shake-y';
 
-  const expandedPanelClass = cn(
-    'flex flex-row items-center gap-1 overflow-hidden ease-out max-w-0 opacity-0',
-    expandOriginClass,
-    controlsExpanded && hasManyExtraControls && 'max-w-40 opacity-100'
-  );
+  const stackClass = stackAlongGutter
+    ? 'flex flex-col items-center'
+    : 'flex flex-row items-center';
 
-  const collapsedPanelClass = cn(
-    'flex flex-row items-center overflow-hidden ease-out max-w-0 opacity-0',
-    expandOriginClass,
-    !controlsExpanded && hasManyExtraControls && 'max-w-10 opacity-100'
-  );
+  const toggleExpand = () => {
+    onControlsExpandedChange?.(!controlsExpanded);
+  };
+
+  const expandAnimClass = stackAlongGutter
+    ? 'map-split-control-expand-y'
+    : 'map-split-control-expand-x';
+
+  const ratioTitle = ratioLocked ? '분할 비율 고정됨' : '분할 비율 조절';
+  const ratioCursor = ratioLocked
+    ? 'cursor-default'
+    : isHorizontal
+      ? 'cursor-col-resize'
+      : 'cursor-row-resize';
 
   return (
     <div
       ref={gutterRef}
       className={cn(
-        'group relative z-[5] shrink-0',
-        isHorizontal ? 'w-[3px] self-stretch' : 'h-[3px] w-full self-center',
-        ratioLocked
-          ? 'cursor-default'
-          : isHorizontal
-            ? 'cursor-col-resize'
-            : 'cursor-row-resize'
+        'relative z-[5] shrink-0',
+        // h-full: 부모(래퍼·flex 행) 높이를 채워 pill top:50%가 세로 중앙에 오도록
+        isHorizontal ? 'h-full w-[3px]' : 'h-[3px] w-full self-center'
       )}
-      onPointerEnter={() => {
-        if (!ratioLocked) onRatioDragApproach?.();
-      }}
-      onPointerDown={(e) => {
-        if ((e.target as HTMLElement).closest('[data-split-controls]')) return;
-        if (ratioLocked) return;
-        e.preventDefault();
-        onDragStart(isHorizontal ? e.clientX : e.clientY);
-      }}
       role="separator"
       aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
-      title={ratioLocked ? '분할 비율 고정됨' : '분할 비율 조절'}
     >
+      {/* 실선만 비율 조절 커서·툴팁·드래그 — 컨트롤러와 분리 */}
       <div
         aria-hidden
+        title={ratioTitle}
         className={cn(
-          'pointer-events-none absolute bg-slate-500 dark:bg-slate-600',
+          'absolute z-0 bg-slate-500 dark:bg-muted/60',
+          ratioCursor,
           isHorizontal
-            ? 'inset-y-0 left-1/2 w-[3px] -translate-x-1/2'
-            : 'inset-x-0 top-1/2 h-[3px] -translate-y-1/2',
-          !ratioLocked &&
-            (isHorizontal
-              ? 'group-hover:w-2 group-hover:bg-slate-400 dark:group-hover:bg-slate-500'
-              : 'group-hover:h-2 group-hover:bg-slate-400 dark:group-hover:bg-slate-500')
+            ? cn(
+                'inset-y-0 left-1/2 w-[3px] -translate-x-1/2',
+                !ratioLocked && 'hover:w-2 hover:bg-slate-400 dark:hover:bg-muted/80'
+              )
+            : cn(
+                'inset-x-0 top-1/2 h-[3px] -translate-y-1/2',
+                !ratioLocked && 'hover:h-2 hover:bg-slate-400 dark:hover:bg-muted/80'
+              )
         )}
+        onPointerEnter={() => {
+          if (!ratioLocked) onRatioDragApproach?.();
+        }}
+        onPointerDown={(e) => {
+          if (ratioLocked) return;
+          e.preventDefault();
+          onDragStart(isHorizontal ? e.clientX : e.clientY);
+        }}
       />
       <div
         ref={pillRef}
@@ -383,11 +437,12 @@ export function MapSplitterGutter({
         data-split-control-drag={offsetMoveEnabled ? 'true' : undefined}
         title={offsetMoveEnabled ? PILL_DRAG_TITLE : undefined}
         className={cn(
-          'absolute rounded-full bg-slate-800 shadow-md',
+          'absolute z-[1] rounded-full bg-slate-800 shadow-md',
           'opacity-95 transition-opacity hover:opacity-100',
           'dark:bg-slate-900 dark:shadow-black/40',
           hasExtraControls ? 'p-1.5' : 'p-0.5',
-          offsetMoveEnabled && 'cursor-grab active:cursor-grabbing'
+          /* 부모/실선 리사이즈 커서가 컨트롤러로 새지 않게 */
+          offsetMoveEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
         )}
         style={{
           ...(isHorizontal
@@ -420,60 +475,90 @@ export function MapSplitterGutter({
         }}
       >
         <div className={cn('inline-grid items-center', edgeShake && shakeAxisClass)}>
-          <div
-            className={cn(
-              'col-start-1 row-start-1 flex flex-row items-center',
-              hasExtraControls && 'gap-1'
-            )}
-          >
-            <MapSplitControlButton
-              title={ratioLocked ? '분할선 이동 해제' : '분할선 이동 잠금'}
-              active={!ratioLocked}
-              activeClassName="text-blue-400"
-              onClick={() => onRatioLockedChange(!ratioLocked)}
-            >
-              <UnfoldHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            </MapSplitControlButton>
-            <div
-              className={expandedPanelClass}
-              style={{ transitionDuration: `${animMs}ms` }}
-              aria-hidden={!controlsExpanded || !hasManyExtraControls}
-            >
-              {controlsExpanded
-                ? resolvedControls.map((item) => (
-                    <MapSplitControlButton
-                      key={item.key}
-                      title={item.title}
-                      active={item.active}
-                      activeClassName={item.activeClassName}
-                      onClick={item.onClick}
-                    >
-                      {item.icon}
-                    </MapSplitControlButton>
-                  ))
-                : null}
-            </div>
-            {hasManyExtraControls ? (
-              <div
-                className={collapsedPanelClass}
-                style={{ transitionDuration: `${animMs}ms` }}
-                aria-hidden={controlsExpanded || !hasManyExtraControls}
+          <div className={cn('col-start-1 row-start-1', stackClass, 'gap-1')}>
+            {canCollapse ? (
+              <MapSplitControlButton
+                title={controlsExpanded ? '컨트롤 접기' : '컨트롤 펼치기'}
+                active={false}
+                iconActiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.expandToggle.active}
+                iconInactiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.expandToggle.inactive}
+                onClick={toggleExpand}
               >
-                {!controlsExpanded
-                  ? resolvedControls.map((item) => (
+                <ListChevronsUpDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </MapSplitControlButton>
+            ) : null}
+
+            {canCollapse ? (
+              <div
+                className={expandAnimClass}
+                data-open={controlsExpanded ? 'true' : 'false'}
+                style={{ transitionDuration: `${animMs}ms` }}
+                aria-hidden={!controlsExpanded}
+              >
+                <div className="map-split-control-expand-inner">
+                  <div className={cn(stackClass, 'gap-1')}>
+                    <MapSplitControlButton
+                      title={ratioLocked ? '분할선 이동 해제' : '분할선 이동 잠금'}
+                      active={!ratioLocked}
+                      iconActiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.active}
+                      iconInactiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.inactive}
+                      onClick={() => onRatioLockedChange(!ratioLocked)}
+                    >
+                      <UnfoldHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                    </MapSplitControlButton>
+                    {foldableControls.map((item) => (
                       <MapSplitControlButton
                         key={item.key}
                         title={item.title}
                         active={item.active}
-                        activeClassName={item.activeClassName}
+                        iconActiveColor={item.iconActiveColor}
+                        iconInactiveColor={item.iconInactiveColor}
                         onClick={item.onClick}
                       >
                         {item.icon}
                       </MapSplitControlButton>
-                    ))
-                  : null}
+                    ))}
+                  </div>
+                </div>
               </div>
-            ) : null}
+            ) : (
+              <>
+                <MapSplitControlButton
+                  title={ratioLocked ? '분할선 이동 해제' : '분할선 이동 잠금'}
+                  active={!ratioLocked}
+                  iconActiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.active}
+                  iconInactiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.inactive}
+                  onClick={() => onRatioLockedChange(!ratioLocked)}
+                >
+                  <UnfoldHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </MapSplitControlButton>
+                {foldableControls.map((item) => (
+                  <MapSplitControlButton
+                    key={item.key}
+                    title={item.title}
+                    active={item.active}
+                    iconActiveColor={item.iconActiveColor}
+                    iconInactiveColor={item.iconInactiveColor}
+                    onClick={item.onClick}
+                  >
+                    {item.icon}
+                  </MapSplitControlButton>
+                ))}
+              </>
+            )}
+
+            {pinnedControls.map((item) => (
+              <MapSplitControlButton
+                key={item.key}
+                title={item.title}
+                active={item.active}
+                iconActiveColor={item.iconActiveColor}
+                iconInactiveColor={item.iconInactiveColor}
+                onClick={item.onClick}
+              >
+                {item.icon}
+              </MapSplitControlButton>
+            ))}
           </div>
         </div>
       </div>

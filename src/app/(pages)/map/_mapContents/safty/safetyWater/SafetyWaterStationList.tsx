@@ -65,7 +65,7 @@ export function SafetyWaterStationList({
           onClick={() => onSelect(null)}
           className={cn(
             'flex w-full cursor-pointer items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors',
-            allSelected ? 'bg-primary/10' : 'hover:bg-muted/50'
+            allSelected ? 'bg-primary/10 dark:bg-primary/25' : 'hover:bg-muted/50'
           )}
         >
           <div className="flex min-w-0 flex-1 items-center">
@@ -106,7 +106,7 @@ export function SafetyWaterStationList({
               onClick={() => onSelect(st.id)}
               className={cn(
                 'flex w-full cursor-pointer items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors',
-                selected ? 'bg-primary/10' : 'hover:bg-muted/50'
+                selected ? 'bg-primary/10 dark:bg-primary/25' : 'hover:bg-muted/50'
               )}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">

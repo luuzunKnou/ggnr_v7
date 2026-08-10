@@ -845,7 +845,7 @@ export function StreetViewPanel({
       {showControls ? (
         <div
           data-roadview-controls
-          className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border px-3 @container"
+          className="pointer-events-none absolute inset-x-0 bottom-3 z-[3] box-border pl-3 pr-20 @container"
         >
           <div className="flex w-full flex-col items-center gap-1.5 @[26rem]:flex-row @[26rem]:items-center @[26rem]:justify-between">
             <div className="hidden h-8 w-[7.5rem] shrink-0 @[26rem]:block" aria-hidden />

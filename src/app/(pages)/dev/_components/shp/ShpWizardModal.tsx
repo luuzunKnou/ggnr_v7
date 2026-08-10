@@ -1344,6 +1344,9 @@ export function ShpWizardModal({
       }
       setStatusRows(rows);
 
+      const needAfter = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
+      const allReady = needAfter.length === 0;
+
       const failed = batchResults.filter(
         (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
       );

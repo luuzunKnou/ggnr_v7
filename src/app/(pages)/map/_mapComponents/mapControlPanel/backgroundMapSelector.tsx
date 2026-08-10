@@ -20,6 +20,13 @@ export interface BackgroundMapGroup {
 /** 자체항공영상이 없을 때 사용하는 배경지도 id */
 export const FALLBACK_BACKGROUND_MAP_ID = 'aerial-vworld';
 
+/** 지도분할·배경 싱크 OFF — 좌는 globals primary(청록) 그대로, 우만 파란 accent */
+export const BACKGROUND_MAP_SPLIT_RADIO_CLASS = {
+  left: 'h-4 w-4 shrink-0 cursor-pointer border-gray-300 dark:border-white/30',
+  right:
+    'background-map-radio-right h-4 w-4 shrink-0 cursor-pointer border-gray-300 dark:border-white/30',
+} as const;
+
 export type OrthophotoTileOutputsPayload = {
   groups?: { groupName: string; tileSetIds: string[] }[];
   legacyTileSetIds?: string[];
@@ -106,20 +113,35 @@ export const defaultBackgroundMapGroups: BackgroundMapGroup[] = [
   },
 ];
 
+/** 지도분할·배경 싱크 OFF 시 좌·우 독립 선택 */
+export type BackgroundMapSplitSelect = {
+  leftValue: string;
+  rightValue: string;
+  onLeftChange: (value: string) => void;
+  onRightChange: (value: string) => void;
+};
+
 // 그룹 컴포넌트 (접기/펼치기 지원)
 function BackgroundMapGroupSection({
   group,
   selectedValue,
   onValueChange,
+  splitSelect,
   defaultExpanded = true,
 }: {
   group: BackgroundMapGroup;
   selectedValue: string;
   onValueChange: (value: string) => void;
+  splitSelect?: BackgroundMapSplitSelect;
   defaultExpanded?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const hasSelectedItem = group.options.some((opt) => opt.id === selectedValue);
+  const hasSelectedItem = splitSelect
+    ? group.options.some(
+        (opt) =>
+          opt.id === splitSelect.leftValue || opt.id === splitSelect.rightValue
+      )
+    : group.options.some((opt) => opt.id === selectedValue);
 
   return (
     <div className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
@@ -149,37 +171,91 @@ function BackgroundMapGroupSection({
       {/* 그룹 옵션들 */}
       {isExpanded && (
         <div className="pb-1">
-          {group.options.map((option) => (
-            <div
-              key={option.id}
-              className={cn(
-                'flex items-center px-3 py-1.5 transition-colors',
-                'hover:bg-slate-50 dark:hover:bg-white/10',
-                selectedValue === option.id && 'bg-blue-50 dark:bg-white/20'
-              )}
-            >
-              <label className="flex items-center gap-2 flex-1 cursor-pointer min-w-0">
-                <input
-                  type="radio"
-                  name="background-map"
-                  value={option.id}
-                  checked={selectedValue === option.id}
-                  onChange={() => onValueChange(option.id)}
-                  className="w-4 h-4 shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:text-blue-400 dark:border-white/30"
-                />
-                <span
+          {group.options.map((option) => {
+            if (splitSelect) {
+              const leftOn = splitSelect.leftValue === option.id;
+              const rightOn = splitSelect.rightValue === option.id;
+              return (
+                <div
+                  key={option.id}
                   className={cn(
-                    'text-xs truncate',
-                    selectedValue === option.id
-                      ? 'text-blue-600 font-medium dark:text-white'
-                      : 'text-slate-700 dark:text-white/90'
+                    'flex items-center gap-2 px-3 py-1.5 transition-colors',
+                    'hover:bg-slate-50 dark:hover:bg-white/10',
+                    (leftOn || rightOn) && 'bg-blue-50 dark:bg-white/20'
                   )}
                 >
-                  {option.label}
-                </span>
-              </label>
-            </div>
-          ))}
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1 truncate text-xs',
+                      leftOn || rightOn
+                        ? 'font-medium text-blue-600 dark:text-white'
+                        : 'text-slate-700 dark:text-white/90'
+                    )}
+                    title={option.label}
+                  >
+                    {option.label}
+                  </span>
+                  <input
+                    type="radio"
+                    name="background-map-left"
+                    value={option.id}
+                    checked={leftOn}
+                    title="좌측 지도"
+                    aria-label={`${option.label} — 좌측 지도`}
+                    onChange={() => splitSelect.onLeftChange(option.id)}
+                    className={BACKGROUND_MAP_SPLIT_RADIO_CLASS.left}
+                  />
+                  <div
+                    className="mx-0.5 h-4 w-0 shrink-0 border-l border-dashed border-slate-300 dark:border-white/30"
+                    aria-hidden
+                  />
+                  <input
+                    type="radio"
+                    name="background-map-right"
+                    value={option.id}
+                    checked={rightOn}
+                    title="우측 지도"
+                    aria-label={`${option.label} — 우측 지도`}
+                    onChange={() => splitSelect.onRightChange(option.id)}
+                    className={BACKGROUND_MAP_SPLIT_RADIO_CLASS.right}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={option.id}
+                className={cn(
+                  'flex items-center px-3 py-1.5 transition-colors',
+                  'hover:bg-slate-50 dark:hover:bg-white/10',
+                  selectedValue === option.id && 'bg-blue-50 dark:bg-white/20'
+                )}
+              >
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="background-map"
+                    value={option.id}
+                    checked={selectedValue === option.id}
+                    title={option.label}
+                    onChange={() => onValueChange(option.id)}
+                    className="h-4 w-4 shrink-0 border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-white/30 dark:text-blue-400"
+                  />
+                  <span
+                    className={cn(
+                      'truncate text-xs',
+                      selectedValue === option.id
+                        ? 'font-medium text-blue-600 dark:text-white'
+                        : 'text-slate-700 dark:text-white/90'
+                    )}
+                  >
+                    {option.label}
+                  </span>
+                </label>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -191,6 +267,8 @@ export interface BackgroundMapSelectorProps {
   groups?: BackgroundMapGroup[];
   value?: string;
   onValueChange?: (value: string) => void;
+  /** 지도분할·배경 싱크 OFF 시 좌·우 라디오 */
+  splitSelect?: BackgroundMapSplitSelect;
   className?: string;
 }
 
@@ -198,6 +276,7 @@ export function BackgroundMapSelector({
   groups = defaultBackgroundMapGroups,
   value,
   onValueChange,
+  splitSelect,
   className,
 }: BackgroundMapSelectorProps) {
   const [internalValue, setInternalValue] = useState(FALLBACK_BACKGROUND_MAP_ID);
@@ -211,19 +290,21 @@ export function BackgroundMapSelector({
   return (
     <div
       className={cn(
-        'w-56 bg-white shadow-xl overflow-hidden flex flex-col rounded-[5px] opacity-90',
-        'dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm dark:border dark:border-white/10',
+        'flex flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        splitSelect ? 'w-64' : 'w-56',
+        'dark:border dark:border-white/10 dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm',
         className
       )}
     >
       {/* 스크롤 영역 */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {groups.map((group) => (
           <BackgroundMapGroupSection
             key={group.id}
             group={group}
             selectedValue={selectedValue}
             onValueChange={handleValueChange}
+            splitSelect={splitSelect}
           />
         ))}
       </div>

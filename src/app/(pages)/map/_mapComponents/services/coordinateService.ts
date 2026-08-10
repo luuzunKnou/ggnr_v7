@@ -130,7 +130,9 @@ export function transformToStandardProjection(
 }
 
 /**
- * View의 좌표계를 변경하고 중심 좌표를 변환
+ * View의 좌표계를 변경하고 중심 좌표를 변환.
+ * 새 View를 만들 때 기존 view.padding을 유지한다.
+ * (미유지 시 왼쪽 패널 패딩이 사라져 센터마크 기준 지도가 오른쪽으로 밀려 보임)
  */
 export function updateViewProjection(
   map: Map,
@@ -147,6 +149,15 @@ export function updateViewProjection(
     console.error(`좌표계를 찾을 수 없습니다: ${newProjection}`);
     return;
   }
+
+  // 좌표계가 같으면 View 재생성 불필요(배경 레이어만 교체) — padding·중심 유지
+  if (currentProjection === newProjection) {
+    return;
+  }
+
+  const prevPadding = view.padding
+    ? ([...(view.padding as number[])] as [number, number, number, number])
+    : null;
 
   let newCenter: [number, number] | null = null;
 
@@ -176,7 +187,16 @@ export function updateViewProjection(
   }
 
   if (newCenter) {
-    const viewOptions: { projection: typeof targetProj; center: [number, number]; zoom: number; resolutions?: number[]; minZoom?: number; maxZoom?: number; constrainResolution?: boolean } = {
+    const viewOptions: {
+      projection: typeof targetProj;
+      center: [number, number];
+      zoom: number;
+      resolutions?: number[];
+      minZoom?: number;
+      maxZoom?: number;
+      constrainResolution?: boolean;
+      padding?: [number, number, number, number];
+    } = {
       projection: targetProj,
       center: newCenter,
       zoom: currentZoom,
@@ -186,6 +206,9 @@ export function updateViewProjection(
       viewOptions.minZoom = 0;
       viewOptions.maxZoom = RESOLUTIONS_3857.length - 1;
       viewOptions.constrainResolution = true;
+    }
+    if (prevPadding) {
+      viewOptions.padding = prevPadding;
     }
     map.setView(new View(viewOptions));
   } else {
