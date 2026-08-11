@@ -47,6 +47,8 @@ import {
   versionOptionBase,
   versionOptionLabel,
 } from '@/lib/gnmsVersionLabel';
+import { SchemaSyncPreviewModal } from './SchemaSyncPreviewModal';
+import type { SchemaSyncPreviewResult } from '@/lib/schemaSyncPreviewTypes';
 
 type SideProgress = {
   message: string;
@@ -78,6 +80,11 @@ export function VersionManagerContent() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [appliedVersion, setAppliedVersion] = useState<string | null>(null);
+  const [schemaModalOpen, setSchemaModalOpen] = useState(false);
+  const [schemaPreview, setSchemaPreview] = useState<SchemaSyncPreviewResult | null>(null);
+  const [schemaPreviewLoading, setSchemaPreviewLoading] = useState(false);
+  const [schemaActionBusy, setSchemaActionBusy] = useState(false);
+  const schemaDecisionRef = useRef<((action: 'continue' | 'abort') => void) | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
@@ -180,6 +187,102 @@ export function VersionManagerContent() {
     setProgress((p) => ({ ...p, logs: next }));
   };
 
+  /** 병합 반영 후 스키마 집계 모달 → 진행=재기동 / 중단=백업 롤백 */
+  const waitSchemaPreviewAck = async (
+    pendingId: string | undefined
+  ): Promise<'continue' | 'abort'> => {
+    setSchemaPreviewLoading(true);
+    setSchemaPreview(null);
+    setSchemaActionBusy(false);
+    setSchemaModalOpen(true);
+    pushLog('스키마 변경 미리보기 조회 중…');
+    try {
+      const res = await fetch('/api/dev/schema-sync/preview', { cache: 'no-store' });
+      const json = (await res.json()) as SchemaSyncPreviewResult & { error?: string };
+      if (!res.ok && !json.counts) {
+        setSchemaPreview({
+          ok: false,
+          error: json.error ?? `HTTP ${res.status}`,
+          counts: { create: 0, drop: 0, delete: 0, alter: 0 },
+          items: [],
+          warnings: [],
+          hasDataLoss: false,
+        });
+      } else {
+        setSchemaPreview(json);
+      }
+    } catch (e: unknown) {
+      setSchemaPreview({
+        ok: false,
+        error: e instanceof Error ? e.message : '미리보기 실패',
+        counts: { create: 0, drop: 0, delete: 0, alter: 0 },
+        items: [],
+        warnings: [],
+        hasDataLoss: false,
+      });
+    } finally {
+      setSchemaPreviewLoading(false);
+    }
+
+    const action = await new Promise<'continue' | 'abort'>((resolve) => {
+      schemaDecisionRef.current = (a) => {
+        schemaDecisionRef.current = null;
+        resolve(a);
+      };
+    });
+
+    if (!pendingId?.trim()) {
+      setSchemaModalOpen(false);
+      throw new Error(
+        '스키마 안내 대기 세션이 없습니다. 적용을 다시 시도하거나 서버 로그를 확인하세요.'
+      );
+    }
+
+    setSchemaActionBusy(true);
+    try {
+      if (action === 'abort') {
+        pushLog('적용 중단 — 직전 소스로 롤백 중…');
+        const res = await fetch('/api/dev/schema-sync/abort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pendingId }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          rollbackDetail?: string;
+        };
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error ?? `중단 실패 (HTTP ${res.status})`);
+        }
+        pushLog(`롤백 완료${json.rollbackDetail ? ` — ${json.rollbackDetail}` : ''}`);
+      } else {
+        pushLog('스키마 안내 확인 — 재기동 예약 중…');
+        const res = await fetch('/api/dev/schema-sync/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pendingId }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          restart?: { message?: string; scheduled?: boolean };
+        };
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error ?? `진행 확정 실패 (HTTP ${res.status})`);
+        }
+        if (json.restart?.message) {
+          pushLog(`재시작: ${json.restart.message}`);
+        }
+      }
+    } finally {
+      setSchemaActionBusy(false);
+      setSchemaModalOpen(false);
+    }
+
+    return action;
+  };
+
   const runUpdate = async () => {
     if (busyRef.current) return;
     if (!selectedEntry) {
@@ -212,8 +315,10 @@ export function VersionManagerContent() {
       pct: 2,
     });
     setStages(buildRelayBaseStages(opts));
-    /** 사전 빌드·앱 종료 진행 중 이후 끊김은 재시작으로 간주 */
-    let reachedRestartCommit = false;
+    /** 스키마 확인 후 재시작이 예약된 뒤에만 soft-disconnect(정상 끊김) 허용 */
+    let restartCommitAfterSchema = false;
+    /** 재기동 대기·하드 리로드 중에는 busy 유지 */
+    let keepBusyUntilReload = false;
 
     try {
       const versionLabel = versionOptionBase(selectedEntry);
@@ -226,9 +331,6 @@ export function VersionManagerContent() {
         isLatest: selectedEntry.isLatest,
         signal,
         onProgress: (p: VersionRelayProgress) => {
-          if (p.phase === 'npm-install' || p.phase === 'build' || p.phase === 'app-stop') {
-            reachedRestartCommit = true;
-          }
           if (p.phase === 'merge-apply') {
             const step: MergeApplyEtaStep =
               p.mergeStep ??
@@ -289,13 +391,21 @@ export function VersionManagerContent() {
                           ? 94
                           : p.phase === 'build'
                             ? 97
-                            : p.phase === 'app-stop'
-                              ? 99
-                              : null;
+                            : p.phase === 'schema-wait'
+                              ? 98
+                              : p.phase === 'app-stop'
+                                ? 99
+                                : p.phase === 'download'
+                                  ? 20
+                                  : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
             versionDetailRef.current = p.message.replace(/^latest:\s*/i, '');
           }
-          setProgress((prev) => ({ ...prev, message: p.message, pct }));
+          setProgress((prev) => ({
+            ...prev,
+            message: p.message,
+            pct: pct ?? prev.pct,
+          }));
           setStages(
             buildRelayStagesFromProgress(
               {
@@ -312,6 +422,21 @@ export function VersionManagerContent() {
                       ? `병합 ${p.appliedFiles}/${p.totalFiles}`
                       : `병합 ${p.appliedFiles}건`
                     : undefined,
+                npmInstallDetail:
+                  p.phase === 'npm-install' || p.phase === 'schema-wait' || p.phase === 'build'
+                    ? profile === 'open'
+                      ? '사전 npm install 완료'
+                      : undefined
+                    : undefined,
+                buildDetail:
+                  p.phase === 'build' || p.phase === 'schema-wait'
+                    ? '사전 빌드 완료'
+                    : undefined,
+                schemaWaiting: p.phase === 'schema-wait',
+                preRestartCompleted:
+                  p.phase === 'schema-wait' ||
+                  p.phase === 'npm-install' ||
+                  p.phase === 'build',
               },
               opts
             )
@@ -341,28 +466,37 @@ export function VersionManagerContent() {
         buildRelayStagesFromProgress(
           {
             phase: 'done',
-            message: json.restart?.scheduled
-              ? '적용 완료 · 재시작 파이프라인 예약'
-              : '적용 완료',
+            message: json.pendingSchemaConfirm
+              ? '적용 완료 · 스키마 안내 대기'
+              : json.restart?.scheduled
+                ? '적용 완료 · 재시작 파이프라인 예약'
+                : '적용 완료',
             versionDetail: versionDetailRef.current,
             applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
             geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
             geoserverStartDetail: json.geoserver?.startMessage,
-            appStopDetail: json.restart?.scheduled
-              ? doneMode === 'exit'
-                ? '앱 종료 단계 완료 · process.exit 예약'
-                : '앱 종료 단계 완료 · 런처가 Next 종료'
-              : undefined,
+            appStopDetail: json.pendingSchemaConfirm
+              ? '스키마 안내 대기'
+              : json.restart?.scheduled
+                ? doneMode === 'exit'
+                  ? '앱 종료 단계 완료 · process.exit 예약'
+                  : '앱 종료 단계 완료 · 런처가 Next 종료'
+                : undefined,
             npmInstallDetail:
-              json.restart?.scheduled && profile === 'open'
+              (json.pendingSchemaConfirm || json.restart?.scheduled) && profile === 'open'
                 ? '사전 npm install 완료'
                 : undefined,
-            buildDetail: json.restart?.scheduled ? '사전 빌드 완료' : undefined,
+            buildDetail:
+              json.pendingSchemaConfirm || json.restart?.scheduled
+                ? '사전 빌드 완료'
+                : undefined,
             appStartDetail:
               json.restart?.scheduled && doneMode === 'launcher'
                 ? '콘솔(런처)에서 Next 재기동'
                 : json.restart?.message,
             restartScheduled: Boolean(json.restart?.scheduled),
+            schemaWaiting: Boolean(json.pendingSchemaConfirm),
+            preRestartCompleted: Boolean(json.pendingSchemaConfirm) || doneMode !== 'none',
             geoserverStartOk: !(
               json.geoserver?.started === false && !json.geoserver?.deferredStart
             ),
@@ -370,24 +504,99 @@ export function VersionManagerContent() {
           doneOpts
         )
       );
-      const restartHint =
-        doneMode === 'exit'
-          ? '적용 완료. 서버 재기동 대기 중… (새로고침하지 마세요)'
-          : doneMode === 'launcher'
-            ? '적용 완료. Next 재기동 대기 중… (새로고침하지 마세요)'
-            : '최신 소스 적용 완료. 화면을 새로고침합니다…';
       setProgress({
-        message: json.restart?.scheduled ? restartHint : '최신 소스 적용 완료. 화면을 새로고침합니다…',
+        message: json.restart?.scheduled
+          ? '적용 완료. 스키마 변경 안내 확인 후 재기동합니다…'
+          : json.pendingSchemaConfirm
+            ? '적용 완료. 스키마 변경 안내에서 진행 또는 중단을 선택하세요…'
+            : '최신 소스 적용 완료. 스키마 변경 안내…',
         pct: 100,
         logs: logRef.current,
         error: null,
       });
-      if (json.restart?.scheduled) {
+
+      let schemaAction: 'continue' | 'abort' = 'continue';
+      try {
+        schemaAction = await waitSchemaPreviewAck(json.pendingId);
+      } catch (schemaErr: unknown) {
+        const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
+        pushLog(`스키마 안내 처리 실패: ${msg}`);
+        setProgress((p) => ({
+          ...p,
+          message: '취소됨 — 스키마 안내 처리 실패',
+          error: msg,
+        }));
+        busyRef.current = false;
+        setBusy(false);
+        return;
+      }
+
+      if (schemaAction === 'abort') {
+        setProgress({
+          message: '취소됨 — 적용 직전 소스로 되돌렸습니다.',
+          pct: 100,
+          logs: logRef.current,
+          error: null,
+        });
+        setStages(
+          buildRelayStagesFromProgress(
+            {
+              phase: 'done',
+              message: '적용 취소',
+              versionDetail: versionDetailRef.current,
+              applyDetail: '사용자가 스키마 안내에서 중단 · 백업 롤백',
+              restartScheduled: false,
+            },
+            { ...doneOpts, restart: false, restartMode: 'none' }
+          )
+        );
+        await refreshAppliedVersion();
+        notifyDevVersionHistoryRefresh();
+        return;
+      }
+
+      if (json.restart?.requested || doneMode !== 'none') {
+        restartCommitAfterSchema = true;
+        setStages(
+          buildRelayStagesFromProgress(
+            {
+              phase: 'done',
+              message: '적용 확정 · 재시작 예약',
+              versionDetail: versionDetailRef.current,
+              applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
+              geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
+              geoserverStartDetail: json.geoserver?.startMessage,
+              npmInstallDetail: profile === 'open' ? '사전 npm install 완료' : undefined,
+              buildDetail: '사전 빌드 완료',
+              appStopDetail:
+                doneMode === 'exit'
+                  ? '앱 종료 단계 완료 · process.exit 예약'
+                  : '앱 종료 단계 완료 · 런처가 Next 종료',
+              appStartDetail:
+                doneMode === 'launcher' ? '콘솔(런처)에서 Next 재기동' : undefined,
+              restartScheduled: true,
+              preRestartCompleted: true,
+              geoserverStartOk: !(
+                json.geoserver?.started === false && !json.geoserver?.deferredStart
+              ),
+            },
+            doneOpts
+          )
+        );
+      }
+
+      if (json.restart?.requested || json.pendingSchemaConfirm) {
         pushLog(
           doneMode === 'exit'
             ? '재시작 예약: 사전 빌드·앱 종료 완료 → process.exit → nssm/런처 재기동'
-            : '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
+            : doneMode === 'launcher'
+              ? '재시작 예약: 사전 빌드·앱 종료 완료 → 런처가 Next 재기동'
+              : '적용 확정 완료'
         );
+      }
+
+      if (json.restart?.requested || doneMode !== 'none') {
+        keepBusyUntilReload = true;
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
@@ -409,18 +618,22 @@ export function VersionManagerContent() {
             }
           },
         });
-      } else {
-        await refreshAppliedVersion();
-        notifyDevVersionHistoryRefresh();
-        pushLog('화면 새로고침(세션 유지)…');
-        void hardReloadKeepSessionAfterDelay(1000);
+        return;
       }
+
+      await refreshAppliedVersion();
+      notifyDevVersionHistoryRefresh();
+      pushLog('화면 새로고침(세션 유지)…');
+      keepBusyUntilReload = true;
+      void hardReloadKeepSessionAfterDelay(1000);
+      return;
     } catch (e: unknown) {
       const isAbort = isUserAbortError(e);
       const isTimeout = isRelayTimeoutError(e);
       const isDisconnect = isRestartDisconnectError(e);
-      /** 재시작 예약 후 서버 종료로 끊긴 경우 — 실패 UI 대신 안내 */
-      if (!isAbort && isDisconnect && restart && reachedRestartCommit) {
+      /** 스키마 확인·재시작 예약 후 서버 종료로 끊긴 경우 — 실패 UI 대신 안내 */
+      if (!isAbort && isDisconnect && restart && restartCommitAfterSchema) {
+        keepBusyUntilReload = true;
         const softOpts = {
           restart: true,
           restartMode,
@@ -438,6 +651,7 @@ export function VersionManagerContent() {
               appStartDetail:
                 restartMode === 'launcher' ? '콘솔(런처)에서 Next 재기동' : undefined,
               restartScheduled: true,
+              preRestartCompleted: true,
               geoserverStartOk: true,
             },
             softOpts
@@ -500,8 +714,10 @@ export function VersionManagerContent() {
       }
     } finally {
       abortRef.current = null;
-      busyRef.current = false;
-      setBusy(false);
+      if (!keepBusyUntilReload) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   };
 
@@ -685,8 +901,11 @@ export function VersionManagerContent() {
           <p className="text-xs text-muted-foreground">{progress.message}</p>
           {progress.error && <p className="text-xs text-red-600">{progress.error}</p>}
         </div>
-        <div className="min-h-0 shrink space-y-2">
-          <ProgressStagesList stages={stages} />
+        <div className="min-h-0 max-h-[35%] shrink overflow-y-auto space-y-2">
+          <ProgressStagesList
+            stages={stages}
+            className="rounded border px-3 py-2 text-xs"
+          />
           {relayResult && (
             <div className="rounded border bg-muted/10 p-2 text-xs">
               <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
@@ -700,10 +919,22 @@ export function VersionManagerContent() {
             </div>
           )}
         </div>
-        <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-[8rem] flex-1 flex-col overflow-hidden">
           <LiveLogsPanel logs={progress.logs} />
         </div>
       </div>
+      <SchemaSyncPreviewModal
+        open={schemaModalOpen}
+        preview={schemaPreview}
+        loading={schemaPreviewLoading}
+        busyAction={schemaActionBusy}
+        onContinue={() => {
+          schemaDecisionRef.current?.('continue');
+        }}
+        onAbort={() => {
+          schemaDecisionRef.current?.('abort');
+        }}
+      />
     </div>
   );
 }

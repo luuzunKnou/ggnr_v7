@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Hammer, Upload } from 'lucide-react';
+import { CircleQuestionMark, Loader2, Hammer, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
@@ -9,10 +9,16 @@ import {
   buildSourceUploadFailBody,
   buildSourceUploadHistoryFields,
   buildSourceUploadSuccessBody,
+  formatBuildCheckSkippedWarning,
+  formatDbSchemaMismatchWarning,
 } from '@/lib/sourceUploadHistoryMessage';
+import {
+  formatSchemaDiffItemsTitle,
+  type SchemaDiffItemLike,
+} from '@/lib/sourceUploadDbCompareFormat';
 import { closeDevVersionHistory, notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import { InstallZipDownloadPanel } from './InstallZipDownloadPanel';
-import { ProgressStagesList } from './ProgressStagesList';
+import { ProgressStagesList, type StageState } from './ProgressStagesList';
 import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload/sourceUploadProfiles';
 import {
   estimateBuildCheckRemainingSeconds,
@@ -29,12 +35,13 @@ type MainTab = 'install_download' | 'source_upload';
 type UploadRow = {
   file: string;
   category: SourceUploadCategory;
-  status: 'ok' | 'fail' | 'skipped';
+  status: 'ok' | 'fail' | 'skipped' | 'warn';
   error?: string;
+  /** 비고 옆 도움말 title — 스키마 불일치 n건 상세 등 */
+  errorTitle?: string;
 };
 
 type StageId = 'preflight' | 'scan' | 'dbCompare' | 'zip' | 'init' | 'chunk' | 'complete' | 'npmInstall' | 'finalize';
-type StageState = 'pending' | 'active' | 'done' | 'error';
 type StageItem = {
   id: StageId;
   label: string;
@@ -47,6 +54,7 @@ type StageItem = {
 type StageReport = {
   id: string;
   ok: boolean;
+  warn?: boolean;
   detail?: string;
   error?: string;
 };
@@ -134,8 +142,8 @@ function applyStageReports(reports: StageReport[]): Partial<Record<StageId, Pick
   for (const r of reports) {
     if (!isStageId(r.id)) continue;
     out[r.id] = {
-      state: r.ok ? 'done' : 'error',
-      detail: r.ok ? r.detail : (r.error ?? r.detail),
+      state: r.warn ? 'warn' : r.ok ? 'done' : 'error',
+      detail: r.warn || r.ok ? r.detail ?? r.error : (r.error ?? r.detail),
     };
   }
   return out;
@@ -281,6 +289,8 @@ export function SourceCodeUploaderContent() {
   const buildAbortRef = useRef<AbortController | null>(null);
   /** 이 페이지에서 취소 없이 빌드 검사가 1회라도 완료되면 true */
   const buildCheckCompletedOnceRef = useRef(false);
+  /** 빌드 검사 없이 업로드 진행 확인을 한 경우 — 성공 이력 본문에 경고 */
+  const buildCheckSkippedRef = useRef(false);
   const buildCheckStartedAtRef = useRef(0);
   const buildCheckPhaseRef = useRef<BuildCheckEtaPhase>('copy');
   const buildCheckPhaseStartedAtRef = useRef(0);
@@ -402,6 +412,7 @@ export function SourceCodeUploaderContent() {
     setDbConfirm(null);
     setBuildCheckSkipConfirmOpen(false);
     buildCheckCompletedOnceRef.current = false;
+    buildCheckSkippedRef.current = false;
     setProgressPhase('idle');
     progressPhaseRef.current = 'idle';
     setProgressPct(0);
@@ -571,12 +582,14 @@ export function SourceCodeUploaderContent() {
       ok: 0,
       fail: 0,
       skipped: 0,
+      warn: 0,
     };
     for (const r of rows) {
       by[r.category] += 1;
       if (r.status === 'ok') by.ok += 1;
       if (r.status === 'fail') by.fail += 1;
       if (r.status === 'skipped') by.skipped += 1;
+      if (r.status === 'warn') by.warn += 1;
     }
     return by;
   }, [rows]);
@@ -676,6 +689,7 @@ export function SourceCodeUploaderContent() {
             appendLog('빌드 확인이 취소되었습니다.');
           } else {
             buildCheckCompletedOnceRef.current = true;
+            buildCheckSkippedRef.current = false;
             appendLog(parsed.ok ? '빌드 성공' : `빌드 실패: ${parsed.message ?? ''}`);
           }
         } else if (parsed.type === 'error') {
@@ -812,6 +826,7 @@ export function SourceCodeUploaderContent() {
           progressId,
           includeNodeModules,
           confirmDbMismatch,
+          buildCheckSkipped: buildCheckSkippedRef.current,
           clientIp: await resolveClientMachineIp(),
         }),
         signal,
@@ -834,31 +849,43 @@ export function SourceCodeUploaderContent() {
       }
 
       if (res.status === 409 && json.dbCompareRequired) {
-        const dbCompare = json.dbCompare as { diffCount?: number; dialogSummary?: string } | undefined;
+        const dbCompare = json.dbCompare as
+          | {
+              diffCount?: number;
+              dialogSummary?: string;
+              items?: SchemaDiffItemLike[];
+            }
+          | undefined;
+        const diffCount = dbCompare?.diffCount ?? 0;
+        const errorTitle =
+          formatSchemaDiffItemsTitle(dbCompare?.items ?? []) ||
+          (typeof dbCompare?.dialogSummary === 'string' ? dbCompare.dialogSummary : '') ||
+          undefined;
         setUploading(false);
         setDbConfirm({
           open: true,
-          diffCount: dbCompare?.diffCount ?? 0,
+          diffCount,
           summary: dbCompare?.dialogSummary ?? String(json.error ?? ''),
           progressId,
         });
         patchStages({
           dbCompare: {
-            state: 'error',
-            detail: `스키마 SQL ↔ DB 차이 ${dbCompare?.diffCount ?? '?'}건`,
+            state: 'warn',
+            detail: `스키마 SQL ↔ DB 차이 ${diffCount || '?'}건`,
           },
         });
-        if (json.historyRecorded === true) {
-          uploadHistoryRecordedRef.current = true;
-          notifyDevVersionHistoryRefresh();
-        } else {
-          await recordFinalUploadHistoryClient({
-            status: 'fail',
-            body: buildSourceUploadFailBody(String(json.error ?? 'DB 스키마 불일치')),
-          });
-        }
+        setRows([
+          {
+            file: '(스키마 비교)',
+            category: 'core',
+            status: 'warn',
+            error: formatDbSchemaMismatchWarning(diffCount),
+            errorTitle,
+          },
+        ]);
+        /** 확인 대기는 실패 이력 남기지 않음 */
         setProgressText('DB 스키마 불일치 — 확인 필요');
-        appendLog('DB 불일치 — 사용자 확인 대기');
+        appendLog('DB 불일치 — 사용자 확인 대기 (경고)');
         return;
       }
 
@@ -919,6 +946,8 @@ export function SourceCodeUploaderContent() {
 
       const scanSummary = json.scanSummary as { included?: number; skipped?: number } | undefined;
       const skipCount = scanSummary?.skipped ?? skippedItems.length;
+      const dbCompareJson = json.dbCompare as { diffCount?: number } | undefined;
+      const schemaWarn = (dbCompareJson?.diffCount ?? 0) > 0;
       patchStages({
         scan: {
           state: 'done',
@@ -926,7 +955,12 @@ export function SourceCodeUploaderContent() {
           detailExclude: `제외 ${skipCount}`,
           title: skipCount > 0 ? scanSkippedTitle : undefined,
         },
-        dbCompare: { state: 'done' },
+        dbCompare: schemaWarn
+          ? {
+              state: 'warn',
+              detail: `스키마 SQL ↔ DB 차이 ${dbCompareJson?.diffCount}건`,
+            }
+          : { state: 'done' },
         zip: { state: 'done', detail: typeof json.zipName === 'string' ? json.zipName : undefined },
         init: { state: 'done' },
         chunk: { state: 'done', detail: chunkDetail },
@@ -944,17 +978,29 @@ export function SourceCodeUploaderContent() {
         uploadHistoryRecordedRef.current = true;
         notifyDevVersionHistoryRefresh();
       } else {
+        const serverWarnings = Array.isArray(json.warnings)
+          ? (json.warnings as string[]).filter((x) => typeof x === 'string')
+          : [];
+        const warnings: string[] = [...serverWarnings];
+        if (schemaWarn && !warnings.some((w) => w.includes('스키마'))) {
+          warnings.push(formatDbSchemaMismatchWarning(dbCompareJson?.diffCount ?? 0));
+        }
+        if (buildCheckSkippedRef.current && !warnings.some((w) => w.includes('빌드 검사'))) {
+          warnings.push(formatBuildCheckSkippedWarning());
+        }
         await recordFinalUploadHistoryClient({
           status: 'success',
           body: buildSourceUploadSuccessBody(
             Number(json.ok ?? 0),
             Number(json.skipped ?? 0),
             Number(json.fail ?? 0),
-            includeNodeModules ? 'npm install 생략' : 'npm install 완료'
+            includeNodeModules ? 'npm install 생략' : 'npm install 완료',
+            warnings
           ),
           version: typeof json.bundleRoot === 'string' ? json.bundleRoot : undefined,
         });
       }
+      buildCheckSkippedRef.current = false;
 
       setProgressPct(100);
       appendLog('업로드 전체 완료');
@@ -1030,8 +1076,16 @@ export function SourceCodeUploaderContent() {
                 title="중단"
                 onClick={() => {
                   setDbConfirm(null);
-                  appendLog('업로드 중단 — DB 스키마 불일치');
-                  setProgressText('업로드 중단 — DB 스키마 불일치');
+                  appendLog('업로드 중단 — DB 스키마 불일치 (경고, 이력 없음)');
+                  setProgressText('업로드 중단 — DB 스키마 불일치 (경고)');
+                  setRows([
+                    {
+                      file: '(스키마 비교)',
+                      category: 'core',
+                      status: 'warn',
+                      error: 'DB 스키마 불일치 — 사용자 중단',
+                    },
+                  ]);
                 }}
               >
                 중단
@@ -1072,6 +1126,7 @@ export function SourceCodeUploaderContent() {
                 title="계속 진행"
                 onClick={() => {
                   setBuildCheckSkipConfirmOpen(false);
+                  buildCheckSkippedRef.current = true;
                   void runUploadCurrentWorkspace(false);
                 }}
               >
@@ -1321,6 +1376,7 @@ export function SourceCodeUploaderContent() {
             <span className="mr-3">runtime {stats.runtime}</span>
             <span className="mr-3">data {stats.data}</span>
             <span className="mr-3 text-green-700 dark:text-green-400">성공 {stats.ok}</span>
+            <span className="mr-3 text-amber-700 dark:text-amber-400">경고 {stats.warn}</span>
             <span className="mr-3 text-red-700 dark:text-red-400">실패 {stats.fail}</span>
             <span
               className={`text-muted-foreground ${stats.skipped > 0 ? 'cursor-help' : ''}`}
@@ -1389,11 +1445,42 @@ export function SourceCodeUploaderContent() {
                                   제외
                                 </span>
                               )
-                            : r.status === 'fail'
-                              ? '실패'
-                              : '대기'}
+                            : r.status === 'warn'
+                              ? (
+                                  <span className="text-amber-700 dark:text-amber-400">경고</span>
+                                )
+                              : r.status === 'fail'
+                                ? '실패'
+                                : '대기'}
                       </td>
-                      <td className="truncate px-2 py-1 text-red-600 dark:text-red-400">{r.error ?? ''}</td>
+                      <td
+                        className={`px-2 py-1 ${
+                          r.status === 'warn'
+                            ? 'text-amber-700 dark:text-amber-400'
+                            : r.status === 'fail'
+                              ? 'text-red-600 dark:text-red-400'
+                              : ''
+                        }`}
+                      >
+                        <span className="inline-flex max-w-full items-center gap-1">
+                          <span className="min-w-0 truncate" title={r.error}>
+                            {r.error ?? ''}
+                          </span>
+                          {r.errorTitle ? (
+                            <span
+                              className="inline-flex shrink-0 cursor-help"
+                              title={r.errorTitle}
+                              aria-label="불일치 상세"
+                            >
+                              <CircleQuestionMark
+                                className="h-3.5 w-3.5 opacity-80"
+                                strokeWidth={1.75}
+                                aria-hidden
+                              />
+                            </span>
+                          ) : null}
+                        </span>
+                      </td>
                     </tr>
                   ))
                 )}

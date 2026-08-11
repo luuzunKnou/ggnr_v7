@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import type Map from 'ol/Map';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { useMeasure, type MeasureType } from '../../_mapComponents/hooks/useMeasure';
@@ -67,16 +67,8 @@ export function MapSplitSecondaryMapInputs({ map, active }: Props) {
     return () => window.removeEventListener(MAP_MEASUREMENTS_RESET_EVENT, onReset);
   }, [clearAllSecondaryMeasurements]);
 
-  const wasMeasuringRef = useRef(false);
-  useEffect(() => {
-    const measuring = Boolean(tool);
-    if (wasMeasuringRef.current && !measuring) {
-      clearMeasurements();
-      clearAltitudeMarkers();
-      clearSlopeMeasurements();
-    }
-    wasMeasuringRef.current = measuring;
-  }, [tool, clearMeasurements, clearAltitudeMarkers, clearSlopeMeasurements]);
+  // 측정 메뉴 OFF·초기화 패널 열림만으로 결과는 지우지 않음(좌측과 동일).
+  // 삭제는 초기화 패널에서 우측·양쪽을 고를 때만.
 
   useSpatialDrawOnMap(
     map,

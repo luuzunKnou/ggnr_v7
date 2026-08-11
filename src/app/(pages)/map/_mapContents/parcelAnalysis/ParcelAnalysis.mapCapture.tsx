@@ -387,6 +387,7 @@ function waitForBasemapTiles(
     onReady();
     return () => {};
   }
+  const tileSource = source;
 
   let pending = 0;
   let done = false;
@@ -398,9 +399,9 @@ function waitForBasemapTiles(
     done = true;
     if (idleTimer) window.clearTimeout(idleTimer);
     window.clearTimeout(maxTimer);
-    source.un('tileloadstart', onStart);
-    source.un('tileloadend', onEnd);
-    source.un('tileloaderror', onEnd);
+    tileSource.un('tileloadstart', onStart);
+    tileSource.un('tileloadend', onEnd);
+    tileSource.un('tileloaderror', onEnd);
     onReady();
   }
 

@@ -237,12 +237,14 @@ export function InstallZipDownloadPanel() {
     return () => clearInterval(id);
   }, [busy]);
 
+  // 소스 모드 전환 시에만 단계·로그 초기화 (다운로드 완료로 busy가 꺼질 때는 유지)
   useEffect(() => {
-    if (busy) return;
     setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
     setProgress(emptySideProgress());
     setInstallMeta({});
-  }, [sourceMode, busy]);
+    logRef.current = [];
+    lastLogMessageRef.current = '';
+  }, [sourceMode]);
 
   const isAbortError = (e: unknown): boolean => e instanceof Error && e.name === 'AbortError';
 
@@ -621,9 +623,14 @@ export function InstallZipDownloadPanel() {
     setBusy(true);
     logRef.current = [];
     lastLogMessageRef.current = '';
+    lastSkipLoggedRef.current = null;
+    lastPhaseRef.current = '';
     startedAtRef.current = Date.now();
     downloadBytesRef.current = null;
     downloadStartedAtRef.current = 0;
+    setInstallMeta({});
+    setProgress(emptySideProgress());
+    setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
 
     try {
       if (sourceMode === 'gnms') {

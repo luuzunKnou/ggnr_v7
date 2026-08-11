@@ -7,7 +7,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - 실행 위치 root = 이 bat이 있는 폴더
 :: - node PATH = where node 결과의 디렉터리
 :: - root에 node_modules 없으면 고지 후 npm install (Y/N)
-:: - ggnr_start.bat: .next 없으면 npm run build 후 start
+:: - ggnr_start.bat: .next\BUILD_ID 없으면 npm run build 후 start (폴더만 있는 불완전 빌드 포함)
 :: - 프로젝트명·환경 = 실행 시 입력
 :: - 생성 후 Y/N: 기동 검사 → nssm_install_ggnr.bat → open_ggnr_logs.bat
 :: =============================================================================
@@ -21,7 +21,11 @@ set "SMOKE_PS1=%ROOT%\smoke_ggnr_start.ps1"
 set "SMOKE_CLEANUP_PS1=%ROOT%\smoke_ggnr_cleanup.ps1"
 set "SMOKE_PORT=3000"
 set "SMOKE_GEO_PORT=8080"
+:: Next listen 전 GeoServer ensure^(최대 ~120초^) + Next 기동 여유 → 기본 180초
 set "SMOKE_TIMEOUT_SEC=180"
+:: 더블클릭 창이 오류 직후 닫히지 않도록 ^(nssm·자동화는 GGNR_START_NO_PAUSE=1^)
+set "PAUSE_ON_FAIL=1"
+if /i "%GGNR_START_NO_PAUSE%"=="1" set "PAUSE_ON_FAIL=0"
 
 echo.
 echo [00_make_ggnr_starter] root = %ROOT%
@@ -31,7 +35,7 @@ echo.
 where node >nul 2>&1
 if errorlevel 1 (
   echo [오류] where node 실패. PATH 에 node 가 없습니다.
-  exit /b 1
+  goto :fail_exit
 )
 
 set "NODE_EXE="
@@ -43,7 +47,7 @@ for /f "delims=" %%I in ('where node') do (
 :node_found
 if not defined NODE_EXE (
   echo [오류] node.exe 경로를 읽지 못했습니다.
-  exit /b 1
+  goto :fail_exit
 )
 
 for %%I in ("%NODE_EXE%") do set "NODE_DIR=%%~dpI"
@@ -68,11 +72,12 @@ if not exist "%ROOT%\node_modules\" (
     popd
     if not "!NPM_EC!"=="0" (
       echo [오류] npm install 실패 ^(exit=!NPM_EC!^)
-      exit /b 1
+      set "FAIL_EC=!NPM_EC!"
+      goto :fail_exit
     )
     if not exist "%ROOT%\node_modules\" (
       echo [오류] npm install 후에도 node_modules 가 없습니다.
-      exit /b 1
+      goto :fail_exit
     )
     echo [완료] npm install 완료.
     echo.
@@ -85,23 +90,23 @@ if not exist "%ROOT%\node_modules\" (
 set /p "PROJECT_NAME=프로젝트명 (GGNR_PROJECT): "
 if not defined PROJECT_NAME (
   echo [오류] 프로젝트명이 비어 있습니다.
-  exit /b 1
+  goto :fail_exit
 )
 echo(!PROJECT_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
   echo [오류] 프로젝트명에 공백이 있습니다. 공백 없이 입력하세요.
-  exit /b 1
+  goto :fail_exit
 )
 
 set /p "ENV_NAME=환경 (GGNR_ENV): "
 if not defined ENV_NAME (
   echo [오류] 환경이 비어 있습니다.
-  exit /b 1
+  goto :fail_exit
 )
 echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
   echo [오류] 환경명에 공백이 있습니다. 공백 없이 입력하세요.
-  exit /b 1
+  goto :fail_exit
 )
 
 echo.
@@ -149,45 +154,66 @@ if "!SKIP_WRITE!"=="0" (
   echo set "GGNR_PROJECT=%PROJECT_NAME%"
   echo set "GGNR_ENV=%ENV_NAME%"
   echo.
-  echo :: [빌드] .next 없으면 next build 선행
-  echo if not exist ".next\" ^(
-  echo   echo [진행] .next 없음 — npm run build 실행...
-  echo   call npm run build
-  echo   set "GGNR_BUILD_EC=%%ERRORLEVEL%%"
-  echo   if not "%%GGNR_BUILD_EC%%"=="0" ^(
-  echo     echo [오류] npm run build 실패 ^(exit=%%GGNR_BUILD_EC%%^)
-  echo     if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
-  echo       echo 아무 키나 누르면 창이 닫힙니다.
-  echo       pause ^>nul
-  echo     ^)
-  echo     exit /b %%GGNR_BUILD_EC%%
-  echo   ^)
-  echo   echo [완료] npm run build 완료.
+  echo :: [빌드] .next\BUILD_ID 없으면 next build 선행
+  echo :: ^(^) else 블록 안 %%ERRORLEVEL%% 은 파싱 시 비어 오판되므로 if errorlevel / goto 사용
+  echo if exist ".next\BUILD_ID" ^(
+  echo   echo [진행] .next\BUILD_ID 확인됨 — 빌드 생략
+  echo   goto after_build
   echo ^)
+  echo if exist ".next\" ^(
+  echo   echo [경고] .next 폴더는 있으나 BUILD_ID 없음 — 불완전 빌드로 보고 npm run build 실행...
+  echo ^) else ^(
+  echo   echo [진행] .next\BUILD_ID 없음 — npm run build 실행...
+  echo ^)
+  echo call npm run build
+  echo if errorlevel 1 goto build_fail
+  echo if not exist ".next\BUILD_ID" goto build_no_id
+  echo echo [완료] npm run build 완료 ^(.next\BUILD_ID 확인^).
+  echo goto after_build
   echo.
-  echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
-  echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)
-  echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
-  echo set "GGNR_START_EC=%%ERRORLEVEL%%"
-  echo if "%%GGNR_START_EC%%"=="0" exit /b 0
-  echo echo.
-  echo echo [오류] 기동 실패 ^(exit=%%GGNR_START_EC%%^). 위 로그를 확인하세요.
+  echo :build_fail
+  echo echo [오류] npm run build 실패.
   echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
   echo   echo 아무 키나 누르면 창이 닫힙니다.
   echo   pause ^>nul
   echo ^)
-  echo exit /b %%GGNR_START_EC%%
+  echo exit /b 1
+  echo.
+  echo :build_no_id
+  echo echo [오류] npm run build 후 .next\BUILD_ID 가 없습니다. production 기동을 중단합니다.
+  echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
+  echo   echo 아무 키나 누르면 창이 닫힙니다.
+  echo   pause ^>nul
+  echo ^)
+  echo exit /b 1
+  echo.
+  echo :after_build
+  echo.
+  echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
+  echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)
+  echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
+  echo if errorlevel 1 goto start_fail
+  echo exit /b 0
+  echo.
+  echo :start_fail
+  echo echo.
+  echo echo [오류] 기동 실패. 위 로그를 확인하세요.
+  echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
+  echo   echo 아무 키나 누르면 창이 닫힙니다.
+  echo   pause ^>nul
+  echo ^)
+  echo exit /b 1
   )
 
   if not exist "%OUT%" (
     echo [오류] ggnr_start.bat 생성 실패
-    exit /b 1
+    goto :fail_exit
   )
   echo [완료] 생성됨: %OUT%
 ) else (
   if not exist "%OUT%" (
     echo [오류] ggnr_start.bat 이 없습니다.
-    exit /b 1
+    goto :fail_exit
   )
   echo [주의] 기존 ggnr_start.bat 을 유지합니다.
   echo         방금 입력한 프로젝트명/환경은 기존 파일에 반영되지 않습니다.
@@ -201,6 +227,10 @@ if /i not "!DO_NEXT!"=="Y" (
   echo [종료] 생성만 완료했습니다.
   echo   수동: nssm_install_ggnr.bat ^(관리자 CMD^) → open_ggnr_logs.bat
   echo.
+  if "!PAUSE_ON_FAIL!"=="1" (
+    echo 아무 키나 누르면 창이 닫힙니다.
+    pause >nul
+  )
   exit /b 0
 )
 
@@ -210,31 +240,32 @@ if errorlevel 1 (
   echo [오류] 관리자 실행이 아닙니다.
   echo         기동 검사·nssm 등록은 관리자 CMD에서 실행해야 합니다.
   echo         CMD를 마우스 오른쪽 버튼 → «관리자 권한으로 실행» 후 다시 실행하세요.
-  exit /b 1
+  goto :fail_exit
 )
 echo [확인] 관리자 권한으로 실행 중입니다.
 
 if not exist "%SMOKE_PS1%" (
   echo [오류] 없음: %SMOKE_PS1%
-  exit /b 1
+  goto :fail_exit
 )
 if not exist "%SMOKE_CLEANUP_PS1%" (
   echo [오류] 없음: %SMOKE_CLEANUP_PS1%
   echo         잔여 프로세스 정리 스크립트가 필요합니다. 설치 패키지를 확인하세요.
-  exit /b 1
+  goto :fail_exit
 )
 if not exist "%NSSM_BAT%" (
   echo [오류] 없음: %NSSM_BAT%
-  exit /b 1
+  goto :fail_exit
 )
 if not exist "%LOGS_BAT%" (
   echo [오류] 없음: %LOGS_BAT%
-  exit /b 1
+  goto :fail_exit
 )
 
 echo.
 echo [1/3] ggnr_start.bat 기동 검사 ^(포트 %SMOKE_PORT%, 최대 %SMOKE_TIMEOUT_SEC%초^)...
 echo       주의: 같은 포트에서 이미 npm run dev/start 가 돌면 실패할 수 있습니다.
+echo       Next 포트는 GeoServer 설정^(최대 ~120초^) 이후에 열립니다. 그동안 포트=False 가 정상일 수 있습니다.
 echo       진행 로그는 아래 [smoke] 줄로 표시됩니다 ^(약 5초마다^).
 echo       취소^([Ctrl]+[C]^) 시 백그라운드 Next·GeoServer 도 정리합니다.
 
@@ -253,10 +284,12 @@ if not "!SMOKE_EC!"=="0" (
       echo [중단] 포트 %SMOKE_PORT% 가 이미 사용 중입니다 — nssm 등록을 하지 않습니다.
     ) else (
       echo [중단] 기동 검사 실패 ^(exit=!SMOKE_EC!^) — nssm 등록을 하지 않습니다.
+      echo         스모크 로그: %TEMP%\ggnr_start_smoke.out.log / ggnr_start_smoke.err.log
     )
   )
   echo         폴더가 안 지워지면: powershell -NoProfile -File "%SMOKE_CLEANUP_PS1%" -Root "%ROOT%"
-  exit /b 1
+  set "FAIL_EC=!SMOKE_EC!"
+  goto :fail_exit
 )
 
 echo.
@@ -273,11 +306,16 @@ if "!NSSM_EC!"=="2" (
   echo.
   echo [완료] 생성 → 기동 검사 → ^(기존 서비스 유지^) → 로그 창까지 끝났습니다.
   echo.
+  if "!PAUSE_ON_FAIL!"=="1" (
+    echo 아무 키나 누르면 창이 닫힙니다.
+    pause >nul
+  )
   exit /b 0
 )
 if not "!NSSM_EC!"=="0" (
   echo [중단] nssm 등록/시작 실패 ^(exit=!NSSM_EC!^)
-  exit /b 1
+  set "FAIL_EC=!NSSM_EC!"
+  goto :fail_exit
 )
 
 echo.
@@ -287,4 +325,18 @@ call "%LOGS_BAT%"
 echo.
 echo [완료] 생성 → 기동 검사 → nssm 등록 → 로그 창까지 끝났습니다.
 echo.
+if "!PAUSE_ON_FAIL!"=="1" (
+  echo 아무 키나 누르면 창이 닫힙니다.
+  pause >nul
+)
 exit /b 0
+
+:fail_exit
+if not defined FAIL_EC set "FAIL_EC=1"
+echo.
+echo [종료] 오류로 중단되었습니다 ^(exit=!FAIL_EC!^). 위 메시지를 확인하세요.
+if "!PAUSE_ON_FAIL!"=="1" (
+  echo 아무 키나 누르면 창이 닫힙니다.
+  pause >nul
+)
+exit /b !FAIL_EC!

@@ -1,4 +1,4 @@
-export type StageState = 'pending' | 'active' | 'done' | 'error';
+export type StageState = 'pending' | 'active' | 'done' | 'warn' | 'error';
 
 export type StageItem = {
   id: string;
@@ -13,6 +13,7 @@ export type StageItem = {
 
 function stateLabel(state: StageState): string {
   if (state === 'done') return '완료';
+  if (state === 'warn') return '경고';
   if (state === 'error') return '실패';
   if (state === 'active') return '진행';
   return '대기';
@@ -20,6 +21,7 @@ function stateLabel(state: StageState): string {
 
 function stateClass(state: StageState): string {
   if (state === 'done') return 'text-green-700 dark:text-green-400';
+  if (state === 'warn') return 'text-amber-700 dark:text-amber-400';
   if (state === 'error') return 'text-red-700 dark:text-red-400';
   if (state === 'active') return 'text-blue-700 dark:text-blue-400';
   return 'text-muted-foreground';
@@ -29,14 +31,14 @@ function StageDetail({
   detail,
   detailExclude,
   title,
-  isError,
+  toneClass,
 }: {
   detail?: string;
   detailExclude?: string;
   title?: string;
-  isError?: boolean;
+  toneClass?: string;
 }) {
-  const tone = isError ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
+  const tone = toneClass ?? 'text-muted-foreground';
   const detailTitle =
     title ||
     [detail, detailExclude].filter((x) => x != null && String(x).trim() !== '').join(' · ') ||
@@ -66,10 +68,22 @@ function StageDetail({
 }
 
 /** 단계 목록 — 행은 한 줄 말줄임, 목록은 세로 스크롤 */
-export function ProgressStagesList({ stages }: { stages: StageItem[] }) {
+export function ProgressStagesList({
+  stages,
+  className,
+}: {
+  stages: StageItem[];
+  /** 기본 max-h-48. 부모에서 높이·스크롤을 제어할 때 덮어씀 */
+  className?: string;
+}) {
   if (stages.length === 0) return null;
   return (
-    <div className="max-h-48 min-h-0 overflow-y-auto rounded border px-3 py-2 text-xs">
+    <div
+      className={
+        className ??
+        'max-h-48 min-h-0 overflow-y-auto rounded border px-3 py-2 text-xs'
+      }
+    >
       {stages.map((s) => {
         const left = `${stateLabel(s.state)} · ${s.label}`;
         return (
@@ -84,7 +98,13 @@ export function ProgressStagesList({ stages }: { stages: StageItem[] }) {
               detail={s.detail}
               detailExclude={s.detailExclude}
               title={s.title}
-              isError={s.state === 'error'}
+              toneClass={
+                s.state === 'error'
+                  ? 'text-red-600 dark:text-red-400'
+                  : s.state === 'warn'
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : undefined
+              }
             />
           </div>
         );

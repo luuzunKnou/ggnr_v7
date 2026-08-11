@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useRef, useState, useCallback, type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import type Map from 'ol/Map';
-import type { MapSplitSecondaryKind } from './mapSplit/mapSplitTypes';
+import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX, type MapSplitSecondaryKind } from './mapSplit/mapSplitTypes';
 import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
 import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
@@ -125,6 +125,9 @@ export type MapContextValue = {
   /** 뷰 왼쪽 패딩(px). 레이아웃에서 설정. 크로스헤어 위치 재계산용 */
   mapPaddingLeft: number;
   setMapPaddingLeft: Dispatch<SetStateAction<number>>;
+  /** 뷰 오른쪽 패딩(px). 우측 메뉴·확장 패널 폭. 거터 pill 가용 범위용 */
+  mapPaddingRight: number;
+  setMapPaddingRight: Dispatch<SetStateAction<number>>;
   /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
   applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
   /**
@@ -442,6 +445,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   >(null);
   const [mapDrawInputSuspended, setMapDrawInputSuspended] = useState(false);
   const [mapPaddingLeft, setMapPaddingLeft] = useState(0);
+  const [mapPaddingRight, setMapPaddingRight] = useState(
+    MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX
+  );
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
   const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -617,6 +623,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setMapDrawInputSuspended,
         mapPaddingLeft,
         setMapPaddingLeft,
+        mapPaddingRight,
+        setMapPaddingRight,
         applyMapViewPaddingRef,
         mapViewPaddingOverrideRef,
         mapReady,

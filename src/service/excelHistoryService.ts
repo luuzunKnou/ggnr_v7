@@ -305,6 +305,20 @@ export async function attachExcelIntegritySyncToHistory(params: {
       await db.update(eh).set({ ehRowCount: cnt.count }).where(eq(eh.ehKey, ehKey));
     }
 
+    // 주소→지적 등으로 레이어에만 들어간 도형을 이력 도형 테이블·JSON에 보정
+    const kfRes = await db.execute(sql.raw(
+      `SELECT esl_key_field
+       FROM excel_sync_log
+       WHERE esl_eh_key = ${ehKey} AND esl_table_name = '${tableName}'
+         AND esl_key_field IS NOT NULL AND btrim(esl_key_field) <> ''
+       LIMIT 1`
+    ));
+    const keyField = safeIdent(
+      String((kfRes.rows as Array<{ esl_key_field?: string }>)[0]?.esl_key_field ?? '')
+    );
+    if (keyField) {
+      await fillExcelSyncLogNewGeoms({ ehKey, tableName, keyField });
+    }
     await syncExcelSyncLogJsonGeomFromSideTable({ tableName, ehKey });
     await mirrorExcelEhKeyToDataLog({
       ehKey,
@@ -816,7 +830,7 @@ export async function getExcelHistoryLog(params: {
 
   const relative = sourcePath.replace(/\//g, path.sep).replace(/^[/\\]+/, '');
   const absoluteDir = path.join(GGNR_DATA_DIR, path.dirname(relative));
-  const base = path.basename(relative).replace(/\.xlsx?$/i, '');
+  const base = path.basename(relative).replace(/\.(xlsx|xls|csv)$/i, '');
   const logAbs = path.resolve(absoluteDir, `${base}.log`);
   const dataRoot = path.resolve(GGNR_DATA_DIR);
   const relToRoot = path.relative(dataRoot, logAbs);
@@ -894,12 +908,12 @@ async function mirrorExcelEhKeyToDataLog(params: {
   /** usrId(usrName) 형식 */
   logUser?: string | null;
 }): Promise<void> {
+  const batchKey = `excel:${params.ehKey}`;
   try {
-    const batchKey = `excel:${params.ehKey}`;
     const already = await db.execute(sql.raw(
       `SELECT 1 AS ok FROM data_log WHERE dl_batch_key = '${batchKey.replace(/'/g, "''")}' LIMIT 1`
     ));
-    if ((already.rows as unknown[])?.length) return;
+    const alreadyMirrored = !!((already.rows as unknown[])?.length);
 
     let logUser = String(params.logUser ?? '').trim() || null;
     let group: string | null = null;
@@ -932,92 +946,126 @@ async function mirrorExcelEhKeyToDataLog(params: {
       tableKorName = String(urow?.eh_kor ?? '').trim() || null;
     }
 
-    const res = await db.execute(sql.raw(
-      `SELECT esl_key, esl_key_field, esl_key_value, esl_operation, esl_old_data, esl_new_data
-       FROM excel_sync_log
-       WHERE esl_eh_key = ${params.ehKey}
-         AND esl_operation IS NOT NULL
-         AND esl_operation <> 'kept'`
-    ));
-    const { fetchExcelSyncLogGeomAsGeoJson, fetchLayerGeomAsGeoJson } = await import('@/lib/syncLogGeom');
-    const rawRows = res.rows as Array<{
-      esl_key: number;
-      esl_key_field: string;
-      esl_key_value: string;
-      esl_operation: string;
-      esl_old_data: Record<string, unknown> | null;
-      esl_new_data: Record<string, unknown> | null;
-    }>;
+    if (!alreadyMirrored) {
+      const res = await db.execute(sql.raw(
+        `SELECT esl_key, esl_key_field, esl_key_value, esl_operation, esl_old_data, esl_new_data
+         FROM excel_sync_log
+         WHERE esl_eh_key = ${params.ehKey}
+           AND esl_operation IS NOT NULL
+           AND esl_operation <> 'kept'`
+      ));
+      const { fetchExcelSyncLogGeomAsGeoJson, fetchLayerGeomAsGeoJson } = await import('@/lib/syncLogGeom');
+      const rawRows = res.rows as Array<{
+        esl_key: number;
+        esl_key_field: string;
+        esl_key_value: string;
+        esl_operation: string;
+        esl_old_data: Record<string, unknown> | null;
+        esl_new_data: Record<string, unknown> | null;
+      }>;
 
-    const isGeomMetaOnly = (g: unknown): boolean => {
-      if (g == null || typeof g !== 'object' || Array.isArray(g)) return false;
-      const o = g as Record<string, unknown>;
-      if ('coordinates' in o || 'geometries' in o) return false;
-      return typeof o.hash === 'string' || o._meta === true;
-    };
+      const isGeomMetaOnly = (g: unknown): boolean => {
+        if (g == null || typeof g !== 'object' || Array.isArray(g)) return false;
+        const o = g as Record<string, unknown>;
+        if ('coordinates' in o || 'geometries' in o) return false;
+        return typeof o.hash === 'string' || o._meta === true;
+      };
 
-    const stripOrReplaceGeomMeta = (
-      data: Record<string, unknown> | null,
-      full: unknown | null,
-    ): void => {
-      if (!data) return;
-      if (full != null) {
-        data.geom = full;
-      } else if (data.__rollback_geom != null && !isGeomMetaOnly(data.__rollback_geom)) {
-        data.geom = data.__rollback_geom;
-      } else if (isGeomMetaOnly(data.geom)) {
-        delete data.geom;
-      }
-      delete data.__rollback_geom;
-    };
+      const stripOrReplaceGeomMeta = (
+        data: Record<string, unknown> | null,
+        full: unknown | null,
+      ): void => {
+        if (!data) return;
+        if (full != null) {
+          data.geom = full;
+        } else if (data.__rollback_geom != null && !isGeomMetaOnly(data.__rollback_geom)) {
+          data.geom = data.__rollback_geom;
+        } else if (isGeomMetaOnly(data.geom)) {
+          delete data.geom;
+        }
+        delete data.__rollback_geom;
+      };
 
-    const rows = [];
-    for (const r of rawRows) {
-      const oldData = r.esl_old_data && typeof r.esl_old_data === 'object'
-        ? { ...r.esl_old_data }
-        : null;
-      const newData = r.esl_new_data && typeof r.esl_new_data === 'object'
-        ? { ...r.esl_new_data }
-        : null;
-      const [oldG, newG] = await Promise.all([
-        fetchExcelSyncLogGeomAsGeoJson(r.esl_key, 'old'),
-        fetchExcelSyncLogGeomAsGeoJson(r.esl_key, 'new'),
-      ]);
-      stripOrReplaceGeomMeta(oldData, oldG);
-      let resolvedNew = newG;
-      // new 전용 도형이 없고 메타만 있으면 반영 후 레이어 좌표로 보강
-      if (
-        resolvedNew == null
-        && newData
-        && isGeomMetaOnly(newData.geom)
-        && (r.esl_operation === 'append' || r.esl_operation === 'conflict')
-      ) {
-        resolvedNew = await fetchLayerGeomAsGeoJson({
-          tableName: params.tableName,
+      const rows = [];
+      for (const r of rawRows) {
+        const oldData = r.esl_old_data && typeof r.esl_old_data === 'object'
+          ? { ...r.esl_old_data }
+          : null;
+        const newData = r.esl_new_data && typeof r.esl_new_data === 'object'
+          ? { ...r.esl_new_data }
+          : null;
+        const [oldG, newG] = await Promise.all([
+          fetchExcelSyncLogGeomAsGeoJson(r.esl_key, 'old'),
+          fetchExcelSyncLogGeomAsGeoJson(r.esl_key, 'new'),
+        ]);
+        stripOrReplaceGeomMeta(oldData, oldG);
+        let resolvedNew = newG;
+        if (
+          resolvedNew == null
+          && newData
+          && isGeomMetaOnly(newData.geom)
+          && (r.esl_operation === 'append' || r.esl_operation === 'conflict')
+        ) {
+          resolvedNew = await fetchLayerGeomAsGeoJson({
+            tableName: params.tableName,
+            keyField: r.esl_key_field,
+            keyValue: r.esl_key_value,
+          });
+        }
+        stripOrReplaceGeomMeta(newData, resolvedNew);
+        rows.push({
           keyField: r.esl_key_field,
           keyValue: r.esl_key_value,
+          operation: r.esl_operation,
+          oldData,
+          newData,
         });
       }
-      stripOrReplaceGeomMeta(newData, resolvedNew);
-      rows.push({
-        keyField: r.esl_key_field,
-        keyValue: r.esl_key_value,
-        operation: r.esl_operation,
-        oldData,
-        newData,
-      });
+      if (rows.length > 0) {
+        await recordDataLogsFromSyncStyleRows({
+          source: 'Excel 업로드',
+          tableName: params.tableName,
+          tableKorName,
+          group,
+          batchKey,
+          serviceName: 'Excel 업로드',
+          user: logUser,
+          rows,
+        });
+      }
     }
-    if (rows.length === 0) return;
-    await recordDataLogsFromSyncStyleRows({
-      source: 'Excel 업로드',
-      tableName: params.tableName,
-      tableKorName,
-      group,
-      batchKey,
-      serviceName: 'Excel 업로드',
-      user: logUser,
-      rows,
-    });
+
+    // 회차 전체 스냅샷 (미러 중복이어도 스냅샷만 없으면 생성)
+    try {
+      const kfRes = await db.execute(sql.raw(
+        `SELECT esl_key_field
+         FROM excel_sync_log
+         WHERE esl_eh_key = ${params.ehKey}
+           AND esl_key_field IS NOT NULL
+           AND btrim(esl_key_field) <> ''
+         LIMIT 1`
+      ));
+      const keyField = String(
+        (kfRes.rows as Array<{ esl_key_field?: string }>)[0]?.esl_key_field ?? ''
+      ).trim();
+      if (keyField) {
+        const { captureBatchSnapshot } = await import('./batchSnapshotService');
+        await captureBatchSnapshot({
+          batchKey,
+          tableName: params.tableName,
+          keyField,
+          user: logUser,
+          source: 'Excel 업로드',
+          group,
+          tableKorName,
+        });
+      }
+    } catch (snapErr) {
+      console.warn(
+        '[mirrorExcelEhKeyToDataLog] snapshot',
+        snapErr instanceof Error ? snapErr.message : snapErr
+      );
+    }
   } catch (e) {
     console.warn(
       '[mirrorExcelEhKeyToDataLog]',
@@ -1332,7 +1380,7 @@ export async function getSyncLogs(params: {
          WHEN (${col}->'geom' ? 'coordinates') OR (${col}->'geom' ? 'geometries') THEN
            (${col} - 'geom') || jsonb_build_object(
              'geom',
-             jsonb_build_object('type', COALESCE(${col}->'geom'->>'type', 'Geometry'))
+             jsonb_build_object('type', COALESCE(${col}->'geom'->>'type', '도형 없음'))
            )
          ELSE ${col}
        END`;
@@ -1490,13 +1538,31 @@ export async function getSyncLogDetail(params: {
       fetchExcelSyncLogGeomAsGeoJson(slKey, 'new'),
     ]);
 
+    const tableName = String(row.sl_table_name ?? '');
+    const keyField = String(row.sl_key_field ?? '');
+    const keyValue = String(row.sl_key_value ?? '');
+    const op = String(row.sl_operation ?? '').trim();
+
+    /** 좌표 없는 타입 자리표시·메타만 → 레이어 폴백 대상 */
+    const geomNeedsLayerFallback = (g: unknown): boolean => {
+      if (g == null) return true;
+      if (typeof g !== 'object' || Array.isArray(g)) return true;
+      const o = g as Record<string, unknown>;
+      if ('geometries' in o) {
+        const arr = o.geometries;
+        return !Array.isArray(arr) || arr.length === 0;
+      }
+      if ('coordinates' in o) {
+        const c = o.coordinates;
+        return !Array.isArray(c) || c.length === 0;
+      }
+      return true;
+    };
+
     if (oldG != null) {
       if (!oldData) oldData = {};
       oldData.geom = oldG;
-    } else if (oldData || row.sl_old_data != null || String(row.sl_operation ?? '') === 'remove') {
-      const tableName = String(row.sl_table_name ?? '');
-      const keyField = String(row.sl_key_field ?? '');
-      const keyValue = String(row.sl_key_value ?? '');
+    } else if (oldData || row.sl_old_data != null || op === 'remove') {
       const layerG = await fetchLayerGeomAsGeoJson({ tableName, keyField, keyValue });
       if (layerG != null) {
         if (!oldData) oldData = {};
@@ -1507,6 +1573,16 @@ export async function getSyncLogDetail(params: {
     if (newG != null) {
       if (!newData) newData = {};
       newData.geom = newG;
+    } else if (
+      op === 'append' ||
+      op === 'conflict' ||
+      (newData != null && geomNeedsLayerFallback(newData.geom))
+    ) {
+      const layerG = await fetchLayerGeomAsGeoJson({ tableName, keyField, keyValue });
+      if (layerG != null) {
+        if (!newData) newData = {};
+        newData.geom = layerG;
+      }
     }
 
     row.sl_old_data = oldData;

@@ -127,6 +127,7 @@ export function MapControlPanel({
                 <div
                   key={`panel-${item.id}`}
                   className="pointer-events-auto absolute right-[calc(100%+12px)] z-10"
+                  data-map-control-expand-panel
                   style={{
                     top: (itemIndex + 1) * 45,
                     transform: "translateY(-100%)",

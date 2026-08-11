@@ -30,17 +30,6 @@ export function useStreetViewSplitterPrefs(projectName?: string) {
     }, SAVE_DEBOUNCE_MS);
   }, []);
 
-  const setControlOffsetRatio = useCallback(
-    (controlOffsetRatio: number) => {
-      setPrefs((prev) => {
-        const next = { ...prev, controlOffsetRatio };
-        scheduleSave(next);
-        return next;
-      });
-    },
-    [scheduleSave]
-  );
-
   const setExpanded = useCallback(
     (expanded: boolean) => {
       setPrefs((prev) => {
@@ -59,9 +48,7 @@ export function useStreetViewSplitterPrefs(projectName?: string) {
   }, []);
 
   return {
-    controlOffsetRatio: prefs.controlOffsetRatio,
     controlsExpanded: prefs.expanded,
-    setControlOffsetRatio,
     setControlsExpanded: setExpanded,
   };
 }

@@ -19,7 +19,7 @@ export type LayerHistoryRow = {
   lhContents: string | null;
   lhSuccessCount: number | null;
   lhFailCount: number | null;
-  lhCreateUser: number | null;
+  lhCreateUser: string | null;
   lhCreateDate: string | null;
 };
 

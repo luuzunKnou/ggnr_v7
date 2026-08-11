@@ -107,7 +107,7 @@ export function LayerManagerUploadDialogs({ kind, onClose, onSuccess }: LayerMan
             <ServerDataBrowser
               rootPath={EXL_ROOT}
               pickMode="file"
-              fileFilter={(name) => /\.(xlsx|xls)$/i.test(name)}
+              fileFilter={(name) => /\.(xlsx|xls|csv)$/i.test(name)}
               onPickFile={(fileRelPath, fileName) => {
                 const parts = fileRelPath.replace(/\\/g, "/").split("/").filter(Boolean)
                 const folderName = parts.length >= 2 ? parts[parts.length - 2] : parts[0] ?? ""

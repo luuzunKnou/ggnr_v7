@@ -199,7 +199,7 @@ export function ServerDataBrowser({
       )}
       {pickMode === "file" && (
         <p className="text-xs text-muted-foreground shrink-0">
-          Excel 파일(.xlsx, .xls)을 클릭하면 업데이트 마법사가 열립니다.
+          Excel/CSV 파일(.xlsx, .xls, .csv)을 클릭하면 업데이트 마법사가 열립니다.
         </p>
       )}
     </div>

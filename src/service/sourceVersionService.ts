@@ -138,6 +138,9 @@ export type ApplyLatestSourceResult = {
     signalFile: string;
     message: string;
   };
+  /** 스키마 모달 확인 전 — 재기동·스냅샷 삭제 보류 */
+  pendingSchemaConfirm?: boolean;
+  pendingId?: string;
 };
 
 type GnmsLatestPayload = {
@@ -352,6 +355,350 @@ async function removeApplyRollbackSnapshot(snapshot: ApplyRollbackSnapshot | nul
   await fs.rm(snapshot.root, { recursive: true, force: true }).catch(() => {});
 }
 
+const PENDING_SCHEMA_TTL_MS = 30 * 60 * 1000;
+
+type PendingSchemaConfirmSession = {
+  id: string;
+  createdAt: number;
+  requestedBy: string;
+  snapshot: ApplyRollbackSnapshot;
+  workspaceRoot: string;
+  includeNodeModules: boolean;
+  doRestart: boolean;
+  restartMode: RestartMode;
+  signalFile: string;
+  mergeRelPaths: string[];
+  version: string;
+  fileName: string;
+  clientIp?: string;
+  historyVersion: string;
+  historyOption: string[];
+  successMessage: string;
+  bootCommand: string | null;
+  appliedFiles: number;
+  skippedFiles: number;
+  geoserverMessage: string;
+  netLabel: string;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+type PendingSchemaConfirmStored = Omit<PendingSchemaConfirmSession, 'timer'>;
+
+const pendingSchemaSessions = new globalThis.Map<string, PendingSchemaConfirmSession>();
+
+function pendingSchemaStoreDir(): string {
+  return path.join(process.cwd(), '.cursor-runtime', 'pending-schema-confirm');
+}
+
+async function writePendingSchemaFile(stored: PendingSchemaConfirmStored): Promise<void> {
+  const dir = pendingSchemaStoreDir();
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, `${stored.id}.json`), JSON.stringify(stored), 'utf-8');
+}
+
+async function deletePendingSchemaFile(id: string): Promise<void> {
+  await fs.rm(path.join(pendingSchemaStoreDir(), `${id}.json`), { force: true }).catch(() => {});
+}
+
+async function readPendingSchemaFile(id: string): Promise<PendingSchemaConfirmStored | null> {
+  try {
+    const raw = await fs.readFile(path.join(pendingSchemaStoreDir(), `${id}.json`), 'utf-8');
+    return JSON.parse(raw) as PendingSchemaConfirmStored;
+  } catch {
+    return null;
+  }
+}
+
+function armPendingSchemaTimer(session: PendingSchemaConfirmSession): void {
+  clearTimeout(session.timer);
+  session.timer = setTimeout(() => {
+    void (async () => {
+      const s = pendingSchemaSessions.get(session.id);
+      if (!s) return;
+      console.warn(`[SourceCodeUpload] pending schema confirm timeout — 자동 롤백 id=${session.id}`);
+      try {
+        await discardPendingSession(s, true);
+        await recordVersionHistory({
+          historyType: 'apply_latest',
+          status: 'cancel',
+          message: `스키마 안내 대기 시간 초과 — 적용 직전 소스로 롤백 (${s.version})`,
+          option: s.historyOption,
+          version: s.historyVersion,
+          ip: s.clientIp,
+        }).catch((histErr) => {
+          console.error('[SourceCodeUpload] pending timeout 이력 기록 실패', histErr);
+        });
+      } catch (e) {
+        console.error('[SourceCodeUpload] pending timeout 롤백 실패', e);
+      }
+    })();
+  }, PENDING_SCHEMA_TTL_MS);
+  session.timer.unref?.();
+}
+
+function clearPendingTimer(session: PendingSchemaConfirmSession): void {
+  clearTimeout(session.timer);
+}
+
+async function discardPendingSession(session: PendingSchemaConfirmSession, restore: boolean): Promise<string> {
+  clearPendingTimer(session);
+  pendingSchemaSessions.delete(session.id);
+  await deletePendingSchemaFile(session.id);
+  let detail = '';
+  if (restore) {
+    const result = await restoreApplyRollbackSnapshot({
+      snapshot: session.snapshot,
+      workspaceRoot: session.workspaceRoot,
+      includeNodeModules: session.includeNodeModules,
+    });
+    detail = result.detail;
+  }
+  await removeApplyRollbackSnapshot(session.snapshot);
+  return detail;
+}
+
+async function resolvePendingSession(pendingId: string): Promise<PendingSchemaConfirmSession | null> {
+  const cached = pendingSchemaSessions.get(pendingId);
+  if (cached) return cached;
+  const stored = await readPendingSchemaFile(pendingId);
+  if (!stored) return null;
+  const remaining = PENDING_SCHEMA_TTL_MS - (Date.now() - stored.createdAt);
+  if (remaining <= 0) {
+    console.warn(`[SourceCodeUpload] pending schema 파일 만료 — 자동 롤백 id=${pendingId}`);
+    try {
+      const expired: PendingSchemaConfirmSession = {
+        ...stored,
+        timer: setTimeout(() => {}, 0),
+      };
+      clearTimeout(expired.timer);
+      await discardPendingSession(expired, true);
+      await recordVersionHistory({
+        historyType: 'apply_latest',
+        status: 'cancel',
+        message: `스키마 안내 대기 시간 초과 — 적용 직전 소스로 롤백 (${stored.version})`,
+        option: stored.historyOption,
+        version: stored.historyVersion,
+        ip: stored.clientIp,
+      }).catch((histErr) => {
+        console.error('[SourceCodeUpload] pending 만료 이력 기록 실패', histErr);
+      });
+    } catch (e) {
+      console.error('[SourceCodeUpload] pending 만료 롤백 실패', e);
+    }
+    return null;
+  }
+  const session: PendingSchemaConfirmSession = {
+    ...stored,
+    timer: setTimeout(() => {}, 0),
+  };
+  clearTimeout(session.timer);
+  armPendingSchemaTimer(session);
+  pendingSchemaSessions.set(session.id, session);
+  console.log(`[SourceCodeUpload] pending schema 세션 디스크에서 복구 id=${pendingId}`);
+  return session;
+}
+
+async function registerPendingSchemaConfirm(
+  partial: Omit<PendingSchemaConfirmSession, 'id' | 'createdAt' | 'timer'>
+): Promise<string> {
+  const id = `psc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const stored: PendingSchemaConfirmStored = {
+    ...partial,
+    id,
+    createdAt: Date.now(),
+  };
+  await writePendingSchemaFile(stored);
+  const session: PendingSchemaConfirmSession = {
+    ...stored,
+    timer: setTimeout(() => {}, 0),
+  };
+  clearTimeout(session.timer);
+  armPendingSchemaTimer(session);
+  pendingSchemaSessions.set(id, session);
+  console.log(`[SourceCodeUpload] pending schema 등록 id=${id} (디스크+메모리)`);
+  return id;
+}
+
+export type SchemaConfirmResult = {
+  ok: boolean;
+  error?: string;
+  restart?: ApplyLatestSourceResult['restart'];
+  rollbackDetail?: string;
+};
+
+/** 스키마 모달 [진행] — 잔여 정리·재기동 예약·스냅샷 삭제 */
+export async function confirmPendingSchemaApply(params: {
+  pendingId: string;
+  requestedBy: string;
+}): Promise<SchemaConfirmResult> {
+  const session = await resolvePendingSession(params.pendingId);
+  if (!session) {
+    console.error(`[SourceCodeUpload] schema confirm 실패 — 세션 없음 id=${params.pendingId}`);
+    return { ok: false, error: '대기 중인 적용 세션이 없습니다. (만료·이미 처리됨)' };
+  }
+  if (session.requestedBy !== params.requestedBy) {
+    console.error(
+      `[SourceCodeUpload] schema confirm 거부 — 사용자 불일치 id=${params.pendingId} by=${params.requestedBy}`
+    );
+    return { ok: false, error: '적용을 시작한 사용자만 확인할 수 있습니다.' };
+  }
+
+  clearPendingTimer(session);
+  pendingSchemaSessions.delete(session.id);
+  await deletePendingSchemaFile(session.id);
+
+  const {
+    snapshot,
+    workspaceRoot,
+    includeNodeModules,
+    doRestart,
+    restartMode,
+    signalFile,
+    mergeRelPaths,
+    requestedBy,
+    version,
+    fileName,
+    clientIp,
+    historyVersion,
+    historyOption,
+    successMessage,
+    bootCommand,
+    appliedFiles,
+    skippedFiles,
+    geoserverMessage,
+    netLabel,
+  } = session;
+
+  try {
+    try {
+      const orphanRemoved = await cleanupOrphanManagedFiles({
+        workspaceRoot,
+        mergeRelSet: new Set(mergeRelPaths),
+        includeNodeModules,
+      });
+      console.log(`[SourceCodeUpload] 잔여 소스 정리 완료 (${orphanRemoved}건)`);
+    } catch (orphanErr: unknown) {
+      const om = orphanErr instanceof Error ? orphanErr.message : String(orphanErr);
+      console.warn(`[SourceCodeUpload] 잔여 소스 정리 경고: ${om}`);
+    }
+
+    const runNpmInstallBefore = false;
+    const runBuildAfterExit = false;
+    const ipTrim = clientIp?.trim() || undefined;
+
+    await writeRestartSignal(signalFile, {
+      at: new Date().toISOString(),
+      requestedBy,
+      version,
+      fileName,
+      clientIp: ipTrim ?? null,
+      restartRequested: doRestart,
+      restartMode,
+      includeNodeModules,
+      runNpmInstallBefore,
+      runBuild: runBuildAfterExit,
+      startGeoServerAfter: doRestart,
+      historyPending: doRestart,
+      historyPayload: doRestart
+        ? {
+            mode: restartMode,
+            command: bootCommand,
+            version: historyVersion,
+            appliedFiles,
+            skippedFiles,
+            netLabel,
+            geoserverMsg: geoserverMessage,
+            message: successMessage,
+            option: historyOption,
+          }
+        : null,
+      launcherConsumed: false,
+      launcherConsumedAt: null,
+      source: 'versionManagerClientRelay',
+    });
+
+    if (!doRestart) {
+      await recordVersionHistory({
+        historyType: 'apply_latest',
+        status: 'success',
+        message: successMessage,
+        option: historyOption,
+        version: historyVersion,
+        ip: ipTrim,
+      });
+    }
+
+    await removeApplyRollbackSnapshot(snapshot);
+
+    const restartResult = scheduleRestart(restartMode);
+    console.log(`[SourceCodeUpload] 스키마 안내 확인 후 재기동: ${restartResult.message}`);
+
+    return {
+      ok: true,
+      restart: {
+        requested: doRestart,
+        mode: restartMode,
+        commandConfigured: restartResult.commandConfigured,
+        scheduled: restartResult.scheduled,
+        signalFile: normalizeSlashes(path.relative(workspaceRoot, signalFile)),
+        message: restartResult.message,
+      },
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[SourceCodeUpload] schema confirm 처리 실패 id=${params.pendingId}:`, msg);
+    try {
+      await restoreApplyRollbackSnapshot({
+        snapshot,
+        workspaceRoot,
+        includeNodeModules,
+      });
+    } catch (restoreErr) {
+      console.error('[SourceCodeUpload] schema confirm 실패 후 롤백도 실패', restoreErr);
+    }
+    await removeApplyRollbackSnapshot(snapshot).catch(() => {});
+    return { ok: false, error: msg };
+  }
+}
+
+/** 스키마 모달 [중단] — 적용 직전 백업 복원 */
+export async function abortPendingSchemaApply(params: {
+  pendingId: string;
+  requestedBy: string;
+}): Promise<SchemaConfirmResult> {
+  const session = await resolvePendingSession(params.pendingId);
+  if (!session) {
+    console.error(`[SourceCodeUpload] schema abort 실패 — 세션 없음 id=${params.pendingId}`);
+    return { ok: false, error: '대기 중인 적용 세션이 없습니다. (만료·이미 처리됨)' };
+  }
+  if (session.requestedBy !== params.requestedBy) {
+    console.error(
+      `[SourceCodeUpload] schema abort 거부 — 사용자 불일치 id=${params.pendingId} by=${params.requestedBy}`
+    );
+    return { ok: false, error: '적용을 시작한 사용자만 중단할 수 있습니다.' };
+  }
+
+  try {
+    const detail = await discardPendingSession(session, true);
+    await recordVersionHistory({
+      historyType: 'apply_latest',
+      status: 'cancel',
+      message: `사용자가 스키마 안내에서 중단 — ${detail} (version=${session.version})`,
+      option: session.historyOption,
+      version: session.historyVersion,
+      ip: session.clientIp,
+    }).catch((histErr) => {
+      console.error('[SourceCodeUpload] schema abort 이력 기록 실패', histErr);
+    });
+    console.log(`[SourceCodeUpload] 스키마 안내 중단·롤백: ${detail}`);
+    return { ok: true, rollbackDetail: detail };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[SourceCodeUpload] schema abort 처리 실패 id=${params.pendingId}:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
 async function cleanupOrphanManagedFiles(params: {
   workspaceRoot: string;
   mergeRelSet: Set<string>;
@@ -450,6 +797,7 @@ export type ApplySourceProgressPhase =
   | 'geoserver-start'
   | 'npm-install'
   | 'build'
+  | 'schema-wait'
   | 'app-stop';
 
 /** 병합·적용 내부 단계 — ETA·진행률용 (ZIP 해제·백업은 복사 건수에 안 잡힘) */
@@ -530,8 +878,16 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   };
 
   const runRollback = async (reason: string): Promise<string> => {
-    if (!rollback) return `${reason} (롤백 스냅샷 없음)`;
-    await emit('merge-apply', '적용 실패 — 직전 소스로 롤백 중...');
+    if (!rollback) {
+      console.error(`[SourceCodeUpload] 적용 실패 (롤백 스냅샷 없음): ${reason}`);
+      return `${reason} (롤백 스냅샷 없음)`;
+    }
+    console.error(`[SourceCodeUpload] 적용 실패 — 직전 소스로 롤백 중: ${reason}`);
+    await emit(
+      'merge-apply',
+      `적용 실패 — 직전 소스로 롤백 중... (${reason})`,
+      { logLine: `[SourceCodeUpload] 적용 실패 — 직전 소스로 롤백 중... (${reason})` }
+    );
     const result = await restoreApplyRollbackSnapshot({
       snapshot: rollback,
       workspaceRoot,
@@ -539,6 +895,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     });
     await removeApplyRollbackSnapshot(rollback);
     rollback = null;
+    console.error(`[SourceCodeUpload] 롤백 완료: ${reason} / ${result.detail}`);
     return `${reason} / ${result.detail}`;
   };
 
@@ -599,17 +956,29 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       dstRoot: workspaceRoot,
       excludePrefixes,
       totalFiles,
-      onProgress: (p) => {
-        const pct =
-          p.totalFiles > 0 ? Math.min(100, Math.round((p.appliedFiles / p.totalFiles) * 100)) : 0;
-        const msg = `병합 진행 ${p.appliedFiles}/${p.totalFiles} (${pct}%) · 제외 ${p.skippedFiles}`;
-        void emit('merge-apply', msg, {
-          mergeStep: 'copy',
-          appliedFiles: p.appliedFiles,
-          skippedFiles: p.skippedFiles,
-          totalFiles: p.totalFiles,
-        });
-      },
+      onProgress: (() => {
+        let lastEmitAt = 0;
+        return async (p: {
+          appliedFiles: number;
+          skippedFiles: number;
+          totalFiles: number;
+        }) => {
+          const now = Date.now();
+          const done = p.appliedFiles + p.skippedFiles;
+          const isLast = p.totalFiles > 0 && done >= p.totalFiles;
+          if (!isLast && now - lastEmitAt < 400) return;
+          lastEmitAt = now;
+          const pct =
+            p.totalFiles > 0 ? Math.min(100, Math.round((p.appliedFiles / p.totalFiles) * 100)) : 0;
+          const msg = `병합 진행 ${p.appliedFiles}/${p.totalFiles} (${pct}%) · 제외 ${p.skippedFiles}`;
+          await emit('merge-apply', msg, {
+            mergeStep: 'copy',
+            appliedFiles: p.appliedFiles,
+            skippedFiles: p.skippedFiles,
+            totalFiles: p.totalFiles,
+          });
+        };
+      })(),
     });
     await emit(
       'merge-apply',
@@ -627,7 +996,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const stopMessage = stopResult.message;
     let startMessage: string | undefined;
     let started = false;
-    /** 병합 후 재시작 여부와 관계없이 기동. run.ts ensure는 이중 안전망 */
+    /** 병합 후 재시작 여부와 관계없이 기동 시도. 응답 판정 실패해도 소스 롤백하지 않음(경고만). */
     await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
     let startResult = await ensureGeoServerRunning({ forceRestart: false });
     if (!startResult.success) {
@@ -642,7 +1011,12 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         : startResult.action === 'restarted'
           ? '기동 OK(재기동·응답)'
           : '기동 OK(응답)'
-      : `기동 실패: ${startResult.error ?? 'unknown'}`;
+      : `기동 경고(응답 미확인): ${startResult.error ?? 'unknown'}`;
+    if (!startResult.success) {
+      console.warn(
+        `[SourceCodeUpload] GeoServer ${startMessage} — 소스 적용은 계속(롤백하지 않음). 프로세스·8080·GEOSERVER_URL 확인 권장`
+      );
+    }
     await emit('geoserver-start', `GeoServer ${startMessage}`);
 
     const geoserver: GeoServerApplyStep = {
@@ -687,89 +1061,43 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       }
     }
 
-    /** 사전 빌드 완료분 — 재기동 후행 install/build 없음. GeoServer는 위에서 기동·run.ts ensure */
-    const runNpmInstallBefore = false;
-    const runBuildAfterExit = false;
+    /** 사전 빌드 완료분 — 재기동은 스키마 모달 [진행] 이후로 미룸 */
 
-    await writeRestartSignal(signalFile, {
-      at: new Date().toISOString(),
+    /** 성공 확정 전 잔여 정리는 confirm 시 수행 (중단 시 롤백과 충돌 방지) */
+
+    if (!rollback) {
+      throw new Error('적용 직전 백업 스냅샷이 없어 스키마 안내를 진행할 수 없습니다.');
+    }
+
+    const pendingId = await registerPendingSchemaConfirm({
       requestedBy,
+      snapshot: rollback,
+      workspaceRoot,
+      includeNodeModules,
+      doRestart,
+      restartMode,
+      signalFile,
+      mergeRelPaths,
       version,
       fileName,
-      clientIp: ipTrim ?? null,
-      restartRequested: doRestart,
-      restartMode,
-      includeNodeModules,
-      runNpmInstallBefore,
-      runBuild: runBuildAfterExit,
-      /** 재기동 시 run.ts ensure 이중 확인(적용 경로에서 이미 기동해도 OK) */
-      startGeoServerAfter: doRestart,
-      historyPending: doRestart,
-      historyPayload: doRestart
-        ? {
-            mode: restartMode,
-            command: bootCommand,
-            version: historyVersion,
-            appliedFiles: copyResult.appliedFiles,
-            skippedFiles: copyResult.skippedFiles,
-            netLabel,
-            geoserverMsg: geoserver.message,
-            message: successMessage,
-            option: historyOption,
-          }
-        : null,
-      /** 이전 재기동이 남긴 소비 플래그 — 매 적용마다 초기화해야 2회차부터 스킵되지 않음 */
-      launcherConsumed: false,
-      launcherConsumedAt: null,
-      source: 'versionManagerClientRelay',
+      clientIp: ipTrim,
+      historyVersion,
+      historyOption,
+      successMessage,
+      bootCommand,
+      appliedFiles: copyResult.appliedFiles,
+      skippedFiles: copyResult.skippedFiles,
+      geoserverMessage: geoserver.message,
+      netLabel,
     });
-
-    /** 재시작 없음: 즉시 INSERT. 재시작 있음: 부팅 시 flush (exit 직전 INSERT 유실 방지) */
-    if (!doRestart) {
-      await recordVersionHistory({
-        historyType: 'apply_latest',
-        status: 'success',
-        message: successMessage,
-        option: historyOption,
-        version: historyVersion,
-        ip: ipTrim,
-      });
-    }
-
-    /** 성공 확정 후 잔여 정리 — 실패해도 롤백하지 않음(적용 직전 파일 보존 위해) */
-    try {
-      await emit('merge-apply', '잔여 소스 정리 중...', { mergeStep: 'cleanup' });
-      const orphanRemoved = await cleanupOrphanManagedFiles({
-        workspaceRoot,
-        mergeRelSet: new Set(mergeRelPaths),
-        includeNodeModules,
-        onLog: (m) => {
-          void emit('merge-apply', m, { mergeStep: 'cleanup' });
-        },
-      });
-      await emit('merge-apply', `잔여 소스 정리 완료 (${orphanRemoved}건)`, {
-        mergeStep: 'cleanup',
-      });
-    } catch (orphanErr: unknown) {
-      const om = orphanErr instanceof Error ? orphanErr.message : String(orphanErr);
-      await emit('merge-apply', `잔여 소스 정리 경고: ${om}`);
-    }
-
-    await removeApplyRollbackSnapshot(rollback);
     rollback = null;
 
-    /** 앱 종료 단계는 응답 flush 전에 완료로 보고 (이후 process.exit·런처 종료) */
-    if (doRestart) {
-      await emit(
-        'app-stop',
-        restartMode === 'exit'
-          ? '앱 종료 단계 완료 · process.exit 예약'
-          : '앱 종료 단계 완료 · 런처가 Next 종료 예정'
-      );
-    }
-
-    const restartResult = scheduleRestart(restartMode);
-    await emit('app-stop', `적용 완료 restart=${restartResult.message}`);
+    await emit(
+      'schema-wait',
+      doRestart
+        ? '스키마 변경 안내 대기 중 — 확인 후 재기동'
+        : '스키마 변경 안내 대기 중 — 확인 후 적용 확정'
+    );
 
     return {
       version,
@@ -783,17 +1111,20 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       restart: {
         requested: doRestart,
         mode: restartMode,
-        commandConfigured: restartResult.commandConfigured,
-        scheduled: restartResult.scheduled,
+        commandConfigured: isRestartCommandConfigured(),
+        scheduled: false,
         signalFile: normalizeSlashes(path.relative(workspaceRoot, signalFile)),
-        message: restartResult.message,
+        message: '스키마 안내 확인 후 재기동',
       },
+      pendingSchemaConfirm: true,
+      pendingId,
     };
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     console.error(`[SourceCodeUpload] 적용 실패:`, raw);
 
     let failMessage = raw;
+    let historyRecorded = false;
     if (rollback) {
       try {
         failMessage = await runRollback(raw);
@@ -801,25 +1132,36 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         failMessage = `${raw} / 롤백 실패: ${
           rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
         }`;
+        console.error(`[SourceCodeUpload] 롤백 자체 실패:`, failMessage);
         await removeApplyRollbackSnapshot(rollback).catch(() => {});
         rollback = null;
       }
       console.error(`[SourceCodeUpload] ${failMessage}`);
-      await recordVersionHistory({
+      const hist = await recordVersionHistory({
         historyType: 'apply_latest',
         status: 'fail',
         message: failMessage,
         option: applyLatestHistoryOptions(includeNodeModules, restartMode),
         version,
         ip: clientIp?.trim() || undefined,
-      }).catch(() => {});
+      }).catch((histErr) => {
+        console.error('[SourceCodeUpload] 실패 이력 기록 실패', histErr);
+        return { ok: false as const };
+      });
+      historyRecorded = hist?.ok === true;
+    } else {
+      console.error(`[SourceCodeUpload] 적용 실패 (롤백 없음): ${failMessage}`);
     }
 
     /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
     if (!geoStartedOnSuccessPath) {
-      await ensureGeoServerRunning({ forceRestart: false }).catch(() => {});
+      await ensureGeoServerRunning({ forceRestart: false }).catch((e) => {
+        console.error('[SourceCodeUpload] 실패 후 GeoServer ensure 실패', e);
+      });
     }
-    throw new Error(failMessage);
+    const outErr = new Error(failMessage) as Error & { historyRecorded?: boolean };
+    outErr.historyRecorded = historyRecorded;
+    throw outErr;
   } finally {
     await removeApplyRollbackSnapshot(rollback);
     await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});

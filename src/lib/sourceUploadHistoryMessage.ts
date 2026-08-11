@@ -16,7 +16,10 @@ export type UploadHistoryStageId =
 
 export type UploadHistoryStageReport = {
   id: UploadHistoryStageId | string;
+  /** false = 실패. 경고만 있는 단계는 ok:true + warn:true */
   ok: boolean;
+  /** 성공/실패와 별도 — 이력 status가 아니라 본문 `[경고]` 줄용 */
+  warn?: boolean;
   detail?: string;
   error?: string;
 };
@@ -45,14 +48,29 @@ const STAGE_ORDER: UploadHistoryStageId[] = [
   'finalize',
 ];
 
-function stageLine(id: string, ok: boolean, detail?: string, error?: string): string {
+function stageLine(
+  id: string,
+  ok: boolean,
+  detail?: string,
+  error?: string,
+  warn?: boolean
+): string {
   const label = STAGE_LABEL[id] ?? id;
+  if (warn) {
+    return `[경고] ${label}: ${error ?? detail ?? '확인 필요'}`;
+  }
   const body = ok ? detail ?? '완료' : error ?? detail ?? '실패';
   return `[${ok ? '성공' : '실패'}] ${label}: ${body}`;
 }
 
-export function buildStageHistoryMessage(id: string, ok: boolean, detail?: string, error?: string): string {
-  return stageLine(id, ok, detail, error);
+export function buildStageHistoryMessage(
+  id: string,
+  ok: boolean,
+  detail?: string,
+  error?: string,
+  warn?: boolean
+): string {
+  return stageLine(id, ok, detail, error, warn);
 }
 
 function mergeStageMap(
@@ -91,6 +109,8 @@ export function listUploadHistoryStageReportsFromUi(
     if (!s) continue;
     if (s.state === 'done') {
       out.push({ id, ok: true, detail: s.detail });
+    } else if (s.state === 'warn') {
+      out.push({ id, ok: true, warn: true, detail: s.detail, error: s.detail });
     } else if (s.state === 'error') {
       out.push({ id, ok: false, error: s.detail ?? stopError, detail: s.detail });
       break;
@@ -139,7 +159,7 @@ export function formatUploadStagesHistoryMessage(
       : listUploadHistoryStageReports(localStagesOrStages, remoteStages, extra);
   const lines: string[] = [];
   for (const s of stages) {
-    lines.push(stageLine(s.id, s.ok, s.detail, s.error));
+    lines.push(stageLine(s.id, s.ok, s.detail, s.error, s.warn));
   }
   return lines.join('\n');
 }
@@ -160,9 +180,26 @@ export function resolveUploadOverallStatus(
       ? localStagesOrStages
       : listUploadHistoryStageReports(localStagesOrStages, remoteStages, extra);
   for (const s of stages) {
-    if (!s.ok) return 'fail';
+    /** 경고(warn)는 실패로 보지 않음 */
+    if (!s.ok && !s.warn) return 'fail';
   }
   return 'success';
+}
+
+/** 성공/실패 이력 본문에 경고 줄 추가 (별도 status 없음) */
+export function appendHistoryWarnings(body: string, warnings: string[]): string {
+  const base = body.trim();
+  const lines = warnings.map((w) => w.trim()).filter(Boolean).map((w) => (w.startsWith('[경고]') ? w : `[경고] ${w}`));
+  if (lines.length === 0) return base;
+  return base ? `${base}\n${lines.join('\n')}` : lines.join('\n');
+}
+
+export function formatDbSchemaMismatchWarning(diffCount: number): string {
+  return `스키마 SQL ↔ DB 비교: 불일치 ${diffCount}건 — 사용자 확인 후 진행`;
+}
+
+export function formatBuildCheckSkippedWarning(): string {
+  return '빌드 검사 미실시 — 사용자 확인 후 업로드';
 }
 
 export function buildUploadHistoryPrefix(includeNodeModules?: boolean): string {
@@ -204,10 +241,12 @@ export function buildSourceUploadSuccessBody(
   ok: number,
   skipped: number,
   fail: number,
-  extra?: string
+  extra?: string,
+  warnings?: string[]
 ): string {
   const summary = `최종 집계 (성공 ${ok} / 제외 ${skipped} / 실패 ${fail})`;
-  return extra ? `${summary}, ${extra}` : summary;
+  const body = extra ? `${summary}, ${extra}` : summary;
+  return appendHistoryWarnings(body, warnings ?? []);
 }
 
 export function buildSourceUploadFailBody(reason: string): string {

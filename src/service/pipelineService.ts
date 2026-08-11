@@ -11,13 +11,44 @@ import { broadcastPipelineStep } from '@/lib/pipelineEvents';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
-/** pdal/gdal이 설치된 Python. 미설정 시 'python'. 항상 프로젝트 루트(process.cwd()) 기준 상대경로로 해석 */
+/**
+ * pdal/gdal Python 실행 파일.
+ * Turbopack이 spawn('python')·cwd=python/ 을 프로젝트 전체로 추적하지 않도록
+ * env 인터프리터 절대경로를 우선하고, 작업 디렉터리는 프로젝트 루트를 쓴다.
+ */
 function getPythonBin(): string {
-  const raw = process.env.GGNR_PIPELINE_PYTHON || 'python';
-  if (!raw || raw === 'python') return raw;
-  return path.resolve(process.cwd(), raw);
+  const raw = process.env.GGNR_PIPELINE_PYTHON?.trim();
+  if (raw && raw !== 'python') {
+    return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw);
+  }
+  const envPy =
+    process.platform === 'win32'
+      ? path.join(process.cwd(), 'python', 'env', 'python.exe')
+      : path.join(process.cwd(), 'python', 'env', 'bin', 'python');
+  if (fs.existsSync(envPy)) return envPy;
+  return process.platform === 'win32' ? 'python.exe' : 'python3';
 }
-const PYTHON_BIN = getPythonBin();
+
+/** -m pipeline.cli 용: cwd=프로젝트 루트, PYTHONPATH=python/ */
+function pythonSpawnEnv(): NodeJS.ProcessEnv {
+  const pythonPath = path.join(process.cwd(), 'python');
+  const prev = process.env.PYTHONPATH ?? '';
+  return {
+    ...process.env,
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1',
+    PYTHONPATH: prev ? `${pythonPath}${path.delimiter}${prev}` : pythonPath,
+  };
+}
+
+function spawnPipelinePython(args: string[]) {
+  return spawn(getPythonBin(), args, {
+    cwd: process.cwd(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    env: pythonSpawnEnv(),
+  });
+}
 
 const ENV_SETUP_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per step
 
@@ -61,8 +92,7 @@ function resolveCondaExe(): { exe: string } | { error: string } {
   };
 }
 
-/** Windows에서 한글 등 유니코드 경로/메시지 처리 시 코드 페이지 오류 방지 (Python UTF-8 모드) */
-const PYTHON_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
+/** Windows에서 한글 등 유니코드 경로/메시지 처리 시 코드 페이지 오류 방지 (Python UTF-8 모드) — conda setup 등 */
 
 function runCommand(
   cmd: string,
@@ -159,8 +189,6 @@ function pntsOutputDir(baseDir: string, lasRelativePath: string): string {
 export function runLasPipeline(params: { lasRelativePath: string; only?: 'ecef' | 'pnts' }): void {
   const { lasRelativePath, only: onlyStep } = params;
   const baseDir = GGNR_DATA_DIR;
-  const projectRoot = path.resolve(process.cwd());
-  const pythonDir = path.join(projectRoot, 'python');
   const sourceFile = path.basename(lasRelativePath);
   let handled = false;
 
@@ -192,12 +220,7 @@ export function runLasPipeline(params: { lasRelativePath: string; only?: 'ecef' 
   const callbackUrl = (process.env.PIPELINE_CALLBACK_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
   const args = ['-m', 'pipeline.cli', '--base-dir', baseDir, '--input-file', lasRelativePath, '--callback-url', callbackUrl];
   if (onlyStep) args.push('--only', onlyStep);
-  const child = spawn(PYTHON_BIN, args, {
-    cwd: pythonDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-    env: PYTHON_ENV,
-  });
+  const child = spawnPipelinePython(args);
 
   let stdout = '';
   let stdoutLineBuf = '';
@@ -292,15 +315,17 @@ export type FixLasTo4326Result = {
 export async function fixLasTo4326(params: { lasRelativePath: string }): Promise<FixLasTo4326Result> {
   const { lasRelativePath } = params;
   const baseDir = GGNR_DATA_DIR;
-  const projectRoot = path.resolve(process.cwd());
-  const pythonDir = path.join(projectRoot, 'python');
 
   return new Promise((resolve) => {
-    const child = spawn(
-      PYTHON_BIN,
-      ['-m', 'pipeline.cli', '--base-dir', baseDir, '--input-file', lasRelativePath, '--fix-las-to-4326'],
-      { cwd: pythonDir, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: PYTHON_ENV }
-    );
+    const child = spawnPipelinePython([
+      '-m',
+      'pipeline.cli',
+      '--base-dir',
+      baseDir,
+      '--input-file',
+      lasRelativePath,
+      '--fix-las-to-4326',
+    ]);
 
     let stdout = '';
     let stderr = '';
@@ -352,15 +377,17 @@ export async function fixLasTo4326(params: { lasRelativePath: string }): Promise
 export async function fixLasTo5181(params: { lasRelativePath: string }): Promise<FixLasTo4326Result> {
   const { lasRelativePath } = params;
   const baseDir = GGNR_DATA_DIR;
-  const projectRoot = path.resolve(process.cwd());
-  const pythonDir = path.join(projectRoot, 'python');
 
   return new Promise((resolve) => {
-    const child = spawn(
-      PYTHON_BIN,
-      ['-m', 'pipeline.cli', '--base-dir', baseDir, '--input-file', lasRelativePath, '--fix-las-to-5181'],
-      { cwd: pythonDir, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: PYTHON_ENV }
-    );
+    const child = spawnPipelinePython([
+      '-m',
+      'pipeline.cli',
+      '--base-dir',
+      baseDir,
+      '--input-file',
+      lasRelativePath,
+      '--fix-las-to-5181',
+    ]);
 
     let stdout = '';
     let stderr = '';
@@ -412,15 +439,17 @@ export async function fixLasTo5181(params: { lasRelativePath: string }): Promise
 export async function fixLasToEcef(params: { lasRelativePath: string }): Promise<FixLasTo4326Result> {
   const { lasRelativePath } = params;
   const baseDir = GGNR_DATA_DIR;
-  const projectRoot = path.resolve(process.cwd());
-  const pythonDir = path.join(projectRoot, 'python');
 
   return new Promise((resolve) => {
-    const child = spawn(
-      PYTHON_BIN,
-      ['-m', 'pipeline.cli', '--base-dir', baseDir, '--input-file', lasRelativePath, '--fix-las-to-ecef'],
-      { cwd: pythonDir, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: PYTHON_ENV }
-    );
+    const child = spawnPipelinePython([
+      '-m',
+      'pipeline.cli',
+      '--base-dir',
+      baseDir,
+      '--input-file',
+      lasRelativePath,
+      '--fix-las-to-ecef',
+    ]);
 
     let stdout = '';
     let stderr = '';

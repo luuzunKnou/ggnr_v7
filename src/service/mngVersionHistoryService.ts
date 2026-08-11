@@ -80,7 +80,7 @@ export { historyTypeLabel };
 
 export async function recordVersionHistory(params: {
   historyType: VersionHistoryType;
-  status: 'success' | 'fail';
+  status: 'success' | 'fail' | 'cancel';
   message?: string;
   option?: string[] | null;
   memo?: string | null;

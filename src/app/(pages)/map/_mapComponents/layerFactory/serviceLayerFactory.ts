@@ -300,7 +300,7 @@ export function useServiceLayerSync(
     params.LAYERS = layersParam;
     params.STYLES = stylesParam;
     params.CQL_FILTER = cqlParam;
-    params.TRANSPARENT = true;
+    params.TRANSPARENT = 'true';
     params.EXCEPTIONS = 'application/vnd.ogc.se_xml';
     serviceLayer.setVisible(true);
     source.changed();
