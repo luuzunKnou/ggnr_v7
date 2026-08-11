@@ -7,6 +7,7 @@ import {
   sortLayerNamesForWmsStack,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
+import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
 
 const WORKSPACE = 'ggnr';
 
@@ -258,10 +259,11 @@ export function refreshServiceWmsLayer(map: OLMap | null | undefined): void {
 }
 
 /**
- * visibleLayerNames / layerFilterRows / spatialFilterWkt / serviceWmsCqlByLayer 변경 시
- * serviceLayer WMS 파라미터를 자동 동기화하는 훅.
+ * visibleLayerNames / layerFilterRows / spatialFilterWkt / serviceWmsCqlByLayer /
+ * occupationDeptPanelOpen 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.
  * serviceWmsCqlByLayer는 레이어별 추가 속성 CQL(기본계획도 선택 하천 등).
+ * occupationDeptPanelOpen이면 점용 부서업무 레이어에 울진 팔레트 스타일을 적용.
  * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점(아래→위)으로 맞춘다.
  */
 export function useServiceLayerSync(
@@ -275,6 +277,8 @@ export function useServiceLayerSync(
   hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
   /** 레이어별 추가 CQL (define_table_name → CQL). null이면 없음 */
   serviceWmsCqlByLayer?: Record<string, string> | null,
+  /** 공통 점용 부서업무 패널 열림 — 울진과 동일 팔레트 스타일 사용 */
+  occupationDeptPanelOpen?: boolean,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
@@ -283,6 +287,7 @@ export function useServiceLayerSync(
   const extraCqlRef = useRef(serviceWmsCqlByLayer);
   extraCqlRef.current = serviceWmsCqlByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
+  const deptOpen = occupationDeptPanelOpen === true;
 
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -322,12 +327,13 @@ export function useServiceLayerSync(
     }
 
     const rawNames = Array.from(visibleLayerNames);
-    const names =
-      layerGeometryTypes && Object.keys(layerGeometryTypes).length > 0
-        ? sortLayerNamesForWmsStack(rawNames, layerGeometryTypes)
-        : rawNames;
+    // 기하 타입 없어도 강제 하단(시설물 등) 정렬은 항상 적용
+    const names = sortLayerNamesForWmsStack(rawNames, layerGeometryTypes ?? {});
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    const stylesParam = names.join(',');
+    // 부서업무 점용: 울진 usage_data_as* 스타일 재사용 / 데이터조회: 테이블명(기본 SLD)
+    const stylesParam = names
+      .map((n) => resolveOccupationDeptWmsStyleName(n, deptOpen) ?? n)
+      .join(',');
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
@@ -380,6 +386,7 @@ export function useServiceLayerSync(
       });
     }
     serviceLayer.setVisible(true);
+    source.changed();
   }, [
     map,
     mapReady,
@@ -388,6 +395,7 @@ export function useServiceLayerSync(
     layerGeometryTypes,
     hiddenFeaturesByLayer,
     serviceWmsCqlByLayer,
+    deptOpen,
   ]);
 }
 

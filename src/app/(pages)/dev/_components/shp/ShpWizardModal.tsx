@@ -25,7 +25,11 @@ import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/land
 import { LayerAttrManager } from '../LayerAttrManager';
 import * as XLSX from 'xlsx';
 
-const KEY_FIELD_ERROR_MARKERS = ['key 필드가 설정되어 있지 않습니다', '테이블에 존재하지 않습니다'];
+const KEY_FIELD_ERROR_MARKERS = [
+  'key 필드가 설정되어 있지 않습니다',
+  '테이블에 존재하지 않습니다',
+  '에 빈 값이 있습니다',
+];
 function isKeyFieldFixableError(error?: string): boolean {
   return !!error && KEY_FIELD_ERROR_MARKERS.some((marker) => error.includes(marker));
 }
@@ -1329,10 +1333,10 @@ export function ShpWizardModal({
       const d = res?.data ?? res;
       const batchResults: Array<{
         file: string;
-        table: { success: boolean; error?: string };
-        layer: { success: boolean; error?: string };
-        style: { success: boolean; error?: string };
-        define: { success: boolean; error?: string };
+        table: { success: boolean; error?: string; skipped?: boolean };
+        layer: { success: boolean; error?: string; skipped?: boolean };
+        style: { success: boolean; error?: string; skipped?: boolean };
+        define: { success: boolean; error?: string; skipped?: boolean };
       }> = d?.results ?? [];
 
       const pathSet = new Set(statusRows.map((r) => r.pathOrResult.replace(/\\/g, '/')));
@@ -1344,23 +1348,39 @@ export function ShpWizardModal({
       }
       setStatusRows(rows);
 
+      if (batchResults.length === 0 && statusRows.length > 0) {
+        setLayersError(
+          '후처리 결과가 비어 있습니다. 파일 경로·상태를 확인한 뒤 「시작」을 다시 눌러 주세요.'
+        );
+        return;
+      }
+
       const needAfter = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
-      const allReady = needAfter.length === 0;
 
       const failed = batchResults.filter(
         (r) => !r.table.success || !r.layer.success || !r.style.success || !r.define.success
       );
       if (failed.length > 0) {
+        const stepFailMsg = (
+          label: string,
+          step: { success: boolean; error?: string; skipped?: boolean }
+        ) => {
+          if (step.success) return null;
+          if (step.error?.trim()) return `${label}: ${step.error.trim()}`;
+          if (step.skipped) return `${label}: 건너뜀`;
+          return `${label}: 실패(상세 없음)`;
+        };
         const detail = failed
           .slice(0, 5)
           .map((r) => {
-            const parts: string[] = [];
-            if (!r.table.success && r.table.error) parts.push(`Table: ${r.table.error}`);
-            if (!r.layer.success && r.layer.error) parts.push(`Layer: ${r.layer.error}`);
-            if (!r.style.success && r.style.error) parts.push(`Style: ${r.style.error}`);
-            if (!r.define.success && r.define.error) parts.push(`Define: ${r.define.error}`);
+            const parts = [
+              stepFailMsg('Table', r.table),
+              stepFailMsg('Layer', r.layer),
+              stepFailMsg('Style', r.style),
+              stepFailMsg('Define', r.define),
+            ].filter(Boolean) as string[];
             const name = r.file?.replace(/^.*[/\\]/, '') || '(파일)';
-            const msg = parts[0]?.replace(/\s+/g, ' ').slice(0, 160) || '실패';
+            const msg = parts.join(' / ').replace(/\s+/g, ' ').slice(0, 220) || '실패';
             return `${name} — ${msg}`;
           })
           .join('\n');
@@ -1368,16 +1388,24 @@ export function ShpWizardModal({
         setLayersError(
           `${failed.length}개 파일의 Table·Layer·Style·Define 생성에 실패했습니다.\n${detail}${more}`
         );
+      } else if (needAfter.length > 0) {
+        const names = needAfter
+          .slice(0, 5)
+          .map((r) => {
+            const miss: string[] = [];
+            if (!r.table) miss.push('Table');
+            if (!r.layer) miss.push('Layer');
+            if (!r.style) miss.push('Style');
+            if (!r.define) miss.push('Define');
+            return `${r.sourceFile}(${miss.join(',')})`;
+          })
+          .join(', ');
+        const more = needAfter.length > 5 ? ` 외 ${needAfter.length - 5}개` : '';
+        setLayersError(
+          `생성 응답은 성공이었으나 상태가 갱신되지 않은 항목이 있습니다: ${names}${more}\nStyle이 계속 누락이면 GeoServer 스타일 카탈로그(xml)와 data_dir CSS를 확인하세요.`
+        );
       } else if (d?.error) {
         setLayersError(String(d.error));
-      } else {
-        const needAfter = rows.filter((r) => !r.table || !r.layer || !r.style || !r.define);
-        if (needAfter.length > 0) {
-          // 배치 성공으로 보이지만 상태 재조회 후 아직 누락이면 안내
-          setLayersError(
-            `생성 후 상태 확인: 아직 ${needAfter.length}개 파일에 Table·Layer·Style·Define 누락이 있습니다.`
-          );
-        }
       }
     } catch (e: unknown) {
       // #region agent log
@@ -1507,6 +1535,12 @@ export function ShpWizardModal({
           }
         }
 
+        if (layer.size === 0) {
+          markLayerCrsChecked(layer.name);
+          setLayersError((prev) => prev ?? `좌표계 자동 탐지 (${layer.name}): 미리보기할 도형이 없습니다.`);
+          continue;
+        }
+
         // 3순위: 후보 탐지만 먼저 실행(지도 미리보기는 확인 버튼 클릭 시에만 불러옴), 일치율 1순위로 자동 입력
         // conda run(Windows GDAL 실행 방식)이 임시 파일을 공유해서 동시 호출 시 충돌하므로 순차 실행
         try {
@@ -1517,6 +1551,11 @@ export function ShpWizardModal({
           });
           if (cancelled) return;
           const cd = candRes?.data ?? candRes;
+          if (cd?.emptyShp) {
+            markLayerCrsChecked(layer.name);
+            setLayersError((prev) => prev ?? `좌표계 자동 탐지 (${layer.name}): 미리보기할 도형이 없습니다.`);
+            continue;
+          }
           const candidates: ShpCrsCandidate[] = cd?.success && Array.isArray(cd.candidates) ? cd.candidates : [];
           const reference5181: ShpCrsCandidate | undefined = cd?.reference5181;
           setCrsCandidatesByFile((prev) => ({ ...prev, [pathOrResult]: { candidates, reference5181 } }));
@@ -1538,8 +1577,14 @@ export function ShpWizardModal({
   }, [readyPath, layers.length, folderEpsg, schemaChecking, setLayerEpsg, markLayerCrsChecked]);
 
   // 행의 "확인" 버튼: 캐시된 후보(없으면 재조회) + 미리보기 도형을 불러와 모달로 확인
-  const openCrsModalForFile = useCallback(async (pathOrResult: string, currentEpsg: number | null) => {
+  const openCrsModalForFile = useCallback(async (pathOrResult: string, currentEpsg: number | null, fileSize?: number | null) => {
     if (crsModalLoadingPath) return;
+    const fileName = fileNameOfPath(pathOrResult);
+    if (fileSize === 0) {
+      markLayerCrsChecked(fileName);
+      setLayersError(`좌표계 확인 (${fileName}): 미리보기할 도형이 없습니다.`);
+      return;
+    }
     setCrsModalLoadingPath(pathOrResult);
     setCrsModalTarget(pathOrResult);
     setCrsModalCurrentEpsg(currentEpsg);
@@ -1553,8 +1598,13 @@ export function ShpWizardModal({
           params: { pathOrResult },
         });
         const cd = candRes?.data ?? candRes;
+        if (cd?.emptyShp) {
+          markLayerCrsChecked(fileName);
+          setLayersError(`좌표계 확인 (${fileName}): 미리보기할 도형이 없습니다.`);
+          return;
+        }
         if (cd && cd.success === false) {
-          setLayersError(`좌표계 확인 (${fileNameOfPath(pathOrResult)}): 후보 조회 실패 - ${cd.error ?? '알 수 없는 오류'}`);
+          setLayersError(`좌표계 확인 (${fileName}): 후보 조회 실패 - ${cd.error ?? '알 수 없는 오류'}`);
           return;
         }
         result = {
@@ -1569,9 +1619,14 @@ export function ShpWizardModal({
         params: { pathOrResult, maxFeatures: 2000 },
       });
       const gd = geoRes?.data ?? geoRes;
+      if (gd?.emptyShp) {
+        markLayerCrsChecked(fileName);
+        setLayersError(`좌표계 확인 (${fileName}): 미리보기할 도형이 없습니다.`);
+        return;
+      }
       const geojson = gd?.success && gd.geojson ? (gd.geojson as Record<string, unknown>) : null;
       if (!geojson) {
-        setLayersError(`좌표계 확인 (${fileNameOfPath(pathOrResult)}): 미리보기 도형 변환 실패 - ${gd?.error ?? '알 수 없는 오류'}`);
+        setLayersError(`좌표계 확인 (${fileName}): 미리보기 도형 변환 실패 - ${gd?.error ?? '알 수 없는 오류'}`);
         return;
       }
       setCrsCandidates(result.candidates);
@@ -1579,11 +1634,11 @@ export function ShpWizardModal({
       setCrsCandidateGeojson(geojson);
       setCrsModalOpen(true);
     } catch (e: unknown) {
-      setLayersError(`좌표계 확인 중 오류 (${fileNameOfPath(pathOrResult)}): ${e instanceof Error ? e.message : String(e)}`);
+      setLayersError(`좌표계 확인 중 오류 (${fileName}): ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setCrsModalLoadingPath(null);
     }
-  }, [crsCandidatesByFile, crsModalLoadingPath]);
+  }, [crsCandidatesByFile, crsModalLoadingPath, markLayerCrsChecked]);
 
   const handleCrsConfirm = useCallback((epsg: number) => {
     if (crsModalTarget) setLayerEpsg(fileNameOfPath(crsModalTarget), epsg, 'candidate');
@@ -2513,11 +2568,12 @@ export function ShpWizardModal({
                                   {readyPath ? (
                                     <button
                                       type="button"
-                                      disabled={isBusy || crsModalLoadingPath != null}
-                                      onClick={() => void openCrsModalForFile(`${readyPath.replace(/\/$/, '')}/${row.name}`, row.epsg ?? null)}
+                                      disabled={isBusy || crsModalLoadingPath != null || row.size === 0}
+                                      title={row.size === 0 ? '미리보기할 도형이 없습니다' : undefined}
+                                      onClick={() => void openCrsModalForFile(`${readyPath.replace(/\/$/, '')}/${row.name}`, row.epsg ?? null, row.size)}
                                       className="shrink-0 text-[11px] text-blue-600 hover:underline disabled:pointer-events-none disabled:opacity-40 dark:text-blue-400"
                                     >
-                                      {crsModalLoadingPath === `${readyPath.replace(/\/$/, '')}/${row.name}` ? '확인 중…' : '확인'}
+                                      {crsModalLoadingPath === `${readyPath.replace(/\/$/, '')}/${row.name}` ? '확인 중…' : row.size === 0 ? '빈 파일' : '확인'}
                                     </button>
                                   ) : null}
                                 </div>

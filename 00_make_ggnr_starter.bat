@@ -6,8 +6,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: ggnr_start.bat 생성기 + (선택) 기동 검사 · nssm 등록 · 로그 창
 :: - 실행 위치 root = 이 bat이 있는 폴더
 :: - node PATH = where node 결과의 디렉터리
-:: - root에 node_modules 없으면 고지 후 npm install (Y/N)
-:: - ggnr_start.bat: .next\BUILD_ID 없으면 npm run build 후 start (폴더만 있는 불완전 빌드 포함)
+:: - package-lock.json 기준 npm ci 로 의존성 동기화 (Y/N, GGNR_START_NO_PAUSE=1 이면 자동)
+:: - 기동 검사: .next 삭제 → npm run build → BUILD_ID 확인 후 smoke ^(스모크는 기동만, 빌드는 한도 밖^)
+:: - ggnr_start.bat: node_modules·next 확인 후 .next\BUILD_ID 없으면 npm run build → start
 :: - 프로젝트명·환경 = 실행 시 입력
 :: - 생성 후 Y/N: 기동 검사 → nssm_install_ggnr.bat → open_ggnr_logs.bat
 :: =============================================================================
@@ -26,6 +27,7 @@ set "SMOKE_TIMEOUT_SEC=180"
 :: 더블클릭 창이 오류 직후 닫히지 않도록 ^(nssm·자동화는 GGNR_START_NO_PAUSE=1^)
 set "PAUSE_ON_FAIL=1"
 if /i "%GGNR_START_NO_PAUSE%"=="1" set "PAUSE_ON_FAIL=0"
+set "NPM_SYNC_DONE=0"
 
 echo.
 echo [00_make_ggnr_starter] root = %ROOT%
@@ -54,37 +56,30 @@ for %%I in ("%NODE_EXE%") do set "NODE_DIR=%%~dpI"
 if "%NODE_DIR:~-1%"=="\" set "NODE_DIR=%NODE_DIR:~0,-1%"
 
 echo [00_make_ggnr_starter] node.exe = %NODE_EXE%
+for /f "delims=" %%V in ('node -v 2^>nul') do echo [00_make_ggnr_starter] Node = %%V
 echo [00_make_ggnr_starter] PATH 추가 = %NODE_DIR%
 echo.
 
-if not exist "%ROOT%\node_modules\" (
-  echo [고지] root 에 node_modules 폴더가 없습니다.
-  echo         패키지가 없으면 기동·기동 검사가 실패할 수 있습니다.
-  echo         경로: %ROOT%\node_modules
+:: --- 의존성 동기화: node_modules 유무와 관계없이 lock 기준 재설치 권장 ---
+if /i "%GGNR_START_NO_PAUSE%"=="1" (
+  echo [진행] GGNR_START_NO_PAUSE=1 — npm ci ^(install^) 자동 실행
+  set "DO_NPM_SYNC=Y"
+) else (
+  echo [고지] 배포 안정을 위해 package-lock.json 기준 npm ci 를 권장합니다.
+  echo         기존 node_modules 가 있어도 복사본·lock 불일치면 Y 로 lock 과 맞추세요.
+  echo         폐쇄망일 경우 n을 입력하세요(npm install 불가)
   echo.
-  set /p "DO_NPM=npm install 을 실행할까요? (Y/N): "
-  if /i "!DO_NPM!"=="Y" (
-    echo.
-    echo [진행] cd /d "%ROOT%" ^& npm install
-    pushd "%ROOT%"
-    call npm install
-    set "NPM_EC=!errorlevel!"
-    popd
-    if not "!NPM_EC!"=="0" (
-      echo [오류] npm install 실패 ^(exit=!NPM_EC!^)
-      set "FAIL_EC=!NPM_EC!"
-      goto :fail_exit
-    )
-    if not exist "%ROOT%\node_modules\" (
-      echo [오류] npm install 후에도 node_modules 가 없습니다.
-      goto :fail_exit
-    )
-    echo [완료] npm install 완료.
-    echo.
-  ) else (
-    echo [건너뜀] npm install 을 하지 않습니다. 필요 시 root 에서 직접 실행하세요.
-    echo.
-  )
+  set /p "DO_NPM_SYNC=npm ci ^(또는 install^) 로 의존성 동기화할까요? (Y/N): "
+)
+if /i "!DO_NPM_SYNC!"=="Y" (
+  call :run_npm_sync
+  if errorlevel 1 goto :fail_exit
+  set "NPM_SYNC_DONE=1"
+  echo.
+) else (
+  echo [건너뜀] 의존성 동기화를 하지 않습니다.
+  echo         기동 검사 시 node_modules\next 가 없으면 실패합니다. 필요 시 root 에서 npm ci 를 실행하세요.
+  echo.
 )
 
 set /p "PROJECT_NAME=프로젝트명 (GGNR_PROJECT): "
@@ -153,6 +148,15 @@ if "!SKIP_WRITE!"=="0" (
   echo :: [프로젝트 설정]
   echo set "GGNR_PROJECT=%PROJECT_NAME%"
   echo set "GGNR_ENV=%ENV_NAME%"
+  echo.
+  echo :: [의존성] next 없으면 빌드 중단 — 00_make_ggnr_starter 에서 npm ci 권장
+  echo if not exist "node_modules\.bin\next.cmd" ^(
+  echo   if not exist "node_modules\next\package.json" ^(
+  echo     echo [오류] node_modules 가 없거나 next 가 설치되지 않았습니다.
+  echo     echo         root 에서 npm ci 또는 npm install 실행 후 다시 실행하세요.
+  echo     goto build_fail
+  echo   ^)
+  echo ^)
   echo.
   echo :: [빌드] .next\BUILD_ID 없으면 next build 선행
   echo :: ^(^) else 블록 안 %%ERRORLEVEL%% 은 파싱 시 비어 오판되므로 if errorlevel / goto 사용
@@ -244,6 +248,41 @@ if errorlevel 1 (
 )
 echo [확인] 관리자 권한으로 실행 중입니다.
 
+if not exist "%ROOT%\node_modules\next\package.json" (
+  echo [오류] node_modules 가 없거나 next 가 설치되지 않았습니다.
+  echo         의존성 동기화를 Y 로 다시 실행하거나, root 에서 npm ci 를 실행한 뒤 기동 검사를 진행하세요.
+  goto :fail_exit
+)
+echo.
+
+echo [1/3 준비] 기동 검사용 .next 초기화 후 npm run build ^(스모크 한도 밖^)...
+if exist "%ROOT%\.next\" (
+  rmdir /s /q "%ROOT%\.next" 2>nul
+  if exist "%ROOT%\.next\" (
+    echo [오류] .next 폴더를 삭제하지 못했습니다. 다른 프로세스가 사용 중인지 확인하세요.
+    goto :fail_exit
+  )
+  echo       .next 삭제 완료.
+) else (
+  echo       .next 없음.
+)
+echo [1/3 준비] npm run build 실행...
+pushd "%ROOT%"
+call npm run build
+set "BUILD_EC=!errorlevel!"
+popd
+if not "!BUILD_EC!"=="0" (
+  echo [오류] npm run build 실패 ^(exit=!BUILD_EC!^) — 기동 검사를 하지 않습니다.
+  set "FAIL_EC=!BUILD_EC!"
+  goto :fail_exit
+)
+if not exist "%ROOT%\.next\BUILD_ID" (
+  echo [오류] npm run build 후 .next\BUILD_ID 가 없습니다 — 기동 검사를 하지 않습니다.
+  goto :fail_exit
+)
+echo [완료] npm run build 완료 ^(.next\BUILD_ID 확인^). 스모크는 빌드 생략 후 기동만 검증합니다.
+echo.
+
 if not exist "%SMOKE_PS1%" (
   echo [오류] 없음: %SMOKE_PS1%
   goto :fail_exit
@@ -265,6 +304,7 @@ if not exist "%LOGS_BAT%" (
 echo.
 echo [1/3] ggnr_start.bat 기동 검사 ^(포트 %SMOKE_PORT%, 최대 %SMOKE_TIMEOUT_SEC%초^)...
 echo       주의: 같은 포트에서 이미 npm run dev/start 가 돌면 실패할 수 있습니다.
+echo       빌드는 위에서 완료됨 — 스모크는 빌드 생략 후 GeoServer·Next 기동만 검증합니다.
 echo       Next 포트는 GeoServer 설정^(최대 ~120초^) 이후에 열립니다. 그동안 포트=False 가 정상일 수 있습니다.
 echo       진행 로그는 아래 [smoke] 줄로 표시됩니다 ^(약 5초마다^).
 echo       취소^([Ctrl]+[C]^) 시 백그라운드 Next·GeoServer 도 정리합니다.
@@ -340,3 +380,28 @@ if "!PAUSE_ON_FAIL!"=="1" (
   pause >nul
 )
 exit /b !FAIL_EC!
+
+:: package-lock.json 기준 npm ci ^(없으면 npm install^). exit /b 로 FAIL_EC 반환.
+:run_npm_sync
+pushd "%ROOT%"
+if exist "package-lock.json" (
+  echo [진행] npm ci ^(package-lock.json 기준, node_modules 재생성^)...
+  call npm ci
+) else (
+  echo [경고] package-lock.json 없음 — npm install 로 대체합니다.
+  call npm install
+)
+set "NPM_EC=!errorlevel!"
+popd
+if not "!NPM_EC!"=="0" (
+  echo [오류] 의존성 동기화 실패 ^(exit=!NPM_EC!^)
+  set "FAIL_EC=!NPM_EC!"
+  exit /b !NPM_EC!
+)
+if not exist "%ROOT%\node_modules\next\package.json" (
+  echo [오류] node_modules 에 next 가 없습니다. package.json·package-lock.json 을 확인하세요.
+  set "FAIL_EC=1"
+  exit /b 1
+)
+echo [완료] 의존성 동기화 완료.
+exit /b 0

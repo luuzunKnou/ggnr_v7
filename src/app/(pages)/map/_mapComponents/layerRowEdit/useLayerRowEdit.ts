@@ -150,10 +150,31 @@ export function useLayerRowEdit({
 
   useEffect(() => {
     if (isEditing && !prevEditingRef.current) {
-      const base = isCreateMode ? [] : [...initialParcels];
+      // DB 필지는 자동목록 — 수동(추가)만 showMapGeom:true. 그래야 도형수정 replaceAuto가 갱신됨
+      const base = isCreateMode
+        ? []
+        : initialParcels.map((p) => ({ ...p, showMapGeom: false as const }));
       setDraftParcels(base);
       if (base.length > 0) {
-        void resolveParcelGeoms(base).then(setDraftParcels);
+        void resolveParcelGeoms(base).then((resolved) => {
+          // 도형교차 자동목록이 먼저 반영된 경우 덮어쓰지 않고 주소별 geom만 병합
+          setDraftParcels((prev) => {
+            if (prev.length === 0) return prev;
+            const byKey = new Map(
+              resolved.map((r) => [String(r.address ?? "").toLowerCase(), r])
+            );
+            return prev.map((p) => {
+              const r = byKey.get(String(p.address ?? "").toLowerCase());
+              if (!r) return p;
+              return {
+                ...p,
+                pnu: r.pnu ?? p.pnu,
+                extent3857: r.extent3857 ?? p.extent3857,
+                geometry3857: r.geometry3857 ?? p.geometry3857,
+              };
+            });
+          });
+        });
       }
     }
     // 빈 배열을 매번 setState 하면 참조가 바뀌어 Maximum update depth 유발

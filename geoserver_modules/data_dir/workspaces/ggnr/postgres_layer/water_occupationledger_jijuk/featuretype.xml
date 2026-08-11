@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77aa</id>
+  <id>FeatureTypeInfoImpl-30757437:19fe9f3fc96:-76e1</id>
   <name>water_occupationledger_jijuk</name>
   <nativeName>water_occupationledger_jijuk</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>0.0</minx>
-    <maxx>-1.0</maxx>
-    <miny>0.0</miny>
-    <maxy>-1.0</maxy>
+    <minx>417815.71362903947</minx>
+    <maxx>418020.8255395056</maxx>
+    <miny>360339.3524219936</miny>
+    <maxy>360562.3491170713</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.84847767680762</minx>
-    <maxx>124.84848865053446</maxx>
-    <miny>33.47495973610326</miny>
-    <maxy>33.474968932506</maxy>
+    <minx>129.43781818572444</minx>
+    <maxx>129.4401754711762</maxx>
+    <miny>36.71660154899924</miny>
+    <maxy>36.718656229697515</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

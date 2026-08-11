@@ -7,6 +7,10 @@ import GeoJSON from "ol/format/GeoJSON";
 import Feature from "ol/Feature";
 import { Polygon } from "ol/geom";
 import { Style, Stroke, Fill } from "ol/style";
+import {
+  occupationFillRgba,
+  occupationStrokeRgba,
+} from "@/lib/occupationLayerStyle";
 import { useMapContext } from "../MapContext";
 import { getParcelExtent3857 } from "./layerRowParcelUtils";
 import type { LayerRowParcelHighlightVariant } from "./useLayerRowParcelHighlight";
@@ -14,12 +18,20 @@ import type { LayerRowParcelItem } from "./types";
 
 const DRAFT_PREVIEW_STYLES: Record<LayerRowParcelHighlightVariant, Style> = {
   blue: new Style({
-    stroke: new Stroke({ color: "rgba(29, 78, 216, 0.85)", width: 2 }),
-    fill: new Fill({ color: "rgba(29, 78, 216, 0.2)" }),
+    stroke: new Stroke({ color: occupationStrokeRgba("parcel", 0.9), width: 2 }),
+    fill: new Fill({ color: occupationFillRgba("parcel") }),
+  }),
+  red: new Style({
+    stroke: new Stroke({ color: occupationStrokeRgba("mgj", 0.9), width: 2 }),
+    fill: new Fill({ color: occupationFillRgba("mgj") }),
   }),
   yellow: new Style({
-    stroke: new Stroke({ color: "rgba(234, 179, 8, 0.9)", width: 2 }),
-    fill: new Fill({ color: "rgba(250, 204, 21, 0.28)" }),
+    stroke: new Stroke({ color: occupationStrokeRgba("facility", 0.9), width: 2 }),
+    fill: new Fill({ color: occupationFillRgba("facility") }),
+  }),
+  black: new Style({
+    stroke: new Stroke({ color: occupationStrokeRgba("mgj", 0.9), width: 2 }),
+    fill: new Fill({ color: occupationFillRgba("mgj") }),
   }),
 };
 

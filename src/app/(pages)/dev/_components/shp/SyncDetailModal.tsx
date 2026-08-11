@@ -134,7 +134,14 @@ function parseGeomType(g: unknown): string | null {
     obj = g as Record<string, unknown>;
   }
   const t = obj?.type;
-  return typeof t === 'string' ? t.toUpperCase() : null;
+  if (typeof t !== 'string' || !t.trim()) return null;
+  const trimmed = t.trim();
+  const upper = trimmed.toUpperCase();
+  // 무도형 자리표시(과거 GEOMETRY / 신규 «도형 없음»)
+  if (trimmed === '도형 없음' || upper === 'GEOMETRY') {
+    return '도형 없음';
+  }
+  return upper;
 }
 
 function normalizeGeomForDiff(g: unknown): unknown {

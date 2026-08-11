@@ -55,8 +55,18 @@ export function mergeDefineLayerShpTypesIntoGeometryMap(
 }
 
 /**
+ * 동일 기하 타입 안에서도 항상 맨 아래(먼저 그리기)에 깔 레이어.
+ * 예: 점용시설물은 점용·필지 WMS보다 아래에.
+ */
+const WMS_STACK_FORCE_BOTTOM = new Set(['usage_data_sisul_as']);
+
+function wmsStackForceBottomRank(name: string): number {
+  return WMS_STACK_FORCE_BOTTOM.has(String(name ?? '').trim().toLowerCase()) ? 0 : 1;
+}
+
+/**
  * GeoServer WMS LAYERS: 앞쪽이 먼저 그려져 바닥에 깔림.
- * Polygon → Line → Point 순으로 정렬한다.
+ * 강제 하단 → Polygon → Line → Point 순으로 정렬한다.
  */
 export function sortLayerNamesForWmsStack(
   names: string[],
@@ -64,6 +74,9 @@ export function sortLayerNamesForWmsStack(
 ): string[] {
   if (names.length <= 1) return names;
   return [...names].sort((a, b) => {
+    const fa = wmsStackForceBottomRank(a);
+    const fb = wmsStackForceBottomRank(b);
+    if (fa !== fb) return fa - fb;
     const ra = wmsLayerSortRank(types[a]);
     const rb = wmsLayerSortRank(types[b]);
     if (ra !== rb) return ra - rb;

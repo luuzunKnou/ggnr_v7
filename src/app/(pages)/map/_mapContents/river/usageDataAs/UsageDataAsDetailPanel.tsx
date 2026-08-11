@@ -27,10 +27,14 @@ import { UsageDataAsAddressList } from "./UsageDataAsAddressList";
 import { useLayerRowParcelHighlight, type LayerRowParcelHighlightVariant } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight";
 import { useLayerRowParcelDraftPreview } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelDraftPreview";
 import { useUsageDataAsParentGeomHighlight } from "./useUsageDataAsParentGeomHighlight";
-import { refreshUsageDataAsMapView } from "./usageDataAsMapSync";
+import {
+  ensureUsageDataAsWmsLayersVisible,
+  refreshUsageDataAsMapView,
+} from "./usageDataAsMapSync";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
+import { resolveParcelItemIntersectParentForHighlight } from "../../../_mapComponents/layerRowEdit/resolveParcelItemIntersectParentForHighlight";
 
 type Props = {
   detailId: string;
@@ -269,7 +273,7 @@ export function UsageDataAsDetailPanel({
     showParentGeom ? null : highlightParcel,
     highlightVariant
   );
-  useLayerRowParcelDraftPreview(draftMgj, "yellow", isEditing);
+  useLayerRowParcelDraftPreview(draftMgj, "red", isEditing);
   const { parentExtentRef } = useUsageDataAsParentGeomHighlight(
     detailId,
     showParentGeom && !isCreateMode,
@@ -289,11 +293,7 @@ export function UsageDataAsDetailPanel({
     const map = mapContext?.mapInstanceRef?.current;
     const ext = parentExtentRef.current;
     if (!map || !ext) return;
-    const lid = USAGE_DATA_AS_WMS_LAYER_ID.toLowerCase();
-    mapContext?.setVisibleLayerNames?.((prev) => {
-      if (prev.has(lid)) return prev;
-      return new Set(prev).add(lid);
-    });
+    ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
     scheduleFitMapToExtent3857(map, ext, {
       maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
       applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
@@ -338,15 +338,15 @@ export function UsageDataAsDetailPanel({
           prev.map((p) => (p.address.toLowerCase() === addrKey ? merged : p))
         );
         setShowParentGeom(false);
-        setHighlightVariant("yellow");
+        setHighlightVariant("red");
         setHighlightParcel(merged);
         clearSoloSelection();
+        ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
         const map = mapContext?.mapInstanceRef?.current;
         if (map) {
           fitMapToLayerRowParcel(map, merged, {
-            wmsLayerId: USAGE_DATA_AS_MGJ_WMS_LAYER_ID,
-            setVisibleLayerNames: mapContext?.setVisibleLayerNames,
             applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+            enableWmsLayer: false,
           });
         }
       });
@@ -372,9 +372,31 @@ export function UsageDataAsDetailPanel({
       clearMgjSelection();
       setShowParentGeom(false);
       setHighlightVariant("blue");
-      void selectSoloParcel(item, idx, { onHighlight: setHighlightParcel });
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      void (async () => {
+        const clipped = await resolveParcelItemIntersectParentForHighlight(item, {
+          childTable: USAGE_DATA_AS_SOLO_WMS_LAYER_ID,
+          parentTable: USAGE_DATA_AS_WMS_LAYER_ID,
+          parentKeyField: preset.keyField,
+          parentKeyValue: detailId,
+        });
+        void selectSoloParcel(clipped, idx, {
+          onHighlight: setHighlightParcel,
+          enableWmsLayer: false,
+          useItemGeometry: true,
+        });
+      })();
     },
-    [clearMgjSelection, clearSoloSelection, focusParentGeomOnMap, selectSoloParcel, selectedSoloIdx]
+    [
+      clearMgjSelection,
+      clearSoloSelection,
+      detailId,
+      focusParentGeomOnMap,
+      mapContext?.setVisibleLayerNames,
+      preset.keyField,
+      selectSoloParcel,
+      selectedSoloIdx,
+    ]
   );
 
   const handleSelectMgjParcel = useCallback(
@@ -386,10 +408,21 @@ export function UsageDataAsDetailPanel({
       }
       clearSoloSelection();
       setShowParentGeom(false);
-      setHighlightVariant("yellow");
-      void selectMgjParcel(item, idx, { onHighlight: setHighlightParcel });
+      setHighlightVariant("red");
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      void selectMgjParcel(item, idx, {
+        onHighlight: setHighlightParcel,
+        enableWmsLayer: false,
+      });
     },
-    [clearMgjSelection, clearSoloSelection, focusParentGeomOnMap, selectMgjParcel, selectedMgjIdx]
+    [
+      clearMgjSelection,
+      clearSoloSelection,
+      focusParentGeomOnMap,
+      mapContext?.setVisibleLayerNames,
+      selectMgjParcel,
+      selectedMgjIdx,
+    ]
   );
 
   const vworldApiKey = mapContext?.vworldApiKey ?? "";
@@ -463,7 +496,7 @@ export function UsageDataAsDetailPanel({
                 isEditing={isEditing}
                 items={mgjList}
                 selectedIdx={selectedMgjIdx}
-                selectionTone="yellow"
+                selectionTone="primary"
                 onAdd={isEditing ? () => setMgjAddModalOpen(true) : undefined}
                 onRemove={isEditing ? handleRemoveMgj : undefined}
                 onClick={handleSelectMgjParcel}

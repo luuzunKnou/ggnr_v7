@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils'
 type ListRow = {
   id: string
   status: string
-  chargeNo: string
-  year: string
+  ledgerNo: string
+  dptNm: string
   payer: string
   amount: string
   dueDate: string
@@ -122,7 +122,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="검색 (부과번호, 납부자, 상태, 연도)"
+            placeholder="검색 (대장번호, 부서명, 납부자, 상태)"
             className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
           />
         </div>
@@ -157,7 +157,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
           {error ? (
             <div className="px-3 py-6 text-center text-xs text-red-600">{error}</div>
           ) : loading && rows.length === 0 ? (
@@ -168,8 +168,8 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
             <table className="w-full min-w-[440px] table-fixed border-collapse text-left text-xs">
               <colgroup>
                 <col className="w-[48px]" />
-                <col className="w-[68px]" />
-                <col className="w-[44px]" />
+                <col className="w-[88px]" />
+                <col className="w-[72px]" />
                 <col className="w-[64px]" />
                 <col className="w-[88px]" />
                 <col className="w-[76px]" />
@@ -180,10 +180,10 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
                     상태
                   </th>
                   <th className="whitespace-nowrap border-b border-slate-200 px-1.5 py-2 font-semibold text-slate-700">
-                    부과번호
+                    대장번호
                   </th>
                   <th className="whitespace-nowrap border-b border-slate-200 px-1.5 py-2 font-semibold text-slate-700">
-                    연도
+                    부서명
                   </th>
                   <th className="whitespace-nowrap border-b border-slate-200 px-1.5 py-2 font-semibold text-slate-700">
                     납부자
@@ -228,10 +228,12 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
                           {row.status}
                         </span>
                       </td>
-                      <td className="truncate px-1.5 py-1.5 text-slate-800" title={row.chargeNo}>
-                        {row.chargeNo || '—'}
+                      <td className="truncate px-1.5 py-1.5 text-slate-800" title={row.ledgerNo}>
+                        {row.ledgerNo || '—'}
                       </td>
-                      <td className="px-1.5 py-1.5 text-slate-700">{row.year || '—'}</td>
+                      <td className="truncate px-1.5 py-1.5 text-slate-700" title={row.dptNm}>
+                        {row.dptNm || '—'}
+                      </td>
                       <td className="truncate px-1.5 py-1.5 text-slate-700" title={row.payer}>
                         {row.payer || '—'}
                       </td>

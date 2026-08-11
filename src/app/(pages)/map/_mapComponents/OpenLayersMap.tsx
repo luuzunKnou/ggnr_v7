@@ -803,7 +803,8 @@ export default function OpenLayersMap({
     spatialFilterWkt,
     layerGeometryTypes,
     undefined,
-    serviceWmsCqlByLayer
+    serviceWmsCqlByLayer,
+    mapContext?.occupationLedgerPanelOpen === true
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)

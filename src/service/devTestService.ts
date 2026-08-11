@@ -1475,6 +1475,80 @@ async function geoServerStyleExists(baseUrl: string, name: string): Promise<bool
   return res.ok;
 }
 
+/**
+ * REST 카탈로그에 없고 data_dir에만 .css가 남은 orphan 스타일을 등록.
+ * 동일 파일명 때문에 POST가 막히므로 잠깐 치운 뒤 기존 CSS 본문으로 등록한다(커스텀 유지).
+ */
+async function registerOrphanCssStyle(
+  baseUrl: string,
+  layerName: string
+): Promise<{ success: boolean; error?: string }> {
+  const cssPath = path.join(getStylesDir(), `${layerName}.css`);
+  if (!fs.existsSync(cssPath)) {
+    return { success: false, error: '디스크 CSS가 없습니다.' };
+  }
+  let existingCss: string;
+  try {
+    existingCss = fs.readFileSync(cssPath, 'utf-8');
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!existingCss.trim()) {
+    return { success: false, error: '디스크 CSS가 비어 있습니다.' };
+  }
+
+  const bakPath = `${cssPath}.orphan_bak`;
+  try {
+    if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
+    fs.renameSync(cssPath, bakPath);
+  } catch (e: unknown) {
+    return {
+      success: false,
+      error: `orphan CSS 이동 실패: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const restoreBak = () => {
+    try {
+      if (!fs.existsSync(cssPath) && fs.existsSync(bakPath)) {
+        fs.renameSync(bakPath, cssPath);
+      } else if (fs.existsSync(bakPath)) {
+        fs.unlinkSync(bakPath);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  try {
+    const postRes = await geoserverFetch(baseUrl, `/rest/styles?name=${encodeURIComponent(layerName)}`, {
+      method: 'POST',
+      body: existingCss,
+      contentType: 'application/vnd.geoserver.geocss+css',
+    });
+    if (postRes.ok || postRes.status === 201) {
+      writeCssStyleToDataDir(layerName, existingCss);
+      try {
+        if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
+      } catch {
+        // ignore
+      }
+      return { success: true };
+    }
+    const text = (await postRes.text().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 300);
+    restoreBak();
+    return {
+      success: false,
+      error: text
+        ? `orphan CSS 등록 실패: ${postRes.status} ${text}`
+        : `orphan CSS 등록 실패: ${postRes.status}`,
+    };
+  } catch (e: unknown) {
+    restoreBak();
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 type DefineLayerRow = {
   define_table_name?: string;
   define_table_shp_type?: string;
@@ -1911,6 +1985,8 @@ export async function applyDefaultStyleToLayer(params: {
       geometryType,
       styleProps,
     });
+
+    /** orphan CSS만 등록한 경우 Material Tone으로 덮어쓰지 않음 — registerOrphanCssStyle 경로에서 PUT 생략 */
 
     if (createRes.success && 'alreadyExists' in createRes && createRes.alreadyExists) {
       catalogExists = await geoServerStyleExists(baseUrl, layerName);
@@ -3913,9 +3989,12 @@ export async function switchLayerTableSchema(params: {
   tableName: string;
   toSchema: 'layer' | 'public_layer';
   url?: string;
+  /** public_layer 전환 시 해당 테이블 통합 이력·스냅샷 삭제 */
+  deleteDataHistory?: boolean;
 }) {
   const tableName = String(params.tableName ?? '').trim();
   const toSchema = params.toSchema === 'public_layer' ? 'public_layer' : 'layer';
+  const deleteDataHistory = !!params.deleteDataHistory && toSchema === 'public_layer';
   const baseUrl = (params.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = 'ggnr';
 
@@ -3929,6 +4008,21 @@ export async function switchLayerTableSchema(params: {
     defineSaved: false,
     dbMoved: false,
     geoserverUpdated: false,
+    historyDeleted: false,
+  };
+
+  const runHistoryDeleteIfNeeded = async (): Promise<string | null> => {
+    if (!deleteDataHistory) return null;
+    const { deleteIntegratedDataHistoryForTable } = await import('./dataLogService');
+    const hist = await deleteIntegratedDataHistoryForTable(tableName);
+    if (!hist.success) {
+      return hist.error ?? '통합 이력 삭제 실패';
+    }
+    stepsDone.historyDeleted = true;
+    steps.push(
+      `데이터 통합이력 삭제: data_log ${hist.deletedLogs}건, 스냅샷 ${hist.deletedSnapshots}건`
+    );
+    return null;
   };
 
   try {
@@ -3980,9 +4074,22 @@ export async function switchLayerTableSchema(params: {
 
     if (!matches.length) {
       steps.push('DB 테이블 없음 → 정의만 변경');
+      const histErr = await runHistoryDeleteIfNeeded();
+      if (histErr) {
+        return {
+          success: false as const,
+          error: `정의 스키마는 변경됐으나 통합 이력 삭제 실패: ${histErr}`,
+          steps,
+          fromSchema: fromDefine,
+          toSchema,
+          ...stepsDone,
+        };
+      }
       return {
         success: true as const,
-        message: `정의 스키마만 ${toSchema}로 변경했습니다. (DB 테이블 없음)`,
+        message: deleteDataHistory
+          ? `정의 스키마만 ${toSchema}로 변경하고 데이터 통합이력을 삭제했습니다. (DB 테이블 없음)`
+          : `정의 스키마만 ${toSchema}로 변경했습니다. (DB 테이블 없음)`,
         steps,
         fromSchema: fromDefine,
         toSchema,
@@ -4114,9 +4221,23 @@ export async function switchLayerTableSchema(params: {
     }
     stepsDone.geoserverUpdated = true;
 
+    const histErr = await runHistoryDeleteIfNeeded();
+    if (histErr) {
+      return {
+        success: false as const,
+        error: `스키마는 전환됐으나 통합 이력 삭제 실패: ${histErr}`,
+        steps,
+        fromSchema: fromDefine,
+        toSchema,
+        ...stepsDone,
+      };
+    }
+
     return {
       success: true as const,
-      message: `스키마 전환 완료: ${fromDefine} → ${toSchema} (정의·DB·GeoServer)`,
+      message: deleteDataHistory
+        ? `스키마 전환 완료: ${fromDefine} → ${toSchema} (정의·DB·GeoServer, 데이터 통합이력 삭제)`
+        : `스키마 전환 완료: ${fromDefine} → ${toSchema} (정의·DB·GeoServer)`,
       steps,
       fromSchema: fromDefine,
       toSchema,

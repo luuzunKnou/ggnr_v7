@@ -1,16 +1,19 @@
 <layer>
   <name>water_occupationledger_mgj</name>
-  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77a7</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-76de</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffe</id>
+    <id>StyleInfoImpl--5fabfce7:19fca79c611:-77c7</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77a8</id>
+    <id>FeatureTypeInfoImpl-30757437:19fe9f3fc96:-76df</id>
   </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-08-04 05:45:28.127 UTC</dateCreated>
+  <dateCreated>2026-08-10 10:54:32.751 UTC</dateCreated>
+  <dateModified>2026-08-10 10:54:37.215 UTC</dateModified>
 </layer>

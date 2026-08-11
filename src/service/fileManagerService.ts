@@ -3,7 +3,7 @@
  * 디렉터리 목록 조회. 베이스 = GGNR_DATA_DIR (사업명 폴더 없음).
  * 폴더 구조 없으면 생성: 3dtiles_*, tiles_*, file_data, shp_data, excel_data, PDFToJPG, .meta
  */
-import fs from 'node:fs/promises';
+import nodeFs from 'node:fs/promises';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import archiver from 'archiver';
@@ -14,13 +14,32 @@ import {
   shouldHideServiceFileDataFileName,
 } from '@/lib/serviceFileData';
 import { GGNR_BASE_STRUCTURE, GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
 // 사업명 폴더 없이 데이터 루트가 곧 베이스. 환경변수 GGNR_DATA_DIR로 덮을 수 있음.
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-
 function getBaseDir(): string {
-  return GGNR_DATA_DIR;
+  return resolveGgnrDataDir();
 }
+
+/** Turbopack Overly broad patterns 회피 — fs 인자만 감쌈 */
+function fsPath(p: string): string {
+  return turbopackOpaquePath(p);
+}
+
+/** node:fs/promises 래퍼 — 경로 인자를 opaque 처리 (NFT 정적 추적 끊기) */
+const fs = {
+  mkdir: (p: string, opts?: Parameters<typeof nodeFs.mkdir>[1]) => nodeFs.mkdir(fsPath(p), opts),
+  stat: (p: string) => nodeFs.stat(fsPath(p)),
+  readdir: ((p: string, opts?: Parameters<typeof nodeFs.readdir>[1]) =>
+    nodeFs.readdir(fsPath(p), opts as never)) as typeof nodeFs.readdir,
+  rename: (a: string, b: string) => nodeFs.rename(fsPath(a), fsPath(b)),
+  rm: (p: string, opts?: Parameters<typeof nodeFs.rm>[1]) => nodeFs.rm(fsPath(p), opts),
+  unlink: (p: string) => nodeFs.unlink(fsPath(p)),
+  readFile: ((p: string, opts?: Parameters<typeof nodeFs.readFile>[1]) =>
+    nodeFs.readFile(fsPath(p), opts as never)) as typeof nodeFs.readFile,
+  writeFile: ((p: string, data: Parameters<typeof nodeFs.writeFile>[1], opts?: Parameters<typeof nodeFs.writeFile>[2]) =>
+    nodeFs.writeFile(fsPath(p), data, opts as never)) as typeof nodeFs.writeFile,
+};
 
 function normalizeRelativePath(relativePath?: string): string {
   return String(relativePath ?? '')
@@ -32,12 +51,12 @@ function normalizeRelativePath(relativePath?: string): string {
 
 function resolveWithinBase(relativePath?: string): { base: string; baseResolved: string; abs: string; rel: string } | null {
   const base = getBaseDir();
-  const baseResolved = path.resolve(base);
+  const baseResolved = fsPath(path.resolve(base));
   const rel = normalizeRelativePath(relativePath);
   if (!rel) return { base, baseResolved, abs: baseResolved, rel: '' };
   const segments = rel.split('/').filter(Boolean);
   if (segments.some((seg) => seg === '.' || seg === '..')) return null;
-  const abs = path.resolve(baseResolved, ...segments);
+  const abs = fsPath(path.resolve(baseResolved, ...segments));
   if (abs !== baseResolved && !abs.startsWith(baseResolved + path.sep)) return null;
   return { base, baseResolved, abs, rel: segments.join('/') };
 }
@@ -628,9 +647,9 @@ export async function deleteFileDataPath(params: {
     return { ok: false, error: 'file_data 하위만 삭제할 수 있습니다.' };
   }
 
-  const base = path.resolve(getBaseDir());
-  const prefixResolved = path.resolve(base, FILE_DATA_ROOT_REL);
-  const full = path.resolve(base, ...raw.split('/').filter(Boolean));
+  const base = fsPath(path.resolve(getBaseDir()));
+  const prefixResolved = fsPath(path.resolve(base, FILE_DATA_ROOT_REL));
+  const full = fsPath(path.resolve(base, ...raw.split('/').filter(Boolean)));
 
   if (full === prefixResolved) {
     return { ok: false, error: 'file_data 루트 폴더는 삭제할 수 없습니다.' };
