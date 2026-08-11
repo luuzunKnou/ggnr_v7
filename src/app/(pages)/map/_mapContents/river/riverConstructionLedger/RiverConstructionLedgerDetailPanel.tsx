@@ -598,7 +598,6 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                   ...mapped,
                   geom: mapped.geom ?? r.geom,
                   attachments: r.attachments,
-                  history: r.history,
                 }
               : r
           )
