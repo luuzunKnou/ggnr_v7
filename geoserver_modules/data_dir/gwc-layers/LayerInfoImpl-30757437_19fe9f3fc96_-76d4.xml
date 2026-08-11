@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77ab</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-76d4</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:water_occupationledger</name>
+  <name>ggnr:public_occupationledger_jijuk</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>129.43706445687457</double>
+          <double>36.7176822761025</double>
+          <double>129.44279878761014</double>
+          <double>36.72162981469158</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4408868105115406E7</double>
+          <double>4399828.055307665</double>
+          <double>1.4409506447892932E7</double>
+          <double>4400376.276512349</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>polygon</defaultStyle>
+      <defaultStyle>public_occupationledger_jijuk</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

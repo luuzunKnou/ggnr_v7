@@ -19,7 +19,13 @@ export function useLayerParcelNavigation(wmsLayerId?: string) {
     async (
       item: LayerRowParcelItem,
       idx: number,
-      options?: { onHighlight?: (resolved: LayerRowParcelItem | null) => void }
+      options?: {
+        onHighlight?: (resolved: LayerRowParcelItem | null) => void;
+        /** false면 필지/물건지 WMS 전체를 켜지 않음 (선택 도형 하이라이트만) */
+        enableWmsLayer?: boolean;
+        /** true면 주소/키로 geom 재조회하지 않고 item 도형을 그대로 씀 */
+        useItemGeometry?: boolean;
+      }
     ) => {
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
@@ -27,7 +33,9 @@ export function useLayerParcelNavigation(wmsLayerId?: string) {
       setSelectedParcelIdx(idx);
       setMovingParcelIdx(idx);
       try {
-        const target = await resolveParcelItemForHighlight(item, wmsLayerId);
+        const target = options?.useItemGeometry
+          ? item
+          : await resolveParcelItemForHighlight(item, wmsLayerId);
         if (!getParcelExtent3857(target) && !target.geometry3857) {
           options?.onHighlight?.(null);
           return;
@@ -37,6 +45,7 @@ export function useLayerParcelNavigation(wmsLayerId?: string) {
           wmsLayerId,
           setVisibleLayerNames: mapContext?.setVisibleLayerNames,
           applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+          enableWmsLayer: options?.enableWmsLayer,
         });
       } finally {
         setMovingParcelIdx(null);

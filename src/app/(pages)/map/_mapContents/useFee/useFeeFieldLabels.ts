@@ -18,7 +18,7 @@ export const USE_FEE_FIELD_LABELS: Record<string, string> = {
   sgbNm: '자치단체명',
   pyrNo: '납부자번호',
   pyrNm: '납부자명',
-  pyrAddr: '납세자주소',
+  pyrAddr: '납부자주소',
   pyrSeCd: '납부자구분코드',
   pyrMngNo: '납부자관리번호',
   pyrSttCd: '납부자상태코드',
@@ -55,7 +55,7 @@ export const USE_FEE_FIELD_LABELS: Record<string, string> = {
   mngItemSn1: '점용기간',
   mngItemSn2: '점용면적',
   mngItemSn3: '공시지가',
-  mngItemSn4: '점용면적',
+  mngItemSn4: '점용목적',
   mngItemSn5: '관리항목5',
   mngItemSn6: '관리항목6',
   spacBizCd: '특별회계사업코드',
@@ -77,6 +77,9 @@ for (let i = 1; i <= 20; i++) {
   USE_FEE_FIELD_LABELS[`vtlacBankNm${i}`] = `가상계좌은행${i}`;
   USE_FEE_FIELD_LABELS[`vrActno${i}`] = `가상계좌번호${i}`;
 }
+
+/** 상세 기본 노출(더보기 위) 항목 수 */
+export const USE_FEE_DETAIL_PRIMARY_COUNT = 16;
 
 export function labelForUseFeeField(field: string, fallback?: string): string {
   const key = String(field ?? '').trim();

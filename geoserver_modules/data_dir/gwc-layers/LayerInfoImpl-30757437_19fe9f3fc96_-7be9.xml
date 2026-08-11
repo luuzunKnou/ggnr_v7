@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-1124</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-7be9</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:usage_data_sisul_as</name>
+  <name>ggnr:usage_data_as_solo</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>usage_data_sisul_as</defaultStyle>
+      <defaultStyle>usage_data_as_solo</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

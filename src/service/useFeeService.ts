@@ -35,8 +35,8 @@ function systemDeptScopeSql(system?: string) {
 export type UseFeeListRow = {
   id: string;
   status: string;
-  chargeNo: string;
-  year: string;
+  ledgerNo: string;
+  dptNm: string;
   payer: string;
   amount: string;
   amountRaw: number | null;
@@ -198,7 +198,7 @@ export async function getUseFeeDepartments(params?: {
   }
 }
 
-/** 목록: 상태, 부과번호, 회계연도, 납부자, 납부금액, 납기일 */
+/** 목록: 상태, 대장번호, 부서명, 납부자, 납부금액, 납기일 */
 export async function getUseFeeList(params?: {
   keyword?: string;
   /** 부서명 정확 일치. 비우면 전체 */
@@ -219,6 +219,7 @@ export async function getUseFeeList(params?: {
 
     const kw = keyword
       ? or(
+          ilike(nglFeeList.ledgerNo, `%${keyword}%`),
           ilike(nglFeeList.lvyNo, `%${keyword}%`),
           ilike(nglFeeList.pyrNm, `%${keyword}%`),
           ilike(nglFeeList.feeStatus, `%${keyword}%`),
@@ -237,7 +238,7 @@ export async function getUseFeeList(params?: {
       .where(where);
     const total = Number(countRes[0]?.c ?? 0);
 
-    // 1) 수납=수납일자 / 그 외=최종납기일 최신순 2) 부과번호 큰 순
+    // 1) 수납=수납일자 / 그 외=최종납기일 최신순 2) 대장번호·부과번호 큰 순
     const listDateExpr = sql`case
       when ${nglFeeList.feeStatus} = '수납' then nullif(trim(${nglFeeList.rcvmtYmd}), '')
       else coalesce(
@@ -251,6 +252,7 @@ export async function getUseFeeList(params?: {
       .where(where)
       .orderBy(
         sql`${listDateExpr} desc nulls last`,
+        desc(nglFeeList.ledgerNo),
         desc(nglFeeList.lvyNo),
         desc(nglFeeList.id)
       )
@@ -263,8 +265,8 @@ export async function getUseFeeList(params?: {
         return {
           id: String(r.id),
           status: String(r.feeStatus ?? ''),
-          chargeNo: String(r.lvyNo ?? ''),
-          year: String(r.fyr ?? ''),
+          ledgerNo: String(r.ledgerNo ?? ''),
+          dptNm: String(r.dptNm ?? ''),
           payer: String(r.pyrNm ?? ''),
           amount: formatAmount(amountRaw),
           amountRaw,
@@ -355,6 +357,25 @@ for (let i = 1; i <= 20; i++) {
   );
 }
 
+const DETAIL_PRIMARY_KEYS: (keyof NglFeeList)[] = [
+  'feeStatus',
+  'ledgerNo',
+  'dptNm',
+  'pyrSttNm',
+  'pyrNm',
+  'pyrAddr',
+  'pyrCnpcNo',
+  'mngItemSn1',
+  'lvyYmd',
+  'frstPidYmd',
+  'lastPidYmd',
+  'glAddr',
+  'mngItemSn2',
+  'mngItemSn3',
+  'pidAfAmt',
+  'mngItemSn4',
+];
+
 const AMOUNT_KEYS = new Set([
   'pidAfAmt',
   'frstPctAmt',
@@ -380,29 +401,43 @@ function isVirtualAccountField(key: string): boolean {
   return /^vtlacBankNm\d+$/.test(key) || /^vrActno\d+$/.test(key);
 }
 
+function formatAttrValue(key: string, raw: unknown): string {
+  if (AMOUNT_KEYS.has(key)) {
+    return formatAmount(typeof raw === 'number' ? raw : raw == null ? null : Number(raw));
+  }
+  if (YMD_KEYS.has(key)) {
+    return formatYmd(raw == null ? null : String(raw));
+  }
+  return displayValue(raw);
+}
+
 function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
-  const attrs: UseFeeDetailAttr[] = [];
+  const byKey = new Map<string, UseFeeDetailAttr>();
   for (const { key } of DETAIL_FIELD_ORDER) {
-    const resolvedLabel = labelForUseFeeField(String(key));
-    // 코드성 필드는 상세 화면에서 숨김
+    const field = String(key);
+    const resolvedLabel = labelForUseFeeField(field);
     if (resolvedLabel.includes('코드')) continue;
 
-    const raw = row[key];
-    let value: string;
-    if (AMOUNT_KEYS.has(String(key))) {
-      value = formatAmount(typeof raw === 'number' ? raw : raw == null ? null : Number(raw));
-    } else if (YMD_KEYS.has(String(key))) {
-      value = formatYmd(raw == null ? null : String(raw));
-    } else {
-      value = displayValue(raw);
-    }
-    // 가상계좌 은행·번호 1~20: 값 있는 것만 표시
-    if (isVirtualAccountField(String(key)) && (value === '—' || value === '')) continue;
-    attrs.push({
-      field: String(key),
-      label: resolvedLabel,
-      value,
-    });
+    const value = formatAttrValue(field, row[key]);
+    if (isVirtualAccountField(field) && (value === '—' || value === '')) continue;
+    byKey.set(field, { field, label: resolvedLabel, value });
+  }
+
+  const attrs: UseFeeDetailAttr[] = [];
+  const used = new Set<string>();
+  for (const key of DETAIL_PRIMARY_KEYS) {
+    const field = String(key);
+    const hit = byKey.get(field);
+    if (!hit) continue;
+    attrs.push(hit);
+    used.add(field);
+  }
+  for (const { key } of DETAIL_FIELD_ORDER) {
+    const field = String(key);
+    if (used.has(field)) continue;
+    const hit = byKey.get(field);
+    if (!hit) continue;
+    attrs.push(hit);
   }
   return attrs;
 }
@@ -435,8 +470,8 @@ export async function getUseFeeDetail(params: {
       row: {
         id: String(r.id),
         status: String(r.feeStatus ?? ''),
-        chargeNo: String(r.lvyNo ?? ''),
-        year: String(r.fyr ?? ''),
+        ledgerNo: String(r.ledgerNo ?? ''),
+        dptNm: String(r.dptNm ?? ''),
         payer: String(r.pyrNm ?? ''),
         amount: formatAmount(amountRaw),
         amountRaw,
@@ -470,8 +505,8 @@ export async function getUseFeeReceiptsByLvyKey(params: { lvyKey?: string }) {
       return {
         id: String(r.id),
         status: String(r.feeStatus ?? ''),
-        chargeNo: String(r.lvyNo ?? ''),
-        year: String(r.fyr ?? ''),
+        ledgerNo: String(r.ledgerNo ?? ''),
+        dptNm: String(r.dptNm ?? ''),
         payer: String(r.pyrNm ?? ''),
         amount: formatAmount(amountRaw),
         amountRaw,

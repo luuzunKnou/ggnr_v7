@@ -320,58 +320,34 @@ export async function getUsageDataAsList(params?: {
   }
 }
 
-/** 지도 이동용 extent — 메인·필지·물건지 geom 합집합 */
+/** 지도 이동용 extent — 점용 본표(geom)만. 필지·물건지 합치면 중심이 어긋남 */
 export async function getUsageDataAsExtent3857ByKey(params: {
   key?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
   const keyRaw = String(params?.key ?? '').trim();
   if (!keyRaw) return { extent3857: null, error: '키가 필요합니다.' };
 
-  const geomSelects: string[] = [];
-
   const mainMeta = await resolveTableWithSchema(MAIN_TABLE);
-  if (mainMeta) {
-    const cols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
-    const keyCol = findColumn(cols, KEY_FIELD);
-    const geomCol = findColumn(cols, 'geom');
-    if (keyCol && geomCol) {
-      const safe = mainMeta.tableName.replace(/"/g, '""');
-      const safeSchema = mainMeta.schema.replace(/"/g, '""');
-      geomSelects.push(
-        `SELECT ST_Transform(t.${quoteIdent(geomCol)}, 3857) AS g
-         FROM "${safeSchema}"."${safe}" t
-         WHERE t.${quoteIdent(keyCol)}::text = '${esc(keyRaw)}' AND t.${quoteIdent(geomCol)} IS NOT NULL`
-      );
-    }
+  if (!mainMeta) {
+    return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
-
-  for (const childTable of [SOLO_TABLE, MGJ_TABLE]) {
-    const meta = await resolveTableWithSchema(childTable);
-    if (!meta) continue;
-    const cols = await getTableColumns(meta.schema, meta.tableName);
-    const parentCol = findColumn(cols, CHILD_PARENT_FIELD);
-    const geomCol = findColumn(cols, 'geom');
-    if (!parentCol || !geomCol) continue;
-    const safe = meta.tableName.replace(/"/g, '""');
-    const safeSchema = meta.schema.replace(/"/g, '""');
-    geomSelects.push(
-      `SELECT ST_Transform(c.${quoteIdent(geomCol)}, 3857) AS g
-       FROM "${safeSchema}"."${safe}" c
-       WHERE c.${quoteIdent(parentCol)}::text = '${esc(keyRaw)}' AND c.${quoteIdent(geomCol)} IS NOT NULL`
-    );
-  }
-
-  if (geomSelects.length === 0) {
+  const cols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
+  const keyCol = findColumn(cols, KEY_FIELD);
+  const geomCol = findColumn(cols, 'geom');
+  if (!keyCol || !geomCol) {
     return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
 
+  const safe = mainMeta.tableName.replace(/"/g, '""');
+  const safeSchema = mainMeta.schema.replace(/"/g, '""');
   const sqlText = `
     SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
            ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
     FROM (
-      SELECT ST_Extent(g)::box2d AS ext
-      FROM (${geomSelects.join(' UNION ALL ')}) u
-      WHERE g IS NOT NULL
+      SELECT ST_Extent(ST_Transform(t.${quoteIdent(geomCol)}, 3857))::box2d AS ext
+      FROM "${safeSchema}"."${safe}" t
+      WHERE t.${quoteIdent(keyCol)}::text = '${esc(keyRaw)}'
+        AND t.${quoteIdent(geomCol)} IS NOT NULL
     ) s
     WHERE ext IS NOT NULL`;
 
