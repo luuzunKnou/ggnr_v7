@@ -53,7 +53,7 @@ export async function resolveParcelGeoms(items: LayerRowParcelItem[]): Promise<L
         pnu: resolvedPnu || item.pnu,
         extent3857: parsed.extent3857 ?? item.extent3857,
         geometry3857: parsed.geometry3857 ?? item.geometry3857,
-        showMapGeom: item.showMapGeom !== false ? true : false,
+        // showMapGeom 유지 — true로 강제하면 도형수정 replaceAuto가 전부 수동으로 취급됨
       };
     });
   } catch {

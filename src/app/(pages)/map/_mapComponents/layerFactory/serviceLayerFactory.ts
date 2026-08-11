@@ -7,6 +7,7 @@ import {
   sortLayerNamesForWmsStack,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
+import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
 
 const WORKSPACE = 'ggnr';
 
@@ -229,12 +230,15 @@ export function useServiceLayerSync(
   layerGeometryTypes?: Record<string, LayerDbGeometryKind>,
   /** 레이어별 WMS에서 숨길 feature key (도형편집기 등) */
   hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
+  /** 공통 점용 부서업무 패널 열림 — 울진과 동일 팔레트 스타일 사용 */
+  occupationDeptPanelOpen?: boolean,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
   const hiddenRef = useRef(hiddenFeaturesByLayer);
   hiddenRef.current = hiddenFeaturesByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
+  const deptOpen = occupationDeptPanelOpen === true;
 
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -263,12 +267,13 @@ export function useServiceLayerSync(
     }
 
     const rawNames = Array.from(visibleLayerNames);
-    const names =
-      layerGeometryTypes && Object.keys(layerGeometryTypes).length > 0
-        ? sortLayerNamesForWmsStack(rawNames, layerGeometryTypes)
-        : rawNames;
+    // 기하 타입 없어도 강제 하단(시설물 등) 정렬은 항상 적용
+    const names = sortLayerNamesForWmsStack(rawNames, layerGeometryTypes ?? {});
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    const stylesParam = names.join(',');
+    // 부서업무 점용: 울진 usage_data_as* 스타일 재사용 / 데이터조회: 테이블명(기본 SLD)
+    const stylesParam = names
+      .map((n) => resolveOccupationDeptWmsStyleName(n, deptOpen) ?? n)
+      .join(',');
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
@@ -299,7 +304,15 @@ export function useServiceLayerSync(
     params.EXCEPTIONS = 'application/vnd.ogc.se_xml';
     serviceLayer.setVisible(true);
     source.changed();
-  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);
+  }, [
+    map,
+    mapReady,
+    visibleLayerNames,
+    spatialFilterWkt,
+    layerGeometryTypes,
+    hiddenFeaturesByLayer,
+    deptOpen,
+  ]);
 }
 
 export { WORKSPACE };

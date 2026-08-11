@@ -1,16 +1,19 @@
 <layer>
   <name>usage_data_as_mgj</name>
-  <id>LayerInfoImpl--71188a54:19f7e56f171:-78ea</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-7beb</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--5417137b:19f83ba2858:142</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--71188a54:19f7e56f171:-78eb</id>
+    <id>FeatureTypeInfoImpl-30757437:19fe9f3fc96:-7bec</id>
   </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-28 05:38:26.105 UTC</dateCreated>
+  <dateCreated>2026-08-10 10:44:13.114 UTC</dateCreated>
+  <dateModified>2026-08-10 10:44:20.966 UTC</dateModified>
 </layer>

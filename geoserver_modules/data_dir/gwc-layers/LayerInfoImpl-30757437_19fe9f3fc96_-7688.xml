@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77b3</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-7688</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:usage_data_as</name>
+  <name>ggnr:road_occupationledger</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>129.4277088926679</double>
+          <double>36.71709799339241</double>
+          <double>129.43768838743463</double>
+          <double>36.720413739258056</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4407826648471838E7</double>
+          <double>4399746.914435863</double>
+          <double>1.4408937560747644E7</double>
+          <double>4400207.388944125</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>polygon</defaultStyle>
+      <defaultStyle>road_occupationledger</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

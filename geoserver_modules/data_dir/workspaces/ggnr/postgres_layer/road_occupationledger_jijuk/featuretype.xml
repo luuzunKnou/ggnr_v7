@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77a4</id>
+  <id>FeatureTypeInfoImpl-30757437:19fe9f3fc96:-76db</id>
   <name>road_occupationledger_jijuk</name>
   <nativeName>road_occupationledger_jijuk</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>0.0</minx>
-    <maxx>-1.0</maxx>
-    <miny>0.0</miny>
-    <maxy>-1.0</maxy>
+    <minx>416824.0072681387</minx>
+    <maxx>417909.8768076982</maxx>
+    <miny>360346.33923017676</miny>
+    <maxy>360776.64396387094</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.84847767680762</minx>
-    <maxx>124.84848865053446</maxx>
-    <miny>33.47495973610326</miny>
-    <maxy>33.474968932506</maxy>
+    <minx>129.4267299236258</minx>
+    <maxx>129.43899574170752</maxx>
+    <miny>36.71668989375821</miny>
+    <maxy>36.72081231370062</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

@@ -21,6 +21,7 @@ import { UsageDataAsAddressList } from '../river/usageDataAs/UsageDataAsAddressL
 import { OccupationLedgerAttributeSection } from './OccupationLedgerAttributeSection';
 import { fitMapToLayerRowParcel } from '../../_mapComponents/layerRowEdit/layerRowParcelUtils';
 import { resolveParcelGeoms } from '../../_mapComponents/layerRowEdit/resolveParcelGeoms';
+import { resolveParcelItemIntersectParentForHighlight } from '../../_mapComponents/layerRowEdit/resolveParcelItemIntersectParentForHighlight';
 import {
   useLayerRowParcelHighlight,
   type LayerRowParcelHighlightVariant,
@@ -296,7 +297,7 @@ export function OccupationLedgerDetailPanel({
   }, [isEditing, detailId]);
 
   useLayerRowParcelHighlight(showParentGeom ? null : highlightParcel, highlightVariant);
-  useLayerRowParcelDraftPreview(draftMgj, 'yellow', isEditing);
+  useLayerRowParcelDraftPreview(draftMgj, 'red', isEditing);
   const { parentExtentRef } = useOccupationLedgerParentGeomHighlight(
     detailId,
     mainTable,
@@ -318,16 +319,12 @@ export function OccupationLedgerDetailPanel({
     const map = mapContext?.mapInstanceRef?.current;
     const ext = parentExtentRef.current;
     if (!map || !ext) return;
-    const lid = mainTable.toLowerCase();
-    mapContext?.setVisibleLayerNames?.((prev) => {
-      if (prev.has(lid)) return prev;
-      return new Set(prev).add(lid);
-    });
+    ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
     scheduleFitMapToExtent3857(map, ext, {
       maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
       applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
     });
-  }, [isEditing, mainTable, mapContext, parentExtentRef]);
+  }, [isEditing, mapContext, parentExtentRef, serEng]);
 
   useEffect(() => {
     if (isEditing) {
@@ -367,15 +364,15 @@ export function OccupationLedgerDetailPanel({
           prev.map((p) => (p.address.toLowerCase() === addrKey ? merged : p))
         );
         setShowParentGeom(false);
-        setHighlightVariant('yellow');
+        setHighlightVariant('red');
         setHighlightParcel(merged);
         clearSoloSelection();
+        ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
         const map = mapContext?.mapInstanceRef?.current;
         if (map) {
           fitMapToLayerRowParcel(map, merged, {
-            wmsLayerId: mgjTable,
-            setVisibleLayerNames: mapContext?.setVisibleLayerNames,
             applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+            enableWmsLayer: false,
           });
         }
       });
@@ -385,7 +382,7 @@ export function OccupationLedgerDetailPanel({
       mapContext?.applyMapViewPaddingRef,
       mapContext?.mapInstanceRef,
       mapContext?.setVisibleLayerNames,
-      mgjTable,
+      serEng,
     ]
   );
 
@@ -407,9 +404,34 @@ export function OccupationLedgerDetailPanel({
       clearMgjSelection();
       setShowParentGeom(false);
       setHighlightVariant('blue');
-      void selectSoloParcel(item, idx, { onHighlight: setHighlightParcel });
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      void (async () => {
+        const clipped = await resolveParcelItemIntersectParentForHighlight(item, {
+          childTable: jijukTable,
+          parentTable: mainTable,
+          parentKeyField: keyField,
+          parentKeyValue: detailId,
+        });
+        void selectSoloParcel(clipped, idx, {
+          onHighlight: setHighlightParcel,
+          enableWmsLayer: false,
+          useItemGeometry: true,
+        });
+      })();
     },
-    [clearMgjSelection, clearSoloSelection, focusParentGeomOnMap, selectSoloParcel, selectedSoloIdx]
+    [
+      clearMgjSelection,
+      clearSoloSelection,
+      detailId,
+      focusParentGeomOnMap,
+      jijukTable,
+      keyField,
+      mainTable,
+      mapContext?.setVisibleLayerNames,
+      selectSoloParcel,
+      selectedSoloIdx,
+      serEng,
+    ]
   );
 
   const handleSelectMgjParcel = useCallback(
@@ -421,10 +443,22 @@ export function OccupationLedgerDetailPanel({
       }
       clearSoloSelection();
       setShowParentGeom(false);
-      setHighlightVariant('yellow');
-      void selectMgjParcel(item, idx, { onHighlight: setHighlightParcel });
+      setHighlightVariant('red');
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      void selectMgjParcel(item, idx, {
+        onHighlight: setHighlightParcel,
+        enableWmsLayer: false,
+      });
     },
-    [clearMgjSelection, clearSoloSelection, focusParentGeomOnMap, selectMgjParcel, selectedMgjIdx]
+    [
+      clearMgjSelection,
+      clearSoloSelection,
+      focusParentGeomOnMap,
+      mapContext?.setVisibleLayerNames,
+      selectMgjParcel,
+      selectedMgjIdx,
+      serEng,
+    ]
   );
 
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
@@ -501,7 +535,7 @@ export function OccupationLedgerDetailPanel({
                 isEditing={isEditing}
                 items={mgjList}
                 selectedIdx={selectedMgjIdx}
-                selectionTone="yellow"
+                selectionTone="primary"
                 onAdd={isEditing ? () => setMgjAddModalOpen(true) : undefined}
                 onRemove={isEditing ? handleRemoveMgj : undefined}
                 onClick={handleSelectMgjParcel}
