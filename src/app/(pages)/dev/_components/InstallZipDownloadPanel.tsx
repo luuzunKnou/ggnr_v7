@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { BookOpenText, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { LiveLogsPanel } from './LiveLogsPanel';
 import { ProgressStagesList, type StageItem } from './ProgressStagesList';
@@ -586,14 +586,16 @@ export function InstallZipDownloadPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded border p-3 gap-2">
       <div className="shrink-0 space-y-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={openInstallManualPopup}
-          className="inline-block cursor-pointer text-xs text-blue-600 underline"
+          className="gap-1 cursor-pointer"
           title="설치 매뉴얼"
         >
+          <BookOpenText className="h-4 w-4" />
           설치 매뉴얼
-        </button>
+        </Button>
         <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={busy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (

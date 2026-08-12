@@ -43,7 +43,7 @@ export function InstallManualClient() {
   return (
     <div className="flex h-screen min-h-0 bg-background text-foreground">
       <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/20">
-        <div className={`${HEADER_BAR} px-3 text-sm font-semibold`}>설치 매뉴얼</div>
+        <div className={`${HEADER_BAR} px-3 text-base font-semibold`}>설치 매뉴얼</div>
         <nav
           className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
           aria-label="목차"
@@ -80,7 +80,7 @@ export function InstallManualClient() {
           style={{ display: 'flex', flexDirection: 'column', gap: 64 }}
         >
           <section id="nodejs" className="scroll-mt-4 space-y-3">
-            <h1 className="text-base font-semibold">Node.js 및 npm 설치</h1>
+            <h1 className="text-xl font-semibold">Node.js 및 npm 설치</h1>
             <ol className="list-decimal space-y-3 pl-5">
               <li>
                 해당 페이지 &gt; 다운로드 &gt; github 다운로드
@@ -129,14 +129,15 @@ npm -v`}</CodeBlock>
           </section>
 
           <section id="package" className="scroll-mt-4 space-y-3">
-            <h1 className="text-base font-semibold">프로젝트 파일 설치/실행 및 서비스 등록</h1>
+            <h1 className="text-xl font-semibold">프로젝트 파일 설치/실행 및 서비스 등록</h1>
+            <h2 className="text-base font-semibold">TypeScript 타입 검사</h2>
             <p>
               아래 실행하기 전 먼저 코드에서 TypeScript 타입 검사{' '}
               <code className="rounded bg-muted px-1 py-0.5">npx tsc --noEmit</code> 를 실행하여
               타입에러가 없는지 검사후 (커서에서 타입에러만 수정하도록 요청 -원본 작업자에게 이를 알리고
               진행)
             </p>
-            <p>에러가 없을 경우 다음으로 진행</p>
+            <h2 className="text-base font-semibold">에러가 없을 경우 다음으로 진행</h2>
             <p>
               <ExtLink href="http://localhost:3001/dev">http://localhost:3001/dev</ExtLink>{' '}
               (개발자 모드)
@@ -166,7 +167,7 @@ npm -v`}</CodeBlock>
           </section>
 
           <section id="run" className="scroll-mt-4 space-y-3">
-            <h1 className="text-base font-semibold">구동</h1>
+            <h1 className="text-xl font-semibold">구동</h1>
             <ol className="list-decimal space-y-3 pl-5">
               <li>
                 VM C 드라이브 내 <code className="rounded bg-muted px-1 py-0.5">htdocs</code> 폴더
@@ -196,8 +197,8 @@ npm -v`}</CodeBlock>
                   <li>
                     이후 자동 진행되는 내용
                     <ul className="mt-1 list-disc pl-5">
-                      <li>npm run start 되는지 확인</li>
-                      <li>Window 서비스 등록</li>
+                      <li>smoke: npm run start 되는지 확인</li>
+                      <li>nssm: Window 서비스 등록</li>
                       <li>window 서비스 로그 확인용 cmd 열기</li>
                     </ul>
                   </li>
@@ -219,8 +220,8 @@ npm -v`}</CodeBlock>
           </section>
 
           <section id="remove" className="scroll-mt-4 space-y-3">
-            <h1 className="text-base font-semibold">Window 서비스 등록 삭제</h1>
-            <h2 className="text-sm font-semibold">bat 실행</h2>
+            <h1 className="text-xl font-semibold">Window 서비스 등록 삭제</h1>
+            <h2 className="text-base font-semibold">bat 실행</h2>
             <ol className="list-decimal space-y-1 pl-5">
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">Win+R</code>:{' '}
@@ -230,7 +231,7 @@ npm -v`}</CodeBlock>
                 <code className="rounded bg-muted px-1 py-0.5">00_remove_ggnr.bat</code> 실행
               </li>
             </ol>
-            <h2 className="text-sm font-semibold">수동 제거</h2>
+            <h2 className="text-base font-semibold">수동 제거</h2>
             <ol className="list-decimal space-y-2 pl-5">
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">Win+R</code>:{' '}
@@ -254,7 +255,7 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
           </section>
 
           <section id="contour" className="scroll-mt-4 space-y-3">
-            <h1 className="text-base font-semibold">고도(등고선)</h1>
+            <h1 className="text-xl font-semibold">고도(등고선)</h1>
             <ol className="list-decimal space-y-2 pl-5">
               <li>브이월드 &gt; 공간정보 다운로드 &gt; 등고선(지도-고도) 다운로드</li>
               <li>필요 지역 대해 다운로드</li>
@@ -291,7 +292,7 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
           </section>
 
           <section id="python-env" className="scroll-mt-4 space-y-3 pb-8">
-            <h1 className="text-base font-semibold">레이어 업로드 실패(python/env) 문제</h1>
+            <h1 className="text-xl font-semibold">레이어 업로드 실패(python/env) 문제</h1>
             <ol className="list-decimal space-y-2 pl-5">
               <li>
                 ‘설치파일 다운로드’에서는{' '}

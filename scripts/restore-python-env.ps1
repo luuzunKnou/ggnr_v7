@@ -65,4 +65,8 @@ if (-not (Test-Path -LiteralPath $envExe)) {
 }
 
 Write-Host '[python-env] python\env 복원 완료'
+if (Test-Path -LiteralPath $partsDir) {
+  Remove-Item -LiteralPath $partsDir -Recurse -Force
+  Write-Host '[python-env] python\env_parts 삭제 완료'
+}
 exit 0
