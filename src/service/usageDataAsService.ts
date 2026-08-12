@@ -158,7 +158,8 @@ async function getChildAddressItems(params: {
     const res = await db.execute(sql.raw(sqlText));
     const items = (res.rows ?? []).map((r) => {
       const row = r as Record<string, unknown>;
-      const address = String(row.addr ?? '').trim();
+      const addressRaw = String(row.addr ?? '').trim();
+      const address = formatAddressStripSidoSigungu(addressRaw) || addressRaw;
       const xmin = Number(row.xmin);
       const ymin = Number(row.ymin);
       const xmax = Number(row.xmax);
@@ -439,10 +440,15 @@ export async function getUsageDataAsDetailByKey(params: {
     const metaByField = new Map(fieldDefs.fields.map((f) => [f.field.toLowerCase(), f]));
     const attributes: UsageDataAsDetailAttr[] = dataFields.map((field) => {
       const def = metaByField.get(field.toLowerCase());
+      const raw = String(row[field] ?? '').trim();
+      const value =
+        field.toLowerCase() === 'usage_loc'
+          ? formatAddressStripSidoSigungu(raw) || raw || '—'
+          : raw || '—';
       return {
         field,
         label: labelForUsageDataAsField(field),
-        value: String(row[field] ?? '').trim() || '—',
+        value,
         showDetail: def?.showDetail !== false,
       };
     });

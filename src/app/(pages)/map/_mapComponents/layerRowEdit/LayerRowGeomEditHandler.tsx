@@ -535,6 +535,13 @@ export function LayerRowGeomEditHandler({
           return false;
         }
         if (!data?.geometry) {
+          if (edit.allowEmptyGeom) {
+            wktRef.current = null;
+            if (dirtyRef) dirtyRef.current = false;
+            setHasParentGeom(false);
+            attachModify();
+            return true;
+          }
           window.alert("DB에서 기존 도형을 찾지 못했습니다.");
           setEdit?.(null);
           return false;

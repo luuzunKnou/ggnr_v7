@@ -10,6 +10,7 @@ import { LAYER_ROW_GEOM_CLEAR_SENTINEL } from "./LayerRowGeomEditHandler";
 import { fetchReadOnlyFieldSet } from "./buildFormAttributes";
 import { parcelAddressesFromItems, fitMapToLayerRowParcel } from "./layerRowParcelUtils";
 import { resolveParcelGeoms } from "./resolveParcelGeoms";
+import { validateOccupationPeriodAndGeom } from "./validateOccupationPeriodAndGeom";
 import type { LayerRowDetailAttr, LayerRowEditPreset, LayerRowParcelItem } from "./types";
 
 function toDateInputValue(raw: string): string {
@@ -124,6 +125,7 @@ export function useLayerRowEdit({
         keyField: preset.keyField ?? "id",
         keyValue,
         mode,
+        allowEmptyGeom: !!preset.requirePeriodAndGeomOnSave,
       });
     },
     [
@@ -132,6 +134,7 @@ export function useLayerRowEdit({
       mapContext?.clearMapDrawInteractionsRef,
       mapContext?.setSpatialDrawRequest,
       preset.keyField,
+      preset.requirePeriodAndGeomOnSave,
       preset.schema,
       preset.tableName,
       setLayerRowGeomEdit,
@@ -432,6 +435,12 @@ export function useLayerRowEdit({
         geomDirty && wktRaw != null && wktRaw !== LAYER_ROW_GEOM_CLEAR_SENTINEL
           ? wktRaw
           : null;
+
+      const requiredMsg = validateOccupationPeriodAndGeom(preset, draft, wktRaw);
+      if (requiredMsg) {
+        setEditError(requiredMsg);
+        return;
+      }
 
       if (isCreateMode) {
         const res = await call("", "POST", {

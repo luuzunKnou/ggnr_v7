@@ -105,6 +105,7 @@ import {
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
 } from '@/lib/occupationLedgerBinding';
+import { USE_FEE_WMS_LAYER_ID } from '../_mapContents/useFee/useFeeLayerId';
 import { Crosshair } from 'lucide-react';
 import './config/projections';
 import VectorSource from 'ol/source/Vector';
@@ -1374,6 +1375,34 @@ export default function OpenLayersMap({
             clearIdentifyIntake();
             return;
           }
+        }
+      }
+
+      /** 점사용료: ngl_fee_list → 목록·상세 선택 */
+      if (mapContext?.useFeePanelOpen && mapContext.applyUseFeeMapPickRef) {
+        const feeLid = USE_FEE_WMS_LAYER_ID.toLowerCase();
+        const feeHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return tn === feeLid && r.features.length > 0;
+        });
+        if (feeHit) {
+          const hitData = feeHit.features[0]?.data;
+          const feeId = pickIdentifyField(hitData, 'id');
+          if (!feeId) {
+            if (!cancelled) {
+              window.alert('클릭한 점사용료 도형의 번호를 읽을 수 없습니다.');
+            }
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.applyUseFeeMapPickRef.current?.({
+            id: feeId,
+            extent3857: pickIdentifyExtent3857(hitData),
+          });
+          clearIdentifyIntake();
+          return;
         }
       }
 

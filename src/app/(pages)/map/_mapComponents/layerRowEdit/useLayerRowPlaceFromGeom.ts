@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { formatAddressStripSidoSigungu } from "@/lib/formatAddressStripAdmin";
 import { useMapContext } from "../MapContext";
 import { resolveAddressFromWkt5181 } from "./resolveAddressFromWkt5181";
 
@@ -55,8 +56,9 @@ export function useLayerRowPlaceFromGeom({
       }
       // 필지 조회가 역지오코딩보다 늦게 끝나는 경우 대비 — await 이후 폴백 재확인
       const fallback = String(parcelAddressesRef.current[0] ?? "").trim();
-      const next = (addr || fallback || "").trim();
-      if (!next) return;
+      const raw = (addr || fallback || "").trim();
+      if (!raw) return;
+      const next = formatAddressStripSidoSigungu(raw) || raw;
       lastAppliedWktRef.current = wkt;
       onSetPlaceRef.current(field, next);
     })();

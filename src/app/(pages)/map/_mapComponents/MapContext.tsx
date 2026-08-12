@@ -235,6 +235,20 @@ export type MapContextValue = {
       }) => void)
     | null
   >;
+  /** 점사용료 패널(URL opened=useFee) 열림 */
+  useFeePanelOpen: boolean;
+  setUseFeePanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 점사용료 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (UseFeeListPanel이 등록)
+   */
+  applyUseFeeMapPickRef: MutableRefObject<
+    | ((pick: {
+        id: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -426,6 +440,8 @@ export type LayerRowGeomEditState = {
   seedWkt5181?: string | null;
   /** true면 getTableRowGeomGeoJson3857 호출 생략 */
   protoGeom?: boolean;
+  /** true면 기존 도형 없어도 수정 세션 유지(도형추가로 입력) */
+  allowEmptyGeom?: boolean;
 } | null;
 
 const MapContext = createContext<MapContextValue | null>(null);
@@ -499,6 +515,14 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const applyOccupationLedgerMapPickRef = useRef<
     | ((pick: {
         rowKey: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >(null);
+  const [useFeePanelOpen, setUseFeePanelOpen] = useState(false);
+  const applyUseFeeMapPickRef = useRef<
+    | ((pick: {
+        id: string;
         extent3857?: [number, number, number, number] | null;
       }) => void)
     | null
@@ -675,6 +699,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         occupationLedgerPanelOpen,
         setOccupationLedgerPanelOpen,
         applyOccupationLedgerMapPickRef,
+        useFeePanelOpen,
+        setUseFeePanelOpen,
+        applyUseFeeMapPickRef,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,

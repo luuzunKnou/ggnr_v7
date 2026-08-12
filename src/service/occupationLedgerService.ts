@@ -154,7 +154,8 @@ async function getChildAddressItems(params: {
     const res = await db.execute(sql.raw(sqlText));
     const items = (res.rows ?? []).map((r) => {
       const row = r as Record<string, unknown>;
-      const address = String(row.addr ?? '').trim();
+      const addressRaw = String(row.addr ?? '').trim();
+      const address = formatAddressStripSidoSigungu(addressRaw) || addressRaw;
       const xmin = Number(row.xmin);
       const ymin = Number(row.ymin);
       const xmax = Number(row.xmax);
@@ -415,17 +416,23 @@ export async function getOccupationLedgerDetailByKey(params: {
     const endYmd =
       tryFormatToYmd(endRaw) ?? (endRaw == null ? '' : String(endRaw).trim());
     const periodState = deriveOccupationPeriodState(endYmd);
+    const addressFields = new Set(['occup_place', 'applicant_addr']);
     const attributes: OccupationLedgerDetailAttr[] = dataFields.map((field) => {
       const def = metaByField.get(field.toLowerCase());
-      const isState = field.toLowerCase() === 'state';
+      const fl = field.toLowerCase();
+      const isState = fl === 'state';
+      let value = isState
+        ? periodState
+        : row[field] == null
+          ? ''
+          : String(row[field]);
+      if (!isState && addressFields.has(fl) && value) {
+        value = formatAddressStripSidoSigungu(value) || value;
+      }
       return {
         field,
         label: labelForOccupationLedgerField(field),
-        value: isState
-          ? periodState
-          : row[field] == null
-            ? ''
-            : String(row[field]),
+        value,
         showDetail: def?.showDetail !== false,
       };
     });

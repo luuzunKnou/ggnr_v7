@@ -59,6 +59,7 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childParentField: "cons_code",
     childAddressField: "usage_loc",
     fieldLabels: USAGE_DATA_AS_FIELD_LABELS,
+    requirePeriodAndGeomOnSave: true,
   },
   waterOccupationLedger: {
     tableName: "water_occupationledger",
@@ -73,6 +74,7 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childParentField: "id",
     childAddressField: "occup_place",
     fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
+    requirePeriodAndGeomOnSave: true,
   },
   roadOccupationLedger: {
     tableName: "road_occupationledger",
@@ -87,6 +89,7 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childParentField: "id",
     childAddressField: "occup_place",
     fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
+    requirePeriodAndGeomOnSave: true,
   },
   publicOccupationLedger: {
     tableName: "public_occupationledger",
@@ -101,6 +104,7 @@ export const LAYER_ROW_EDIT_PRESETS = {
     childParentField: "id",
     childAddressField: "occup_place",
     fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
+    requirePeriodAndGeomOnSave: true,
   },
 } as const satisfies Record<string, LayerRowEditPreset>;
 
