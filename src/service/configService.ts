@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
+import { unstable_noStore as noStore } from "next/cache"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -46,6 +47,7 @@ function resolveRuntimeEnvPath(): { project: string; path: string } {
 
 /** 현재 프로젝트의 src/config/projects/<project>.runtime.env 를 읽어 키-값 맵 반환 (재시작 없이 실시간 반영) */
 function getRuntimeEnvVars(): Record<string, string> {
+  noStore()
   const { project, path: runtimeEnvPath } = resolveRuntimeEnvPath()
   if (!project) return {}
   if (!existsSync(runtimeEnvPath)) return {}
@@ -513,6 +515,7 @@ export async function fetchSafetydataDssp10941Test(params?: {
  * ParcelSlider 배경용. 서버에서만 호출.
  */
 export function getIndexSliderImages(projectName: string): string[] {
+  noStore()
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")
   const out: string[] = []
@@ -532,6 +535,7 @@ export function getIndexSliderImages(projectName: string): string[] {
  * 1) {project}_index_logo.svg → 2) {project}_index_logo.png → 3) default_index_logo.svg (공간누리)
  */
 export function getIndexLogoSrc(projectName?: string): string {
+  noStore()
   const name = (projectName ?? process.env.GGNR_PROJECT ?? "build_yy").trim()
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")

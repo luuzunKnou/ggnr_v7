@@ -24,7 +24,7 @@ import type { FloodTimeType, SafetyWaterRiskArea } from './safetyWaterTypes';
 const ELEVATION_LAYER_NAME = 'elevation';
 
 /** 지도 심볼·토글칩과 동일 */
-const RAIN_SYMBOL_COLOR = '#00897B';
+const RAIN_SYMBOL_COLOR = '#E65100';
 const WATER_SYMBOL_COLOR = '#0B65C6';
 
 const TIME_OPTIONS: { value: FloodTimeType; label: string }[] = [
@@ -285,7 +285,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
           className={cn(
             'relative cursor-pointer rounded-[5px] border bg-card p-3 text-left shadow-sm transition-colors hover:bg-muted/50',
             statsKinds.includes('rain')
-              ? 'border-[#00897B] ring-1 ring-[#00897B]/30'
+              ? 'border-[#E65100] ring-1 ring-[#E65100]/30'
               : 'border-border/90'
           )}
           title={statsKinds.includes('rain') ? '강수량 기간별 현황 닫기' : '강수량 기간별 현황 보기'}

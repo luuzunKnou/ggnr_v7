@@ -59,8 +59,54 @@ type MergedRow = {
   water: SafetyWaterStatPoint | null;
 };
 
-const RAIN_COLOR = '#00897B';
+const RAIN_COLOR = '#E65100';
 const WATER_COLOR = '#0B65C6';
+/** 통계 선 그래프 등장(그리기) 애니메이션 */
+const CHART_LINE_DRAW_MS = 750;
+
+function AnimatedChartPolyline({
+  points,
+  stroke,
+  animKey,
+}: {
+  points: string;
+  stroke: string;
+  /** 데이터·크기 변경 시 재생 */
+  animKey: string;
+}) {
+  const ref = useRef<SVGPolylineElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !points) return;
+    const len = el.getTotalLength();
+    if (!Number.isFinite(len) || len <= 0) {
+      el.style.strokeDasharray = '';
+      el.style.strokeDashoffset = '';
+      el.style.transition = '';
+      return;
+    }
+    el.style.transition = 'none';
+    el.style.strokeDasharray = `${len}`;
+    el.style.strokeDashoffset = `${len}`;
+    // reflow 후 offset → 0
+    void el.getBoundingClientRect();
+    el.style.transition = `stroke-dashoffset ${CHART_LINE_DRAW_MS}ms ease-out`;
+    el.style.strokeDashoffset = '0';
+  }, [points, animKey]);
+
+  return (
+    <polyline
+      ref={ref}
+      fill="none"
+      stroke={stroke}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      points={points}
+    />
+  );
+}
 
 /** 관심~심각 구간만 (계획홍수위는 그래프 색·선에 미사용) */
 const THRESHOLD_BANDS: {
@@ -222,6 +268,7 @@ function StatsChartSvg({
   const waterPoints = showWater
     ? polylinePoints(dates, waterByDate, width, height, padX, waterRange.min, waterRange.max, padR)
     : '';
+  const lineAnimKey = `${dates.length}:${dates[0] ?? ''}:${dates[dates.length - 1] ?? ''}:${width}x${height}:${showRain}:${showWater}`;
   const maxLabels = Math.max(2, Math.min(6, Math.floor(width / 90)));
   const labelEvery = Math.max(1, Math.ceil(dates.length / maxLabels));
 
@@ -545,9 +592,11 @@ function StatsChartSvg({
             />
           );
         })}
-        {rainPoints ? <polyline fill="none" stroke={RAIN_COLOR} strokeWidth="2" points={rainPoints} /> : null}
+        {rainPoints ? (
+          <AnimatedChartPolyline points={rainPoints} stroke={RAIN_COLOR} animKey={`rain:${lineAnimKey}`} />
+        ) : null}
         {waterPoints ? (
-          <polyline fill="none" stroke={WATER_COLOR} strokeWidth="2" points={waterPoints} />
+          <AnimatedChartPolyline points={waterPoints} stroke={WATER_COLOR} animKey={`water:${lineAnimKey}`} />
         ) : null}
         {hoverDate ? (
           <>

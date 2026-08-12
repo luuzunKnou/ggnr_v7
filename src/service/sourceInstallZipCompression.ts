@@ -30,8 +30,11 @@ export function zipEntryName(relPath: string): string {
 }
 
 export function archiverLevelForPath(relPath: string): 0 | 1 | 9 {
+  const posix = relPath.replace(/\\/g, '/');
+  if (posix.startsWith('python/env_parts/')) return 0;
   const ext = path.extname(relPath).toLowerCase();
   if (STORE_EXTENSIONS.has(ext)) return 0;
+  if (/^\.z\d+$/i.test(ext)) return 0;
   return 1;
 }
 

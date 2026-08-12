@@ -4,7 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
 :: GGNR_V7 서비스 제거 + GeoServer(80) 포트 점유 종료 (관리자 권한으로 실행)
-:: - nssm 위치: nssm_install_ggnr.bat 과 동일 (C:\nssm\win64\nssm.exe 등)
+:: - nssm 위치: root\nssm\win64\nssm.exe (nssm_install_ggnr.bat 과 동일)
 :: - 순서: 1) nssm stop/remove GGNR_V7  2) 80 포트 Listen 프로세스 종료
 :: - 종료 시 항상 pause — 로그 확인 후 수동으로 창 닫기
 :: =============================================================================
@@ -32,11 +32,10 @@ if errorlevel 1 (
 )
 echo [확인] 관리자 권한으로 실행 중입니다.
 
-:: nssm 찾기 (nssm_install_ggnr.bat 과 동일)
-set "NSSM="
-if exist "C:\nssm\win64\nssm.exe" set "NSSM=C:\nssm\win64\nssm.exe"
-if not defined NSSM if exist "C:\nssm\nssm.exe" set "NSSM=C:\nssm\nssm.exe"
-if not defined NSSM (
+:: nssm 찾기 (프로젝트 내부: root\nssm\win64\nssm.exe)
+set "NSSM=%ROOT%\nssm\win64\nssm.exe"
+if not exist "%NSSM%" set "NSSM=%ROOT%\nssm\win32\nssm.exe"
+if not exist "%NSSM%" (
   where nssm >nul 2>&1
   if not errorlevel 1 (
     for /f "delims=" %%I in ('where nssm') do (
@@ -47,9 +46,9 @@ if not defined NSSM (
 )
 
 :nssm_found
-if not defined NSSM (
+if not exist "%NSSM%" (
   echo [오류] nssm.exe 를 찾지 못했습니다.
-  echo   기대 경로: C:\nssm\win64\nssm.exe
+  echo   기대 경로: %ROOT%\nssm\win64\nssm.exe
   set "EXIT_EC=1"
   goto :end_pause
 )

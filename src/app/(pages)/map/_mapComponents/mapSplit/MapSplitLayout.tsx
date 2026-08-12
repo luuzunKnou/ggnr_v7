@@ -125,23 +125,6 @@ export function MapSplitLayout({
     if (splitActive) setRatioLocked(false);
   }, [splitActive]);
 
-  /** 분할 ON 직후 가용 분율 스냅샷 — 저장된 primaryRatio → usableFraction */
-  useLayoutEffect(() => {
-    if (!splitActive) return;
-    const el = containerRef.current;
-    if (!el) return;
-    if (orientationRef.current === 'horizontal') {
-      usableSplitFractionRef.current = usableFractionFromPrimaryRatio(
-        el.clientWidth,
-        mapPaddingLeftRef.current,
-        mapPaddingRightRef.current,
-        primaryRatioRef.current
-      );
-    } else {
-      usableSplitFractionRef.current = primaryRatioRef.current;
-    }
-  }, [splitActive]);
-
   const dragRef = useRef<{ startPos: number; startRatio: number } | null>(null);
   const draggingRef = useRef(false);
   const pendingRatioRef = useRef<number | null>(null);
@@ -186,6 +169,40 @@ export function MapSplitLayout({
   const usableSplitFractionRef = useRef(0.5);
   const primaryRatioRef = useRef(primaryRatio);
   primaryRatioRef.current = primaryRatio;
+
+  /**
+   * 분할·로드뷰 OFF → 비율 초기화.
+   * ON → 가용 영역 1:1(0.5)부터 시작 (이전 드래그 비율 유지 금지).
+   */
+  useLayoutEffect(() => {
+    if (primaryRatioPropRef.current != null) return;
+
+    if (!splitActive) {
+      usableSplitFractionRef.current = 0.5;
+      const next = MAP_SPLIT_DEFAULT_PRIMARY_RATIO;
+      if (Math.abs(primaryRatioRef.current - next) > 1e-4) {
+        primaryRatioRef.current = next;
+        setPrimaryRatio(next);
+        onPrimaryRatioChangeRef.current?.(next);
+      }
+      return;
+    }
+
+    usableSplitFractionRef.current = 0.5;
+    const el = containerRef.current;
+    const next =
+      el && orientationRef.current === 'horizontal'
+        ? primaryRatioFromUsableFraction(
+            el.clientWidth,
+            mapPaddingLeftRef.current,
+            mapPaddingRightRef.current,
+            0.5
+          )
+        : MAP_SPLIT_DEFAULT_PRIMARY_RATIO;
+    primaryRatioRef.current = next;
+    setPrimaryRatio(next);
+    onPrimaryRatioChangeRef.current?.(next);
+  }, [splitActive]);
 
   /** 가용 분율 → primaryRatio 반영 (패널·리사이즈 시). 드래그 중에는 스킵 */
   const syncHorizontalRatioFromUsable = useCallback(() => {

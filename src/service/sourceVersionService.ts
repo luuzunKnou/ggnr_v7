@@ -13,6 +13,12 @@ import {
   isManagedApplyOrphanCandidate,
   isProtectedApplyResidualPath,
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { decodeChildOutput } from '@/lib/decodeChildOutput';
+import {
+  isPrebuildTsxAvailable,
+  NPM_INSTALL_DEV_ARGS,
+  resolveNpmInstallEnv,
+} from '@/lib/npmApplyEnv';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
 
@@ -97,18 +103,20 @@ function npmFailureDetail(output: string, code: number | null, label: string): s
 /** npm stdout/stderr → UI 로그·실패 원인 (stdio inherit 대신 캡처) */
 async function spawnNpmWithApplyLog(
   args: string[],
-  onLine: (line: string) => void | Promise<void>
+  onLine: (line: string) => void | Promise<void>,
+  envOverride?: NodeJS.ProcessEnv
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const usedCmdShell = process.platform === 'win32';
     const child = spawn('npm', args, {
       cwd: process.cwd(),
       shell: true,
       windowsHide: true,
-      env: process.env,
+      env: envOverride ?? process.env,
     });
     let combined = '';
     const handleData = (buf: Buffer) => {
-      const chunk = buf.toString('utf-8');
+      const chunk = decodeChildOutput(buf, usedCmdShell);
       combined += chunk;
       for (const line of chunk.split(/\r?\n/)) {
         const trimmed = line.trimEnd();
@@ -123,6 +131,20 @@ async function spawnNpmWithApplyLog(
       else reject(new Error(npmFailureDetail(combined, code, `npm ${args.join(' ')}`)));
     });
   });
+}
+
+/** prebuild(tsx) 누락 시 devDependencies 포함 install (개방·폐쇄망 공통) */
+async function ensurePrebuildDevDeps(
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  if (isPrebuildTsxAvailable()) return;
+  await spawnNpmWithApplyLog([...NPM_INSTALL_DEV_ARGS], onLine, resolveNpmInstallEnv());
+}
+
+async function runApplyNpmInstallDev(
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  await spawnNpmWithApplyLog([...NPM_INSTALL_DEV_ARGS], onLine, resolveNpmInstallEnv());
 }
 
 export type ApplyLatestSourceOptions = {
@@ -180,6 +202,7 @@ const DEFAULT_EXCLUDE_PREFIXES = [
   'node_modules/',
   '.cursor/',
   '.vscode/',
+  'nssm/',
   '3dtiles_las/',
   'tiles_tif/',
   'tiles_jpg/',
@@ -787,10 +810,12 @@ export type GnmsClientConfig = {
   listUrl: string;
   downloadUrlFallback: string;
   cancelUrl: string;
+  installLatestUrl: string;
+  installDownloadUrl: string;
   bearer: string;
 };
 
-/** 브라우저가 GNMS에 직접 요청할 때 쓸 URL·토큰 (폐쇄망 중계, CORS 허용 전제) */
+/** 로컬 서버가 GNMS API를 호출할 때 쓸 URL·토큰 */
 export function getGnmsClientConfig(): GnmsClientConfig {
   const gnmsBaseUrl =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BASE_URL?.trim() ||
@@ -800,6 +825,10 @@ export function getGnmsClientConfig(): GnmsClientConfig {
   const listPath = process.env.GNMS_SOURCE_LIST_PATH?.trim() ?? '/list';
   const downloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
   const cancelPath = process.env.GNMS_SOURCE_CANCEL_PATH?.trim() ?? '/cancel';
+  const installLatestPath =
+    process.env.GNMS_SOURCE_INSTALL_LATEST_PATH?.trim() ?? '/install/latest';
+  const installDownloadPath =
+    process.env.GNMS_SOURCE_INSTALL_DOWNLOAD_PATH?.trim() ?? '/install/download/latest';
   const bearer =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BEARER?.trim() ||
     process.env.GNMS_SOURCE_BEARER?.trim() ||
@@ -810,6 +839,8 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     listUrl: resolveGnmsApiUrl(gnmsBaseUrl, listPath),
     downloadUrlFallback: resolveGnmsApiUrl(gnmsBaseUrl, downloadPath),
     cancelUrl: resolveGnmsApiUrl(gnmsBaseUrl, cancelPath),
+    installLatestUrl: resolveGnmsApiUrl(gnmsBaseUrl, installLatestPath),
+    installDownloadUrl: resolveGnmsApiUrl(gnmsBaseUrl, installDownloadPath),
     bearer,
   };
 }
@@ -1079,9 +1110,9 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       if (!includeNodeModules && rollback) {
         await emit('npm-install', 'node_modules 백업 중...');
         await snapshotNodeModulesInto(rollback, workspaceRoot);
-        await emit('npm-install', 'npm install (개방망) 시작');
+        await emit('npm-install', 'npm install --include=dev (개방망) 시작');
         try {
-          await spawnNpmWithApplyLog(['install', '--no-audit', '--no-fund'], async (line) => {
+          await runApplyNpmInstallDev(async (line) => {
             await emit('npm-install', line, { logLine: `[npm install] ${line}` });
           });
         } catch (installErr: unknown) {
@@ -1092,6 +1123,20 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
           throw new Error(`npm install 실패 (version=${version}, 개방망):\n${detail}`);
         }
         await emit('npm-install', 'npm install 완료');
+      }
+      if (!isPrebuildTsxAvailable()) {
+        await emit('npm-install', 'prebuild용 tsx 없음 — npm install --include=dev');
+        try {
+          await runApplyNpmInstallDev(async (line) => {
+            await emit('npm-install', line, { logLine: `[npm install] ${line}` });
+          });
+        } catch (installErr: unknown) {
+          const detail = installErr instanceof Error ? installErr.message : String(installErr);
+          await emit('npm-install', 'npm install 실패', {
+            logLine: `[SourceCodeUpload] tsx 보강 install 실패:\n${detail}`,
+          });
+          throw new Error(`tsx 보강 install 실패 (version=${version}):\n${detail}`);
+        }
       }
       await emit('build', '사전 빌드 시작');
       try {

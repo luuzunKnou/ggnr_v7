@@ -1,5 +1,7 @@
 // src/app/(pages)/map/page.tsx
 import { Suspense } from 'react';
+
+export const dynamic = 'force-dynamic';
 import { getDefaultMapCenterFromFooter } from '@/service/configService';
 import MapViewModeWrapper from './_mapComponents/MapViewModeWrapper';
 

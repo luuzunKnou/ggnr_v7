@@ -5,6 +5,7 @@ import {
   buildInstallZip,
   recordInstallZipHistory,
   failInstallZipBuild,
+  formatInstallZipError,
 } from '@/service/sourceInstallZipService';
 import type { SourcePackageProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
     const downloadUrl = `/api/source/version/install-zip/download?zipName=${encodeURIComponent(result.zipName)}`;
     return NextResponse.redirect(new URL(downloadUrl, req.nextUrl.origin));
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'install zip build failed';
+    const message = formatInstallZipError(err);
     failInstallZipBuild(undefined, message);
     await recordInstallZipHistory({
       ok: false,

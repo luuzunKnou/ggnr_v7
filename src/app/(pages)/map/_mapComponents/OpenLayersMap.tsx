@@ -430,24 +430,19 @@ export default function OpenLayersMap({
     return () => ro.disconnect();
   }, [backgroundPanelVisible]);
 
-  /** 우측 메뉴·확장 패널 폭 — 상하 분할 거터 pill 가용 범위 */
+  /** 우측 메뉴(버튼 열) 폭만 — 상하 분할 거터·방향 전환용.
+   * 배경지도·레이어 선택 등 우측에서 뜨는 패널은 전부 오버레이 모달로 보고
+   * 지도 가용폭·좌우/상하 전환에 넣지 않음. */
   useEffect(() => {
     const setPaddingRight = mapContext?.setMapPaddingRight;
     const fixed = mapControlFixedRef.current;
     if (!setPaddingRight || !fixed) return;
 
     const syncPaddingRight = () => {
-      let leftEdge = window.innerWidth;
-      const row = mapControlOverlayRowRef.current;
-      if (row) {
-        leftEdge = Math.min(leftEdge, row.getBoundingClientRect().left);
-      }
-      fixed.querySelectorAll('[data-map-control-expand-panel]').forEach((el) => {
-        const r = el.getBoundingClientRect();
-        if (r.width > 1 && r.height > 1) {
-          leftEdge = Math.min(leftEdge, r.left);
-        }
-      });
+      const menu = fixed.querySelector('[data-map-control-menu]');
+      const leftEdge = menu
+        ? menu.getBoundingClientRect().left
+        : window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
       const next = Math.max(
         MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
         Math.ceil(window.innerWidth - leftEdge)
@@ -457,21 +452,15 @@ export default function OpenLayersMap({
 
     syncPaddingRight();
     const ro = new ResizeObserver(syncPaddingRight);
-    ro.observe(fixed);
-    if (mapControlOverlayRowRef.current) ro.observe(mapControlOverlayRowRef.current);
+    const menu = fixed.querySelector('[data-map-control-menu]');
+    if (menu) ro.observe(menu);
+    else ro.observe(fixed);
     window.addEventListener('resize', syncPaddingRight);
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', syncPaddingRight);
     };
-  }, [
-    mapContext?.setMapPaddingRight,
-    activeControls,
-    openSubPanel,
-    resetMeasurementsPanelVisible,
-    backgroundPanelVisible,
-    isAerialViewPanelExiting,
-  ]);
+  }, [mapContext?.setMapPaddingRight, activeControls, extraControls]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   useEffect(() => {
@@ -2079,7 +2068,7 @@ export default function OpenLayersMap({
             </div>
           )}
 
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto" data-map-control-menu>
             <MapControlPanel
               groups={mapControlGroups}
               activeIds={

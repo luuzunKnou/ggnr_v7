@@ -32,7 +32,7 @@ function kindLabel(kind: SafetyWaterStation['kind']) {
 function kindBadgeClass(kind: SafetyWaterStation['kind']) {
   return kind === 'water'
     ? 'bg-[#3B8DE0] text-white'
-    : 'bg-[#26A69A] text-white';
+    : 'bg-[#FB8C00] text-white';
 }
 
 export function SafetyWaterStationList({
