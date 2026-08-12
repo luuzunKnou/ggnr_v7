@@ -9,6 +9,7 @@ import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import { cloneRoadNetworkRows } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
+import type { MapHitOverlapOption } from './MapHitOverlapSelect';
 
 export type RoadCctvOverlayState = {
   items: ItsCctvItem[];
@@ -218,9 +219,14 @@ export type MapContextValue = {
     | ((pick: {
         consCode: string;
         extent3857?: [number, number, number, number] | null;
+        /** 겹친 도형 후보(2건 이상이면 상세 상단 선택) */
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
+  /** 지도 클릭 겹침 후보 — 울진 하천점용 상세 상단 select */
+  usageDataAsMapHitOptions: MapHitOverlapOption[];
+  setUsageDataAsMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 공통 점용대장 패널(URL opened=occupationLedger) 열림 */
   occupationLedgerPanelOpen: boolean;
   setOccupationLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -232,10 +238,14 @@ export type MapContextValue = {
     | ((pick: {
         rowKey: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
-  /** 점사용료 패널(URL opened=useFee) 열림 */
+  /** 지도 클릭 겹침 후보 — 공통 점용 상세 상단 select */
+  occupationLedgerMapHitOptions: MapHitOverlapOption[];
+  setOccupationLedgerMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
+  /** 점사용료 패널(URL opened=*NglFeeList) 열림 */
   useFeePanelOpen: boolean;
   setUseFeePanelOpen: Dispatch<SetStateAction<boolean>>;
   /**
@@ -246,9 +256,13 @@ export type MapContextValue = {
     | ((pick: {
         id: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
+  /** 지도 클릭 겹침 후보 — 점사용료 상세 상단 select */
+  useFeeMapHitOptions: MapHitOverlapOption[];
+  setUseFeeMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -508,25 +522,33 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     | ((pick: {
         consCode: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [usageDataAsMapHitOptions, setUsageDataAsMapHitOptions] = useState<MapHitOverlapOption[]>([]);
   const [occupationLedgerPanelOpen, setOccupationLedgerPanelOpen] = useState(false);
   const applyOccupationLedgerMapPickRef = useRef<
     | ((pick: {
         rowKey: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [occupationLedgerMapHitOptions, setOccupationLedgerMapHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
   const [useFeePanelOpen, setUseFeePanelOpen] = useState(false);
   const applyUseFeeMapPickRef = useRef<
     | ((pick: {
         id: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [useFeeMapHitOptions, setUseFeeMapHitOptions] = useState<MapHitOverlapOption[]>([]);
   const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
   const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
   const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
@@ -696,12 +718,18 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         usageDataAsPanelOpen,
         setUsageDataAsPanelOpen,
         applyUsageDataAsMapPickRef,
+        usageDataAsMapHitOptions,
+        setUsageDataAsMapHitOptions,
         occupationLedgerPanelOpen,
         setOccupationLedgerPanelOpen,
         applyOccupationLedgerMapPickRef,
+        occupationLedgerMapHitOptions,
+        setOccupationLedgerMapHitOptions,
         useFeePanelOpen,
         setUseFeePanelOpen,
         applyUseFeeMapPickRef,
+        useFeeMapHitOptions,
+        setUseFeeMapHitOptions,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,

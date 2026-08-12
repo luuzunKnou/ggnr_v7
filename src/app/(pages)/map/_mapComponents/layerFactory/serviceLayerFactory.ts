@@ -232,6 +232,11 @@ export function useServiceLayerSync(
   hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
   /** 공통 점용 부서업무 패널 열림 — 울진과 동일 팔레트 스타일 사용 */
   occupationDeptPanelOpen?: boolean,
+  /**
+   * WMS에서 본표보다 아래에 깔 레이어 id
+   * (부서업무 본표는 위, 패널에서 켠 점사용료 등은 아래)
+   */
+  wmsForceBottomLayerNames?: Iterable<string>,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
@@ -239,6 +244,11 @@ export function useServiceLayerSync(
   hiddenRef.current = hiddenFeaturesByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
   const deptOpen = occupationDeptPanelOpen === true;
+  const forceBottomKey = Array.from(wmsForceBottomLayerNames ?? [])
+    .map((n) => String(n).trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join(',');
 
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -267,8 +277,12 @@ export function useServiceLayerSync(
     }
 
     const rawNames = Array.from(visibleLayerNames);
-    // 기하 타입 없어도 강제 하단(시설물 등) 정렬은 항상 적용
-    const names = sortLayerNamesForWmsStack(rawNames, layerGeometryTypes ?? {});
+    // 기하 타입 없어도 강제 하단(시설물·보조 레이어) 정렬은 항상 적용
+    const names = sortLayerNamesForWmsStack(
+      rawNames,
+      layerGeometryTypes ?? {},
+      wmsForceBottomLayerNames
+    );
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
     // 부서업무 점용: 울진 usage_data_as* 스타일 재사용 / 데이터조회: 테이블명(기본 SLD)
     const stylesParam = names
@@ -284,7 +298,7 @@ export function useServiceLayerSync(
       return mergeCqlParts(base, spatialCql, excludeCql);
     });
     const cqlParam = cqlArr.join(';');
-    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}`;
+    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}|fb:${forceBottomKey}`;
 
     if (
       lastSyncKeyRef.current === syncKey &&
@@ -312,6 +326,8 @@ export function useServiceLayerSync(
     layerGeometryTypes,
     hiddenFeaturesByLayer,
     deptOpen,
+    forceBottomKey,
+    wmsForceBottomLayerNames,
   ]);
 }
 

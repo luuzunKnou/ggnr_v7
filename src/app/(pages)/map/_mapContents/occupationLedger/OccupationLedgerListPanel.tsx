@@ -92,6 +92,7 @@ export function OccupationLedgerListPanel({
   const handleRowClick = useCallback(
     async (rowKey: string) => {
       if (!rowKey) return;
+      mapContext?.setOccupationLedgerMapHitOptions?.([]);
       onSelectDetailId(rowKey);
       if (rowKey === LAYER_ROW_NEW_ID) return;
       try {
@@ -115,7 +116,7 @@ export function OccupationLedgerListPanel({
         window.alert('지도 이동에 실패했습니다.');
       }
     },
-    [onSelectDetailId, serEng, fitMapAfterDetailLayout]
+    [onSelectDetailId, serEng, fitMapAfterDetailLayout, mapContext]
   );
 
   useEffect(() => {
@@ -124,6 +125,8 @@ export function OccupationLedgerListPanel({
     pickRef.current = (pick) => {
       const rowKey = String(pick?.rowKey ?? '').trim();
       if (!rowKey) return;
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
+      mapContext?.setOccupationLedgerMapHitOptions?.(opts.length > 1 ? opts : []);
       onSelectDetailId(rowKey);
       if (
         Array.isArray(pick?.extent3857) &&
@@ -131,14 +134,12 @@ export function OccupationLedgerListPanel({
         pick.extent3857.every((v) => Number.isFinite(Number(v)))
       ) {
         fitMapAfterDetailLayout(pick.extent3857.map(Number));
-        return;
       }
-      void handleRowClick(rowKey);
     };
     return () => {
       pickRef.current = null;
     };
-  }, [mapContext, onSelectDetailId, fitMapAfterDetailLayout, handleRowClick]);
+  }, [mapContext, onSelectDetailId, fitMapAfterDetailLayout]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -196,7 +197,13 @@ export function OccupationLedgerListPanel({
     scroller.scrollBy({ top: delta, behavior: 'smooth' });
   }, [selectedDetailId, filteredItems]);
 
-  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames);
+  const useFeeSystem =
+    serEng === 'roadOccupationLedger'
+      ? 'road'
+      : serEng === 'publicOccupationLedger'
+        ? 'build'
+        : 'river';
+  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames, useFeeSystem);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -208,7 +215,9 @@ export function OccupationLedgerListPanel({
             title={useFeeLayerOn ? '점사용료 레이어 끄기' : '점사용료 레이어 켜기'}
             aria-label={useFeeLayerOn ? '점사용료 레이어 끄기' : '점사용료 레이어 켜기'}
             aria-pressed={useFeeLayerOn}
-            onClick={() => toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames)}
+            onClick={() =>
+              toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames, useFeeSystem)
+            }
             style={useFeeLayerOn ? occupationLayerToggleActiveStyle('useFee') : undefined}
             className={useFeeLayerOn ? 'hover:opacity-90' : undefined}
           >
@@ -282,11 +291,11 @@ export function OccupationLedgerListPanel({
                 : '선택한 상태에 해당하는 목록이 없습니다.'}
             </div>
           ) : (
-            <table className="w-full min-w-[666px] table-fixed border-collapse text-left text-xs">
+            <table className="w-full min-w-[608px] table-fixed border-collapse text-left text-xs">
               <colgroup>
                 <col className="w-[60px]" />
                 <col className="w-[180px]" />
-                <col className="w-[250px]" />
+                <col className="w-[192px]" />
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>

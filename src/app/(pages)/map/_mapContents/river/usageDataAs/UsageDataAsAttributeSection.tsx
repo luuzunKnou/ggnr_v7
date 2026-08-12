@@ -121,7 +121,7 @@ export function UsageDataAsAttributeSection({
             return (
               <div
                 key={row.field}
-                className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
+                className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 py-1.5 pl-2 pr-0"
               >
                 <dt className="shrink-0 leading-none font-medium text-slate-600">{row.label}</dt>
                 <dd className="relative min-w-0 break-words text-slate-800">

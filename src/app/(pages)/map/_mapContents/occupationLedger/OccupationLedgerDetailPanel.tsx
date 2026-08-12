@@ -35,6 +35,7 @@ import {
   refreshOccupationLedgerMapView,
 } from './occupationLedgerMapSync';
 import { useOccupationLedgerParentGeomHighlight } from './useOccupationLedgerParentGeomHighlight';
+import { MapHitOverlapSelect } from '../../_mapComponents/MapHitOverlapSelect';
 import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
 import { currentPermitYear } from '@/lib/occupationPermitNo';
 import { useAutoOccupationPermitNo } from '../../_mapComponents/layerRowEdit/useAutoOccupationPermitNo';
@@ -55,6 +56,7 @@ type Props = {
   detailId: string;
   serEng: string;
   onClose: () => void;
+  onSelectDetailId?: (id: string) => void;
   onSaved?: () => void;
   onCreated?: (newKey: string) => void;
   onDeleted?: () => void;
@@ -92,11 +94,13 @@ export function OccupationLedgerDetailPanel({
   detailId,
   serEng,
   onClose,
+  onSelectDetailId,
   onSaved,
   onCreated,
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
+  const hitOptions = mapContext?.occupationLedgerMapHitOptions ?? [];
   const binding = getOccupationLedgerBinding({ serEng });
   const presetKey = (binding?.editPresetKey ?? 'waterOccupationLedger') as LayerRowEditPresetKey;
   const preset = LAYER_ROW_EDIT_PRESETS[presetKey] ?? LAYER_ROW_EDIT_PRESETS.waterOccupationLedger;
@@ -599,11 +603,21 @@ export function OccupationLedgerDetailPanel({
       <LayerRowEditHeader
         title={`${binding?.title ?? '점용'} 상세`}
         actionsPlacement="footer"
-        onClose={onClose}
+        onClose={() => {
+          mapContext?.setOccupationLedgerMapHitOptions?.([]);
+          onClose();
+        }}
+        className="pl-3 pr-0"
         {...editToolbarProps}
       />
+      <MapHitOverlapSelect
+        fieldLabel="허가번호"
+        options={hitOptions}
+        value={detailId}
+        onChange={(id) => onSelectDetailId?.(id)}
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      <div className="min-h-0 flex-1 overflow-auto pl-3 pr-0 py-2 text-xs">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />

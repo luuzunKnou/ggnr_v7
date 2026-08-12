@@ -5,13 +5,14 @@ import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import GeoJSON from 'ol/format/GeoJSON'
 import { Style, Stroke, Fill } from 'ol/style'
+import { useSearchParams } from 'next/navigation'
 import { call } from '@/lib/api'
 import {
   occupationFillRgba,
   occupationStrokeRgba,
 } from '@/lib/occupationLayerStyle'
 import { useMapContext } from '../../_mapComponents/MapContext'
-import { USE_FEE_WMS_LAYER_ID } from './useFeeLayerId'
+import { getUseFeeWmsLayerId } from './useFeeLayerId'
 
 /**
  * 목록·상세 선택 시 도형 강조.
@@ -29,8 +30,15 @@ const USE_FEE_GEOM_STYLE = [
 ]
 
 /** 상세 선택 — 점사용료 geom 활성 표시 */
-export function useUseFeeGeomHighlight(detailId: string | null, active: boolean) {
+export function useUseFeeGeomHighlight(
+  detailId: string | null,
+  active: boolean,
+  serEng?: string | null
+) {
   const mapContext = useMapContext()
+  const searchParams = useSearchParams()
+  const system = String(searchParams.get('system') ?? '').trim()
+  const feeTable = getUseFeeWmsLayerId({ system: system || 'river', serEng })
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null)
 
   useEffect(() => {
@@ -69,7 +77,7 @@ export function useUseFeeGeomHighlight(detailId: string | null, active: boolean)
           service: 'layerRowService',
           action: 'getTableRowGeomGeoJson3857',
           params: {
-            table: USE_FEE_WMS_LAYER_ID,
+            table: feeTable,
             schema: 'layer',
             keyField: 'id',
             keyValue: key,
@@ -96,5 +104,5 @@ export function useUseFeeGeomHighlight(detailId: string | null, active: boolean)
     return () => {
       cancelled = true
     }
-  }, [detailId, active])
+  }, [active, detailId, feeTable])
 }

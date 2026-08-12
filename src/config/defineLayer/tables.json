@@ -6321,8 +6321,32 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "ngl_fee_list",
-    "define_table_kor_name": "ngl_fee_list",
+    "define_table_name": "water_ngl_fee_list",
+    "define_table_kor_name": "하천점사용료",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점사용료",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_ngl_fee_list",
+    "define_table_kor_name": "도로점사용료",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점사용료",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "public_ngl_fee_list",
+    "define_table_kor_name": "국공유지점사용료",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",

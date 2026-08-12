@@ -30,6 +30,7 @@ import { UsageDataAsAddressList } from "./UsageDataAsAddressList";
 import { useLayerRowParcelHighlight, type LayerRowParcelHighlightVariant } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight";
 import { useLayerRowParcelDraftPreview } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelDraftPreview";
 import { useUsageDataAsParentGeomHighlight } from "./useUsageDataAsParentGeomHighlight";
+import { MapHitOverlapSelect } from "../../../_mapComponents/MapHitOverlapSelect";
 import {
   ensureUsageDataAsWmsLayersVisible,
   refreshUsageDataAsMapView,
@@ -47,6 +48,7 @@ import { currentPermitYear } from "@/lib/occupationPermitNo";
 type Props = {
   detailId: string;
   onClose: () => void;
+  onSelectDetailId?: (id: string) => void;
   onSaved?: () => void;
   onCreated?: (newKey: string) => void;
   onDeleted?: () => void;
@@ -55,11 +57,13 @@ type Props = {
 export function UsageDataAsDetailPanel({
   detailId,
   onClose,
+  onSelectDetailId,
   onSaved,
   onCreated,
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
+  const hitOptions = mapContext?.usageDataAsMapHitOptions ?? [];
   const preset = LAYER_ROW_EDIT_PRESETS.usageDataAs;
   const isCreateMode = detailId === LAYER_ROW_NEW_ID;
 
@@ -574,11 +578,21 @@ export function UsageDataAsDetailPanel({
       <LayerRowEditHeader
         title="하천점용 상세"
         actionsPlacement="footer"
-        onClose={onClose}
+        onClose={() => {
+          mapContext?.setUsageDataAsMapHitOptions?.([]);
+          onClose();
+        }}
+        className="pl-3 pr-0"
         {...editToolbarProps}
       />
+      <MapHitOverlapSelect
+        fieldLabel="허가번호"
+        options={hitOptions}
+        value={detailId}
+        onChange={(id) => onSelectDetailId?.(id)}
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      <div className="min-h-0 flex-1 overflow-auto pl-3 pr-0 py-2 text-xs">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />

@@ -135,6 +135,7 @@ export function UsageDataAsListPanel({
   const handleRowClick = useCallback(
     (rowKey: string) => {
       if (!rowKey) return;
+      mapContext?.setUsageDataAsMapHitOptions?.([]);
       // 같은 행 재클릭 — selectedDetailId 불변이라 effect가 안 도므로 직접 맞춤
       if (rowKey === selectedDetailId && rowKey !== LAYER_ROW_NEW_ID) {
         void fitMapToDetailKey(rowKey);
@@ -142,7 +143,7 @@ export function UsageDataAsListPanel({
       }
       onSelectDetailId(rowKey);
     },
-    [selectedDetailId, onSelectDetailId, fitMapToDetailKey]
+    [selectedDetailId, onSelectDetailId, fitMapToDetailKey, mapContext]
   );
 
   /** 지도에서 점용 레이어 클릭 → 목록·상세 선택 + 클릭 도형을 지도 중앙에 맞춤 */
@@ -152,6 +153,11 @@ export function UsageDataAsListPanel({
     pickRef.current = (pick) => {
       const consCode = String(pick?.consCode ?? "").trim();
       if (!consCode) return;
+      // 겹침 옵션은 OpenLayersMap이 Context에 먼저 넣음 — 여기서 []로 덮어쓰지 않음
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
+      if (opts.length > 1) {
+        mapContextRef.current?.setUsageDataAsMapHitOptions?.(opts);
+      }
       const clickedExt = pick?.extent3857;
       if (
         Array.isArray(clickedExt) &&
@@ -168,11 +174,7 @@ export function UsageDataAsListPanel({
     return () => {
       pickRef.current = null;
     };
-  }, [
-    mapContext?.applyUsageDataAsMapPickRef,
-    onSelectDetailId,
-    fitMapAfterDetailLayout,
-  ]);
+  }, [mapContext?.applyUsageDataAsMapPickRef, onSelectDetailId, fitMapAfterDetailLayout]);
 
   useEffect(() => {
     if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;
@@ -218,7 +220,7 @@ export function UsageDataAsListPanel({
   }, [keyword, refreshKey]);
 
   const sisulLayerOn = isUsageDataAsSisulWmsVisible(mapContext?.visibleLayerNames);
-  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames);
+  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames, 'river');
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -241,7 +243,9 @@ export function UsageDataAsListPanel({
             title={useFeeLayerOn ? "점사용료 레이어 끄기" : "점사용료 레이어 켜기"}
             aria-label={useFeeLayerOn ? "점사용료 레이어 끄기" : "점사용료 레이어 켜기"}
             aria-pressed={useFeeLayerOn}
-            onClick={() => toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames)}
+            onClick={() =>
+              toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames, 'river')
+            }
             style={useFeeLayerOn ? occupationLayerToggleActiveStyle("useFee") : undefined}
             className={useFeeLayerOn ? "hover:opacity-90" : undefined}
           >
@@ -287,10 +291,10 @@ export function UsageDataAsListPanel({
           {loading ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
           ) : (
-            <table className="w-full min-w-[606px] table-fixed border-collapse text-left text-xs">
+            <table className="w-full min-w-[548px] table-fixed border-collapse text-left text-xs">
               <colgroup>
                 <col className="w-[180px]" />
-                <col className="w-[250px]" />
+                <col className="w-[192px]" />
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>

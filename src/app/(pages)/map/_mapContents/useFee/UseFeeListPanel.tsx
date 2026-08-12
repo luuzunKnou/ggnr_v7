@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { getUseFeeBinding } from '@/lib/useFeeBinding'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
@@ -55,11 +56,14 @@ type ListProps = {
   onClose: () => void
   selectedId: string | null
   onSelectId: (id: string) => void
+  /** water|road|publicNglFeeList */
+  serEng: string
 }
 
-export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) {
+export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: ListProps) {
   const searchParams = useSearchParams()
   const system = String(searchParams.get('system') ?? '').trim()
+  const feeQuery = { system: system || undefined, serEng: serEng || undefined }
   const mapContext = useMapContext()
   const mapContextRef = useRef(mapContext)
   mapContextRef.current = mapContext
@@ -86,7 +90,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
   rowsLenRef.current = rows.length
   totalRef.current = total
 
-  useUseFeeGeomHighlight(selectedId, Boolean(selectedId))
+  useUseFeeGeomHighlight(selectedId, Boolean(selectedId), serEng)
 
   useEffect(() => {
     let cancelled = false
@@ -105,18 +109,18 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
   }, [])
 
   useEffect(() => {
-    ensureUseFeeWmsLayer(mapContextRef.current?.setVisibleLayerNames)
+    ensureUseFeeWmsLayer(mapContextRef.current?.setVisibleLayerNames, feeQuery)
     return () => {
       clearUseFeeOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames)
       clearUseFeeWmsLayer(mapContextRef.current?.setVisibleLayerNames)
     }
-  }, [])
+  }, [serEng, system])
 
   const fitMapAfterDetailLayout = useCallback(
     (extent3857: number[]) => {
       const map = mapContext?.mapInstanceRef?.current
       if (!map) return
-      ensureUseFeeWmsLayer(mapContext?.setVisibleLayerNames)
+      ensureUseFeeWmsLayer(mapContext?.setVisibleLayerNames, feeQuery)
       window.setTimeout(() => {
         scheduleFitMapToExtent3857(map, extent3857, {
           maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
@@ -124,7 +128,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
         })
       }, 80)
     },
-    [mapContext]
+    [mapContext, serEng, system]
   )
 
   const fitMapToFeeId = useCallback(
@@ -135,7 +139,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
         const res = await call('', 'POST', {
           service: 'useFeeService',
           action: 'getUseFeeExtent3857ById',
-          params: { id: key },
+          params: { id: key, ...feeQuery },
         })
         const data = res?.data ?? res
         const ext = data?.extent3857 as unknown
@@ -146,7 +150,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
         /* geom 없으면 무시 */
       }
     },
-    [fitMapAfterDetailLayout]
+    [fitMapAfterDetailLayout, serEng, system]
   )
 
   useEffect(() => {
@@ -165,6 +169,8 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     pickRef.current = (pick) => {
       const id = String(pick?.id ?? '').trim()
       if (!id) return
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : []
+      mapContext?.setUseFeeMapHitOptions?.(opts.length > 1 ? opts : [])
 
       const clickedExt = pick?.extent3857
       if (
@@ -203,13 +209,14 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
   const handleRowClick = useCallback(
     (id: string) => {
       if (!id) return
+      mapContext?.setUseFeeMapHitOptions?.([])
       if (id === selectedId) {
         void fitMapToFeeId(id)
         return
       }
       onSelectId(id)
     },
-    [selectedId, onSelectId, fitMapToFeeId]
+    [selectedId, onSelectId, fitMapToFeeId, mapContext]
   )
 
   useEffect(() => {
@@ -222,7 +229,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     void call('', 'POST', {
       service: 'useFeeService',
       action: 'getUseFeeDepartments',
-      params: { system: system || undefined },
+      params: feeQuery,
     })
       .then((res) => {
         if (cancelled) return
@@ -237,7 +244,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     return () => {
       cancelled = true
     }
-  }, [system])
+  }, [serEng, system])
 
   useEffect(() => {
     let cancelled = false
@@ -253,7 +260,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
         dptNm: dptNm || undefined,
         feeStatus: feeStatusFilter === '전체' ? undefined : feeStatusFilter,
         sorts: sorts.length > 0 ? sorts : undefined,
-        system: system || undefined,
+        ...feeQuery,
         limit: PAGE_SIZE,
         offset: 0,
       },
@@ -281,7 +288,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword, dptNm, feeStatusFilter, sorts, system])
+  }, [debouncedKeyword, dptNm, feeStatusFilter, sorts, serEng, system])
 
   const loadMore = useCallback(() => {
     if (loadingMoreRef.current || loading) return
@@ -298,6 +305,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
         feeStatus: feeStatusFilter === '전체' ? undefined : feeStatusFilter,
         sorts: sorts.length > 0 ? sorts : undefined,
         system: system || undefined,
+        serEng: serEng || undefined,
         limit: PAGE_SIZE,
         offset,
       },
@@ -333,6 +341,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     dptNm,
     feeStatusFilter,
     sorts,
+    serEng,
     system,
   ])
 
@@ -360,8 +369,10 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
     })
   }
 
+  const feeBinding = getUseFeeBinding({ serEng, system })
   const occupationTarget = getUseFeeOccupationLedgerTarget({
     system,
+    serEng,
     isUljinRiver,
   })
   const occupationLayerOn = isUseFeeOccupationLedgerWmsVisible(
@@ -372,7 +383,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId }: ListProps) 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 py-1.5 pl-3 pr-0">
-        <span className="text-sm font-semibold text-slate-800">점사용료</span>
+        <span className="text-sm font-semibold text-slate-800">{feeBinding.title}</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
             type="button"

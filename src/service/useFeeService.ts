@@ -1,15 +1,53 @@
 /**
- * 점사용료 — layer.ngl_fee_list 조회 + 차세대 수동 연계
+ * 점사용료 — water|road|public_ngl_fee_list 조회 + 차세대 수동 연계
  */
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
-import { nglFeeList, type NglFeeList } from '@/database/schema/ngl_fee_list';
+import {
+  type NglFeeList,
+  type NglFeeListTable,
+} from '@/database/schema/ngl_fee_list';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
 import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
+import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
+import { getAllUseFeeWmsLayerIds, getUseFeeBinding, USE_FEE_PREFIXES } from '@/lib/useFeeBinding';
 import { labelForUseFeeField } from '@/app/(pages)/map/_mapContents/useFee/useFeeFieldLabels';
 
 const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
+
+function resolveFeeOpts(params?: {
+  system?: string | null;
+  serEng?: string | null;
+}): { system?: string | null; serEng?: string | null } {
+  return {
+    system: params?.system,
+    serEng: params?.serEng,
+  };
+}
+
+function resolveFeeTable(params?: {
+  system?: string | null;
+  serEng?: string | null;
+}): NglFeeListTable {
+  return getNglFeeListTableByPrefix(getUseFeeBinding(resolveFeeOpts(params)).prefix);
+}
+
+function resolveFeeTableName(params?: {
+  system?: string | null;
+  serEng?: string | null;
+}): string {
+  return getUseFeeBinding(resolveFeeOpts(params)).mainTable;
+}
+
+/** raw SQL용 — 바인딩된 물리 테이블명만 허용 */
+function assertFeeTableName(name: string): string {
+  const n = String(name ?? '').trim().toLowerCase();
+  if (!getAllUseFeeWmsLayerIds().includes(n)) {
+    throw new Error(`invalid fee table: ${name}`);
+  }
+  return n;
+}
 
 export type UseFeeListRow = {
   id: string;
@@ -101,7 +139,7 @@ export type UseFeeUnpaidDueNotifRow = {
   dptNm: string;
 };
 
-/** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 */
+/** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 (하천·도로·국공유 전부) */
 export async function getUseFeeUnpaidDueNotifications(params?: {
   withinDays?: number;
 }): Promise<{ items: UseFeeUnpaidDueNotifRow[]; error?: string }> {
@@ -116,31 +154,33 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
     } catch {
       /* ignore */
     }
-    const rows = await db
-      .select()
-      .from(nglFeeList)
-      .where(eq(nglFeeList.feeStatus, '미납'))
-      .limit(10000);
-
     const todayMs = startOfLocalDayMs(new Date());
     if (todayMs == null) return { items: [] };
 
     const items: UseFeeUnpaidDueNotifRow[] = [];
-    for (const row of rows) {
-      const dueYmd = toYmd(listDateYmd(row));
-      if (!dueYmd) continue;
-      const dueMs = startOfLocalDayMs(dueYmd);
-      if (dueMs == null) continue;
-      const daysRemaining = diffLocalCalendarDays(todayMs, dueMs);
-      if (daysRemaining < 0 || daysRemaining > withinDays) continue;
-      items.push({
-        id: String(row.id),
-        chargeNo: String(row.lvyNo ?? '').trim() || String(row.id),
-        payer: String(row.pyrNm ?? '').trim() || '—',
-        dueDate: dueYmd,
-        daysRemaining,
-        dptNm: String(row.dptNm ?? '').trim(),
-      });
+    for (const prefix of USE_FEE_PREFIXES) {
+      const nglFeeList = getNglFeeListTableByPrefix(prefix);
+      const rows = await db
+        .select()
+        .from(nglFeeList)
+        .where(eq(nglFeeList.feeStatus, '미납'))
+        .limit(10000);
+      for (const row of rows) {
+        const dueYmd = toYmd(listDateYmd(row));
+        if (!dueYmd) continue;
+        const dueMs = startOfLocalDayMs(dueYmd);
+        if (dueMs == null) continue;
+        const daysRemaining = diffLocalCalendarDays(todayMs, dueMs);
+        if (daysRemaining < 0 || daysRemaining > withinDays) continue;
+        items.push({
+          id: String(row.id),
+          chargeNo: String(row.lvyNo ?? '').trim() || String(row.id),
+          payer: String(row.pyrNm ?? '').trim() || '—',
+          dueDate: dueYmd,
+          daysRemaining,
+          dptNm: String(row.dptNm ?? '').trim(),
+        });
+      }
     }
 
     items.sort((a, b) => {
@@ -158,11 +198,13 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
 /** 부서 필터용: 데이터에 있는 부서명 목록 */
 export async function getUseFeeDepartments(_params?: {
   system?: string;
+  serEng?: string;
 }): Promise<{
   departments: string[];
   error?: string;
 }> {
   try {
+    const nglFeeList = resolveFeeTable(_params);
     const rows = await db
       .selectDistinct({ dptNm: nglFeeList.dptNm })
       .from(nglFeeList)
@@ -238,8 +280,10 @@ export async function getUseFeeList(params?: {
   dptNm?: string;
   /** 미납 | 수납. 비우면 전체 */
   feeStatus?: string;
-  /** URL system= (참고용·필터에 미사용 — 전체 부서 노출) */
+  /** URL system= river|road|build → water|road|public_ngl_fee_list */
   system?: string;
+  /** ser_eng: water|road|publicNglFeeList (우선) */
+  serEng?: string;
   /** 다중 정렬 [{ key, dir }] — 앞선 항목이 우선 */
   sorts?: Array<{ key?: string; dir?: string }>;
   /** 단일 정렬(호환). sorts 있으면 무시 */
@@ -258,6 +302,7 @@ export async function getUseFeeList(params?: {
   const sortSpecs = parseUseFeeSortSpecs(params);
   const limit = Math.min(Math.max(Number(params?.limit) || 500, 1), 2000);
   const offset = Math.max(0, Math.trunc(Number(params?.offset) || 0));
+  const nglFeeList = resolveFeeTable(params);
 
   try {
     if (offset === 0) {
@@ -590,8 +635,9 @@ function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
 
 export async function getUseFeeDetail(params: {
   id?: string | number;
-  /** URL system= (참고용) */
+  /** URL system= river|road|build */
   system?: string;
+  serEng?: string;
 }): Promise<{ row: UseFeeListRow | null; attributes: UseFeeDetailAttr[]; error?: string }> {
   const idNum = Number(params?.id);
   if (!Number.isFinite(idNum) || idNum <= 0) {
@@ -604,6 +650,7 @@ export async function getUseFeeDetail(params: {
     } catch {
       // geom 컬럼 없어도 상세 조회는 계속
     }
+    const nglFeeList = resolveFeeTable(params);
     const rows = await db.select().from(nglFeeList).where(eq(nglFeeList.id, idNum)).limit(1);
     const r = rows[0];
     if (!r) return { row: null, attributes: [], error: '선택한 점사용료를 찾을 수 없습니다.' };
@@ -631,11 +678,14 @@ export async function getUseFeeDetail(params: {
 /** 지도 이동용 extent — geom 없으면 null (알림 없음) */
 export async function getUseFeeExtent3857ById(params: {
   id?: string | number;
+  system?: string;
+  serEng?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
   const idNum = Number(params?.id);
   if (!Number.isFinite(idNum) || idNum <= 0) {
     return { extent3857: null };
   }
+  const tableName = assertFeeTableName(resolveFeeTableName(params));
   try {
     try {
       await ensureNglFeeListGeomColumn();
@@ -648,7 +698,7 @@ export async function getUseFeeExtent3857ById(params: {
         ST_YMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymin,
         ST_XMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmax,
         ST_YMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymax
-      FROM layer.ngl_fee_list
+      FROM layer.${tableName}
       WHERE id = ${idNum}
         AND geom IS NOT NULL
       LIMIT 1
@@ -673,7 +723,11 @@ export async function runNextGenSync(params?: { fyr?: string }) {
 }
 
 /** 동일 부과키의 수납 행 목록 (선택 행 맥락용) */
-export async function getUseFeeReceiptsByLvyKey(params: { lvyKey?: string }) {
+export async function getUseFeeReceiptsByLvyKey(params: {
+  lvyKey?: string;
+  system?: string;
+  serEng?: string;
+}) {
   const key = String(params?.lvyKey ?? '').trim();
   if (!key) return { rows: [] as UseFeeListRow[] };
   try {
@@ -681,6 +735,7 @@ export async function getUseFeeReceiptsByLvyKey(params: { lvyKey?: string }) {
   } catch {
     /* ignore */
   }
+  const nglFeeList = resolveFeeTable(params);
   const rows = await db
     .select()
     .from(nglFeeList)
@@ -731,43 +786,45 @@ let nglFeeGeomEnsurePromise: Promise<void> | null = null;
 async function ensureNglFeeListGeomColumn(): Promise<void> {
   if (!nglFeeGeomEnsurePromise) {
     nglFeeGeomEnsurePromise = (async () => {
-      await db.execute(
-        sql.raw(`
-    ALTER TABLE layer.ngl_fee_list
-      ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
-    CREATE INDEX IF NOT EXISTS ngl_fee_list_geom_gix
-      ON layer.ngl_fee_list USING GIST (geom);
-  `)
-      );
-      // geometry_columns srid=0 이면 지도 클릭 식별(ST_Transform)이 실패함
-      try {
+      for (const tableName of getAllUseFeeWmsLayerIds()) {
+        const t = assertFeeTableName(tableName);
         await db.execute(
           sql.raw(`
+    ALTER TABLE layer.${t}
+      ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+    CREATE INDEX IF NOT EXISTS ${t}_geom_gix
+      ON layer.${t} USING GIST (geom);
+  `)
+        );
+        try {
+          await db.execute(
+            sql.raw(`
     DO $fix$
     BEGIN
       IF EXISTS (
         SELECT 1
         FROM geometry_columns
         WHERE f_table_schema = 'layer'
-          AND f_table_name = 'ngl_fee_list'
+          AND f_table_name = '${t}'
           AND f_geometry_column = 'geom'
           AND COALESCE(srid, 0) <= 0
       ) THEN
-        PERFORM UpdateGeometrySRID('layer', 'ngl_fee_list', 'geom', 5181);
+        PERFORM UpdateGeometrySRID('layer', '${t}', 'geom', 5181);
       END IF;
     END
     $fix$;
   `)
-        );
-      } catch {
-        // 메타 보정 실패해도 컬럼/조회는 유지 (identify 쪽 SRID 프로브로 보완)
+          );
+        } catch {
+          /* identify SRID 프로브로 보완 */
+        }
       }
     })().catch((e) => {
       nglFeeGeomEnsurePromise = null;
       throw e;
     });
   }
-  await nglFeeGeomEnsurePromise;
+  return nglFeeGeomEnsurePromise;
 }
 
 /**
@@ -778,6 +835,8 @@ export async function backfillUseFeeGlAddrGeom(params?: {
   /** true면 geom 있는 행도 재변환 */
   force?: boolean;
   limit?: number;
+  system?: string;
+  serEng?: string;
 }): Promise<{
   scanned: number;
   updated: number;
@@ -787,6 +846,8 @@ export async function backfillUseFeeGlAddrGeom(params?: {
 }> {
   const force = params?.force === true;
   const limit = Math.min(Math.max(Number(params?.limit) || 5000, 1), 20000);
+  const nglFeeList = resolveFeeTable(params);
+  const tableName = assertFeeTableName(resolveFeeTableName(params));
 
   try {
     await ensureNglFeeListGeomColumn();
@@ -840,7 +901,7 @@ export async function backfillUseFeeGlAddrGeom(params?: {
       const json = JSON.stringify(gj).replace(/'/g, "''");
       await db.execute(
         sql.raw(`
-          UPDATE layer.ngl_fee_list
+          UPDATE layer.${tableName}
           SET geom = ST_Multi(
                 ST_CollectionExtract(
                   ST_MakeValid(
