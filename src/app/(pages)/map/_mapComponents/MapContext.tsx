@@ -351,6 +351,14 @@ export type MapContextValue = {
   layerRowGeomEditWktRef: MutableRefObject<string | null>;
   /** 사용자가 도형을 실제로 변경했는지 (로드만 한 경우 false) */
   layerRowGeomEditDirtyRef: MutableRefObject<boolean>;
+  /**
+   * 도형 그리기/수정 완료 시 상세 패널 콜백 (점용장소 중심주소 등).
+   * Handler가 호출 — 패널이 등록.
+   */
+  layerRowGeomDrawnRef: MutableRefObject<
+    | ((info: { wkt5181: string; source: "draw" | "modify" }) => void)
+    | null
+  >;
   /** 도형 영역 필지 자동/수동 반영 → 상세 패널 필지목록 */
   layerRowParcelApplyRef: MutableRefObject<
     | ((
@@ -551,6 +559,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
   const layerRowGeomEditDirtyRef = useRef(false);
+  const layerRowGeomDrawnRef = useRef<
+    | ((info: { wkt5181: string; source: "draw" | "modify" }) => void)
+    | null
+  >(null);
   const layerRowParcelApplyRef = useRef<
     | ((
         items: {
@@ -717,6 +729,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,
         layerRowGeomEditDirtyRef,
+        layerRowGeomDrawnRef,
         layerRowParcelApplyRef,
         layerRowParcelRemoveRef,
         layerRowDraftParcels,

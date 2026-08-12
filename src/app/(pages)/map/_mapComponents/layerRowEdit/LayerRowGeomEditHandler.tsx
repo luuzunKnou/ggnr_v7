@@ -201,6 +201,7 @@ export function LayerRowGeomEditHandler({
   const setEdit = mapContext?.setLayerRowGeomEdit;
   const wktRef = mapContext?.layerRowGeomEditWktRef;
   const dirtyRef = mapContext?.layerRowGeomEditDirtyRef;
+  const geomDrawnRef = mapContext?.layerRowGeomDrawnRef;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const setLayerRowDraftParcels = mapContext?.setLayerRowDraftParcels;
   const layerRowParcelRemoveRef = mapContext?.layerRowParcelRemoveRef;
@@ -308,13 +309,23 @@ export function LayerRowGeomEditHandler({
             } => x != null
           );
         apply(items, { replaceAuto: true });
+        // 도형 추가 직후 notify는 필지 폴백이 비어 실패할 수 있음 → 필지 반영 후 장소 재채움
+        const wktNow = String(wktRef?.current ?? "").trim();
+        if (wktNow && wktNow !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
+          queueMicrotask(() => {
+            mapContext?.layerRowGeomDrawnRef?.current?.({
+              wkt5181: wktNow,
+              source: "draw",
+            });
+          });
+        }
       } catch {
         if (!opts?.silent) window.alert("필지목록을 불러오지 못했습니다.");
       } finally {
         setLoadingParcels(false);
       }
     },
-    [mapContext?.layerRowParcelApplyRef, wktRef]
+    [mapContext?.layerRowGeomDrawnRef, mapContext?.layerRowParcelApplyRef, wktRef]
   );
 
   useEffect(() => {
@@ -363,6 +374,15 @@ export function LayerRowGeomEditHandler({
       if (opts?.markDirty && dirtyRef) dirtyRef.current = true;
       setHasParentGeom(getParentFeatures(source).length > 0);
       syncDraftParcelsFromSource(source, setLayerRowDraftParcels);
+    };
+
+    const notifyGeomDrawn = (sourceKind: "draw" | "modify") => {
+      const wkt = String(wktRef?.current ?? "").trim();
+      if (!wkt || wkt === LAYER_ROW_GEOM_CLEAR_SENTINEL) return;
+      // 클로저 ref가 아니라 최신 MapContext 콜백을 직접 호출
+      const cb =
+        mapContext?.layerRowGeomDrawnRef?.current ?? geomDrawnRef?.current;
+      cb?.({ wkt5181: wkt, source: sourceKind });
     };
 
     const subtractParcelFromParentGeom = async (parcel: {
@@ -431,6 +451,7 @@ export function LayerRowGeomEditHandler({
       modify = new Modify({ source });
       modify.on("modifyend", () => {
         syncFromSource({ markDirty: true });
+        notifyGeomDrawn("modify");
         void loadParcelsRef.current?.({ silent: true });
       });
       map.addInteraction(modify);
@@ -460,10 +481,14 @@ export function LayerRowGeomEditHandler({
       draw = new Draw({ source, type: "Polygon", stopClick: true });
       draw.on("drawend", (e) => {
         markAsParentFeature(e.feature);
-        syncFromSource({ markDirty: true });
-        detachDraw();
-        attachModify();
-        loadParcelsAfterDraw();
+        // drawend 직후 소스 반영이 한 틱 늦는 경우 대비
+        requestAnimationFrame(() => {
+          syncFromSource({ markDirty: true });
+          notifyGeomDrawn("draw");
+          detachDraw();
+          attachModify();
+          loadParcelsAfterDraw();
+        });
       });
       map.addInteraction(draw);
       isDrawActiveRef.current = true;

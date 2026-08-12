@@ -32,7 +32,7 @@ function displayAddress(item: VWorldAddressItem): string {
   );
 }
 
-/** 점용대장 상세 전용 — 기존 속성 input 높이에 맞춘 직접입력 + 주소검색 */
+/** 점용장소 직접입력 + 주소검색 (공통 점용·울진 하천점용 공용) */
 export function OccupationLedgerPlaceInput({
   value,
   onChange,

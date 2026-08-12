@@ -8,6 +8,10 @@ import { tryFormatToYmd } from '@/lib/formatDateYmd';
 import { splitUsagePeriod } from '@/lib/usageDataAsFieldUtils';
 import { incrementSuffixCode } from '@/lib/incrementSuffixCode';
 import {
+  formatOccupationPermitNo,
+  parseOccupationPermitNoSeq,
+} from '@/lib/occupationPermitNo';
+import {
   getOccupationLedgerBinding,
   type OccupationLedgerBinding,
 } from '@/lib/occupationLedgerBinding';
@@ -456,6 +460,76 @@ export async function getOccupationLedgerDetailByKey(params: {
   }
 }
 
+/**
+ * 허가번호 다음 번호 — 허가시작일 연도 기준 «YYYY-NN».
+ * 해당 연도 접두가 없으면 01, 해가 바뀌면 다시 01부터.
+ */
+export async function getNextOccupationLedgerPermitNo(params?: {
+  year?: number;
+  serEng?: string;
+  system?: string;
+  excludeKey?: string;
+}): Promise<{ permitNo: string; error?: string }> {
+  const year = Number(params?.year);
+  if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+    return { permitNo: '', error: '시작일 연도가 필요합니다.' };
+  }
+
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) {
+    return { permitNo: '', error: resolved.error };
+  }
+  const binding = resolved.binding;
+  const meta = await resolveTableWithSchema(binding.mainTable);
+  if (!meta) {
+    return {
+      permitNo: formatOccupationPermitNo(year, 1),
+      error: `${binding.mainTable} 테이블이 없습니다.`,
+    };
+  }
+
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const permitCol = findColumn(cols, 'permit_no');
+  if (!permitCol) {
+    return { permitNo: formatOccupationPermitNo(year, 1), error: 'permit_no 컬럼이 없습니다.' };
+  }
+  const keyCol = findColumn(cols, binding.fields.keyField);
+  const exclude = String(params?.excludeKey ?? '').trim();
+
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const prefix = `${year}-`;
+  const excludeClause =
+    exclude && keyCol
+      ? ` AND COALESCE(${quoteIdent(keyCol)}::text, '') <> '${esc(exclude)}'`
+      : '';
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT COALESCE(${quoteIdent(permitCol)}::text, '') AS code
+         FROM "${safeSchema}"."${safe}"
+         WHERE COALESCE(${quoteIdent(permitCol)}::text, '') LIKE '${esc(prefix)}%'
+         ${excludeClause}
+         LIMIT 5000`
+      )
+    );
+    let maxSeq = 0;
+    for (const row of res.rows ?? []) {
+      const code = String((row as { code?: string }).code ?? '').trim();
+      const seq = parseOccupationPermitNoSeq(code, year);
+      if (seq != null && seq > maxSeq) maxSeq = seq;
+    }
+    return { permitNo: formatOccupationPermitNo(year, maxSeq + 1) };
+  } catch (e: unknown) {
+    return {
+      permitNo: formatOccupationPermitNo(year, 1),
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+/** 신규 미리보기용 — 이전 키(숫자)가 5면 6. ogc_fid·id 숫자 최대+1 */
 export async function getNextOccupationLedgerKey(params?: {
   serEng?: string;
   system?: string;
@@ -466,32 +540,64 @@ export async function getNextOccupationLedgerKey(params?: {
   }
   const binding = resolved.binding;
   const meta = await resolveTableWithSchema(binding.mainTable);
-  if (!meta) return { key: 'OCC-0001', error: undefined };
+  if (!meta) return { key: '1' };
 
   const cols = await getTableColumns(meta.schema, meta.tableName);
   const keyCol = findColumn(cols, binding.fields.keyField);
-  if (!keyCol) return { key: 'OCC-0001' };
+  const ogcCol = findColumn(cols, 'ogc_fid');
+  if (!keyCol && !ogcCol) return { key: '1' };
 
   const safe = meta.tableName.replace(/"/g, '""');
   const safeSchema = meta.schema.replace(/"/g, '""');
+  const maxParts: string[] = [];
+  if (ogcCol) {
+    maxParts.push(`COALESCE(MAX(${quoteIdent(ogcCol)}), 0)`);
+  }
+  if (keyCol) {
+    maxParts.push(`COALESCE(
+      MAX(
+        CASE
+          WHEN COALESCE(${quoteIdent(keyCol)}::text, '') ~ '^[0-9]+$'
+          THEN (${quoteIdent(keyCol)}::text)::bigint
+          ELSE 0
+        END
+      ),
+      0
+    )`);
+  }
+
   try {
     const res = await db.execute(
       sql.raw(
-        `SELECT COALESCE(${quoteIdent(keyCol)}::text, '') AS k
-         FROM "${safeSchema}"."${safe}"
-         WHERE COALESCE(${quoteIdent(keyCol)}::text, '') <> ''
-         ORDER BY ${quoteIdent(keyCol)} DESC
-         LIMIT 200`
+        `SELECT GREATEST(${maxParts.join(', ')}) + 1 AS n
+         FROM "${safeSchema}"."${safe}"`
       )
     );
-    const keys = (res.rows ?? [])
-      .map((r) => String((r as { k?: string }).k ?? '').trim())
-      .filter(Boolean);
-    if (keys.length === 0) return { key: 'OCC-0001' };
-    const next = incrementSuffixCode(keys[0]!);
-    return { key: next && next !== keys[0] ? next : 'OCC-0001' };
+    const n = Number((res.rows?.[0] as { n?: string | number } | undefined)?.n ?? 1);
+    if (!Number.isFinite(n) || n < 1) return { key: '1' };
+    return { key: String(Math.floor(n)) };
   } catch {
-    return { key: 'OCC-0001' };
+    // 폴백: 접미사 증가
+    if (!keyCol) return { key: '1' };
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT COALESCE(${quoteIdent(keyCol)}::text, '') AS k
+           FROM "${safeSchema}"."${safe}"
+           WHERE COALESCE(${quoteIdent(keyCol)}::text, '') <> ''
+           ORDER BY ${quoteIdent(keyCol)} DESC
+           LIMIT 200`
+        )
+      );
+      const keys = (res.rows ?? [])
+        .map((r) => String((r as { k?: string }).k ?? '').trim())
+        .filter(Boolean);
+      if (keys.length === 0) return { key: '1' };
+      const next = incrementSuffixCode(keys[0]!);
+      return { key: next && next !== keys[0] ? next : '1' };
+    } catch {
+      return { key: '1' };
+    }
   }
 }
 
