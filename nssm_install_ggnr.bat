@@ -42,11 +42,10 @@ if not exist "%APP_BAT%" (
   exit /b 1
 )
 
-:: nssm 찾기 (기본: C:\nssm\win64\nssm.exe)
-set "NSSM="
-if exist "C:\nssm\win64\nssm.exe" set "NSSM=C:\nssm\win64\nssm.exe"
-if not defined NSSM if exist "C:\nssm\nssm.exe" set "NSSM=C:\nssm\nssm.exe"
-if not defined NSSM (
+:: nssm 찾기 (프로젝트 내부: root\nssm\win64\nssm.exe)
+set "NSSM=%ROOT%\nssm\win64\nssm.exe"
+if not exist "%NSSM%" set "NSSM=%ROOT%\nssm\win32\nssm.exe"
+if not exist "%NSSM%" (
   where nssm >nul 2>&1
   if not errorlevel 1 (
     for /f "delims=" %%I in ('where nssm') do (
@@ -57,9 +56,9 @@ if not defined NSSM (
 )
 
 :nssm_found
-if not defined NSSM (
+if not exist "%NSSM%" (
   echo [오류] nssm.exe 를 찾지 못했습니다.
-  echo   기대 경로: C:\nssm\win64\nssm.exe
+  echo   기대 경로: %ROOT%\nssm\win64\nssm.exe
   exit /b 1
 )
 echo [nssm-install] nssm     = %NSSM%

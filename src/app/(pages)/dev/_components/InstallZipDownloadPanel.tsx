@@ -18,18 +18,21 @@ import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMac
 import { streamDownloadFile, streamDownloadResponse } from '@/lib/streamFileDownload';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
-  fetchGnmsLatestZipForBrowserSave,
+  fetchGnmsInstallZipViaLocal,
   notifyGnmsLatestDownloadCancel,
-  type GnmsClientConfigForDownload,
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
 
-const INSTALL_MANUAL_URL =
-  process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
-  'https://app.notion.com/p/daeguk/v7_-3a4f538d1f5980ceb743e8e410fb194d?source=copy_link';
-
 const HISTORY_OPTION_GNMS_LATEST = 'GNMS 최신';
+
+function openInstallManualPopup() {
+  window.open(
+    '/dev/install-manual',
+    'ggnrInstallManual',
+    'width=1200,height=800,scrollbars=yes,resizable=yes'
+  );
+}
 
 type DownloadSourceMode = 'gnms' | 'local';
 
@@ -143,16 +146,15 @@ function ModeDescription({ mode }: { mode: DownloadSourceMode }) {
   if (mode === 'gnms') {
     return (
       <p className="text-xs text-muted-foreground">
-        GNMS에 올라간 최신 패키지를 받습니다. «소스코드 업로드»에서 제외된 파일·폴더는 포함되지
-        않습니다(예: .next, .git, 대용량·데이터 폴더, 업로드 시 node_modules 미포함이면 패키지 없음,
-        ggnr_start.bat 등). 설치 후 서버에서 별도 준비가 필요할 수 있습니다.
+        이 서버가 GNMS에 설치 ZIP을 요청한 뒤 브라우저로 전달합니다. 패키지에 python/env_parts(분할
+        압축)가 있으면 설치 시 시작 스크립트가 python/env 로 복원합니다.
       </p>
     );
   }
   return (
     <p className="text-xs text-muted-foreground">
-      이 서버 워크스페이스를 지금 기준으로 설치용 ZIP으로 만듭니다. 폐쇄망/개방망으로 node_modules
-      포함 여부를 선택할 수 있습니다.
+      이 서버 워크스페이스를 지금 기준으로 설치용 ZIP으로 만듭니다. python/env 원본은 빼고 분할
+      압축본(python/env_parts)을 넣어, 설치 서버에서 시작 스크립트가 복원합니다.
     </p>
   );
 }
@@ -273,19 +275,16 @@ export function InstallZipDownloadPanel() {
     setStages(buildGnmsInstallBaseStages());
     setStages((prev) => patchGnmsStages(prev, { latest: { state: 'active' } }));
 
-    let cfg: GnmsClientConfigForDownload | null = null;
     let gnmsJobId: string | null = null;
     let gnmsVersion: string | undefined;
     let gnmsFileName: string | undefined;
 
     try {
-      pushLog('GNMS 최신 설치파일 조회 시작');
-      const { cfg: loadedCfg, bundle } = await fetchGnmsLatestZipForBrowserSave({
+      pushLog('GNMS 최신 설치파일 조회 시작 (로컬 서버 경유)');
+      const { downloadRes, fileName, version, jobId } = await fetchGnmsInstallZipViaLocal({
         signal,
         log: pushLog,
       });
-      cfg = loadedCfg;
-      const { version, fileName, jobId, downloadRes } = bundle;
       gnmsVersion = version;
       gnmsFileName = fileName;
       gnmsJobId = jobId || null;
@@ -349,9 +348,8 @@ export function InstallZipDownloadPanel() {
       const isAbort = isAbortError(e);
       const msg = isAbort ? '사용자가 취소했습니다.' : e instanceof Error ? e.message : String(e);
 
-      if (isAbort && cfg && gnmsJobId) {
+      if (isAbort && gnmsJobId) {
         await notifyGnmsLatestDownloadCancel({
-          cfg,
           jobId: gnmsJobId,
           version: gnmsVersion,
           fileName: gnmsFileName,
@@ -588,15 +586,14 @@ export function InstallZipDownloadPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded border p-3">
       <div className="shrink-0 space-y-2">
-        <a
-          href={INSTALL_MANUAL_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block text-xs text-blue-600 underline"
+        <button
+          type="button"
+          onClick={openInstallManualPopup}
+          className="inline-block cursor-pointer text-xs text-blue-600 underline"
           title="설치 매뉴얼"
         >
           설치 매뉴얼
-        </a>
+        </button>
         <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={busy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (

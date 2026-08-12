@@ -9,7 +9,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - package-lock.json 기준 npm ci 로 의존성 동기화 (Y/N, GGNR_START_NO_PAUSE=1 이면 자동)
 :: - 기동 검사: .next 삭제 → npm run build → BUILD_ID 확인 후 smoke ^(스모크는 기동만, 빌드는 한도 밖^)
 :: - ggnr_start.bat: node_modules·next 확인 후 .next\BUILD_ID 없으면 npm run build → start
-:: - 프로젝트명·환경 = 실행 시 입력
+:: - 프로젝트명·타입·npm 동기화 Y/N = 실행 전 먼저 입력
+:: - nssm = root\nssm\win64\nssm.exe ^(프로젝트 내^)
+:: - python/env_parts 가 있으면 python/env 로 복원 후 npm
 :: - 생성 후 Y/N: 기동 검사 → nssm_install_ggnr.bat → open_ggnr_logs.bat
 :: =============================================================================
 
@@ -17,6 +19,7 @@ set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "OUT=%ROOT%\ggnr_start.bat"
 set "NSSM_BAT=%ROOT%\nssm_install_ggnr.bat"
+set "NSSM_EXE=%ROOT%\nssm\win64\nssm.exe"
 set "LOGS_BAT=%ROOT%\open_ggnr_logs.bat"
 set "SMOKE_PS1=%ROOT%\smoke_ggnr_start.ps1"
 set "SMOKE_CLEANUP_PS1=%ROOT%\smoke_ggnr_cleanup.ps1"
@@ -32,6 +35,47 @@ set "NPM_SYNC_DONE=0"
 echo.
 echo [00_make_ggnr_starter] root = %ROOT%
 echo [00_make_ggnr_starter] 출력 = %OUT%
+echo.
+
+:: --- 사용자 입력 (실행·검사 전에 먼저 수집) ---
+set /p "PROJECT_NAME=프로젝트명 (GGNR_PROJECT): "
+if not defined PROJECT_NAME (
+  echo [오류] 프로젝트명이 비어 있습니다.
+  goto :fail_exit
+)
+echo(!PROJECT_NAME!| findstr /C:" " >nul 2>&1
+if not errorlevel 1 (
+  echo [오류] 프로젝트명에 공백이 있습니다. 공백 없이 입력하세요.
+  goto :fail_exit
+)
+
+set /p "ENV_NAME=타입 (GGNR_ENV, dev ^| demo ^| prod): "
+if not defined ENV_NAME (
+  echo [오류] 타입이 비어 있습니다.
+  goto :fail_exit
+)
+echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
+if not errorlevel 1 (
+  echo [오류] 타입명에 공백이 있습니다. 공백 없이 입력하세요.
+  goto :fail_exit
+)
+
+if /i "%GGNR_START_NO_PAUSE%"=="1" (
+  echo [진행] GGNR_START_NO_PAUSE=1 — npm ci ^(install^) 자동 실행
+  set "DO_NPM_SYNC=Y"
+) else (
+  echo.
+  echo [고지] 배포 안정을 위해 package-lock.json 기준 npm ci 를 권장합니다.
+  echo         기존 node_modules 가 있어도 복사본·lock 불일치면 Y 로 lock 과 맞추세요.
+  echo         폐쇄망일 경우 N 을 입력하세요 ^(npm install 불가^).
+  echo.
+  set /p "DO_NPM_SYNC=npm ci ^(또는 install^) 로 의존성 동기화할까요? (Y/N): "
+)
+echo.
+echo [확인]
+echo   PROJECT     = %PROJECT_NAME%
+echo   TYPE        = %ENV_NAME%
+echo   npm 동기화  = !DO_NPM_SYNC!
 echo.
 
 where node >nul 2>&1
@@ -60,17 +104,13 @@ for /f "delims=" %%V in ('node -v 2^>nul') do echo [00_make_ggnr_starter] Node =
 echo [00_make_ggnr_starter] PATH 추가 = %NODE_DIR%
 echo.
 
+:: --- python/env : env_parts 분할본이 있으면 복원 ---
+echo [진행] python/env 복원 확인...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\restore-python-env.ps1" -Root "%ROOT%"
+if errorlevel 1 goto :fail_exit
+echo.
+
 :: --- 의존성 동기화: node_modules 유무와 관계없이 lock 기준 재설치 권장 ---
-if /i "%GGNR_START_NO_PAUSE%"=="1" (
-  echo [진행] GGNR_START_NO_PAUSE=1 — npm ci ^(install^) 자동 실행
-  set "DO_NPM_SYNC=Y"
-) else (
-  echo [고지] 배포 안정을 위해 package-lock.json 기준 npm ci 를 권장합니다.
-  echo         기존 node_modules 가 있어도 복사본·lock 불일치면 Y 로 lock 과 맞추세요.
-  echo         폐쇄망일 경우 n을 입력하세요(npm install 불가)
-  echo.
-  set /p "DO_NPM_SYNC=npm ci ^(또는 install^) 로 의존성 동기화할까요? (Y/N): "
-)
 if /i "!DO_NPM_SYNC!"=="Y" (
   call :run_npm_sync
   if errorlevel 1 goto :fail_exit
@@ -82,34 +122,12 @@ if /i "!DO_NPM_SYNC!"=="Y" (
   echo.
 )
 
-set /p "PROJECT_NAME=프로젝트명 (GGNR_PROJECT): "
-if not defined PROJECT_NAME (
-  echo [오류] 프로젝트명이 비어 있습니다.
-  goto :fail_exit
-)
-echo(!PROJECT_NAME!| findstr /C:" " >nul 2>&1
-if not errorlevel 1 (
-  echo [오류] 프로젝트명에 공백이 있습니다. 공백 없이 입력하세요.
-  goto :fail_exit
-)
-
-set /p "ENV_NAME=환경 (GGNR_ENV): "
-if not defined ENV_NAME (
-  echo [오류] 환경이 비어 있습니다.
-  goto :fail_exit
-)
-echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
-if not errorlevel 1 (
-  echo [오류] 환경명에 공백이 있습니다. 공백 없이 입력하세요.
-  goto :fail_exit
-)
-
 echo.
 echo [확인]
 echo   cd          = %ROOT%
 echo   NODE_DIR    = %NODE_DIR%
 echo   PROJECT     = %PROJECT_NAME%
-echo   ENV         = %ENV_NAME%
+echo   TYPE        = %ENV_NAME%
 echo.
 
 set "SKIP_WRITE=0"
@@ -294,6 +312,11 @@ if not exist "%SMOKE_CLEANUP_PS1%" (
 )
 if not exist "%NSSM_BAT%" (
   echo [오류] 없음: %NSSM_BAT%
+  goto :fail_exit
+)
+if not exist "%NSSM_EXE%" (
+  echo [오류] nssm.exe 없음: %NSSM_EXE%
+  echo         설치 ZIP에 nssm\win64\nssm.exe 가 포함되어 있는지 확인하세요.
   goto :fail_exit
 )
 if not exist "%LOGS_BAT%" (

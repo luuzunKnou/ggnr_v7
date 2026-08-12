@@ -23,6 +23,7 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   'docs/',
   '.cad-preview-work/',
   'python/env/',
+  'python/env_parts/',
   'geoserver_modules/data_dir/logs/',
   'geoserver_modules/data_dir/gwc/',
 ];
@@ -134,6 +135,8 @@ export function shouldSkipSourceDir(
  * 소스 업로드·설치 ZIP 제외 + 데이터/대용량 + 적용 시 병합 제외와 합집합.
  */
 const APPLY_EXTRA_PROTECT_PREFIXES = [
+  'python/env/',
+  'python/env_parts/',
   '3dtiles_las/',
   'tiles_tif/',
   'tiles_jpg/',
