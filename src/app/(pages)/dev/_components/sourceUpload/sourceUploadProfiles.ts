@@ -23,6 +23,7 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   'docs/',
   '.tmp/',
   '.cad-preview-work/',
+  'nssm/',
   'python/env/',
   'python/env_parts/',
   'geoserver_modules/data_dir/logs/',

@@ -173,6 +173,39 @@ async function scanInstallFiles(params: {
   }
 
   await walk(workspaceRoot);
+
+  /** 업로드에서는 nssm 제외, 설치 ZIP에는 서비스 등록용으로 포함 */
+  const nssmRoot = path.join(workspaceRoot, 'nssm');
+  async function walkNssmForce(absDir: string): Promise<void> {
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const childAbs = path.join(absDir, entry.name);
+      const childRel = toPosixRelative(childAbs, workspaceRoot);
+      if (!childRel || childRel.startsWith('..')) continue;
+      if (entry.isDirectory()) {
+        await walkNssmForce(childAbs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      included.push({
+        absPath: childAbs,
+        relPath: childRel,
+        category: classifySourcePath(childRel),
+      });
+      scanTicks += 1;
+      if (params.progressId && scanTicks % 80 === 0) {
+        pushScanProgress();
+        await new Promise<void>((r) => setImmediate(r));
+      }
+    }
+  }
+  try {
+    await fs.access(nssmRoot);
+    await walkNssmForce(nssmRoot);
+  } catch {
+    /* nssm 폴더 없으면 설치 ZIP에서만 누락 — starter가 별도 안내 */
+  }
+
   pushScanProgress();
   return { included, skipped, skippedPaths, skippedTruncated };
 }
