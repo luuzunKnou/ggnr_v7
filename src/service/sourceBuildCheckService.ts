@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { getProjectEnvVars } from '../../scripts/load-project-env';
+import { decodeChildOutput } from '@/lib/decodeChildOutput';
+import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '@/lib/npmApplyEnv';
 
 const BUILD_CHECK_GGNR_ENV = 'demo';
 
@@ -199,6 +201,7 @@ function spawnNpmWithLines(
       return;
     }
 
+    const usedCmdShell = process.platform === 'win32';
     const child = spawn('npm', args, {
       cwd: workspaceRoot,
       shell: true,
@@ -223,7 +226,7 @@ function spawnNpmWithLines(
     signal?.addEventListener('abort', onAbort, { once: true });
 
     const emitLines = (buf: Buffer) => {
-      const text = buf.toString('utf-8');
+      const text = decodeChildOutput(buf, usedCmdShell);
       for (const line of text.split(/\r?\n/)) {
         const trimmed = line.trimEnd();
         if (trimmed) onLine?.(trimmed);
@@ -232,7 +235,7 @@ function spawnNpmWithLines(
     child.stdout?.on('data', emitLines);
     child.stderr?.on('data', (buf: Buffer) => {
       emitLines(buf);
-      stderr += buf.toString('utf-8');
+      stderr += decodeChildOutput(buf, usedCmdShell);
     });
     child.on('error', (err) => {
       if (signal?.aborted) {
@@ -281,11 +284,12 @@ export async function runIsolatedBuildCheck(
     const copied = await copyWorkspaceForBuildCheck(sourceRoot, tempRoot, onLine, signal);
     throwIfAborted(signal);
     onLine?.(`소스 복사 완료 (${copied}건)`);
-    onLine?.('npm install (캐시 재사용) 시작...');
+    onLine?.('npm install --include=dev (캐시 재사용) 시작...');
+    const installEnv = resolveNpmInstallEnv(buildEnv);
     const installResult = await spawnNpmWithLines(
-      ['install', '--prefer-offline', '--no-audit', '--no-fund', '--ignore-scripts'],
+      [...NPM_INSTALL_DEV_ARGS, '--prefer-offline', '--ignore-scripts'],
       tempRoot,
-      buildEnv,
+      installEnv,
       onLine,
       { ok: 'npm install 완료', fail: 'npm install 실패' },
       signal

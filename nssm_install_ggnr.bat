@@ -9,6 +9,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - 로그 = C:\logs\GGNR_V7_stdout.log / GGNR_V7_stderr.log
 :: - C:\logs · C:\logs\backup 폴더만 생성 (자동 분류/이동 없음)
 :: - 기존 서비스가 있으면 Y/N 후 삭제·재등록 (N이면 등록 중단)
+:: - GGNR_NSSM_REREG=Y^|N 이면 재질문 없이 그 값 사용 (00_make_ggnr_starter 연동)
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
@@ -42,11 +43,10 @@ if not exist "%APP_BAT%" (
   exit /b 1
 )
 
-:: nssm 찾기 (기본: C:\nssm\win64\nssm.exe)
-set "NSSM="
-if exist "C:\nssm\win64\nssm.exe" set "NSSM=C:\nssm\win64\nssm.exe"
-if not defined NSSM if exist "C:\nssm\nssm.exe" set "NSSM=C:\nssm\nssm.exe"
-if not defined NSSM (
+:: nssm 찾기 (프로젝트 내부: root\nssm\win64\nssm.exe)
+set "NSSM=%ROOT%\nssm\win64\nssm.exe"
+if not exist "%NSSM%" set "NSSM=%ROOT%\nssm\win32\nssm.exe"
+if not exist "%NSSM%" (
   where nssm >nul 2>&1
   if not errorlevel 1 (
     for /f "delims=" %%I in ('where nssm') do (
@@ -57,9 +57,9 @@ if not defined NSSM (
 )
 
 :nssm_found
-if not defined NSSM (
+if not exist "%NSSM%" (
   echo [오류] nssm.exe 를 찾지 못했습니다.
-  echo   기대 경로: C:\nssm\win64\nssm.exe
+  echo   기대 경로: %ROOT%\nssm\win64\nssm.exe
   exit /b 1
 )
 echo [nssm-install] nssm     = %NSSM%
@@ -67,11 +67,16 @@ echo [nssm-install] nssm     = %NSSM%
 :: log / log\backup 폴더만 생성
 call :EnsureLogFolders
 
-:: 기존 서비스면 Y/N 후 중지·제거(재등록)
+:: 기존 서비스면 Y/N 후 중지·제거(재등록). 상위 스크립트가 GGNR_NSSM_REREG 를 주면 재질문 없음
 "%NSSM%" status %SERVICE_NAME% >nul 2>&1
 if not errorlevel 1 (
   echo [nssm-install] 서비스 %SERVICE_NAME% 가 이미 등록되어 있습니다.
-  set /p "DO_REREG=삭제 후 재등록할까요? (Y/N): "
+  if defined GGNR_NSSM_REREG (
+    set "DO_REREG=%GGNR_NSSM_REREG%"
+    echo [nssm-install] 재등록 여부 = !DO_REREG! ^(상위 스크립트에서 지정^)
+  ) else (
+    set /p "DO_REREG=삭제 후 재등록할까요? (Y/N): "
+  )
   if /i not "!DO_REREG!"=="Y" (
     echo [중단] 기존 서비스를 유지합니다. 재등록하지 않았습니다.
     exit /b 2

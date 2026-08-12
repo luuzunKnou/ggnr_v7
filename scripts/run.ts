@@ -9,6 +9,7 @@ import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
+import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '../src/lib/npmApplyEnv';
 
 const COMMAND = process.argv[2]; // dev | start
 const PROJECT = process.argv[3]; // e.g. river_yd
@@ -220,12 +221,12 @@ function isSupervisedRestartMode(mode: string | undefined): boolean {
 }
 
 function runNpmInstallSync(): void {
-  console.log('[SourceCodeUpload] npm install --no-audit --no-fund (재기동 전)');
-  execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
+  console.log('[SourceCodeUpload] npm install --include=dev --no-audit --no-fund (재기동 전)');
+  execFileSync('npm', [...NPM_INSTALL_DEV_ARGS], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
-    env: process.env,
+    env: resolveNpmInstallEnv(),
   });
 }
 

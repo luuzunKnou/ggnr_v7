@@ -124,6 +124,7 @@ async function buildZipBundle(params: {
     archive.pipe(output);
 
     for (const f of files) {
+      if (!fsSync.existsSync(f.absPath)) continue;
       archive.file(f.absPath, { name: `${bundleRoot}/${f.relPath}` });
     }
     const metaText = [

@@ -5,6 +5,7 @@ import {
   buildInstallZip,
   recordInstallZipHistory,
   failInstallZipBuild,
+  formatInstallZipError,
 } from '@/service/sourceInstallZipService';
 import {
   createInstallZipProgressId,
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       downloadUrl: `/api/source/version/install-zip/download?progressId=${encodeURIComponent(progressId)}`,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'build failed';
+    const message = formatInstallZipError(err);
     failInstallZipBuild(progressId || undefined, message);
     await recordInstallZipHistory({
       ok: false,
