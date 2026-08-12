@@ -33,7 +33,32 @@ import { recordVersionHistory } from '@/service/mngVersionHistoryService';
  */
 function installZipDownloadRoot(): string {
   const leaf = ['ggnr', 'source', 'install', 'download'].join('_');
+  return [process.cwd(), '.tmp', leaf].join(path.sep);
+}
+
+function legacyOsTmpLeaf(leaf: string): string {
   return `${os.tmpdir()}${path.sep}${leaf}`;
+}
+
+/** 이전 C: TEMP·워크스페이스 .tmp 잔여 설치 ZIP/분할본 삭제 */
+async function purgeStaleInstallTemps(): Promise<void> {
+  const dirs = [
+    installZipDownloadRoot(),
+    [process.cwd(), '.tmp', ['ggnr', 'python', 'env', 'split'].join('_')].join(path.sep),
+    legacyOsTmpLeaf(['ggnr', 'source', 'install', 'download'].join('_')),
+    legacyOsTmpLeaf(['ggnr', 'python', 'env', 'split'].join('_')),
+  ];
+  for (const dir of dirs) {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+export function formatInstallZipError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/ENOSPC|no space left/i.test(raw)) {
+    return '디스크 공간이 부족합니다. 설치 ZIP은 프로젝트 .tmp 에 만들며, 이전 임시 파일은 자동으로 지웁니다. C 드라이브 용량을 확보한 뒤 다시 시도하세요.';
+  }
+  return raw || '설치 ZIP 생성 실패';
 }
 
 type IncludedFile = {
@@ -223,6 +248,8 @@ export async function buildInstallZip(params: {
 }): Promise<BuildInstallZipResult> {
   const { profile, progressId } = params;
   const date = todayYmd();
+  if (progressId) setInstallZipPhase(progressId, 'scan', '이전 임시 파일 정리 중...');
+  await purgeStaleInstallTemps();
   if (progressId) setInstallZipPhase(progressId, 'scan', '설치 ZIP 스캔 중...');
   const scan = await scanInstallFiles({ profile, progressId });
   const files = [...scan.included];

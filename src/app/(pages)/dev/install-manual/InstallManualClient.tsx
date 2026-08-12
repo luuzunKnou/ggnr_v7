@@ -163,21 +163,6 @@ npm -v`}</CodeBlock>
               </li>
               <li>다운로드 클릭</li>
             </ol>
-            <div className="border-t pt-3">
-              <ExtLink href="https://nssm.cc/download">https://nssm.cc/download</ExtLink>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>
-                  서비스 등록을 위해 <code className="rounded bg-muted px-1 py-0.5">NSSM</code> 다운로드
-                </li>
-                <li>
-                  사이트 이동 &gt; <strong>Latest release</strong> &gt; ZIP 파일 압축 풀기
-                </li>
-                <li>
-                  C 드라이브에 복사 붙여넣기 후 폴더 이름을{' '}
-                  <code className="rounded bg-muted px-1 py-0.5">nssm</code>으로 수정
-                </li>
-              </ol>
-            </div>
           </section>
 
           <section id="run" className="scroll-mt-4 space-y-3">
@@ -261,7 +246,7 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
                 </div>
               </li>
               <li>
-                C 드라이브에 <code className="rounded bg-muted px-1 py-0.5">nssm</code> &gt;{' '}
+                <code className="rounded bg-muted px-1 py-0.5">nssm</code> &gt;{' '}
                 <code className="rounded bg-muted px-1 py-0.5">win64</code> &gt;{' '}
                 <code className="rounded bg-muted px-1 py-0.5">nssm.exe</code>까지 이동
               </li>

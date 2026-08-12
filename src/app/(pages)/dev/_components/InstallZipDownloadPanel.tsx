@@ -146,15 +146,15 @@ function ModeDescription({ mode }: { mode: DownloadSourceMode }) {
   if (mode === 'gnms') {
     return (
       <p className="text-xs text-muted-foreground">
-        이 서버가 GNMS에 설치 ZIP을 요청한 뒤 브라우저로 전달합니다. 패키지에 python/env_parts(분할
-        압축)가 있으면 설치 시 시작 스크립트가 python/env 로 복원합니다.
+        이 서버가 GNMS에 설치 ZIP을 요청한 뒤 브라우저로 전달합니다.<br />
+        GNMS에서 python/env의 분할 압축본을 ZIP에 포함시켜 제공하며, 설치 서버에서 시작 스크립트가 분할 압축을 복원합니다.
       </p>
     );
   }
   return (
     <p className="text-xs text-muted-foreground">
-      이 서버 워크스페이스를 지금 기준으로 설치용 ZIP으로 만듭니다. python/env 원본은 빼고 분할
-      압축본(python/env_parts)을 넣어, 설치 서버에서 시작 스크립트가 복원합니다.
+      이 서버 워크스페이스를 지금 로컬 기준으로 설치용 ZIP으로 만듭니다.<br />
+      python/env 원본은 빼고 분할압축본을 생성합니다. 설치 서버에서 시작 스크립트가 분할 압축을 복원합니다.
     </p>
   );
 }

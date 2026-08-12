@@ -1,14 +1,13 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import archiver from 'archiver';
 
 const PART_BYTES = 5 * 1024 * 1024;
 
 function splitTempRoot(): string {
   const leaf = ['ggnr', 'python', 'env', 'split'].join('_');
-  return `${os.tmpdir()}${path.sep}${leaf}`;
+  return [process.cwd(), '.tmp', leaf].join(path.sep);
 }
 
 export type PythonEnvPartFile = {

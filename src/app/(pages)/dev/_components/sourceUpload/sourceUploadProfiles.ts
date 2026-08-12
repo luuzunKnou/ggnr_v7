@@ -21,6 +21,7 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   'out/',
   'build/',
   'docs/',
+  '.tmp/',
   '.cad-preview-work/',
   'python/env/',
   'python/env_parts/',
