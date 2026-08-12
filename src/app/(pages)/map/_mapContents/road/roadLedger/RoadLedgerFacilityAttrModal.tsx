@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useId } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { XIcon } from "lucide-react";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { getLegendUrl } from "../../../_mapComponents/hooks/useFeatureIdentify";
 import { formatRoadLedgerAttrValue } from "./roadLedgerFormat";
+import {
+  fetchRoadLedgerDefineFieldLabels,
+  resolveRoadLedgerFieldLabel,
+} from "./roadLedgerDefineFieldLabels";
 import { DetailInfoTable } from "./RoadLedgerDetailPanel";
 
 const GEOM_LIKE = new Set(["geom", "geometry", "the_geom", "wkb_geometry", "shape"]);
@@ -33,6 +37,7 @@ export function RoadLedgerFacilityAttrModal({
   const pick = mapContext?.roadLedgerFacilityModal;
   const open = Boolean(pick);
   const titleId = useId();
+  const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
 
   const close = useCallback(() => {
     mapContext?.setRoadLedgerFacilityModal?.(null);
@@ -47,13 +52,32 @@ export function RoadLedgerFacilityAttrModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, close]);
 
+  useEffect(() => {
+    const table = String(pick?.defineTableName ?? "").trim();
+    if (!open || !table) {
+      setFieldLabels({});
+      return;
+    }
+    let cancelled = false;
+    void fetchRoadLedgerDefineFieldLabels(table).then((labels) => {
+      if (!cancelled) setFieldLabels(labels);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, pick?.defineTableName]);
+
   const entries = pick
     ? Object.entries(pick.row)
         .filter(([k]) => !isGeomKey(k))
-        .sort(([a], [b]) => a.localeCompare(b, "ko"))
+        .sort(([a], [b]) => {
+          const la = resolveRoadLedgerFieldLabel(fieldLabels, a);
+          const lb = resolveRoadLedgerFieldLabel(fieldLabels, b);
+          return la.localeCompare(lb, "ko");
+        })
         .map(([fieldKey, val]) => ({
           fieldKey,
-          label: fieldKey,
+          label: resolveRoadLedgerFieldLabel(fieldLabels, fieldKey),
           value: formatRoadLedgerAttrValue(fieldKey, val),
         }))
     : [];

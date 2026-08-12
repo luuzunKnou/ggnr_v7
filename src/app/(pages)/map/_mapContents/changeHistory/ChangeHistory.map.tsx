@@ -240,7 +240,7 @@ export type ChangeHistoryLiveMapProps = {
   asOfFeatures?: ChangeHistoryAsOfFeature[];
   /** 선택일 당일 전·후 도형 — 변경 전 레이어 복원에 사용 */
   dayDiffFeatures?: ChangeHistoryDayDiffFeature[];
-  /** 이력·시점 도형 조회 중 — 지도 위 로딩 표시 */
+  /** 시점·변경 도형 조회 중 — 지도 위 가림 스피너 */
   mapLoading?: boolean;
   /** 실제 깐 배경 (정사 성공 여부) — 하단 요약과 맞춤 */
   onBackgroundResolved?: (info: { isOrtho: boolean; year: string | null }) => void;
@@ -439,10 +439,12 @@ export function ChangeHistoryLiveMap({
 
   // 3-5: GetMap 디바운스 — 발행 레이어 정의는 변경하지 않음
   // 시점 벡터(변경 전·후)가 있으면 운영 WMS는 숨김 — 최신본·이중 표시 혼선 방지
+  // 조회 중(mapLoading)에도 WMS 숨김 — 운영본·구 도형 깜빡임 방지
   useEffect(() => {
     const layer = wmsLayerRef.current;
     if (!layer) return;
-    const hideWms = asOfFeatures.length > 0 || dayDiffFeatures.length > 0;
+    const hideWms =
+      mapLoading || asOfFeatures.length > 0 || dayDiffFeatures.length > 0;
     layer.setVisible(!hideWms);
     if (hideWms) return;
     if (wmsTimerRef.current) clearTimeout(wmsTimerRef.current);
@@ -452,7 +454,7 @@ export function ChangeHistoryLiveMap({
     return () => {
       if (wmsTimerRef.current) clearTimeout(wmsTimerRef.current);
     };
-  }, [wmsParams, asOfFeatures.length, dayDiffFeatures.length]);
+  }, [wmsParams, asOfFeatures.length, dayDiffFeatures.length, mapLoading]);
 
   useEffect(() => {
     const map = mapRef.current;

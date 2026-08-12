@@ -1082,12 +1082,21 @@ export function LayerDataPanel({
   const listFieldsAll = (fields.length > 0 ? fields : detailFields.length > 0 ? detailFields : autoFields).filter(
     (f) => !isGeomLikeFieldName(String(f.define_field_name ?? ''))
   );
-  /** 데이터 조회와 동일: 최대 5열. 시설관리(도로대장 시설 컬럼)도 같은 레이아웃·클래스만 사용 */
+  /** 데이터 조회와 동일: 최대 5열. 시설관리 컬럼 순서는 도로대장 설정, 헤더는 defineLayer 한글명 */
   const listFields = useFacilityCols
-    ? facilityColumnKeys.slice(0, 5).map((k) => ({
-        define_field_name: k,
-        define_field_kor_name: k,
-      }))
+    ? facilityColumnKeys.slice(0, 5).map((k) => {
+        const kl = String(k).trim().toLowerCase();
+        const meta =
+          detailFields.find(
+            (f) => String(f.define_field_name ?? "").trim().toLowerCase() === kl
+          ) ??
+          fields.find((f) => String(f.define_field_name ?? "").trim().toLowerCase() === kl);
+        const kor = String(meta?.define_field_kor_name ?? "").trim();
+        return {
+          define_field_name: k,
+          define_field_kor_name: kor || k,
+        };
+      })
     : listFieldsAll.slice(0, 5);
 
   const isKeyField = (name: string) =>

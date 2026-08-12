@@ -1886,11 +1886,11 @@ export function RoadNetworkDetailPanel({
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
-          className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 pt-1.5"
+          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 pt-1.5"
           role="tablist"
           aria-label="이력·민원·첨부"
         >
-          <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto scrollbar-hide">
+          <div className="flex min-w-0 flex-1 items-stretch gap-0.5 self-stretch overflow-x-auto scrollbar-hide">
             {bottomTabs.map((t) => {
               const active = bottomTab === t.id;
               return (
@@ -1901,41 +1901,48 @@ export function RoadNetworkDetailPanel({
                   aria-selected={active}
                   onClick={() => setBottomTab(t.id)}
                   className={cn(
-                    "relative shrink-0 px-2.5 pb-1.5 text-[11px] font-medium transition-colors",
+                    "relative flex shrink-0 items-center px-2.5 pb-1.5 text-[11px] font-medium transition-colors",
                     active ? "text-primary" : "text-slate-500 hover:text-slate-700"
                   )}
                 >
                   {t.label}
                   {active ? (
-                    <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-primary" />
+                    <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-primary" />
                   ) : null}
                 </button>
               );
             })}
           </div>
-          {showAddButton ? (
-            <button
-              type="button"
-              className={cn(btnPrimary, "mb-1 mr-1 shrink-0")}
-              disabled={
-                (bottomTab === "maintenance" && siteModal?.kind === "maint") ||
-                (bottomTab === "complaints" && siteModal?.kind === "comp")
-              }
-              onClick={bottomTab === "maintenance" ? openNewMaint : openNewComp}
-            >
-              <Plus className="h-3 w-3" />
-              추가
-            </button>
-          ) : bottomTab === "attachments" ? (
-            <button
-              type="button"
-              className={cn(btnPrimary, "mb-1 mr-1 shrink-0")}
-              onClick={() => roadAttachInputRef.current?.click()}
-            >
-              <Plus className="h-3 w-3" />
-              첨부
-            </button>
-          ) : null}
+          <div className="mb-1 mr-1 flex h-7 shrink-0 items-center justify-end">
+            {showAddButton ? (
+              <button
+                type="button"
+                className={cn(btnPrimary, "shrink-0")}
+                disabled={
+                  (bottomTab === "maintenance" && siteModal?.kind === "maint") ||
+                  (bottomTab === "complaints" && siteModal?.kind === "comp")
+                }
+                onClick={bottomTab === "maintenance" ? openNewMaint : openNewComp}
+              >
+                <Plus className="h-3 w-3" />
+                추가
+              </button>
+            ) : bottomTab === "attachments" ? (
+              <button
+                type="button"
+                className={cn(btnPrimary, "shrink-0")}
+                onClick={() => roadAttachInputRef.current?.click()}
+              >
+                <Plus className="h-3 w-3" />
+                첨부
+              </button>
+            ) : (
+              <span className="invisible inline-flex h-7 items-center px-2 text-[11px]" aria-hidden>
+                <Plus className="h-3 w-3" />
+                추가
+              </span>
+            )}
+          </div>
         </div>
 
         {(bottomTab === "maintenance" || bottomTab === "complaints") && (

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/app/shadcnComponents/ui/dialog"
 import { call } from "@/lib/api"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react"
 import type { LayerSetupAutofixLogRow } from "@/service/devTestService"
 import { ExcelProcessLogLines } from "../exl/ExcelProcessLogLines"
 
@@ -126,24 +126,36 @@ export function LayerManagerAutofixHistoryPanel({ refreshToken = 0 }: Props) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto border rounded-none bg-muted/20">
-        {loading ? (
-          <p className="p-2 text-xs text-muted-foreground">이력 로딩 중…</p>
-        ) : error ? (
-          <p className="p-2 text-xs text-destructive">{error}</p>
-        ) : logs.length === 0 ? (
-          <p className="p-2 text-xs text-muted-foreground">자동 수정 이력이 없습니다.</p>
-        ) : (
-          <table className="w-full text-xs border-collapse">
-            <thead className="sticky top-0 z-10 bg-muted border-b">
+        <table className="w-full text-xs border-collapse">
+          <thead className="sticky top-0 z-10 bg-muted border-b">
+            <tr>
+              <th className="py-1 px-2 text-left font-medium w-[150px]">일시</th>
+              <th className="py-1 px-2 text-left font-medium">테이블명</th>
+              <th className="py-1 px-2 text-left font-medium w-[72px]">결과</th>
+              <th className="py-1 px-2 text-left font-medium">파일</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
               <tr>
-                <th className="py-1 px-2 text-left font-medium w-[150px]">일시</th>
-                <th className="py-1 px-2 text-left font-medium">테이블명</th>
-                <th className="py-1 px-2 text-left font-medium w-[72px]">결과</th>
-                <th className="py-1 px-2 text-left font-medium">파일</th>
+                <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                  이력 로딩 중…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {logs.map((row) => (
+            ) : error ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-destructive">
+                  {error}
+                </td>
+              </tr>
+            ) : logs.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                  자동 수정 이력이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              logs.map((row) => (
                 <tr
                   key={row.fileName}
                   className={`border-b cursor-pointer hover:bg-green-50/30 dark:hover:bg-green-950/10 ${
@@ -171,39 +183,65 @@ export function LayerManagerAutofixHistoryPanel({ refreshToken = 0 }: Props) {
                     {row.fileName}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            이전
-          </Button>
-          <span>
-            {page} / {totalPages}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            다음
-          </Button>
-        </div>
-      )}
+      <div className="shrink-0 flex items-center justify-center gap-1 text-xs">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage(1)}
+          title="처음"
+          aria-label="처음"
+        >
+          <ChevronsLeft className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          title="이전"
+          aria-label="이전"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="px-2 tabular-nums">
+          {page} / {totalPages}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          title="다음"
+          aria-label="다음"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage(totalPages)}
+          title="끝"
+          aria-label="끝"
+        >
+          <ChevronsRight className="w-4 h-4" />
+        </Button>
+      </div>
 
       <Dialog open={logOpen} onOpenChange={setLogOpen}>
         <DialogContent className="max-w-4xl sm:max-w-4xl w-[90vw] max-h-[85vh] flex flex-col">

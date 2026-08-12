@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-1121</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-76e2</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:usage_data_as_solo</name>
+  <name>ggnr:water_occupationledger</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>129.0694029551915</double>
-          <double>36.65040289243611</double>
-          <double>129.4868430602227</double>
-          <double>37.14378063716121</double>
+          <double>129.4382695773163</double>
+          <double>36.71718192573706</double>
+          <double>129.43925875815688</double>
+          <double>36.71816570837379</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4367940213963756E7</double>
-          <double>4390488.842368976</double>
-          <double>1.441440943389252E7</double>
-          <double>4459166.947814902</double>
+          <double>1.4409002258509325E7</double>
+          <double>4399758.570302655</double>
+          <double>1.4409112373616802E7</double>
+          <double>4399895.191281193</double>
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>usage_data_as_solo</defaultStyle>
+      <defaultStyle>water_occupationledger</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

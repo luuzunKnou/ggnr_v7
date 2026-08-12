@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-77a2</id>
+  <id>FeatureTypeInfoImpl-30757437:19fe9f3fc96:-76d9</id>
   <name>road_occupationledger_mgj</name>
   <nativeName>road_occupationledger_mgj</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>0.0</minx>
-    <maxx>-1.0</maxx>
-    <miny>0.0</miny>
-    <maxy>-1.0</maxy>
+    <minx>417231.8326368695</minx>
+    <maxx>417276.5886849145</maxx>
+    <miny>360481.25577882165</miny>
+    <maxy>360589.61799865816</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.84847767680762</minx>
-    <maxx>124.84848865053446</maxx>
-    <miny>33.47495973610326</miny>
-    <maxy>33.474968932506</maxy>
+    <minx>129.4313289505254</minx>
+    <maxx>129.43186023643983</maxx>
+    <miny>36.718049537574366</miny>
+    <maxy>36.71903536555023</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

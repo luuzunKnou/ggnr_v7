@@ -347,3 +347,23 @@ export async function prefetchCompareStyles(tableNames: string[]): Promise<void>
   const uniq = [...new Set(tableNames.map((t) => t.trim()).filter(Boolean))];
   await Promise.all(uniq.map((t) => fetchStyleInfo(t)));
 }
+
+/** 관련 레이어 칩 범례 — 변경 후(원색) 기준. 캐시 없으면 null */
+export type ChangeHistoryLegendInfo = {
+  kind: 'point' | 'line' | 'polygon';
+  fillColor: string;
+  strokeColor: string;
+};
+
+export function peekCompareLegendInfo(tableName: string): ChangeHistoryLegendInfo | null {
+  const raw = tableName.trim();
+  if (!raw) return null;
+  const info = styleInfoCache.get(raw.toLowerCase());
+  if (!info) return null;
+  const p = info.styleProps;
+  return {
+    kind: resolveDrawKind(undefined, info.geometryType),
+    fillColor: p.fillColor ?? '#808080',
+    strokeColor: p.strokeColor ?? p.fillColor ?? '#333333',
+  };
+}

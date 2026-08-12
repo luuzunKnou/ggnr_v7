@@ -12,6 +12,10 @@ import Feature from "ol/Feature";
 import type { FeatureLike } from "ol/Feature";
 import { MultiPolygon, Polygon } from "ol/geom";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
+import {
+  occupationFillRgba,
+  occupationStrokeRgba,
+} from "@/lib/occupationLayerStyle";
 import { useMapContext } from "../MapContext";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
@@ -73,19 +77,19 @@ function replaceParentFeaturesFromWkt5181(source: VectorSource, wkt5181: string)
 
 function createParentEditStyle() {
   return new Style({
-    stroke: new Stroke({ color: "rgba(239, 68, 68, 0.95)", width: 2.5 }),
-    fill: new Fill({ color: "rgba(239, 68, 68, 0.12)" }),
+    stroke: new Stroke({ color: occupationStrokeRgba("parentActive"), width: 2.5 }),
+    fill: new Fill({ color: occupationFillRgba("parentActive") }),
     image: new CircleStyle({
       radius: 5,
-      fill: new Fill({ color: "rgba(239, 68, 68, 0.95)" }),
+      fill: new Fill({ color: occupationFillRgba("parentActive", 0.95) }),
       stroke: new Stroke({ color: "#fff", width: 1.5 }),
     }),
   });
 }
 
 const parcelEditStyle = new Style({
-  stroke: new Stroke({ color: "#1d4ed8", width: 3 }),
-  fill: new Fill({ color: "rgba(29, 78, 216, 0.32)" }),
+  stroke: new Stroke({ color: occupationStrokeRgba("parcel"), width: 2 }),
+  fill: new Fill({ color: occupationFillRgba("parcel") }),
 });
 
 const parentEditStyle = createParentEditStyle();

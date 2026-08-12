@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--5fabfce7:19fca79c611:-77af</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-76d6</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:public_occupationledger_jijuk</name>
+  <name>ggnr:public_occupationledger</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>129.4404420281868</double>
+          <double>36.7187426487286</double>
+          <double>129.44143388178395</double>
+          <double>36.71957712897771</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4409244094634E7</double>
+          <double>4399975.313610673</double>
+          <double>1.440935450727138E7</double>
+          <double>4400091.2027405705</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>polygon</defaultStyle>
+      <defaultStyle>public_occupationledger</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

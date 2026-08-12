@@ -1,12 +1,12 @@
 <layer>
   <name>usage_data_sisul_as</name>
-  <id>LayerInfoImpl--5417137b:19f83ba2858:341</id>
+  <id>LayerInfoImpl-30757437:19fe9f3fc96:-7be7</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--5417137b:19f83ba2858:342</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--5417137b:19f83ba2858:340</id>
+    <id>FeatureTypeInfoImpl-30757437:19fe9f3fc96:-7be8</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-23 05:40:38.129 UTC</dateCreated>
-  <dateModified>2026-07-23 05:40:38.229 UTC</dateModified>
+  <dateCreated>2026-08-10 10:44:16.120 UTC</dateCreated>
+  <dateModified>2026-08-10 10:44:17.966 UTC</dateModified>
 </layer>

@@ -417,6 +417,209 @@ export async function getTableRowGeomGeoJson3857(params: {
   }
 }
 
+/**
+ * 부모(점용본표) ∩ 자식(필지) 교집합 도형 — GeoJSON EPSG:3857.
+ * 필지(jijuk 계열)는 SRID=0·좌표 5181인 경우가 많아 SetSRID(5181) 후 교집합.
+ * ST_CollectionExtract 타입: 1=점, 2=선, 3=면(폴리곤)
+ */
+export async function getIntersectedRowGeomGeoJson3857(params: {
+  parentTable: string;
+  parentKeyValue: string | number;
+  parentKeyField?: string;
+  childTable: string;
+  childKeyValue: string | number;
+  childKeyField?: string;
+  schema?: string;
+}): Promise<{ geometry: Record<string, unknown> | null; error?: string }> {
+  const parentGuess = String(params?.parentTable ?? '').trim().toLowerCase();
+  const childGuess = String(params?.childTable ?? '').trim().toLowerCase();
+  const parentKeyValue = String(params?.parentKeyValue ?? '').trim();
+  const childKeyValue = String(params?.childKeyValue ?? '').trim();
+  if (!parentGuess || !childGuess || !parentKeyValue || !childKeyValue) {
+    return { geometry: null, error: 'parent/child table·keyValue가 필요합니다.' };
+  }
+
+  const preferredSchema = resolveSchema(params?.schema);
+  const parentResolved =
+    (await resolveLayerPhysicalRelName(preferredSchema, parentGuess).then((t) =>
+      t ? { schema: preferredSchema, table: t } : null
+    )) ??
+    (await (async () => {
+      for (const sch of ['layer', 'public', 'public_layer'] as const) {
+        if (sch === preferredSchema) continue;
+        const t = await resolveLayerPhysicalRelName(sch, parentGuess);
+        if (t) return { schema: sch, table: t };
+      }
+      return null;
+    })());
+  const childResolved =
+    (await resolveLayerPhysicalRelName(preferredSchema, childGuess).then((t) =>
+      t ? { schema: preferredSchema, table: t } : null
+    )) ??
+    (await (async () => {
+      for (const sch of ['layer', 'public', 'public_layer'] as const) {
+        if (sch === preferredSchema) continue;
+        const t = await resolveLayerPhysicalRelName(sch, childGuess);
+        if (t) return { schema: sch, table: t };
+      }
+      return null;
+    })());
+  if (!parentResolved || !childResolved) {
+    return { geometry: null, error: '테이블을 찾을 수 없습니다.' };
+  }
+
+  const parentCols = await getTableColumns(parentResolved.schema, parentResolved.table);
+  const childCols = await getTableColumns(childResolved.schema, childResolved.table);
+  if (!parentCols.length || !childCols.length) {
+    return { geometry: null, error: '컬럼 정보를 찾을 수 없습니다.' };
+  }
+
+  let parentKeyField = resolveKeyField(parentGuess, params?.parentKeyField);
+  if (!parentKeyField || !findColumnName(parentCols, parentKeyField)) {
+    parentKeyField = findColumnName(parentCols, 'id') ?? parentKeyField;
+  }
+  let childKeyField = resolveKeyField(childGuess, params?.childKeyField);
+  if (!childKeyField || !findColumnName(childCols, childKeyField)) {
+    childKeyField =
+      findColumnName(childCols, 'ogc_fid') ??
+      findColumnName(childCols, 'id') ??
+      childKeyField;
+  }
+  if (!parentKeyField || !findColumnName(parentCols, parentKeyField)) {
+    return { geometry: null, error: '부모 키 컬럼을 찾을 수 없습니다.' };
+  }
+  if (!childKeyField || !findColumnName(childCols, childKeyField)) {
+    return { geometry: null, error: '자식 키 컬럼을 찾을 수 없습니다.' };
+  }
+
+  const parentGeomMeta = await resolveGeomColumnMeta(
+    parentResolved.schema,
+    parentResolved.table,
+    parentCols
+  );
+  const childGeomMeta = await resolveGeomColumnMeta(
+    childResolved.schema,
+    childResolved.table,
+    childCols
+  );
+  if (!parentGeomMeta || !childGeomMeta) {
+    return { geometry: null, error: 'geometry 컬럼을 찾을 수 없습니다.' };
+  }
+
+  const parentKeyCol = findColumnName(parentCols, parentKeyField)!;
+  const childKeyCol = findColumnName(childCols, childKeyField)!;
+  const parentGeomRef = `p.${quoteIdent(parentGeomMeta.col)}`;
+  const childGeomRef = `c.${quoteIdent(childGeomMeta.col)}`;
+
+  // 점용(부모)·필지(자식) 모두 5181로 맞춘 뒤 교집합 → 결과만 3857
+  const parent5181 = `ST_MakeValid(ST_Force2D(
+      CASE
+        WHEN ST_SRID(${parentGeomRef}) = 0 THEN ST_SetSRID(${parentGeomRef}, ${JIJUK_GEOM_SRID})
+        WHEN ST_SRID(${parentGeomRef}) = ${JIJUK_GEOM_SRID} THEN ${parentGeomRef}
+        ELSE ST_Transform(${parentGeomRef}, ${JIJUK_GEOM_SRID})
+      END
+    ))`;
+  const child5181 = `ST_MakeValid(ST_Force2D(
+      CASE
+        WHEN ST_SRID(${childGeomRef}) = 0 THEN ST_SetSRID(${childGeomRef}, ${JIJUK_GEOM_SRID})
+        WHEN ST_SRID(${childGeomRef}) = ${JIJUK_GEOM_SRID} THEN ${childGeomRef}
+        ELSE ST_Transform(${childGeomRef}, ${JIJUK_GEOM_SRID})
+      END
+    ))`;
+  // PostGIS CollectionExtract: 1=POINT, 2=LINESTRING, 3=POLYGON
+  const intersectPoly = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${parent5181}, ${child5181})), 3)`;
+
+  const q = `
+    SELECT ST_AsGeoJSON(ST_Transform(${intersectPoly}, 3857))::json AS geometry
+    FROM ${quoteIdent(parentResolved.schema)}.${quoteIdent(parentResolved.table)} p
+    CROSS JOIN ${quoteIdent(childResolved.schema)}.${quoteIdent(childResolved.table)} c
+    WHERE p.${quoteIdent(parentKeyCol)}::text = '${esc(parentKeyValue)}'
+      AND c.${quoteIdent(childKeyCol)}::text = '${esc(childKeyValue)}'
+      AND ${parentGeomRef} IS NOT NULL
+      AND ${childGeomRef} IS NOT NULL
+      AND ST_Intersects(${parent5181}, ${child5181})
+      AND NOT ST_IsEmpty(${intersectPoly})
+      AND ST_Area(${intersectPoly}) > 0
+    LIMIT 1`;
+
+  try {
+    const res = await db.execute(sql.raw(q));
+    const raw = res.rows?.[0] as { geometry?: unknown } | undefined;
+    const geometry = parseGeoJsonGeometry(raw?.geometry);
+    if (!geometry) return { geometry: null };
+    return { geometry };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { geometry: null, error: msg };
+  }
+}
+
+function parseGeoJsonGeometry(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** 이미 3857 GeoJSON인 두 도형의 면 교집합 */
+export async function getIntersectedGeoJson3857(params: {
+  parentGeometry: Record<string, unknown>;
+  childGeometry: Record<string, unknown>;
+}): Promise<{ geometry: Record<string, unknown> | null; error?: string }> {
+  const parentGeometry = params?.parentGeometry;
+  const childGeometry = params?.childGeometry;
+  if (!parentGeometry || typeof parentGeometry !== 'object') {
+    return { geometry: null, error: 'parentGeometry가 필요합니다.' };
+  }
+  if (!childGeometry || typeof childGeometry !== 'object') {
+    return { geometry: null, error: 'childGeometry가 필요합니다.' };
+  }
+
+  let parentJson: string;
+  let childJson: string;
+  try {
+    parentJson = JSON.stringify(parentGeometry);
+    childJson = JSON.stringify(childGeometry);
+  } catch {
+    return { geometry: null, error: 'GeoJSON 직렬화에 실패했습니다.' };
+  }
+
+  const tag = `ggnr${Date.now().toString(36)}`;
+  const parentGeom = `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromGeoJSON($${tag}$${parentJson}$${tag}$), 3857)))`;
+  const childGeom = `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromGeoJSON($${tag}c$${childJson}$${tag}c$), 3857)))`;
+  // PostGIS CollectionExtract: 3=POLYGON
+  const intersectExpr = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${parentGeom}, ${childGeom})), 3)`;
+
+  const q = `
+    SELECT ST_AsGeoJSON(ix)::json AS geometry
+    FROM (SELECT ${intersectExpr} AS ix) s
+    WHERE s.ix IS NOT NULL
+      AND NOT ST_IsEmpty(s.ix)
+      AND ST_Area(s.ix) > 0`;
+
+  try {
+    const res = await db.execute(sql.raw(q));
+    const raw = res.rows?.[0] as { geometry?: unknown } | undefined;
+    const geometry = parseGeoJsonGeometry(raw?.geometry);
+    if (!geometry) return { geometry: null };
+    return { geometry };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { geometry: null, error: msg };
+  }
+}
+
 function geomSetExpr(wkt5181: string): string {
   return `ST_SetSRID(ST_GeomFromText('${esc(wkt5181.trim())}'), 5181)`;
 }

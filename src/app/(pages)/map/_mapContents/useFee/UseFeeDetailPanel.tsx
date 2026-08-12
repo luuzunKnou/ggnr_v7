@@ -5,12 +5,13 @@ import { useSearchParams } from 'next/navigation'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
+import { USE_FEE_DETAIL_PRIMARY_COUNT } from './useFeeFieldLabels'
 
 type ListRow = {
   id: string
   status: string
-  chargeNo: string
-  year: string
+  ledgerNo: string
+  dptNm: string
   payer: string
   amount: string
   dueDate: string
@@ -26,8 +27,6 @@ type DetailProps = {
   detailId: string
   onClose: () => void
 }
-
-const FEE_DETAIL_INITIAL_COUNT = 20
 
 export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
   const searchParams = useSearchParams()
@@ -77,9 +76,9 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
 
   const visibleAttributes = expanded
     ? attributes
-    : attributes.slice(0, FEE_DETAIL_INITIAL_COUNT)
-  const hiddenCount = Math.max(0, attributes.length - FEE_DETAIL_INITIAL_COUNT)
-  const showMoreButton = attributes.length > FEE_DETAIL_INITIAL_COUNT
+    : attributes.slice(0, USE_FEE_DETAIL_PRIMARY_COUNT)
+  const hiddenCount = Math.max(0, attributes.length - USE_FEE_DETAIL_PRIMARY_COUNT)
+  const showMoreButton = attributes.length > USE_FEE_DETAIL_PRIMARY_COUNT
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
