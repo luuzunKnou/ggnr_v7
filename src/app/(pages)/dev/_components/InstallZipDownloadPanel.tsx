@@ -584,7 +584,7 @@ export function InstallZipDownloadPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded border p-3">
+    <div className="flex min-h-0 flex-1 flex-col rounded border p-3 gap-2">
       <div className="shrink-0 space-y-2">
         <button
           type="button"

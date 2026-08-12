@@ -1,8 +1,5 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
-
 const SECTIONS = [
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
   { id: 'package', label: '프로젝트 파일 설치/실행 및 서비스 등록' },
@@ -12,10 +9,7 @@ const SECTIONS = [
   { id: 'python-env', label: '레이어 업로드 실패(python/env) 문제' },
 ] as const;
 
-const TOC_ACTIVE =
-  'rounded-r-sm bg-primary/[0.11] pl-2.5 font-medium text-foreground';
-const TOC_IDLE =
-  'rounded-sm pl-2.5 text-muted-foreground font-medium hover:bg-primary/5 hover:text-foreground';
+const HEADER_BAR = 'flex h-10 shrink-0 items-center border-b';
 
 function ExtLink({ href, children }: { href: string; children: string }) {
   return (
@@ -40,30 +34,6 @@ function CodeBlock({ children }: { children: string }) {
 }
 
 export function InstallManualClient() {
-  const contentRef = useRef<HTMLElement>(null);
-  const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
-
-  const updateActive = useCallback(() => {
-    const root = contentRef.current;
-    if (!root) return;
-    const top = root.scrollTop + 24;
-    let current: string = SECTIONS[0].id;
-    for (const sec of SECTIONS) {
-      const el = document.getElementById(sec.id);
-      if (!el) continue;
-      if (el.offsetTop <= top) current = sec.id;
-    }
-    setActiveId(current);
-  }, []);
-
-  useEffect(() => {
-    const root = contentRef.current;
-    if (!root) return;
-    updateActive();
-    root.addEventListener('scroll', updateActive, { passive: true });
-    return () => root.removeEventListener('scroll', updateActive);
-  }, [updateActive]);
-
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -73,7 +43,7 @@ export function InstallManualClient() {
   return (
     <div className="flex h-screen min-h-0 bg-background text-foreground">
       <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/20">
-        <div className="border-b px-3 py-2 text-sm font-semibold">설치 매뉴얼</div>
+        <div className={`${HEADER_BAR} px-3 text-sm font-semibold`}>설치 매뉴얼</div>
         <nav
           className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
           aria-label="목차"
@@ -85,10 +55,7 @@ export function InstallManualClient() {
               type="button"
               title={sec.label}
               onClick={() => scrollToSection(sec.id)}
-              className={cn(
-                'block w-full cursor-pointer py-1 pr-1 text-left text-xs leading-snug',
-                activeId === sec.id ? TOC_ACTIVE : TOC_IDLE
-              )}
+              className="block w-full cursor-pointer rounded-sm py-1 pl-2.5 pr-1 text-left text-xs font-medium leading-snug text-foreground hover:bg-primary/5 hover:text-primary"
             >
               {sec.label}
             </button>
@@ -96,7 +63,18 @@ export function InstallManualClient() {
         </nav>
       </aside>
 
-      <main ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <section
+          id="sub_text"
+          className={`${HEADER_BAR} sticky top-0 z-10 justify-center border-[#e5e5e5] bg-background px-6 text-center text-xs leading-none dark:border-neutral-600`}
+        >
+          <p className="truncate">
+            매뉴얼 수정시{' '}
+            <code className="rounded bg-muted px-1 py-0.5">InstallManualClient.tsx</code> 파일을
+            수정하세요.
+          </p>
+        </section>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <article
           className="mx-auto max-w-3xl text-xs leading-relaxed"
           style={{ display: 'flex', flexDirection: 'column', gap: 64 }}
@@ -341,6 +319,7 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
             </ol>
           </section>
         </article>
+        </div>
       </main>
     </div>
   );

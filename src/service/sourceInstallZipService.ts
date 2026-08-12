@@ -183,6 +183,7 @@ async function buildInstallZipFile(params: {
     });
     archive.pipe(output);
     for (const f of files) {
+      if (!fsSync.existsSync(f.absPath)) continue;
       const level = archiverLevelForPath(f.relPath);
       // @types/archiver EntryData에 store/zlib이 빠져 있어 런타임 옵션만 전달
       archive.file(

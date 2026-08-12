@@ -29,7 +29,12 @@ const ALWAYS_EXCLUDE_PREFIXES = [
 ];
 
 /** 운영 서버마다 다른 기동 bat·Next 생성 타입 등은 패키지에 넣지 않음 */
-const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts', 'ggnr_start.bat'];
+const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts', 'ggnr_start.bat', 'python/env.zip'];
+
+/** python/env 옆의 env.zip·env.z01 — 분할본은 python/env_parts/ 만 사용 */
+function isPythonEnvRootSplitFile(p: string): boolean {
+  return p === 'python/env.zip' || /^python\/env\.z\d+$/i.test(p);
+}
 
 const RUNTIME_PREFIXES = [
   'scripts/',
@@ -88,6 +93,7 @@ export function isExcludedSourcePath(
   const p = normalizeRelPath(relativePath);
   if (!p) return true;
   if (ALWAYS_EXCLUDE_EXACT.includes(p)) return true;
+  if (isPythonEnvRootSplitFile(p)) return true;
   if (p.endsWith('.log')) return true;
   if (hasAnyPrefix(p, ALWAYS_EXCLUDE_PREFIXES)) return true;
   if (!includeNodeModules && (p === 'node_modules' || p.startsWith('node_modules/'))) return true;

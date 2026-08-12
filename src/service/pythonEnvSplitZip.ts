@@ -63,19 +63,24 @@ async function splitZipFile(zipPath: string, partsDir: string): Promise<PythonEn
   return parts;
 }
 
-/** python/env 가 있으면 tmp에 zip·분할. 없으면 null. 호출측에서 tmpDir 삭제 */
+/** cwd/python/env — 정적 경로 추적 회피 (python/env.zip 로 오인되지 않게) */
+function pythonEnvDir(workspaceRoot: string): string {
+  return [workspaceRoot, 'python', 'env'].join(path.sep);
+}
+
+/** python/env 폴더를 tmp에서 zip·5MiB 분할. 엔트리는 python/env_parts/ 만. 호출측에서 tmpDir 삭제 */
 export async function createPythonEnvSplitParts(workspaceRoot: string): Promise<{
   parts: PythonEnvPartFile[];
   tmpDir: string;
 } | null> {
-  const envDir = path.join(workspaceRoot, 'python', 'env');
-  const exe = path.join(envDir, 'python.exe');
+  const envDir = pythonEnvDir(workspaceRoot);
+  const exe = [envDir, 'python.exe'].join(path.sep);
   if (!fsSync.existsSync(exe)) return null;
   const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const tmpDir = `${splitTempRoot()}${path.sep}${stamp}`;
   await fs.mkdir(tmpDir, { recursive: true });
-  const fullZip = path.join(tmpDir, 'env_full.zip');
-  const partsDir = path.join(tmpDir, 'parts');
+  const fullZip = [tmpDir, 'env_full.zip'].join(path.sep);
+  const partsDir = [tmpDir, 'parts'].join(path.sep);
   await zipPythonEnvDir(envDir, fullZip);
   const parts = await splitZipFile(fullZip, partsDir);
   await fs.rm(fullZip, { force: true }).catch(() => {});
