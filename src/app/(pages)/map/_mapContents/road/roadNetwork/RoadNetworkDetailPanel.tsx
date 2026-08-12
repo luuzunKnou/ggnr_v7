@@ -55,7 +55,7 @@ import {
 } from "../../../searchBarOffsetContext";
 import { buildRoadNetworkReportHtml } from "./roadNetworkReport";
 import {
-  cleanRoadNetworkDisplayText,
+  formatRoadNetworkListTitle,
   formatRoadNetworkNumericAttr,
   lineCoordsToRoadNetworkGeom,
   roadNetworkGeomToLineCoords,
@@ -65,9 +65,9 @@ import {
   getRoadNetworkFieldsForType,
   roadTypeHasDept,
   roadTypeHasGeomAttrs,
-  roadTypeHasOpenStatus,
   roadTypeHasSinuosity,
 } from "./roadNetworkFields";
+import { refreshRoadNetworkWmsLayer } from "./roadNetworkMapSync";
 import { RoadNetworkSiteItemModal } from "./RoadNetworkSiteItemModal";
 import {
   ROAD_NETWORK_COMPLAINT_STATE_FILTERS,
@@ -498,7 +498,8 @@ export function RoadNetworkDetailPanel({
   const compAttachInputRef = useRef<HTMLInputElement>(null);
 
   const badge = ROAD_NETWORK_TYPE_BADGE[row.roadType];
-  const displayRoadNo = cleanRoadNetworkDisplayText(row.roadNo);
+  const displayTitle = formatRoadNetworkListTitle(row);
+  const hasRoadName = Boolean(row.roadName.trim());
   const roadAttachments = ensureAttachments(row.attachments);
   const historyNewestFirst = useMemo(
     () => [...(row.history ?? [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)),
@@ -532,7 +533,8 @@ export function RoadNetworkDetailPanel({
     geomModifyFeatureRef.current = null;
     setFocusedSiteKey?.(null);
 
-    const editing = isNewRoadNetworkRowId(row.id) || !row.roadName.trim();
+    // 명칭 공란이어도 조회 모드 유지 — 신규 등록만 자동 편집
+    const editing = isNewRoadNetworkRowId(row.id);
     setAttrEditing(editing);
     if (editing) {
       // 신규 도로: 속성·도형 편집 함께 시작
@@ -1277,6 +1279,7 @@ export function RoadNetworkDetailPanel({
         return [merged, ...rest];
       });
       mapContext?.setRoadNetworkSelectedId?.(saved.id);
+      refreshRoadNetworkWmsLayer(mapContext?.mapInstanceRef?.current);
 
       if (geomEditMode) {
         setGeomEditMode(null);
@@ -1313,6 +1316,7 @@ export function RoadNetworkDetailPanel({
       }
       mapContext?.setRoadNetworkRows?.((rows) => rows.filter((r) => r.id !== row.id));
       mapContext?.setRoadNetworkSelectedId?.(null);
+      refreshRoadNetworkWmsLayer(mapContext?.mapInstanceRef?.current);
     } catch (e: unknown) {
       window.alert(e instanceof Error ? e.message : "삭제에 실패했습니다.");
     }
@@ -2040,40 +2044,27 @@ export function RoadNetworkDetailPanel({
 
   return (
     <div className="relative flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3 py-2">
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={cn(
-                "shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-                badge.bg,
-                badge.text,
-                badge.border
-              )}
-            >
-              {row.roadType}
-            </span>
-            <h2
-              className={cn(
-                "truncate text-sm font-semibold",
-                row.roadName.trim() ? "text-slate-800" : "text-slate-400"
-              )}
-              title={row.roadName.trim() || "이름 없음"}
-            >
-              {row.roadName.trim() || "(이름 없음)"}
-            </h2>
-          </div>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">
-            {[
-              displayRoadNo ? `도로번호 ${displayRoadNo}` : null,
-              roadTypeHasOpenStatus(row.roadType) ? row.openStatus || null : null,
-              roadTypeHasDept(row.roadType)
-                ? row.dept.trim() || null
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+              badge.bg,
+              badge.text,
+              badge.border
+            )}
+          >
+            {row.roadType}
+          </span>
+          <h2
+            className={cn(
+              "truncate text-sm font-semibold",
+              hasRoadName ? "text-slate-800" : "text-slate-500"
+            )}
+            title={displayTitle}
+          >
+            {displayTitle}
+          </h2>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {!isNewRoad ? (
@@ -2099,8 +2090,13 @@ export function RoadNetworkDetailPanel({
         </div>
       </div>
 
-      <section className="shrink-0 border-b border-slate-200">
-        <div className="flex items-center gap-1 px-2 py-1.5">
+      <section
+        className={cn(
+          "border-b border-slate-200",
+          isNewRoad ? "flex min-h-0 flex-1 flex-col" : "shrink-0"
+        )}
+      >
+        <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
           <button
             type="button"
             onClick={() => setAttrsOpen((v) => !v)}
@@ -2154,7 +2150,12 @@ export function RoadNetworkDetailPanel({
           ) : null}
         </div>
         {attrsOpen ? (
-          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-hide">
+          <div
+            className={cn(
+              "overflow-y-auto px-3 pb-2.5 scrollbar-hide",
+              isNewRoad ? "min-h-0 flex-1" : "max-h-[42vh]"
+            )}
+          >
             {attrEditing ? (
               <AttrTable entries={attrEditEntries} />
             ) : (
@@ -2164,6 +2165,7 @@ export function RoadNetworkDetailPanel({
         ) : null}
       </section>
 
+      {!isNewRoad ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 pt-1.5"
@@ -2534,6 +2536,7 @@ export function RoadNetworkDetailPanel({
           />
         ) : null}
       </div>
+      ) : null}
 
       <input
         ref={roadAttachInputRef}

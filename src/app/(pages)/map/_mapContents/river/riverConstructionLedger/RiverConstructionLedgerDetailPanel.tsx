@@ -81,9 +81,7 @@ type Props = {
 };
 
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
-const textareaClass =
-  "min-h-[2.75rem] w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "box-border h-[22px] w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 const btnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
 
@@ -109,7 +107,38 @@ type AttrDraft = {
   remark: string;
 };
 
+/** 사업비 숫자 파싱 — 빈 값은 0, 콤마·공백 제거 */
+function parseBudgetNumber(raw: string): number | null {
+  const s = String(raw ?? "")
+    .replace(/,/g, "")
+    .replace(/\s/g, "")
+    .trim();
+  if (!s) return 0;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 사업비_후 = 전 + 증가 − 감소 */
+function computeBudgetAfter(
+  before: string,
+  increase: string,
+  decrease: string
+): string {
+  if (!before.trim() && !increase.trim() && !decrease.trim()) return "";
+  const b = parseBudgetNumber(before);
+  const i = parseBudgetNumber(increase);
+  const d = parseBudgetNumber(decrease);
+  if (b == null || i == null || d == null) return "";
+  const n = b + i - d;
+  if (Number.isInteger(n)) return String(n);
+  // 부동소수 노이즈 완화
+  return String(Math.round(n * 1000) / 1000);
+}
+
 function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
+  const budgetBefore = row.budgetBefore;
+  const budgetIncrease = row.budgetIncrease;
+  const budgetDecrease = row.budgetDecrease;
   return {
     name: row.name,
     location: row.location,
@@ -124,10 +153,10 @@ function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
     companyAddress: row.companyAddress,
     supervisor: row.supervisor,
     supervisorName: row.supervisorName,
-    budgetBefore: row.budgetBefore,
-    budgetIncrease: row.budgetIncrease,
-    budgetDecrease: row.budgetDecrease,
-    budgetAfter: row.budgetAfter,
+    budgetBefore,
+    budgetIncrease,
+    budgetDecrease,
+    budgetAfter: computeBudgetAfter(budgetBefore, budgetIncrease, budgetDecrease) || row.budgetAfter,
     changeReason: row.changeReason,
     remark: row.remark,
   };
@@ -163,22 +192,103 @@ type AttrEntry = {
   fullWidth?: boolean;
 };
 
-/** 반칸에서 말줄임이 날 길이면 한 줄 전체 폭으로 표시 */
+/** 반칸에서 말줄임이 날 길이 — 목록 전체 최장값 기준(행마다 레이아웃이 바뀌지 않게) */
 const ATTR_FULL_WIDTH_MIN_LEN = 12;
 
-function withFullWidthIfLong(
+/** 레이아웃 판정에 쓰는 속성 키 (표시 순서와 무관, fullWidth 맵용) */
+const ATTR_LAYOUT_TEXT_KEYS = [
+  "name",
+  "location",
+  "riverNames",
+  "quantity",
+  "contractDate",
+  "startDate",
+  "endDate",
+  "actualEndDate",
+  "companyName",
+  "representative",
+  "phone",
+  "supervisor",
+  "supervisorName",
+  "budgetBefore",
+  "budgetIncrease",
+  "budgetDecrease",
+  "budgetAfter",
+  "companyAddress",
+  "changeReason",
+  "remark",
+] as const;
+
+type AttrLayoutTextKey = (typeof ATTR_LAYOUT_TEXT_KEYS)[number];
+
+/** 항상 한 줄 — textarea·장문·주소(업체명 바로 아래 단독 행) */
+const ATTR_ALWAYS_FULL_WIDTH = new Set<AttrLayoutTextKey>([
+  "changeReason",
+  "remark",
+  "companyAddress",
+]);
+
+/** 항상 반줄 — 짧은 식별·연락 정보 (목록 최장값이어도 반칸 유지) */
+const ATTR_ALWAYS_HALF_WIDTH = new Set<AttrLayoutTextKey>([
+  "companyName",
+  "representative",
+  "phone",
+  "supervisor",
+  "supervisorName",
+]);
+
+function attrTextCharLen(raw: unknown): number {
+  const t = String(raw ?? "").trim();
+  if (!t || t === "—") return 0;
+  return [...t].length;
+}
+
+function attrFieldTextFromRow(
+  row: RiverConstructionLedgerRow,
+  key: AttrLayoutTextKey
+): string {
+  if (key === "riverNames") {
+    return (row.riverNames ?? []).map((n) => String(n).trim()).filter(Boolean).join(", ");
+  }
+  return String(row[key] ?? "");
+}
+
+/**
+ * 목록 데이터에서 필드별 최장 문자열 길이를 보고 fullWidth 고정 맵을 만든다.
+ * → 상세를 바꿔도 속성 칸 위치(한 줄/반 줄)가 흔들리지 않음.
+ */
+function buildAttrFullWidthMap(
+  rows: RiverConstructionLedgerRow[]
+): Record<string, boolean> {
+  const maxLen: Record<string, number> = {};
+  for (const key of ATTR_LAYOUT_TEXT_KEYS) maxLen[key] = 0;
+
+  for (const row of rows) {
+    for (const key of ATTR_LAYOUT_TEXT_KEYS) {
+      const n = attrTextCharLen(attrFieldTextFromRow(row, key));
+      if (n > (maxLen[key] ?? 0)) maxLen[key] = n;
+    }
+  }
+
+  const out: Record<string, boolean> = {};
+  for (const key of ATTR_LAYOUT_TEXT_KEYS) {
+    if (ATTR_ALWAYS_HALF_WIDTH.has(key)) {
+      out[key] = false;
+      continue;
+    }
+    out[key] =
+      ATTR_ALWAYS_FULL_WIDTH.has(key) || (maxLen[key] ?? 0) >= ATTR_FULL_WIDTH_MIN_LEN;
+  }
+  return out;
+}
+
+function applyAttrFullWidthMap(
   entries: AttrEntry[],
-  textByKey?: Record<string, string>
+  fullWidthByKey: Record<string, boolean>
 ): AttrEntry[] {
   return entries.map((e) => {
     if (e.fullWidth) return e;
-    const raw =
-      textByKey?.[e.fieldKey] ??
-      (typeof e.value === "string" ? e.value : "");
-    const t = String(raw ?? "").trim();
-    if (t && t !== "—" && [...t].length >= ATTR_FULL_WIDTH_MIN_LEN) {
-      return { ...e, fullWidth: true };
-    }
+    if (fullWidthByKey[e.fieldKey]) return { ...e, fullWidth: true };
     return e;
   });
 }
@@ -211,7 +321,8 @@ function AttrLabelCell({
   return (
     <div
       className={cn(
-        "flex items-center bg-slate-100 px-2 py-1",
+        // 조회·수정 공통 행 높이 — 조회 기준(h-7), 수정 입력은 이 안에 맞춤
+        "flex h-7 items-center bg-slate-100 px-2",
         borderBottom && "border-b border-slate-200",
         borderRight && "border-r border-slate-200",
         roundedCorner === "tl" && "rounded-tl-[5px]",
@@ -239,13 +350,15 @@ function AttrValueCell({
   return (
     <div
       className={cn(
-        "min-w-0 px-2 py-1",
+        "flex h-7 min-w-0 items-center px-2",
         borderBottom && "border-b border-slate-200",
         borderRight && "border-r border-slate-200"
       )}
       style={gridColumn ? { gridColumn } : undefined}
     >
-      <AttrValue value={value} />
+      <div className="min-w-0 w-full">
+        <AttrValue value={value} />
+      </div>
     </div>
   );
 }
@@ -1283,17 +1396,23 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     const riverEntry: AttrEntry = {
       fieldKey: "riverNames",
       label: "대상 하천",
-      // 하천명 하나만 선택하는 값이라 다른 항목처럼 반칸이면 충분함
       value: riverNamesCell,
     };
-    // 공사명·공사위치 다음에 한 줄로 배치
+    // 공사명·공사위치 다음에 배치 (한 줄/반 줄은 fullWidth 맵이 결정)
     return [entries[0]!, entries[1]!, riverEntry, ...entries.slice(2)];
   };
 
+  /** 목록 전체 최장값 기준 — 행 전환해도 속성 칸 배치 고정 */
+  const attrFullWidthByKey = useMemo(() => {
+    const list = mapContext?.riverConstructionLedgerRows ?? [];
+    const hasCurrent = list.some((r) => r.id === row.id);
+    return buildAttrFullWidthMap(hasCurrent ? list : [row, ...list]);
+  }, [mapContext?.riverConstructionLedgerRows, row]);
+
   const viewEntries = useMemo(
     () =>
-      withRiverEntry(
-        withFullWidthIfLong([
+      applyAttrFullWidthMap(
+        withRiverEntry([
           { fieldKey: "name", label: "공사명", value: row.name || "—" },
           { fieldKey: "location", label: "공사위치", value: row.location || "—" },
           { fieldKey: "quantity", label: "공사량", value: row.quantity || "—" },
@@ -1303,24 +1422,40 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           { fieldKey: "actualEndDate", label: "실준공일자", value: row.actualEndDate || "—" },
           { fieldKey: "companyName", label: "업체명", value: row.companyName || "—" },
           { fieldKey: "representative", label: "대표자명", value: row.representative || "—" },
-          { fieldKey: "phone", label: "전화번호", value: row.phone || "—" },
+          { fieldKey: "companyAddress", label: "업체주소", value: row.companyAddress || "—" },
           { fieldKey: "supervisor", label: "감독관", value: row.supervisor || "—" },
           { fieldKey: "supervisorName", label: "감독관명", value: row.supervisorName || "—" },
+          { fieldKey: "phone", label: "전화번호", value: row.phone || "—" },
           { fieldKey: "budgetBefore", label: "사업비_전", value: row.budgetBefore || "—" },
           { fieldKey: "budgetIncrease", label: "사업비_증가", value: row.budgetIncrease || "—" },
           { fieldKey: "budgetDecrease", label: "사업비_감소", value: row.budgetDecrease || "—" },
           { fieldKey: "budgetAfter", label: "사업비_후", value: row.budgetAfter || "—" },
-          { fieldKey: "companyAddress", label: "업체주소", value: row.companyAddress || "—" },
           { fieldKey: "changeReason", label: "변경사유", value: row.changeReason || "—" },
           { fieldKey: "remark", label: "비고", value: row.remark || "—" },
-        ])
+        ]),
+        attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- riverNamesCell follows riverNames
-    [row, riverNames]
+    [row, riverNames, attrFullWidthByKey]
   );
 
   const setField = <K extends keyof AttrDraft>(key: K, value: AttrDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setBudgetField = (
+    key: "budgetBefore" | "budgetIncrease" | "budgetDecrease",
+    value: string
+  ) => {
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      next.budgetAfter = computeBudgetAfter(
+        next.budgetBefore,
+        next.budgetIncrease,
+        next.budgetDecrease
+      );
+      return next;
+    });
   };
 
   const textInput = (key: keyof AttrDraft) => (
@@ -1328,6 +1463,15 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       className={fieldClass}
       value={draft[key]}
       onChange={(e) => setField(key, e.target.value)}
+    />
+  );
+
+  const budgetInput = (key: "budgetBefore" | "budgetIncrease" | "budgetDecrease") => (
+    <input
+      className={fieldClass}
+      value={draft[key]}
+      inputMode="decimal"
+      onChange={(e) => setBudgetField(key, e.target.value)}
     />
   );
 
@@ -1342,54 +1486,32 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
   const editEntries = useMemo(
     () =>
-      withRiverEntry(
-        withFullWidthIfLong(
-          [
-            { fieldKey: "name", label: "공사명", value: textInput("name") },
-            { fieldKey: "location", label: "공사위치", value: textInput("location") },
-            { fieldKey: "quantity", label: "공사량", value: textInput("quantity") },
-            { fieldKey: "contractDate", label: "계약일", value: dateInput("contractDate") },
-            { fieldKey: "startDate", label: "착수일자", value: dateInput("startDate") },
-            { fieldKey: "endDate", label: "준공일자", value: dateInput("endDate") },
-            { fieldKey: "actualEndDate", label: "실준공일자", value: dateInput("actualEndDate") },
-            { fieldKey: "companyName", label: "업체명", value: textInput("companyName") },
-            { fieldKey: "representative", label: "대표자명", value: textInput("representative") },
-            { fieldKey: "phone", label: "전화번호", value: textInput("phone") },
-            { fieldKey: "supervisor", label: "감독관", value: textInput("supervisor") },
-            { fieldKey: "supervisorName", label: "감독관명", value: textInput("supervisorName") },
-            { fieldKey: "budgetBefore", label: "사업비_전", value: textInput("budgetBefore") },
-            { fieldKey: "budgetIncrease", label: "사업비_증가", value: textInput("budgetIncrease") },
-            { fieldKey: "budgetDecrease", label: "사업비_감소", value: textInput("budgetDecrease") },
-            { fieldKey: "budgetAfter", label: "사업비_후", value: textInput("budgetAfter") },
-            { fieldKey: "companyAddress", label: "업체주소", value: textInput("companyAddress") },
-            {
-              fieldKey: "changeReason",
-              label: "변경사유",
-              value: (
-                <textarea
-                  className={textareaClass}
-                  value={draft.changeReason}
-                  onChange={(e) => setField("changeReason", e.target.value)}
-                />
-              ),
-            },
-            {
-              fieldKey: "remark",
-              label: "비고",
-              value: (
-                <textarea
-                  className={textareaClass}
-                  value={draft.remark}
-                  onChange={(e) => setField("remark", e.target.value)}
-                />
-              ),
-            },
-          ],
-          draft
-        )
+      applyAttrFullWidthMap(
+        withRiverEntry([
+          { fieldKey: "name", label: "공사명", value: textInput("name") },
+          { fieldKey: "location", label: "공사위치", value: textInput("location") },
+          { fieldKey: "quantity", label: "공사량", value: textInput("quantity") },
+          { fieldKey: "contractDate", label: "계약일", value: dateInput("contractDate") },
+          { fieldKey: "startDate", label: "착수일자", value: dateInput("startDate") },
+          { fieldKey: "endDate", label: "준공일자", value: dateInput("endDate") },
+          { fieldKey: "actualEndDate", label: "실준공일자", value: dateInput("actualEndDate") },
+          { fieldKey: "companyName", label: "업체명", value: textInput("companyName") },
+          { fieldKey: "representative", label: "대표자명", value: textInput("representative") },
+          { fieldKey: "companyAddress", label: "업체주소", value: textInput("companyAddress") },
+          { fieldKey: "supervisor", label: "감독관", value: textInput("supervisor") },
+          { fieldKey: "supervisorName", label: "감독관명", value: textInput("supervisorName") },
+          { fieldKey: "phone", label: "전화번호", value: textInput("phone") },
+          { fieldKey: "budgetBefore", label: "사업비_전", value: budgetInput("budgetBefore") },
+          { fieldKey: "budgetIncrease", label: "사업비_증가", value: budgetInput("budgetIncrease") },
+          { fieldKey: "budgetDecrease", label: "사업비_감소", value: budgetInput("budgetDecrease") },
+          { fieldKey: "budgetAfter", label: "사업비_후", value: textInput("budgetAfter") },
+          { fieldKey: "changeReason", label: "변경사유", value: textInput("changeReason") },
+          { fieldKey: "remark", label: "비고", value: textInput("remark") },
+        ]),
+        attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draft + river cell
-    [draft, riverNames, riverNamesText]
+    [draft, riverNames, riverNamesText, attrFullWidthByKey]
   );
 
   const geomBannerHost =

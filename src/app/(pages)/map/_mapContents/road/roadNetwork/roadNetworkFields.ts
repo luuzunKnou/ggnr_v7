@@ -70,6 +70,8 @@ export function getRoadNetworkFieldsForType(
       ];
     case "입체교차로":
       return [
+        // DB name 컬럼 존재 — 값이 비어 있어도 속성 행은 표시 (not required)
+        { key: "roadName", label: "도로명", input: "text", maxLength: 1 },
         { key: "roadType", label: "도로종류", input: "select-type" },
         { key: "lengthAttr", label: "길이", input: "text" },
         { key: "defense", label: "방위", input: "text" },

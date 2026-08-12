@@ -549,7 +549,7 @@ async function deleteAddedHistoryRow(params: {
   }
   const whereAttr = buildAddedRowAttrWhereClause(params.details);
   if (!whereAttr) return 0;
-  return deleteOnePropByAttrWhere(params.fq, whereAttr);
+  return deleteOneRowByAttrWhere(params.fq, whereAttr);
 }
 
 function buildSetExpression(

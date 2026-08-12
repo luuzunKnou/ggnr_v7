@@ -23,6 +23,10 @@ import { exportRoadNetworkExcel } from "./exportRoadNetworkExcel";
 import { formatRoadNetworkListTitle } from "./roadNetworkFormat";
 import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
 import {
+  clearRoadNetworkWmsLayers,
+  ensureRoadNetworkWmsLayers,
+} from "./roadNetworkMapSync";
+import {
   ROAD_NETWORK_NEW_ID,
   ROAD_NETWORK_OPEN_STATUS_BADGE,
   ROAD_NETWORK_OPEN_STATUS_FILTERS,
@@ -62,6 +66,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   const selectedId = mapContext?.roadNetworkSelectedId ?? null;
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt;
+  const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const setRoadNetworkOverlayRows = mapContext?.setRoadNetworkOverlayRows;
   const setRoadNetworkRows = mapContext?.setRoadNetworkRows;
   const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId;
@@ -122,6 +127,37 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   useEffect(() => {
     void reloadList();
   }, [reloadList]);
+
+  /** GeoServer WMS — 종류·개설 필터에 맞는 레이어만 표시 */
+  useEffect(() => {
+    ensureRoadNetworkWmsLayers(setVisibleLayerNames, {
+      typeFilter,
+      openStatusFilter,
+    });
+  }, [typeFilter, openStatusFilter, setVisibleLayerNames]);
+
+  useEffect(() => {
+    return () => {
+      clearRoadNetworkWmsLayers(setVisibleLayerNames);
+    };
+  }, [setVisibleLayerNames]);
+
+  /** 지도 WMS 클릭 → 목록 선택 */
+  useEffect(() => {
+    const pickRef = mapContext?.applyRoadNetworkMapPickRef;
+    if (!pickRef) return;
+    pickRef.current = (pick) => {
+      const rowId = String(pick?.rowId ?? "").trim();
+      if (!rowId) return;
+      setRoadNetworkRows?.((prev) =>
+        prev.filter((r) => !isNewRoadNetworkRowId(r.id))
+      );
+      setRoadNetworkSelectedId?.(rowId);
+    };
+    return () => {
+      pickRef.current = null;
+    };
+  }, [mapContext?.applyRoadNetworkMapPickRef, setRoadNetworkRows, setRoadNetworkSelectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,29 +369,37 @@ export function RoadNetworkListPanel({ onClose }: Props) {
 
   const items = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    return filterRoadNetworkRowsByWkt5181(rows, spatialWkt).filter((row) => {
-      // 미저장 신규는 목록에 표시하지 않음
-      if (isNewRoadNetworkRowId(row.id)) return false;
-      if (typeFilter !== "전체" && !matchesRoadNetworkTypeFilter(row.roadType, typeFilter))
-        return false;
-      if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
-        return false;
-      }
-      if (!q) return true;
-      const hay = [
-        row.roadName,
-        row.roadNo,
-        row.roadType,
-        row.openStatus ?? "",
-        row.sect,
-        row.dept,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
+    return filterRoadNetworkRowsByWkt5181(rows, spatialWkt)
+      .filter((row) => {
+        // 미저장 신규는 목록에 표시하지 않음
+        if (isNewRoadNetworkRowId(row.id)) return false;
+        if (typeFilter !== "전체" && !matchesRoadNetworkTypeFilter(row.roadType, typeFilter))
+          return false;
+        if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
+          return false;
+        }
+        if (!q) return true;
+        const hay = [
+          row.roadName,
+          row.roadNo,
+          row.roadType,
+          row.openStatus ?? "",
+          row.sect,
+          row.dept,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      })
+      // 입체교차로는 목록 최하단
+      .sort((a, b) => {
+        const aBottom = a.roadType === "입체교차로" ? 1 : 0;
+        const bBottom = b.roadType === "입체교차로" ? 1 : 0;
+        return aBottom - bBottom;
+      });
   }, [keyword, typeFilter, openStatusFilter, rows, spatialWkt]);
 
+  /** 지도 도로명 라벨용 — 필터된 목록과 동일 */
   useEffect(() => {
     setRoadNetworkOverlayRows?.(items);
   }, [items, setRoadNetworkOverlayRows]);
@@ -490,7 +534,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 />
               </div>
               <div
-                className="flex shrink-0 rounded-md border border-slate-200 bg-slate-50 p-0.5"
+                className="flex h-8 shrink-0 items-stretch gap-0.5"
                 role="group"
                 aria-label="개설 여부 필터"
                 title="개설 여부"
@@ -502,11 +546,12 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       key={filter}
                       type="button"
                       onClick={() => setOpenStatusFilter(filter)}
+                      title={filter}
                       className={cn(
-                        "rounded px-1.5 py-1 text-[10px] font-medium transition-colors",
+                        "rounded border px-1.5 text-[10px] font-medium leading-tight transition-colors",
                         active
-                          ? "bg-white text-teal-800 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                       )}
                       aria-pressed={active}
                     >
@@ -703,7 +748,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
         {listLoading ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중...</p>
         ) : listError ? (
@@ -714,11 +759,11 @@ export function RoadNetworkListPanel({ onClose }: Props) {
           <table className="w-full table-fixed border-collapse text-xs">
             <colgroup>
               <col />
-              <col className="w-[7.5rem]" />
+              <col className="w-[5.75rem]" />
             </colgroup>
             <tbody>
               {items.map((item) => {
-                const titleLine = formatRoadNetworkListTitle(item.roadName, item.roadNo);
+                const titleLine = formatRoadNetworkListTitle(item);
                 const hasName = Boolean(item.roadName.trim());
                 const isSelected = selectedId === item.id;
                 const badge = ROAD_NETWORK_TYPE_BADGE[item.roadType];
@@ -749,7 +794,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       <div className="flex min-w-0 items-center gap-1.5">
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center justify-center rounded border px-1 py-0.5 text-[10px] font-semibold leading-none",
+                            "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                             item.roadType === "입체교차로"
                               ? "max-w-[5.5rem] truncate"
                               : "w-[3.5rem]",
@@ -764,7 +809,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         {openBadge ? (
                           <span
                             className={cn(
-                              "inline-flex w-[2.5rem] shrink-0 items-center justify-center rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none",
+                              "inline-flex w-[2.5rem] shrink-0 items-center justify-center whitespace-nowrap rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none",
                               openBadge.bg,
                               openBadge.text,
                               openBadge.border
@@ -785,7 +830,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       </div>
                     </td>
                     <td
-                      className="min-w-0 px-3 py-1.5 text-right text-[11px] text-slate-600"
+                      className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] text-slate-500"
                       title={item.dept || undefined}
                     >
                       <span className="block truncate">{item.dept || "—"}</span>

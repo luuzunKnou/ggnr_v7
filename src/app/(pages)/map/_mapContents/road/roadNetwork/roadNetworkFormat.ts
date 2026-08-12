@@ -1,4 +1,8 @@
-import type { RoadNetworkGeom } from "./roadNetworkMock";
+import {
+  formatRoadNetworkLengthKm,
+  type RoadNetworkGeom,
+  type RoadNetworkType,
+} from "./roadNetworkMock";
 
 /** 도로망도 목록·표시용 문자열 정리 (플레이스홀더 -, \ 등 숨김) */
 
@@ -20,11 +24,34 @@ export function cleanRoadNetworkDisplayText(raw: unknown): string {
   return parts.join(", ");
 }
 
-/** 목록 제목: 이름 + (도로번호). 번호가 없거나 `-`면 괄호 생략 */
-export function formatRoadNetworkListTitle(roadName: string, roadNo: string): string {
-  const name = cleanRoadNetworkDisplayText(roadName) || "(이름 없음)";
-  const no = cleanRoadNetworkDisplayText(roadNo);
-  return no ? `${name} (${no})` : name;
+export type RoadNetworkListTitleInput = {
+  roadName: string;
+  roadType: RoadNetworkType;
+  roadNo: string;
+  /** SHP 원본 길이 속성 — 있으면 단위 임의 부여 없이 그대로 표시 */
+  lengthAttr?: string | null;
+  /** 도형 계산 연장(m) — 표시 시 km */
+  lengthM?: number | null;
+};
+
+/**
+ * 목록·패널 헤더용 표시명.
+ * 원본 도로명이 있으면 그대로, 없으면 번호·길이 등으로만 대체 (속성값에는 쓰지 않음).
+ */
+export function formatRoadNetworkListTitle(row: RoadNetworkListTitleInput): string {
+  const name = cleanRoadNetworkDisplayText(row.roadName);
+  if (name) return name;
+
+  const no = cleanRoadNetworkDisplayText(row.roadNo);
+  if (no) return `${row.roadType} ${no}`;
+
+  const attrLen = cleanRoadNetworkDisplayText(row.lengthAttr);
+  if (attrLen) return `${row.roadType} · ${attrLen}`;
+
+  const km = formatRoadNetworkLengthKm(Number(row.lengthM));
+  if (km !== "—") return `${row.roadType} · ${km}`;
+
+  return row.roadType;
 }
 
 /**

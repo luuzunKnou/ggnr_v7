@@ -63,7 +63,8 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_national1_ls',
     roadType: '국도',
     openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.road_name::text), ''), '국도 ' || COALESCE(NULLIF(trim(both from t.road_no::text), ''), t.ogc_fid::text))`,
+    // 원본 도로명만 — 번호·ogc_fid로 임의 생성하지 않음
+    nameExpr: `COALESCE(NULLIF(trim(both from t.road_name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.road_no::text), ''), '')`,
     deptExpr: `''`,
   },
@@ -71,11 +72,11 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_national2_interc_ls',
     roadType: '입체교차로',
     openStatus: '개설',
-    // name 거의 전부 null/플레이스홀더 — ogc_fid를 번호처럼 쓰지 않음. 구분은 연장(m)
+    // 원본 name만 — 플레이스홀더는 빈 값 (연장·ogc_fid로 채우지 않음)
     nameExpr: `CASE
       WHEN NULLIF(trim(both from COALESCE(t.name::text, '')), '') IS NULL
         OR trim(both from t.name::text) ~ '^[-–—\\\\/.]+$'
-      THEN '입체교차로 · ' || ROUND(ST_Length(ST_Transform(t.geom, 5186)))::int::text || 'm'
+      THEN ''
       ELSE trim(both from t.name::text)
     END`,
     noExpr: `''`,
@@ -88,11 +89,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_nsprov_0610_ls',
     roadType: '국지도',
     openStatus: '개설',
-    nameExpr: `COALESCE(
-      NULLIF(trim(both from t.rn::text), ''),
-      NULLIF(trim(both from t.road_type::text), '') || ' ' || COALESCE(NULLIF(trim(both from t.road_no::text), ''), t.ogc_fid::text),
-      '국지도 ' || COALESCE(NULLIF(trim(both from t.road_no::text), ''), t.ogc_fid::text)
-    )`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.road_no::text), ''), '')`,
     deptExpr: `''`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -104,11 +101,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_prov_0610_ls',
     roadType: '지방도',
     openStatus: '개설',
-    nameExpr: `COALESCE(
-      NULLIF(trim(both from t.rn::text), ''),
-      NULLIF(trim(both from t.road_type::text), '') || ' ' || COALESCE(NULLIF(trim(both from t.road_no::text), ''), t.ogc_fid::text),
-      '지방도 ' || COALESCE(NULLIF(trim(both from t.road_no::text), ''), t.ogc_fid::text)
-    )`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.road_no::text), ''), '')`,
     deptExpr: `''`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -118,7 +111,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_county_opn_ls',
     roadType: '군도',
     openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '군도 ' || COALESCE(NULLIF(trim(both from t.no::text), ''), t.ogc_fid::text))`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.no::text), ''), NULLIF(trim(both from t.admin_no::text), ''), '')`,
     deptExpr: `COALESCE(NULLIF(trim(both from t.admin::text), ''), '')`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -129,7 +122,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_county_uopn_ls',
     roadType: '군도',
     openStatus: '미개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '군도 ' || COALESCE(NULLIF(trim(both from t.no::text), ''), t.ogc_fid::text))`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.no::text), ''), NULLIF(trim(both from t.admin_no::text), ''), '')`,
     deptExpr: `COALESCE(NULLIF(trim(both from t.admin::text), ''), '')`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -140,7 +133,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_perch_opn_ls',
     roadType: '농도',
     openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '농도 ' || COALESCE(NULLIF(trim(both from t.no::text), ''), t.ogc_fid::text))`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.no::text), ''), NULLIF(trim(both from t.admin_no::text), ''), '')`,
     deptExpr: `COALESCE(NULLIF(trim(both from t.admin::text), ''), '')`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -151,7 +144,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_perch_uopn_ls',
     roadType: '농도',
     openStatus: '미개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '농도 ' || COALESCE(NULLIF(trim(both from t.no::text), ''), t.ogc_fid::text))`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.no::text), ''), NULLIF(trim(both from t.admin_no::text), ''), '')`,
     deptExpr: `COALESCE(NULLIF(trim(both from t.admin::text), ''), '')`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -162,7 +155,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_sprd_0610_ls',
     roadType: '일반도로',
     openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), NULLIF(trim(both from t.name::text), ''), '일반도로 ' || t.ogc_fid::text)`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.rds_man_no::text), ''), '')`,
     deptExpr: `''`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -174,7 +167,7 @@ const SOURCES: SourceDef[] = [
     table: 'rdl_frl_0610_ls',
     roadType: '임도',
     openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), '임도 ' || t.ogc_fid::text)`,
+    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.rds_man_no::text), ''), '')`,
     deptExpr: `''`,
     lengthAttrExpr: LENGTH_ATTR_EXPR,
@@ -296,13 +289,13 @@ export async function getRoadNetworkList(params?: {
        ORDER BY
          CASE u."roadType"
            WHEN '국도' THEN 1
-           WHEN '입체교차로' THEN 2
-           WHEN '지방도' THEN 3
-           WHEN '국지도' THEN 4
-           WHEN '군도' THEN 5
-           WHEN '농도' THEN 6
-           WHEN '일반도로' THEN 7
-           WHEN '임도' THEN 8
+           WHEN '지방도' THEN 2
+           WHEN '국지도' THEN 3
+           WHEN '군도' THEN 4
+           WHEN '농도' THEN 5
+           WHEN '일반도로' THEN 6
+           WHEN '임도' THEN 7
+           WHEN '입체교차로' THEN 8
            ELSE 9
          END,
          CASE
@@ -463,7 +456,8 @@ function buildAttrSqlValues(
       add('road_type', '국도');
       break;
     case 'rdl_national2_interc_ls':
-      // name varchar(1) — 저장하지 않음
+      // name varchar(1) — 컬럼 길이만큼만 저장
+      add('name', name.slice(0, 1));
       add('length', lengthAttr);
       add('defense', defense);
       add('sinuosity', sinuosity);

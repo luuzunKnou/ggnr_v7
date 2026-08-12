@@ -19,6 +19,7 @@ import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedger
 import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/RoadLedgerFacilityAttrModal"
 import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetworkListPanel"
 import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
+import { clearRoadNetworkWmsLayers } from "./_mapContents/road/roadNetwork/roadNetworkMapSync"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
@@ -870,6 +871,10 @@ function MapLayoutContent({
       if (mapContext?.roadNetworkPointPickRef) {
         mapContext.roadNetworkPointPickRef.current = null
       }
+      if (mapContext?.applyRoadNetworkMapPickRef) {
+        mapContext.applyRoadNetworkMapPickRef.current = null
+      }
+      clearRoadNetworkWmsLayers(setVisibleLayerNames)
     }
   }, [
     roadNetworkOpen,
@@ -884,6 +889,8 @@ function MapLayoutContent({
     setRoadNetworkEndpointMarkers,
     setRoadNetworkFocusedSitePointKey,
     mapContext?.roadNetworkPointPickRef,
+    mapContext?.applyRoadNetworkMapPickRef,
+    setVisibleLayerNames,
   ])
 
   useEffect(() => {
@@ -1577,20 +1584,21 @@ function MapLayoutContent({
             </div>
           )}
           {roadNetworkOpen && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={roadNetworkListWidth}
                 minWidth={ROAD_NETWORK_LIST_MIN_WIDTH}
                 maxWidth={ROAD_NETWORK_LIST_MAX_WIDTH}
                 leftOffsetPx={roadNetworkListLeftPx}
                 onWidthChange={setRoadNetworkListWidth}
+                contentClassName="overflow-hidden"
               >
                 <RoadNetworkListPanel onClose={handleHideRoadNetwork} />
               </MapSideListPanel>
             </div>
           )}
           {roadNetworkOpen && roadNetworkSelectedRow && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={roadNetworkDetailWidth}
                 minWidth={ROAD_NETWORK_DETAIL_MIN_WIDTH}

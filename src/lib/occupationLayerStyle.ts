@@ -42,19 +42,20 @@ export type OccupationLayerStyleKey = keyof typeof OCCUPATION_LAYER_STYLE;
 
 export function occupationFillRgba(
   key: OccupationLayerStyleKey,
-  opacity = OCCUPATION_LAYER_STYLE[key].fillOpacity
+  opacity?: number
 ): string {
+  const alpha = opacity ?? OCCUPATION_LAYER_STYLE[key].fillOpacity;
   const hex = OCCUPATION_LAYER_STYLE[key].fill.replace("#", "");
   const n = parseInt(hex, 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function occupationStrokeRgba(
   key: OccupationLayerStyleKey,
-  opacity = 0.95
+  opacity: number = 0.95
 ): string {
   const hex = OCCUPATION_LAYER_STYLE[key].stroke.replace("#", "");
   if (hex.length !== 6) return OCCUPATION_LAYER_STYLE[key].stroke;

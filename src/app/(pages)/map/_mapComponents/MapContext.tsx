@@ -270,10 +270,21 @@ export type MapContextValue = {
   /** URL opened 도로망도 패널 열림 */
   roadNetworkPanelOpen: boolean;
   setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
-  /** 필터 결과 지도 레이어 표시 */
+  /**
+   * 지도에서 도로망 WMS 식별 직후 목록이 행 선택·줌하도록 호출
+   * (RoadNetworkListPanel이 등록)
+   */
+  applyRoadNetworkMapPickRef: MutableRefObject<
+    | ((pick: {
+        rowId: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >;
+  /** @deprecated 배경은 GeoServer WMS — 유지(호환) */
   roadNetworkOverlayVisible: boolean;
   setRoadNetworkOverlayVisible: Dispatch<SetStateAction<boolean>>;
-  /** 목록 필터·검색 결과(지도 오버레이용) */
+  /** 목록 필터 결과 — 지도 도로명 라벨(OL)용 */
   roadNetworkOverlayRows: RoadNetworkRow[];
   setRoadNetworkOverlayRows: Dispatch<SetStateAction<RoadNetworkRow[]>>;
   /**
@@ -512,6 +523,13 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
+  const applyRoadNetworkMapPickRef = useRef<
+    | ((pick: {
+        rowId: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >(null);
   const [roadNetworkOverlayVisible, setRoadNetworkOverlayVisible] = useState(false);
   const [roadNetworkOverlayRows, setRoadNetworkOverlayRows] = useState<RoadNetworkRow[]>([]);
   const roadNetworkPointPickRef = useRef<((lon: number, lat: number) => void) | null>(null);
@@ -683,6 +701,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkSelectedId,
         roadNetworkPanelOpen,
         setRoadNetworkPanelOpen,
+        applyRoadNetworkMapPickRef,
         roadNetworkOverlayVisible,
         setRoadNetworkOverlayVisible,
         roadNetworkOverlayRows,
