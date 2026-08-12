@@ -249,10 +249,20 @@ export async function getTableRowForEdit(params: {
     const res = await db.execute(sql.raw(q));
     const raw = (res.rows?.[0] ?? null) as Record<string, unknown> | null;
     if (!raw) return { row: null, keyField, error: '데이터를 찾을 수 없습니다.' };
+    const addressStripFields = new Set([
+      'usage_loc',
+      'occup_place',
+      'applicant_addr',
+      'parcel_address',
+    ]);
     const row: Record<string, string> = {};
     for (const col of dataColumns) {
       const val = raw[col];
-      row[col] = val == null ? '' : String(val);
+      let text = val == null ? '' : String(val);
+      if (text && addressStripFields.has(col.toLowerCase())) {
+        text = formatAddressStripSidoSigungu(text) || text;
+      }
+      row[col] = text;
     }
     return { row, keyField };
   } catch (e: unknown) {

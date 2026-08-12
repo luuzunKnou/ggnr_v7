@@ -36,6 +36,10 @@ import {
 } from './occupationLedgerMapSync';
 import { useOccupationLedgerParentGeomHighlight } from './useOccupationLedgerParentGeomHighlight';
 import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
+import { currentPermitYear } from '@/lib/occupationPermitNo';
+import { useAutoOccupationPermitNo } from '../../_mapComponents/layerRowEdit/useAutoOccupationPermitNo';
+import { useLayerRowPlaceFromGeom } from '../../_mapComponents/layerRowEdit/useLayerRowPlaceFromGeom';
+import { computeAreaSqmFromWkt5181 } from '../../_mapComponents/analysisArea';
 
 function draftFieldValue(draft: Record<string, string>, fieldLower: string): string {
   if (fieldLower in draft) return draft[fieldLower] ?? '';
@@ -117,6 +121,8 @@ export function OccupationLedgerDetailPanel({
   const [highlightParcel, setHighlightParcel] = useState<LayerRowParcelItem | null>(null);
   const [highlightVariant, setHighlightVariant] = useState<LayerRowParcelHighlightVariant>('blue');
   const [showParentGeom, setShowParentGeom] = useState(true);
+  const [nextKey, setNextKey] = useState('');
+  const [nextPermitNo, setNextPermitNo] = useState('');
 
   const {
     selectParcel: selectSoloParcel,
@@ -233,10 +239,54 @@ export function OccupationLedgerDetailPanel({
     ]
   );
 
+  useEffect(() => {
+    if (!isCreateMode) {
+      setNextKey('');
+      setNextPermitNo('');
+      return;
+    }
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'occupationLedgerService',
+      action: 'getNextOccupationLedgerKey',
+      params: { serEng },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setNextKey(String(data?.key ?? '').trim());
+      })
+      .catch(() => {
+        if (!cancelled) setNextKey('');
+      });
+    void call('', 'POST', {
+      service: 'occupationLedgerService',
+      action: 'getNextOccupationLedgerPermitNo',
+      params: { year: currentPermitYear(), serEng },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setNextPermitNo(String(data?.permitNo ?? '').trim());
+      })
+      .catch(() => {
+        if (!cancelled) setNextPermitNo('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateMode, serEng]);
+
   const formAttributesForEdit = useMemo(() => {
-    if (isCreateMode) return formAttributes;
-    return attributes;
-  }, [attributes, formAttributes, isCreateMode]);
+    const base = isCreateMode ? formAttributes : attributes;
+    if (!isCreateMode) return base;
+    return base.map((row) => {
+      const fl = row.field.toLowerCase();
+      if (fl === 'id' && nextKey) return { ...row, value: nextKey };
+      if (fl === 'permit_no' && nextPermitNo) return { ...row, value: nextPermitNo };
+      return row;
+    });
+  }, [attributes, formAttributes, isCreateMode, nextKey, nextPermitNo]);
 
   const {
     isEditing,
@@ -296,6 +346,71 @@ export function OccupationLedgerDetailPanel({
     handleDraftChange(stateKey, next);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집 모드·건 전환 시에만
   }, [isEditing, detailId]);
+
+  const startDateRaw = draftFieldValue(draft, 'perm_start_date');
+  const permitFieldKey = draftFieldKey(draft, 'permit_no');
+  const permitValue = draftFieldValue(draft, 'permit_no');
+
+  const fetchNextPermitNo = useCallback(
+    async (year: number) => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'occupationLedgerService',
+          action: 'getNextOccupationLedgerPermitNo',
+          params: {
+            year,
+            serEng,
+            excludeKey: isCreateMode ? undefined : detailId,
+          },
+        });
+        const data = res?.data ?? res;
+        const next = String(data?.permitNo ?? '').trim();
+        return next || null;
+      } catch {
+        return null;
+      }
+    },
+    [detailId, isCreateMode, serEng]
+  );
+
+  useAutoOccupationPermitNo({
+    enabled: isEditing,
+    sessionKey: `${serEng}:${detailId}:${isEditing ? 'edit' : 'view'}`,
+    startDateRaw,
+    permitValue,
+    permitFieldKey,
+    onSetPermit: handleDraftChange,
+    fetchNext: fetchNextPermitNo,
+    useCurrentYearWhenEmpty: isCreateMode,
+  });
+
+  const placeFieldKey = useMemo(() => {
+    const fromAttrs = formAttributesForEdit.find(
+      (a) => a.field.toLowerCase() === 'occup_place'
+    );
+    return fromAttrs?.field ?? 'occup_place';
+  }, [formAttributesForEdit]);
+
+  useLayerRowPlaceFromGeom({
+    enabled: isEditing,
+    placeFieldKey,
+    onSetPlace: handleDraftChange,
+    parcelAddresses: draftParcels.map((p) => p.address),
+  });
+
+  const handleAutoCalcArea = useCallback(
+    (field: string): string | null => {
+      const wkt = String(mapContext?.layerRowGeomEditWktRef?.current ?? '').trim();
+      if (!wkt) return '도형을 먼저 지정하거나 수정해 주세요.';
+      const areaSqm = computeAreaSqmFromWkt5181(wkt);
+      if (!Number.isFinite(areaSqm) || areaSqm <= 0) {
+        return '도형 면적을 계산할 수 없습니다.';
+      }
+      handleDraftChange(field, String(areaSqm));
+      return null;
+    },
+    [handleDraftChange, mapContext?.layerRowGeomEditWktRef]
+  );
 
   useLayerRowParcelHighlight(showParentGeom ? null : highlightParcel, highlightVariant);
   useLayerRowParcelDraftPreview(draftMgj, 'red', isEditing);
@@ -514,6 +629,7 @@ export function OccupationLedgerDetailPanel({
               vworldApiKey={mapContext?.vworldApiKey ?? ''}
               onDraftChange={handleOccupationDraftChange}
               resetKey={detailId}
+              onAutoCalcArea={handleAutoCalcArea}
             />
 
             {(isEditing || !isCreateMode) && (

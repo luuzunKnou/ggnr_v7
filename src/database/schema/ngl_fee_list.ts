@@ -1,13 +1,22 @@
-import { bigint, bigserial, pgSchema, text, timestamp, unique } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, customType, pgSchema, text, timestamp, unique } from 'drizzle-orm/pg-core';
 
-/** 차세대 세외수입 — 점사용료 미납·수납 통합 */
-const nextGenLinkage = pgSchema('next_gen_linkage');
+/** 차세대 세외수입 — 점사용료 미납·수납 통합 (layer 스키마) */
+const layer = pgSchema('layer');
 
-export const nglFeeList = nextGenLinkage.table(
+/** 물건지주소(gl_addr) → jijuk 필지 폴리곤 */
+const geomPolygon5181 = customType<{ data: string | null; driverData: string | null }>({
+  dataType() {
+    return 'geometry(MultiPolygon,5181)';
+  },
+});
+
+export const nglFeeList = layer.table(
   'ngl_fee_list',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     feeStatus: text('fee_status').notNull(),
+    /** 물건지 필지 폴리곤 (gl_addr 변환) */
+    geom: geomPolygon5181('geom'),
     sgbCd: text('sgb_cd'),
     lvyKey: text('lvy_key'),
     dptNm: text('dpt_nm'),
@@ -137,6 +146,7 @@ export const nglFeeListTableComment = '점사용료 미납·수납 통합';
 export const nglFeeListColumnComments: Record<string, string> = {
   id: 'id',
   fee_status: '미납 | 수납',
+  geom: '물건지 필지 폴리곤(EPSG:5181)',
   sgb_cd: '지방자치단체코드',
   lvy_key: '부과키',
   dpt_nm: '부서명',

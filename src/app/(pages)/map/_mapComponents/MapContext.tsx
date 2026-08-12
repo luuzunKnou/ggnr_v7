@@ -235,6 +235,20 @@ export type MapContextValue = {
       }) => void)
     | null
   >;
+  /** 점사용료 패널(URL opened=useFee) 열림 */
+  useFeePanelOpen: boolean;
+  setUseFeePanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 점사용료 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (UseFeeListPanel이 등록)
+   */
+  applyUseFeeMapPickRef: MutableRefObject<
+    | ((pick: {
+        id: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -351,6 +365,14 @@ export type MapContextValue = {
   layerRowGeomEditWktRef: MutableRefObject<string | null>;
   /** 사용자가 도형을 실제로 변경했는지 (로드만 한 경우 false) */
   layerRowGeomEditDirtyRef: MutableRefObject<boolean>;
+  /**
+   * 도형 그리기/수정 완료 시 상세 패널 콜백 (점용장소 중심주소 등).
+   * Handler가 호출 — 패널이 등록.
+   */
+  layerRowGeomDrawnRef: MutableRefObject<
+    | ((info: { wkt5181: string; source: "draw" | "modify" }) => void)
+    | null
+  >;
   /** 도형 영역 필지 자동/수동 반영 → 상세 패널 필지목록 */
   layerRowParcelApplyRef: MutableRefObject<
     | ((
@@ -418,6 +440,8 @@ export type LayerRowGeomEditState = {
   seedWkt5181?: string | null;
   /** true면 getTableRowGeomGeoJson3857 호출 생략 */
   protoGeom?: boolean;
+  /** true면 기존 도형 없어도 수정 세션 유지(도형추가로 입력) */
+  allowEmptyGeom?: boolean;
 } | null;
 
 const MapContext = createContext<MapContextValue | null>(null);
@@ -495,6 +519,14 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
       }) => void)
     | null
   >(null);
+  const [useFeePanelOpen, setUseFeePanelOpen] = useState(false);
+  const applyUseFeeMapPickRef = useRef<
+    | ((pick: {
+        id: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >(null);
   const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
   const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
   const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
@@ -551,6 +583,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
   const layerRowGeomEditDirtyRef = useRef(false);
+  const layerRowGeomDrawnRef = useRef<
+    | ((info: { wkt5181: string; source: "draw" | "modify" }) => void)
+    | null
+  >(null);
   const layerRowParcelApplyRef = useRef<
     | ((
         items: {
@@ -663,6 +699,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         occupationLedgerPanelOpen,
         setOccupationLedgerPanelOpen,
         applyOccupationLedgerMapPickRef,
+        useFeePanelOpen,
+        setUseFeePanelOpen,
+        applyUseFeeMapPickRef,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,
@@ -717,6 +756,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,
         layerRowGeomEditDirtyRef,
+        layerRowGeomDrawnRef,
         layerRowParcelApplyRef,
         layerRowParcelRemoveRef,
         layerRowDraftParcels,

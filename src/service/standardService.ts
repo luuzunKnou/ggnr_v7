@@ -536,8 +536,27 @@ export async function identifyFeatures(params: {
             | undefined;
           if (!gcRow?.name) return;
           geomCol = String(gcRow.name).trim();
-          tableSrid = gcRow.srid ?? 4326;
+          tableSrid = Number(gcRow.srid);
           geomTypeRaw = gcRow.type ?? null;
+
+          // geometry_columns srid=0/누락 시 실제 도형 SRID로 보정 (점사용료 등)
+          if (!Number.isFinite(tableSrid) || tableSrid <= 0) {
+            const safeGeomForProbe = geomCol.replace(/"/g, '""');
+            try {
+              const sridProbe = await db.execute(
+                sql.raw(
+                  `SELECT ST_SRID("${safeGeomForProbe}")::int AS s
+                   FROM "${safeSchema}"."${safeTable}"
+                   WHERE "${safeGeomForProbe}" IS NOT NULL
+                   LIMIT 1`
+                )
+              );
+              const probed = Number((sridProbe.rows?.[0] as { s?: number } | undefined)?.s);
+              tableSrid = Number.isFinite(probed) && probed > 0 ? probed : 5181;
+            } catch {
+              tableSrid = 5181;
+            }
+          }
 
           const colRes = await db.execute(
             sql.raw(
@@ -548,6 +567,26 @@ export async function identifyFeatures(params: {
           );
           columns = (colRes.rows as { name: string }[]).map((r) => String(r?.name ?? '').trim()).filter(Boolean);
           if (columns.length === 0) return;
+          identifyTableMetaCache.set(cacheKey, { geomCol, tableSrid, columns, geomTypeRaw });
+        }
+
+        // 캐시에 srid=0이 남아 있으면 재보정
+        if (!Number.isFinite(tableSrid) || tableSrid <= 0) {
+          const safeGeomForProbe = geomCol.replace(/"/g, '""');
+          try {
+            const sridProbe = await db.execute(
+              sql.raw(
+                `SELECT ST_SRID("${safeGeomForProbe}")::int AS s
+                 FROM "${safeSchema}"."${safeTable}"
+                 WHERE "${safeGeomForProbe}" IS NOT NULL
+                 LIMIT 1`
+              )
+            );
+            const probed = Number((sridProbe.rows?.[0] as { s?: number } | undefined)?.s);
+            tableSrid = Number.isFinite(probed) && probed > 0 ? probed : 5181;
+          } catch {
+            tableSrid = 5181;
+          }
           identifyTableMetaCache.set(cacheKey, { geomCol, tableSrid, columns, geomTypeRaw });
         }
 

@@ -8,6 +8,7 @@ import {
 import { refreshServiceWmsLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
+import { clearUseFeeWmsLayer } from '../useFee/useFeeMapSync';
 
 type SetVisible = (updater: (prev: Set<string>) => Set<string>) => void;
 
@@ -30,6 +31,7 @@ export function clearOccupationLedgerWmsLayers(
     }
     return changed ? next : prev;
   });
+  clearUseFeeWmsLayer(setVisibleLayerNames);
 }
 
 /** 시스템 전환 시 — 현재 시스템이 아닌 점용대장 레이어만 끄기 */

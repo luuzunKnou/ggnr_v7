@@ -10,6 +10,7 @@ import { LAYER_ROW_GEOM_CLEAR_SENTINEL } from "./LayerRowGeomEditHandler";
 import { fetchReadOnlyFieldSet } from "./buildFormAttributes";
 import { parcelAddressesFromItems, fitMapToLayerRowParcel } from "./layerRowParcelUtils";
 import { resolveParcelGeoms } from "./resolveParcelGeoms";
+import { validateOccupationPeriodAndGeom } from "./validateOccupationPeriodAndGeom";
 import type { LayerRowDetailAttr, LayerRowEditPreset, LayerRowParcelItem } from "./types";
 
 function toDateInputValue(raw: string): string {
@@ -124,6 +125,7 @@ export function useLayerRowEdit({
         keyField: preset.keyField ?? "id",
         keyValue,
         mode,
+        allowEmptyGeom: !!preset.requirePeriodAndGeomOnSave,
       });
     },
     [
@@ -132,6 +134,7 @@ export function useLayerRowEdit({
       mapContext?.clearMapDrawInteractionsRef,
       mapContext?.setSpatialDrawRequest,
       preset.keyField,
+      preset.requirePeriodAndGeomOnSave,
       preset.schema,
       preset.tableName,
       setLayerRowGeomEdit,
@@ -230,16 +233,37 @@ export function useLayerRowEdit({
     if (isCreateMode) {
       setIsEditing(true);
       setEditError(null);
+      let cancelled = false;
       void fetchReadOnlyFieldSet(preset).then((locked) => {
+        if (cancelled) return;
         if (preset.keyFieldEditableOnCreate && preset.keyField) {
           locked.delete(String(preset.keyField).toLowerCase());
         }
         setReadOnlyFields(locked);
-        const empty = buildEmptyDraft(attributes);
-        baselineDraftRef.current = { ...empty };
-        setDraft(empty);
+        /**
+         * attributes 참조가 바뀔 때마다(키·허가번호 미리보기 등) draft를 통째로
+         * 비우면 도형 중심주소·사용자 입력이 사라짐 → 기존 값은 유지하고 빈 칸만 채움.
+         */
+        setDraft((prev) => {
+          const had = Object.keys(prev).length > 0;
+          if (!had) {
+            const empty = buildEmptyDraft(attributes);
+            baselineDraftRef.current = { ...empty };
+            return empty;
+          }
+          const next = { ...prev };
+          for (const attr of attributes) {
+            if (!(attr.field in next)) next[attr.field] = "";
+            if (!(attr.field in baselineDraftRef.current)) {
+              baselineDraftRef.current[attr.field] = "";
+            }
+          }
+          return next;
+        });
       });
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
     setIsEditing(false);
     setDraft({});
@@ -411,6 +435,12 @@ export function useLayerRowEdit({
         geomDirty && wktRaw != null && wktRaw !== LAYER_ROW_GEOM_CLEAR_SENTINEL
           ? wktRaw
           : null;
+
+      const requiredMsg = validateOccupationPeriodAndGeom(preset, draft, wktRaw);
+      if (requiredMsg) {
+        setEditError(requiredMsg);
+        return;
+      }
 
       if (isCreateMode) {
         const res = await call("", "POST", {
