@@ -24,6 +24,7 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   '.tmp/',
   '.cad-preview-work/',
   'nssm/',
+  '.cursor-runtime/',
   'python/env/',
   'python/env_parts/',
   'geoserver_modules/data_dir/logs/',

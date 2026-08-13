@@ -203,6 +203,7 @@ const DEFAULT_EXCLUDE_PREFIXES = [
   '.cursor/',
   '.vscode/',
   'nssm/',
+  '.cursor-runtime/',
   '3dtiles_las/',
   'tiles_tif/',
   'tiles_jpg/',
