@@ -11,6 +11,10 @@ import {
   incrementSuffixCode,
 } from '@/lib/incrementSuffixCode';
 import {
+  formatOccupationPermitNo,
+  parseOccupationPermitNoSeq,
+} from '@/lib/occupationPermitNo';
+import {
   getEditableFieldDefinitionsForTable,
   resolveJijukParcelGeomsByAddresses,
   syncChildParcelsByParentId,
@@ -154,7 +158,8 @@ async function getChildAddressItems(params: {
     const res = await db.execute(sql.raw(sqlText));
     const items = (res.rows ?? []).map((r) => {
       const row = r as Record<string, unknown>;
-      const address = String(row.addr ?? '').trim();
+      const addressRaw = String(row.addr ?? '').trim();
+      const address = formatAddressStripSidoSigungu(addressRaw) || addressRaw;
       const xmin = Number(row.xmin);
       const ymin = Number(row.ymin);
       const xmax = Number(row.xmax);
@@ -386,7 +391,19 @@ export async function getUsageDataAsDetailByKey(params: {
   const fieldDefs = await getEditableFieldDefinitionsForTable({
     table: MAIN_TABLE,
     schema: DEFAULT_SCHEMA,
-    excludeFields: ['ogc_fid', 'gkey_code', 'river_code', 'mng_cde', 'user_name'],
+    excludeFields: [
+      'ogc_fid',
+      'gkey_code',
+      'river_code',
+      'mng_cde',
+      'user_name',
+      'emd_code',
+      'ri_code',
+      'bobn',
+      'bubn',
+      'ledg_gbn',
+      'temp_area',
+    ],
     includeHiddenDetail: true,
   });
   if (fieldDefs.error) {
@@ -423,10 +440,15 @@ export async function getUsageDataAsDetailByKey(params: {
     const metaByField = new Map(fieldDefs.fields.map((f) => [f.field.toLowerCase(), f]));
     const attributes: UsageDataAsDetailAttr[] = dataFields.map((field) => {
       const def = metaByField.get(field.toLowerCase());
+      const raw = String(row[field] ?? '').trim();
+      const value =
+        field.toLowerCase() === 'usage_loc'
+          ? formatAddressStripSidoSigungu(raw) || raw || '—'
+          : raw || '—';
       return {
         field,
         label: labelForUsageDataAsField(field),
-        value: String(row[field] ?? '').trim() || '—',
+        value,
         showDetail: def?.showDetail !== false,
       };
     });
@@ -449,6 +471,117 @@ export async function getUsageDataAsDetailByKey(params: {
       attributes: [],
       parcelItems: [],
       mgjItems: [],
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+/**
+ * 하천명·하천유형 선택용 — layer.river_plan_as 의 하천명/유형 목록.
+ */
+export async function listUsageDataAsRiverOptions(): Promise<{
+  rivers: { riverName: string; riverType: string }[];
+  error?: string;
+}> {
+  const meta = await resolveTableWithSchema('river_plan_as');
+  if (!meta) {
+    return { rivers: [], error: 'river_plan_as 테이블이 없습니다.' };
+  }
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const nameCol = findColumn(cols, 'river_name');
+  const typeCol = findColumn(cols, 'river_type');
+  if (!nameCol) {
+    return { rivers: [], error: 'river_name 컬럼이 없습니다.' };
+  }
+
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const typeExpr = typeCol
+    ? `MAX(COALESCE(${quoteIdent(typeCol)}::text, ''))`
+    : `''`;
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           COALESCE(${quoteIdent(nameCol)}::text, '') AS river_name,
+           ${typeExpr} AS river_type
+         FROM "${safeSchema}"."${safe}"
+         WHERE COALESCE(${quoteIdent(nameCol)}::text, '') <> ''
+         GROUP BY COALESCE(${quoteIdent(nameCol)}::text, '')
+         ORDER BY 1`
+      )
+    );
+    const rivers = (res.rows ?? [])
+      .map((r) => {
+        const row = r as { river_name?: string; river_type?: string };
+        return {
+          riverName: String(row.river_name ?? '').trim(),
+          riverType: String(row.river_type ?? '').trim(),
+        };
+      })
+      .filter((r) => r.riverName);
+    return { rivers };
+  } catch (e: unknown) {
+    return {
+      rivers: [],
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+/**
+ * 허가번호 다음 번호 — 시작일 연도 기준 «YYYY-NN».
+ * 해당 연도 접두가 없으면 01, 해가 바뀌면 다시 01부터.
+ */
+export async function getNextUsageDataAsPermitNo(params?: {
+  year?: number;
+  excludeConsCode?: string;
+}): Promise<{ permitNo: string; error?: string }> {
+  const year = Number(params?.year);
+  if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+    return { permitNo: '', error: '시작일 연도가 필요합니다.' };
+  }
+
+  const meta = await resolveTableWithSchema(MAIN_TABLE);
+  if (!meta) return { permitNo: formatOccupationPermitNo(year, 1), error: `${MAIN_TABLE} 테이블이 없습니다.` };
+
+  const { tableName, schema } = meta;
+  const columns = await getTableColumns(schema, tableName);
+  const permitCol = findColumn(columns, 'perm_num');
+  if (!permitCol) {
+    return { permitNo: formatOccupationPermitNo(year, 1), error: 'perm_num 컬럼이 없습니다.' };
+  }
+  const keyCol = findColumn(columns, KEY_FIELD);
+  const exclude = String(params?.excludeConsCode ?? '').trim();
+
+  const safe = tableName.replace(/"/g, '""');
+  const safeSchema = schema.replace(/"/g, '""');
+  const prefix = `${year}-`;
+  const excludeClause =
+    exclude && keyCol
+      ? ` AND COALESCE(${quoteIdent(keyCol)}::text, '') <> '${esc(exclude)}'`
+      : '';
+
+  const sqlText = `
+    SELECT COALESCE(${quoteIdent(permitCol)}::text, '') AS code
+    FROM "${safeSchema}"."${safe}"
+    WHERE COALESCE(${quoteIdent(permitCol)}::text, '') LIKE '${esc(prefix)}%'
+    ${excludeClause}
+    LIMIT 5000`;
+
+  try {
+    const res = await db.execute(sql.raw(sqlText));
+    let maxSeq = 0;
+    for (const row of res.rows ?? []) {
+      const code = String((row as { code?: string }).code ?? '').trim();
+      const seq = parseOccupationPermitNoSeq(code, year);
+      if (seq != null && seq > maxSeq) maxSeq = seq;
+    }
+    return { permitNo: formatOccupationPermitNo(year, maxSeq + 1) };
+  } catch (e: unknown) {
+    return {
+      permitNo: formatOccupationPermitNo(year, 1),
       error: e instanceof Error ? e.message : String(e),
     };
   }

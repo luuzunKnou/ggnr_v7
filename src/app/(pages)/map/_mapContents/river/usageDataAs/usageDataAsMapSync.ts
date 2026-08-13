@@ -3,6 +3,7 @@ import { call } from "@/lib/api";
 import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
+import { clearUseFeeWmsLayer } from "../../useFee/useFeeMapSync";
 import {
   USAGE_DATA_AS_CHILD_WMS_LAYER_IDS,
   USAGE_DATA_AS_PANEL_WMS_LAYER_IDS,
@@ -45,7 +46,7 @@ export function ensureUsageDataAsWmsLayersVisible(
   });
 }
 
-/** 하천점용 패널 종료·시스템 이탈 시 — 점용·시설물 WMS 끄기 */
+/** 하천점용 패널 종료·시스템 이탈 시 — 점용·시설물·점사용료 WMS 끄기 */
 export function clearUsageDataAsWmsLayers(
   setVisibleLayerNames?: (updater: (prev: Set<string>) => Set<string>) => void
 ): void {
@@ -59,6 +60,7 @@ export function clearUsageDataAsWmsLayers(
     }
     return changed ? next : prev;
   });
+  clearUseFeeWmsLayer(setVisibleLayerNames);
 }
 
 /** 점용시설물 WMS on/off (울진 하천점용 목록) */

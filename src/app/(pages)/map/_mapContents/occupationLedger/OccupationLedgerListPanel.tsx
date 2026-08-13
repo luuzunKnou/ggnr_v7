@@ -13,11 +13,13 @@ import { getOccupationLedgerBinding } from './occupationLedgerBinding';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation';
-import { LAYER_ROW_NEW_ID, LayerRowAddButton } from '../../_mapComponents/layerRowEdit';
+import { LAYER_ROW_NEW_ID, LayerRowAddButton, LayerRowPanelButton } from '../../_mapComponents/layerRowEdit';
 import {
   clearOccupationLedgerWmsLayers,
   ensureOccupationLedgerWmsLayers,
 } from './occupationLedgerMapSync';
+import { isUseFeeWmsVisible, toggleUseFeeWmsLayer } from '../useFee/useFeeMapSync';
+import { occupationLayerToggleActiveStyle } from '@/lib/occupationLayerStyle';
 
 type ListRow = {
   rowKey: string;
@@ -194,11 +196,24 @@ export function OccupationLedgerListPanel({
     scroller.scrollBy({ top: delta, behavior: 'smooth' });
   }, [selectedDetailId, filteredItems]);
 
+  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 py-1.5 pl-3 pr-0">
         <span className="text-sm font-semibold text-slate-800">{title}</span>
         <div className="flex items-center gap-1">
+          <LayerRowPanelButton
+            type="button"
+            title={useFeeLayerOn ? '점사용료 레이어 끄기' : '점사용료 레이어 켜기'}
+            aria-label={useFeeLayerOn ? '점사용료 레이어 끄기' : '점사용료 레이어 켜기'}
+            aria-pressed={useFeeLayerOn}
+            onClick={() => toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames)}
+            style={useFeeLayerOn ? occupationLayerToggleActiveStyle('useFee') : undefined}
+            className={useFeeLayerOn ? 'hover:opacity-90' : undefined}
+          >
+            점사용료
+          </LayerRowPanelButton>
           <LayerRowAddButton
             onClick={() => {
               if (onAdd) onAdd();
@@ -218,7 +233,7 @@ export function OccupationLedgerListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-slate-100 py-2 pl-3 pr-0">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -257,7 +272,7 @@ export function OccupationLedgerListPanel({
             {error}
           </div>
         )}
-        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           {loading ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
           ) : filteredItems.length === 0 && !error ? (
@@ -267,11 +282,11 @@ export function OccupationLedgerListPanel({
                 : '선택한 상태에 해당하는 목록이 없습니다.'}
             </div>
           ) : (
-            <table className="w-full min-w-[450px] table-fixed border-collapse text-left text-xs">
+            <table className="w-full min-w-[666px] table-fixed border-collapse text-left text-xs">
               <colgroup>
-                <col className="w-[52px]" />
-                <col className="w-[88px]" />
-                <col className="w-[110px]" />
+                <col className="w-[60px]" />
+                <col className="w-[180px]" />
+                <col className="w-[250px]" />
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>

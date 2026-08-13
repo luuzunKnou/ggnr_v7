@@ -53,7 +53,7 @@
   },
   {
     "define_field_name": "work_name",
-    "define_field_kor_name": "공사명(점용명)",
+    "define_field_kor_name": "점용명",
     "define_field_type": "text",
     "define_field_idx": 5,
     "define_field_is_required": false,

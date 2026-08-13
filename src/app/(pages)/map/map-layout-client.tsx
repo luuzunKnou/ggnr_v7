@@ -285,8 +285,8 @@ const USE_FEE_DETAIL_DEFAULT_WIDTH = 343
 const USE_FEE_DETAIL_MIN_WIDTH = 343
 const USE_FEE_DETAIL_MAX_WIDTH = 480
 /** 하천점용 목록(466)과 동일 기준 */
-const USE_FEE_PANEL_DEFAULT_WIDTH = 466
-const USE_FEE_PANEL_MIN_WIDTH = 466
+const USE_FEE_PANEL_DEFAULT_WIDTH = 540
+const USE_FEE_PANEL_MIN_WIDTH = 540
 const USE_FEE_PANEL_MAX_WIDTH = 960
 
 /** serviceList.ser_eng / systemList 메뉴 키와 동일 */
@@ -321,15 +321,15 @@ const RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH = 640
 
-const USAGE_DATA_AS_PANEL_DEFAULT_WIDTH = 466
-const USAGE_DATA_AS_PANEL_MIN_WIDTH = 466
+const USAGE_DATA_AS_PANEL_DEFAULT_WIDTH = 670
+const USAGE_DATA_AS_PANEL_MIN_WIDTH = 670
 const USAGE_DATA_AS_PANEL_MAX_WIDTH = 960
 const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
 const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
 const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
 
-const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 466
-const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 466
+const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 677
+const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 677
 const OCCUPATION_LEDGER_PANEL_MAX_WIDTH = 960
 const OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const OCCUPATION_LEDGER_DETAIL_MIN_WIDTH = 320
@@ -364,6 +364,7 @@ function MapLayoutContent({
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
   const setUsageDataAsPanelOpen = mapContext?.setUsageDataAsPanelOpen
   const setOccupationLedgerPanelOpen = mapContext?.setOccupationLedgerPanelOpen
+  const setUseFeePanelOpen = mapContext?.setUseFeePanelOpen
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
   const setRoadLedgerIdentifyRow = mapContext?.setRoadLedgerIdentifyRow
   const setRoadLedgerFacilityModal = mapContext?.setRoadLedgerFacilityModal
@@ -842,6 +843,10 @@ function MapLayoutContent({
     setVisibleLayerNames,
     occupationLedgerSerEng,
   ])
+
+  useEffect(() => {
+    setUseFeePanelOpen?.(useFeeOpen)
+  }, [setUseFeePanelOpen, useFeeOpen])
 
   /** 시스템 전환 시 — 다른 시스템 점용대장(하천·도로·국공유지) WMS만 끄기 */
   useEffect(() => {
@@ -2209,9 +2214,7 @@ function MapLayoutContent({
                 <UseFeeListPanel
                   onClose={handleCloseUseFee}
                   selectedId={useFeeDetailId}
-                  onSelectId={(id) => {
-                    setUseFeeDetailId((prev) => (prev === id ? null : id))
-                  }}
+                  onSelectId={setUseFeeDetailId}
                 />
               </MapSideListPanel>
             </div>
