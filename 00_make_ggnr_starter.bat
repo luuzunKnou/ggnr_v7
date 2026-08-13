@@ -237,7 +237,7 @@ if "!SKIP_WRITE!"=="0" (
   echo.
   echo :: [앱 기동] nssm AppStdout 연결용 — call 유지
   echo :: 실패 시 더블클릭 창이 바로 닫히지 않도록 pause ^(nssm·스모크는 GGNR_START_NO_PAUSE=1^)
-  echo call npm run start -- "%PROJECT_NAME%" "%ENV_NAME%"
+  echo call npm run start -- "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
   echo if errorlevel 1 goto start_fail
   echo exit /b 0
   echo.
@@ -395,6 +395,8 @@ if /i not "!DO_NSSM!"=="Y" (
 echo.
 echo [2/3] nssm 서비스 등록...
 set "GGNR_NSSM_REREG=!DO_REREG!"
+set "GGNR_NSSM_PROJECT=%PROJECT_NAME%"
+set "GGNR_NSSM_ENV=%ENV_NAME%"
 call "%NSSM_BAT%"
 set "NSSM_EC=!ERRORLEVEL!"
 if "!NSSM_EC!"=="2" (

@@ -42,7 +42,7 @@ export type OccupationLayerStyleKey = keyof typeof OCCUPATION_LAYER_STYLE;
 
 export function occupationFillRgba(
   key: OccupationLayerStyleKey,
-  opacity = OCCUPATION_LAYER_STYLE[key].fillOpacity
+  opacity: number = OCCUPATION_LAYER_STYLE[key].fillOpacity
 ): string {
   const hex = OCCUPATION_LAYER_STYLE[key].fill.replace("#", "");
   const n = parseInt(hex, 16);

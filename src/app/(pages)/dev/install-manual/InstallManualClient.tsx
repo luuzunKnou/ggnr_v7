@@ -2,11 +2,11 @@
 
 const SECTIONS = [
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
+  { id: 'install_db', label: 'PostgreSQL 설치 및 DB 생성' },
   { id: 'package', label: '프로젝트 파일 설치/실행 및 서비스 등록' },
   { id: 'run', label: '구동' },
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
-  { id: 'contour', label: '고도(등고선)' },
-  { id: 'python-env', label: '레이어 업로드 실패(python/env) 문제' },
+  { id: 'contour', label: '고도(등고선)' }
 ] as const;
 
 const HEADER_BAR = 'flex h-10 shrink-0 items-center border-b';
@@ -79,6 +79,7 @@ export function InstallManualClient() {
           className="mx-auto max-w-3xl text-xs leading-relaxed"
           style={{ display: 'flex', flexDirection: 'column', gap: 64 }}
         >
+
           <section id="nodejs" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">Node.js 및 npm 설치</h1>
             <ol className="list-decimal space-y-3 pl-5">
@@ -124,6 +125,21 @@ npm -v`}</CodeBlock>
                     </div>
                   </li>
                 </ol>
+              </li>
+            </ol>
+          </section>
+
+          <section id="install_db" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">PostgreSQL 설치 및 DB 생성</h1>
+            <ol className="list-decimal space-y-3 pl-5">
+              <li>
+                PostgreSQL 18 버전 설치
+              </li>
+              <li>
+                DB 생성(V6 DB 세팅 참고)
+              </li>
+              <li>
+                '프로젝트명'.env 파일 내 demo/prod를 생성한 DB 내용에 따라 수정
               </li>
             </ol>
           </section>
@@ -287,20 +303,6 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
               <li>
                 layer, path 필드 삭제: 레이어 우클릭 &gt; 속성 테이블 &gt; 상단 연필(편집 모드) &gt; 필드
                 속성 삭제 &gt; 저장
-              </li>
-            </ol>
-          </section>
-
-          <section id="python-env" className="scroll-mt-4 space-y-3 pb-8">
-            <h1 className="text-xl font-semibold">레이어 업로드 실패(python/env) 문제</h1>
-            <ol className="list-decimal space-y-2 pl-5">
-              <li>
-                ‘설치파일 다운로드’에서는{' '}
-                <code className="rounded bg-muted px-1 py-0.5">python/env</code> 폴더 제외되고 있음.
-              </li>
-              <li>
-                <code className="rounded bg-muted px-1 py-0.5">LAS File Uploader</code> 내 파이프라인
-                환경(python/env) 통해 설치 가능
               </li>
             </ol>
           </section>

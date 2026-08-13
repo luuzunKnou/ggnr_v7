@@ -96,8 +96,32 @@ if errorlevel 1 (
 "%NSSM%" set %SERVICE_NAME% AppDirectory "%ROOT%"
 "%NSSM%" set %SERVICE_NAME% AppExit Default Restart
 "%NSSM%" set %SERVICE_NAME% AppRestartDelay 3000
-:: ggnr_start.bat 실패 시 pause 방지 (서비스가 키 입력 대기하지 않도록)
-"%NSSM%" set %SERVICE_NAME% AppEnvironmentExtra GGNR_START_NO_PAUSE=1
+:: ggnr_start.bat 실패 시 pause 방지 + 프로젝트/타입 (run.ts 가 argv보다 env 우선)
+set "NSSM_PROJECT=%GGNR_NSSM_PROJECT%"
+set "NSSM_ENV=%GGNR_NSSM_ENV%"
+if not defined NSSM_PROJECT (
+  for /f "tokens=2 delims==" %%A in ('findstr /I /C:"GGNR_PROJECT=" "%APP_BAT%" 2^>nul') do (
+    set "NSSM_PROJECT=%%~A"
+    goto :got_proj_from_bat
+  )
+)
+:got_proj_from_bat
+if not defined NSSM_ENV (
+  for /f "tokens=2 delims==" %%A in ('findstr /I /C:"GGNR_ENV=" "%APP_BAT%" 2^>nul') do (
+    set "NSSM_ENV=%%~A"
+    goto :got_env_from_bat
+  )
+)
+:got_env_from_bat
+if defined NSSM_PROJECT set "NSSM_PROJECT=!NSSM_PROJECT:"=!"
+if defined NSSM_ENV set "NSSM_ENV=!NSSM_ENV:"=!"
+if defined NSSM_PROJECT if defined NSSM_ENV (
+  echo [nssm-install] AppEnvironmentExtra GGNR_PROJECT=!NSSM_PROJECT! GGNR_ENV=!NSSM_ENV!
+  "%NSSM%" set %SERVICE_NAME% AppEnvironmentExtra GGNR_START_NO_PAUSE=1 GGNR_PROJECT=!NSSM_PROJECT! GGNR_ENV=!NSSM_ENV!
+) else (
+  echo [경고] ggnr_start.bat 에서 GGNR_PROJECT/GGNR_ENV 를 못 읽었습니다. GGNR_START_NO_PAUSE 만 설정합니다.
+  "%NSSM%" set %SERVICE_NAME% AppEnvironmentExtra GGNR_START_NO_PAUSE=1
+)
 "%NSSM%" set %SERVICE_NAME% AppStdout "%LOG_OUT%"
 "%NSSM%" set %SERVICE_NAME% AppStderr "%LOG_ERR%"
 :: 로그 회전(약 10MB, 5개 백업)
