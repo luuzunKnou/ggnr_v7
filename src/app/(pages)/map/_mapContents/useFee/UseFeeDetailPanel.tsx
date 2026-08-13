@@ -8,6 +8,7 @@ import { LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
 import { MapHitOverlapSelect } from '../../_mapComponents/MapHitOverlapSelect'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { USE_FEE_DETAIL_PRIMARY_COUNT } from './useFeeFieldLabels'
+import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 
 type ListRow = {
   id: string
@@ -100,7 +101,6 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
           onClose()
         }}
         editable={false}
-        className="pl-3 pr-0"
       />
       <MapHitOverlapSelect
         fieldLabel="대장번호"
@@ -109,7 +109,7 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
         onChange={(id) => onSelectId?.(id)}
       />
 
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden pl-3 pr-0 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {loading && attributes.length === 0 ? (
           <div className="px-1 py-6 text-center text-slate-500">불러오는 중…</div>
         ) : error && attributes.length === 0 ? (
@@ -123,7 +123,7 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
               {visibleAttributes.map((row) => (
                 <div
                   key={row.field}
-                  className="grid grid-cols-[6.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 py-1.5 pl-2 pr-0"
+                  className="grid grid-cols-[6.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-2 py-1.5"
                 >
                   <dt className="w-[6.25rem] shrink-0 overflow-hidden whitespace-nowrap font-medium text-slate-600">
                     {row.label}
@@ -159,7 +159,7 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
             연계된 점용대장이 없습니다.
           </div>
         </div>
-      </div>
+      </MapSideDetailScroll>
     </div>
   )
 }

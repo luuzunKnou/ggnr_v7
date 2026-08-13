@@ -44,6 +44,7 @@ import { useLayerRowPlaceFromGeom } from "../../../_mapComponents/layerRowEdit/u
 import { computeAreaSqmFromWkt5181 } from "../../../_mapComponents/analysisArea";
 import { splitUsagePeriod } from "@/lib/usageDataAsFieldUtils";
 import { currentPermitYear } from "@/lib/occupationPermitNo";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   detailId: string;
@@ -582,7 +583,6 @@ export function UsageDataAsDetailPanel({
           mapContext?.setUsageDataAsMapHitOptions?.([]);
           onClose();
         }}
-        className="pl-3 pr-0"
         {...editToolbarProps}
       />
       <MapHitOverlapSelect
@@ -592,7 +592,7 @@ export function UsageDataAsDetailPanel({
         onChange={(id) => onSelectDetailId?.(id)}
       />
 
-      <div className="min-h-0 flex-1 overflow-auto pl-3 pr-0 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
@@ -666,7 +666,7 @@ export function UsageDataAsDetailPanel({
             등록할 필드 정의를 불러오지 못했습니다.
           </div>
         )}
-      </div>
+      </MapSideDetailScroll>
 
       <LayerRowEditFooter {...editToolbarProps} />
 

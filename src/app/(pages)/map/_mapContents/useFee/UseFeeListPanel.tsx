@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getUseFeeBinding } from '@/lib/useFeeBinding'
@@ -382,7 +382,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 py-1.5 pl-3 pr-0">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">{feeBinding.title}</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
@@ -407,6 +407,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
             style={occupationLayerOn ? occupationLayerToggleActiveStyle('parent') : undefined}
             className={occupationLayerOn ? 'hover:opacity-90' : undefined}
           >
+            <Layers className="h-3 w-3 shrink-0" aria-hidden />
             {occupationTarget.label}
           </LayerRowPanelButton>
           <button
@@ -421,7 +422,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 py-2 pl-3 pr-0">
+      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
         <div className="flex items-stretch gap-1.5">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -460,34 +461,32 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
             })}
           </div>
         </div>
-        {departments.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                { value: '', label: '전체' },
-                ...departments.map((name) => ({ value: name, label: name })),
-              ] as const
-            ).map((opt) => {
-              const active = dptNm === opt.value
-              return (
-                <button
-                  key={opt.value || '__all__'}
-                  type="button"
-                  onClick={() => setDptNm(opt.value)}
-                  title={opt.label}
-                  className={cn(
-                    'max-w-full truncate rounded border px-2 py-1 text-[11px] font-medium transition-colors',
-                    active
-                      ? 'border-primary bg-primary/10 text-slate-800'
-                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                  )}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-1">
+          {(
+            [
+              { value: '', label: '전체' },
+              ...departments.map((name) => ({ value: name, label: name })),
+            ] as const
+          ).map((opt) => {
+            const active = dptNm === opt.value
+            return (
+              <button
+                key={opt.value || '__all__'}
+                type="button"
+                onClick={() => setDptNm(opt.value)}
+                title={opt.label}
+                className={cn(
+                  'max-w-full truncate rounded border px-2 py-1 text-[11px] font-medium transition-colors',
+                  active
+                    ? 'border-primary bg-primary/10 text-slate-800'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                )}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -496,65 +495,85 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
           className="min-h-0 flex-1 overflow-auto scrollbar-thin"
           onScroll={onListScroll}
         >
-          {error ? (
-            <div className="px-3 py-6 text-center text-xs text-red-600">{error}</div>
-          ) : loading && rows.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
-          ) : rows.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-slate-500">조회된 점사용료가 없습니다.</div>
-          ) : (
-            <>
-            <table className="w-full min-w-[517px] table-fixed border-collapse text-left text-xs">
-              <colgroup>
-                <col className="w-[55px]" />
-                <col className="w-[88px]" />
-                <col className="w-[80px]" />
-                <col className="w-[90px]" />
-                <col className="w-[90px]" />
-                <col className="w-[80px]" />
-              </colgroup>
-              <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
-                <tr>
-                  {SORT_COLUMNS.map((col) => {
-                    const sortIdx = sorts.findIndex((s) => s.key === col.key)
-                    const active = sortIdx >= 0
-                    const sortDir = active ? sorts[sortIdx].dir : null
-                    const Icon = !active
-                      ? ArrowUpDown
-                      : sortDir === 'asc'
-                        ? ArrowUp
-                        : ArrowDown
-                    const initial = initialSortDir(col.key)
-                    return (
-                      <th
-                        key={col.key}
-                        className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
+          <table className="w-full min-w-[517px] table-fixed border-collapse text-left text-xs">
+            <colgroup>
+              <col className="w-[55px]" />
+              <col className="w-[88px]" />
+              <col className="w-[80px]" />
+              <col className="w-[90px]" />
+              <col className="w-[90px]" />
+              <col className="w-[80px]" />
+            </colgroup>
+            <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+              <tr>
+                {SORT_COLUMNS.map((col) => {
+                  const sortIdx = sorts.findIndex((s) => s.key === col.key)
+                  const active = sortIdx >= 0
+                  const sortDir = active ? sorts[sortIdx].dir : null
+                  const Icon = !active
+                    ? ArrowUpDown
+                    : sortDir === 'asc'
+                      ? ArrowUp
+                      : ArrowDown
+                  const initial = initialSortDir(col.key)
+                  return (
+                    <th
+                      key={col.key}
+                      className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className={cn(
+                          'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-slate-100',
+                          active ? 'text-primary' : 'text-slate-700'
+                        )}
+                        title={
+                          !active
+                            ? `${col.label} 정렬 추가`
+                            : sortDir === initial
+                              ? `${col.label} 방향 바꾸기`
+                              : `${col.label} 정렬 해제`
+                        }
                       >
-                        <button
-                          type="button"
-                          onClick={() => toggleSort(col.key)}
-                          className={cn(
-                            'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-slate-100',
-                            active ? 'text-primary' : 'text-slate-700'
-                          )}
-                          title={
-                            !active
-                              ? `${col.label} 정렬 추가`
-                              : sortDir === initial
-                                ? `${col.label} 방향 바꾸기`
-                                : `${col.label} 정렬 해제`
-                          }
-                        >
-                          <span className="truncate">{col.label}</span>
-                          <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-                        </button>
-                      </th>
-                    )
-                  })}
+                        <span className="truncate">{col.label}</span>
+                        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                      </button>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {error ? (
+                <tr>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-red-600"
+                  >
+                    {error}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
+              ) : loading && rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-slate-500"
+                  >
+                    불러오는 중…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-slate-500"
+                  >
+                    조회된 점사용료가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => {
                   const isSelected = selectedId === row.id
                   return (
                     <tr
@@ -609,18 +628,19 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                       </td>
                     </tr>
                   )
-                })}
-              </tbody>
-            </table>
-            {loadingMore ? (
+                })
+              )}
+            </tbody>
+          </table>
+          {rows.length > 0 ? (
+            loadingMore ? (
               <div className="px-3 py-2 text-center text-[11px] text-slate-500">더 불러오는 중…</div>
             ) : rows.length < total ? (
               <div className="px-3 py-2 text-center text-[11px] text-slate-400">
                 아래로 스크롤하면 더 불러옵니다
               </div>
-            ) : null}
-            </>
-          )}
+            ) : null
+          ) : null}
         </div>
         <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
           {rows.length < total

@@ -1419,7 +1419,7 @@ function MapLayoutContent({
                 className="shadow-none"
               >
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0 bg-white">
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
                     <span className="text-sm font-semibold text-slate-800">시설관리</span>
                     <button
                       type="button"
@@ -1580,7 +1580,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadLedgerDetailLeftPx}
                 onWidthChange={setRoadLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-auto scrollbar-thin"
               >
                 <RoadLedgerDetailPanel
                   row={mapContext.roadLedgerIdentifyRow}
@@ -1651,7 +1651,7 @@ function MapLayoutContent({
                 maxWidth={BUILD_PUBLIC_LAND_DETAIL_MAX_WIDTH}
                 leftOffsetPx={buildPublicLandDetailLeftPx}
                 onWidthChange={setBuildPublicLandDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <BuildPublicLandDetailPanel
                   detailId={buildPublicLandSelectedId}
@@ -1696,7 +1696,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_USE_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadUseLedgerDetailLeftPx}
                 onWidthChange={setRoadUseLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RoadUseLedgerDetailPanel
                   detailId={roadUseLedgerDetailId}
@@ -1741,7 +1741,7 @@ function MapLayoutContent({
                 maxWidth={RIVER_USE_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={riverUseLedgerDetailLeftPx}
                 onWidthChange={setRiverUseLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RiverUseLedgerDetailPanel
                   detailId={riverUseLedgerDetailId}
@@ -1944,7 +1944,7 @@ function MapLayoutContent({
                 maxWidth={OCCUPATION_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={occupationLedgerDetailLeftPx}
                 onWidthChange={setOccupationLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <OccupationLedgerDetailPanel
                   detailId={occupationLedgerDetailId}
@@ -1991,7 +1991,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_REWARD_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadRewardDetailLeftPx}
                 onWidthChange={setRoadRewardDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RoadRewardDetailPanel
                   caseId={roadRewardSelectedId}
@@ -2002,7 +2002,8 @@ function MapLayoutContent({
                   onCaseIdChange={setRoadRewardSelectedId}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
-                    roadRewardPanelWidth + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+                    roadRewardPanelWidth +
+                    (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
                   }
                 />
               </MapSideListPanel>
@@ -2060,7 +2061,7 @@ function MapLayoutContent({
                 maxWidth={MEMO_DETAIL_MAX_WIDTH}
                 leftOffsetPx={memoDetailLeftPx}
                 onWidthChange={setMemoDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <MemoDetailPanel
                   detailId={memoDetailId}
@@ -2194,7 +2195,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
                 leftOffsetPx={roadDocPanelLeftPx}
                 onWidthChange={setRoadDocPanelWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RoadDocManualPanel onClose={handleCloseRoadDoc} />
               </MapSideListPanel>

@@ -10,6 +10,7 @@ import {
 } from '@/lib/groundwaterPermitStatus'
 import { GROUNDWATER_PERMIT_DETAIL_SECTIONS } from './groundwaterPermitSections'
 import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
+import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   detailId: string
@@ -133,7 +134,7 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
         </button>
       </div>
 
-      <div className="scrollbar-thin min-h-0 flex-1 space-y-2 overflow-y-scroll overflow-x-hidden px-3 py-2 text-xs [scrollbar-gutter:stable]">
+      <MapSideDetailScroll className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-2 text-xs">
         {loading && !row ? (
           <div className="px-1 py-8 text-center text-slate-500">불러오는 중…</div>
         ) : error && !row ? (
@@ -191,7 +192,7 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
         ) : (
           <div className="px-1 py-8 text-center text-slate-500">항목을 찾을 수 없습니다.</div>
         )}
-      </div>
+      </MapSideDetailScroll>
     </div>
   )
 }

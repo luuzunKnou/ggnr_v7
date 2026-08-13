@@ -607,7 +607,6 @@ export function OccupationLedgerDetailPanel({
           mapContext?.setOccupationLedgerMapHitOptions?.([]);
           onClose();
         }}
-        className="pl-3 pr-0"
         {...editToolbarProps}
       />
       <MapHitOverlapSelect
@@ -617,7 +616,8 @@ export function OccupationLedgerDetailPanel({
         onChange={(id) => onSelectDetailId?.(id)}
       />
 
-      <div className="min-h-0 flex-1 overflow-auto pl-3 pr-0 py-2 text-xs">
+      {/* 울진하천 목록과 동일: overflow-auto scrollbar-thin (+ MapSideListPanel mr) */}
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs scrollbar-thin">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />

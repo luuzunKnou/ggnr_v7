@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
+import {
+  LayerRowAddButton,
+  LayerRowPanelButton,
+} from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { exportRoadNetworkExcel } from "./exportRoadNetworkExcel";
 import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
@@ -345,25 +349,12 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     <div className="flex min-h-0 h-full flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">도로망도</span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
-            title="엑셀 내보내기"
-          >
-            <Download className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-1">
+          <LayerRowPanelButton type="button" onClick={handleExport} title="엑셀 내보내기">
+            <Download className="h-3 w-3 shrink-0" aria-hidden />
             엑셀
-          </button>
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-            title="도로 추가"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            추가
-          </button>
+          </LayerRowPanelButton>
+          <LayerRowAddButton onClick={handleAdd} />
           <button
             type="button"
             onClick={() => {
@@ -654,7 +645,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {items.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
         ) : (

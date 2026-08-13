@@ -44,6 +44,7 @@ import {
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
 import { useMapContext } from "../../../_mapComponents/MapContext";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { getAddressFromCoord } from "../../../_mapComponents/addressSearch/vworldAddressSearch";
 import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
@@ -1987,7 +1988,7 @@ export function RoadNetworkDetailPanel({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 scrollbar-hide">
+        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
           {bottomTab === "maintenance" ? (
             filteredMaintenance.length === 0 ? (
               <p className="py-6 text-center text-[11px] text-slate-500">
@@ -2220,7 +2221,7 @@ export function RoadNetworkDetailPanel({
               })}
             </ul>
           )}
-        </div>
+        </MapSideDetailScroll>
 
         {siteModal ? (
           <RoadNetworkSiteItemModal

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Layers, Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
@@ -207,7 +207,7 @@ export function OccupationLedgerListPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 py-1.5 pl-3 pr-0">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">{title}</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
@@ -221,6 +221,7 @@ export function OccupationLedgerListPanel({
             style={useFeeLayerOn ? occupationLayerToggleActiveStyle('useFee') : undefined}
             className={useFeeLayerOn ? 'hover:opacity-90' : undefined}
           >
+            <Layers className="h-3 w-3 shrink-0" aria-hidden />
             점사용료
           </LayerRowPanelButton>
           <LayerRowAddButton
@@ -242,7 +243,7 @@ export function OccupationLedgerListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 py-2 pl-3 pr-0">
+      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input

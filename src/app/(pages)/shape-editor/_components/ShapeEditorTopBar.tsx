@@ -100,23 +100,6 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
         Redo
       </ToolbarButton>
 
-      <div className="mx-1 h-5 w-px bg-slate-200" />
-
-      <ToolbarButton
-        title="변경된 도형 일괄 저장"
-        disabled={dirtySaveItems.length === 0 || bulkSaving}
-        onClick={() => void bulkSavePending()}
-      >
-        <Save className="h-3.5 w-3.5" />
-        {bulkSaving
-          ? '저장 중…'
-          : `일괄저장${dirtySaveItems.length > 0 ? ` (${dirtySaveItems.length})` : ''}`}
-      </ToolbarButton>
-      <ToolbarButton title="닫기" onClick={handleClose}>
-        <X className="h-3.5 w-3.5" />
-        닫기
-      </ToolbarButton>
-
       <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
 
       {SHAPE_EDITOR_OVERLAY_CONTROLS.map(({ id, label }) => (
@@ -130,9 +113,29 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
         </ToolbarButton>
       ))}
 
+      <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
+
+      <ToolbarButton
+        title="변경된 도형 일괄 저장"
+        disabled={dirtySaveItems.length === 0 || bulkSaving}
+        onClick={() => void bulkSavePending()}
+      >
+        <Save className="h-3.5 w-3.5" />
+        {bulkSaving
+          ? '저장 중…'
+          : `일괄저장${dirtySaveItems.length > 0 ? ` (${dirtySaveItems.length})` : ''}`}
+      </ToolbarButton>
+
       {statusMessage ? (
         <span className="ml-2 min-w-0 flex-1 truncate text-xs text-slate-500">{statusMessage}</span>
-      ) : null}
+      ) : (
+        <span className="min-w-0 flex-1" />
+      )}
+
+      <ToolbarButton title="닫기" onClick={handleClose}>
+        <X className="h-3.5 w-3.5" />
+        닫기
+      </ToolbarButton>
     </header>
   );
 }
