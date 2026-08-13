@@ -41,14 +41,11 @@ const TYPE = resolveTypeArg();
 const SIGNAL_PATH = path.join(process.cwd(), '.cursor-runtime', 'restart-request.json');
 const RELAUNCH_POLL_MS = 1000;
 
-/** src/config/projects/<project>.runtime.env 의 KEY=VALUE 를 process.env 에 병합 */
-function loadRuntimeEnv(projectName: string): void {
-  const root = process.cwd();
-  const filePath = path.join(root, 'src', 'config', 'projects', `${projectName}.runtime.env`);
+/** src/config/projects/*.runtime.env 의 KEY=VALUE 를 process.env 에 병합 */
+function applyRuntimeEnvFile(filePath: string): void {
   if (!fs.existsSync(filePath)) return;
   const content = fs.readFileSync(filePath, 'utf-8');
-  const lines = content.split(/\r?\n/);
-  for (const line of lines) {
+  for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
     const eq = trimmed.indexOf('=');
@@ -57,6 +54,14 @@ function loadRuntimeEnv(projectName: string): void {
     const value = trimmed.slice(eq + 1).trim();
     if (key) (process.env as Record<string, string>)[key] = value;
   }
+}
+
+/** 공용 common.runtime.env 먼저, 이어서 프로젝트 runtime.env (프로젝트 우선 덮어쓰기) */
+function loadRuntimeEnv(projectName: string): void {
+  const root = process.cwd();
+  const dir = path.join(root, 'src', 'config', 'projects');
+  applyRuntimeEnvFile(path.join(dir, 'common.runtime.env'));
+  applyRuntimeEnvFile(path.join(dir, `${projectName}.runtime.env`));
 }
 
 function usage(): never {
