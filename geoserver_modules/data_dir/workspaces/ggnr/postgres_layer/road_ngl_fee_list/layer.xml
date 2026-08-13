@@ -1,0 +1,19 @@
+<layer>
+  <name>road_ngl_fee_list</name>
+  <id>LayerInfoImpl-4785472f:19ff42d5832:-728c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4785472f:19ff42d5832:-728b</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4785472f:19ff42d5832:-728d</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-12 08:51:45.920 UTC</dateCreated>
+  <dateModified>2026-08-12 08:51:48.207 UTC</dateModified>
+</layer>

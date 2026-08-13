@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Layers, Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
@@ -135,6 +135,7 @@ export function UsageDataAsListPanel({
   const handleRowClick = useCallback(
     (rowKey: string) => {
       if (!rowKey) return;
+      mapContext?.setUsageDataAsMapHitOptions?.([]);
       // 같은 행 재클릭 — selectedDetailId 불변이라 effect가 안 도므로 직접 맞춤
       if (rowKey === selectedDetailId && rowKey !== LAYER_ROW_NEW_ID) {
         void fitMapToDetailKey(rowKey);
@@ -142,7 +143,7 @@ export function UsageDataAsListPanel({
       }
       onSelectDetailId(rowKey);
     },
-    [selectedDetailId, onSelectDetailId, fitMapToDetailKey]
+    [selectedDetailId, onSelectDetailId, fitMapToDetailKey, mapContext]
   );
 
   /** 지도에서 점용 레이어 클릭 → 목록·상세 선택 + 클릭 도형을 지도 중앙에 맞춤 */
@@ -152,6 +153,11 @@ export function UsageDataAsListPanel({
     pickRef.current = (pick) => {
       const consCode = String(pick?.consCode ?? "").trim();
       if (!consCode) return;
+      // 겹침 옵션은 OpenLayersMap이 Context에 먼저 넣음 — 여기서 []로 덮어쓰지 않음
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
+      if (opts.length > 1) {
+        mapContextRef.current?.setUsageDataAsMapHitOptions?.(opts);
+      }
       const clickedExt = pick?.extent3857;
       if (
         Array.isArray(clickedExt) &&
@@ -168,11 +174,7 @@ export function UsageDataAsListPanel({
     return () => {
       pickRef.current = null;
     };
-  }, [
-    mapContext?.applyUsageDataAsMapPickRef,
-    onSelectDetailId,
-    fitMapAfterDetailLayout,
-  ]);
+  }, [mapContext?.applyUsageDataAsMapPickRef, onSelectDetailId, fitMapAfterDetailLayout]);
 
   useEffect(() => {
     if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;
@@ -218,11 +220,11 @@ export function UsageDataAsListPanel({
   }, [keyword, refreshKey]);
 
   const sisulLayerOn = isUsageDataAsSisulWmsVisible(mapContext?.visibleLayerNames);
-  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames);
+  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames, 'river');
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 py-1.5 pl-3 pr-0">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">하천점용</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
@@ -234,6 +236,7 @@ export function UsageDataAsListPanel({
             style={sisulLayerOn ? occupationLayerToggleActiveStyle("facility") : undefined}
             className={sisulLayerOn ? "hover:opacity-90" : undefined}
           >
+            <Layers className="h-3 w-3 shrink-0" aria-hidden />
             시설물
           </LayerRowPanelButton>
           <LayerRowPanelButton
@@ -241,10 +244,13 @@ export function UsageDataAsListPanel({
             title={useFeeLayerOn ? "점사용료 레이어 끄기" : "점사용료 레이어 켜기"}
             aria-label={useFeeLayerOn ? "점사용료 레이어 끄기" : "점사용료 레이어 켜기"}
             aria-pressed={useFeeLayerOn}
-            onClick={() => toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames)}
+            onClick={() =>
+              toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames, 'river')
+            }
             style={useFeeLayerOn ? occupationLayerToggleActiveStyle("useFee") : undefined}
             className={useFeeLayerOn ? "hover:opacity-90" : undefined}
           >
+            <Layers className="h-3 w-3 shrink-0" aria-hidden />
             점사용료
           </LayerRowPanelButton>
           <LayerRowAddButton
@@ -266,7 +272,7 @@ export function UsageDataAsListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 py-2 pl-3 pr-0">
+      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -287,10 +293,10 @@ export function UsageDataAsListPanel({
           {loading ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
           ) : (
-            <table className="w-full min-w-[606px] table-fixed border-collapse text-left text-xs">
+            <table className="w-full min-w-[548px] table-fixed border-collapse text-left text-xs">
               <colgroup>
                 <col className="w-[180px]" />
-                <col className="w-[250px]" />
+                <col className="w-[192px]" />
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>

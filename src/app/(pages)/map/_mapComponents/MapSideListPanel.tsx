@@ -95,7 +95,9 @@ export function MapSideListPanel({
 
       <div
         className={cn(
-          'flex min-h-0 flex-1 flex-col pr-2.5',
+          'flex min-h-0 flex-1 flex-col',
+          // 목록 스크롤(scrollbar-thin)만 고정 여유. 상세는 MapSideDetailScroll(넘칠 때만)
+          '[&.scrollbar-thin]:mr-[10px] [&_.scrollbar-thin]:mr-[10px]',
           contentClassName ?? 'overflow-hidden',
         )}
       >

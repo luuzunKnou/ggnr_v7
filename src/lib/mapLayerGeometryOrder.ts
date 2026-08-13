@@ -56,26 +56,36 @@ export function mergeDefineLayerShpTypesIntoGeometryMap(
 
 /**
  * 동일 기하 타입 안에서도 항상 맨 아래(먼저 그리기)에 깔 레이어.
- * 예: 점용시설물은 점용·필지 WMS보다 아래에.
+ * 예: 점용시설물은 점용 본표 WMS보다 아래에.
  */
-const WMS_STACK_FORCE_BOTTOM = new Set(['usage_data_sisul_as']);
+const WMS_STACK_ALWAYS_BOTTOM = new Set(['usage_data_sisul_as']);
 
-function wmsStackForceBottomRank(name: string): number {
-  return WMS_STACK_FORCE_BOTTOM.has(String(name ?? '').trim().toLowerCase()) ? 0 : 1;
+function wmsStackForceBottomRank(name: string, extraBottom?: Set<string>): number {
+  const n = String(name ?? '').trim().toLowerCase();
+  if (WMS_STACK_ALWAYS_BOTTOM.has(n)) return 0;
+  if (extraBottom?.has(n)) return 0;
+  return 1;
 }
 
 /**
  * GeoServer WMS LAYERS: 앞쪽이 먼저 그려져 바닥에 깔림.
  * 강제 하단 → Polygon → Line → Point 순으로 정렬한다.
+ *
+ * @param forceBottomNames 부서업무 본표보다 아래에 깔 보조 레이어
+ *   (예: 하천점용 패널에서 켠 점사용료)
  */
 export function sortLayerNamesForWmsStack(
   names: string[],
   types: Record<string, LayerDbGeometryKind>,
+  forceBottomNames?: Iterable<string>,
 ): string[] {
   if (names.length <= 1) return names;
+  const extraBottom = new Set(
+    [...(forceBottomNames ?? [])].map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean)
+  );
   return [...names].sort((a, b) => {
-    const fa = wmsStackForceBottomRank(a);
-    const fb = wmsStackForceBottomRank(b);
+    const fa = wmsStackForceBottomRank(a, extraBottom);
+    const fb = wmsStackForceBottomRank(b, extraBottom);
     if (fa !== fb) return fa - fb;
     const ra = wmsLayerSortRank(types[a]);
     const rb = wmsLayerSortRank(types[b]);

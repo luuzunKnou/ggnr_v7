@@ -97,6 +97,7 @@ import {
 } from '../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import { pickRoadLedgerField } from '../_mapContents/road/roadLedger/roadLedgerFormat';
 import {
+  USAGE_DATA_AS_WMS_LAYER_ID,
   USAGE_DATA_AS_WMS_LAYER_IDS,
   isUsageDataAsWmsLayerId,
 } from '../_mapContents/river/usageDataAs/usageDataAsLayerId';
@@ -105,7 +106,12 @@ import {
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
 } from '@/lib/occupationLedgerBinding';
-import { USE_FEE_WMS_LAYER_ID } from '../_mapContents/useFee/useFeeLayerId';
+import { getAllUseFeeWmsLayerIds, getUseFeeWmsLayerId } from '../_mapContents/useFee/useFeeLayerId';
+import {
+  USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID,
+  USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID,
+  USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID,
+} from '../_mapContents/useFee/useFeeMapSync';
 import { Crosshair } from 'lucide-react';
 import './config/projections';
 import VectorSource from 'ol/source/Vector';
@@ -268,6 +274,9 @@ export default function OpenLayersMap({
 }: OpenLayersMapProps = {}) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapContext = useMapContext();
+  /** Provider value는 매 렌더 새 객체 — identify effect deps에 mapContext 넣지 않기 위해 ref 유지 */
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const sharedMapRef = mapContext?.mapInstanceRef ?? null;
   const { mapInstanceRef, mapReady } = useMapInstance(
     mapRef,
@@ -709,6 +718,29 @@ export default function OpenLayersMap({
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
 
+  /** 부서업무 본표는 위, 패널에서 켠 보조 레이어(점사용료·타 점용 등)는 아래 */
+  const wmsForceBottomLayerNames = useMemo(() => {
+    const useFeeOpen = mapContext?.useFeePanelOpen === true;
+    const usageOpen = mapContext?.usageDataAsPanelOpen === true;
+    const occupationOpen = mapContext?.occupationLedgerPanelOpen === true;
+    if (useFeeOpen) {
+      return [
+        USAGE_DATA_AS_WMS_LAYER_ID,
+        USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID,
+        USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID,
+        USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID,
+      ];
+    }
+    if (usageOpen || occupationOpen) {
+      return getAllUseFeeWmsLayerIds();
+    }
+    return [];
+  }, [
+    mapContext?.useFeePanelOpen,
+    mapContext?.usageDataAsPanelOpen,
+    mapContext?.occupationLedgerPanelOpen,
+  ]);
+
   // 맵 상태 자동 저장 (복원 완료 후에만 저장 시작 — 빈 상태 덮어쓰기 방지)
   const layerPanelSelections = useMemo(
     () => ({
@@ -792,7 +824,8 @@ export default function OpenLayersMap({
     spatialFilterWkt,
     layerGeometryTypes,
     undefined,
-    mapContext?.occupationLedgerPanelOpen === true
+    mapContext?.occupationLedgerPanelOpen === true,
+    wmsForceBottomLayerNames
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -1153,8 +1186,10 @@ export default function OpenLayersMap({
 
   // 지도 클릭 시 목록창(팝업) 없이 바로 '지도에서 선택된 항목' 데이터 패널로 열기
   // (좌측 popupState · 우측 mapSplitIdentifyPopup 공통)
+  // mapContext는 ref로만 읽음 — options/visibleLayer 갱신으로 effect가 재실행·cancel 되지 않게
   useEffect(() => {
-    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length || !mapContext) return;
+    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length) return;
+    if (!mapContextRef.current) return;
     let cancelled = false;
 
     const run = async () => {
@@ -1163,7 +1198,7 @@ export default function OpenLayersMap({
 
       const clearIdentifyIntake = () => {
         closePopup();
-        mapContext.setMapSplitIdentifyPopup?.(null);
+        mapContextRef.current?.setMapSplitIdentifyPopup?.(null);
       };
 
       const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
@@ -1184,6 +1219,10 @@ export default function OpenLayersMap({
         if (cancelled) return;
         openScanLayers = new Set();
       }
+
+      // await 이후 최신 panelOpen / setters
+      const mapContext = mapContextRef.current;
+      if (!mapContext || cancelled) return;
 
       const hitOpenScan = withFeat.some((r) => openScanLayers.has(String(r.tableName ?? '').trim()));
 
@@ -1301,6 +1340,7 @@ export default function OpenLayersMap({
         const usageLayerSet = new Set(
           USAGE_DATA_AS_WMS_LAYER_IDS.map((id) => id.toLowerCase())
         );
+        const parentTable = USAGE_DATA_AS_WMS_LAYER_ID.toLowerCase();
         const ranked = withFeat
           .map((r, wi) => {
             const tn = String(r.tableName ?? '')
@@ -1309,24 +1349,73 @@ export default function OpenLayersMap({
             if (!usageLayerSet.has(tn) || r.features.length === 0) return null;
             // 클릭 도형 중앙 맞춤: 필지·물건지(작은 도형)를 부모보다 우선
             const rank = tn === 'usage_data_as_solo' ? 0 : tn === 'usage_data_as_mgj' ? 1 : 2;
-            return { wi, rank, layer: r };
+            return { wi, rank, layer: r, tn };
           })
           .filter((x): x is NonNullable<typeof x> => x != null)
           .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
-        const usageHit = ranked[0]?.layer;
-        if (usageHit) {
-          const hitData = usageHit.features[0]?.data;
-          const consCode = pickIdentifyConsCode(hitData);
-          if (!consCode) {
+        if (ranked.length > 0) {
+          const pushOverlap = (
+            overlapOptions: {
+              value: string;
+              label: string;
+              extent3857?: [number, number, number, number] | null;
+            }[],
+            seen: Set<string>,
+            layer: (typeof ranked)[number]['layer']
+          ) => {
+            for (const feat of layer.features) {
+              const consCode = pickIdentifyConsCode(feat?.data);
+              if (!consCode || seen.has(consCode)) continue;
+              seen.add(consCode);
+              const permit =
+                pickIdentifyField(feat?.data, 'perm_num') ||
+                pickIdentifyField(feat?.data, 'permit_no') ||
+                pickIdentifyField(feat?.data, 'usage_name') ||
+                consCode;
+              overlapOptions.push({
+                value: consCode,
+                label: permit,
+                extent3857: pickIdentifyExtent3857(feat?.data),
+              });
+            }
+          };
+
+          // select 후보: 본표(겹친 점용) 우선 — 자식만 있으면 전체 ranked
+          const overlapOptions: {
+            value: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const seen = new Set<string>();
+          const parentRanked = ranked.filter((x) => x.tn === parentTable);
+          for (const { layer } of parentRanked.length > 0 ? parentRanked : ranked) {
+            pushOverlap(overlapOptions, seen, layer);
+          }
+
+          // 상세 오픈·줌: 필지/물건지 우선(작은 도형)
+          let primary: (typeof overlapOptions)[number] | null = null;
+          const primarySeen = new Set<string>();
+          const primaryOpts: typeof overlapOptions = [];
+          for (const { layer } of ranked) {
+            pushOverlap(primaryOpts, primarySeen, layer);
+          }
+          primary = primaryOpts[0] ?? overlapOptions[0] ?? null;
+
+          if (!primary) {
             if (!cancelled) {
               window.alert('클릭한 점용 도형의 대장번호(cons_code)를 읽을 수 없습니다.');
             }
             clearIdentifyIntake();
             return;
           }
+          // 목록 pick 핸들러보다 먼저 옵션 확정 (핸들러가 opts 누락 시 덮어쓰지 않도록)
+          mapContext.setUsageDataAsMapHitOptions?.(
+            overlapOptions.length > 1 ? overlapOptions : []
+          );
           mapContext.applyUsageDataAsMapPickRef.current?.({
-            consCode,
-            extent3857: pickIdentifyExtent3857(hitData),
+            consCode: primary.value,
+            extent3857: primary.extent3857,
+            overlapOptions,
           });
           clearIdentifyIntake();
           return;
@@ -1357,11 +1446,32 @@ export default function OpenLayersMap({
             })
             .filter((x): x is NonNullable<typeof x> => x != null)
             .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
-          const occHit = ranked[0]?.layer;
-          if (occHit) {
-            const hitData = occHit.features[0]?.data;
-            const rowKey = pickIdentifyField(hitData, binding.fields.keyField);
-            if (!rowKey) {
+          if (ranked.length > 0) {
+            const keyField = binding.fields.keyField;
+            const overlapOptions: {
+              value: string;
+              label: string;
+              extent3857?: [number, number, number, number] | null;
+            }[] = [];
+            const seen = new Set<string>();
+            for (const { layer } of ranked) {
+              for (const feat of layer.features) {
+                const rowKey = pickIdentifyField(feat?.data, keyField);
+                if (!rowKey || seen.has(rowKey)) continue;
+                seen.add(rowKey);
+                const permit =
+                  pickIdentifyField(feat?.data, 'permit_no') ||
+                  pickIdentifyField(feat?.data, 'work_name') ||
+                  rowKey;
+                overlapOptions.push({
+                  value: rowKey,
+                  label: permit,
+                  extent3857: pickIdentifyExtent3857(feat?.data),
+                });
+              }
+            }
+            const first = overlapOptions[0];
+            if (!first) {
               if (!cancelled) {
                 window.alert('클릭한 점용 도형의 대장번호를 읽을 수 없습니다.');
               }
@@ -1369,8 +1479,9 @@ export default function OpenLayersMap({
               return;
             }
             mapContext.applyOccupationLedgerMapPickRef.current?.({
-              rowKey,
-              extent3857: pickIdentifyExtent3857(hitData),
+              rowKey: first.value,
+              extent3857: first.extent3857,
+              overlapOptions,
             });
             clearIdentifyIntake();
             return;
@@ -1378,9 +1489,10 @@ export default function OpenLayersMap({
         }
       }
 
-      /** 점사용료: ngl_fee_list → 목록·상세 선택 */
+      /** 점사용료: water|road|public_ngl_fee_list → 목록·상세 선택 */
       if (mapContext?.useFeePanelOpen && mapContext.applyUseFeeMapPickRef) {
-        const feeLid = USE_FEE_WMS_LAYER_ID.toLowerCase();
+        const system = String(searchParams.get('system') ?? '').trim();
+        const feeLid = getUseFeeWmsLayerId(system || 'river').toLowerCase();
         const feeHit = withFeat.find((r) => {
           const tn = String(r.tableName ?? '')
             .trim()
@@ -1388,9 +1500,28 @@ export default function OpenLayersMap({
           return tn === feeLid && r.features.length > 0;
         });
         if (feeHit) {
-          const hitData = feeHit.features[0]?.data;
-          const feeId = pickIdentifyField(hitData, 'id');
-          if (!feeId) {
+          const overlapOptions: {
+            value: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const seen = new Set<string>();
+          for (const feat of feeHit.features) {
+            const feeId = pickIdentifyField(feat?.data, 'id');
+            if (!feeId || seen.has(feeId)) continue;
+            seen.add(feeId);
+            const ledger =
+              pickIdentifyField(feat?.data, 'ledger_no') ||
+              pickIdentifyField(feat?.data, 'ledgerNo') ||
+              feeId;
+            overlapOptions.push({
+              value: feeId,
+              label: ledger,
+              extent3857: pickIdentifyExtent3857(feat?.data),
+            });
+          }
+          const first = overlapOptions[0];
+          if (!first) {
             if (!cancelled) {
               window.alert('클릭한 점사용료 도형의 번호를 읽을 수 없습니다.');
             }
@@ -1398,8 +1529,9 @@ export default function OpenLayersMap({
             return;
           }
           mapContext.applyUseFeeMapPickRef.current?.({
-            id: feeId,
-            extent3857: pickIdentifyExtent3857(hitData),
+            id: first.value,
+            extent3857: first.extent3857,
+            overlapOptions,
           });
           clearIdentifyIntake();
           return;
@@ -1524,7 +1656,7 @@ export default function OpenLayersMap({
     return () => {
       cancelled = true;
     };
-  }, [totalIdentifyCount, identifyIntakePopup, mapContext, searchParams, router, closePopup]);
+  }, [totalIdentifyCount, identifyIntakePopup, searchParams, router, closePopup]);
 
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
   const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);

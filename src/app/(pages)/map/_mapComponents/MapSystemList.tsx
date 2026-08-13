@@ -9,6 +9,7 @@ import { canAccessPrivateSystem, type ClientAccessSnapshot } from '@/lib/accessC
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
+import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 
 type SystemItem = {
   sys_key: string;
@@ -73,6 +74,7 @@ export function MapSystemList() {
       const current = new URLSearchParams(Array.from(searchParams.entries()));
       current.set('system', firstAllowed);
       scrubOccupationLedgerFromMapSearchParams(current, firstAllowed);
+      scrubUseFeeFromMapSearchParams(current, firstAllowed);
       router.replace(`/map?${current.toString()}`);
       return;
     }
@@ -80,6 +82,7 @@ export function MapSystemList() {
       const current = new URLSearchParams(Array.from(searchParams.entries()));
       current.set('system', firstAllowed);
       scrubOccupationLedgerFromMapSearchParams(current, firstAllowed);
+      scrubUseFeeFromMapSearchParams(current, firstAllowed);
       router.replace(`/map?${current.toString()}`);
     }
   }, [accessLoading, snapshot, systemList, systemKeyFromUrl, searchParams, router]);
@@ -100,6 +103,7 @@ export function MapSystemList() {
       current.delete('system');
     }
     scrubOccupationLedgerFromMapSearchParams(current, sysKey);
+    scrubUseFeeFromMapSearchParams(current, sysKey);
     router.push(`/map?${current.toString()}`);
   };
 

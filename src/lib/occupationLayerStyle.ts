@@ -1,7 +1,7 @@
 /**
  * 점용(울진·공통) 레이어 색.
  * - parent/facility/parcel/mgj: 울진 usage_data_as* WMS와 동일
- * - useFee: ngl_fee_list WMS(#673AB7)
+ * - useFee: water_ngl_fee_list WMS(#2196F3)
  * - 부서업무 공통점용 WMS도 같은 스타일명(usage_data_as*) 재사용
  * - 데이터조회 공통점용 기본 SLD(테이블명)는 기존 팔레트 유지
  * - parentActive: 목록 선택·도형 수정 시 벡터 강조(기존 빨간 표시)
@@ -25,11 +25,11 @@ export const OCCUPATION_LAYER_STYLE = {
     stroke: "#FBBA00",
     fillOpacity: 0.35,
   },
-  /** 점사용료 (ngl_fee_list) */
+  /** 점사용료 (water_ngl_fee_list 등) */
   useFee: {
-    fill: "#673AB7",
+    fill: "#2196F3",
     stroke: "#FFFFFF",
-    fillOpacity: 0.25,
+    fillOpacity: 0.3,
   },
   /** 필지 */
   parcel: {
