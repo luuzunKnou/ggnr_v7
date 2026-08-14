@@ -1,16 +1,16 @@
 <layer>
   <name>pub_railway_lm</name>
-  <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7fd3</id>
+  <id>LayerInfoImpl-4785472f:19ff42d5832:-6ec3</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7fff</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7fd4</id>
+    <id>FeatureTypeInfoImpl-4785472f:19ff42d5832:-6ec4</id>
   </resource>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-08-06 07:31:04.559 UTC</dateCreated>
+  <dateCreated>2026-08-14 07:32:11.432 UTC</dateCreated>
 </layer>

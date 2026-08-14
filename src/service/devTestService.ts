@@ -367,6 +367,22 @@ export async function setupGeoServerDb(params: {
   ] as const;
 
   try {
+    // 앱 필수 layer 테이블(도로점용·공통점용 9·점사용료 3·메모·영상 등) 선확보
+    let layerAppTables:
+      | { created: string[]; moved: string[]; existed: string[]; errors: string[] }
+      | undefined;
+    try {
+      const { ensureLayerAppTables } = await import('@/service/ensureLayerAppTables');
+      layerAppTables = await ensureLayerAppTables();
+    } catch (e: unknown) {
+      layerAppTables = {
+        created: [],
+        moved: [],
+        existed: [],
+        errors: [e instanceof Error ? e.message : String(e)],
+      };
+    }
+
     const wsRes = await geoserverFetch(baseUrl, `/rest/workspaces/${workspace}.json`);
     if (!wsRes.ok && wsRes.status !== 404) {
       const text = await wsRes.text();
@@ -442,6 +458,7 @@ export async function setupGeoServerDb(params: {
       datastoreName: targets.map((t) => t.name).join(','),
       datastores,
       elevationStyle,
+      layerAppTables,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

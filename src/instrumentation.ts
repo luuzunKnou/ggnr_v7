@@ -7,7 +7,7 @@
  * interval(분)은 시계 격자(예 5분→:00,:05,…)에 맞춤. (next dev에서는 5분 interval만 daily 1회로 축소)
  * - process.env DISABLE_*_SCHEDULER=1 또는 runtime.env DISABLED_SCHEDULERS=useFeeSync,kais,…
  *
- * 앱 layer 테이블: 도로점용대장·메모 등 — 없으면 CREATE, public에만 있으면 layer로 이동.
+ * 앱 layer 테이블: 도로점용대장·공통점용(9)·점사용료(3)·메모·영상 등 — 없으면 CREATE, public에만 있으면 layer로 이동.
  *
  * instrumentation은 edge/nodejs 둘 다 컴파일되므로, pg를 쓰는 스케줄러는
  * NEXT_RUNTIME === 'nodejs' 분기 안에서만 동적 import 한다.

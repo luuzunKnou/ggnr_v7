@@ -1,6 +1,8 @@
 /**
  * 서버 기동 시 앱 필수 layer 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
+ * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
+ * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
  */
@@ -14,6 +16,8 @@ type EnsureResult = {
   existed: string[];
   errors: string[];
 };
+
+const OCCUPATION_PREFIXES = ['water', 'road', 'public'] as const;
 
 async function tableExists(schema: string, table: string): Promise<'BASE TABLE' | 'VIEW' | null> {
   const res = await db.execute(
@@ -188,6 +192,187 @@ COMMENT ON TABLE layer."${t}" IS '메모';
 `;
 }
 
+function occupationLedgerMainSql(prefix: string): string {
+  const t = `${prefix}_occupationledger`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  ogc_fid serial PRIMARY KEY,
+  id text,
+  work_name text,
+  occup_place text,
+  occup_purpose text,
+  perm_start_date date,
+  perm_end_date date,
+  perm_area text,
+  permit_no text,
+  permit_date date,
+  occup_name text,
+  occup_phone text,
+  applicant_addr text,
+  manage_name text,
+  state text,
+  remark text,
+  geom geometry(MultiPolygon, 5181)
+);
+CREATE INDEX IF NOT EXISTS ${t}_geom_gix ON layer.${t} USING GIST (geom);
+CREATE INDEX IF NOT EXISTS ${t}_permit_no_idx ON layer.${t} (permit_no);
+COMMENT ON TABLE layer.${t} IS '공통 점용대장';
+`;
+}
+
+function occupationLedgerChildSql(tableName: string, comment: string): string {
+  const t = tableName.replace(/"/g, '');
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  ogc_fid serial PRIMARY KEY,
+  permit_no text,
+  id text,
+  occup_place text,
+  geom geometry(MultiPolygon, 5181)
+);
+CREATE INDEX IF NOT EXISTS ${t}_permit_no_idx ON layer.${t} (permit_no);
+CREATE INDEX IF NOT EXISTS ${t}_geom_gix ON layer.${t} USING GIST (geom);
+COMMENT ON TABLE layer.${t} IS '${comment.replace(/'/g, "''")}';
+`;
+}
+
+/** scripts/sql/ngl_fee_list.sql 과 동일 컬럼 — water|road|public 접두 */
+function nglFeeListSql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_lvy_rcvmt_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  fee_status text NOT NULL CHECK (fee_status IN ('미납', '수납')),
+  geom geometry(MultiPolygon, 5181),
+  sgb_cd text,
+  lvy_key text,
+  dpt_nm text,
+  dpt_cd text,
+  fyr text,
+  act_se_cd text,
+  rprs_txm_cd text,
+  rprs_txm_nm text,
+  lvy_no text,
+  itm_sn text,
+  pyr_no text,
+  pyr_nm text,
+  pyr_addr text,
+  lvy_ymd text,
+  frst_pid_ymd text,
+  gl_nm text,
+  gl_mng_no text,
+  gl_addr text,
+  vtlac_bank_nm1 text,
+  vr_actno1 text,
+  vtlac_bank_nm2 text,
+  vr_actno2 text,
+  vtlac_bank_nm3 text,
+  vr_actno3 text,
+  vtlac_bank_nm4 text,
+  vr_actno4 text,
+  vtlac_bank_nm5 text,
+  vr_actno5 text,
+  vtlac_bank_nm6 text,
+  vr_actno6 text,
+  vtlac_bank_nm7 text,
+  vr_actno7 text,
+  vtlac_bank_nm8 text,
+  vr_actno8 text,
+  vtlac_bank_nm9 text,
+  vr_actno9 text,
+  vtlac_bank_nm10 text,
+  vr_actno10 text,
+  vtlac_bank_nm11 text,
+  vr_actno11 text,
+  vtlac_bank_nm12 text,
+  vr_actno12 text,
+  vtlac_bank_nm13 text,
+  vr_actno13 text,
+  vtlac_bank_nm14 text,
+  vr_actno14 text,
+  vtlac_bank_nm15 text,
+  vr_actno15 text,
+  vtlac_bank_nm16 text,
+  vr_actno16 text,
+  vtlac_bank_nm17 text,
+  vr_actno17 text,
+  vtlac_bank_nm18 text,
+  vr_actno18 text,
+  vtlac_bank_nm19 text,
+  vr_actno19 text,
+  vtlac_bank_nm20 text,
+  vr_actno20 text,
+  epay_no text,
+  ledger_no text,
+  acct_itm_cd text,
+  sgb_nm text,
+  rcvmt_se_nm text,
+  szr_se_nm text,
+  pyr_se_cd text,
+  pyr_mng_no text,
+  pyr_addr_sn text,
+  pyr_stt_cd text,
+  pyr_stt_nm text,
+  zip text,
+  lotno_road_addr_se_cd text,
+  pyr_cnpc_no text,
+  pyr_mbl_cnpc_no text,
+  lvy_se_cd text,
+  last_pid_ymd text,
+  pid_af_ymd text,
+  pid_af_amt bigint,
+  frst_pct_amt bigint,
+  lvy_stt_se_nm text,
+  last_pct_amt bigint,
+  last_adtn_amt bigint,
+  last_itm_intr_amt bigint,
+  itm_se_nm text,
+  unty_lvy_data_se_nm text,
+  gl_lotno_road_addr_se_cd text,
+  gl_zip text,
+  mng_item_sn1 text,
+  mng_item_sn2 text,
+  mng_item_sn3 text,
+  mng_item_sn4 text,
+  mng_item_sn5 text,
+  mng_item_sn6 text,
+  arr_rsn_cd text,
+  arr_rsn_nm text,
+  dft_se_nm text,
+  pyr_eml_addr text,
+  auto_pay_se_cd text,
+  rdt_se_nm text,
+  rpm_szr_vhrno text,
+  unty_rprs_key text,
+  spac_biz_cd text,
+  rcvmt_sn text,
+  rcvmt_ymd text,
+  rcvmt_pct_amt bigint,
+  rcvmt_adtn_amt bigint,
+  itm_intr_amt bigint,
+  rcvmt_bank text,
+  rcvmt_ty_cd text,
+  rcvmt_ty_nm text,
+  act_ymd text,
+  pmk_ymd text,
+  rcvmt_se_cd text,
+  rcvmt_stt_se_cd text,
+  taxn_no text,
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (lvy_key, rcvmt_sn)
+);
+CREATE INDEX IF NOT EXISTS ${t}_fee_status_idx ON layer.${t} (fee_status);
+CREATE INDEX IF NOT EXISTS ${t}_geom_gix ON layer.${t} USING GIST (geom);
+CREATE INDEX IF NOT EXISTS ${t}_lvy_no_idx ON layer.${t} (lvy_no);
+CREATE INDEX IF NOT EXISTS ${t}_ledger_no_idx ON layer.${t} (ledger_no);
+COMMENT ON TABLE layer.${t} IS '점사용료 미납·수납 통합';
+`;
+}
+
 /** public→layer 이동 후 geom 컬럼·인덱스·좌표 백필 */
 async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
   const fq = 'layer.file_unit';
@@ -239,6 +424,46 @@ export async function ensureRoadUseLedgerTables(result?: EnsureResult): Promise<
   return out;
 }
 
+/** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
+export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const base = `${prefix}_occupationledger`;
+    await ensureBaseTable({
+      table: base,
+      createSql: occupationLedgerMainSql(prefix),
+      result: out,
+    });
+    await ensureBaseTable({
+      table: `${base}_jijuk`,
+      createSql: occupationLedgerChildSql(`${base}_jijuk`, '공통 점용대장 필지'),
+      result: out,
+    });
+    await ensureBaseTable({
+      table: `${base}_mgj`,
+      createSql: occupationLedgerChildSql(`${base}_mgj`, '공통 점용대장 물건지'),
+      result: out,
+    });
+  }
+  return out;
+}
+
+/** 점사용료 water|road|public_ngl_fee_list (3개) */
+export async function ensureNglFeeListTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const table = `${prefix}_ngl_fee_list`;
+    await ensureBaseTable({
+      table,
+      createSql: nglFeeListSql(table),
+      result: out,
+    });
+  }
+  return out;
+}
+
 export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -275,6 +500,8 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
   try {
     await ensureSchemaLayer();
     await ensureRoadUseLedgerTables(result);
+    await ensureOccupationLedgerTables(result);
+    await ensureNglFeeListTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
   } catch (e: unknown) {
