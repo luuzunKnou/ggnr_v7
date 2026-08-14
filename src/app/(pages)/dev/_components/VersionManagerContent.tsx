@@ -429,22 +429,24 @@ export function VersionManagerContent() {
                 ? '적용 완료 · 재시작 파이프라인 예약'
                 : '적용 완료',
             versionDetail: versionDetailRef.current,
-            applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
+            applyDetail: json.pendingSchemaConfirm
+              ? `prepare 완료 · commit 대기 ${json.appliedFiles}건`
+              : `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
             geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
             geoserverStartDetail: json.geoserver?.startMessage,
             appStopDetail: json.pendingSchemaConfirm
-              ? '스키마 안내 대기'
+              ? '스키마 안내 대기 (commit 전)'
               : json.restart?.scheduled
                 ? doneMode === 'exit'
                   ? '앱 종료 단계 완료 · process.exit 예약'
                   : '앱 종료 단계 완료 · 런처가 Next 종료'
                 : undefined,
             npmInstallDetail:
-              (json.pendingSchemaConfirm || json.restart?.scheduled) && profile === 'open'
+              json.restart?.scheduled && !json.pendingSchemaConfirm && profile === 'open'
                 ? '사전 npm install 완료'
                 : undefined,
             buildDetail:
-              json.pendingSchemaConfirm || json.restart?.scheduled
+              json.restart?.scheduled && !json.pendingSchemaConfirm
                 ? '사전 빌드 완료'
                 : undefined,
             appStartDetail:
@@ -453,7 +455,7 @@ export function VersionManagerContent() {
                 : json.restart?.message,
             restartScheduled: Boolean(json.restart?.scheduled),
             schemaWaiting: Boolean(json.pendingSchemaConfirm),
-            preRestartCompleted: Boolean(json.pendingSchemaConfirm) || doneMode !== 'none',
+            preRestartCompleted: Boolean(json.restart?.scheduled) && !json.pendingSchemaConfirm,
             geoserverStartOk: !(
               json.geoserver?.started === false && !json.geoserver?.deferredStart
             ),
@@ -465,7 +467,7 @@ export function VersionManagerContent() {
         message: json.restart?.scheduled
           ? '적용 완료. 스키마 변경 안내 확인 후 재기동합니다…'
           : json.pendingSchemaConfirm
-            ? '적용 완료. 스키마 변경 안내에서 진행 또는 중단을 선택하세요…'
+            ? 'prepare 완료. 스키마 안내에서 [진행] 시 commit·재기동…'
             : '최신 소스 적용 완료. 스키마 변경 안내…',
         pct: 100,
         logs: logRef.current,
