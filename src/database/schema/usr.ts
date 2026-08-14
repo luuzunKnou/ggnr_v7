@@ -22,6 +22,7 @@ export const usr = pgTable('usr', {
   usrReqTime: timestamp('usr_req_time', { mode: 'string' }),
   usrOkTime: timestamp('usr_ok_time', { mode: 'string' }),
   usrCancleTime: timestamp('usr_cancle_time', { mode: 'string' }),
+  usrRejectReason: varchar('usr_reject_reason'),
 });
 
 /** 테이블 코멘트 (동기화·DB COMMENT ON TABLE 에 사용) */
@@ -44,6 +45,7 @@ export const usrColumnComments: Record<string, string> = {
   usr_req_time: '신청시간',
   usr_ok_time: '승인시간',
   usr_cancle_time: '반려시간',
+  usr_reject_reason: '가입 반려사유',
 };
 
 export type Usr = typeof usr.$inferSelect;
