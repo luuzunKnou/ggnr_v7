@@ -919,6 +919,7 @@ export async function createOrUpdateGeoServerLayer(params: {
     if (!dsOk.success) return { success: false as const, error: dsOk.error };
 
     // 재생성: 기존 레이어·FeatureType 삭제 (없으면 404 무시)
+    // 스키마 이동 후에는 반대편 datastore에 FeatureType이 남을 수 있어 양쪽 모두 삭제
     const delLayerRes = await geoserverFetch(
       baseUrl,
       `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}`,
@@ -929,14 +930,19 @@ export async function createOrUpdateGeoServerLayer(params: {
       return { success: false as const, error: `레이어 삭제 실패: ${delLayerRes.status} ${text}` };
     }
 
-    const delFtRes = await geoserverFetch(
-      baseUrl,
-      `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(layerName)}`,
-      { method: 'DELETE' }
-    );
-    if (!delFtRes.ok && delFtRes.status !== 404) {
-      const text = await delFtRes.text();
-      return { success: false as const, error: `FeatureType 삭제 실패: ${delFtRes.status} ${text}` };
+    for (const ds of ['postgres_layer', 'postgres_public_layer'] as const) {
+      const delFtRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${ds}/featuretypes/${encodeURIComponent(layerName)}`,
+        { method: 'DELETE' }
+      );
+      if (!delFtRes.ok && delFtRes.status !== 404) {
+        const text = await delFtRes.text();
+        return {
+          success: false as const,
+          error: `FeatureType 삭제 실패(${ds}): ${delFtRes.status} ${text}`,
+        };
+      }
     }
 
     const ftBody = {
@@ -3001,6 +3007,12 @@ function isShpSyncTempTableName(tableName: string): boolean {
   return tableName.startsWith('_sync_');
 }
 
+/** 스키마 재생성 임시·백업 테이블(_rctmp_*) — 오류수정 목록에 올리지 않음 */
+function isShpSchemaRecreateTempTableName(tableName: string): boolean {
+  const n = String(tableName ?? '').trim().toLowerCase();
+  return n.startsWith('_rctmp_') || n.endsWith('_rctmp');
+}
+
 function normalizeLayerSchema(value: unknown): 'layer' | 'public_layer' {
   return String(value ?? '').trim() === 'public_layer' ? 'public_layer' : 'layer';
 }
@@ -3150,6 +3162,9 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
       const schema = t.schema === 'public_layer' ? 'public_layer' : 'layer';
       const tableName = String(t.table ?? '').trim();
       if (!tableName) continue;
+
+      // 스키마 재생성 임시 테이블 — 오류수정에 노출하지 않음
+      if (isShpSchemaRecreateTempTableName(tableName)) continue;
 
       const defineKey = `${schema}:${tableName.toLowerCase()}`;
 

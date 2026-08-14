@@ -626,9 +626,10 @@ function equalsTableName(a: string, b: string): boolean {
 
 function findLayerTableByName(
   tables: Array<{ schema: string; table: string }>,
-  wanted: string
+  wanted: string,
+  schema: string = 'layer'
 ): { schema: string; table: string } | null {
-  return tables.find((t) => t.schema === 'layer' && equalsTableName(t.table, wanted)) ?? null;
+  return tables.find((t) => t.schema === schema && equalsTableName(t.table, wanted)) ?? null;
 }
 
 /** tables.json에 이미 등록된 스키마가 있으면 그대로 사용(기본 layer). 레이어 설정(Layer) 탭에서 지정한 스키마를 SHP 업로드 파이프라인이 존중하도록 함. */
@@ -1226,13 +1227,20 @@ export async function createTableFromShp(params: {
   sourceSrsOverride?: string;
   /** 업로드 모달에서 선택한 스키마. 없으면 defineLayer 기준 */
   dbSchema?: 'layer' | 'public_layer';
+  /** 테이블명 강제 (스키마 재생성용 임시 테이블 등) */
+  tableNameOverride?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
-  const tableName = safeTableName(basename);
+  const override = String(params.tableNameOverride ?? '').trim();
+  const tableName = override
+    ? override.toLowerCase().startsWith('_rctmp_')
+      ? `_rctmp_${safeTableName(override.slice('_rctmp_'.length))}`
+      : safeTableName(override)
+    : safeTableName(basename);
 
   try {
     const stat = await fs.stat(absolutePath);
@@ -1355,7 +1363,11 @@ export async function createTableFromShp(params: {
   await ensureLayerGeomColumnUnrestricted(dbSchema, tableName);
 
   // 업로드에서 스키마를 명시했으면 defineLayer에 반영 (신규·기존 빈 값·강제 갱신)
-  if (params.dbSchema === 'public_layer' || params.dbSchema === 'layer') {
+  // 임시 테이블명(override)으로 만들 때는 define에 올리지 않음 — 교체 후 호출측에서 처리
+  if (
+    !override &&
+    (params.dbSchema === 'public_layer' || params.dbSchema === 'layer')
+  ) {
     try {
       const geometryType = await getShpGeometryType(absolutePath).catch(() => null);
       await ensureDefineLayerEntry(tableName, geometryType ?? 'POLYGON', undefined, params.dbSchema, true);
@@ -1473,11 +1485,12 @@ function ensureDefineLayerEntry(
 
 function mapDataTypeToDefineFieldType(dataType: string): string {
   const t = dataType.toLowerCase();
-  if (/int|smallint|bigint|serial/.test(t)) return 'integer';
-  if (/float|double|real|numeric|decimal/.test(t)) return 'number';
-  if (/date|time/.test(t)) return 'date';
-  if (/geom|geography/.test(t)) return 'text';
-  return 'text';
+  if (/int|smallint|bigint|serial/.test(t)) return 'NUMBER';
+  if (/float|double|real|numeric|decimal/.test(t)) return 'NUMBER';
+  if (/date|time/.test(t)) return 'DATE';
+  if (/geom|geography/.test(t)) return 'GEOMETRY';
+  if (/bool/.test(t)) return 'BOOLEAN';
+  return 'TEXT';
 }
 
 function buildDefaultField(col: { name: string; dataType: string }, idx: number): Record<string, unknown> {
@@ -2439,6 +2452,14 @@ export type CompareResult = {
 
 export type ShpSchemaField = { name: string; ogrType: string };
 
+/** 구조 검증 시 «DB 유지»로 통과시킬 항목 (클라이언트 세션 보관 후 재검증에 전달) */
+export type ShpSchemaWaivers = {
+  /** 타입 불일치에서 DB 타입 유지로 선택한 필드명 */
+  keepDbTypes?: string[];
+  /** DB에만 있는 필드를 유지(삭제하지 않음)로 인정 */
+  keepDbOnlyColumns?: boolean;
+};
+
 export type ShpSchemaCompareResult = {
   success: boolean;
   ok: boolean;
@@ -2505,6 +2526,26 @@ function normalizePgFieldType(raw: string): string {
   return u;
 }
 
+/**
+ * SHP↔DB 타입 호환.
+ * ogr2ogr는 DBF Integer를 종종 PostgreSQL numeric 으로 만들기 때문에
+ * Integer vs numeric 은 불일치로 보지 않는다.
+ */
+function shpDbFieldTypesCompatible(shpType: string, dbType: string): boolean {
+  const shpNorm = normalizeOgrFieldType(shpType);
+  const dbNorm = normalizePgFieldType(dbType);
+  if (shpNorm === dbNorm) return true;
+  if (shpNorm === 'geometry' || dbNorm === 'geometry') return true;
+
+  const dbRaw = dbType.trim().toLowerCase();
+  const dbIsNumeric = dbRaw.includes('numeric') || dbRaw.includes('decimal');
+  // SHP Integer(·64) ↔ DB numeric : ogr2ogr 관례
+  if (shpNorm === 'integer' && (dbNorm === 'integer' || dbIsNumeric)) return true;
+  // SHP Real ↔ DB numeric/float
+  if (shpNorm === 'float' && (dbNorm === 'float' || dbIsNumeric)) return true;
+  return false;
+}
+
 function parseShpFieldsFromOgrinfoJson(stdout: string): ShpSchemaField[] | null {
   try {
     const parsed = JSON.parse(stdout) as {
@@ -2556,14 +2597,23 @@ async function getShpAttributeFields(absoluteShpPath: string): Promise<ShpSchema
 }
 
 /**
- * SHP 속성 필드 vs 기존 layer 테이블 컬럼 구성·타입 비교.
+ * SHP 속성 필드 vs 기존 테이블 컬럼 구성·타입 비교.
  * 테이블이 없으면 isNew=true, ok=true.
+ * waivers: DB 타입 유지·DB 전용 컬럼 유지로 통과시킨 항목.
  */
 export async function compareShpSchemaWithTable(params: {
   pathOrResult: string;
+  dbSchema?: 'layer' | 'public_layer';
+  waivers?: ShpSchemaWaivers;
 }): Promise<ShpSchemaCompareResult> {
   const pathOrResult = params?.pathOrResult?.trim();
   const sourceFile = pathOrResult ? path.basename(pathOrResult) : '';
+  const dbSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer' ? params.dbSchema : 'layer';
+  const keepDbTypeSet = new Set(
+    (params.waivers?.keepDbTypes ?? []).map((n) => normalizeFieldName(n)).filter(Boolean)
+  );
+  const keepDbOnly = params.waivers?.keepDbOnlyColumns === true;
   const fail = (error: string, partial?: Partial<ShpSchemaCompareResult>): ShpSchemaCompareResult => ({
     success: false,
     ok: false,
@@ -2601,7 +2651,7 @@ export async function compareShpSchemaWithTable(params: {
 
   const listRes = await getLayerTableList();
   const matched = listRes.success && listRes.tables
-    ? findLayerTableByName(listRes.tables, tableName)
+    ? findLayerTableByName(listRes.tables, tableName, dbSchema)
     : null;
 
   if (!matched) {
@@ -2621,7 +2671,7 @@ export async function compareShpSchemaWithTable(params: {
     };
   }
 
-  const colRes = await getTableColumnInfo({ schema: 'layer', table: tableName });
+  const colRes = await getTableColumnInfo({ schema: matched.schema, table: matched.table });
   if (!colRes.success) {
     return fail(colRes.error ?? 'DB 컬럼 정보를 가져올 수 없습니다.', { tableName, shpFields });
   }
@@ -2641,9 +2691,8 @@ export async function compareShpSchemaWithTable(params: {
       missingInDb.push(sf.name);
       continue;
     }
-    const shpNorm = normalizeOgrFieldType(sf.ogrType);
-    const dbNorm = normalizePgFieldType(dbCol.dataType);
-    if (shpNorm !== dbNorm && shpNorm !== 'geometry' && dbNorm !== 'geometry') {
+    if (keepDbTypeSet.has(key)) continue;
+    if (!shpDbFieldTypesCompatible(sf.ogrType, dbCol.dataType)) {
       typeMismatches.push({ name: sf.name, shpType: sf.ogrType, dbType: dbCol.dataType });
     }
   }
@@ -2654,7 +2703,8 @@ export async function compareShpSchemaWithTable(params: {
     }
   }
 
-  const ok = missingInDb.length === 0 && missingInShp.length === 0 && typeMismatches.length === 0;
+  const missingInShpForOk = keepDbOnly ? [] : missingInShp;
+  const ok = missingInDb.length === 0 && missingInShpForOk.length === 0 && typeMismatches.length === 0;
   const message = ok ? '일치' : buildShpSchemaMismatchMessage({ tableName, missingInDb, missingInShp, typeMismatches });
 
   return {
@@ -2710,14 +2760,505 @@ function buildShpSchemaMismatchMessage(params: {
 /** 폴더 내 .shp 파일별 스키마 검증 일괄 실행 */
 export async function compareShpFolderSchema(params?: {
   relativePath?: string;
+  dbSchema?: 'layer' | 'public_layer';
+  /** sourceFile(소문자) → 유지 선택 */
+  waiversByFile?: Record<string, ShpSchemaWaivers>;
 }): Promise<{ success: boolean; results: ShpSchemaCompareResult[]; error?: string }> {
   const statusRes = await getShpStatusList(params);
   const results: ShpSchemaCompareResult[] = [];
+  const waiversByFile = params?.waiversByFile ?? {};
   for (const row of statusRes.rows) {
-    results.push(await compareShpSchemaWithTable({ pathOrResult: row.pathOrResult }));
+    const key = row.sourceFile.toLowerCase();
+    results.push(
+      await compareShpSchemaWithTable({
+        pathOrResult: row.pathOrResult,
+        dbSchema: params?.dbSchema,
+        waivers: waiversByFile[key],
+      })
+    );
   }
   const allOk = results.every((r) => r.success && (r.ok || r.isNew));
   return { success: allOk, results };
+}
+
+function quotePgIdent(ident: string): string {
+  return `"${String(ident).replace(/"/g, '""')}"`;
+}
+
+function ogrTypeToPgType(ogrType: string): string {
+  const norm = normalizeOgrFieldType(ogrType);
+  if (norm === 'integer') return 'integer';
+  if (norm === 'float') return 'float8';
+  if (norm === 'datetime') return 'timestamp';
+  if (norm === 'boolean') return 'boolean';
+  return 'text';
+}
+
+function backupTableSuffixNow(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}${get('month')}${get('day')}_${get('hour')}${get('minute')}`;
+}
+
+function pgBackupObjectNewName(oldName: string, fromPrefix: string, toPrefix: string): string {
+  let newName = oldName.startsWith(fromPrefix)
+    ? `${toPrefix}${oldName.slice(fromPrefix.length)}`
+    : `${toPrefix}_${oldName}`;
+  if (newName.length > 63) newName = newName.slice(0, 63);
+  return newName;
+}
+
+async function dropLayerTableIfExists(schema: string, tableName: string): Promise<void> {
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  await db.execute(
+    sql.raw(
+      `DROP TABLE IF EXISTS ${quotePgIdent(schema)}.${quotePgIdent(tableName)} CASCADE`
+    )
+  );
+}
+
+/**
+ * 테이블 RENAME 후 시퀀스·인덱스·제약 이름에 옛 테이블명이 남아 충돌하지 않도록
+ * 대상 접두사로 함께 변경. 실패 시 error 반환(무시하지 않음).
+ */
+async function backupRenameLayerTable(params: {
+  schema: string;
+  tableName: string;
+  backupName: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const schema = params.schema.trim();
+  const tableName = params.tableName.trim();
+  const backupName = params.backupName.trim();
+  if (!schema || !tableName || !backupName) {
+    return { success: false, error: 'schema·tableName·backupName이 필요합니다.' };
+  }
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(schema) || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) {
+    return { success: false, error: '스키마·테이블명 형식이 올바르지 않습니다.' };
+  }
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(backupName)) {
+    return { success: false, error: '백업 테이블명 형식이 올바르지 않습니다.' };
+  }
+
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const sch = quotePgIdent(schema);
+  const tbl = quotePgIdent(tableName);
+  const bak = quotePgIdent(backupName);
+  const schemaLit = schema.replace(/'/g, "''");
+  const tableLit = tableName.replace(/'/g, "''");
+  const backupLit = backupName.replace(/'/g, "''");
+
+  try {
+    const exists = await db.execute(
+      sql.raw(
+        `SELECT 1 AS ok FROM information_schema.tables
+         WHERE table_schema = '${schemaLit}'
+           AND table_name = '${tableLit}'
+         LIMIT 1`
+      )
+    );
+    if ((exists.rows?.length ?? 0) === 0) {
+      return { success: false, error: `${schema}.${tableName} 테이블이 없습니다.` };
+    }
+
+    const bakExists = await db.execute(
+      sql.raw(
+        `SELECT 1 AS ok FROM information_schema.tables
+         WHERE table_schema = '${schemaLit}'
+           AND table_name = '${backupLit}'
+         LIMIT 1`
+      )
+    );
+    if ((bakExists.rows?.length ?? 0) > 0) {
+      return { success: false, error: `대상 테이블 ${schema}.${backupName}이(가) 이미 있습니다.` };
+    }
+
+    await db.execute(sql.raw(`ALTER TABLE ${sch}.${tbl} RENAME TO ${bak}`));
+
+    const renameErrors: string[] = [];
+
+    const idxRes = await db.execute(
+      sql.raw(
+        `SELECT c.relname AS name
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_index i ON i.indexrelid = c.oid
+         JOIN pg_class t ON t.oid = i.indrelid
+         WHERE n.nspname = '${schemaLit}'
+           AND t.relname = '${backupLit}'
+           AND c.relkind = 'i'`
+      )
+    );
+    for (const row of (idxRes.rows ?? []) as Array<{ name?: string }>) {
+      const oldName = String(row.name ?? '').trim();
+      if (!oldName) continue;
+      const newName = pgBackupObjectNewName(oldName, tableName, backupName);
+      if (newName === oldName) continue;
+      try {
+        await db.execute(
+          sql.raw(`ALTER INDEX ${sch}.${quotePgIdent(oldName)} RENAME TO ${quotePgIdent(newName)}`)
+        );
+      } catch (e: unknown) {
+        renameErrors.push(
+          `인덱스 ${oldName}: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+    }
+
+    const conRes = await db.execute(
+      sql.raw(
+        `SELECT c.conname AS name
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         WHERE n.nspname = '${schemaLit}'
+           AND t.relname = '${backupLit}'`
+      )
+    );
+    for (const row of (conRes.rows ?? []) as Array<{ name?: string }>) {
+      const oldName = String(row.name ?? '').trim();
+      if (!oldName) continue;
+      const newName = pgBackupObjectNewName(oldName, tableName, backupName);
+      if (newName === oldName) continue;
+      try {
+        await db.execute(
+          sql.raw(
+            `ALTER TABLE ${sch}.${bak} RENAME CONSTRAINT ${quotePgIdent(oldName)} TO ${quotePgIdent(newName)}`
+          )
+        );
+      } catch (e: unknown) {
+        // PK 인덱스를 먼저 바꾼 경우 제약 이름이 이미 바뀌었을 수 있음
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/does not exist/i.test(msg)) {
+          renameErrors.push(`제약 ${oldName}: ${msg}`);
+        }
+      }
+    }
+
+    const seqRes = await db.execute(
+      sql.raw(
+        `SELECT seq.relname AS name
+         FROM pg_class seq
+         JOIN pg_namespace n ON n.oid = seq.relnamespace
+         LEFT JOIN pg_depend d ON d.objid = seq.oid AND d.deptype IN ('a', 'i')
+         LEFT JOIN pg_class t ON t.oid = d.refobjid
+         WHERE seq.relkind = 'S'
+           AND n.nspname = '${schemaLit}'
+           AND (
+             t.relname = '${backupLit}'
+             OR seq.relname = '${tableLit}'
+             OR seq.relname LIKE '${tableLit}\\_%' ESCAPE '\\'
+           )`
+      )
+    );
+    const seenSeq = new Set<string>();
+    for (const row of (seqRes.rows ?? []) as Array<{ name?: string }>) {
+      const oldName = String(row.name ?? '').trim();
+      if (!oldName || seenSeq.has(oldName)) continue;
+      seenSeq.add(oldName);
+      const newName = pgBackupObjectNewName(oldName, tableName, backupName);
+      if (newName === oldName) continue;
+      try {
+        await db.execute(
+          sql.raw(`ALTER SEQUENCE ${sch}.${quotePgIdent(oldName)} RENAME TO ${quotePgIdent(newName)}`)
+        );
+      } catch (e: unknown) {
+        renameErrors.push(
+          `시퀀스 ${oldName}: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+    }
+
+    if (renameErrors.length > 0) {
+      return {
+        success: false,
+        error: `테이블은 ${backupName}으로 바꿨으나 관련 객체 이름 변경 실패: ${renameErrors.join(' / ')}`,
+      };
+    }
+
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function logShpSchemaResolveHistory(params: {
+  tableName: string;
+  pathOrResult?: string;
+  contents: string;
+  createUser?: string | null;
+}): Promise<{ success: boolean; lhKey?: number; error?: string }> {
+  try {
+    const { createLayerHistory, createLayerDetailHistoryBatch } = await import('./layerHistoryService');
+    const hist = await createLayerHistory({
+      contents: 'SHP 스키마 해소',
+      successCount: 1,
+      failCount: 0,
+      createUser: params.createUser ?? null,
+    });
+    if (!hist.success || hist.lhKey == null) {
+      return { success: false, error: hist.error ?? '이력 생성 실패' };
+    }
+    const detail = await createLayerDetailHistoryBatch({
+      lhKey: hist.lhKey,
+      details: [
+        {
+          name: params.tableName,
+          type: '스키마해소',
+          contents: params.contents.slice(0, 2000),
+          result: '성공',
+          shpPath: params.pathOrResult,
+        },
+      ],
+    });
+    if (!detail.success) return { success: false, error: detail.error, lhKey: hist.lhKey };
+    return { success: true, lhKey: hist.lhKey };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 스키마 불일치 해소.
+ * - adjust: 타입(SHP 선택 시 ALTER)·SHP만 있는 필드 ADD COLUMN·DB만 있는 필드는 유지(+waiver)
+ * - recreate: 테이블·관련 객체 이름을 `_yyyyMMdd_HHmm`으로 바꾼 뒤 SHP로 신규 생성
+ * DROP COLUMN / DROP TABLE 은 수행하지 않음.
+ */
+export async function resolveShpSchemaMismatch(params: {
+  pathOrResult: string;
+  dbSchema?: 'layer' | 'public_layer';
+  mode: 'adjust' | 'recreate';
+  /** mode=adjust: 타입 불일치 컬럼별 선택 */
+  typeChoices?: Array<{ name: string; prefer: 'db' | 'shp' }>;
+  createUser?: string | null;
+  sourceSrsOverride?: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  backupTableName?: string;
+  waivers?: ShpSchemaWaivers;
+  log?: string[];
+  compare?: ShpSchemaCompareResult;
+}> {
+  const pathOrResult = params?.pathOrResult?.trim();
+  if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+  const mode = params.mode === 'recreate' ? 'recreate' : 'adjust';
+  const dbSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer' ? params.dbSchema : 'layer';
+
+  const before = await compareShpSchemaWithTable({ pathOrResult, dbSchema });
+  if (!before.success) return { success: false, error: before.error ?? '구조 비교 실패' };
+  if (before.isNew) {
+    return { success: false, error: '신규 레이어는 스키마 해소가 필요하지 않습니다.' };
+  }
+
+  const tableName = before.tableName || safeTableName(path.basename(pathOrResult, '.shp'));
+  const log: string[] = [];
+
+  if (mode === 'recreate') {
+    const rctmpPrefix = '_rctmp_';
+    const suffix = backupTableSuffixNow();
+    // 백업: _rctmp_{table}_{yyyyMMdd}_{HHmm} — 오류수정에서 제외·수동 정리 대상
+    let backupName = `${rctmpPrefix}${tableName}_${suffix}`;
+    if (backupName.length > 63) {
+      const maxTableLen = Math.max(1, 63 - rctmpPrefix.length - 1 - suffix.length);
+      backupName = `${rctmpPrefix}${tableName.slice(0, maxTableLen)}_${suffix}`;
+    }
+    // 교체용 임시: _rctmp_{table} (백업과 구분 — 날짜 접미사 없음)
+    let tmpName = `${rctmpPrefix}${tableName}`;
+    if (tmpName.length > 63) {
+      tmpName = `${rctmpPrefix}${tableName.slice(0, Math.max(1, 63 - rctmpPrefix.length))}`;
+    }
+    // 임시명이 백업 접두와 겹치지 않도록: 백업은 항상 _{suffix} 가 붙음
+    if (tmpName === backupName) {
+      tmpName = `${rctmpPrefix}${tableName.slice(0, Math.max(1, 63 - rctmpPrefix.length - 4))}_new`;
+    }
+
+    try {
+      await dropLayerTableIfExists(dbSchema, tmpName);
+    } catch {
+      /* ignore */
+    }
+
+    const created = await createTableFromShp({
+      pathOrResult,
+      dbSchema,
+      sourceSrsOverride: params.sourceSrsOverride,
+      tableNameOverride: tmpName,
+    });
+    if (!created.success) {
+      try {
+        await dropLayerTableIfExists(dbSchema, tmpName);
+      } catch {
+        /* ignore */
+      }
+      return {
+        success: false,
+        error: created.error ?? 'SHP로 임시 테이블 생성에 실패했습니다.',
+        log,
+      };
+    }
+    log.push(`SHP로 임시 테이블 ${dbSchema}.${tmpName} 생성`);
+
+    const renamed = await backupRenameLayerTable({
+      schema: dbSchema,
+      tableName,
+      backupName,
+    });
+    if (!renamed.success) {
+      try {
+        await dropLayerTableIfExists(dbSchema, tmpName);
+      } catch {
+        /* ignore */
+      }
+      return { success: false, error: renamed.error, log };
+    }
+    log.push(`기존 테이블 ${dbSchema}.${tableName} → ${backupName} (관련 객체 이름 변경)`);
+
+    const promoted = await backupRenameLayerTable({
+      schema: dbSchema,
+      tableName: tmpName,
+      backupName: tableName,
+    });
+    if (!promoted.success) {
+      // 원본명 복구 시도
+      const restored = await backupRenameLayerTable({
+        schema: dbSchema,
+        tableName: backupName,
+        backupName: tableName,
+      });
+      try {
+        await dropLayerTableIfExists(dbSchema, tmpName);
+      } catch {
+        /* ignore */
+      }
+      return {
+        success: false,
+        error: `${promoted.error}${restored.success ? '' : ` / 원본 복구 실패: ${restored.error}`}`,
+        backupTableName: restored.success ? undefined : backupName,
+        log,
+      };
+    }
+    log.push(`임시 테이블 ${tmpName} → ${tableName} 로 교체`);
+
+    try {
+      const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+      const geometryType = await getShpGeometryType(absolutePath).catch(() => null);
+      await ensureDefineLayerEntry(tableName, geometryType ?? 'POLYGON', undefined, dbSchema, true);
+    } catch {
+      /* define 반영 실패해도 테이블 교체는 유지 */
+    }
+
+    const contents = log.join('\n');
+    await logShpSchemaResolveHistory({
+      tableName,
+      pathOrResult,
+      contents,
+      createUser: params.createUser,
+    });
+
+    const compare = await compareShpSchemaWithTable({ pathOrResult, dbSchema });
+    if (!compare.success || (!compare.ok && !compare.isNew)) {
+      return {
+        success: false,
+        error:
+          compare.error ??
+          compare.message ??
+          '테이블은 교체됐지만 구조 검증이 여전히 실패합니다.',
+        backupTableName: backupName,
+        waivers: {},
+        log,
+        compare,
+      };
+    }
+    return {
+      success: true,
+      backupTableName: backupName,
+      waivers: {},
+      log,
+      compare,
+    };
+  }
+
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const fq = `${quotePgIdent(dbSchema)}.${quotePgIdent(tableName)}`;
+  const shpByName = new Map(before.shpFields.map((f) => [normalizeFieldName(f.name), f]));
+  const keepDbTypes: string[] = [];
+
+  for (const choice of params.typeChoices ?? []) {
+    const name = String(choice.name ?? '').trim();
+    if (!name) continue;
+    const key = normalizeFieldName(name);
+    const mismatch = before.typeMismatches.find((t) => normalizeFieldName(t.name) === key);
+    if (!mismatch) continue;
+    if (choice.prefer === 'db') {
+      keepDbTypes.push(mismatch.name);
+      log.push(`${mismatch.name}: DB 타입 유지 (${mismatch.dbType})`);
+      continue;
+    }
+    const shpField = shpByName.get(key);
+    const pgType = ogrTypeToPgType(shpField?.ogrType ?? mismatch.shpType);
+    const col = quotePgIdent(mismatch.name);
+    try {
+      await db.execute(
+        sql.raw(
+          `ALTER TABLE ${fq} ALTER COLUMN ${col} TYPE ${pgType} USING (${col})::${pgType}`
+        )
+      );
+      log.push(`${mismatch.name}: DB 타입 ${mismatch.dbType} → ${pgType} (SHP ${mismatch.shpType})`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false, error: `${mismatch.name} 타입 변경 실패: ${msg}`, log };
+    }
+  }
+
+  for (const fieldName of before.missingInDb) {
+    const shpField = shpByName.get(normalizeFieldName(fieldName));
+    const pgType = ogrTypeToPgType(shpField?.ogrType ?? 'String');
+    const col = quotePgIdent(fieldName);
+    try {
+      await db.execute(sql.raw(`ALTER TABLE ${fq} ADD COLUMN IF NOT EXISTS ${col} ${pgType}`));
+      log.push(`${fieldName}: SHP에만 있어 DB 컬럼 추가 (${pgType})`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false, error: `${fieldName} 컬럼 추가 실패: ${msg}`, log };
+    }
+  }
+
+  if (before.missingInShp.length > 0) {
+    log.push(
+      `DB에만 있는 필드 유지(삭제 안 함): ${before.missingInShp.join(', ')}`
+    );
+  }
+
+  const waivers: ShpSchemaWaivers = {
+    keepDbTypes,
+    keepDbOnlyColumns: before.missingInShp.length > 0,
+  };
+
+  if (log.length === 0) {
+    log.push('변경 사항 없음');
+  }
+
+  await logShpSchemaResolveHistory({
+    tableName,
+    pathOrResult,
+    contents: log.join('\n'),
+    createUser: params.createUser,
+  });
+
+  const compare = await compareShpSchemaWithTable({ pathOrResult, dbSchema, waivers });
+  return { success: true, waivers, log, compare };
 }
 
 type SyncColPair = { db: string; sync: string };

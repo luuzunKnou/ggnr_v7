@@ -21,6 +21,11 @@ import { SyncDetailModal } from './SyncDetailModal';
 import { isShpSyncDetailModalTarget } from './shpModalLayers';
 import { requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ShpCrsCandidateModal, type ShpCrsCandidate } from './ShpCrsCandidateModal';
+import {
+  ShpSchemaResolveModal,
+  type SchemaResolveApplyInput,
+  type SchemaResolvePayload,
+} from './ShpSchemaResolveModal';
 import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared';
 import { LayerAttrManager } from '../LayerAttrManager';
 import * as XLSX from 'xlsx';
@@ -42,6 +47,13 @@ type LayerRow = {
   modified?: string;
   schemaStatus?: 'pending' | 'checking' | 'new' | 'ok' | 'mismatch' | 'error';
   schemaDetail?: string;
+  /** 구조 불일치 상세 — 해소 모달용 */
+  schemaCompare?: SchemaResolvePayload;
+  /** DB 타입 유지·DB 전용 컬럼 유지 등 재검증 시 전달 */
+  schemaWaivers?: {
+    keepDbTypes?: string[];
+    keepDbOnlyColumns?: boolean;
+  };
   epsg?: number | null;
   epsgSource?: EpsgSource;
   /** 자동 탐지 시도가 끝났는지(성공/실패 무관). epsg가 null이어도 이 값이 true면 더 이상 로딩 중이 아니라 수동 입력 대기 상태다. */
@@ -499,6 +511,10 @@ export function ShpWizardModal({
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadFileName, setUploadFileName] = useState('');
   const [schemaChecking, setSchemaChecking] = useState(false);
+  const [schemaResolveOpen, setSchemaResolveOpen] = useState(false);
+  const [schemaResolvePayload, setSchemaResolvePayload] = useState<SchemaResolvePayload | null>(null);
+  const [schemaResolveBusy, setSchemaResolveBusy] = useState(false);
+  const [schemaResolveError, setSchemaResolveError] = useState<string | null>(null);
   const [stepBusy, setStepBusy] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -1204,23 +1220,41 @@ export function ShpWizardModal({
 
   const runSchemaValidation = useCallback(async (relPath: string) => {
     setSchemaChecking(true);
-    setLayers((prev) =>
-      prev.map((l) => ({ ...l, schemaStatus: 'checking' as const, schemaDetail: undefined }))
-    );
+    const waiversByFile: Record<string, { keepDbTypes?: string[]; keepDbOnlyColumns?: boolean }> = {};
+    setLayers((prev) => {
+      for (const l of prev) {
+        if (l.schemaWaivers) waiversByFile[l.name.toLowerCase()] = l.schemaWaivers;
+      }
+      return prev.map((l) => ({
+        ...l,
+        schemaStatus: 'checking' as const,
+        schemaDetail: undefined,
+        schemaCompare: undefined,
+      }));
+    });
     try {
       const res = await call('', 'POST', {
         service: 'shpUploadService',
         action: 'compareShpFolderSchema',
-        params: { relativePath: relPath },
+        params: {
+          relativePath: relPath,
+          dbSchema: targetDbSchema,
+          waiversByFile,
+        },
       });
       const d = res?.data ?? res;
       const results: Array<{
         sourceFile: string;
+        pathOrResult?: string;
+        tableName?: string;
         ok: boolean;
         isNew: boolean;
         message?: string;
         error?: string;
         success?: boolean;
+        missingInDb?: string[];
+        missingInShp?: string[];
+        typeMismatches?: Array<{ name: string; shpType: string; dbType: string }>;
       }> = d?.results ?? [];
 
       const byFile = new Map(results.map((r) => [r.sourceFile.toLowerCase(), r]));
@@ -1230,20 +1264,55 @@ export function ShpWizardModal({
         prev.map((l) => {
           const r = byFile.get(l.name.toLowerCase());
           if (!r) {
-            return { ...l, schemaStatus: 'error' as const, schemaDetail: '검증 결과 없음' };
+            return {
+              ...l,
+              schemaStatus: 'error' as const,
+              schemaDetail: '검증 결과 없음',
+              schemaCompare: undefined,
+            };
           }
           if (!r.success && r.error) {
             hasMismatch = true;
-            return { ...l, schemaStatus: 'error' as const, schemaDetail: r.error };
+            return {
+              ...l,
+              schemaStatus: 'error' as const,
+              schemaDetail: r.error,
+              schemaCompare: undefined,
+            };
           }
           if (r.isNew) {
-            return { ...l, schemaStatus: 'new' as const, schemaDetail: '신규' };
+            return {
+              ...l,
+              schemaStatus: 'new' as const,
+              schemaDetail: '신규',
+              schemaCompare: undefined,
+              schemaWaivers: undefined,
+            };
           }
           if (r.ok) {
-            return { ...l, schemaStatus: 'ok' as const, schemaDetail: '구조 일치' };
+            return {
+              ...l,
+              schemaStatus: 'ok' as const,
+              schemaDetail: '구조 일치',
+              schemaCompare: undefined,
+            };
           }
           hasMismatch = true;
-          return { ...l, schemaStatus: 'mismatch' as const, schemaDetail: r.message ?? '구조 불일치' };
+          const compare: SchemaResolvePayload = {
+            sourceFile: r.sourceFile,
+            pathOrResult: r.pathOrResult ?? '',
+            tableName: r.tableName ?? '',
+            missingInDb: r.missingInDb ?? [],
+            missingInShp: r.missingInShp ?? [],
+            typeMismatches: r.typeMismatches ?? [],
+            message: r.message,
+          };
+          return {
+            ...l,
+            schemaStatus: 'mismatch' as const,
+            schemaDetail: r.message ?? '구조 불일치',
+            schemaCompare: compare,
+          };
         })
       );
 
@@ -1256,24 +1325,110 @@ export function ShpWizardModal({
       );
 
       if (hasMismatch) {
-        setLayersError('일부 레이어의 SHP 파일과 DB 테이블 구조가 맞지 않습니다. 비고 열을 확인한 뒤 SHP 또는 DB를 수정하고 다시 선택하세요.');
+        setLayersError(
+          '일부 레이어의 SHP 파일과 DB 테이블 구조가 맞지 않습니다. 비고를 클릭해 스키마를 해소하거나 SHP·DB를 수정한 뒤 다시 검증하세요.'
+        );
       } else {
         setLayersError((prev) =>
-          prev ===
-          '일부 레이어의 SHP 파일과 DB 테이블 구조가 맞지 않습니다. 비고 열을 확인한 뒤 SHP 또는 DB를 수정하고 다시 선택하세요.'
-            ? null
-            : prev
+          prev?.includes('SHP 파일과 DB 테이블 구조가 맞지 않습니다') ? null : prev
         );
       }
     } catch (e: unknown) {
       setLayersError(e instanceof Error ? e.message : String(e));
       setLayers((prev) =>
-        prev.map((l) => ({ ...l, schemaStatus: 'error' as const, schemaDetail: '검증 실패' }))
+        prev.map((l) => ({
+          ...l,
+          schemaStatus: 'error' as const,
+          schemaDetail: '검증 실패',
+          schemaCompare: undefined,
+        }))
       );
     } finally {
       setSchemaChecking(false);
     }
-  }, [syncTargetSchemaFromDefine]);
+  }, [syncTargetSchemaFromDefine, targetDbSchema]);
+
+  const openSchemaResolve = useCallback((row: LayerRow) => {
+    if (row.schemaStatus !== 'mismatch' || !row.schemaCompare) {
+      const text = schemaRemark(row.schemaStatus, row.schemaDetail);
+      if (text) void copyRemark(text, `layers-${row.name}`);
+      return;
+    }
+    setSchemaResolveError(null);
+    setSchemaResolvePayload(row.schemaCompare);
+    setSchemaResolveOpen(true);
+  }, [copyRemark]);
+
+  const applySchemaResolve = useCallback(
+    async (input: SchemaResolveApplyInput) => {
+      if (!schemaResolvePayload?.pathOrResult || !readyPath) {
+        setSchemaResolveError('파일 경로를 찾을 수 없습니다. 폴더를 다시 선택한 뒤 검증하세요.');
+        return;
+      }
+      setSchemaResolveBusy(true);
+      setSchemaResolveError(null);
+      try {
+        const res = await call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'resolveShpSchemaMismatch',
+          params: {
+            pathOrResult: schemaResolvePayload.pathOrResult,
+            dbSchema: targetDbSchema,
+            mode: input.mode,
+            typeChoices: input.typeChoices,
+            createUser: operatorLabel || null,
+          },
+        });
+        const d = (res?.data ?? res) as {
+          success?: boolean;
+          error?: string;
+          backupTableName?: string;
+          waivers?: LayerRow['schemaWaivers'];
+          log?: string[];
+        };
+        if (d?.success !== true) {
+          const detail =
+            typeof d?.error === 'string' && d.error.trim()
+              ? d.error
+              : '스키마 해소에 실패했습니다.';
+          const logTail =
+            Array.isArray(d?.log) && d.log.length > 0 ? `\n(${d.log.join(' → ')})` : '';
+          setSchemaResolveError(`${detail}${logTail}`);
+          return;
+        }
+        const fileKey = schemaResolvePayload.sourceFile.toLowerCase();
+        setLayers((prev) =>
+          prev.map((l) => {
+            if (l.name.toLowerCase() !== fileKey) return l;
+            if (input.mode === 'recreate') {
+              return { ...l, schemaWaivers: undefined };
+            }
+            return { ...l, schemaWaivers: d.waivers };
+          })
+        );
+        setSchemaResolveOpen(false);
+        setSchemaResolvePayload(null);
+        requestShpHistoryRefresh();
+        await runSchemaValidation(readyPath);
+        if (d.backupTableName) {
+          setToastMsg(`백업: ${d.backupTableName}`);
+        } else {
+          setToastMsg('스키마 해소 적용됨');
+        }
+      } catch (e: unknown) {
+        setSchemaResolveError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSchemaResolveBusy(false);
+      }
+    },
+    [
+      schemaResolvePayload,
+      readyPath,
+      targetDbSchema,
+      operatorLabel,
+      runSchemaValidation,
+    ]
+  );
 
   const runComponentSetup = useCallback(async () => {
     if (!readyPath) return;
@@ -2593,7 +2748,7 @@ export function ShpWizardModal({
                                 {schemaRemark(row.schemaStatus, row.schemaDetail) ? (
                                   <button
                                     type="button"
-                                    onClick={() => copyRemark(schemaRemark(row.schemaStatus, row.schemaDetail), `layers-${i}`)}
+                                    onClick={() => openSchemaResolve(row)}
                                     className="w-full text-left truncate hover:underline hover:cursor-pointer"
                                   >
                                     {schemaRemark(row.schemaStatus, row.schemaDetail)}
@@ -3095,6 +3250,22 @@ export function ShpWizardModal({
           }}
         />
       )}
+
+      <ShpSchemaResolveModal
+        open={schemaResolveOpen}
+        onOpenChange={(open) => {
+          if (schemaResolveBusy) return;
+          setSchemaResolveOpen(open);
+          if (!open) {
+            setSchemaResolvePayload(null);
+            setSchemaResolveError(null);
+          }
+        }}
+        payload={schemaResolvePayload}
+        busy={schemaResolveBusy}
+        error={schemaResolveError}
+        onApply={applySchemaResolve}
+      />
 
       <ShpCrsCandidateModal
         open={crsModalOpen}
