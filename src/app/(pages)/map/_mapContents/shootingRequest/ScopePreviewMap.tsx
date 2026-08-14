@@ -64,7 +64,7 @@ export function ScopePreviewMap({ wkt5181, className }: Props) {
     const map = new Map({
       target: el,
       layers: [
-        createVWorldLayer('base'),
+        createVWorldLayer('satellite'),
         new VectorLayer({ source, style: SCOPE_STYLE, zIndex: 10 }),
       ],
       view: new View({

@@ -1,11 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
+import { call } from '@/lib/api';
 import type { AerialKind, WorkUnitItem } from './aerialMediaTypes';
-import { mockUnitsForKind } from './aerialMediaMockData';
+import {
+  mockUnitsForKind,
+  replaceDroneUnitsFromServer,
+  replaceOrthoUnitsFromServer,
+  replacePanoUnitsFromServer,
+  subscribeMockWorkUnits,
+} from './aerialMediaMockData';
 import { deriveOrthoUnitStatus } from './aerialMediaTypes';
 
 const KIND_TABS: { id: AerialKind; label: string }[] = [
@@ -20,17 +27,6 @@ type Props = {
   onClose?: () => void;
   className?: string;
 };
-
-function unitsForView(kind: AerialKind): WorkUnitItem[] {
-  const list = mockUnitsForKind(kind);
-  if (kind === 'ortho') {
-    return list.filter((u) => {
-      const st = u.status ?? deriveOrthoUnitStatus(u.files);
-      return st === 'done' || u.files.some((f) => f.status === 'done' || f.status === 'registered');
-    });
-  }
-  return list;
-}
 
 function matchesKeyword(unit: WorkUnitItem, keyword: string): boolean {
   const q = keyword.trim().toLowerCase();
@@ -47,8 +43,101 @@ export function AerialViewLayerPanel({
 }: Props) {
   const [kind, setKind] = useState<AerialKind>('ortho');
   const [keyword, setKeyword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [listTick, setListTick] = useState(0);
 
-  const units = useMemo(() => unitsForView(kind), [kind]);
+  useEffect(() => subscribeMockWorkUnits(() => setListTick((t) => t + 1)), []);
+
+  const refreshKind = useCallback(async (nextKind: AerialKind) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'listWorkUnits',
+        params: { kind: nextKind },
+      });
+      if (!res?.success) {
+        setLoadError('목록을 불러오지 못했습니다.');
+        return;
+      }
+      const data = (res.data ?? res) as {
+        units?: Array<{
+          wuKey: number;
+          folderName: string;
+          workName: string;
+          workDate: string | null;
+          srKey: number | null;
+          items: Array<{
+            tuKey?: number;
+            fuKey?: number;
+            fileName: string;
+            sizeLabel: string;
+            format: string;
+            convertStatus?: string;
+            tilesRelativePath?: string | null;
+            relativePath?: string;
+            previewKind?: string;
+            locationLabel?: string | null;
+            x5181?: number | null;
+            y5181?: number | null;
+          }>;
+        }>;
+      };
+      const units = data.units ?? [];
+      if (nextKind === 'ortho') {
+        replaceOrthoUnitsFromServer(units);
+      } else if (nextKind === 'drone' || nextKind === 'panorama') {
+        const mediaUnits = units.map((u) => ({
+          wuKey: u.wuKey,
+          folderName: u.folderName,
+          workName: u.workName,
+          workDate: u.workDate,
+          srKey: u.srKey,
+          items: u.items
+            .filter((m) => m.fuKey != null)
+            .map((m) => ({
+              fuKey: m.fuKey as number,
+              fileName: m.fileName,
+              sizeLabel: m.sizeLabel,
+              format: m.format,
+              previewKind: (m.previewKind === 'video' || m.previewKind === 'panorama'
+                ? m.previewKind
+                : 'image') as 'image' | 'video' | 'panorama',
+              locationLabel: m.locationLabel ?? null,
+              relativePath: m.relativePath,
+              x5181: m.x5181,
+              y5181: m.y5181,
+            })),
+        }));
+        if (nextKind === 'drone') replaceDroneUnitsFromServer(mediaUnits);
+        else replacePanoUnitsFromServer(mediaUnits);
+      }
+      setListTick((t) => t + 1);
+    } catch {
+      setLoadError('목록을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshKind(kind);
+  }, [kind, refreshKind]);
+
+  const units = useMemo(() => {
+    void listTick;
+    const list = mockUnitsForKind(kind);
+    if (kind === 'ortho') {
+      return list.filter((u) => {
+        const st = u.status ?? deriveOrthoUnitStatus(u.files);
+        return st === 'done' || u.files.some((f) => f.status === 'done' || f.status === 'registered');
+      });
+    }
+    return list;
+  }, [kind, listTick]);
+
   const filtered = useMemo(
     () => units.filter((u) => matchesKeyword(u, keyword)),
     [units, keyword]
@@ -77,7 +166,7 @@ export function AerialViewLayerPanel({
   return (
     <div
       className={cn(
-        'flex w-64 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        'pointer-events-auto flex w-64 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
         className
       )}
     >
@@ -148,15 +237,21 @@ export function AerialViewLayerPanel({
           />
           <span className="text-[11px] text-slate-600">전체</span>
         </label>
-        <span className="ml-auto text-[10px] text-slate-400">{filtered.length}건</span>
+        <span className="ml-auto text-[10px] text-slate-400">
+          {loading ? '불러오는 중…' : `${filtered.length}건`}
+        </span>
       </div>
 
       <div className="min-h-0 max-h-[min(420px,calc(100vh-260px))] flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
+        {loadError ? (
+          <p className="px-3 py-6 text-center text-[11px] text-rose-500">{loadError}</p>
+        ) : filtered.length === 0 ? (
           <p className="px-3 py-6 text-center text-[11px] text-slate-400">
-            {units.length === 0
-              ? '표시할 작업단위가 없습니다.'
-              : '검색 조건에 맞는 작업단위가 없습니다.'}
+            {loading
+              ? '목록을 불러오는 중입니다.'
+              : units.length === 0
+                ? '표시할 작업단위가 없습니다.'
+                : '검색 조건에 맞는 작업단위가 없습니다.'}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">

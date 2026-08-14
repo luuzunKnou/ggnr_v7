@@ -1,8 +1,10 @@
 'use client';
 
 import { Map, View } from 'ol';
+import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import XYZ from 'ol/source/XYZ';
 import Feature from 'ol/Feature';
 import Polygon from 'ol/geom/Polygon';
 import Style from 'ol/style/Style';
@@ -11,9 +13,9 @@ import Fill from 'ol/style/Fill';
 import { defaults as defaultControls } from 'ol/control';
 import { fromString } from 'ol/transform';
 import '../../_mapComponents/config/projections';
-import { createVWorldLayer } from '../../_mapComponents/layerFactory/backgroundLayerFactory';
 import { transformCoordinate } from '../../_mapComponents/services/coordinateService';
 import { RESOLUTIONS_3857 } from '../../_mapComponents/config/mapDefaults';
+import { VWORLD_MAX_ZOOM_INDEX } from '../../_mapComponents/layerFactory/backgroundLayerFactory';
 
 const SCOPE_STYLE = new Style({
   stroke: new Stroke({ color: '#0284c7', width: 2 }),
@@ -35,6 +37,18 @@ function parsePolygonWkt5181(wkt: string): [number, number][] | null {
   return ring.length >= 4 ? ring : null;
 }
 
+/** PDF 캡처용 — WebGL 대신 일반 Tile(캔버스 합성 가능·CORS 명시) */
+function createVworldSatelliteTileLayer(): TileLayer<XYZ> {
+  return new TileLayer({
+    source: new XYZ({
+      url: 'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg',
+      crossOrigin: 'anonymous',
+      maxZoom: VWORLD_MAX_ZOOM_INDEX,
+      attributions: '© VWorld',
+    }),
+  });
+}
+
 function compositeMapToCanvas(map: Map, target: HTMLCanvasElement): boolean {
   const size = map.getSize();
   if (!size) return false;
@@ -50,7 +64,7 @@ function compositeMapToCanvas(map: Map, target: HTMLCanvasElement): boolean {
   ctx.globalCompositeOperation = 'source-over';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = '#e8eef2';
   ctx.fillRect(0, 0, width, height);
 
   let drew = false;
@@ -80,8 +94,12 @@ function compositeMapToCanvas(map: Map, target: HTMLCanvasElement): boolean {
         0
       );
     }
-    ctx.drawImage(canvas, 0, 0);
-    drew = true;
+    try {
+      ctx.drawImage(canvas, 0, 0);
+      drew = true;
+    } catch {
+      /* tainted */
+    }
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
@@ -102,6 +120,32 @@ function waitRenderComplete(map: Map, timeoutMs: number): Promise<void> {
   });
 }
 
+function waitTilesLoaded(source: XYZ, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let pending = 0;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      source.un('tileloadstart', onStart);
+      source.un('tileloadend', onEnd);
+      source.un('tileloaderror', onEnd);
+      resolve();
+    };
+    const onStart = () => {
+      pending += 1;
+    };
+    const onEnd = () => {
+      pending = Math.max(0, pending - 1);
+      if (pending === 0) window.setTimeout(finish, 80);
+    };
+    source.on('tileloadstart', onStart);
+    source.on('tileloadend', onEnd);
+    source.on('tileloaderror', onEnd);
+    window.setTimeout(finish, timeoutMs);
+  });
+}
+
 /**
  * 촬영 범위 WKT(EPSG:5181)를 배경지도+폴리곤 이미지(data URL)로 만든다.
  * PDF 위치도 삽입용. 실패 시 null.
@@ -117,14 +161,16 @@ export async function scopeMapToDataUrl(wkt5181: string): Promise<string | null>
     ring3857.push([c[0], c[1]]);
   }
 
+  /** opacity:0 이면 타일 로딩이 스킵되는 브라우저가 있음 → 화면 밖·불투명이되 보이게 */
   const host = document.createElement('div');
   host.style.cssText = [
     'position:fixed',
-    'left:-10000px',
+    'left:0',
     'top:0',
     `width:${CAPTURE_W}px`,
     `height:${CAPTURE_H}px`,
-    'opacity:0',
+    'opacity:1',
+    'visibility:hidden',
     'pointer-events:none',
     'z-index:-1',
   ].join(';');
@@ -132,15 +178,17 @@ export async function scopeMapToDataUrl(wkt5181: string): Promise<string | null>
 
   let map: Map | null = null;
   try {
-    const source = new VectorSource({
+    const vectorSource = new VectorSource({
       features: [new Feature({ geometry: new Polygon([ring3857]) })],
     });
+    const tileLayer = createVworldSatelliteTileLayer();
+    const tileSource = tileLayer.getSource();
 
     map = new Map({
       target: host,
       layers: [
-        createVWorldLayer('base'),
-        new VectorLayer({ source, style: SCOPE_STYLE, zIndex: 10 }),
+        tileLayer,
+        new VectorLayer({ source: vectorSource, style: SCOPE_STYLE, zIndex: 10 }),
       ],
       view: new View({
         resolutions: RESOLUTIONS_3857,
@@ -153,21 +201,29 @@ export async function scopeMapToDataUrl(wkt5181: string): Promise<string | null>
     });
 
     map.setSize([CAPTURE_W, CAPTURE_H]);
-    map.getView().fit(source.getExtent(), {
+    map.getView().fit(vectorSource.getExtent(), {
       padding: [28, 28, 28, 28],
       maxZoom: 17,
       duration: 0,
     });
     map.updateSize();
 
-    await waitRenderComplete(map, 2500);
-    // 배경 타일 추가 로드
-    await new Promise((r) => window.setTimeout(r, 500));
-    await waitRenderComplete(map, 2500);
+    if (tileSource) {
+      await waitTilesLoaded(tileSource, 6000);
+    }
+    await waitRenderComplete(map, 3000);
+    await new Promise((r) => window.setTimeout(r, 400));
+    await waitRenderComplete(map, 2000);
 
     const canvas = document.createElement('canvas');
-    if (!compositeMapToCanvas(map, canvas)) return null;
-    return canvas.toDataURL('image/png');
+    if (!compositeMapToCanvas(map, canvas) || canvas.width < 2) {
+      return null;
+    }
+    try {
+      return canvas.toDataURL('image/png');
+    } catch {
+      return null;
+    }
   } catch {
     return null;
   } finally {

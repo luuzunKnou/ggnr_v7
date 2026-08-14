@@ -196,8 +196,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
-      // 촬영요청·승인 — 개발 중, 오픈 전까지 비노출
-      if (item.ser_eng === 'shootingRequest' || item.ser_eng === 'shootingApproval') return false;
       return true;
     });
 

@@ -53,6 +53,7 @@ import * as geoserverProcessService from './geoserverProcessService';
 import * as shootingRequestService from './shootingRequestService';
 import * as flightLogbookService from './flightLogbookService';
 import * as aerialUploadService from './aerialUploadService';
+import * as aerialOrthoService from './aerialOrthoService';
 import * as useFeeService from './useFeeService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
@@ -111,6 +112,7 @@ export {
   shootingRequestService,
   flightLogbookService,
   aerialUploadService,
+  aerialOrthoService,
   useFeeService,
   groundwaterPermitService,
   bizNotifService,

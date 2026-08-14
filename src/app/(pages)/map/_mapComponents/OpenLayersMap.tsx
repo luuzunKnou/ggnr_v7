@@ -116,6 +116,7 @@ import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
 import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
+import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
 import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
@@ -1156,6 +1157,10 @@ export default function OpenLayersMap({
     enabled: aerialViewCheckedIds.size > 0,
     checkedUnitIds: aerialViewCheckedIds,
   });
+  useAerialOrthoCheckedTiles({
+    enabled: aerialViewCheckedIds.size > 0,
+    checkedUnitIds: aerialViewCheckedIds,
+  });
 
   const totalIdentifyCount = identifyIntakePopup?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
 
@@ -1755,8 +1760,8 @@ export default function OpenLayersMap({
     // 액션 전용 버튼은 상태 변경 없이 액션만 실행
     if (ACTION_ONLY_IDS.includes(id)) {
       if (id === 'shooting-request') {
+        // 신청서 모달만 — 왼쪽 촬영요청 목록 패널은 열지 않음
         const current = new URLSearchParams(Array.from(searchParams.entries()));
-        current.set('opened', 'shootingRequest');
         current.set('shotForm', 'new');
         router.push(`/map?${current.toString()}`);
         return;
@@ -1949,8 +1954,8 @@ export default function OpenLayersMap({
               data-map-control-expand-panel
               className={
                 isAerialViewPanelExiting
-                  ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                  : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+                  ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
+                  : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
               }
             >
               <AerialViewLayerPanel

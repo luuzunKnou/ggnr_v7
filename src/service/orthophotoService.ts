@@ -902,6 +902,16 @@ async function runOrthophotoJob(params: {
   jpegQuality: number;
   /** VRT 등 sourceRelativePath 가 합성일 때 출력 슬러그 강제(그 외에는 경로에서 계산) */
   outputSlugOverride?: string;
+  /**
+   * 지정 시 tiles_jpg 가 아닌 이 상대 경로에 XYZ 타일을 기록.
+   * (드론영상 aerial/ortho/.../xyz/... — 자체항공영상 목록과 분리)
+   */
+  finalOutputDirRel?: string;
+  /**
+   * JPEG는 알파 없음 → 투명 영역이 검정으로 보임.
+   * 드론영상 오버레이는 PNG(알파 유지) 권장.
+   */
+  tileDriver?: 'JPEG' | 'PNG';
 }): Promise<void> {
   const {
     absSource,
@@ -914,10 +924,19 @@ async function runOrthophotoJob(params: {
     zoomMax,
     jpegQuality,
     outputSlugOverride,
+    finalOutputDirRel,
+    tileDriver = 'JPEG',
   } = params;
   let gFromPath: string;
   let outputSlug: string;
-  if (outputSlugOverride && isSafeOrthoSegment(outputSlugOverride)) {
+  const customOut = (finalOutputDirRel ?? '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  if (customOut) {
+    if (customOut.includes('..') || !customOut.startsWith('aerial/ortho/')) {
+      throw new Error('finalOutputDirRel 은 aerial/ortho/ 아래여야 합니다.');
+    }
+    gFromPath = groupName;
+    outputSlug = outputSlugOverride && isSafeOrthoSegment(outputSlugOverride) ? outputSlugOverride : 'xyz';
+  } else if (outputSlugOverride && isSafeOrthoSegment(outputSlugOverride)) {
     gFromPath = groupName;
     outputSlug = outputSlugOverride;
   } else {
@@ -932,7 +951,7 @@ async function runOrthophotoJob(params: {
   }
   const base = getBaseDir();
   const atStart = new Date().toISOString();
-  const finalRel = orthoOutputRel(gFromPath, outputSlug);
+  const finalRel = customOut || orthoOutputRel(gFromPath, outputSlug);
   const fmtNote = `jpeg q=${jpegQuality} z=${zoomMin}-${zoomMax}`;
   await appendUploadConvertHistory({
     at: atStart,
@@ -946,7 +965,9 @@ async function runOrthophotoJob(params: {
   const tmpRoot = path.join(base, '.tmp', `ortho_xyz_${gFromPath}_${outputSlug}_${Date.now()}`);
   const warp3857 = path.join(tmpRoot, 'warp_3857.tif');
   const tilesStaging = path.join(tmpRoot, 'tiles_staging');
-  const finalAbs = path.join(base, 'tiles_jpg', gFromPath);
+  const finalAbs = customOut
+    ? path.join(base, ...customOut.split('/').filter(Boolean))
+    : path.join(base, 'tiles_jpg', gFromPath);
 
   const gdalwarp = gdalToolPath('gdalwarp');
   const gdal2tiles = gdalToolPath('gdal2tiles');
@@ -992,7 +1013,9 @@ async function runOrthophotoJob(params: {
     orthoJobLog(
       logCtx,
       '작업 시작',
-      `src=${sourceRelativePath}(${sourceCrs}) → ${finalRel} z=${zoomMin}-${zoomMax} JPEG q=${jpegQuality} (EPSG:3857 타일)`
+      `src=${sourceRelativePath}(${sourceCrs}) → ${finalRel} z=${zoomMin}-${zoomMax} ${tileDriver}${
+        tileDriver === 'JPEG' ? ` q=${jpegQuality}` : ''
+      } (EPSG:3857 타일)`
     );
     orthoJobLog(logCtx, '임시 폴더 생성', tmpRoot);
 
@@ -1037,8 +1060,8 @@ async function runOrthophotoJob(params: {
       `--zoom=${zArg}`,
       '--quiet',
       '--webviewer=none',
-      '--tiledriver=JPEG',
-      `--jpeg-quality=${String(jpegQuality)}`,
+      `--tiledriver=${tileDriver}`,
+      ...(tileDriver === 'JPEG' ? [`--jpeg-quality=${String(jpegQuality)}`] : []),
       '--processes=4',
       warp3857,
       tilesStaging,
@@ -1046,7 +1069,7 @@ async function runOrthophotoJob(params: {
     orthoJobLog(
       logCtx,
       '2/3 gdal2tiles 시작',
-      `${gdal2tiles} profile=mercator jpeg zoom=${zArg} → ${tilesStaging}`
+      `${gdal2tiles} profile=mercator ${tileDriver.toLowerCase()} zoom=${zArg} → ${tilesStaging}`
     );
     const tileStarted = Date.now();
     const t = await runProcess(gdal2tiles, tileArgs, base, ORTHO_JOB_TIMEOUT_MS, gdalChildEnv);
@@ -1411,5 +1434,90 @@ export async function getOrthoTileSetExtentWgs84(params: { groupName: string }):
   if (pyr) return { ...pyr, groupName };
 
   return { ...empty, error: 'no extent could be derived' };
+}
+
+/**
+ * GeoTIFF 내부 좌표계에서 EPSG:XXXX 추출.
+ * 폴더명 CRS보다 파일 메타를 우선할 때 사용.
+ */
+export async function detectTifSourceCrs(absSource: string): Promise<string | null> {
+  const gdalinfo = gdalToolPath('gdalinfo');
+  if (!isConcreteToolPath(gdalinfo) || !fs.existsSync(gdalinfo)) return null;
+  const env = buildGdalChildEnv(gdalinfo);
+  const p = await runProcess(gdalinfo, ['-json', absSource], getBaseDir(), 120_000, env);
+  if (p.code !== 0 || !p.stdout.trim()) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(p.stdout);
+  } catch {
+    return null;
+  }
+  const root = parsed as {
+    stac?: { 'proj:epsg'?: number };
+    coordinateSystem?: { wkt?: string; projjson?: { id?: { authority?: string; code?: number | string } } };
+    metadata?: Record<string, Record<string, string>>;
+  };
+  const stacEpsg = root.stac?.['proj:epsg'];
+  if (typeof stacEpsg === 'number' && Number.isFinite(stacEpsg)) {
+    return `EPSG:${stacEpsg}`;
+  }
+  const projId = root.coordinateSystem?.projjson?.id;
+  if (projId?.authority?.toUpperCase() === 'EPSG' && projId.code != null) {
+    const code = Number(projId.code);
+    if (Number.isFinite(code)) return `EPSG:${code}`;
+  }
+  const wkt = root.coordinateSystem?.wkt ?? '';
+  const auth = /AUTHORITY\s*\[\s*"EPSG"\s*,\s*"(\d{4,5})"\s*\]/gi.exec(wkt);
+  if (auth?.[1]) return `EPSG:${auth[1]}`;
+  // 마지막 AUTHORITY 가 축 단위일 수 있어 모든 EPSG 후보 중 518x/517x 우선
+  const all = [...wkt.matchAll(/AUTHORITY\s*\[\s*"EPSG"\s*,\s*"(\d{4,5})"\s*\]/gi)].map((m) => m[1]!);
+  const korea = all.find((c) => /^518[0-9]$/.test(c) || /^517[0-9]$/.test(c));
+  if (korea) return `EPSG:${korea}`;
+  if (all.length) return `EPSG:${all[all.length - 1]}`;
+  return null;
+}
+
+/**
+ * 드론영상(TIF) → XYZ JPEG.
+ * 산출은 aerial/ortho/... 아래(자체항공 tiles_jpg 와 분리).
+ */
+export async function runAerialOrthoTifToXyz(params: {
+  absSource: string;
+  sourceRelativePath: string;
+  sourceCrs: string;
+  /** aerial/ortho/{folder}/xyz/{slug} */
+  outputRelativeDir: string;
+  zoomMin?: number;
+  zoomMax?: number;
+  jpegQuality?: number;
+}): Promise<{ success: boolean; error?: string; outputRelativeDir: string }> {
+  const outputRelativeDir = params.outputRelativeDir.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  const sourceBaseName = path.basename(params.absSource);
+  try {
+    await runOrthophotoJob({
+      absSource: params.absSource,
+      sourceRelativePath: params.sourceRelativePath,
+      sourceBaseName,
+      groupName: 'aerial_ortho',
+      sourceCrs: params.sourceCrs,
+      tileSetId: 'aerial-ortho',
+      zoomMin: params.zoomMin ?? 6,
+      zoomMax: params.zoomMax ?? 19,
+      jpegQuality: params.jpegQuality ?? 80,
+      outputSlugOverride: 'xyz',
+      finalOutputDirRel: outputRelativeDir,
+      /** 알파(투명) 유지 — JPEG면 nodata가 검정 사각형으로 보임 */
+      tileDriver: 'PNG',
+    });
+    const absOut = path.join(getBaseDir(), ...outputRelativeDir.split('/').filter(Boolean));
+    const hasZoom = fs.existsSync(absOut) && (await fsPromises.readdir(absOut)).some((n) => /^\d+$/.test(n));
+    if (!hasZoom) {
+      return { success: false, error: '변환 결과 타일 폴더가 없습니다.', outputRelativeDir };
+    }
+    return { success: true, outputRelativeDir };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg, outputRelativeDir };
+  }
 }
 

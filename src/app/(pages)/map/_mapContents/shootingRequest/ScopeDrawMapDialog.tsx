@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import '../../_mapComponents/config/projections';
 import { createVWorldLayer } from '../../_mapComponents/layerFactory/backgroundLayerFactory';
 import { transformCoordinate } from '../../_mapComponents/services/coordinateService';
+import { useMapContext } from '../../_mapComponents/MapContext';
 import {
   DEFAULT_CENTER_LON,
   DEFAULT_CENTER_LAT,
@@ -55,8 +56,9 @@ const SCOPE_STYLE = new Style({
   fill: new Fill({ color: 'rgba(2,132,199,0.15)' }),
 });
 
-/** 촬영 범위 그리기 전용 새 지도 팝업 */
+/** 촬영 범위 그리기 전용 새 지도 팝업 — 현재 메인 지도 중심·줌 유지 */
 export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
+  const mapContext = useMapContext();
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const sourceRef = useRef<VectorSource | null>(null);
@@ -86,7 +88,15 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
       }
 
       const to3857 = getTransform('EPSG:4326', 'EPSG:3857');
-      const center = to3857([DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT]);
+      const mainView = mapContext?.mapInstanceRef?.current?.getView();
+      const mainCenter = mainView?.getCenter();
+      const mainZoom = mainView?.getZoom();
+      const center =
+        Array.isArray(mainCenter) && mainCenter.length >= 2
+          ? ([mainCenter[0], mainCenter[1]] as [number, number])
+          : (to3857([DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT]) as [number, number]);
+      const zoom =
+        typeof mainZoom === 'number' && Number.isFinite(mainZoom) ? mainZoom : DEFAULT_ZOOM_2D;
 
       const source = new VectorSource();
       sourceRef.current = source;
@@ -94,12 +104,12 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
       map = new Map({
         target: el,
         layers: [
-          createVWorldLayer('base'),
+          createVWorldLayer('satellite'),
           new VectorLayer({ source, style: SCOPE_STYLE, zIndex: 10 }),
         ],
         view: new View({
           center,
-          zoom: DEFAULT_ZOOM_2D,
+          zoom,
           resolutions: RESOLUTIONS_3857,
           minZoom: 0,
           maxZoom: RESOLUTIONS_3857.length - 1,
