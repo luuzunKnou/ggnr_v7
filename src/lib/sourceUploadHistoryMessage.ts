@@ -198,10 +198,6 @@ export function formatDbSchemaMismatchWarning(diffCount: number): string {
   return `스키마 SQL ↔ DB 비교: 불일치 ${diffCount}건 — 사용자 확인 후 진행`;
 }
 
-export function formatBuildCheckSkippedWarning(): string {
-  return '빌드 검사 미실시 — 사용자 확인 후 업로드';
-}
-
 export function buildUploadHistoryPrefix(includeNodeModules?: boolean): string {
   if (includeNodeModules == null) return '';
   return `node_modules ${includeNodeModules ? '포함' : '미포함'} — `;
