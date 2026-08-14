@@ -7,6 +7,11 @@ import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
 import { stopGeoServerAndVerify } from '@/service/geoserverProcessService';
+import {
+  releaseSourceApplyLock,
+  tryAcquireSourceApplyLock,
+} from '@/service/sourceApplyLock';
+import { runStagingTypeCheck } from '@/service/sourceApplyStagingService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 import {
   APPLY_ORPHAN_WALK_ROOTS,
@@ -889,6 +894,7 @@ export function getGnmsClientConfig(): GnmsClientConfig {
 
 /** 적용 중 UI 단계 보고 */
 export type ApplySourceProgressPhase =
+  | 'type-check'
   | 'geoserver-stop'
   | 'merge-apply'
   | 'geoserver-start'
@@ -954,6 +960,11 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     throw new Error(LAUNCHER_MISSING_MSG);
   }
 
+  const lockOwner = `${requestedBy}:${version}:${Date.now()}`;
+  if (!tryAcquireSourceApplyLock(lockOwner)) {
+    throw new Error('다른 최신소스 적용이 진행 중입니다. 완료 후 다시 시도하세요.');
+  }
+
   const workspaceRoot = process.cwd();
   const stat = await fs.stat(zipPath);
   const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
@@ -997,15 +1008,11 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   };
 
   await emit(
-    'geoserver-stop',
+    'merge-apply',
     `적용 시작 version=${version} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
   );
 
   try {
-    await onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
-    const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
-    await emit('geoserver-stop', `GeoServer ${stopResult.message}`);
-
     await onProgress?.({
       phase: 'merge-apply',
       message: '소스 병합·적용 중...',
@@ -1029,6 +1036,35 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       skippedFiles: preSkipped,
       appliedFiles: 0,
     });
+
+    const stagingRoot = path.join(tmpBase, 'typecheck-staging');
+    await onProgress?.({ phase: 'type-check', message: '타입 검사 준비 중...' });
+    await emit('type-check', '스테이징 병합 후 타입 검사 시작');
+    const typeCheck = await runStagingTypeCheck({
+      workspaceRoot,
+      extractRoot: extractedRoot,
+      stagingRoot,
+      excludePrefixes,
+      onLine: (line) => {
+        console.log(`[SourceCodeUpload] tsc: ${line}`);
+      },
+    });
+    if (!typeCheck.ok) {
+      await emit('type-check', '타입 검사 실패 — 적용 중단', {
+        logLine: `[SourceCodeUpload] 타입 검사 실패:\n${typeCheck.message}`,
+      });
+      throw new Error(`타입 검사 실패 (version=${version}):\n${typeCheck.message}`);
+    }
+    await emit('type-check', '타입 검사 통과');
+
+    await onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
+    const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
+    await emit('geoserver-stop', `GeoServer ${stopResult.message}`);
+    if (!stopResult.success) {
+      throw new Error(
+        `GeoServer 중지 실패 — 적용 중단: ${stopResult.message}. GeoServer·8080·GEOSERVER_URL 확인 후 다시 시도하세요.`
+      );
+    }
 
     await emit('merge-apply', '적용 직전 소스 백업 중...', { mergeStep: 'backup' });
     rollback = await createSourceRollbackSnapshot({
@@ -1299,6 +1335,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     outErr.historyRecorded = historyRecorded;
     throw outErr;
   } finally {
+    releaseSourceApplyLock(lockOwner);
     await removeApplyRollbackSnapshot(rollback);
     await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
   }

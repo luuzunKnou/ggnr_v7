@@ -9,6 +9,7 @@ export type RelayStageId =
   | 'download'
   | 'relay-init'
   | 'relay-chunk'
+  | 'type-check'
   | 'geoserver-stop'
   | 'merge-apply'
   | 'geoserver-start'
@@ -41,6 +42,7 @@ const RELAY_COMMON_STAGES: RelayStageId[] = [
   'download',
   'relay-init',
   'relay-chunk',
+  'type-check',
   'geoserver-stop',
   'merge-apply',
 ];
@@ -50,6 +52,7 @@ const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
   download: 'GNMS ZIP 다운로드',
   'relay-init': '운영 서버 relay 세션 생성',
   'relay-chunk': '청크 전송',
+  'type-check': '타입 검사',
   'geoserver-stop': 'GeoServer 중지',
   'merge-apply': '병합·적용(백업·정리)',
   'geoserver-start': 'GeoServer 기동',
@@ -65,7 +68,8 @@ const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStag
   download: 'download',
   'relay-init': 'relay-init',
   'relay-chunk': 'relay-chunk',
-  'relay-complete': 'geoserver-stop',
+  'relay-complete': 'type-check',
+  'type-check': 'type-check',
   'merge-apply': 'merge-apply',
   'geoserver-stop': 'geoserver-stop',
   'geoserver-start': 'geoserver-start',
@@ -502,6 +506,7 @@ export function buildRelayStagesFromProgress(
       }
       if (id === 'latest' && p.versionDetail) detail = p.versionDetail;
       if (id === 'geoserver-stop' && !detail) detail = '중지 중...';
+      if (id === 'type-check' && !detail) detail = '타입 검사 중...';
       if (id === 'merge-apply') {
         detail = p.applyDetail ?? detail ?? '병합·적용 중...';
       }
