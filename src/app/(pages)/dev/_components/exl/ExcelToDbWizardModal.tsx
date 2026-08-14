@@ -13,6 +13,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { useChunkedUpload } from '../useChunkedUpload';
 import { getCoordFromAddress } from '@/app/(pages)/map/_mapComponents/addressSearch/vworldAddressSearch';
+import { hangjeongRiAddressAlt } from '@/lib/excelUploadAddressNormalize';
 import { ChevronRight, ChevronLeft, ChevronDown, Loader2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -280,6 +281,34 @@ function normalizeExcelAddressForGeocode(s: string): string {
   // 5자리 이상 숫자는 본번·부번이 아니므로 제거 (주민번호·관리번호 등 오염 방지)
   t = t.replace(/\b\d{5,}\b/g, '');
   return t.replace(/\s{2,}/g, ' ').trim();
+}
+
+/** 원주소 실패 시 행정리→법정리 주소로 VWorld GetCoord 재시도 */
+async function getCoordFromAddressWithHangjeongRiFallback(
+  addr: string,
+  apiKey: string
+): Promise<{
+  ok: boolean;
+  lon?: number;
+  lat?: number;
+  message?: string;
+  hangjeongFix: string | null;
+}> {
+  let coord = await getCoordFromAddress(addr, { apiKey, type: 'ROAD' });
+  if (!coord.ok) {
+    coord = await getCoordFromAddress(addr, { apiKey, type: 'PARCEL' });
+  }
+  if (coord.ok) return { ...coord, hangjeongFix: null };
+  const alt = hangjeongRiAddressAlt(addr);
+  if (!alt) return { ...coord, hangjeongFix: null };
+  let retry = await getCoordFromAddress(alt, { apiKey, type: 'ROAD' });
+  if (!retry.ok) {
+    retry = await getCoordFromAddress(alt, { apiKey, type: 'PARCEL' });
+  }
+  if (retry.ok) {
+    return { ...retry, hangjeongFix: `${addr} → ${alt}` };
+  }
+  return { ...coord, hangjeongFix: null };
 }
 
 type SplitParcelCfg = {
@@ -2034,6 +2063,8 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     let totalCoordOk = 0;
     let totalPnuAttempt = 0;
     let totalPnuOk = 0;
+    let totalHangjeongRiFixOk = 0;
+    const hangjeongRiFixGeocodeLines: string[] = [];
 
     let oldRowCount = 0;
     if (layerTableMeta?.exists) {
@@ -2189,6 +2220,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         totalInsertCount += createData.rowCount ?? 0;
         totalPnuAttempt += createData.pnuAttemptCount ?? 0;
         totalPnuOk += createData.pnuOkCount ?? 0;
+        totalHangjeongRiFixOk += createData.hangjeongRiFixOkCount ?? 0;
         if (geometryType === 'Polygon') {
           totalPolygonMatched += createData.polygonMatchedCount ?? 0;
           totalPolygonNull += createData.polygonNullCount ?? 0;
@@ -2257,12 +2289,13 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         for (const addr of mulgunjiAddrs) {
           if (!addr.trim()) continue;
           try {
-            let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
-            if (!coord.ok) {
-              coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
-            }
+            const coord = await getCoordFromAddressWithHangjeongRiFallback(addr, vworldKey);
             if (coord.ok) {
               mulgunjis.push({ address: addr, x: coord.lon, y: coord.lat });
+              if (coord.hangjeongFix) {
+                totalHangjeongRiFixOk++;
+                hangjeongRiFixGeocodeLines.push(`행 ${i + 1} 물건지: ${coord.hangjeongFix}`);
+              }
             } else {
               mulgunjis.push({ address: addr });
               pushGeocodeFail(addr, coord.message || '물건지 GetCoord 실패');
@@ -2287,13 +2320,13 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         for (const addr of addresses) {
           if (!addr.trim()) continue;
           try {
-            // 개발자 모드 지오코딩 테스트와 동일: VWorld Address API GetCoord (JSONP)
-            let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
-            if (!coord.ok) {
-              coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
-            }
+            const coord = await getCoordFromAddressWithHangjeongRiFallback(addr, vworldKey);
             if (coord.ok) {
               parcels.push({ address: addr, x: coord.lon, y: coord.lat });
+              if (coord.hangjeongFix) {
+                totalHangjeongRiFixOk++;
+                hangjeongRiFixGeocodeLines.push(`행 ${i + 1} 필지: ${coord.hangjeongFix}`);
+              }
             } else {
               parcels.push({ address: addr });
               pushGeocodeFail(addr, coord.message || 'GetCoord 실패');
@@ -2519,6 +2552,15 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       failLogLines.push(formatGeocodeFailLine(f));
     });
     pushLog(...failLogLines);
+    if (hangjeongRiFixGeocodeLines.length > 0) {
+      pushLog(
+        `[행정리→법정리] VWorld 좌표 보정 성공 ${hangjeongRiFixGeocodeLines.length}건`,
+        ...hangjeongRiFixGeocodeLines.slice(0, 50).map((l) => `  ${l}`),
+        ...(hangjeongRiFixGeocodeLines.length > 50
+          ? [`  …외 ${hangjeongRiFixGeocodeLines.length - 50}건 (서버 .log·처리로그 참고)`]
+          : [])
+      );
+    }
     setProcessingProgress(85);
 
     try {
@@ -2526,6 +2568,11 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         pushLog(
           `[지적(jijuk) 폴리곤 매칭] 성공 ${totalPolygonMatched}건, 미매칭(geom NULL) ${totalPolygonNull}건`,
           '  - 서버 .log 하단에 PNU 폴백 상세(행·키·주소)가 이어 붙습니다.',
+        );
+      }
+      if (totalHangjeongRiFixOk > 0) {
+        pushLog(
+          `[행정리→법정리] 보정 후 매칭 성공 누적 ${totalHangjeongRiFixOk}건 (지오코딩·PNU 지적 합산, 상세는 .log riFix=…)`
         );
       }
       setProcessingProgress(90);
@@ -2611,6 +2658,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           pnuOk: totalPnuOk,
           jijukOk: totalPolygonMatched,
           jijukNull: totalPolygonNull,
+          hangjeongRiFixOk: totalHangjeongRiFixOk,
           insertCount: totalInsertCount,
           defineResult,
           geoserverResult,
@@ -2724,6 +2772,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           pnuOk: totalPnuOk,
           jijukOk: totalPolygonMatched,
           jijukNull: totalPolygonNull,
+          hangjeongRiFixOk: totalHangjeongRiFixOk,
           insertCount: totalInsertCount,
           defineResult: '오류로 중단',
           geoserverResult: '오류로 중단',

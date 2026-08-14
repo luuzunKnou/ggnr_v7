@@ -8,6 +8,11 @@ import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
 import { registerLayerManagerDefineRefresh } from "./layerManager/layerManagerUploadBridge"
+import {
+  DEFINE_FIELD_TYPE_OPTIONS,
+  normalizeDefineFieldType,
+  normalizeDefineFieldsTypes,
+} from "@/lib/defineLayerFieldTypeNormalize"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -49,7 +54,7 @@ const READONLY_FIELD_KEYS = new Set(["define_field_name"])
 /** geom은 정합성 key로 불가. ogc_fid는 선택 가능하나 재업로드 시 번호가 바뀔 수 있음 */
 const KEY_INELIGIBLE_FIELD_NAMES = new Set(["geom"])
 const KEY_WARN_FIELD_NAMES = new Set(["ogc_fid"])
-const FIELD_TYPE_OPTIONS = ["TEXT", "NUMBER", "GEOMETRY", "DATE", "BOOLEAN", "CODE"] as const
+const FIELD_TYPE_OPTIONS = DEFINE_FIELD_TYPE_OPTIONS
 const SORT_TYPE_OPTIONS = ["DESC", "ASC"] as const
 const SELECT_KEYS = new Set(["define_field_type", "define_field_sort_type"])
 
@@ -301,11 +306,10 @@ export function LayerAttrManager({
       }
       const body = await res.json()
       if (body.success && body.data) {
-        setFields(body.data)
-        originalFieldsRef.current = new Map(
-          (body.data as Record<string, unknown>[]).map((f, idx) => [idx, f])
-        )
-        setTotal(body.total ?? body.data.length)
+        const normalized = normalizeDefineFieldsTypes(body.data as Record<string, unknown>[])
+        setFields(normalized)
+        originalFieldsRef.current = new Map(normalized.map((f, idx) => [idx, f]))
+        setTotal(body.total ?? normalized.length)
         setPage(1)
         const more = (body.data?.length ?? 0) < (body.total ?? 0)
         setHasMore(more)
@@ -337,9 +341,10 @@ export function LayerAttrManager({
       const body = await res.json()
       if (body.success && Array.isArray(body.data)) {
         if (body.data.length > 0) {
-          setFields((prev) => [...prev, ...body.data])
+          const normalized = normalizeDefineFieldsTypes(body.data as Record<string, unknown>[])
+          setFields((prev) => [...prev, ...normalized])
           const baseIdx = fields.length
-          for (const [i, f] of (body.data as Record<string, unknown>[]).entries()) {
+          for (const [i, f] of normalized.entries()) {
             originalFieldsRef.current.set(baseIdx + i, f)
           }
           setPage(nextPage)
@@ -442,7 +447,8 @@ export function LayerAttrManager({
       const idx = fields.indexOf(filteredFields[fieldIndex])
       if (idx < 0) return
       const next = [...fields]
-      next[idx] = { ...next[idx], [key]: value }
+      const normalizedValue = key === "define_field_type" ? normalizeDefineFieldType(value) : value
+      next[idx] = { ...next[idx], [key]: normalizedValue }
       // key는 테이블당 하나만 존재해야 하므로, 새로 켜면 다른 필드의 key는 자동 해제
       if (key === "define_field_is_key" && value === "true") {
         for (let i = 0; i < next.length; i++) {
@@ -489,20 +495,21 @@ export function LayerAttrManager({
             : f
         )
       }
+      const payload = normalizeDefineFieldsTypes(fullFields as Record<string, unknown>[])
       const res = await fetch(
         `/api/config/defineLayer/fields/${encodeURIComponent(selectedTableKey)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: fullFields }),
+          body: JSON.stringify({ data: payload }),
         }
       )
       const body = await res.json()
       if (body.success) {
         setSuccessMsg("저장되었습니다.")
-        originalFieldsRef.current = new Map(
-          (fields as Record<string, unknown>[]).map((f, idx) => [idx, f])
-        )
+        const normalizedSaved = normalizeDefineFieldsTypes(fields as Record<string, unknown>[])
+        setFields(normalizedSaved)
+        originalFieldsRef.current = new Map(normalizedSaved.map((f, idx) => [idx, f]))
       } else {
         setError(body.error ?? "저장에 실패했습니다.")
       }

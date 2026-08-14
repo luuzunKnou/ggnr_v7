@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as fs from "fs"
 import * as path from "path"
+import { normalizeDefineFieldsTypes } from "@/lib/defineLayerFieldTypeNormalize"
 
 const FIELDS_DIR = path.join(process.cwd(), "src", "config", "defineLayer", "fields")
 
@@ -90,7 +91,8 @@ export async function POST(
     }
     const filePath = getFilePath(tableKey)
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    const sorted = sortFields(fields)
+    const normalized = normalizeDefineFieldsTypes(fields as Record<string, unknown>[])
+    const sorted = sortFields(normalized)
     fs.writeFileSync(filePath, JSON.stringify(sorted, null, 2), "utf-8")
     return NextResponse.json({ success: true })
   } catch (e) {
