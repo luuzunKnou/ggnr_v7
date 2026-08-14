@@ -1,10 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import dynamic from 'next/dynamic';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { mockUnitsForKind, subscribeMockWorkUnits } from './aerialMediaMockData';
+import {
+  mockUnitsForKind,
+  subscribeMockWorkUnits,
+  applyWorkUnitMediaFiles,
+  replaceDroneUnitsFromServer,
+  replacePanoUnitsFromServer,
+  replaceOrthoUnitsFromServer,
+  removeDroneUnitFromStore,
+  removeDroneFileFromStore,
+  removeMediaUnitFromStore,
+  removeOrthoUnitFromStore,
+  removeOrthoFileFromStore,
+} from './aerialMediaMockData';
 import type { AerialKind } from './aerialMediaTypes';
 import { AERIAL_KIND_LABEL } from './aerialMediaTypes';
 import { MapPlaceholder } from './AerialMediaUi';
@@ -17,10 +30,17 @@ import {
   SatelliteWorkUnitDetailPanel,
   type DetailTab,
 } from './WorkUnitDetailPanels';
-import { FolderBatchUploadDialog } from './FolderBatchUploadDialog';
+import { FolderBatchUploadDialog, type FolderCreatedInfo } from './FolderBatchUploadDialog';
+import { WorkUnitMediaUploadDialog } from './WorkUnitMediaUploadDialog';
 import { useAerialMediaMapFocus } from './useAerialMediaMapFocus';
+import { useAerialOrthoCheckedTiles } from './useAerialOrthoCheckedTiles';
+import {
+  subscribeAerialMediaUploadComplete,
+  type AerialMediaUploadCompleteEvent,
+} from './aerialMediaUploadRunner';
 import {
   clearActiveRegistrationRequest,
+  completeMediaRegistration,
   findShootingRequest,
   getShootingRequests,
   subscribeShootingRequests,
@@ -28,12 +48,29 @@ import {
 import {
   getUploadCompleteNotice,
   getUploadProgressUiVersion,
-  getUploadingJobsForKind,
-  resumeUploadingTimersFromStorage,
+  getVisibleUploadJobs,
+  setUploadCompleteNotice,
   subscribeUploadProgress,
 } from './aerialUploadProgressStore';
-import { UploadProgressBanner } from './UploadProgressBanner';
 import { UploadCompleteDialog } from './UploadCompleteDialog';
+import { UploadProgressBanner } from './UploadProgressBanner';
+import { PanoViewerNav } from './PanoViewerNav';
+import { call } from '@/lib/api';
+
+const PannellumViewer = dynamic(() => import('./PannellumViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full w-full items-center justify-center bg-black text-[11px] text-slate-400">
+      뷰어 로딩…
+    </div>
+  ),
+});
+
+function aerialMediaUrl(relativePath: string): string {
+  return `/api/aerial/media?${new URLSearchParams({
+    path: relativePath.replace(/\\/g, '/'),
+  }).toString()}`;
+}
 
 const KIND_ORDER_ALL: AerialKind[] = ['ortho', 'drone', 'panorama', 'satellite'];
 /** 조회전용: 드론영상·파노라마·사진동영상·항공 (관리 버튼·비행기록부 숨김) */
@@ -74,10 +111,166 @@ export function AerialMediaShell({
   /** 상세 «이 건으로 폴더 업로드»로 연 경우에만 설정 — 목록 일반 업로드는 null */
   const [uploadLinkRequestId, setUploadLinkRequestId] = useState<string | null>(null);
   const [listTick, setListTick] = useState(0);
+  const [mediaUploadTarget, setMediaUploadTarget] = useState<{
+    kind: AerialKind;
+    folderName: string;
+    workName: string;
+    wuKey?: number;
+    linkedRequestId?: string;
+  } | null>(null);
 
   /** 업로드·변환 목업이 목록 배열을 바꿀 때 리렌더 */
   useEffect(() => subscribeMockWorkUnits(() => setListTick((t) => t + 1)), []);
 
+  const refreshDroneMediaFiles = async (folderName: string, wuKey?: number) => {
+    const res = await call('', 'POST', {
+      service: 'aerialUploadService',
+      action: 'listWorkUnitMedia',
+      params: {
+        kind: 'drone',
+        folderName,
+        ...(wuKey != null ? { wuKey } : {}),
+      },
+    });
+    if (!res?.success) return;
+    const data = (res.data ?? res) as {
+      items?: Array<{
+        fuKey: number;
+        wuKey: number;
+        fileName: string;
+        sizeLabel: string;
+        format: string;
+        previewKind: 'image' | 'video';
+        locationLabel: string | null;
+        relativePath?: string;
+        x5181?: number | null;
+        y5181?: number | null;
+      }>;
+    };
+    applyWorkUnitMediaFiles('drone', folderName, data.items ?? []);
+    setListTick((t) => t + 1);
+  };
+
+  /** work_unit 목록 (+ file_unit) — 사진·동영상 */
+  const refreshDroneWorkUnitList = async () => {
+    const res = await call('', 'POST', {
+      service: 'aerialUploadService',
+      action: 'listWorkUnits',
+      params: { kind: 'drone' },
+    });
+    if (!res?.success) return;
+    const data = (res.data ?? res) as {
+      units?: Array<{
+        wuKey: number;
+        folderName: string;
+        workName: string;
+        workDate: string | null;
+        srKey: number | null;
+        items: Array<{
+          fuKey: number;
+          fileName: string;
+          sizeLabel: string;
+          format: string;
+          previewKind: 'image' | 'video';
+          locationLabel: string | null;
+          relativePath?: string;
+          x5181?: number | null;
+          y5181?: number | null;
+        }>;
+      }>;
+    };
+    replaceDroneUnitsFromServer(data.units ?? []);
+    setListTick((t) => t + 1);
+  };
+
+  const refreshPanoMediaFiles = async (folderName: string, wuKey?: number) => {
+    const res = await call('', 'POST', {
+      service: 'aerialUploadService',
+      action: 'listWorkUnitMedia',
+      params: {
+        kind: 'panorama',
+        folderName,
+        ...(wuKey != null ? { wuKey } : {}),
+      },
+    });
+    if (!res?.success) return;
+    const data = (res.data ?? res) as {
+      items?: Array<{
+        fuKey: number;
+        wuKey: number;
+        fileName: string;
+        sizeLabel: string;
+        format: string;
+        previewKind: 'image' | 'video' | 'panorama';
+        locationLabel: string | null;
+        relativePath?: string;
+        x5181?: number | null;
+        y5181?: number | null;
+      }>;
+    };
+    applyWorkUnitMediaFiles('panorama', folderName, data.items ?? []);
+    setListTick((t) => t + 1);
+  };
+
+  const refreshPanoWorkUnitList = async () => {
+    const res = await call('', 'POST', {
+      service: 'aerialUploadService',
+      action: 'listWorkUnits',
+      params: { kind: 'panorama' },
+    });
+    if (!res?.success) return;
+    const data = (res.data ?? res) as {
+      units?: Array<{
+        wuKey: number;
+        folderName: string;
+        workName: string;
+        workDate: string | null;
+        srKey: number | null;
+        items: Array<{
+          fuKey: number;
+          fileName: string;
+          sizeLabel: string;
+          format: string;
+          previewKind: 'image' | 'video' | 'panorama';
+          locationLabel: string | null;
+          relativePath?: string;
+          x5181?: number | null;
+          y5181?: number | null;
+        }>;
+      }>;
+    };
+    replacePanoUnitsFromServer(data.units ?? []);
+    setListTick((t) => t + 1);
+  };
+
+  const refreshOrthoWorkUnitList = async () => {
+    const res = await call('', 'POST', {
+      service: 'aerialUploadService',
+      action: 'listWorkUnits',
+      params: { kind: 'ortho' },
+    });
+    if (!res?.success) return;
+    const data = (res.data ?? res) as {
+      units?: Array<{
+        wuKey: number;
+        folderName: string;
+        workName: string;
+        workDate: string | null;
+        srKey: number | null;
+        items: Array<{
+          tuKey?: number;
+          fileName: string;
+          sizeLabel: string;
+          format: string;
+          convertStatus?: string;
+          tilesRelativePath?: string | null;
+          relativePath?: string;
+        }>;
+      }>;
+    };
+    replaceOrthoUnitsFromServer(data.units ?? []);
+    setListTick((t) => t + 1);
+  };
   /** 사이드바 종류 메뉴 전환 시 패널을 다시 만들지 않고 종류만 맞춤 (업로드 진행 유지) */
   useEffect(() => {
     setKind(initialKind);
@@ -90,20 +283,16 @@ export function AerialMediaShell({
     setDateTo('');
     setUploadOpen(false);
     setUploadLinkRequestId(null);
+    setMediaUploadTarget(null);
   }, [initialKind]);
 
   useSyncExternalStore(subscribeShootingRequests, getShootingRequests, getShootingRequests);
   useSyncExternalStore(subscribeUploadProgress, getUploadProgressUiVersion, getUploadProgressUiVersion);
   const uploadCompleteNotice = !viewOnly ? getUploadCompleteNotice() : null;
-  const uploadingJobs = !viewOnly ? getUploadingJobsForKind(kind) : [];
+  const uploadingJobs = !viewOnly ? getVisibleUploadJobs() : [];
   /** 일반 폴더 업로드가 아니라 «이 건으로»로 연 승인 건만 다이얼로그에 표시 */
   const dialogLinkedRequest =
     !viewOnly && uploadLinkRequestId != null ? findShootingRequest(uploadLinkRequestId) : null;
-
-  useEffect(() => {
-    if (viewOnly) return;
-    resumeUploadingTimersFromStorage();
-  }, [viewOnly]);
 
   const units = useMemo(() => {
     void listTick;
@@ -118,11 +307,44 @@ export function AerialMediaShell({
       ? findShootingRequest(selectedUnit.linkedRequestId)
       : null;
 
+  /** 사진·동영상·파노라마·드론영상: DB → 작업단위 목록 */
+  useEffect(() => {
+    if (kind === 'drone') {
+      void refreshDroneWorkUnitList().catch(() => undefined);
+    } else if (kind === 'panorama') {
+      void refreshPanoWorkUnitList().catch(() => undefined);
+    } else if (kind === 'ortho') {
+      void refreshOrthoWorkUnitList().catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
+
+  /**
+   * 상세 열 때 파일 목록 동기화.
+   * listWorkUnits 로 이미 files 가 있으면 재조회 생략.
+   */
+  useEffect(() => {
+    if (!selectedUnit?.folderName) return;
+    if (selectedUnit.files.length > 0) return;
+    if (kind === 'drone') {
+      void refreshDroneMediaFiles(selectedUnit.folderName).catch(() => undefined);
+    } else if (kind === 'panorama') {
+      void refreshPanoMediaFiles(selectedUnit.folderName).catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- folderName·캐시된 files 기준
+  }, [kind, selectedUnit?.folderName, selectedUnit?.files.length]);
+
   useAerialMediaMapFocus({
     /** 항공영상은 geom 없음 · 단순 목록 조회만 — 지도 이동·마커 없음 */
     enabled: useRealMap && kind !== 'satellite',
     unit: selectedUnit,
     selectedFileId,
+  });
+
+  useAerialOrthoCheckedTiles({
+    enabled: useRealMap && kind === 'ortho',
+    unit: selectedUnit,
+    checkedFileIds: checkedOrthoIds,
   });
 
   const switchKind = (next: AerialKind) => {
@@ -153,10 +375,249 @@ export function AerialMediaShell({
     setUploadOpen(true);
   };
 
+  const openMediaUploadForUnit = (unit: {
+    kind: AerialKind;
+    folderName: string;
+    workName: string;
+    linkedRequestId?: string;
+    id?: string;
+  }) => {
+    if (unit.kind !== 'drone' && unit.kind !== 'ortho' && unit.kind !== 'panorama') return;
+    const wuKey =
+      unit.id?.startsWith('wu-') && Number.isFinite(Number(unit.id.slice(3)))
+        ? Number(unit.id.slice(3))
+        : undefined;
+    setMediaUploadTarget({
+      kind: unit.kind,
+      folderName: unit.folderName,
+      workName: unit.workName,
+      wuKey,
+      linkedRequestId: unit.linkedRequestId,
+    });
+  };
+
+  const handleFolderCreated = (info: FolderCreatedInfo) => {
+    setListTick((t) => t + 1);
+    if (info.kind === 'drone' || info.kind === 'ortho' || info.kind === 'panorama') {
+      if (info.kind === 'drone') void refreshDroneWorkUnitList().catch(() => undefined);
+      else if (info.kind === 'panorama') void refreshPanoWorkUnitList().catch(() => undefined);
+      else void refreshOrthoWorkUnitList().catch(() => undefined);
+      setMediaUploadTarget({
+        kind: info.kind,
+        folderName: info.folderName,
+        workName: info.workName,
+        wuKey: info.wuKey,
+        linkedRequestId: info.linkedRequestId,
+      });
+    }
+  };
+
+  const handleMediaUploaded = async (event: AerialMediaUploadCompleteEvent) => {
+    if (event.aborted) return;
+    if (event.error && event.fileCount === 0) return;
+    if (event.kind === 'drone') {
+      await refreshDroneWorkUnitList().catch(() => undefined);
+      await refreshDroneMediaFiles(event.folderName, event.wuKey).catch(() => undefined);
+    } else if (event.kind === 'panorama') {
+      await refreshPanoWorkUnitList().catch(() => undefined);
+      await refreshPanoMediaFiles(event.folderName, event.wuKey).catch(() => undefined);
+    } else if (event.kind === 'ortho') {
+      await refreshOrthoWorkUnitList().catch(() => undefined);
+    }
+    if (event.linkedRequestId) {
+      completeMediaRegistration(event.linkedRequestId, event.workName);
+    }
+    if (event.fileCount > 0) {
+      setUploadCompleteNotice({
+        kind: event.kind,
+        workName: event.workName,
+        folderName: event.folderName,
+        progressFilePath: '',
+        fileTotal: event.fileCount,
+        linkedPurpose: event.linkedRequestId
+          ? findShootingRequest(event.linkedRequestId)?.purpose || undefined
+          : undefined,
+      });
+    }
+  };
+
+  const handleMediaUploadedRef = useRef(handleMediaUploaded);
+  handleMediaUploadedRef.current = handleMediaUploaded;
+
+  useEffect(() => {
+    return subscribeAerialMediaUploadComplete((event) => {
+      void handleMediaUploadedRef.current(event);
+    });
+  }, []);
   const closeUnitDetail = () => {
     setSelectedUnitId(null);
     setSelectedFileId(null);
     setDetailTab('info');
+  };
+
+  const handleDeleteDroneFile = async () => {
+    if (!selectedUnit || selectedUnit.kind !== 'drone' || !selectedFile) return;
+    const fuKey =
+      selectedFile.id.startsWith('fu-') && Number.isFinite(Number(selectedFile.id.slice(3)))
+        ? Number(selectedFile.id.slice(3))
+        : undefined;
+    if (fuKey == null) {
+      window.alert('삭제할 파일 키가 없습니다.');
+      return;
+    }
+    const ok = window.confirm(
+      `파일 «${selectedFile.name}»을(를) 삭제할까요?\n디스크에 저장된 파일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'deleteFileUnit',
+        params: { fuKey },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '파일 삭제에 실패했습니다.');
+        return;
+      }
+      removeDroneFileFromStore(selectedUnit.id, selectedFile.id);
+      setSelectedFileId(null);
+      setListTick((t) => t + 1);
+      const wuKey = Number(selectedUnit.id.slice(3));
+      void refreshDroneMediaFiles(
+        selectedUnit.folderName,
+        Number.isFinite(wuKey) ? wuKey : undefined
+      ).catch(() => undefined);
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '파일 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteDroneUnit = async () => {
+    if (!selectedUnit || selectedUnit.kind !== 'drone') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : undefined;
+    const ok = window.confirm(
+      `작업단위 «${selectedUnit.workName}»을(를) 삭제할까요?\n소속 파일·디스크 저장 파일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'deleteWorkUnit',
+        params: {
+          kind: 'drone',
+          folderName: selectedUnit.folderName,
+          ...(wuKey != null ? { wuKey } : {}),
+        },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '작업단위 삭제에 실패했습니다.');
+        return;
+      }
+      removeDroneUnitFromStore(selectedUnit.id);
+      setListTick((t) => t + 1);
+      closeUnitDetail();
+      void refreshDroneWorkUnitList().catch(() => undefined);
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '작업단위 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleDeletePanoUnit = async () => {
+    if (!selectedUnit || selectedUnit.kind !== 'panorama') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : undefined;
+    const ok = window.confirm(
+      `작업단위 «${selectedUnit.workName}»을(를) 삭제할까요?\n소속 파일·디스크 저장 파일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'deleteWorkUnit',
+        params: {
+          kind: 'panorama',
+          folderName: selectedUnit.folderName,
+          ...(wuKey != null ? { wuKey } : {}),
+        },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '작업단위 삭제에 실패했습니다.');
+        return;
+      }
+      removeMediaUnitFromStore('panorama', selectedUnit.id);
+      setListTick((t) => t + 1);
+      closeUnitDetail();
+      void refreshPanoWorkUnitList().catch(() => undefined);
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '작업단위 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteOrthoUnit = async () => {
+    if (!selectedUnit || selectedUnit.kind !== 'ortho') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : undefined;
+    const ok = window.confirm(
+      `작업단위 «${selectedUnit.workName}»을(를) 삭제할까요?
+소속 TIF·변환 타일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'deleteWorkUnit',
+        params: {
+          kind: 'ortho',
+          folderName: selectedUnit.folderName,
+          ...(wuKey != null ? { wuKey } : {}),
+        },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '작업단위 삭제에 실패했습니다.');
+        return;
+      }
+      removeOrthoUnitFromStore(selectedUnit.id);
+      setListTick((t) => t + 1);
+      closeUnitDetail();
+      void refreshOrthoWorkUnitList().catch(() => undefined);
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '작업단위 삭제에 실패했습니다.');
+    }
   };
 
   const toggleOrthoFile = (fileId: string) => {
@@ -174,21 +635,38 @@ export function AerialMediaShell({
   /** 지도 임베드 시 파노라마 뷰어는 지도 영역 전체를 덮는 오버레이로 표시 */
   const showPanoOverlay = useRealMap && showPanoViewer && selectedFile != null;
 
-  const listWidth = 'w-[22rem]';
-  /** 상세정보·비행기록부 공통 — 촬영신청서 상세(520)와 동일, 목록 폭은 유지 */
-  const detailWidth = 'w-[32.5rem]';
-  /** 드론 파일상세는 지도가 조금 줄더라도 넉넉히 */
-  const fileWidth = showDroneFile ? 'w-[22rem]' : 'w-[17rem]';
+  const panoFiles = kind === 'panorama' && selectedUnit ? selectedUnit.files : [];
+  const panoFileIndex = selectedFile
+    ? panoFiles.findIndex((f) => f.id === selectedFile.id)
+    : -1;
+  const panoCanPrev = panoFileIndex > 0;
+  const panoCanNext = panoFileIndex >= 0 && panoFileIndex < panoFiles.length - 1;
+  const goPanoPrev = useCallback(() => {
+    if (panoFileIndex <= 0) return;
+    const prev = panoFiles[panoFileIndex - 1];
+    if (prev) setSelectedFileId(prev.id);
+  }, [panoFileIndex, panoFiles]);
+  const goPanoNext = useCallback(() => {
+    if (panoFileIndex < 0 || panoFileIndex >= panoFiles.length - 1) return;
+    const next = panoFiles[panoFileIndex + 1];
+    if (next) setSelectedFileId(next.id);
+  }, [panoFileIndex, panoFiles]);
+
+  const listWidth = showDroneFile ? 'w-[20rem]' : 'w-[22rem]';
+  /** 작업단위 상세 — 파일 상세 열림 시 축소해 미리보기 폭 확보 */
+  const detailWidth = showDroneFile ? 'w-[20rem]' : 'w-[28rem]';
+  /** 드론 파일 상세 — 미리보기·속성이 잘리지 않도록 */
+  const fileWidth = showDroneFile ? 'w-[34rem]' : 'w-[17rem]';
 
   useEffect(() => {
     if (!onContentWidthChange) return;
     let w = hideKindNav ? 0 : rem(7.5);
-    w += rem(22);
+    w += showDroneFile ? rem(20) : rem(22);
     if (showUnitDetail) {
-      w += rem(32.5);
+      w += showDroneFile ? rem(20) : rem(28);
     }
     if (showDroneFile) {
-      w += rem(22);
+      w += rem(34);
     }
     onContentWidthChange(w + 4);
   }, [onContentWidthChange, hideKindNav, showUnitDetail, showDroneFile]);
@@ -315,7 +793,7 @@ export function AerialMediaShell({
           emptyHint={viewOnly ? '검색어를 바꿔 보세요.' : undefined}
           banner={
             <div className="space-y-2">
-              {uploadingJobs.length > 0 ? <UploadProgressBanner jobs={uploadingJobs} /> : null}
+              <UploadProgressBanner jobs={uploadingJobs} />
               {kind === 'satellite' ? (
                 <p className="rounded-md border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900">
                   {viewOnly
@@ -323,12 +801,9 @@ export function AerialMediaShell({
                     : '변환 완료 시 배경지도 «자체항공영상»에 등록됩니다. on/off는 배경지도에서 합니다.'}
                 </p>
               ) : null}
-              {uploadingJobs.length === 0 &&
-              useRealMap &&
-              kind === 'ortho' &&
-              checkedOrthoIds.size > 0 ? (
+              {useRealMap && kind === 'ortho' && checkedOrthoIds.size > 0 ? (
                 <p className="rounded-md border border-emerald-200/80 bg-emerald-50 px-2.5 py-2 text-[10px] text-emerald-800">
-                  지도 타일 {checkedOrthoIds.size}개 선택 (목업)
+                  지도에 드론영상 타일 {checkedOrthoIds.size}개 표시 중
                 </p>
               ) : null}
             </div>
@@ -350,9 +825,13 @@ export function AerialMediaShell({
             viewOnly={viewOnly}
             linkedRequest={detailLinkedRequest}
             onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onAddFiles={() => openMediaUploadForUnit(selectedUnit)}
             onClearLink={() => {
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
+            }}
+            onDelete={() => {
+              void handleDeleteOrthoUnit();
             }}
           />
         </div>
@@ -370,9 +849,13 @@ export function AerialMediaShell({
             viewOnly={viewOnly}
             linkedRequest={detailLinkedRequest}
             onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onAddFiles={() => openMediaUploadForUnit(selectedUnit)}
             onClearLink={() => {
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
+            }}
+            onDelete={() => {
+              void handleDeleteDroneUnit();
             }}
           />
         </div>
@@ -390,10 +873,18 @@ export function AerialMediaShell({
             viewOnly={viewOnly}
             linkedRequest={detailLinkedRequest}
             onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onAddFiles={() => openMediaUploadForUnit(selectedUnit)}
             onClearLink={() => {
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
             }}
+            onDelete={
+              viewOnly
+                ? undefined
+                : () => {
+                    void handleDeletePanoUnit();
+                  }
+            }
           />
         </div>
       ) : null}
@@ -418,7 +909,18 @@ export function AerialMediaShell({
 
       {showDroneFile && selectedFile && detailTab === 'info' ? (
         <div className={cn('flex shrink-0 flex-col', fileWidth)}>
-          <DroneFileDetailPanel file={selectedFile} onClose={() => setSelectedFileId(null)} />
+          <DroneFileDetailPanel
+            file={selectedFile}
+            files={selectedUnit?.files}
+            onClose={() => setSelectedFileId(null)}
+            onDelete={
+              viewOnly
+                ? undefined
+                : () => {
+                    void handleDeleteDroneFile();
+                  }
+            }
+          />
         </div>
       ) : null}
 
@@ -433,26 +935,45 @@ export function AerialMediaShell({
                 height: panoRect.height,
               }}
             >
-              <div className="flex h-9 shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-3">
-                <span className="truncate text-xs font-semibold text-slate-100">
-                  파노라마 뷰어 · {selectedFile.name}
-                </span>
+              <div className="flex h-10 shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/90 px-3 backdrop-blur-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                    파노라마 뷰어
+                  </p>
+                  <p className="truncate text-xs font-semibold text-slate-100">{selectedFile.name}</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setSelectedFileId(null)}
-                  className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-100"
                   title="닫기"
                   aria-label="닫기"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex min-h-0 flex-1 items-center justify-center bg-slate-900 p-4">
-                <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-md border border-slate-700 bg-[conic-gradient(from_180deg_at_50%_50%,#1e293b,#334155,#0f172a,#1e293b)] text-slate-200">
-                  <div className="h-20 w-40 rounded-full border border-dashed border-slate-400/50 bg-slate-800/40" />
-                  <p className="px-2 text-center text-sm font-medium">{selectedFile.name}</p>
-                  <p className="text-[11px] text-slate-400">파노라마 뷰어 (목업) · 지도 영역 전체 표시</p>
-                </div>
+              <div className="relative min-h-0 flex-1 bg-black">
+                {selectedFile.relativePath ? (
+                  <PannellumViewer
+                    key={selectedFile.id}
+                    imageUrl={aerialMediaUrl(selectedFile.relativePath)}
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+                    <p className="text-sm font-medium">{selectedFile.name}</p>
+                    <p className="text-[11px] text-slate-500">미리보기 경로가 없습니다</p>
+                  </div>
+                )}
+                <PanoViewerNav
+                  fileName={selectedFile.name}
+                  index={panoFileIndex}
+                  total={panoFiles.length}
+                  canPrev={panoCanPrev}
+                  canNext={panoCanNext}
+                  onPrev={goPanoPrev}
+                  onNext={goPanoNext}
+                  tone="dark"
+                />
               </div>
             </div>,
             document.body
@@ -494,16 +1015,25 @@ export function AerialMediaShell({
 
           {kind === 'panorama' ? (
             <MapPlaceholder
-              title={showPanoViewer ? '파노라마 뷰어' : '지도'}
+              title={showPanoViewer ? '파노라마 미리보기' : '지도'}
               hint={showPanoViewer ? selectedFile?.name : undefined}
             >
-              {showPanoViewer && selectedFile ? (
-                <div className="w-full max-w-md overflow-hidden rounded-lg border border-slate-300 bg-slate-900 shadow-md">
-                  <div className="flex aspect-[2/1] flex-col items-center justify-center gap-2 bg-[conic-gradient(from_180deg_at_50%_50%,#1e293b,#334155,#0f172a,#1e293b)] text-slate-200">
-                    <div className="h-16 w-28 rounded-full border border-dashed border-slate-400/50 bg-slate-800/40" />
-                    <p className="text-[11px] font-medium">{selectedFile.name}</p>
-                    <p className="text-[10px] text-slate-400">파노라마 뷰어 (목업)</p>
-                  </div>
+              {showPanoViewer && selectedFile?.relativePath ? (
+                <div className="relative h-[min(56vh,420px)] w-full max-w-3xl overflow-hidden rounded-xl border border-slate-300 bg-black shadow-md">
+                  <PannellumViewer
+                    key={selectedFile.id}
+                    imageUrl={aerialMediaUrl(selectedFile.relativePath)}
+                  />
+                  <PanoViewerNav
+                    fileName={selectedFile.name}
+                    index={panoFileIndex}
+                    total={panoFiles.length}
+                    canPrev={panoCanPrev}
+                    canNext={panoCanNext}
+                    onPrev={goPanoPrev}
+                    onNext={goPanoNext}
+                    tone="dark"
+                  />
                 </div>
               ) : (
                 <div className="rounded-lg border border-slate-300/80 bg-white/80 px-4 py-3 shadow-sm">
@@ -537,8 +1067,27 @@ export function AerialMediaShell({
         }}
         expectedKind={kind}
         linkedRequest={dialogLinkedRequest}
-        onUploadMockComplete={() => setListTick((t) => t + 1)}
+        onFolderCreated={handleFolderCreated}
       />
+      {mediaUploadTarget ? (
+        <WorkUnitMediaUploadDialog
+          open={!viewOnly}
+          onOpenChange={(open) => {
+            if (!open) setMediaUploadTarget(null);
+          }}
+          kind={mediaUploadTarget.kind}
+          folderName={mediaUploadTarget.folderName}
+          workName={mediaUploadTarget.workName}
+          wuKey={mediaUploadTarget.wuKey}
+          linkedRequestId={mediaUploadTarget.linkedRequestId}
+          srKey={
+            mediaUploadTarget.linkedRequestId != null &&
+            Number.isFinite(Number(mediaUploadTarget.linkedRequestId))
+              ? Number(mediaUploadTarget.linkedRequestId)
+              : undefined
+          }
+        />
+      ) : null}
       {!viewOnly ? <UploadCompleteDialog notice={uploadCompleteNotice} /> : null}
     </div>
   );

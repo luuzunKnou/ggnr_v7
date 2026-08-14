@@ -602,7 +602,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       <div
         ref={wheelTargetRef}
         className={cn(
-          'relative flex min-h-0 flex-1 touch-none select-none',
+          'relative min-h-0 flex-1 touch-none select-none',
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         onPointerDown={onPointerDown}
@@ -610,14 +610,16 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div className="flex h-full w-full items-center justify-center overflow-hidden p-2 sm:p-4">
+        {/* flex 오버플로 치우침 방지 — 화면 정중앙에 맞춤 */}
+        <div className="absolute inset-0 overflow-hidden">
           <div
+            className="absolute left-1/2 top-1/2"
             onDoubleClick={(e) => {
               e.stopPropagation();
               resetView();
             }}
             style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${scale})`,
+              transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${scale})`,
               transformOrigin: 'center center',
             }}
           >
@@ -628,7 +630,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
                 src={current.url}
                 alt=""
                 draggable={false}
-                className="max-h-[min(85vh,100%)] max-w-[min(96vw,100%)] object-contain shadow-2xl"
+                className="block h-auto w-auto max-h-[70vh] max-w-[70vw] object-contain shadow-2xl"
               />
             ) : (
               <PdfPreviewStage

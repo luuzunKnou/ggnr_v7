@@ -311,7 +311,8 @@ const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
 const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = 360
 const AERIAL_MANAGE_PANEL_MIN_WIDTH = 300
-const AERIAL_MANAGE_PANEL_MAX_WIDTH = 1200
+/** 목록+작업단위상세+파일상세(미리보기) 동시 오픈 시 잘리지 않도록 */
+const AERIAL_MANAGE_PANEL_MAX_WIDTH = 1680
 const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = 340
 const SHOOTING_REQUEST_PANEL_MIN_WIDTH = 280
 const SHOOTING_REQUEST_PANEL_MAX_WIDTH = 480
@@ -466,8 +467,9 @@ function MapLayoutContent({
     SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
   const shootingRequestOpen =
     SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
-  const shootingListOpen = shootingApprovalOpen
-  const shootingPanelOpen = shootingApprovalOpen || shootingRequestOpen
+  /** 촬영요청·승인 모두 동일 목록 패널 (모드만 mine / approval) */
+  const shootingListOpen = shootingApprovalOpen || shootingRequestOpen
+  const shootingPanelOpen = shootingListOpen
   const [shootingRequestDetailId, setShootingRequestDetailId] = useState<string | null>(null)
   const [shootingRequestListMode, setShootingRequestListMode] = useState<'mine' | 'approval'>('mine')
   /** 내 정보 → 촬영요청 목록에서 연 신청서 모달 id (사이드 패널 아님) */
@@ -1260,14 +1262,20 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
-    if (!shootingRequestOpen) return
     if (searchParams.get('shotForm') !== 'new') return
-    setShootingRequestListMode('mine')
-    setShootingRequestDetailId(SHOOTING_REQUEST_NEW_ID)
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
+    if (shootingRequestOpen || shootingApprovalOpen) {
+      // 왼쪽 촬영요청·승인 패널이 이미 열린 경우 → 그 흐름에서 신규 신청
+      setShootingRequestListMode('mine')
+      setShootingRequestDetailId(SHOOTING_REQUEST_NEW_ID)
+    } else {
+      // 오른쪽 맵 컨트롤 등 → 목록 패널 없이 신청서 모달만
+      setMyInfoShootingModalId(SHOOTING_REQUEST_NEW_ID)
+      setShootingRequestDetailId(null)
+    }
     router.replace(`/map?${current.toString()}`)
-  }, [shootingRequestOpen, searchParams, router])
+  }, [shootingRequestOpen, shootingApprovalOpen, searchParams, router])
 
   const openShootingRequestForm = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()))
@@ -2033,7 +2041,14 @@ function MapLayoutContent({
                 setShootingRequestDetailId(null)
               }
             }}
-            onCreated={(newId) => setShootingRequestDetailId(newId)}
+            onCreated={(newId) => {
+              if (myInfoShootingModalId != null) {
+                // 신청폼만 연 경우 — 왼쪽 패널 없이 모달에서 접수건 조회로 전환
+                setMyInfoShootingModalId(newId)
+                return
+              }
+              setShootingRequestDetailId(newId)
+            }}
           />
           {memoManagementOpen && (
             <div className="pointer-events-auto shrink-0">

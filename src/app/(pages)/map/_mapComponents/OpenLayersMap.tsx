@@ -124,6 +124,7 @@ import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
 import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
+import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
 import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
@@ -1201,6 +1202,10 @@ export default function OpenLayersMap({
     enabled: aerialViewCheckedIds.size > 0,
     checkedUnitIds: aerialViewCheckedIds,
   });
+  useAerialOrthoCheckedTiles({
+    enabled: aerialViewCheckedIds.size > 0,
+    checkedUnitIds: aerialViewCheckedIds,
+  });
 
   const totalIdentifyCount = identifyIntakePopup?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
 
@@ -1837,6 +1842,15 @@ export default function OpenLayersMap({
 
   /** 목록 패널 열기/닫기. 최초(null)면 빈 선택으로 열고, 기존 선택은 유지한다. */
   const togglePanelLayer = (id: PanelLayerId) => {
+    const opening = openSubPanel !== id;
+    if (opening) {
+      // 배경지도·드론영상 펼침 패널과 배타
+      if (activeControls.includes('background-map')) setIsBackgroundPanelExiting(true);
+      if (activeControls.includes('aerial-view')) setIsAerialViewPanelExiting(true);
+      setActiveControls((prev) =>
+        prev.filter((x) => x !== 'background-map' && x !== 'aerial-view')
+      );
+    }
     setOpenSubPanel((prev) => (prev === id ? null : id));
     if (id === 'land-category') {
       if (visibleJimokLayerNames == null) {
@@ -1878,6 +1892,7 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       } else {
+        setOpenSubPanel(null);
         setIsAerialViewPanelExiting(false);
         setActiveControls((prev) => {
           const next = prev.filter((item) => item !== 'aerial-view');
@@ -1891,6 +1906,7 @@ export default function OpenLayersMap({
         setIsAerialViewPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'aerial-view'));
       } else {
+        setOpenSubPanel(null);
         setIsBackgroundPanelExiting(false);
         setActiveControls((prev) => {
           const next = prev.filter((item) => item !== 'background-map');
@@ -1934,8 +1950,8 @@ export default function OpenLayersMap({
     // 액션 전용 버튼은 상태 변경 없이 액션만 실행
     if (ACTION_ONLY_IDS.includes(id)) {
       if (id === 'shooting-request') {
+        // 신청서 모달만 — 왼쪽 촬영요청 목록 패널은 열지 않음
         const current = new URLSearchParams(Array.from(searchParams.entries()));
-        current.set('opened', 'shootingRequest');
         current.set('shotForm', 'new');
         router.push(`/map?${current.toString()}`);
         return;
@@ -1987,10 +2003,7 @@ export default function OpenLayersMap({
       return;
     }
 
-    // 배경지도·영상조회는 지적도 등 목록과 동시 표시 — 토글 시 목록을 닫지 않음
-    if (id !== 'background-map' && id !== 'aerial-view') {
-      setOpenSubPanel(null);
-    }
+    setOpenSubPanel(null);
 
     if (MULTI_SELECT_IDS.includes(id)) {
       setActiveControls((prev) => {
@@ -2005,7 +2018,7 @@ export default function OpenLayersMap({
         return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
       });
     } else if (id === 'background-map' || id === 'aerial-view') {
-      // 배경지도·드론영상: 서로만 배타. 초기화 패널·측정·레이어 선택은 유지
+      // 배경지도·드론영상: 서로 배타 + 지적도 등 목록 패널과도 배타
       const peer = id === 'background-map' ? 'aerial-view' : 'background-map';
       if (isActive) {
         if (id === 'background-map') setIsBackgroundPanelExiting(true);
@@ -2128,8 +2141,8 @@ export default function OpenLayersMap({
               data-map-control-expand-panel
               className={
                 isAerialViewPanelExiting
-                  ? 'animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                  : 'animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+                  ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
+                  : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
               }
             >
               <AerialViewLayerPanel
