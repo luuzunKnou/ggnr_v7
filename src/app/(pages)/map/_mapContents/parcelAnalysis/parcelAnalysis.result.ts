@@ -281,7 +281,10 @@ export function buildParcelAnalysisResult(
     const priceRaw = formatPrice(r.publicPrice);
     return {
       pnu: String(r.pnu ?? '').trim(),
-      addr: String(r.jibun ?? '').trim() || String(r.pnu ?? '').trim(),
+      addr:
+        formatAddressStripSidoSigungu(String(r.jibun ?? '').trim()) ||
+        String(r.jibun ?? '').trim() ||
+        String(r.pnu ?? '').trim(),
       jimok: formatParcelLandJimokValue(r.jimok),
       area: formatSqm(areaSqm),
       ownerType: formatParcelLandLinkageField(r.ownerType, linkageFailed, true),

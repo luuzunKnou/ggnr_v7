@@ -6,23 +6,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnCo
 import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
 import { transformCoordinate } from '../services/coordinateService';
 import {
-  fetchBuildingLedgerRows,
+  fetchBuildingRegisterDetail,
   fetchLandInfoConfig,
   fetchParcelIdentityAtPoint,
   fetchParcelTabData,
   fetchPermitRows,
-  type BuildingLedgerLandInfoRow,
   type BuildingLedgerRow,
   type BuildingPermitSource,
+  type BuildingRegisterMode,
+  type BuildingRegisterRow,
   type ParcelTabData,
 } from './api';
+import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPanels';
 import {
-  BuildingLinkageLegend,
-  BuildingPermitLinkageLegend,
   LandLinkageLegendText,
   ParcelLandLinkageSourceText,
   ParcelLinkageValueText,
-  buildingPermitLinkageSource,
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 // 2026-07-21 이수빈: 빌드 오류로 임시 처리
 import type { ParcelLandRowSource } from '@/lib/parcelLandNormalize';
@@ -291,10 +290,20 @@ export function LandInfoPanelContent({
     possessions: [],
   });
 
-  const [buildingRows, setBuildingRows] = useState<BuildingLedgerLandInfoRow[]>([]);
+  const [buildingRegisterSource, setBuildingRegisterSource] = useState<'seum' | 'portal' | null>(
+    null
+  );
+  const [buildingRegisterMode, setBuildingRegisterMode] = useState<BuildingRegisterMode>(null);
+  const [buildingRegisterBuildings, setBuildingRegisterBuildings] = useState<BuildingRegisterRow[]>(
+    []
+  );
+  const [buildingRegisterChildren, setBuildingRegisterChildren] = useState<BuildingRegisterRow[]>(
+    []
+  );
   const [buildingLedgerNotice, setBuildingLedgerNotice] = useState<string | null>(null);
   /** true only while 요청 진행 중 — 빈 결과([])와 구분 */
   const [buildingLedgerFetching, setBuildingLedgerFetching] = useState(false);
+  const [buildingRegisterReloadKey, setBuildingRegisterReloadKey] = useState(0);
 
   const [permitRows, setPermitRows] = useState<BuildingLedgerRow[]>([]);
   const [permitSource, setPermitSource] = useState<BuildingPermitSource>(null);
@@ -348,7 +357,10 @@ export function LandInfoPanelContent({
       possessions: [],
     });
     setParcelError(null);
-    setBuildingRows([]);
+    setBuildingRegisterSource(null);
+    setBuildingRegisterMode(null);
+    setBuildingRegisterBuildings([]);
+    setBuildingRegisterChildren([]);
     setBuildingLedgerNotice(null);
     setPermitRows([]);
     setPermitSource(null);
@@ -397,18 +409,24 @@ export function LandInfoPanelContent({
       String(resolvedParcelJibunRef.current ?? '').trim() ||
       String(jibunPropRef.current ?? '').trim() ||
       undefined;
-    fetchBuildingLedgerRows({
+    fetchBuildingRegisterDetail({
       pnu: effectivePnu,
       jibun: jibunHint,
     })
       .then((res) => {
         if (!alive) return;
-        setBuildingRows(res.rows);
+        setBuildingRegisterSource(res.source);
+        setBuildingRegisterMode(res.mode);
+        setBuildingRegisterBuildings(res.buildings);
+        setBuildingRegisterChildren(res.children);
         setBuildingLedgerNotice(res.notice ?? null);
       })
       .catch(() => {
         if (!alive) return;
-        setBuildingRows([]);
+        setBuildingRegisterSource(null);
+        setBuildingRegisterMode(null);
+        setBuildingRegisterBuildings([]);
+        setBuildingRegisterChildren([]);
         setBuildingLedgerNotice(null);
       })
       .finally(() => {
@@ -418,7 +436,7 @@ export function LandInfoPanelContent({
       alive = false;
       setBuildingLedgerFetching(false);
     };
-  }, [activeTab, effectivePnu]);
+  }, [activeTab, effectivePnu, buildingRegisterReloadKey]);
 
   useLayoutEffect(() => {
     if (activeTab !== 'buildingPermit') {
@@ -611,101 +629,35 @@ export function LandInfoPanelContent({
       );
     }
     if (activeTab === 'buildingLedger') {
-      if (buildingLedgerFetching) return <p className="text-xs text-slate-500">건축물대장 조회 중...</p>;
-      if (!buildingRows.length) {
-        return (
-          <div className="space-y-2">
-            {buildingLedgerNotice ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                {buildingLedgerNotice}
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500">조회 결과가 없습니다.</p>
-            )}
-          </div>
-        );
-      }
       return (
-        <div className="space-y-2">
-          {buildingLedgerNotice ? (
-            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              {buildingLedgerNotice}
-            </p>
-          ) : null}
-          <BuildingLinkageLegend sources={buildingRows.map((r) => r.source)} />
-          <DataTable
-            headers={['명칭', '대지위치', '지번', '도로명', '건폐율', '용적률', '대지면적', '연면적']}
-            plainColumnIndexes={[1, 2, 3]}
-            linkageSources={buildingRows.map((r) => r.source)}
-            rows={buildingRows.map((row) => [
-              toText(row.bldNm),
-              toText(
-                (() => {
-                  const t = String(row.platLoc ?? '').trim();
-                  if (!t || t === '-') return t || '-';
-                  return formatAddressStripSidoSigungu(t) || t;
-                })()
-              ),
-              toText(row.jibun),
-              toText(
-                (() => {
-                  const t = String(row.roadAddr ?? '').trim();
-                  if (!t || t === '-') return t || '-';
-                  return formatAddressStripSidoSigungu(t) || t;
-                })()
-              ),
-              toText(row.bcRat),
-              toText(row.vlRat),
-              toText(row.platArea),
-              toText(row.totArea),
-            ])}
-          />
-        </div>
-      );
-    }
-    if (permitFetching) return <p className="text-xs text-muted-foreground">건축인허가 조회 중...</p>;
-    if (!permitRows.length) {
-      return (
-        <div className="space-y-2">
-          {permitNotice ? (
-            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-              {permitNotice}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">건축/주택 인허가 데이터가 없습니다.</p>
-          )}
-        </div>
-      );
-    }
-    const permitLinkage = buildingPermitLinkageSource(permitSource);
-    return (
-      <div className="space-y-2">
-        {permitNotice ? (
-          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-            {permitNotice}
-          </p>
-        ) : null}
-        <BuildingPermitLinkageLegend source={permitSource} />
-        <DataTable
-          headers={['용도명', '허가일', '착공일', '사용승인(검사)일', '연면적(㎡)', '세대수']}
-          linkageSource={permitLinkage}
-          rows={permitRows.map((row) => [
-            toText(row.mainPurpsCdNm || row.purpsCdNm),
-            toText(row.archPmsDay || row.apprvDay),
-            toText(row.realStcnsDay || row.stcnsDay),
-            toText(row.useAprDay || row.useInsptDay),
-            toText(row.totArea),
-            toText(row.hhldCnt || row.totHhldCnt),
-          ])}
+        <BuildingRegisterPanel
+          pnu={effectivePnu || ''}
+          fetching={buildingLedgerFetching}
+          notice={buildingLedgerNotice}
+          source={buildingRegisterSource}
+          mode={buildingRegisterMode}
+          buildings={buildingRegisterBuildings}
+          childRows={buildingRegisterChildren}
+          onResetRoot={() => setBuildingRegisterReloadKey((k) => k + 1)}
         />
-      </div>
+      );
+    }
+    return (
+      <BuildingPermitPanel
+        fetching={permitFetching}
+        notice={permitNotice}
+        source={permitSource}
+        rows={permitRows}
+      />
     );
   }, [
     activeTab,
     buildingLedgerFetching,
     buildingLedgerNotice,
-    buildingRows,
-    dataPortalKey,
+    buildingRegisterBuildings,
+    buildingRegisterChildren,
+    buildingRegisterMode,
+    buildingRegisterSource,
     effectivePnu,
     latestChar,
     latestPossession,

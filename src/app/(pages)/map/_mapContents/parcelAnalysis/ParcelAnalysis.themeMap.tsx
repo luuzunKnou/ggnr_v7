@@ -41,7 +41,7 @@ import {
   PARCEL_ANALYSIS_BOUNDARY_STROKE,
   PARCEL_ANALYSIS_BOUNDARY_STROKE_WIDTH,
   PARCEL_ANALYSIS_OUTSIDE_MASK_FILL,
-  PARCEL_ANALYSIS_VWORLD_BASE_URL,
+  PARCEL_ANALYSIS_VWORLD_SATELLITE_URL,
   resolveThemeMapFeatureStyle,
   toCaptureDisplayGeometry,
 } from './parcelAnalysis.mapStyle';
@@ -186,10 +186,25 @@ type ThemeMapProps = {
   waitingForParcels?: boolean;
 };
 
+/** 결과 지도 프레임 — 고정 높이(본문 폭 100%) */
 const MAP_HEIGHT_PX = 320;
 
+/** 테마 지도 — 노란 선택 영역이 프레임 위·아래에 약 15px 여백 */
+const THEME_MAP_FIT_PADDING: [number, number, number, number] = [15, 15, 15, 15];
+
+const THEME_MAP_FIT_OPTS = {
+  padding: THEME_MAP_FIT_PADDING,
+  zoomInFactor: 1,
+} as const;
+
+function readThemeMapSize(el: HTMLElement): [number, number] {
+  const w = Math.max(1, Math.floor(el.clientWidth) || 640);
+  const h = Math.max(1, Math.floor(el.clientHeight) || MAP_HEIGHT_PX);
+  return [w, h];
+}
+
 function createVworldTileSource() {
-  return createParcelAnalysisBasemapSource(PARCEL_ANALYSIS_VWORLD_BASE_URL);
+  return createParcelAnalysisBasemapSource(PARCEL_ANALYSIS_VWORLD_SATELLITE_URL);
 }
 
 function useThemeMapWhenVisible(rootRef: RefObject<HTMLDivElement | null>) {
@@ -319,9 +334,9 @@ function ParcelAnalysisThemeMapInner({
       });
       const boundaryGeom = toCaptureDisplayGeometry(rawBoundaryGeom);
       const analysisExtent = boundaryGeom.getExtent();
-      const mapSize: [number, number] = [targetEl.clientWidth || 640, MAP_HEIGHT_PX];
+      const mapSize = readThemeMapSize(targetEl);
       const view = new View({ projection: 'EPSG:5181' });
-      const homeView = applyThemeMapHomeView(view, analysisExtent, mapSize);
+      const homeView = applyThemeMapHomeView(view, analysisExtent, mapSize, THEME_MAP_FIT_OPTS);
 
       const geoJson = new GeoJSON();
       const parcelFeatures: Feature<Geometry>[] = [];
@@ -405,6 +420,11 @@ function ParcelAnalysisThemeMapInner({
         view,
         ...createParcelAnalysisStaticMapOptions(),
       });
+      map.updateSize();
+      const sized = readThemeMapSize(targetEl);
+      if (sized[0] !== mapSize[0] || sized[1] !== mapSize[1]) {
+        applyThemeMapHomeView(view, analysisExtent, sized, THEME_MAP_FIT_OPTS);
+      }
 
       const finishRendering = () => {
         if (!cancelled) setMapRendering(false);
