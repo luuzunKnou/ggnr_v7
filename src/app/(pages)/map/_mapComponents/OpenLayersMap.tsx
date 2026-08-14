@@ -1844,9 +1844,9 @@ export default function OpenLayersMap({
   const togglePanelLayer = (id: PanelLayerId) => {
     const opening = openSubPanel !== id;
     if (opening) {
-      // 배경지도·드론영상 펼침 패널과 배타
-      if (activeControls.includes('background-map')) setIsBackgroundPanelExiting(true);
-      if (activeControls.includes('aerial-view')) setIsAerialViewPanelExiting(true);
+      // 배경지도·드론영상과 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
+      setIsBackgroundPanelExiting(false);
+      setIsAerialViewPanelExiting(false);
       setActiveControls((prev) =>
         prev.filter((x) => x !== 'background-map' && x !== 'aerial-view')
       );
