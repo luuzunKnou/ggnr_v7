@@ -2,16 +2,27 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { LayerRowDetailAttr } from '../../_mapComponents/layerRowEdit';
-import { toDateInputValue } from '@/lib/usageDataAsFieldUtils';
+import {
+  formatAreaDisplay,
+  sanitizeNumericInput,
+  toDateInputValue,
+} from '@/lib/usageDataAsFieldUtils';
 import {
   OCCUPATION_PERIOD_STATE_OPTIONS,
 } from '@/lib/occupationLedgerPeriodState';
 import { OccupationLedgerPlaceInput } from './OccupationLedgerPlaceInput';
 
+const AREA_FIELD = 'perm_area';
+
 const inputClass =
   'rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 const readonlyInputClass =
   'cursor-default rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700 outline-none';
+/** 도로망 유지보수 «추가»와 동일 primary 톤, 입력 높이보다 약간 낮게 */
+const btnAutoCalc =
+  'inline-flex h-6 shrink-0 items-center rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
+const areaInputClass =
+  'h-6 min-w-0 flex-1 rounded border border-slate-200 bg-white px-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 
 const DATE_FIELD_SET = new Set(['perm_start_date', 'perm_end_date', 'permit_date']);
 const PLACE_FIELD = 'occup_place';
@@ -26,6 +37,8 @@ type Props = {
   onDraftChange: (field: string, value: string) => void;
   vworldApiKey?: string;
   resetKey?: string;
+  /** 점용면적 — 본표 도형 면적 자동계산. 실패 시 안내 문구 반환 */
+  onAutoCalcArea?: (field: string) => string | null | void;
 };
 
 /** 점용대장 상세 전용 속성 섹션 (상태 select · 점용장소 주소검색) */
@@ -38,8 +51,10 @@ export function OccupationLedgerAttributeSection({
   onDraftChange,
   vworldApiKey = '',
   resetKey,
+  onAutoCalcArea,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [areaHint, setAreaHint] = useState<string | null>(null);
 
   useEffect(() => {
     setExpanded(false);
@@ -91,19 +106,20 @@ export function OccupationLedgerAttributeSection({
             const isDate = dateFields.has(fieldLower) || DATE_FIELD_SET.has(fieldLower);
             const isPlace = fieldLower === PLACE_FIELD;
             const isState = fieldLower === STATE_FIELD;
+            const isArea = fieldLower === AREA_FIELD;
 
             return (
               <div
                 key={row.field}
-                className="grid grid-cols-detail-30 gap-x-2 gap-y-0.5 px-2 py-1.5"
+                className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
               >
-                <dt className="shrink-0 font-medium text-slate-600">{row.label}</dt>
+                <dt className="shrink-0 leading-none font-medium text-slate-600">{row.label}</dt>
                 <dd className="relative min-w-0 break-words text-slate-800">
                   {showInput ? (
                     isPlace ? (
                       <OccupationLedgerPlaceInput
                         key={`${resetKey ?? ''}:place`}
-                        value={inputValue}
+                        value={resolveDraftValue(row.field) || inputValue}
                         onChange={(v) => onDraftChange(row.field, v)}
                         vworldApiKey={vworldApiKey}
                       />
@@ -123,6 +139,39 @@ export function OccupationLedgerAttributeSection({
                           </option>
                         ))}
                       </select>
+                    ) : isArea ? (
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={sanitizeNumericInput(inputValue)}
+                            onChange={(e) => {
+                              setAreaHint(null);
+                              onDraftChange(row.field, sanitizeNumericInput(e.target.value));
+                            }}
+                            className={areaInputClass}
+                            placeholder="0"
+                          />
+                          <span className="shrink-0 text-slate-500">m²</span>
+                          {onAutoCalcArea ? (
+                            <button
+                              type="button"
+                              title="자동계산"
+                              onClick={() => {
+                                const msg = onAutoCalcArea(row.field);
+                                setAreaHint(typeof msg === 'string' && msg ? msg : null);
+                              }}
+                              className={`ml-1.5 ${btnAutoCalc}`}
+                            >
+                              자동계산
+                            </button>
+                          ) : null}
+                        </div>
+                        {areaHint ? (
+                          <span className="text-[10px] text-amber-700">{areaHint}</span>
+                        ) : null}
+                      </div>
                     ) : isDate ? (
                       <input
                         type="date"
@@ -143,10 +192,12 @@ export function OccupationLedgerAttributeSection({
                       type="text"
                       readOnly
                       value={readonlyValue}
-                      placeholder="불러오는 중…"
+                      placeholder=""
                       className={`w-full ${readonlyInputClass}`}
                       aria-readonly="true"
                     />
+                  ) : isArea ? (
+                    formatAreaDisplay(row.value === '—' ? '' : row.value)
                   ) : (
                     row.value
                   )}

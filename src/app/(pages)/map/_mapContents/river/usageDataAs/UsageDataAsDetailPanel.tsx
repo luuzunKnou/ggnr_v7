@@ -15,7 +15,10 @@ import {
   type LayerRowDetailAttr,
   type LayerRowParcelItem,
 } from "../../../_mapComponents/layerRowEdit";
-import { UsageDataAsAttributeSection } from "./UsageDataAsAttributeSection";
+import {
+  UsageDataAsAttributeSection,
+  type UsageDataAsRiverOption,
+} from "./UsageDataAsAttributeSection";
 import { fitMapToLayerRowParcel } from "../../../_mapComponents/layerRowEdit/layerRowParcelUtils";
 import { resolveParcelGeoms } from "../../../_mapComponents/layerRowEdit/resolveParcelGeoms";
 import {
@@ -27,6 +30,7 @@ import { UsageDataAsAddressList } from "./UsageDataAsAddressList";
 import { useLayerRowParcelHighlight, type LayerRowParcelHighlightVariant } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight";
 import { useLayerRowParcelDraftPreview } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelDraftPreview";
 import { useUsageDataAsParentGeomHighlight } from "./useUsageDataAsParentGeomHighlight";
+import { MapHitOverlapSelect } from "../../../_mapComponents/MapHitOverlapSelect";
 import {
   ensureUsageDataAsWmsLayersVisible,
   refreshUsageDataAsMapView,
@@ -35,10 +39,17 @@ import { useMapContext } from "../../../_mapComponents/MapContext";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { resolveParcelItemIntersectParentForHighlight } from "../../../_mapComponents/layerRowEdit/resolveParcelItemIntersectParentForHighlight";
+import { useAutoOccupationPermitNo } from "../../../_mapComponents/layerRowEdit/useAutoOccupationPermitNo";
+import { useLayerRowPlaceFromGeom } from "../../../_mapComponents/layerRowEdit/useLayerRowPlaceFromGeom";
+import { computeAreaSqmFromWkt5181 } from "../../../_mapComponents/analysisArea";
+import { splitUsagePeriod } from "@/lib/usageDataAsFieldUtils";
+import { currentPermitYear } from "@/lib/occupationPermitNo";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   detailId: string;
   onClose: () => void;
+  onSelectDetailId?: (id: string) => void;
   onSaved?: () => void;
   onCreated?: (newKey: string) => void;
   onDeleted?: () => void;
@@ -47,11 +58,13 @@ type Props = {
 export function UsageDataAsDetailPanel({
   detailId,
   onClose,
+  onSelectDetailId,
   onSaved,
   onCreated,
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
+  const hitOptions = mapContext?.usageDataAsMapHitOptions ?? [];
   const preset = LAYER_ROW_EDIT_PRESETS.usageDataAs;
   const isCreateMode = detailId === LAYER_ROW_NEW_ID;
 
@@ -68,6 +81,8 @@ export function UsageDataAsDetailPanel({
   const [mgjAddModalOpen, setMgjAddModalOpen] = useState(false);
   const [parcelAddModalOpen, setParcelAddModalOpen] = useState(false);
   const [nextConsCode, setNextConsCode] = useState("");
+  const [nextPermitNo, setNextPermitNo] = useState("");
+  const [riverOptions, setRiverOptions] = useState<UsageDataAsRiverOption[]>([]);
   const [highlightParcel, setHighlightParcel] = useState<LayerRowParcelItem | null>(null);
   const [highlightVariant, setHighlightVariant] = useState<LayerRowParcelHighlightVariant>("blue");
   const [showParentGeom, setShowParentGeom] = useState(true);
@@ -84,6 +99,34 @@ export function UsageDataAsDetailPanel({
   } = useLayerParcelNavigation(USAGE_DATA_AS_MGJ_WMS_LAYER_ID);
 
   const { formAttributes, formFieldsLoading } = useLayerRowFormFields(preset, isCreateMode);
+
+  useEffect(() => {
+    let cancelled = false;
+    void call("", "POST", {
+      service: "usageDataAsService",
+      action: "listUsageDataAsRiverOptions",
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const rows = Array.isArray(data?.rivers) ? data.rivers : [];
+        setRiverOptions(
+          rows
+            .map((r: { riverName?: string; riverType?: string }) => ({
+              riverName: String(r?.riverName ?? "").trim(),
+              riverType: String(r?.riverType ?? "").trim(),
+            }))
+            .filter((r: UsageDataAsRiverOption) => r.riverName)
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setRiverOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadDetail = useCallback(async () => {
     const key = String(detailId ?? "").trim();
@@ -205,16 +248,18 @@ export function UsageDataAsDetailPanel({
   const formAttributesForEdit = useMemo(() => {
     const base = isCreateMode ? formAttributes : attributes;
     if (!isCreateMode) return base;
-    return base.map((row) =>
-      row.field.toLowerCase() === "cons_code"
-        ? { ...row, value: nextConsCode || row.value || "" }
-        : row
-    );
-  }, [attributes, formAttributes, isCreateMode, nextConsCode]);
+    return base.map((row) => {
+      const fl = row.field.toLowerCase();
+      if (fl === "cons_code") return { ...row, value: nextConsCode || row.value || "" };
+      if (fl === "perm_num" && nextPermitNo) return { ...row, value: nextPermitNo };
+      return row;
+    });
+  }, [attributes, formAttributes, isCreateMode, nextConsCode, nextPermitNo]);
 
   useEffect(() => {
     if (!isCreateMode) {
       setNextConsCode("");
+      setNextPermitNo("");
       return;
     }
     let cancelled = false;
@@ -230,6 +275,19 @@ export function UsageDataAsDetailPanel({
       })
       .catch(() => {
         if (!cancelled) setNextConsCode("");
+      });
+    void call("", "POST", {
+      service: "usageDataAsService",
+      action: "getNextUsageDataAsPermitNo",
+      params: { year: currentPermitYear() },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setNextPermitNo(String(data?.permitNo ?? "").trim());
+      })
+      .catch(() => {
+        if (!cancelled) setNextPermitNo("");
       });
     return () => {
       cancelled = true;
@@ -268,6 +326,80 @@ export function UsageDataAsDetailPanel({
     onCancelCreate: onClose,
     wmsLayerId: USAGE_DATA_AS_SOLO_WMS_LAYER_ID,
   });
+
+  const draftFieldValue = useCallback((fieldLower: string): string => {
+    if (fieldLower in draft) return draft[fieldLower] ?? "";
+    const key = Object.keys(draft).find((k) => k.toLowerCase() === fieldLower);
+    return key ? (draft[key] ?? "") : "";
+  }, [draft]);
+
+  const draftFieldKey = useCallback((fieldLower: string): string => {
+    return Object.keys(draft).find((k) => k.toLowerCase() === fieldLower) ?? fieldLower;
+  }, [draft]);
+
+  const usagePeriodStart = splitUsagePeriod(draftFieldValue("usage_pd")).start;
+  const permitFieldKey = draftFieldKey("perm_num");
+  const permitValue = draftFieldValue("perm_num");
+
+  const fetchNextPermitNo = useCallback(
+    async (year: number) => {
+      try {
+        const res = await call("", "POST", {
+          service: "usageDataAsService",
+          action: "getNextUsageDataAsPermitNo",
+          params: {
+            year,
+            excludeConsCode: isCreateMode ? undefined : detailId,
+          },
+        });
+        const data = res?.data ?? res;
+        const next = String(data?.permitNo ?? "").trim();
+        return next || null;
+      } catch {
+        return null;
+      }
+    },
+    [detailId, isCreateMode]
+  );
+
+  useAutoOccupationPermitNo({
+    enabled: isEditing,
+    sessionKey: `${detailId}:${isEditing ? "edit" : "view"}`,
+    startDateRaw: usagePeriodStart,
+    permitValue,
+    permitFieldKey,
+    onSetPermit: handleDraftChange,
+    fetchNext: fetchNextPermitNo,
+    useCurrentYearWhenEmpty: isCreateMode,
+  });
+
+  const placeFieldKey = useMemo(() => {
+    const fromAttrs = formAttributesForEdit.find(
+      (a) => a.field.toLowerCase() === "usage_loc"
+    );
+    return fromAttrs?.field ?? "usage_loc";
+  }, [formAttributesForEdit]);
+
+  useLayerRowPlaceFromGeom({
+    enabled: isEditing,
+    placeFieldKey,
+    onSetPlace: handleDraftChange,
+    parcelAddresses: draftParcels.map((p) => p.address),
+  });
+
+  const handleAutoCalcArea = useCallback(
+    (field: string): string | null => {
+      const wkt = String(mapContext?.layerRowGeomEditWktRef?.current ?? "").trim();
+      if (!wkt) return "도형을 먼저 지정하거나 수정해 주세요.";
+      const areaSqm = computeAreaSqmFromWkt5181(wkt);
+      if (!Number.isFinite(areaSqm) || areaSqm <= 0) {
+        return "도형 면적을 계산할 수 없습니다.";
+      }
+      handleDraftChange(field, String(areaSqm));
+      return null;
+    },
+    [handleDraftChange, mapContext?.layerRowGeomEditWktRef]
+  );
 
   useLayerRowParcelHighlight(
     showParentGeom ? null : highlightParcel,
@@ -447,11 +579,20 @@ export function UsageDataAsDetailPanel({
       <LayerRowEditHeader
         title="하천점용 상세"
         actionsPlacement="footer"
-        onClose={onClose}
+        onClose={() => {
+          mapContext?.setUsageDataAsMapHitOptions?.([]);
+          onClose();
+        }}
         {...editToolbarProps}
       />
+      <MapHitOverlapSelect
+        fieldLabel="허가번호"
+        options={hitOptions}
+        value={detailId}
+        onChange={(id) => onSelectDetailId?.(id)}
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
@@ -474,6 +615,9 @@ export function UsageDataAsDetailPanel({
               dateFields={dateFields}
               onDraftChange={handleDraftChange}
               resetKey={detailId}
+              onAutoCalcArea={handleAutoCalcArea}
+              vworldApiKey={vworldApiKey}
+              riverOptions={riverOptions}
             />
 
             {(isEditing || !isCreateMode) && (
@@ -522,7 +666,7 @@ export function UsageDataAsDetailPanel({
             등록할 필드 정의를 불러오지 못했습니다.
           </div>
         )}
-      </div>
+      </MapSideDetailScroll>
 
       <LayerRowEditFooter {...editToolbarProps} />
 

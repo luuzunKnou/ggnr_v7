@@ -13,6 +13,7 @@ import {
   type SourceUploadMode,
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import { archiverLevelForPath } from '@/service/sourceInstallZipCompression';
+import { createPythonEnvSplitParts } from '@/service/pythonEnvSplitZip';
 import {
   completeInstallZipProgress,
   failInstallZipProgress,
@@ -32,7 +33,32 @@ import { recordVersionHistory } from '@/service/mngVersionHistoryService';
  */
 function installZipDownloadRoot(): string {
   const leaf = ['ggnr', 'source', 'install', 'download'].join('_');
+  return [process.cwd(), '.tmp', leaf].join(path.sep);
+}
+
+function legacyOsTmpLeaf(leaf: string): string {
   return `${os.tmpdir()}${path.sep}${leaf}`;
+}
+
+/** 이전 C: TEMP·워크스페이스 .tmp 잔여 설치 ZIP/분할본 삭제 */
+async function purgeStaleInstallTemps(): Promise<void> {
+  const dirs = [
+    installZipDownloadRoot(),
+    [process.cwd(), '.tmp', ['ggnr', 'python', 'env', 'split'].join('_')].join(path.sep),
+    legacyOsTmpLeaf(['ggnr', 'source', 'install', 'download'].join('_')),
+    legacyOsTmpLeaf(['ggnr', 'python', 'env', 'split'].join('_')),
+  ];
+  for (const dir of dirs) {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+export function formatInstallZipError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/ENOSPC|no space left/i.test(raw)) {
+    return '디스크 공간이 부족합니다. 설치 ZIP은 프로젝트 .tmp 에 만들며, 이전 임시 파일은 자동으로 지웁니다. C 드라이브 용량을 확보한 뒤 다시 시도하세요.';
+  }
+  return raw || '설치 ZIP 생성 실패';
 }
 
 type IncludedFile = {
@@ -147,6 +173,39 @@ async function scanInstallFiles(params: {
   }
 
   await walk(workspaceRoot);
+
+  /** 업로드에서는 nssm 제외, 설치 ZIP에는 서비스 등록용으로 포함 */
+  const nssmRoot = path.join(workspaceRoot, 'nssm');
+  async function walkNssmForce(absDir: string): Promise<void> {
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const childAbs = path.join(absDir, entry.name);
+      const childRel = toPosixRelative(childAbs, workspaceRoot);
+      if (!childRel || childRel.startsWith('..')) continue;
+      if (entry.isDirectory()) {
+        await walkNssmForce(childAbs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      included.push({
+        absPath: childAbs,
+        relPath: childRel,
+        category: classifySourcePath(childRel),
+      });
+      scanTicks += 1;
+      if (params.progressId && scanTicks % 80 === 0) {
+        pushScanProgress();
+        await new Promise<void>((r) => setImmediate(r));
+      }
+    }
+  }
+  try {
+    await fs.access(nssmRoot);
+    await walkNssmForce(nssmRoot);
+  } catch {
+    /* nssm 폴더 없으면 설치 ZIP에서만 누락 — starter가 별도 안내 */
+  }
+
   pushScanProgress();
   return { included, skipped, skippedPaths, skippedTruncated };
 }
@@ -182,6 +241,7 @@ async function buildInstallZipFile(params: {
     });
     archive.pipe(output);
     for (const f of files) {
+      if (!fsSync.existsSync(f.absPath)) continue;
       const level = archiverLevelForPath(f.relPath);
       // @types/archiver EntryData에 store/zlib이 빠져 있어 런타임 옵션만 전달
       archive.file(
@@ -221,59 +281,82 @@ export async function buildInstallZip(params: {
 }): Promise<BuildInstallZipResult> {
   const { profile, progressId } = params;
   const date = todayYmd();
+  if (progressId) setInstallZipPhase(progressId, 'scan', '이전 임시 파일 정리 중...');
+  await purgeStaleInstallTemps();
   if (progressId) setInstallZipPhase(progressId, 'scan', '설치 ZIP 스캔 중...');
   const scan = await scanInstallFiles({ profile, progressId });
-  const files = scan.included;
-  if (files.length === 0) throw new Error('설치 ZIP 대상 파일이 없습니다.');
-  if (progressId) {
-    setInstallZipScanProgress(progressId, {
-      fileCount: files.length,
-      skipped: scan.skipped,
-      skippedPaths: scan.skippedPaths,
-      skippedTruncated: scan.skippedTruncated,
-      message: `스캔 완료 포함 ${files.length} / 제외 ${scan.skipped}`,
+  const files = [...scan.included];
+  let envPartsTmp: string | null = null;
+  try {
+    if (progressId) {
+      setInstallZipPhase(progressId, 'zip', '파이썬 환경 분할 압축 중...');
+    }
+    const split = await createPythonEnvSplitParts(process.cwd());
+    if (split) {
+      envPartsTmp = split.tmpDir;
+      for (const part of split.parts) {
+        files.push({
+          absPath: part.absPath,
+          relPath: part.relPath,
+          category: 'runtime',
+        });
+      }
+    }
+    if (files.length === 0) throw new Error('설치 ZIP 대상 파일이 없습니다.');
+    if (progressId) {
+      setInstallZipScanProgress(progressId, {
+        fileCount: files.length,
+        skipped: scan.skipped,
+        skippedPaths: scan.skippedPaths,
+        skippedTruncated: scan.skippedTruncated,
+        message: `스캔 완료 포함 ${files.length} / 제외 ${scan.skipped}`,
+      });
+      setInstallZipPhase(progressId, 'zip', `ZIP 생성 중 (${files.length}건)...`, {
+        fileCount: files.length,
+        scanSkipped: scan.skipped,
+        scanSkippedPaths: scan.skippedPaths,
+        scanSkippedTruncated: scan.skippedTruncated,
+      });
+    }
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    const bundleRoot = `${date}_${stamp}`;
+    const zipName = `source_install_${date}_${stamp}.zip`;
+    const tmpDir = `${installZipDownloadRoot()}${path.sep}${stamp}`;
+    const zipPath = `${tmpDir}${path.sep}${zipName}`;
+    await buildInstallZipFile({
+      files,
+      zipPath,
+      bundleRoot,
+      mode: 'install',
+      date,
+      workspaceRoot: process.cwd(),
+      profile,
+      progressId,
     });
-    setInstallZipPhase(progressId, 'zip', `ZIP 생성 중 (${files.length}건)...`, {
+    const zipSize = (await fs.stat(zipPath)).size;
+    if (progressId) {
+      rememberBuiltInstallZip(progressId, zipPath);
+      completeInstallZipProgress(progressId, 'ZIP 생성 완료', zipName, zipSize);
+      patchInstallZipProgress(progressId, {
+        fileCount: files.length,
+        scanSkipped: scan.skipped,
+        scanSkippedPaths: scan.skippedPaths,
+        scanSkippedTruncated: scan.skippedTruncated,
+      });
+    }
+    return {
+      zipPath,
+      zipName,
+      zipSize,
       fileCount: files.length,
-      scanSkipped: scan.skipped,
-      scanSkippedPaths: scan.skippedPaths,
-      scanSkippedTruncated: scan.skippedTruncated,
-    });
+      skippedCount: scan.skipped,
+      bundleRoot,
+    };
+  } finally {
+    if (envPartsTmp) {
+      await fs.rm(envPartsTmp, { recursive: true, force: true }).catch(() => {});
+    }
   }
-  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-  const bundleRoot = `${date}_${stamp}`;
-  const zipName = `source_install_${date}_${stamp}.zip`;
-  const tmpDir = `${installZipDownloadRoot()}${path.sep}${stamp}`;
-  const zipPath = `${tmpDir}${path.sep}${zipName}`;
-  await buildInstallZipFile({
-    files,
-    zipPath,
-    bundleRoot,
-    mode: 'install',
-    date,
-    workspaceRoot: process.cwd(),
-    profile,
-    progressId,
-  });
-  const zipSize = (await fs.stat(zipPath)).size;
-  if (progressId) {
-    rememberBuiltInstallZip(progressId, zipPath);
-    completeInstallZipProgress(progressId, 'ZIP 생성 완료', zipName, zipSize);
-    patchInstallZipProgress(progressId, {
-      fileCount: files.length,
-      scanSkipped: scan.skipped,
-      scanSkippedPaths: scan.skippedPaths,
-      scanSkippedTruncated: scan.skippedTruncated,
-    });
-  }
-  return {
-    zipPath,
-    zipName,
-    zipSize,
-    fileCount: files.length,
-    skippedCount: scan.skipped,
-    bundleRoot,
-  };
 }
 
 /** progressId → zipPath (다운로드 연결용, 프로세스 메모리) */

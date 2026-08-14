@@ -1,0 +1,19 @@
+<layer>
+  <name>ngl_fee_list</name>
+  <id>LayerInfoImpl-4785472f:19ff42d5832:-7327</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4785472f:19ff42d5832:-746d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4785472f:19ff42d5832:-7328</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-12 06:08:21.90 UTC</dateCreated>
+  <dateModified>2026-08-12 06:08:22.644 UTC</dateModified>
+</layer>

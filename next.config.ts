@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     '*': [
       './python/env/**',
+      './python/env.zip',
+      './python/env.z*',
+      './python/env_parts/**',
       './python/**/__pycache__/**',
       './geoserver_modules/geoserver/**',
       './geoserver_modules/java/**',

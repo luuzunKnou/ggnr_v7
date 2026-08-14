@@ -111,7 +111,7 @@ export function GroundwaterPermitListPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {error && (
           <div className="shrink-0 border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
             {error}

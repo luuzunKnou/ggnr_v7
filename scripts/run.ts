@@ -9,10 +9,34 @@ import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
+import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '../src/lib/npmApplyEnv';
 
 const COMMAND = process.argv[2]; // dev | start
-const PROJECT = process.argv[3]; // e.g. river_yd
-const TYPE = process.argv[4]; // dev | demo | prod
+/** ggnr_start.bat / nssm AppEnvironmentExtra 가 넣은 값을 argv보다 우선 (잘못된 npm 인자·package.json 고정 인자 방어) */
+function resolveProjectArg(): string {
+  const fromEnv = (process.env.GGNR_PROJECT ?? '').trim();
+  const fromArgv = (process.argv[3] ?? '').trim();
+  if (fromEnv && fromArgv && fromEnv !== fromArgv) {
+    console.warn(
+      `[run] GGNR_PROJECT 불일치 — env=${fromEnv} argv=${fromArgv} → env 사용 (argv=${JSON.stringify(process.argv.slice(2))})`
+    );
+    return fromEnv;
+  }
+  return fromEnv || fromArgv;
+}
+function resolveTypeArg(): string {
+  const fromEnv = (process.env.GGNR_ENV ?? '').trim();
+  const fromArgv = (process.argv[4] ?? '').trim();
+  if (fromEnv && fromArgv && fromEnv !== fromArgv) {
+    console.warn(
+      `[run] GGNR_ENV 불일치 — env=${fromEnv} argv=${fromArgv} → env 사용`
+    );
+    return fromEnv;
+  }
+  return fromEnv || fromArgv;
+}
+const PROJECT = resolveProjectArg();
+const TYPE = resolveTypeArg();
 
 const SIGNAL_PATH = path.join(process.cwd(), '.cursor-runtime', 'restart-request.json');
 const RELAUNCH_POLL_MS = 1000;
@@ -220,12 +244,12 @@ function isSupervisedRestartMode(mode: string | undefined): boolean {
 }
 
 function runNpmInstallSync(): void {
-  console.log('[SourceCodeUpload] npm install --no-audit --no-fund (재기동 전)');
-  execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
+  console.log('[SourceCodeUpload] npm install --include=dev --no-audit --no-fund (재기동 전)');
+  execFileSync('npm', [...NPM_INSTALL_DEV_ARGS], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
-    env: process.env,
+    env: resolveNpmInstallEnv(),
   });
 }
 
@@ -282,8 +306,12 @@ function spawnNext(cmd: NextCmd): void {
     '.bin',
     process.platform === 'win32' ? 'next.cmd' : 'next'
   );
+  // Windows + cwd 공백: shell:true 일 때 미인용 경로가 잘림 → next.cmd 인용
+  const bin =
+    process.platform === 'win32' && /[\s()]/.test(nextBin) ? `"${nextBin}"` : nextBin;
+  const args = cmd === 'dev' && /\s/.test(process.cwd()) ? [cmd, '--webpack'] : [cmd];
   console.log(`[run] starting Next.js (${cmd})...`);
-  const proc = spawn(nextBin, [cmd], {
+  const proc = spawn(bin, args, {
     cwd: process.cwd(),
     stdio: 'inherit',
     env: process.env,

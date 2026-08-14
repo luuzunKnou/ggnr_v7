@@ -1,13 +1,14 @@
--- next_gen_linkage.ngl_fee_list
+-- layer.ngl_fee_list
 -- 미납·수납 통합 테이블 (v7)
 -- 컬럼 순서: fee_status → 공통 → 미납전용 → 수납전용 → 동기화
 -- Agent가 DB에 자동 실행하지 않음. 필요 시 직접 실행.
 
-CREATE SCHEMA IF NOT EXISTS next_gen_linkage;
+CREATE SCHEMA IF NOT EXISTS layer;
 
-CREATE TABLE IF NOT EXISTS next_gen_linkage.ngl_fee_list (
+CREATE TABLE IF NOT EXISTS layer.ngl_fee_list (
   id bigserial PRIMARY KEY,
   fee_status text NOT NULL CHECK (fee_status IN ('미납', '수납')),
+  geom geometry(MultiPolygon, 5181),
   sgb_cd text,
   lvy_key text,
   dpt_nm text,
@@ -133,18 +134,20 @@ CREATE TABLE IF NOT EXISTS next_gen_linkage.ngl_fee_list (
 );
 
 CREATE INDEX IF NOT EXISTS ngl_fee_list_fee_status_idx
-  ON next_gen_linkage.ngl_fee_list (fee_status);
+  ON layer.ngl_fee_list (fee_status);
+CREATE INDEX IF NOT EXISTS ngl_fee_list_geom_gix
+  ON layer.ngl_fee_list USING GIST (geom);
 CREATE INDEX IF NOT EXISTS ngl_fee_list_lvy_no_idx
-  ON next_gen_linkage.ngl_fee_list (lvy_no);
+  ON layer.ngl_fee_list (lvy_no);
 CREATE INDEX IF NOT EXISTS ngl_fee_list_ledger_no_idx
-  ON next_gen_linkage.ngl_fee_list (ledger_no);
+  ON layer.ngl_fee_list (ledger_no);
 CREATE INDEX IF NOT EXISTS ngl_fee_list_mng_item_sn5_idx
-  ON next_gen_linkage.ngl_fee_list (mng_item_sn5);
+  ON layer.ngl_fee_list (mng_item_sn5);
 CREATE INDEX IF NOT EXISTS ngl_fee_list_mng_item_sn6_idx
-  ON next_gen_linkage.ngl_fee_list (mng_item_sn6);
+  ON layer.ngl_fee_list (mng_item_sn6);
 
-COMMENT ON TABLE next_gen_linkage.ngl_fee_list IS '점사용료 미납·수납 통합';
-COMMENT ON COLUMN next_gen_linkage.ngl_fee_list.fee_status IS '미납 | 수납';
-COMMENT ON COLUMN next_gen_linkage.ngl_fee_list.lvy_key IS '부과키(수납일련과 함께 유니크)';
-COMMENT ON COLUMN next_gen_linkage.ngl_fee_list.mng_item_sn5 IS '관리항목5(대장 관리코드 매핑)';
-COMMENT ON COLUMN next_gen_linkage.ngl_fee_list.mng_item_sn6 IS '관리항목6(대장 관리코드 매핑)';
+COMMENT ON TABLE layer.ngl_fee_list IS '점사용료 미납·수납 통합';
+COMMENT ON COLUMN layer.ngl_fee_list.fee_status IS '미납 | 수납';
+COMMENT ON COLUMN layer.ngl_fee_list.lvy_key IS '부과키(수납일련과 함께 유니크)';
+COMMENT ON COLUMN layer.ngl_fee_list.mng_item_sn5 IS '관리항목5(대장 관리코드 매핑)';
+COMMENT ON COLUMN layer.ngl_fee_list.mng_item_sn6 IS '관리항목6(대장 관리코드 매핑)';

@@ -91,8 +91,9 @@ export function SchemaSyncPreviewModal({
           {!loading && (
             <>
               <p className="text-xs text-muted-foreground">
-                스키마 반영 시 대화형 확인 대신 고정 규칙으로 자동 처리합니다. 생성은 적용하고,
-                삭제·데이터 비우기는 실행하지 않으며, 컬럼 수정·타입 변경 등은 건너뜁니다.
+                Drizzle 스키마에 정의된 테이블만 DB와 비교합니다. DB에만 있는 레이어 테이블 등은
+                목록·건수에 넣지 않습니다. 생성은 적용하고, 정의 테이블에 대한 삭제·데이터 비우기는
+                실행하지 않으며, 컬럼 수정·타입 변경 등은 건너뜁니다.
               </p>
               <p className="text-xs text-destructive">
                 건너뛴 변경은 자동 반영되지 않습니다. 목록을 확인한 뒤 필요하면 개발 환경에서

@@ -1327,14 +1327,6 @@ export async function createTableFromShp(params: {
     result = { code: -1, stderr: 'empty or missing shp/shx/dbf' };
   } else {
     result = await runOgr2ogr(dbfEncoding);
-
-    // UTF-8 오판 시 PG 드라이버 Non UTF-8 → CP949로 1회 재시도
-    const isNonUtf8 =
-      result.code !== 0 && /Non UTF-8 content found/i.test(result.stderr ?? '');
-    if (isNonUtf8 && dbfEncoding.toUpperCase().replace(/_/g, '') !== 'CP949') {
-      dbfEncoding = 'CP949';
-      result = await runOgr2ogr(dbfEncoding);
-    }
   }
 
   if (result.code !== 0) {
@@ -3215,7 +3207,6 @@ async function importShpToSyncTempForHydrate(params: {
       '-lco', 'GEOMETRY_NAME=geom',
       // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (본 업로드와 동일)
       ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
-      '-lco', 'PG_USE_COPY=YES',
       '-overwrite',
     ]);
     if (importResult.code !== 0) {
@@ -3663,7 +3654,6 @@ export async function compareShpWithTable(params: {
         '-lco', 'GEOMETRY_NAME=geom',
         // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (본 업로드와 동일)
         ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
-        '-lco', 'PG_USE_COPY=YES',
         '-overwrite',
       ]);
       syncImportAttempted = true;

@@ -125,9 +125,27 @@ export async function downloadHtmlAsPdf(
     const page = host.querySelector('.formal-pdf-page') as HTMLElement;
     await document.fonts.ready;
 
+    /** data URL·외부 이미지가 로드된 뒤 캡처해야 PDF에 위치도가 남음 */
+    const imgs = Array.from(page.querySelectorAll('img'));
+    await Promise.all(
+      imgs.map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            if (img.complete && img.naturalWidth > 0) {
+              resolve();
+              return;
+            }
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            window.setTimeout(() => resolve(), 4000);
+          })
+      )
+    );
+
     const canvas = await html2canvas(page, {
       scale: 3,
       useCORS: true,
+      allowTaint: false,
       backgroundColor: '#ffffff',
       logging: false,
       windowWidth: 794,
@@ -140,6 +158,21 @@ export async function downloadHtmlAsPdf(
           if (letterRendering) {
             cloned.style.textRendering = 'geometricPrecision';
           }
+          /** width:auto 만 주면 클론에서 0×0 되는 경우 방지 — 실제 픽셀 크기로 고정 */
+          cloned.querySelectorAll('img').forEach((img) => {
+            const el = img as HTMLImageElement;
+            const nw = el.naturalWidth || 0;
+            const nh = el.naturalHeight || 0;
+            if (nw > 0 && nh > 0) {
+              const maxW = 480;
+              const w = Math.min(nw, maxW);
+              const h = Math.round((nh / nw) * w);
+              el.style.width = `${w}px`;
+              el.style.height = `${h}px`;
+              el.style.maxWidth = '100%';
+              el.style.objectFit = 'contain';
+            }
+          });
         }
       },
     });

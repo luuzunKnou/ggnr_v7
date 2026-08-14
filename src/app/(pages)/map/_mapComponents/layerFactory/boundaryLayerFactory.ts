@@ -121,13 +121,16 @@ export function createBuildingRoadLayers(): ImageLayer<ImageWMS>[] {
 
 /**
  * activeControls + visibleTableNames 기준으로 지적도 레이어 표시.
- * visibleTableNames null = 전체, 빈 Set = 전체 숨김, 비어 있지 않으면 선택된 것만.
+ * availableTableNames 미전달(undefined) = 카탈로그 필터 없음(인쇄 등).
+ * null = 카탈로그 로딩 중(전부 끔). Set이면 그 안의 레이어만 가능.
+ * visibleTableNames null = 가용분(또는 전체) 표시 후보, 빈 Set = 전체 숨김.
  */
 export function useCadastralLayerSync(
   map: Map | null,
   mapReady: boolean,
   activeControls: string[],
   visibleTableNames?: Set<string> | null,
+  availableTableNames?: Set<string> | null,
 ) {
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -136,11 +139,19 @@ export function useCadastralLayerSync(
     map.getLayers().getArray().forEach((l) => {
       if (!l.get('cadastralLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
-      const allowed =
+      const selected =
         showAll || (tableName != null && (visibleTableNames?.has(tableName) ?? false));
-      l.setVisible(groupOn && allowed);
+      if (availableTableNames === undefined) {
+        l.setVisible(groupOn && selected);
+        return;
+      }
+      const inCatalog =
+        availableTableNames != null &&
+        tableName != null &&
+        availableTableNames.has(tableName);
+      l.setVisible(groupOn && inCatalog && selected);
     });
-  }, [map, mapReady, activeControls, visibleTableNames]);
+  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames]);
 }
 
 /**

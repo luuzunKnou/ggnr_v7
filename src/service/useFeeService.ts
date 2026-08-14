@@ -1,35 +1,52 @@
 /**
- * 점사용료 — next_gen_linkage.ngl_fee_list 조회 + 차세대 수동 연계
+ * 점사용료 — water|road|public_ngl_fee_list 조회 + 차세대 수동 연계
  */
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
-import { nglFeeList, type NglFeeList } from '@/database/schema/ngl_fee_list';
+import {
+  type NglFeeList,
+  type NglFeeListTable,
+} from '@/database/schema/ngl_fee_list';
+import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
 import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
+import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
+import { getAllUseFeeWmsLayerIds, getUseFeeBinding, USE_FEE_PREFIXES } from '@/lib/useFeeBinding';
 import { labelForUseFeeField } from '@/app/(pages)/map/_mapContents/useFee/useFeeFieldLabels';
 
 const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
 
-/** 건설 시스템(build)에서만 노출하는 부서 */
-const BUILD_ONLY_DEPT_NM = '건설과';
-
-function normalizeSystemKey(system?: string): string {
-  return String(system ?? '').trim().toLowerCase();
+function resolveFeeOpts(params?: {
+  system?: string | null;
+  serEng?: string | null;
+}): { system?: string | null; serEng?: string | null } {
+  return {
+    system: params?.system,
+    serEng: params?.serEng,
+  };
 }
 
-/** 하천·도로 등 건설 외 시스템에서는 건설과 점사용료 제외 */
-function allowsBuildOnlyDept(system?: string): boolean {
-  return normalizeSystemKey(system) === 'build';
+function resolveFeeTable(params?: {
+  system?: string | null;
+  serEng?: string | null;
+}): NglFeeListTable {
+  return getNglFeeListTableByPrefix(getUseFeeBinding(resolveFeeOpts(params)).prefix);
 }
 
-function isBuildOnlyDept(dptNm: string | null | undefined): boolean {
-  return String(dptNm ?? '').trim() === BUILD_ONLY_DEPT_NM;
+function resolveFeeTableName(params?: {
+  system?: string | null;
+  serEng?: string | null;
+}): string {
+  return getUseFeeBinding(resolveFeeOpts(params)).mainTable;
 }
 
-/** 시스템별 부서 노출 SQL 조건 (건설 외: 건설과 제외) */
-function systemDeptScopeSql(system?: string) {
-  if (allowsBuildOnlyDept(system)) return undefined;
-  return sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ${BUILD_ONLY_DEPT_NM}`;
+/** raw SQL용 — 바인딩된 물리 테이블명만 허용 */
+function assertFeeTableName(name: string): string {
+  const n = String(name ?? '').trim().toLowerCase();
+  if (!getAllUseFeeWmsLayerIds().includes(n)) {
+    throw new Error(`invalid fee table: ${name}`);
+  }
+  return n;
 }
 
 export type UseFeeListRow = {
@@ -122,7 +139,7 @@ export type UseFeeUnpaidDueNotifRow = {
   dptNm: string;
 };
 
-/** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 */
+/** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 (하천·도로·국공유 전부) */
 export async function getUseFeeUnpaidDueNotifications(params?: {
   withinDays?: number;
 }): Promise<{ items: UseFeeUnpaidDueNotifRow[]; error?: string }> {
@@ -132,31 +149,38 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
   );
 
   try {
-    const rows = await db
-      .select()
-      .from(nglFeeList)
-      .where(eq(nglFeeList.feeStatus, '미납'))
-      .limit(10000);
-
+    try {
+      await ensureNglFeeListGeomColumn();
+    } catch {
+      /* ignore */
+    }
     const todayMs = startOfLocalDayMs(new Date());
     if (todayMs == null) return { items: [] };
 
     const items: UseFeeUnpaidDueNotifRow[] = [];
-    for (const row of rows) {
-      const dueYmd = toYmd(listDateYmd(row));
-      if (!dueYmd) continue;
-      const dueMs = startOfLocalDayMs(dueYmd);
-      if (dueMs == null) continue;
-      const daysRemaining = diffLocalCalendarDays(todayMs, dueMs);
-      if (daysRemaining < 0 || daysRemaining > withinDays) continue;
-      items.push({
-        id: String(row.id),
-        chargeNo: String(row.lvyNo ?? '').trim() || String(row.id),
-        payer: String(row.pyrNm ?? '').trim() || '—',
-        dueDate: dueYmd,
-        daysRemaining,
-        dptNm: String(row.dptNm ?? '').trim(),
-      });
+    for (const prefix of USE_FEE_PREFIXES) {
+      const nglFeeList = getNglFeeListTableByPrefix(prefix);
+      const rows = await db
+        .select()
+        .from(nglFeeList)
+        .where(eq(nglFeeList.feeStatus, '미납'))
+        .limit(10000);
+      for (const row of rows) {
+        const dueYmd = toYmd(listDateYmd(row));
+        if (!dueYmd) continue;
+        const dueMs = startOfLocalDayMs(dueYmd);
+        if (dueMs == null) continue;
+        const daysRemaining = diffLocalCalendarDays(todayMs, dueMs);
+        if (daysRemaining < 0 || daysRemaining > withinDays) continue;
+        items.push({
+          id: String(row.id),
+          chargeNo: String(row.lvyNo ?? '').trim() || String(row.id),
+          payer: String(row.pyrNm ?? '').trim() || '—',
+          dueDate: dueYmd,
+          daysRemaining,
+          dptNm: String(row.dptNm ?? '').trim(),
+        });
+      }
     }
 
     items.sort((a, b) => {
@@ -171,24 +195,20 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
   }
 }
 
-/** 부서 필터용: 데이터에 있는 부서명 목록 (system=build 외에는 건설과 제외) */
-export async function getUseFeeDepartments(params?: {
+/** 부서 필터용: 데이터에 있는 부서명 목록 */
+export async function getUseFeeDepartments(_params?: {
   system?: string;
+  serEng?: string;
 }): Promise<{
   departments: string[];
   error?: string;
 }> {
-  const system = params?.system;
   try {
+    const nglFeeList = resolveFeeTable(_params);
     const rows = await db
       .selectDistinct({ dptNm: nglFeeList.dptNm })
       .from(nglFeeList)
-      .where(
-        and(
-          sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ''`,
-          systemDeptScopeSql(system)
-        )
-      )
+      .where(sql`coalesce(trim(${nglFeeList.dptNm}), '') <> ''`)
       .orderBy(asc(nglFeeList.dptNm));
     return {
       departments: rows.map((r) => String(r.dptNm ?? '').trim()).filter(Boolean),
@@ -198,23 +218,99 @@ export async function getUseFeeDepartments(params?: {
   }
 }
 
+export type UseFeeListSortKey =
+  | 'status'
+  | 'ledgerNo'
+  | 'dptNm'
+  | 'payer'
+  | 'amount'
+  | 'dueDate';
+
+export type UseFeeFeeStatusFilter = '' | '미납' | '수납';
+
+const USE_FEE_LIST_SORT_KEYS = new Set<string>([
+  'status',
+  'ledgerNo',
+  'dptNm',
+  'payer',
+  'amount',
+  'dueDate',
+]);
+
+type UseFeeSortSpec = { key: UseFeeListSortKey; dir: 'asc' | 'desc' };
+
+function parseUseFeeSortSpecs(params?: {
+  sorts?: unknown;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+}): UseFeeSortSpec[] {
+  const raw = params?.sorts;
+  if (Array.isArray(raw) && raw.length > 0) {
+    const out: UseFeeSortSpec[] = [];
+    const seen = new Set<string>();
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const key = String((item as { key?: unknown }).key ?? '').trim();
+      if (!USE_FEE_LIST_SORT_KEYS.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      const dirRaw = String((item as { dir?: unknown }).dir ?? '').trim().toLowerCase();
+      out.push({
+        key: key as UseFeeListSortKey,
+        dir: dirRaw === 'asc' ? 'asc' : 'desc',
+      });
+    }
+    if (out.length > 0) return out;
+  }
+  const sortBy = String(params?.sortBy ?? '').trim();
+  if (USE_FEE_LIST_SORT_KEYS.has(sortBy)) {
+    return [
+      {
+        key: sortBy as UseFeeListSortKey,
+        dir: params?.sortDir === 'asc' ? 'asc' : 'desc',
+      },
+    ];
+  }
+  return [];
+}
+
 /** 목록: 상태, 대장번호, 부서명, 납부자, 납부금액, 납기일 */
 export async function getUseFeeList(params?: {
   keyword?: string;
   /** 부서명 정확 일치. 비우면 전체 */
   dptNm?: string;
-  /** URL system= (build 외에는 건설과 행 제외) */
+  /** 미납 | 수납. 비우면 전체 */
+  feeStatus?: string;
+  /** URL system= river|road|build → water|road|public_ngl_fee_list */
   system?: string;
+  /** ser_eng: water|road|publicNglFeeList (우선) */
+  serEng?: string;
+  /** 다중 정렬 [{ key, dir }] — 앞선 항목이 우선 */
+  sorts?: Array<{ key?: string; dir?: string }>;
+  /** 단일 정렬(호환). sorts 있으면 무시 */
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  /** 페이지 크기. 기본 500 */
   limit?: number;
+  /** 건너뛸 건수. 기본 0 */
+  offset?: number;
 }): Promise<{ rows: UseFeeListRow[]; total: number; error?: string }> {
   const keyword = String(params?.keyword ?? '').trim();
   const dptNm = String(params?.dptNm ?? '').trim();
-  const system = params?.system;
-  const limit = Math.min(Math.max(Number(params?.limit) || 5000, 1), 10000);
+  const feeStatusRaw = String(params?.feeStatus ?? '').trim();
+  const feeStatus: UseFeeFeeStatusFilter =
+    feeStatusRaw === '미납' || feeStatusRaw === '수납' ? feeStatusRaw : '';
+  const sortSpecs = parseUseFeeSortSpecs(params);
+  const limit = Math.min(Math.max(Number(params?.limit) || 500, 1), 2000);
+  const offset = Math.max(0, Math.trunc(Number(params?.offset) || 0));
+  const nglFeeList = resolveFeeTable(params);
 
   try {
-    if (dptNm && isBuildOnlyDept(dptNm) && !allowsBuildOnlyDept(system)) {
-      return { rows: [], total: 0 };
+    if (offset === 0) {
+      try {
+        await ensureNglFeeListGeomColumn();
+      } catch {
+        // geom 컬럼 없어도 목록 조회는 계속
+      }
     }
 
     const kw = keyword
@@ -226,11 +322,13 @@ export async function getUseFeeList(params?: {
           ilike(nglFeeList.fyr, `%${keyword}%`),
           ilike(nglFeeList.lvyKey, `%${keyword}%`),
           ilike(nglFeeList.glNm, `%${keyword}%`),
+          ilike(nglFeeList.glAddr, `%${keyword}%`),
           ilike(nglFeeList.dptNm, `%${keyword}%`)
         )
       : undefined;
     const dpt = dptNm ? eq(nglFeeList.dptNm, dptNm) : undefined;
-    const where = and(kw, dpt, systemDeptScopeSql(system));
+    const statusEq = feeStatus ? eq(nglFeeList.feeStatus, feeStatus) : undefined;
+    const where = and(kw, dpt, statusEq);
 
     const countRes = await db
       .select({ c: sql<number>`count(*)::int` })
@@ -238,7 +336,7 @@ export async function getUseFeeList(params?: {
       .where(where);
     const total = Number(countRes[0]?.c ?? 0);
 
-    // 1) 수납=수납일자 / 그 외=최종납기일 최신순 2) 대장번호·부과번호 큰 순
+    /** 수납=수납일자 / 그 외=최종납기(없으면 최초납기) — 비교용 YYYYMMDD */
     const listDateExpr = sql`case
       when ${nglFeeList.feeStatus} = '수납' then nullif(trim(${nglFeeList.rcvmtYmd}), '')
       else coalesce(
@@ -246,22 +344,108 @@ export async function getUseFeeList(params?: {
         nullif(trim(${nglFeeList.frstPidYmd}), '')
       )
     end`;
+    const amountExpr = sql`case
+      when ${nglFeeList.feeStatus} = '수납' then ${nglFeeList.rcvmtPctAmt}
+      else coalesce(${nglFeeList.lastPctAmt}, ${nglFeeList.frstPctAmt})
+    end`;
+    const unpaidFirst = sql`case when ${nglFeeList.feeStatus} = '미납' then 0 else 1 end`;
+
+    const orderParts: ReturnType<typeof sql>[] = [];
+    for (const { key, dir: sortDir } of sortSpecs) {
+      switch (key) {
+        case 'status':
+          // 오름차순=미납 먼저, 내림차순=수납 먼저
+          orderParts.push(
+            sortDir === 'asc'
+              ? sql`case
+                  when ${nglFeeList.feeStatus} = '미납' then 0
+                  when ${nglFeeList.feeStatus} = '수납' then 1
+                  else 2
+                end`
+              : sql`case
+                  when ${nglFeeList.feeStatus} = '수납' then 0
+                  when ${nglFeeList.feeStatus} = '미납' then 1
+                  else 2
+                end`
+          );
+          break;
+        case 'ledgerNo':
+          orderParts.push(
+            sortDir === 'asc'
+              ? sql`${nglFeeList.ledgerNo} asc nulls last`
+              : sql`${nglFeeList.ledgerNo} desc nulls last`
+          );
+          break;
+        case 'dptNm':
+          orderParts.push(
+            sortDir === 'asc'
+              ? sql`${nglFeeList.dptNm} asc nulls last`
+              : sql`${nglFeeList.dptNm} desc nulls last`
+          );
+          break;
+        case 'payer':
+          orderParts.push(
+            sortDir === 'asc'
+              ? sql`${nglFeeList.pyrNm} asc nulls last`
+              : sql`${nglFeeList.pyrNm} desc nulls last`
+          );
+          break;
+        case 'amount':
+          orderParts.push(
+            sortDir === 'asc'
+              ? sql`${amountExpr} asc nulls last`
+              : sql`${amountExpr} desc nulls last`
+          );
+          break;
+        case 'dueDate':
+          orderParts.push(
+            sortDir === 'asc'
+              ? sql`${listDateExpr} asc nulls last`
+              : sql`${listDateExpr} desc nulls last`
+          );
+          break;
+        default:
+          break;
+      }
+    }
+
+    const orderBy =
+      orderParts.length > 0
+        ? [...orderParts, desc(nglFeeList.id)]
+        : [
+            // 기본: 미납 먼저 → 납기일 최신 → 대장번호 최신
+            unpaidFirst,
+            sql`${listDateExpr} desc nulls last`,
+            desc(nglFeeList.ledgerNo),
+            desc(nglFeeList.lvyNo),
+            desc(nglFeeList.id),
+          ];
+
     const rows = await db
-      .select()
+      .select({
+        id: nglFeeList.id,
+        feeStatus: nglFeeList.feeStatus,
+        ledgerNo: nglFeeList.ledgerNo,
+        dptNm: nglFeeList.dptNm,
+        pyrNm: nglFeeList.pyrNm,
+        rcvmtSn: nglFeeList.rcvmtSn,
+        rcvmtPctAmt: nglFeeList.rcvmtPctAmt,
+        lastPctAmt: nglFeeList.lastPctAmt,
+        frstPctAmt: nglFeeList.frstPctAmt,
+        rcvmtYmd: nglFeeList.rcvmtYmd,
+        lastPidYmd: nglFeeList.lastPidYmd,
+        frstPidYmd: nglFeeList.frstPidYmd,
+      })
       .from(nglFeeList)
       .where(where)
-      .orderBy(
-        sql`${listDateExpr} desc nulls last`,
-        desc(nglFeeList.ledgerNo),
-        desc(nglFeeList.lvyNo),
-        desc(nglFeeList.id)
-      )
-      .limit(limit);
+      .orderBy(...orderBy)
+      .limit(limit)
+      .offset(offset);
 
     return {
       total,
       rows: rows.map((r) => {
-        const amountRaw = listAmount(r);
+        const amountRaw = listAmount(r as NglFeeList);
         return {
           id: String(r.id),
           status: String(r.feeStatus ?? ''),
@@ -270,7 +454,7 @@ export async function getUseFeeList(params?: {
           payer: String(r.pyrNm ?? ''),
           amount: formatAmount(amountRaw),
           amountRaw,
-          dueDate: formatYmd(listDateYmd(r)),
+          dueDate: formatYmd(listDateYmd(r as NglFeeList)),
           rcvmtSn: String(r.rcvmtSn ?? ''),
         };
       }),
@@ -401,12 +585,19 @@ function isVirtualAccountField(key: string): boolean {
   return /^vtlacBankNm\d+$/.test(key) || /^vrActno\d+$/.test(key);
 }
 
+const ADDRESS_ATTR_KEYS = new Set(['pyrAddr', 'glAddr']);
+
 function formatAttrValue(key: string, raw: unknown): string {
   if (AMOUNT_KEYS.has(key)) {
     return formatAmount(typeof raw === 'number' ? raw : raw == null ? null : Number(raw));
   }
   if (YMD_KEYS.has(key)) {
     return formatYmd(raw == null ? null : String(raw));
+  }
+  if (ADDRESS_ATTR_KEYS.has(key)) {
+    const s = String(raw ?? '').trim();
+    if (!s) return '—';
+    return formatAddressStripSidoSigungu(s) || s;
   }
   return displayValue(raw);
 }
@@ -444,8 +635,9 @@ function buildAttributes(row: NglFeeList): UseFeeDetailAttr[] {
 
 export async function getUseFeeDetail(params: {
   id?: string | number;
-  /** URL system= (build 외에는 건설과 상세 차단) */
+  /** URL system= river|road|build */
   system?: string;
+  serEng?: string;
 }): Promise<{ row: UseFeeListRow | null; attributes: UseFeeDetailAttr[]; error?: string }> {
   const idNum = Number(params?.id);
   if (!Number.isFinite(idNum) || idNum <= 0) {
@@ -453,17 +645,15 @@ export async function getUseFeeDetail(params: {
   }
 
   try {
+    try {
+      await ensureNglFeeListGeomColumn();
+    } catch {
+      // geom 컬럼 없어도 상세 조회는 계속
+    }
+    const nglFeeList = resolveFeeTable(params);
     const rows = await db.select().from(nglFeeList).where(eq(nglFeeList.id, idNum)).limit(1);
     const r = rows[0];
     if (!r) return { row: null, attributes: [], error: '선택한 점사용료를 찾을 수 없습니다.' };
-
-    if (isBuildOnlyDept(r.dptNm) && !allowsBuildOnlyDept(params?.system)) {
-      return {
-        row: null,
-        attributes: [],
-        error: '선택한 점사용료를 찾을 수 없습니다.',
-      };
-    }
 
     const amountRaw = listAmount(r);
     return {
@@ -485,15 +675,67 @@ export async function getUseFeeDetail(params: {
   }
 }
 
+/** 지도 이동용 extent — geom 없으면 null (알림 없음) */
+export async function getUseFeeExtent3857ById(params: {
+  id?: string | number;
+  system?: string;
+  serEng?: string;
+}): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
+  const idNum = Number(params?.id);
+  if (!Number.isFinite(idNum) || idNum <= 0) {
+    return { extent3857: null };
+  }
+  const tableName = assertFeeTableName(resolveFeeTableName(params));
+  try {
+    try {
+      await ensureNglFeeListGeomColumn();
+    } catch {
+      /* ignore */
+    }
+    const res = await db.execute(sql.raw(`
+      SELECT
+        ST_XMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmin,
+        ST_YMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymin,
+        ST_XMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmax,
+        ST_YMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymax
+      FROM layer.${tableName}
+      WHERE id = ${idNum}
+        AND geom IS NOT NULL
+      LIMIT 1
+    `));
+    const row = res.rows?.[0] as
+      | { xmin?: number; ymin?: number; xmax?: number; ymax?: number }
+      | undefined;
+    if (!row) return { extent3857: null };
+    const coords = [row.xmin, row.ymin, row.xmax, row.ymax].map(Number);
+    if (coords.length !== 4 || !coords.every((v) => Number.isFinite(v))) {
+      return { extent3857: null };
+    }
+    return { extent3857: coords as [number, number, number, number] };
+  } catch (e) {
+    return { extent3857: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도 */
 export async function runNextGenSync(params?: { fyr?: string }) {
   return runNextGenFeeSync({ fyr: params?.fyr });
 }
 
 /** 동일 부과키의 수납 행 목록 (선택 행 맥락용) */
-export async function getUseFeeReceiptsByLvyKey(params: { lvyKey?: string }) {
+export async function getUseFeeReceiptsByLvyKey(params: {
+  lvyKey?: string;
+  system?: string;
+  serEng?: string;
+}) {
   const key = String(params?.lvyKey ?? '').trim();
   if (!key) return { rows: [] as UseFeeListRow[] };
+  try {
+    await ensureNglFeeListGeomColumn();
+  } catch {
+    /* ignore */
+  }
+  const nglFeeList = resolveFeeTable(params);
   const rows = await db
     .select()
     .from(nglFeeList)
@@ -514,5 +756,177 @@ export async function getUseFeeReceiptsByLvyKey(params: { lvyKey?: string }) {
         rcvmtSn: String(r.rcvmtSn ?? ''),
       };
     }),
+  };
+}
+
+/**
+ * 물건지주소 필지검색용 정규화.
+ * «438번지 1호» → «438-1», «951번지» → «951»
+ */
+export function normalizeUseFeeGlAddrForParcelSearch(addr: string): string {
+  let s = String(addr ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!s) return '';
+  s = s.replace(/(\d{1,5})\s*번지\s+(\d{1,5})\s*호/gu, '$1-$2');
+  s = s.replace(/(\d{1,5})\s*번지/gu, '$1');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** 지번(본번/부번·번지)이 없으면 필지 검색 생략 — 예: «평해읍 학곡리» */
+export function hasUseFeeGlAddrJibunLot(addr: string): boolean {
+  const s = normalizeUseFeeGlAddrForParcelSearch(addr);
+  if (!s) return false;
+  if (/(?:^|\s)산\s*\d{1,5}(?:\s*-\s*\d{1,5})?(?:\s|$)/u.test(s)) return true;
+  return /(?:^|\s)\d{1,5}(?:\s*-\s*\d{1,5})?(?:\s|$)/u.test(s);
+}
+
+let nglFeeGeomEnsurePromise: Promise<void> | null = null;
+
+async function ensureNglFeeListGeomColumn(): Promise<void> {
+  if (!nglFeeGeomEnsurePromise) {
+    nglFeeGeomEnsurePromise = (async () => {
+      for (const tableName of getAllUseFeeWmsLayerIds()) {
+        const t = assertFeeTableName(tableName);
+        await db.execute(
+          sql.raw(`
+    ALTER TABLE layer.${t}
+      ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+    CREATE INDEX IF NOT EXISTS ${t}_geom_gix
+      ON layer.${t} USING GIST (geom);
+  `)
+        );
+        try {
+          await db.execute(
+            sql.raw(`
+    DO $fix$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM geometry_columns
+        WHERE f_table_schema = 'layer'
+          AND f_table_name = '${t}'
+          AND f_geometry_column = 'geom'
+          AND COALESCE(srid, 0) <= 0
+      ) THEN
+        PERFORM UpdateGeometrySRID('layer', '${t}', 'geom', 5181);
+      END IF;
+    END
+    $fix$;
+  `)
+          );
+        } catch {
+          /* identify SRID 프로브로 보완 */
+        }
+      }
+    })().catch((e) => {
+      nglFeeGeomEnsurePromise = null;
+      throw e;
+    });
+  }
+  return nglFeeGeomEnsurePromise;
+}
+
+/**
+ * 물건지주소(gl_addr) → jijuk 필지 폴리곤을 geom에 적재.
+ * 지번 없는 주소·검색 실패는 건너뜀. geom이 이미 있는 행은 기본 제외.
+ */
+export async function backfillUseFeeGlAddrGeom(params?: {
+  /** true면 geom 있는 행도 재변환 */
+  force?: boolean;
+  limit?: number;
+  system?: string;
+  serEng?: string;
+}): Promise<{
+  scanned: number;
+  updated: number;
+  skippedNoJibun: number;
+  skippedNotFound: number;
+  error?: string;
+}> {
+  const force = params?.force === true;
+  const limit = Math.min(Math.max(Number(params?.limit) || 5000, 1), 20000);
+  const nglFeeList = resolveFeeTable(params);
+  const tableName = assertFeeTableName(resolveFeeTableName(params));
+
+  try {
+    await ensureNglFeeListGeomColumn();
+  } catch (e) {
+    return {
+      scanned: 0,
+      updated: 0,
+      skippedNoJibun: 0,
+      skippedNotFound: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+
+  const { resolveJijukParcelGeomsByAddresses } = await import('@/service/layerRowService');
+
+  const whereGeom = force
+    ? sql`true`
+    : sql`${nglFeeList.geom} is null`;
+  const candidates = await db
+    .select({
+      id: nglFeeList.id,
+      glAddr: nglFeeList.glAddr,
+    })
+    .from(nglFeeList)
+    .where(and(whereGeom, sql`coalesce(trim(${nglFeeList.glAddr}), '') <> ''`))
+    .orderBy(desc(nglFeeList.id))
+    .limit(limit);
+
+  let updated = 0;
+  let skippedNoJibun = 0;
+  let skippedNotFound = 0;
+
+  for (const row of candidates) {
+    const addrRaw = String(row.glAddr ?? '').trim();
+    const addr = normalizeUseFeeGlAddrForParcelSearch(addrRaw);
+    if (!hasUseFeeGlAddrJibunLot(addrRaw)) {
+      skippedNoJibun += 1;
+      continue;
+    }
+
+    try {
+      const resolved = await resolveJijukParcelGeomsByAddresses({
+        items: [{ address: addr }],
+      });
+      const parcel = resolved.parcels[0];
+      const gj = parcel?.geometry3857;
+      if (!gj || typeof gj !== 'object') {
+        skippedNotFound += 1;
+        continue;
+      }
+      const json = JSON.stringify(gj).replace(/'/g, "''");
+      await db.execute(
+        sql.raw(`
+          UPDATE layer.${tableName}
+          SET geom = ST_Multi(
+                ST_CollectionExtract(
+                  ST_MakeValid(
+                    ST_Transform(
+                      ST_SetSRID(ST_GeomFromGeoJSON('${json}'), 3857),
+                      5181
+                    )
+                  ),
+                  3
+                )
+              ),
+              updated_at = now()
+          WHERE id = ${Number(row.id)}
+        `)
+      );
+      updated += 1;
+    } catch {
+      skippedNotFound += 1;
+    }
+  }
+
+  return {
+    scanned: candidates.length,
+    updated,
+    skippedNoJibun,
+    skippedNotFound,
   };
 }

@@ -88,6 +88,7 @@
           </sld:TextSymbolizer>
         </sld:Rule>
         <sld:Rule>
+          <!-- 숫자 라벨: 더 확대한 뒤에만 (축척≤2000). 중간 확대에서는 선만 -->
           <sld:MaxScaleDenominator>2000.0</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
             <sld:Geometry>
@@ -145,21 +146,21 @@
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
                 <ogc:Function name="numberFormat">
-                  <ogc:Literal>0.00</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                   <ogc:Function name="property">
                     <ogc:Literal>eve_bsi_mn</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
                 <ogc:Function name="Concatenate">
                   <ogc:Function name="numberFormat">
-                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
                     <ogc:Function name="property">
                       <ogc:Literal>eve_bsi_mn</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                   <ogc:Literal>-</ogc:Literal>
                   <ogc:Function name="numberFormat">
-                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
                     <ogc:Function name="property">
                       <ogc:Literal>eve_bsi_sl</ogc:Literal>
                     </ogc:Function>
@@ -176,15 +177,13 @@
                   </ogc:Function>
                   <ogc:Literal>15</ogc:Literal>
                   <ogc:Literal>1500</ogc:Literal>
-                  <ogc:Literal>10</ogc:Literal>
+                  <ogc:Literal>12</ogc:Literal>
                   <ogc:Literal>3000</ogc:Literal>
-                  <ogc:Literal>8</ogc:Literal>
+                  <ogc:Literal>10</ogc:Literal>
                   <ogc:Literal>5000</ogc:Literal>
                   <ogc:Literal>8</ogc:Literal>
                   <ogc:Literal>10000</ogc:Literal>
-                  <ogc:Literal>0</ogc:Literal>
-                  <ogc:Literal>30000</ogc:Literal>
-                  <ogc:Literal>0</ogc:Literal>
+                  <ogc:Literal>8</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -205,7 +204,10 @@
               <sld:CssParameter name="fill">#000000</sld:CssParameter>
             </sld:Fill>
             <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="maxAngleDelta">120</sld:VendorOption>
+            <sld:VendorOption name="maxAngleDelta">35</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+            <sld:VendorOption name="partials">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">40</sld:VendorOption>
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
             <sld:Label>
@@ -217,21 +219,21 @@
                   <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
                 <ogc:Function name="numberFormat">
-                  <ogc:Literal>0.00</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                   <ogc:Function name="property">
                     <ogc:Literal>odd_bsi_mn</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
                 <ogc:Function name="Concatenate">
                   <ogc:Function name="numberFormat">
-                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
                     <ogc:Function name="property">
                       <ogc:Literal>odd_bsi_mn</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                   <ogc:Literal>-</ogc:Literal>
                   <ogc:Function name="numberFormat">
-                    <ogc:Literal>0.00</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
                     <ogc:Function name="property">
                       <ogc:Literal>odd_bsi_sl</ogc:Literal>
                     </ogc:Function>
@@ -250,13 +252,11 @@
                   <ogc:Literal>1500</ogc:Literal>
                   <ogc:Literal>12</ogc:Literal>
                   <ogc:Literal>3000</ogc:Literal>
-                  <ogc:Literal>8</ogc:Literal>
+                  <ogc:Literal>10</ogc:Literal>
                   <ogc:Literal>5000</ogc:Literal>
                   <ogc:Literal>8</ogc:Literal>
                   <ogc:Literal>10000</ogc:Literal>
-                  <ogc:Literal>0</ogc:Literal>
-                  <ogc:Literal>30000</ogc:Literal>
-                  <ogc:Literal>0</ogc:Literal>
+                  <ogc:Literal>8</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -277,7 +277,10 @@
               <sld:CssParameter name="fill">#000000</sld:CssParameter>
             </sld:Fill>
             <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="maxAngleDelta">120</sld:VendorOption>
+            <sld:VendorOption name="maxAngleDelta">35</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+            <sld:VendorOption name="partials">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">40</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>

@@ -24,6 +24,7 @@ import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
+import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -337,6 +338,7 @@ export function MapSearchBar({
     if (sysKey) current.set('system', sysKey);
     else current.delete('system');
     scrubOccupationLedgerFromMapSearchParams(current, sysKey);
+    scrubUseFeeFromMapSearchParams(current, sysKey);
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };

@@ -728,8 +728,7 @@ export function VersionManagerContent() {
         <div className="shrink-0 space-y-2">
           <div className="text-sm font-medium">최신 소스 적용</div>
           <p className="text-xs text-muted-foreground">
-            GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 서버 상태를
-            선택하세요.
+            이 서버가 GNMS에서 소스 ZIP을 받아 반영합니다. 버전을 고른 뒤 서버 상태를 선택하세요.
           </p>
           <div className="space-y-2">
             <div className={sectionClass}>

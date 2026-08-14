@@ -20,6 +20,7 @@ import {
 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
+import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { CONS_DATA_AS_WMS_LAYER_IDS } from "./consDataAsLayerId";
 import {
@@ -441,16 +442,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
     <div className="flex min-h-0 h-full flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">공사대장</span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-            title="공사 추가"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            추가
-          </button>
+        <div className="flex items-center gap-1">
+          <LayerRowAddButton onClick={handleAdd} />
           <button
             type="button"
             onClick={() => {
@@ -668,7 +661,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {listError ? (
           <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
         ) : null}

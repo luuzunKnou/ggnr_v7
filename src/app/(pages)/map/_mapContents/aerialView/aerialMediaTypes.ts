@@ -2,7 +2,7 @@
 
 export type AerialKind = 'ortho' | 'drone' | 'panorama' | 'satellite';
 
-export type ConvertStatus = 'done' | 'converting' | 'pending' | 'registered';
+export type ConvertStatus = 'done' | 'converting' | 'pending' | 'registered' | 'failed';
 
 /** 상태 배지 문구 — 정사(변환) vs 사진·동영상(업로드 종료) */
 export type StatusBadgeMode = 'convert' | 'upload';
@@ -20,7 +20,17 @@ export type WorkFileItem = {
   status: ConvertStatus;
   /** 드론·파노라마 미리보기용 */
   previewKind?: 'image' | 'video' | 'panorama';
+  /** 촬영 위치 표시(지번). 지도 이동은 x5181/y5181 사용 */
   locationLabel?: string;
+  /** EPSG:5181 — 지도 포커스용 (화면에는 지번만 표시) */
+  x5181?: number | null;
+  y5181?: number | null;
+  /** GGNR_DATA_DIR 기준 상대 경로 — 미리보기·다운로드 */
+  relativePath?: string;
+  /** 드론영상 변환 타일 루트 (상대 경로) */
+  tilesRelativePath?: string | null;
+  /** 드론영상 TIF 키 */
+  tuKey?: number;
 };
 
 export type WorkUnitItem = {
@@ -54,6 +64,7 @@ export const CONVERT_STATUS_LABEL: Record<ConvertStatus, string> = {
   converting: '변환중',
   pending: '대기',
   registered: '등록',
+  failed: '변환실패',
 };
 
 /** 사진·동영상·파노라마 — 업로드하면 종료 */
@@ -62,6 +73,7 @@ export const UPLOAD_STATUS_LABEL: Record<ConvertStatus, string> = {
   converting: '업로드중',
   pending: '대기',
   registered: '업로드완료',
+  failed: '실패',
 };
 
 export function statusLabel(status: ConvertStatus, mode: StatusBadgeMode = 'convert'): string {
@@ -75,6 +87,7 @@ export function statusLabel(status: ConvertStatus, mode: StatusBadgeMode = 'conv
 export function deriveOrthoUnitStatus(files: WorkFileItem[]): ConvertStatus {
   if (files.length === 0) return 'pending';
   if (files.some((f) => f.status === 'converting')) return 'converting';
+  if (files.some((f) => f.status === 'failed')) return 'failed';
   if (files.some((f) => f.status === 'pending')) return 'pending';
   if (files.every((f) => f.status === 'done' || f.status === 'registered')) return 'done';
   return 'pending';

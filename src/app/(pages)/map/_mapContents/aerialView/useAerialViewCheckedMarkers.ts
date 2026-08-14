@@ -1,7 +1,7 @@
 'use client';
 
 import '@/app/(pages)/map/_mapComponents/config/projections';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
@@ -11,7 +11,7 @@ import { Fill, Stroke, Style, Circle as CircleStyle } from 'ol/style';
 import { boundingExtent } from 'ol/extent';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import type { AerialKind, WorkUnitItem } from './aerialMediaTypes';
-import { mockUnitsForKind } from './aerialMediaMockData';
+import { mockUnitsForKind, subscribeMockWorkUnits } from './aerialMediaMockData';
 import { collectFileLocations5181 } from './aerialLocationParse';
 
 const LAYER_ID = 'aerial-view-checked-units';
@@ -29,13 +29,13 @@ function markerStyle() {
   });
 }
 
-function allMockUnits(): WorkUnitItem[] {
+function allStoreUnits(): WorkUnitItem[] {
   return ALL_KINDS.flatMap((k) => mockUnitsForKind(k));
 }
 
 /**
  * 영상조회 패널에서 체크한 작업단위의 촬영 위치를 지도에 표시.
- * (1차 목업 — 정사 타일 다중 on/off는 후속)
+ * (드론영상 ortho 타일은 useAerialOrthoCheckedTiles 다중 단위 모드)
  */
 export function useAerialViewCheckedMarkers(params: {
   enabled: boolean;
@@ -46,10 +46,13 @@ export function useAerialViewCheckedMarkers(params: {
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const sourceRef = useRef<VectorSource | null>(null);
   const lastKeyRef = useRef<string>('');
+  const [listTick, setListTick] = useState(0);
+
+  useEffect(() => subscribeMockWorkUnits(() => setListTick((t) => t + 1)), []);
 
   const checkedKey = useMemo(
-    () => Array.from(checkedUnitIds).sort().join(','),
-    [checkedUnitIds]
+    () => `${Array.from(checkedUnitIds).sort().join(',')}|${listTick}`,
+    [checkedUnitIds, listTick]
   );
 
   useEffect(() => {
@@ -97,11 +100,11 @@ export function useAerialViewCheckedMarkers(params: {
     lastKeyRef.current = checkedKey;
 
     source.clear();
-    const units = allMockUnits().filter((u) => checkedUnitIds.has(u.id));
+    const units = allStoreUnits().filter((u) => checkedUnitIds.has(u.id));
     const coords3857: number[][] = [];
 
     for (const unit of units) {
-      if (unit.kind === 'satellite') continue;
+      if (unit.kind === 'satellite' || unit.kind === 'ortho') continue;
       const locs = collectFileLocations5181(unit.files);
       for (const loc of locs) {
         const [x, y] = to3857(loc.coord, undefined, undefined);

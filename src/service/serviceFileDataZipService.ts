@@ -1,12 +1,12 @@
 /**
  * file_data/{layer}/{key}/ 폴더를 ZIP 스트림으로 묶기 (스트리밍).
+ * 하위 폴더(공사대장 탭 등) 파일도 상대 경로 유지해 포함.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import archiver from 'archiver';
-import { fileDataRelativeDir } from '@/lib/serviceFileData';
-import { listServiceFileDataFiles } from './fileManagerService';
+import { fileDataRelativeDir, isServiceFileDataTmpMarkedFileName } from '@/lib/serviceFileData';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
@@ -58,6 +58,37 @@ export function buildServiceFileDataZipDownloadFileName(params: {
   return `${ts}_${label} 첨부파일.zip`;
 }
 
+type ZipFileEntry = { absPath: string; entryName: string };
+
+/** 디렉터리 재귀 수집 — .tmp 소프트삭제 파일 제외, ZIP entry는 posix 상대경로 */
+async function collectFilesRecursive(
+  absDir: string,
+  prefix = ''
+): Promise<ZipFileEntry[]> {
+  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  try {
+    entries = await fs.readdir(absDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: ZipFileEntry[] = [];
+  for (const ent of entries) {
+    const name = String(ent.name ?? '');
+    if (!name || name === '.' || name === '..') continue;
+    if (isServiceFileDataTmpMarkedFileName(name)) continue;
+    const absPath = path.join(absDir, name);
+    const entryName = prefix ? `${prefix}/${name}` : name;
+    if (ent.isDirectory()) {
+      out.push(...(await collectFilesRecursive(absPath, entryName)));
+      continue;
+    }
+    if (ent.isFile()) {
+      out.push({ absPath, entryName });
+    }
+  }
+  return out;
+}
+
 export async function createServiceFileDataZipStream(params: {
   layerName: string;
   keyValue: string;
@@ -66,7 +97,10 @@ export async function createServiceFileDataZipStream(params: {
   const rel = fileDataRelativeDir(params.layerName, params.keyValue);
   if (!rel) throw new Error('Invalid path');
   const dir = path.join(GGNR_DATA_DIR, ...rel.split('/'));
-  const files = await listServiceFileDataFiles(params);
+  const files = await collectFilesRecursive(dir);
+  if (files.length === 0) {
+    throw new Error('다운로드할 첨부파일이 없습니다.');
+  }
   const pass = new PassThrough();
   const archive = archiver('zip', { zlib: { level: 6 } });
   archive.on('error', (err: unknown) => {
@@ -74,11 +108,10 @@ export async function createServiceFileDataZipStream(params: {
   });
   archive.pipe(pass);
   for (const f of files) {
-    const fp = path.join(dir, f.name);
     try {
-      const st = await fs.stat(fp);
+      const st = await fs.stat(f.absPath);
       if (st.isFile()) {
-        archive.file(fp, { name: f.name });
+        archive.file(f.absPath, { name: f.entryName });
       }
     } catch {
       // 목록과 불일치 시 건너뜀

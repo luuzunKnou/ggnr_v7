@@ -55,22 +55,22 @@ export function UploadCompleteDialog({ notice }: Props) {
         <DialogHeader className="border-b border-emerald-100 bg-emerald-50/90 px-4 py-3">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-            업로드 완료
+            {notice && notice.fileTotal > 0 ? '업로드 완료' : '폴더 생성 완료'}
           </DialogTitle>
         </DialogHeader>
 
         {notice ? (
           <div className="space-y-3 px-4 py-3">
             <p className="text-[12px] leading-relaxed text-slate-700">
-              {notice.kind === 'ortho'
-                ? '폴더 업로드가 끝났습니다. 타일 변환이 자동으로 시작되어 목록에 «변환중»으로 표시됩니다.'
-                : '폴더 업로드가 끝났습니다. 작업단위 목록에서 확인할 수 있습니다.'}
+              {notice.fileTotal > 0
+                ? '사진·동영상 업로드가 끝났습니다. 작업단위 상세에서 파일을 확인하고 지도에서 위치를 볼 수 있습니다.'
+                : '작업단위 폴더가 생성되었습니다. 목록에서 상세를 열어 사진·동영상 등 파일을 추가하세요.'}
             </p>
 
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50/80">
               <dl className="divide-y divide-slate-100 text-[11px]">
                 <Row label="작업명" value={notice.workName} />
-                <Row label="파일" value={`${notice.fileTotal}개`} />
+                {notice.fileTotal > 0 ? <Row label="파일" value={`${notice.fileTotal}개`} /> : null}
                 {notice.linkedPurpose ? (
                   <Row label="연결 신청" value={notice.linkedPurpose} />
                 ) : null}
@@ -78,9 +78,24 @@ export function UploadCompleteDialog({ notice }: Props) {
             </div>
 
             {notice.linkedPurpose ? (
-              <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[10px] leading-relaxed text-emerald-900">
-                촬영신청 «{notice.linkedPurpose}» 상태가 <span className="font-semibold">등록완료</span>로
-                변경되었습니다.
+              <p
+                className={
+                  notice.fileTotal > 0
+                    ? 'rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[10px] leading-relaxed text-emerald-900'
+                    : 'rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900'
+                }
+              >
+                {notice.fileTotal > 0 ? (
+                  <>
+                    촬영신청 «{notice.linkedPurpose}» 상태가{' '}
+                    <span className="font-semibold">등록완료</span>로 변경되었습니다.
+                  </>
+                ) : (
+                  <>
+                    촬영신청 «{notice.linkedPurpose}» 상태가 <span className="font-semibold">등록중</span>
+                    입니다. 파일 업로드가 끝나면 등록완료로 바뀝니다.
+                  </>
+                )}
               </p>
             ) : null}
           </div>

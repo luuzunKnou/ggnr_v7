@@ -4,7 +4,7 @@
  */
 export const OCCUPATION_LEDGER_FIELD_LABELS: Record<string, string> = {
   id: '키',
-  work_name: '공사명',
+  work_name: '점용명',
   occup_place: '점용장소',
   occup_purpose: '점용목적',
   perm_start_date: '점용 시작일',
