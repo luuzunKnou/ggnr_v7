@@ -10,6 +10,26 @@ const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 export const dynamic = 'force-dynamic';
 
+const IMAGE_THUMB_EXTS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.tif',
+  '.tiff',
+  '.bmp',
+]);
+
+/** `thumb=1` → 160px, 또는 32~640 숫자. 목록용 저화질 JPEG */
+function parseThumbWidth(raw: string | null): number | null {
+  if (raw == null || raw === '') return null;
+  if (raw === '1' || raw === 'true') return 160;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 32 || n > 640) return null;
+  return Math.round(n);
+}
+
 function contentTypeForFile(name: string): string {
   const ext = path.extname(name).toLowerCase();
   const map: Record<string, string> = {
@@ -61,8 +81,38 @@ export async function GET(req: NextRequest) {
     if (stat.isDirectory()) {
       return NextResponse.json({ error: '파일만 다운로드할 수 있습니다.' }, { status: 400 });
     }
-    const buf = await fs.readFile(resolved);
     const filename = path.basename(resolved);
+    const thumbW = parseThumbWidth(req.nextUrl.searchParams.get('thumb'));
+    const ext = path.extname(filename).toLowerCase();
+
+    if (thumbW != null && IMAGE_THUMB_EXTS.has(ext)) {
+      try {
+        const sharp = (await import('sharp')).default;
+        const thumbBuf = await sharp(resolved)
+          .rotate()
+          .resize({
+            width: thumbW,
+            height: thumbW,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality: 42, mozjpeg: true })
+          .toBuffer();
+        return new NextResponse(new Uint8Array(thumbBuf), {
+          headers: {
+            'Content-Type': 'image/jpeg',
+            'Content-Disposition': `inline; filename="${encodeURIComponent(
+              `${path.parse(filename).name}_thumb.jpg`
+            )}"`,
+            'Cache-Control': 'private, max-age=3600',
+          },
+        });
+      } catch {
+        // sharp 실패 시 원본으로 폴백
+      }
+    }
+
+    const buf = await fs.readFile(resolved);
     return new NextResponse(buf, {
       headers: {
         'Content-Type': contentTypeForFile(filename),

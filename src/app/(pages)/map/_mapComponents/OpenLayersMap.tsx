@@ -103,6 +103,10 @@ import {
   isUsageDataAsWmsLayerId,
 } from '../_mapContents/river/usageDataAs/usageDataAsLayerId';
 import {
+  buildRoadNetworkRowId,
+  isRoadNetworkWmsLayerId,
+} from '../_mapContents/road/roadNetwork/roadNetworkLayerId';
+import {
   findOpenedOccupationLedgerSerEng,
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
@@ -797,6 +801,7 @@ export default function OpenLayersMap({
     projectName
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+  const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
 
   useEffect(() => {
     if (!mapReady) return;
@@ -844,6 +849,7 @@ export default function OpenLayersMap({
     spatialFilterWkt,
     layerGeometryTypes,
     undefined,
+    serviceWmsCqlByLayer,
     mapContext?.occupationLedgerPanelOpen === true,
     wmsForceBottomLayerNames
   );
@@ -1045,11 +1051,11 @@ export default function OpenLayersMap({
     };
   }, [mapContext]);
 
-  const roadNetworkOverlayPickActive =
-    Boolean(mapContext?.roadNetworkPanelOpen) ||
+  /** 도로망 점찍기 중에만 identify 비활성 — 배경은 GeoServer WMS 클릭 선택 */
+  const roadNetworkPointPickActive =
     Boolean(mapContext?.roadNetworkPointPickActive);
 
-  // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 오버레이 픽 중에는 식별 비활성
+  // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기 중에는 식별 비활성
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
@@ -1057,7 +1063,7 @@ export default function OpenLayersMap({
     roadCctvPanelOpen ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
-      roadNetworkOverlayPickActive ||
+      roadNetworkPointPickActive ||
       activeControls.some((id) => MEASUREMENT_IDS.includes(id))
   );
 
@@ -1259,7 +1265,7 @@ export default function OpenLayersMap({
           const r = withFeat[wi];
           const tn = String(r.tableName ?? '').trim();
           if (!tn) continue;
-          if (isRiverBasicPlanIndexDefineTable(tn) && openScanLayers.has(tn)) {
+          if (isRiverBasicPlanIndexDefineTable(tn)) {
             cands.push({
               tableName: tn,
               rank: riverBasicPlanIdentifyGeometryRank(tn),
@@ -1441,6 +1447,38 @@ export default function OpenLayersMap({
             consCode: primary.value,
             extent3857: primary.extent3857,
             overlapOptions,
+          });
+          clearIdentifyIntake();
+          return;
+        }
+      }
+
+      /** 도로망도: rdl_* LINE → 목록·상세 선택 */
+      if (
+        mapContext?.roadNetworkPanelOpen &&
+        mapContext.applyRoadNetworkMapPickRef
+      ) {
+        const roadHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return isRoadNetworkWmsLayerId(tn) && r.features.length > 0;
+        });
+        if (roadHit) {
+          const tableName = String(roadHit.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          const ogc = pickIdentifyOgcFid(roadHit.features[0]?.data);
+          if (ogc == null) {
+            if (!cancelled) {
+              window.alert('클릭한 도로망 도형의 고유 ID(ogc_fid)를 읽을 수 없습니다.');
+            }
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.applyRoadNetworkMapPickRef.current?.({
+            rowId: buildRoadNetworkRowId(tableName, ogc),
+            extent3857: pickIdentifyExtent3857(roadHit.features[0]?.data),
           });
           clearIdentifyIntake();
           return;

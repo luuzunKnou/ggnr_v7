@@ -193,17 +193,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       setSelectedId?.(rowId);
       setRiverFocus?.(null);
       if (isNewRiverConstructionLedgerRow({ id: rowId })) return;
+      // 클릭 즉시 지도만 이동 — 상세·필지 GeoJSON은 DetailPanel에서 비동기 로드
       try {
-        const res = await call("", "POST", {
-          service: "consDataAsService",
-          action: "getDetailByConsCode",
-          params: { consCode: rowId },
-        });
-        const data = res?.data ?? res;
-        if (data?.error || !data?.row) return;
-        const mapped = mapConsDataAsApiToLedgerRow(data.row as ConsDataAsApiRow);
-        setRows?.((prev) => prev.map((r) => (r.id === rowId ? { ...mapped, geom: r.geom ?? mapped.geom } : r)));
-
         const map = mapContext?.mapInstanceRef?.current;
         if (!map) return;
         const extRes = await call("", "POST", {
@@ -220,10 +211,10 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
           });
         }
       } catch {
-        /* 상세 보강 실패 시 목록 행으로 표시 */
+        /* extent 실패 시 목록 행 geom 강조에 맡김 */
       }
     },
-    [mapContext, setRiverFocus, setRows, setSelectedId]
+    [mapContext, setRiverFocus, setSelectedId]
   );
 
   useEffect(() => {
@@ -679,7 +670,13 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         ) : items.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
         ) : (
-          <table className="w-full min-w-[420px] border-collapse text-left text-xs">
+          <table className="w-full table-fixed border-collapse text-left text-xs">
+            <colgroup>
+              <col />
+              <col className="w-[4.5rem]" />
+              <col className="w-[4.75rem]" />
+              <col className="w-[5.25rem]" />
+            </colgroup>
             <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
               <tr>
                 <th className="px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">공사명</th>
@@ -717,19 +714,19 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                     )}
                   >
                     <td
-                      className="max-w-[10rem] truncate px-2 py-1.5 text-slate-800"
+                      className="min-w-0 truncate px-2 py-1.5 text-slate-800"
                       title={row.name}
                     >
                       {row.name || "—"}
                     </td>
                     <td
-                      className="max-w-[8rem] truncate px-2 py-1.5 text-slate-700"
+                      className="min-w-0 truncate px-2 py-1.5 text-slate-700"
                       title={formatRiverNamesLabel(row.riverNames)}
                     >
                       {formatRiverNamesShort(row.riverNames)}
                     </td>
                     <td
-                      className="max-w-[8rem] truncate px-2 py-1.5 text-slate-700"
+                      className="min-w-0 truncate px-2 py-1.5 text-slate-700"
                       title={row.companyName}
                     >
                       {row.companyName || "—"}

@@ -10,6 +10,7 @@ type ServiceMenuLayerClearTarget = Partial<
     | 'setSpatialFilteredLayerNames'
     | 'setIdentifyResultList'
     | 'setIdentifySelectedRow'
+    | 'setServiceWmsCqlByLayer'
   >
 >;
 
@@ -86,6 +87,7 @@ export function clearServiceMenuLayerState(
   ctx.setSafetyMapLayerVisibility?.((prev) => (Object.keys(prev ?? {}).length === 0 ? prev : {}));
   ctx.setSpatialFilterWkt?.((prev) => (prev == null ? prev : null));
   ctx.setSpatialFilteredLayerNames?.((prev) => (prev == null ? prev : null));
+  ctx.setServiceWmsCqlByLayer?.((prev) => (prev == null ? prev : null));
   ctx.setIdentifyResultList?.((prev) => (prev == null ? prev : null));
   ctx.setIdentifySelectedRow?.((prev) => (prev == null ? prev : null));
 }

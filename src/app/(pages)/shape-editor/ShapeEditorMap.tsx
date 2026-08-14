@@ -11,6 +11,8 @@ import { useOwnershipLayerSync } from '../map/_mapComponents/layerFactory/owners
 import { useThematicMapLayerSync } from '../map/_mapComponents/layerFactory/thematicMapLayerFactory';
 import { useThematicMapCatalog } from '../map/_mapComponents/hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from '../map/_mapComponents/hooks/useOwnershipCatalog';
+import { useBuildingRoadCatalog } from '../map/_mapComponents/hooks/useBuildingRoadCatalog';
+import { useJimokCatalog } from '../map/_mapComponents/hooks/useJimokCatalog';
 import { useServiceLayerSync } from '../map/_mapComponents/layerFactory/serviceLayerFactory';
 import type { ShapeEditorOverlayControls } from './_hooks/useShapeEditorOverlayControls';
 import { useShapeEditorMapInstance } from './_hooks/useShapeEditorMapInstance';
@@ -32,8 +34,13 @@ export function ShapeEditorMap({
 }: ShapeEditorMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const { mapInstanceRef, mapReady } = useShapeEditorMapInstance(mapRef, defaultCenter, projectName);
-  const { registerMap, visibleLayerNames, wmsRefreshToken, hiddenWmsFeaturesByLayer } =
-    useShapeEditorContext();
+  const {
+    registerMap,
+    visibleLayerNames,
+    layerGeometryTypes,
+    wmsRefreshToken,
+    hiddenWmsFeaturesByLayer,
+  } = useShapeEditorContext();
 
   const {
     activeControls,
@@ -48,6 +55,14 @@ export function ShapeEditorMap({
     availableLayerTableNames: ownershipAvailableTableNames,
     loading: ownershipCatalogLoading,
   } = useOwnershipCatalog();
+  const {
+    availableLayerTableNames: buildingRoadAvailableTableNames,
+    loading: buildingRoadCatalogLoading,
+  } = useBuildingRoadCatalog();
+  const {
+    availableLayerTableNames: jimokAvailableTableNames,
+    loading: jimokCatalogLoading,
+  } = useJimokCatalog();
 
   useEffect(() => {
     registerMap(mapInstanceRef.current);
@@ -60,9 +75,16 @@ export function ShapeEditorMap({
     mapInstanceRef.current,
     mapReady,
     activeControls,
-    visibleBuildingRoadLayerNames
+    visibleBuildingRoadLayerNames,
+    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames
   );
-  useJimokLayerSync(mapInstanceRef.current, mapReady, activeControls, visibleJimokLayerNames);
+  useJimokLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    activeControls,
+    visibleJimokLayerNames,
+    jimokCatalogLoading ? null : jimokAvailableTableNames
+  );
   useOwnershipLayerSync(
     mapInstanceRef.current,
     mapReady,
@@ -89,7 +111,7 @@ export function ShapeEditorMap({
     visibleLayerNames,
     undefined,
     undefined,
-    undefined,
+    layerGeometryTypes,
     hiddenWmsFeaturesByLayer
   );
 

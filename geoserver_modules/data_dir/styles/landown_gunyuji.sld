@@ -7,8 +7,8 @@
         <sld:Rule>
           <sld:PolygonSymbolizer>
             <sld:Fill>
-              <sld:CssParameter name="fill">#CDDC39</sld:CssParameter>
-              <sld:CssParameter name="fill-opacity">0.3</sld:CssParameter>
+              <sld:CssParameter name="fill">#00BCD4</sld:CssParameter>
+              <sld:CssParameter name="fill-opacity">#3F51B5</sld:CssParameter>
             </sld:Fill>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>

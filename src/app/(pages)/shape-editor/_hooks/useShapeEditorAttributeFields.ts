@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react';
 import { fetchFormAttributesForPreset } from '../../map/_mapComponents/layerRowEdit/buildFormAttributes';
 import type { ShapeEditorLayerItem, ShapeEditorAttributeField } from '../types';
 
+function isDateFieldType(type?: string): boolean {
+  const t = String(type ?? '').trim().toLowerCase();
+  return t === 'date' || t === 'datetime' || t === 'timestamp' || t === 'timestamptz';
+}
+
 export function useShapeEditorAttributeFields(activeEditLayer: ShapeEditorLayerItem | null) {
   const [fields, setFields] = useState<ShapeEditorAttributeField[]>([]);
   const [loading, setLoading] = useState(false);
@@ -25,6 +30,8 @@ export function useShapeEditorAttributeFields(activeEditLayer: ShapeEditorLayerI
           attrs.map((a) => ({
             field: a.field,
             label: a.label,
+            type: a.type ?? 'text',
+            readOnly: a.readOnly === true,
           }))
         );
       })
@@ -39,5 +46,5 @@ export function useShapeEditorAttributeFields(activeEditLayer: ShapeEditorLayerI
     };
   }, [activeEditLayer?.id, activeEditLayer?.tableName, activeEditLayer?.schema]);
 
-  return { fields, loading };
+  return { fields, loading, isDateFieldType };
 }

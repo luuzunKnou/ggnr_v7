@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,7 @@ import type {
 import type { WmsFeatureKey } from './_lib/wmsFeatureKey';
 import { isWmsCqlSafeKeyField } from './_lib/wmsFeatureKey';
 import {
+  attributesEqual,
   buildHistoryEntry,
   buildDeleteHistoryEntry,
   buildSessionKey,
@@ -77,6 +79,8 @@ type ShapeEditorContextValue = {
   /** 자석 켜진 작업 레이어 (최대 1개) */
   snapWorkLayer: ShapeEditorLayerItem | null;
   visibleLayerNames: Set<string>;
+  /** 보이는 작업 레이어 기하 타입 (WMS 쌓음 순서) */
+  layerGeometryTypes: Record<string, 'POINT' | 'LINE' | 'POLYGON'>;
   snapLayerNames: Set<string>;
   toolMode: ShapeEditorToolMode;
   setToolMode: (mode: ShapeEditorToolMode) => void;
@@ -159,6 +163,7 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
   workLayersRef.current = workLayers;
   const engineBridgeRef = useRef<ShapeEditorEngineBridge | null>(null);
   const isRestoringHistoryRef = useRef(false);
+  const attributeHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const registerEngineBridge = useCallback((bridge: ShapeEditorEngineBridge | null) => {
     engineBridgeRef.current = bridge;
@@ -174,6 +179,10 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const onFeatureSelected = useCallback((selection: ShapeEditorFeatureSelection | null) => {
+    if (attributeHistoryTimerRef.current) {
+      clearTimeout(attributeHistoryTimerRef.current);
+      attributeHistoryTimerRef.current = null;
+    }
     if (!selection) {
       setDraftState((prev) => ({
         ...prev,
@@ -199,13 +208,99 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const setAttributeValue = useCallback((field: string, value: string) => {
-    setDraftState((prev) => {
-      const attributeValues = { ...prev.attributeValues, [field]: value };
-      engineBridgeRef.current?.applyAttributeValues(attributeValues);
-      return { ...prev, attributeValues };
+  const recordAttributeSnapshot = useCallback(() => {
+    if (isRestoringHistoryRef.current) return;
+    const layer = workLayersRef.current.find((w) => w.edit)?.layer ?? null;
+    if (!layer) return;
+
+    let d: ShapeEditorDraftState = { ...draftRef.current };
+    if (!d.selectedFeatureId && !d.rowKey) return;
+
+    if (!d.wkt5181?.trim()) {
+      const { entries, index } = historyRef.current;
+      const sessionKey = buildSessionKey(layer, d);
+      const latest = latestMeaningfulEntry(entries, index, sessionKey);
+      if (latest?.wkt5181?.trim()) {
+        d = { ...d, hasGeometry: true, wkt5181: latest.wkt5181 };
+      }
+    }
+    if (!d.wkt5181?.trim()) return;
+
+    setHistoryState((prev) => {
+      const sessionKey = buildSessionKey(layer, d);
+      const truncated = prev.entries.slice(0, prev.index + 1);
+      const last = truncated[truncated.length - 1];
+      const compareBase =
+        last?.sessionKey === sessionKey && last.action === 'attribute'
+          ? truncated[truncated.length - 2]
+          : last?.sessionKey === sessionKey
+            ? last
+            : latestMeaningfulEntry(truncated, truncated.length - 1, sessionKey);
+
+      if (
+        compareBase?.sessionKey === sessionKey &&
+        compareBase.wkt5181 === d.wkt5181 &&
+        attributesEqual(compareBase.attributeValues, d.attributeValues)
+      ) {
+        // 직전 속성 이력만 있고 내용이 원복된 경우 해당 이력 제거
+        if (last?.sessionKey === sessionKey && last.action === 'attribute') {
+          const entries = truncated.slice(0, -1);
+          const index = entries.length - 1;
+          const next = { entries, index };
+          historyRef.current = next;
+          dirtySaveItemsRef.current = collectDirtySaveItems(entries, index);
+          return next;
+        }
+        return prev;
+      }
+
+      const entry = buildHistoryEntry(layer, d, 'attribute');
+      if (!entry) return prev;
+
+      let entries: EditHistoryEntry[];
+      if (last?.sessionKey === sessionKey && last.action === 'attribute') {
+        entries = [...truncated.slice(0, -1), entry];
+      } else {
+        entries = [...truncated, entry];
+      }
+      const index = entries.length - 1;
+      const next = { entries, index };
+      historyRef.current = next;
+      dirtySaveItemsRef.current = collectDirtySaveItems(entries, index);
+      return next;
     });
+    setBulkSaveMessage(null);
   }, []);
+
+  const cancelAttributeHistoryTimer = useCallback(() => {
+    if (attributeHistoryTimerRef.current) {
+      clearTimeout(attributeHistoryTimerRef.current);
+      attributeHistoryTimerRef.current = null;
+    }
+  }, []);
+
+  const flushAttributeHistory = useCallback(() => {
+    cancelAttributeHistoryTimer();
+    recordAttributeSnapshot();
+  }, [cancelAttributeHistoryTimer, recordAttributeSnapshot]);
+
+  const setAttributeValue = useCallback(
+    (field: string, value: string) => {
+      setDraftState((prev) => {
+        const attributeValues = { ...prev.attributeValues, [field]: value };
+        engineBridgeRef.current?.applyAttributeValues(attributeValues);
+        const next = { ...prev, attributeValues };
+        draftRef.current = next;
+        return next;
+      });
+      cancelAttributeHistoryTimer();
+      attributeHistoryTimerRef.current = setTimeout(() => {
+        attributeHistoryTimerRef.current = null;
+        recordAttributeSnapshot();
+      }, 400);
+    },
+    [cancelAttributeHistoryTimer, recordAttributeSnapshot]
+  );
 
   const dirtySaveItems = useMemo(
     () => collectDirtySaveItems(historyState.entries, historyState.index),
@@ -238,9 +333,10 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
 
   /** 캔버스만 비움 — 전역 이력·WMS 숨김·dirty 유지 */
   const clearEditingCanvas = useCallback(() => {
+    cancelAttributeHistoryTimer();
     window.dispatchEvent(new Event('shape-editor:clear-geometry'));
     setDraftState(initialDraft);
-  }, []);
+  }, [cancelAttributeHistoryTimer]);
 
   const hideWmsFeature = useCallback((tableName: string, key: WmsFeatureKey) => {
     const keyField = String(key.keyField).trim();
@@ -350,6 +446,11 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
   const recordGeometrySnapshot = useCallback(
     (action: EditHistoryAction, snapshot?: Partial<ShapeEditorDraftState>) => {
       if (isRestoringHistoryRef.current) return;
+      // 도형 이력이 최신 속성을 포함하므로 대기 중 속성 타이머는 취소
+      if (attributeHistoryTimerRef.current) {
+        clearTimeout(attributeHistoryTimerRef.current);
+        attributeHistoryTimerRef.current = null;
+      }
       const layer = workLayersRef.current.find((w) => w.edit)?.layer ?? null;
       if (!layer) return;
       const d: ShapeEditorDraftState = { ...draftRef.current, ...snapshot };
@@ -383,9 +484,44 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
   const recordDeleteSnapshot = useCallback(
     (snapshot?: Partial<ShapeEditorDraftState>) => {
       if (isRestoringHistoryRef.current) return;
+      if (attributeHistoryTimerRef.current) {
+        clearTimeout(attributeHistoryTimerRef.current);
+        attributeHistoryTimerRef.current = null;
+      }
       const layer = workLayersRef.current.find((w) => w.edit)?.layer ?? null;
       if (!layer) return;
-      const d: ShapeEditorDraftState = { ...draftRef.current, ...snapshot };
+      let d: ShapeEditorDraftState = { ...draftRef.current, ...snapshot };
+
+      // draft 가 비어 있으면 현재 세션의 마지막 도형 스냅샷으로 보완
+      if (!d.wkt5181?.trim() || (d.changeKind !== 'insert' && !d.rowKey)) {
+        const { entries, index } = historyRef.current;
+        const sessionKey = buildSessionKey(layer, d);
+        const latest =
+          latestMeaningfulEntry(entries, index, sessionKey) ??
+          (index >= 0 && entries[index]?.layer.tableName === layer.tableName
+            ? latestMeaningfulEntry(entries, index, entries[index]!.sessionKey)
+            : null);
+        if (latest?.wkt5181?.trim()) {
+          d = {
+            ...d,
+            hasGeometry: true,
+            wkt5181: latest.wkt5181,
+            changeKind: latest.kind === 'insert' ? 'insert' : 'update',
+            rowKey: d.rowKey ?? (latest.rowKey ? { ...latest.rowKey } : null),
+            wmsFeatureId: d.wmsFeatureId ?? latest.wmsFeatureId,
+            selectedFeatureId: d.selectedFeatureId ?? latest.featureId,
+            attributeValues:
+              Object.keys(d.attributeValues).length > 0
+                ? d.attributeValues
+                : { ...latest.attributeValues },
+            originalAttributeValues:
+              Object.keys(d.originalAttributeValues).length > 0
+                ? d.originalAttributeValues
+                : { ...latest.originalAttributeValues },
+          };
+        }
+      }
+
       if (!d.wkt5181?.trim()) return;
 
       const entry = buildDeleteHistoryEntry(layer, d);
@@ -439,14 +575,16 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
   );
 
   const undo = useCallback(() => {
+    cancelAttributeHistoryTimer();
     const prev = historyRef.current;
     if (prev.index < 0) return;
     const newIndex = prev.index - 1;
     setHistoryState({ entries: prev.entries, index: newIndex });
     applyHistoryEntry(newIndex >= 0 ? prev.entries[newIndex]! : null, newIndex);
-  }, [applyHistoryEntry]);
+  }, [applyHistoryEntry, cancelAttributeHistoryTimer]);
 
   const redo = useCallback(() => {
+    cancelAttributeHistoryTimer();
     const prev = historyRef.current;
     if (prev.index >= prev.entries.length - 1) return;
     const newIndex = prev.index + 1;
@@ -454,12 +592,22 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
     if (!entry) return;
     setHistoryState({ entries: prev.entries, index: newIndex });
     applyHistoryEntry(entry, newIndex);
-  }, [applyHistoryEntry]);
+  }, [applyHistoryEntry, cancelAttributeHistoryTimer]);
+
+  useEffect(() => {
+    return () => {
+      if (attributeHistoryTimerRef.current) {
+        clearTimeout(attributeHistoryTimerRef.current);
+        attributeHistoryTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const canUndo = historyState.index >= 0;
   const canRedo = historyState.index < historyState.entries.length - 1;
 
   const bulkSavePending = useCallback(async () => {
+    flushAttributeHistory();
     const items = collectDirtySaveItems(historyRef.current.entries, historyRef.current.index);
     if (items.length === 0) {
       window.alert('저장할 변경 사항이 없습니다.');
@@ -490,7 +638,7 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
     } finally {
       setBulkSaving(false);
     }
-  }, [resetAllEditingState]);
+  }, [flushAttributeHistory, resetAllEditingState]);
 
   const hasUnsavedWork = dirtySaveItems.length > 0;
 
@@ -594,6 +742,19 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
     [workLayers]
   );
 
+  /** 작업 레이어 shpType → WMS 면·선·점 쌓음 순서 */
+  const layerGeometryTypes = useMemo(() => {
+    const out: Record<string, 'POINT' | 'LINE' | 'POLYGON'> = {};
+    for (const w of workLayers) {
+      if (!w.view) continue;
+      const t = String(w.layer.shpType ?? '').toUpperCase();
+      if (t.includes('POINT')) out[w.layer.tableName] = 'POINT';
+      else if (t.includes('LINE')) out[w.layer.tableName] = 'LINE';
+      else out[w.layer.tableName] = 'POLYGON';
+    }
+    return out;
+  }, [workLayers]);
+
   const snapWorkLayer = useMemo(
     () => workLayers.find((w) => w.snap)?.layer ?? null,
     [workLayers]
@@ -621,6 +782,7 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
       activeEditLayer,
       snapWorkLayer,
       visibleLayerNames,
+      layerGeometryTypes,
       snapLayerNames,
       toolMode,
       setToolMode,
@@ -667,6 +829,7 @@ export function ShapeEditorProvider({ children }: { children: ReactNode }) {
       activeEditLayer,
       snapWorkLayer,
       visibleLayerNames,
+      layerGeometryTypes,
       snapLayerNames,
       toolMode,
       editMode,
