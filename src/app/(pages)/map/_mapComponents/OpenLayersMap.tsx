@@ -1842,6 +1842,15 @@ export default function OpenLayersMap({
 
   /** 목록 패널 열기/닫기. 최초(null)면 빈 선택으로 열고, 기존 선택은 유지한다. */
   const togglePanelLayer = (id: PanelLayerId) => {
+    const opening = openSubPanel !== id;
+    if (opening) {
+      // 배경지도·드론영상 펼침 패널과 배타
+      if (activeControls.includes('background-map')) setIsBackgroundPanelExiting(true);
+      if (activeControls.includes('aerial-view')) setIsAerialViewPanelExiting(true);
+      setActiveControls((prev) =>
+        prev.filter((x) => x !== 'background-map' && x !== 'aerial-view')
+      );
+    }
     setOpenSubPanel((prev) => (prev === id ? null : id));
     if (id === 'land-category') {
       if (visibleJimokLayerNames == null) {
@@ -1883,6 +1892,7 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       } else {
+        setOpenSubPanel(null);
         setIsAerialViewPanelExiting(false);
         setActiveControls((prev) => {
           const next = prev.filter((item) => item !== 'aerial-view');
@@ -1896,6 +1906,7 @@ export default function OpenLayersMap({
         setIsAerialViewPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'aerial-view'));
       } else {
+        setOpenSubPanel(null);
         setIsBackgroundPanelExiting(false);
         setActiveControls((prev) => {
           const next = prev.filter((item) => item !== 'background-map');
@@ -1992,10 +2003,7 @@ export default function OpenLayersMap({
       return;
     }
 
-    // 배경지도·영상조회는 지적도 등 목록과 동시 표시 — 토글 시 목록을 닫지 않음
-    if (id !== 'background-map' && id !== 'aerial-view') {
-      setOpenSubPanel(null);
-    }
+    setOpenSubPanel(null);
 
     if (MULTI_SELECT_IDS.includes(id)) {
       setActiveControls((prev) => {
@@ -2010,7 +2018,7 @@ export default function OpenLayersMap({
         return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
       });
     } else if (id === 'background-map' || id === 'aerial-view') {
-      // 배경지도·드론영상: 서로만 배타. 초기화 패널·측정·레이어 선택은 유지
+      // 배경지도·드론영상: 서로 배타 + 지적도 등 목록 패널과도 배타
       const peer = id === 'background-map' ? 'aerial-view' : 'background-map';
       if (isActive) {
         if (id === 'background-map') setIsBackgroundPanelExiting(true);

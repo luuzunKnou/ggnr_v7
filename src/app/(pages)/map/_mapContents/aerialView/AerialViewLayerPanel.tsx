@@ -5,21 +5,13 @@ import { Search } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
-import type { AerialKind, WorkUnitItem } from './aerialMediaTypes';
+import type { WorkUnitItem } from './aerialMediaTypes';
 import {
   mockUnitsForKind,
-  replaceDroneUnitsFromServer,
   replaceOrthoUnitsFromServer,
-  replacePanoUnitsFromServer,
   subscribeMockWorkUnits,
 } from './aerialMediaMockData';
 import { deriveOrthoUnitStatus } from './aerialMediaTypes';
-
-const KIND_TABS: { id: AerialKind; label: string }[] = [
-  { id: 'ortho', label: '드론영상' },
-  { id: 'drone', label: '사진,동영상' },
-  { id: 'panorama', label: '파노라마' },
-];
 
 type Props = {
   checkedUnitIds: Set<string>;
@@ -34,14 +26,13 @@ function matchesKeyword(unit: WorkUnitItem, keyword: string): boolean {
   return unit.workName.toLowerCase().includes(q);
 }
 
-/** 우측 컨트롤 «드론영상» — 레이어형 종류 탭 + 검색 + 작업단위 체크 */
+/** 우측 컨트롤 «드론영상» — 드론영상(ortho) 작업단위 검색·체크 */
 export function AerialViewLayerPanel({
   checkedUnitIds,
   onCheckedChange,
   onClose,
   className,
 }: Props) {
-  const [kind, setKind] = useState<AerialKind>('ortho');
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -49,14 +40,14 @@ export function AerialViewLayerPanel({
 
   useEffect(() => subscribeMockWorkUnits(() => setListTick((t) => t + 1)), []);
 
-  const refreshKind = useCallback(async (nextKind: AerialKind) => {
+  const refreshOrtho = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const res = await call('', 'POST', {
         service: 'aerialUploadService',
         action: 'listWorkUnits',
-        params: { kind: nextKind },
+        params: { kind: 'ortho' },
       });
       if (!res?.success) {
         setLoadError('목록을 불러오지 못했습니다.');
@@ -85,35 +76,7 @@ export function AerialViewLayerPanel({
           }>;
         }>;
       };
-      const units = data.units ?? [];
-      if (nextKind === 'ortho') {
-        replaceOrthoUnitsFromServer(units);
-      } else if (nextKind === 'drone' || nextKind === 'panorama') {
-        const mediaUnits = units.map((u) => ({
-          wuKey: u.wuKey,
-          folderName: u.folderName,
-          workName: u.workName,
-          workDate: u.workDate,
-          srKey: u.srKey,
-          items: u.items
-            .filter((m) => m.fuKey != null)
-            .map((m) => ({
-              fuKey: m.fuKey as number,
-              fileName: m.fileName,
-              sizeLabel: m.sizeLabel,
-              format: m.format,
-              previewKind: (m.previewKind === 'video' || m.previewKind === 'panorama'
-                ? m.previewKind
-                : 'image') as 'image' | 'video' | 'panorama',
-              locationLabel: m.locationLabel ?? null,
-              relativePath: m.relativePath,
-              x5181: m.x5181,
-              y5181: m.y5181,
-            })),
-        }));
-        if (nextKind === 'drone') replaceDroneUnitsFromServer(mediaUnits);
-        else replacePanoUnitsFromServer(mediaUnits);
-      }
+      replaceOrthoUnitsFromServer(data.units ?? []);
       setListTick((t) => t + 1);
     } catch {
       setLoadError('목록을 불러오지 못했습니다.');
@@ -123,20 +86,16 @@ export function AerialViewLayerPanel({
   }, []);
 
   useEffect(() => {
-    void refreshKind(kind);
-  }, [kind, refreshKind]);
+    void refreshOrtho();
+  }, [refreshOrtho]);
 
   const units = useMemo(() => {
     void listTick;
-    const list = mockUnitsForKind(kind);
-    if (kind === 'ortho') {
-      return list.filter((u) => {
-        const st = u.status ?? deriveOrthoUnitStatus(u.files);
-        return st === 'done' || u.files.some((f) => f.status === 'done' || f.status === 'registered');
-      });
-    }
-    return list;
-  }, [kind, listTick]);
+    return mockUnitsForKind('ortho').filter((u) => {
+      const st = u.status ?? deriveOrthoUnitStatus(u.files);
+      return st === 'done' || u.files.some((f) => f.status === 'done' || f.status === 'registered');
+    });
+  }, [listTick]);
 
   const filtered = useMemo(
     () => units.filter((u) => matchesKeyword(u, keyword)),
@@ -182,27 +141,6 @@ export function AerialViewLayerPanel({
             닫기
           </button>
         ) : null}
-      </div>
-
-      <div className="grid shrink-0 grid-cols-3 gap-0.5 border-b border-slate-100 bg-slate-50/80 p-1">
-        {KIND_TABS.map((t) => {
-          const active = kind === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setKind(t.id)}
-              className={cn(
-                'rounded px-0.5 py-1.5 text-[10px] leading-tight transition-colors',
-                active
-                  ? 'bg-white font-semibold text-sky-800 shadow-sm ring-1 ring-sky-200'
-                  : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
-              )}
-            >
-              {t.label}
-            </button>
-          );
-        })}
       </div>
 
       <div className="shrink-0 border-b border-slate-100 px-2.5 py-2">
