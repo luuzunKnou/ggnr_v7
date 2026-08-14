@@ -27,6 +27,9 @@ export type ParcelIdentity = {
 
 export type BuildingLedgerRow = Record<string, string>;
 
+/** 세움/포털 상세행 — jijigu_list 등 배열 필드 허용 */
+export type BuildingRegisterRow = Record<string, unknown>;
+
 export type BuildingLedgerLandInfoRow = {
   pnu: string;
   addr: string;
@@ -39,8 +42,22 @@ export type BuildingLedgerLandInfoRow = {
   jijigu: string;
   platArea: string;
   totArea: string;
+  mgmBldrgstPk?: string;
+  raw?: Record<string, string>;
   source?: 'seum' | 'portal';
 };
+
+/** 우클릭 건축물대장 상세 (v6형) */
+export type BuildingRegisterMode = 'recap' | 'title' | 'portal' | null;
+
+export type BuildingRegisterDetailResult = {
+  source: 'seum' | 'portal' | null;
+  mode: BuildingRegisterMode;
+  buildings: BuildingRegisterRow[];
+  children: BuildingRegisterRow[];
+  notice?: string;
+};
+
 export type BuildingPermitSource = 'seum' | 'arch' | 'housing' | null;
 
 export type BuildingPermitFetchResult = {
@@ -280,14 +297,48 @@ export async function fetchLatestOfficialLandPriceForPnu(args: {
   return fetchVworldLatestOfficialLandPrice(args);
 }
 
-/** 세움터 → 데이터포털 (필지분석과 동일 경로) */
-export async function fetchBuildingLedgerRows(args: {
+/** 세움 1차 → 없으면 공공데이터포털 2차 (이중화) */
+export async function fetchBuildingRegisterDetail(args: {
   pnu: string;
   jibun?: string;
-}): Promise<{ rows: BuildingLedgerLandInfoRow[]; notice?: string }> {
+}): Promise<BuildingRegisterDetailResult> {
   const pnu = toStr(args.pnu);
   const jibun = toStr(args.jibun);
-  if (!pnu) return { rows: [] };
+  if (!pnu) return { source: null, mode: null, buildings: [], children: [] };
+
+  try {
+    const seumRes = await call('', 'POST', {
+      service: 'seumService',
+      action: 'fetchSeumBuildingRegisterForLandInfo',
+      params: { pnu },
+    });
+    const seumPayload = (seumRes?.data ?? seumRes) as {
+      ok?: boolean;
+      mode?: 'recap' | 'title' | null;
+      buildings?: BuildingRegisterRow[];
+      children?: BuildingRegisterRow[];
+    };
+    if (
+      seumPayload?.ok !== false &&
+      Array.isArray(seumPayload?.buildings) &&
+      seumPayload.buildings.length
+    ) {
+      return {
+        source: 'seum',
+        mode: seumPayload.mode ?? 'title',
+        buildings: seumPayload.buildings,
+        children: Array.isArray(seumPayload.children) ? seumPayload.children : [],
+      };
+    }
+  } catch (e: unknown) {
+    if (typeof console !== 'undefined') {
+      console.warn('[필지정보·건축물대장] 세움 1차 실패 → 포털 2차', {
+        pnu,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   try {
     const res = await call('', 'POST', {
       service: 'mapAnalyseService',
@@ -298,60 +349,144 @@ export async function fetchBuildingLedgerRows(args: {
       ok?: boolean;
       rows?: BuildingLedgerLandInfoRow[];
       notice?: string;
-      portalQuotaExceeded?: boolean;
       error?: string;
-      debug?: {
-        requested: number;
-        fromSeum: number;
-        portalAttempted: number;
-        portalOk: number;
-        portalEmpty: number;
-        portalQuota: number;
-        portalOtherError: number;
-        samples?: Array<{
-          pnu: string;
-          outcome: string;
-          status?: number;
-          resultCode?: string;
-          reason?: string;
-          bodyPreview?: string;
-          count?: number;
-        }>;
-      };
     };
-    if (typeof console !== 'undefined') {
-      const logFn =
-        payload?.notice ||
-        payload?.portalQuotaExceeded ||
-        (payload?.debug?.portalQuota ?? 0) > 0 ||
-        (payload?.debug?.portalOtherError ?? 0) > 0
-          ? console.warn
-          : console.info;
-      logFn('[필지정보·건축물대장]', {
-        pnu,
-        ok: payload?.ok,
-        rowCount: Array.isArray(payload?.rows) ? payload.rows.length : 0,
-        notice: payload?.notice,
-        portalQuotaExceeded: payload?.portalQuotaExceeded,
-        error: payload?.error,
-        debug: payload?.debug,
-      });
-    }
     if (payload?.ok === false) {
       return {
-        rows: [],
+        source: null,
+        mode: null,
+        buildings: [],
+        children: [],
         notice: payload.notice ?? payload.error,
       };
     }
     const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-    const notice = payload?.notice;
-    return { rows, notice };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (typeof console !== 'undefined') {
-      console.error('[필지정보·건축물대장]', { pnu, error: msg });
+    if (!rows.length) {
+      return { source: null, mode: null, buildings: [], children: [], notice: payload?.notice };
     }
-    return { rows: [] };
+    return {
+      source: rows[0]?.source === 'seum' ? 'seum' : 'portal',
+      mode: 'title',
+      buildings: rows.map((row) => ({
+        type: '표제부',
+        ...(row.raw ?? {}),
+        bldrgst_seqno: row.pnu,
+        bld_nm: row.bldNm && row.bldNm !== '-' ? row.bldNm : '',
+        plat_area: row.platArea || '',
+        totarea: row.totArea || '',
+        bcrat: row.bcRat || '',
+        vlrat: row.vlRat || '',
+        plat_loc: row.platLoc || '',
+        jibun: row.jibun || '',
+        road_addr: row.roadAddr || '',
+        comm_bld_esnc_no: row.mgmBldrgstPk || '',
+        source: row.source || 'portal',
+      })),
+      children: [],
+      notice: payload?.notice,
+    };
+  } catch (e: unknown) {
+    if (typeof console !== 'undefined') {
+      console.error('[필지정보·건축물대장] 포털 2차 실패', {
+        pnu,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    return { source: null, mode: null, buildings: [], children: [] };
+  }
+}
+
+/** @deprecated 상세 API 사용 — 호환용 */
+export async function fetchBuildingLedgerRows(args: {
+  pnu: string;
+  jibun?: string;
+}): Promise<{ rows: BuildingLedgerLandInfoRow[]; notice?: string }> {
+  const detail = await fetchBuildingRegisterDetail(args);
+  return {
+    rows: detail.buildings.map((b) => ({
+      pnu: args.pnu,
+      addr: '',
+      bldNm: [strField(b, 'bld_nm'), strField(b, 'dong_nm')].filter(Boolean).join(' ') || '',
+      platLoc:
+        [strField(b, 'sigungu_cd_nm'), strField(b, 'bjdong_cd_nm')].filter(Boolean).join(' ') ||
+        strField(b, 'plat_loc'),
+      jibun: formatSeumJibun(b),
+      roadAddr: formatSeumRoad(b),
+      bcRat: strField(b, 'bcrat'),
+      vlRat: strField(b, 'vlrat'),
+      jijigu: strField(b, 'main_prpos_cd_nm') || strField(b, 'jijigu_nm'),
+      platArea: strField(b, 'plat_area'),
+      totArea: strField(b, 'totarea'),
+      source: (strField(b, 'source') as 'seum' | 'portal') || (detail.source ?? undefined),
+    })),
+    notice: detail.notice,
+  };
+}
+
+function strField(row: BuildingRegisterRow, key: string): string {
+  const v = row[key];
+  if (v == null) return '';
+  return String(v).trim();
+}
+
+function formatSeumJibun(b: BuildingRegisterRow): string {
+  const m = Number(b.mnnm);
+  const s = Number(b.slno);
+  if (!Number.isFinite(m) || m === 0) return strField(b, 'jibun');
+  return s ? `${m}-${s}` : String(m);
+}
+
+function formatSeumRoad(b: BuildingRegisterRow): string {
+  if (!strField(b, 'na_road_cd_nm')) return strField(b, 'road_addr');
+  const m = Number(b.na_mnnm);
+  const s = Number(b.na_slno);
+  const lot = Number.isFinite(m) ? (s ? `${m}-${s}` : String(m)) : '';
+  return [strField(b, 'sigungu_cd_nm'), strField(b, 'na_road_cd_nm'), lot].filter(Boolean).join(' ');
+}
+
+export async function fetchBuildingRegisterByDong(args: {
+  pnu: string;
+  bldNm: string;
+}): Promise<{ buildings: BuildingRegisterRow[]; children: BuildingRegisterRow[] }> {
+  const pnu = toStr(args.pnu);
+  if (!pnu) return { buildings: [], children: [] };
+  try {
+    const res = await call('', 'POST', {
+      service: 'seumService',
+      action: 'fetchSeumBuildingRegisterByDong',
+      params: { pnu, bldNm: toStr(args.bldNm) },
+    });
+    const payload = (res?.data ?? res) as {
+      ok?: boolean;
+      buildings?: BuildingRegisterRow[];
+      children?: BuildingRegisterRow[];
+    };
+    return {
+      buildings: Array.isArray(payload?.buildings) ? payload.buildings : [],
+      children: Array.isArray(payload?.children) ? payload.children : [],
+    };
+  } catch {
+    return { buildings: [], children: [] };
+  }
+}
+
+export async function fetchBuildingFloorList(args: {
+  type: string;
+  seqNo: string;
+}): Promise<BuildingRegisterRow[]> {
+  const type = toStr(args.type);
+  const seqNo = toStr(args.seqNo);
+  if (!type || !seqNo) return [];
+  try {
+    const res = await call('', 'POST', {
+      service: 'seumService',
+      action: 'fetchSeumBuildingFloorList',
+      params: { type, seqNo },
+    });
+    const payload = (res?.data ?? res) as { ok?: boolean; children?: BuildingRegisterRow[] };
+    return Array.isArray(payload?.children) ? payload.children : [];
+  } catch {
+    return [];
   }
 }
 
@@ -381,7 +516,7 @@ export async function fetchPermitRows(args: {
       };
     }
   } catch {
-    /* 세움터 실패 시 포털 폴백 */
+    /* 세움 1차 실패 → 포털 2차 */
   }
 
   if (!args.dataPortalKey) return { source: null, rows: [] };
@@ -404,15 +539,6 @@ export async function fetchPermitRows(args: {
 
   const transient = arch.transient || housing.transient;
   if (transient) {
-    if (typeof console !== 'undefined') {
-      console.warn('[필지정보·건축인허가]', {
-        pnu,
-        archStatus: arch.status,
-        housingStatus: housing.status,
-        notice: BUILDING_PERMIT_PORTAL_TIMEOUT_NOTICE,
-        archPreview: String(arch.text ?? '').slice(0, 160),
-      });
-    }
     return {
       source: null,
       rows: [],

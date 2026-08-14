@@ -317,6 +317,13 @@ export function ChangeHistoryResult() {
   const [asOfFeatures, setAsOfFeatures] = useState<ChangeHistoryAsOfFeature[]>([]);
   const [dayDiffFeatures, setDayDiffFeatures] = useState<ChangeHistoryDayDiffFeature[]>([]);
   const [asOfLoading, setAsOfLoading] = useState(false);
+  /** 결과 모달 열린 동안 — 날짜|테이블|영역별 asOf·dayDiff 캐시 (재클릭 시 재조회 생략) */
+  const asOfCacheRef = useRef(
+    new Map<
+      string,
+      { asOf: ChangeHistoryAsOfFeature[]; dayDiff: ChangeHistoryDayDiffFeature[] }
+    >()
+  );
   const [orthoTilePayload, setOrthoTilePayload] = useState<OrthophotoTileOutputsPayload | null>(null);
   const [mapBg, setMapBg] = useState<{ isOrtho: boolean; year: string | null }>({
     isOrtho: false,
@@ -353,6 +360,7 @@ export function ChangeHistoryResult() {
       setAsOfLoading(false);
       setAsOfFeatures([]);
       setDayDiffFeatures([]);
+      asOfCacheRef.current.clear();
       return;
     }
   }, [resultOpen]);
@@ -490,6 +498,7 @@ export function ChangeHistoryResult() {
 
   const asOfTablesKey = asOfTableNames.join('|');
   const asOfDate = event?.date ?? '';
+  const asOfWktKey = area?.wkt ?? '';
   const asOfRequestRef = useRef(0);
 
   useEffect(() => {
@@ -499,6 +508,17 @@ export function ChangeHistoryResult() {
       setAsOfLoading(false);
       return;
     }
+
+    const cacheKey = `v3\0${asOfDate}\0${asOfTablesKey}\0${asOfWktKey}`;
+    const cached = asOfCacheRef.current.get(cacheKey);
+    if (cached) {
+      asOfRequestRef.current += 1;
+      setAsOfFeatures(cached.asOf);
+      setDayDiffFeatures(cached.dayDiff);
+      setAsOfLoading(false);
+      return;
+    }
+
     const tables = asOfTablesKey.split('|');
     const reqId = ++asOfRequestRef.current;
     let cancelled = false;
@@ -536,7 +556,7 @@ export function ChangeHistoryResult() {
       }),
     ])
       .then(([asOfRes, diffRes]) => {
-        if (cancelled) return;
+        if (cancelled || reqId !== asOfRequestRef.current) return;
         const asOfData = unwrapPayload<{
           features?: Array<{
             tableName: string;
@@ -548,36 +568,36 @@ export function ChangeHistoryResult() {
           }>;
         }>(asOfRes);
         const list = Array.isArray(asOfData?.features) ? asOfData.features : [];
-        setAsOfFeatures(
-          list.map((f) => ({
-            tableName: f.tableName || (f as { table_name?: string }).table_name || '',
-            keyField: f.keyField,
-            keyValue: f.keyValue,
-            properties: {},
-            geom: f.geom,
-            lastOp: f.lastOp,
-            lastAt: f.lastAt,
-          }))
-        );
+        const nextAsOf: ChangeHistoryAsOfFeature[] = list.map((f) => ({
+          tableName: f.tableName || (f as { table_name?: string }).table_name || '',
+          keyField: f.keyField,
+          keyValue: f.keyValue,
+          properties: {},
+          geom: f.geom,
+          lastOp: f.lastOp,
+          lastAt: f.lastAt,
+        }));
 
         const diffData = unwrapPayload<{
           features?: ChangeHistoryDayDiffFeature[];
         }>(diffRes);
         const diffs = Array.isArray(diffData?.features) ? diffData.features : [];
-        setDayDiffFeatures(
-          diffs.map((f) => ({
-            tableName: f.tableName,
-            keyField: f.keyField,
-            keyValue: f.keyValue,
-            op: f.op,
-            side: f.side,
-            geom: f.geom,
-            appliedAt: f.appliedAt ?? '',
-          }))
-        );
+        const nextDiff: ChangeHistoryDayDiffFeature[] = diffs.map((f) => ({
+          tableName: f.tableName,
+          keyField: f.keyField,
+          keyValue: f.keyValue,
+          op: f.op,
+          side: f.side,
+          geom: f.geom,
+          appliedAt: f.appliedAt ?? '',
+        }));
+
+        asOfCacheRef.current.set(cacheKey, { asOf: nextAsOf, dayDiff: nextDiff });
+        setAsOfFeatures(nextAsOf);
+        setDayDiffFeatures(nextDiff);
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && reqId === asOfRequestRef.current) {
           setAsOfFeatures([]);
           setDayDiffFeatures([]);
         }
@@ -592,7 +612,7 @@ export function ChangeHistoryResult() {
       asOfRequestRef.current += 1;
       setAsOfLoading(false);
     };
-  }, [resultOpen, asOfDate, asOfTablesKey, area?.wkt]);
+  }, [resultOpen, asOfDate, asOfTablesKey, asOfWktKey, area?.wkt]);
 
   useEffect(() => {
     if (!resultOpen || contentReady || !timelineSettled || timelineLoading) return;
@@ -998,6 +1018,7 @@ export function ChangeHistoryResult() {
 
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <ChangeHistoryLiveMap
+                key={`${area?.wkt ?? ''}|${event?.date ?? selectedDate}`}
                 wkt5181={area?.wkt ?? null}
                 selectedDate={event?.date ?? selectedDate}
                 orthoBackgroundMapId={orthoBackgroundMapId}

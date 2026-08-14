@@ -7,6 +7,7 @@ import { perm } from '@/database/schema/perm';
 import { upMap } from '@/database/schema/up_map';
 import { hashPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
 
 function strOrNull(v: unknown): string | null {
   if (v == null) return null;
@@ -214,7 +215,7 @@ export async function listUserPermKeys(params: Record<string, unknown>) {
 }
 
 export async function createUser(params: Record<string, unknown>) {
-  await requireLoggedIn();
+  const operator = await requireLoggedIn();
   const usrId = String(params.usr_id ?? '').trim();
   const ugName = String(params.ug_name ?? '').trim();
   const utName = String(params.ut_name ?? '').trim();
@@ -260,6 +261,14 @@ export async function createUser(params: Record<string, unknown>) {
       }
 
       return created;
+    });
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '사용자 생성',
+      ulType: '추가',
+      ulUser: usrId,
+      ulGroup: ugName,
+      ulWorkUser: operator,
     });
     return { success: true, data: inserted };
   } catch (error: unknown) {
@@ -319,6 +328,7 @@ export async function submitSignUp(params: Record<string, unknown>) {
               usrReqTime: reqAt,
               usrOkTime: null,
               usrCancleTime: null,
+              usrRejectReason: null,
             })
             .where(eq(usr.usrId, usrId))
             .returning({
@@ -393,6 +403,7 @@ export async function listPendingSignUps(_params?: unknown) {
         usrReqTime: usr.usrReqTime,
         usrOkTime: usr.usrOkTime,
         usrCancleTime: usr.usrCancleTime,
+        usrRejectReason: usr.usrRejectReason,
       })
       .from(usr)
       .where(
@@ -411,7 +422,7 @@ export async function listPendingSignUps(_params?: unknown) {
 }
 
 export async function approveSignUp(params: Record<string, unknown>) {
-  await requireLoggedIn();
+  const operator = await requireLoggedIn();
   const usrId = String(params.usr_id ?? '').trim();
   const permKeys = parsePermKeys(params.perm_keys);
   if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
@@ -427,7 +438,7 @@ export async function approveSignUp(params: Record<string, unknown>) {
     const [updated] = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(usr)
-        .set({ usrOkTime: okAt, usrCancleTime: null })
+        .set({ usrOkTime: okAt, usrCancleTime: null, usrRejectReason: null })
         .where(eq(usr.usrId, usrId))
         .returning();
       if (permKeys.length) {
@@ -435,6 +446,14 @@ export async function approveSignUp(params: Record<string, unknown>) {
         await tx.insert(upMap).values(permKeys.map((permKey) => ({ usrId, permKey })));
       }
       return [next];
+    });
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '가입 승인',
+      ulType: '추가',
+      ulUser: usrId,
+      ulGroup: row.ugName,
+      ulWorkUser: operator,
     });
     return { success: true, data: updated };
   } catch (error: unknown) {
@@ -444,8 +463,9 @@ export async function approveSignUp(params: Record<string, unknown>) {
 }
 
 export async function rejectSignUp(params: Record<string, unknown>) {
-  await requireLoggedIn();
+  const operator = await requireLoggedIn();
   const usrId = String(params.usr_id ?? '').trim();
+  const rejectReason = strOrNull(params.reject_reason ?? params.rejectReason);
   if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
 
   try {
@@ -457,9 +477,22 @@ export async function rejectSignUp(params: Record<string, unknown>) {
 
     const [updated] = await db
       .update(usr)
-      .set({ usrCancleTime: nowTs(), usrOkTime: null })
+      .set({
+        usrCancleTime: nowTs(),
+        usrOkTime: null,
+        usrRejectReason: rejectReason,
+      })
       .where(eq(usr.usrId, usrId))
       .returning();
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '가입 반려',
+      ulType: '삭제',
+      ulUser: usrId,
+      ulGroup: row.ugName,
+      ulWorkUser: operator,
+      ulDetail: rejectReason,
+    });
     return { success: true, data: updated };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '가입 반려 실패';
@@ -467,13 +500,47 @@ export async function rejectSignUp(params: Record<string, unknown>) {
   }
 }
 
+/** 로그인 안내용. 반려된 계정만 사유를 돌려준다. 로그인 불필요. */
+export async function getSignUpRejectReason(params: Record<string, unknown>) {
+  const usrId = String(params.usr_id ?? '').trim();
+  if (!usrId) return { success: true, data: { reason: null } };
+  try {
+    const [row] = await db
+      .select({
+        usrCancleTime: usr.usrCancleTime,
+        usrRejectReason: usr.usrRejectReason,
+      })
+      .from(usr)
+      .where(eq(usr.usrId, usrId))
+      .limit(1);
+    if (!row?.usrCancleTime) return { success: true, data: { reason: null } };
+    return { success: true, data: { reason: strOrNull(row.usrRejectReason) } };
+  } catch {
+    return { success: true, data: { reason: null } };
+  }
+}
+
 export async function updateUser(params: Record<string, unknown>) {
-  await requireLoggedIn();
+  const operator = await requireLoggedIn();
   const usrId = String(params.usr_id ?? '').trim();
   const permKeys = parsePermKeys(params.perm_keys);
   if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
 
   try {
+    const [before] = await db
+      .select({
+        ugName: usr.ugName,
+        utName: usr.utName,
+        usrName: usr.usrName,
+        usrTel: usr.usrTel,
+        usrMail: usr.usrMail,
+        usrEtc: usr.usrEtc,
+      })
+      .from(usr)
+      .where(eq(usr.usrId, usrId))
+      .limit(1);
+    if (!before) return { success: false, error: '대상 사용자를 찾을 수 없습니다.' };
+
     const nextUgName = params.ug_name !== undefined ? strOrNull(params.ug_name) : null;
     const nextUtName = params.ut_name !== undefined ? strOrNull(params.ut_name) : null;
     if (nextUgName && nextUtName) {
@@ -501,6 +568,28 @@ export async function updateUser(params: Record<string, unknown>) {
       return [nextUser];
     });
     if (!updated) return { success: false, error: '대상 사용자를 찾을 수 없습니다.' };
+
+    const newUg = nextUgName ?? before.ugName;
+    if (params.ug_name !== undefined && nextUgName && nextUgName !== before.ugName) {
+      void recordUserLog({
+        ulCat: UL_CAT_USER,
+        ulContents: '부서 이관',
+        ulType: '수정',
+        ulUser: usrId,
+        ulGroup: newUg,
+        ulWorkUser: operator,
+        ulDetail: `${before.ugName ?? '—'} -> ${nextUgName}`,
+      });
+    } else {
+      void recordUserLog({
+        ulCat: UL_CAT_USER,
+        ulContents: '사용자 정보 수정',
+        ulType: '수정',
+        ulUser: usrId,
+        ulGroup: newUg,
+        ulWorkUser: operator,
+      });
+    }
     return { success: true, data: updated };
   } catch (error: unknown) {
     const e = error as { code?: string; message?: string; detail?: string };
@@ -513,17 +602,30 @@ export async function updateUser(params: Record<string, unknown>) {
 }
 
 export async function deleteUser(params: Record<string, unknown>) {
-  await requireLoggedIn();
+  const operator = await requireLoggedIn();
   const usrId = String(params.usr_id ?? '').trim();
   if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
   if (usrId === 'su') return { success: false, error: 'su 계정은 삭제할 수 없습니다.' };
   try {
+    const [before] = await db
+      .select({ ugName: usr.ugName })
+      .from(usr)
+      .where(eq(usr.usrId, usrId))
+      .limit(1);
     const rows = await db
       .update(usr)
       .set({ usrIsDel: true })
       .where(eq(usr.usrId, usrId))
       .returning({ usrId: usr.usrId });
     if (!rows.length) return { success: false, error: '대상 사용자를 찾을 수 없습니다.' };
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '사용자 삭제',
+      ulType: '삭제',
+      ulUser: usrId,
+      ulGroup: before?.ugName ?? null,
+      ulWorkUser: operator,
+    });
     return { success: true };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '사용자 삭제 실패';

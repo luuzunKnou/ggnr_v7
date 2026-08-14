@@ -10,6 +10,8 @@ import { LayerManagerContent } from "@/app/(pages)/dev/_components/LayerManagerC
 import { LayerManagerUploadButtons } from "@/app/(pages)/dev/_components/layerManager/LayerManagerUploadButtons"
 import { DataHistoryManagerContent } from "@/app/(pages)/dev/_components/DataHistoryManagerContent"
 import { SignUpApprove } from "@/app/(pages)/dev/_components/SignUpApprove"
+import { UserMgmtHistory } from "@/app/(pages)/dev/_components/UserMgmtHistory"
+import { UserAccessStats } from "@/app/(pages)/dev/_components/UserAccessStats"
 import {
   SYS_MANAGER_CONSOLE_MENUS,
   type SysManagerConsoleMenuId,
@@ -82,9 +84,9 @@ function getSysAdminDescription(menuId: string): string {
     case "featureUsageStats":
       return "기능(서비스)별 사용 횟수·현황 통계 (구현 예정)"
     case "userAccessStats":
-      return "로그인·접속 건수 등 사용자 접속 현황 (구현 예정)"
+      return "로그인 접속 이력·기간별 통계 그래프·도표를 조회합니다."
     case "userMgmtHistory":
-      return "계정 생성·변경 등 사용자 관리 이력 조회 (구현 예정)"
+      return "계정 생성·변경·삭제 등 사용자 관리 이력을 조회합니다."
     case "userPermHistory":
       return "권한 부여·변경 이력 조회 (구현 예정)"
     default:
@@ -123,10 +125,20 @@ function renderSysAdminContent(menuId: string): ReactNode {
         </div>
       )
     case "featureUsageStats":
-    case "userAccessStats":
-    case "userMgmtHistory":
     case "userPermHistory":
       return <PlaceholderPanel title={menuLabel(menuId)} />
+    case "userAccessStats":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <UserAccessStats />
+        </div>
+      )
+    case "userMgmtHistory":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <UserMgmtHistory />
+        </div>
+      )
     default:
       return null
   }
