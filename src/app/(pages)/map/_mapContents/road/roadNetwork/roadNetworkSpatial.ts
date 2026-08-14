@@ -26,18 +26,27 @@ function densifyLineCoords(coords: number[][], step = 80): number[][] {
   return out;
 }
 
+function collectLineCoords(roadGeom: Geometry): number[][] {
+  const type = roadGeom.getType();
+  if (type === "LineString") {
+    return (roadGeom as import("ol/geom/LineString").default).getCoordinates();
+  }
+  if (type === "MultiLineString") {
+    const multi = roadGeom as import("ol/geom/MultiLineString").default;
+    return multi.getCoordinates().flat();
+  }
+  const extent = roadGeom.getExtent();
+  if (!extent) return [];
+  return [
+    [extent[0]!, extent[1]!],
+    [extent[2]!, extent[3]!],
+  ];
+}
+
 function lineIntersectsPolygon(filterGeom: Geometry, roadGeom: Geometry): boolean {
   if (!extentsOverlap(filterGeom.getExtent(), roadGeom.getExtent())) return false;
 
-  const flat = roadGeom.getType() === "LineString"
-    ? (roadGeom as import("ol/geom/LineString").default).getCoordinates()
-    : roadGeom.getExtent()
-      ? [
-          [roadGeom.getExtent()[0]!, roadGeom.getExtent()[1]!],
-          [roadGeom.getExtent()[2]!, roadGeom.getExtent()[3]!],
-        ]
-      : [];
-
+  const flat = collectLineCoords(roadGeom);
   const samples = densifyLineCoords(flat);
   for (const c of samples) {
     if (filterGeom.intersectsCoordinate(c)) return true;
@@ -45,28 +54,22 @@ function lineIntersectsPolygon(filterGeom: Geometry, roadGeom: Geometry): boolea
   return false;
 }
 
-/** 5181 WKT 검색 도형과 도로 LineString(WGS84) 교차 여부 */
+/** 5181 WKT 검색 도형과 도로 선(WGS84) 교차 여부 */
 export function roadNetworkRowIntersectsWkt5181(
   row: RoadNetworkRow,
   wkt5181: string
 ): boolean {
-  if (!row.geom?.coordinates?.length || !wkt5181.trim()) return false;
+  if (!row.geom || !wkt5181.trim()) return false;
   try {
     const filterGeom = new WKT().readGeometry(wkt5181, {
       dataProjection: "EPSG:5181",
       featureProjection: "EPSG:3857",
     });
     if (!filterGeom) return false;
-    const roadGeom = new GeoJSON().readGeometry(
-      {
-        type: "LineString",
-        coordinates: row.geom.coordinates,
-      },
-      {
-        dataProjection: "EPSG:4326",
-        featureProjection: "EPSG:3857",
-      }
-    );
+    const roadGeom = new GeoJSON().readGeometry(row.geom, {
+      dataProjection: "EPSG:4326",
+      featureProjection: "EPSG:3857",
+    });
     if (!roadGeom) return false;
     return lineIntersectsPolygon(filterGeom, roadGeom);
   } catch {

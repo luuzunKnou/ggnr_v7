@@ -149,6 +149,8 @@ export async function downloadHtmlAsPdf(
       backgroundColor: '#ffffff',
       logging: false,
       windowWidth: 794,
+      // html2canvas 런타임 옵션(타입 정의에는 없음)
+      ...(letterRendering ? ({ letterRendering: true } as object) : {}),
       onclone: (doc) => {
         const cloned = doc.querySelector('.formal-pdf-page') as HTMLElement | null;
         if (cloned) {

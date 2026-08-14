@@ -92,23 +92,24 @@ export function RiverUseLedgerDetailPanel({
           if (!cancelled) setModeReady(true);
           return;
         }
-        const isUsageData = data?.editPresetKey === "riverUsageData";
-        const presetKey: LayerRowEditPresetKey = isUsageData
-          ? "usageDataAs"
-          : "riverUseLedger";
+        const presetKey: LayerRowEditPresetKey =
+          data?.editPresetKey === "riverUsageData" || data?.editPresetKey === "usageDataAs"
+            ? "usageDataAs"
+            : "riverUseLedger";
+        const isUsageVariant = presetKey === "usageDataAs";
         setMode({
           editPresetKey: presetKey,
           parcelsEditable: Boolean(data?.parcelsEditable),
           showMulgunji: Boolean(data?.showMulgunji),
           jijukLayerId: String(
             data?.jijukLayerId ??
-              (isUsageData
+              (isUsageVariant
                 ? RIVER_USAGE_DATA_SOLO_WMS_LAYER_ID
                 : RIVER_USE_LEDGER_JIJUK_WMS_LAYER_ID)
           ),
           mulgunjiLayerId: data?.mulgunjiLayerId
             ? String(data.mulgunjiLayerId)
-            : isUsageData
+            : isUsageVariant
               ? null
               : RIVER_USE_LEDGER_MULGUNJI_WMS_LAYER_ID,
         });

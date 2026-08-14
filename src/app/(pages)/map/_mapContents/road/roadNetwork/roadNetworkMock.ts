@@ -75,10 +75,15 @@ export const ROAD_NETWORK_TYPE_BADGE: Record<
   입체교차로: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
 };
 
-export type RoadNetworkGeom = {
-  type: "LineString";
-  coordinates: [number, number][];
-};
+export type RoadNetworkGeom =
+  | {
+      type: "LineString";
+      coordinates: [number, number][];
+    }
+  | {
+      type: "MultiLineString";
+      coordinates: [number, number][][];
+    };
 
 export type RoadNetworkPreviewKind = "image" | "pdf" | "other";
 
@@ -154,6 +159,16 @@ export type RoadNetworkRow = {
   startPointCoord?: RoadNetworkPoint | null;
   /** 종점 좌표(지도 위치 지정) */
   endPointCoord?: RoadNetworkPoint | null;
+  /** 입체교차로 등 SHP 속성 — 길이 */
+  lengthAttr?: string;
+  /** SHP 속성 — 방위 */
+  defense?: string;
+  /** SHP 속성 — 굴곡도 */
+  sinuosity?: string;
+  /** 상세사유·상세설명 (alwnc_resn) */
+  detailReason?: string;
+  /** 주소 (rbp_cn / rep_cn) */
+  address?: string;
   designateDate: string;
   /** WGS84 LineString — 지도 강조용. 신규 등록 시 null(미지정) */
   geom: RoadNetworkGeom | null;
@@ -809,30 +824,49 @@ export function describeAttrHistoryDetail(
     endPoint?: string;
     startPointCoord?: RoadNetworkPoint | null;
     endPointCoord?: RoadNetworkPoint | null;
+    lengthAttr?: string;
+    defense?: string;
+    sinuosity?: string;
+    detailReason?: string;
+    address?: string;
   }
 ): string {
   const changes: string[] = [];
   pushChange(changes, "도로명", prev.roadName, next.roadName);
   pushChange(changes, "도로종류", prev.roadType, next.roadType);
-  pushChange(changes, "노선번호", prev.roadNo || "", next.roadNo || "");
+  pushChange(changes, "도로번호", prev.roadNo || "", next.roadNo || "");
   pushChange(changes, "개설여부", prev.openStatus ?? "", next.openStatus ?? "");
   pushChange(changes, "관리기관", prev.dept || "", next.dept || "");
   pushChange(changes, "담당자", prev.manager || "", next.manager || "");
-  if (next.roadType === "군도" || next.roadType === "농도") {
-    pushChange(changes, "기점", prev.startPoint || "", next.startPoint || "");
-    pushChange(changes, "종점", prev.endPoint || "", next.endPoint || "");
-    pushChange(
-      changes,
-      "기점위치",
-      pointStatus(prev.startPointCoord),
-      pointStatus(next.startPointCoord)
-    );
-    pushChange(
-      changes,
-      "종점위치",
-      pointStatus(prev.endPointCoord),
-      pointStatus(next.endPointCoord)
-    );
+  if (
+    next.roadType === "입체교차로" ||
+    next.roadType === "지방도" ||
+    next.roadType === "국지도" ||
+    next.roadType === "군도" ||
+    next.roadType === "농도" ||
+    next.roadType === "일반도로" ||
+    next.roadType === "임도"
+  ) {
+    pushChange(changes, "길이", prev.lengthAttr || "", next.lengthAttr || "");
+    pushChange(changes, "방위", prev.defense || "", next.defense || "");
+  }
+  if (
+    next.roadType === "입체교차로" ||
+    next.roadType === "국지도" ||
+    next.roadType === "군도" ||
+    next.roadType === "농도" ||
+    next.roadType === "임도"
+  ) {
+    pushChange(changes, "굴곡도", prev.sinuosity || "", next.sinuosity || "");
+  }
+  if (next.roadType === "국지도" || next.roadType === "일반도로") {
+    pushChange(changes, "상세사유", prev.detailReason || "", next.detailReason || "");
+  }
+  if (next.roadType === "임도") {
+    pushChange(changes, "상세설명", prev.detailReason || "", next.detailReason || "");
+  }
+  if (next.roadType === "일반도로" || next.roadType === "임도") {
+    pushChange(changes, "주소", prev.address || "", next.address || "");
   }
   if (changes.length === 0) return "변경 사항 없음";
   return changes.join("\n");
@@ -988,9 +1022,12 @@ export function cloneRoadNetworkRows(): RoadNetworkRow[] {
   return rows;
 }
 
-export function createEmptyRoadNetworkRow(user = "미확인"): RoadNetworkRow {
+export function createEmptyRoadNetworkRow(
+  user = "미확인",
+  id: string = `local-${Date.now()}`
+): RoadNetworkRow {
   return {
-    id: `new-${Date.now()}`,
+    id,
     roadName: "",
     roadNo: "",
     roadType: "일반도로",
@@ -1008,10 +1045,15 @@ export function createEmptyRoadNetworkRow(user = "미확인"): RoadNetworkRow {
     maintenance: [],
     complaints: [],
     attachments: [],
-    history: [
-      createHistoryItem("도로 등록", "신규 등록 — 속성·노선 미입력", user),
-    ],
+    history: [],
   };
+}
+
+/** 목록에 넣지 않는 미저장 신규 선택 id */
+export const ROAD_NETWORK_NEW_ID = "__new__";
+
+export function isNewRoadNetworkRowId(id: string | null | undefined): boolean {
+  return String(id ?? "").trim() === ROAD_NETWORK_NEW_ID;
 }
 
 export function createEmptyMaintenanceItem(): RoadNetworkMaintenanceItem {
