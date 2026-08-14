@@ -1017,7 +1017,7 @@ export function RoadRewardDetailPanel({
           ) : null}
         </div>
         {attrsOpen ? (
-          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-hide">
+          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-thin">
             <AttrTable entries={isEditing ? caseEditEntries : caseViewEntries} />
           </div>
         ) : null}

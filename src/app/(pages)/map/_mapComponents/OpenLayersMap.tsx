@@ -18,6 +18,7 @@ import {
   type BackgroundMapGroup,
 } from './mapControlPanel/backgroundMapSelector';
 import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
+import { CadastralZoomHint } from './mapControlPanel/CadastralZoomHint';
 import { ThematicMapLayerSelector } from './mapControlPanel/ThematicMapLayerSelector';
 import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
 import {
@@ -2102,6 +2103,10 @@ export default function OpenLayersMap({
       ? 'pointer-events-none'
       : 'pointer-events-auto';
 
+  const jijukLayerEnabled =
+    activeControls.includes('cadastral') &&
+    (visibleCadastralLayerNames?.has('jijuk') ?? false);
+
   const renderMapControlItemPanel = useCallback(
     (itemId: string) => {
       if (itemId !== 'reset-measurements' || !resetMeasurementsPanelVisible) return null;
@@ -2144,6 +2149,12 @@ export default function OpenLayersMap({
         />
       </div>
       )}
+
+      <CadastralZoomHint
+        map={mapReady ? mapInstanceRef.current : null}
+        mapReady={mapReady}
+        jijukEnabled={jijukLayerEnabled}
+      />
 
       {/* 오른쪽 맵 컨트롤 패널 — 분할 시에도 화면 오른쪽 고정
           래퍼는 pointer-events-none: 배경지도 등 하위 패널이 버튼열보다 짧을 때

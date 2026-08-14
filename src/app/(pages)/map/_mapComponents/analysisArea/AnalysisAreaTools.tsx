@@ -420,21 +420,32 @@ export function AnalysisAreaSummary({
 }
 
 type DrawToolbarActionsProps = {
-  drawPhase: 'drawing' | 'editing';
+  drawPhase: 'drawing' | 'editing' | 'managed';
   confirmDraw: () => void;
   redrawShape: () => void;
   cancelDraw: () => void;
   /** 필지: 사업구역 밖이면 true. 변동이력 등은 생략(기본 false) */
   applyDisabled?: boolean;
+  /** managed(적용 후) — 점용대장·하천점용 */
+  addGeom?: () => void;
+  modifyGeom?: () => void;
+  deleteGeom?: () => void;
+  showDeleteGeom?: boolean;
+  showModifyGeom?: boolean;
 };
 
-/** 도형 그리기·편집 지도 위 알약 툴바 (필지분석·변동이력 공용) */
+/** 도형 그리기·편집 지도 위 알약 툴바 (필지분석·변동이력·점용 공용) */
 export function DrawToolbarActions({
   drawPhase,
   confirmDraw,
   redrawShape,
   cancelDraw,
   applyDisabled = false,
+  addGeom,
+  modifyGeom,
+  deleteGeom,
+  showDeleteGeom = true,
+  showModifyGeom = true,
 }: DrawToolbarActionsProps) {
   const pillShell =
     'pointer-events-auto flex max-w-[min(100vw-16px,560px)] flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 py-2 pr-2 pl-4 text-foreground shadow-lg backdrop-blur';
@@ -453,6 +464,47 @@ export function DrawToolbarActions({
           <X className="size-3.5" />
           취소
         </button>
+      </div>
+    );
+  }
+
+  if (drawPhase === 'managed') {
+    const managedBtn =
+      'cursor-pointer rounded-full bg-muted px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground sm:text-sm';
+
+    return (
+      <div className={cn(pillShell, 'justify-center gap-1.5 px-2')}>
+        {showModifyGeom ? (
+          <button
+            type="button"
+            onClick={modifyGeom}
+            title="도형수정"
+            aria-label="도형수정"
+            className={managedBtn}
+          >
+            도형수정
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={addGeom}
+          title="도형추가"
+          aria-label="도형추가"
+          className={managedBtn}
+        >
+          도형추가
+        </button>
+        {showDeleteGeom ? (
+          <button
+            type="button"
+            onClick={deleteGeom}
+            title="도형삭제"
+            aria-label="도형삭제"
+            className={managedBtn}
+          >
+            도형삭제
+          </button>
+        ) : null}
       </div>
     );
   }

@@ -15,6 +15,7 @@ export type MapSideDetailScrollProps = ComponentPropsWithoutRef<'div'>;
 
 /**
  * 상세 패널 본문 스크롤 영역.
+ * 점용대장과 동일하게 scrollbar-thin 적용.
  * 내용이 넘칠 때만 margin-right 10px — 스크롤 없으면 여백 없음.
  */
 export function MapSideDetailScroll({
@@ -47,7 +48,11 @@ export function MapSideDetailScroll({
   }, []);
 
   return (
-    <div ref={ref} className={cn(className, overflowY && SCROLL_CLEARANCE_MR)} {...rest}>
+    <div
+      ref={ref}
+      className={cn('scrollbar-thin', className, overflowY && SCROLL_CLEARANCE_MR)}
+      {...rest}
+    >
       {children}
     </div>
   );

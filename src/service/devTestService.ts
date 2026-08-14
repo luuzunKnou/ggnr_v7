@@ -20,7 +20,7 @@ import {
   buildElevationContourCss,
   ELEVATION_LAYER_NAME,
 } from '@/lib/geoserverStyles/elevationContourStyle';
-import { normalizeDefineTableSource } from '@/lib/defineLayerTablesNormalize';
+import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
@@ -1591,7 +1591,8 @@ export async function getDefineLayerTables(): Promise<{
       return { success: false, error: 'Invalid tables format', tables: [] };
     }
     normalizeDefineTableSource(tables as Record<string, unknown>[]);
-    return { success: true, tables: sortDefineLayerTables(tables) };
+    const deduped = dedupeDefineLayerTablesByName(tables as Record<string, unknown>[]);
+    return { success: true, tables: sortDefineLayerTables(deduped as DefineLayerRow[]) };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg, tables: [] };

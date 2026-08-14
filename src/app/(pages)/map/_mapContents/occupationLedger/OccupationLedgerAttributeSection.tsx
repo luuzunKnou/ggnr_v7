@@ -113,7 +113,14 @@ export function OccupationLedgerAttributeSection({
                 key={row.field}
                 className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
               >
-                <dt className="shrink-0 leading-none font-medium text-slate-600">{row.label}</dt>
+                <dt className="shrink-0 leading-none font-medium text-slate-600">
+                  {row.label}
+                  {isEditing && row.required ? (
+                    <span className="ml-0.5 text-red-500" aria-hidden>
+                      *
+                    </span>
+                  ) : null}
+                </dt>
                 <dd className="relative min-w-0 break-words text-slate-800">
                   {showInput ? (
                     isPlace ? (

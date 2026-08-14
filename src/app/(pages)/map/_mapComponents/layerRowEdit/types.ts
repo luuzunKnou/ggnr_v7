@@ -32,10 +32,12 @@ export type LayerRowEditPreset = {
    */
   fieldLabels?: Record<string, string>;
   /**
-   * 저장 시 점용기간(시작·종료)·도형 필수.
-   * 울진 하천점용·공통 점용대장용. 없으면 저장 막고 안내 후 편집 유지.
+   * 저장 시 점용기간(시작·종료)·도형 하드코딩 필수 (울진 하천점용 등).
+   * 공통 점용대장은 define_field_is_required만 사용.
    */
   requirePeriodAndGeomOnSave?: boolean;
+  /** 편집 시 DB에 도형이 없어도 도형 편집 세션 유지 */
+  allowEmptyGeom?: boolean;
 };
 
 export type LayerRowDetailAttr = {
@@ -48,6 +50,8 @@ export type LayerRowDetailAttr = {
   type?: string;
   /** define_field_read_only */
   readOnly?: boolean;
+  /** define_field_is_required — 저장 시 검증 */
+  required?: boolean;
 };
 
 export type LayerRowParcelItem = {

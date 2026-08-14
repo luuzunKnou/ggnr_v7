@@ -26,8 +26,8 @@
     "define_field_show_title": false
   },
   {
-    "define_field_name": "id",
-    "define_field_kor_name": "부모키",
+    "define_field_name": "permit_no",
+    "define_field_kor_name": "허가번호",
     "define_field_type": "text",
     "define_field_idx": 3,
     "define_field_is_required": "true",
