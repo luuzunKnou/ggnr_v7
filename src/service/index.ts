@@ -22,6 +22,8 @@ import * as batchSnapshotService from './batchSnapshotService';
 import * as dataLogService from './dataLogService';
 import * as permissionService from './permissionService';
 import * as usrService from './usrService';
+import * as userLogService from './userLogService';
+import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadUseLedgerService from './roadUseLedgerService';
@@ -83,6 +85,8 @@ export {
   dataLogService,
   permissionService,
   usrService,
+  userLogService,
+  loginLogService,
   riverBasicPlanService,
   roadLedgerService,
   roadUseLedgerService,
