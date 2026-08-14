@@ -40,53 +40,358 @@ export type LayerDetailRow = {
   dhShpPath: string | null;
 };
 
-/** 테이블별 수정 이력 (layer_detail_history + layer_history) */
+/** 레이어 목록 «수정 이력» 모달용 — SHP·Excel·시스템 UI 통합 행 */
+export type LayerTableHistoryUnifiedRow = {
+  id: string;
+  /** 표시용 일시 (ISO 또는 YYYY-MM-DD) */
+  date: string | null;
+  /** 정렬용 epoch ms */
+  sortAt: number;
+  /** SHP | Excel | 서비스명 | 시스템 UI */
+  sourceLabel: string;
+  countOld: number | null;
+  countNew: number | null;
+  /** 건수 열 요약(없으면 UI에서 —) */
+  countSummary: string | null;
+  contents: string | null;
+  result: string | null;
+};
+
+export type LayerDetailHistoryByTableRow = LayerDetailRow & {
+  lhCreateDate: string | null;
+  lhContents: string | null;
+  /** 통합 모달용 (있으면 UI가 이 필드를 우선) */
+  sourceLabel?: string;
+  countSummary?: string | null;
+  id?: string;
+  sortAt?: number;
+};
+
+function formatCountKo(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return Number(n).toLocaleString('ko-KR');
+}
+
+function toSortAt(raw: unknown): number {
+  if (raw == null) return 0;
+  if (raw instanceof Date) {
+    const t = raw.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+  const s = String(raw).trim();
+  if (!s) return 0;
+  // YYYY-MM-DD only → 당일 끝으로 (시간 없는 SHP 이력과 timestamp 비교 시 당일 배치가 뒤로 가지 않게)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const t = Date.parse(`${s}T23:59:59+09:00`);
+    return Number.isFinite(t) ? t : 0;
+  }
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function toDateString(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (raw instanceof Date) return raw.toISOString();
+  const s = String(raw).trim();
+  return s || null;
+}
+
+function resolveUiSourceLabel(params: {
+  dlSource?: string | null;
+  dlServiceName?: string | null;
+}): string {
+  const src = String(params.dlSource ?? '').trim();
+  if (src === 'SHP 업로드' || src === 'SHP') return 'SHP';
+  if (src === 'Excel 업로드' || src === 'Excel') return 'Excel';
+  if (src === '시스템') return '시스템 UI';
+  const svc = String(params.dlServiceName ?? '').trim();
+  if (
+    svc &&
+    svc !== '시스템' &&
+    svc !== 'SHP 업로드' &&
+    svc !== 'Excel 업로드' &&
+    svc !== '레이어 관리(개발자모드)'
+  ) {
+    return svc;
+  }
+  return '시스템 UI';
+}
+
+function buildShpContents(dhType: string | null, dhContents: string | null, lhContents: string | null): string {
+  const type = String(dhType ?? '').trim();
+  const detail = String(dhContents ?? lhContents ?? '').trim();
+  if (type && detail && type !== detail) return `${type} — ${detail}`;
+  return type || detail || '—';
+}
+
+/**
+ * 테이블별 수정 이력 — SHP(layer_detail_history) · Excel(excel_upload_history) ·
+ * 시스템 UI(data_log, 업로드 미러·다운로드 제외)를 합쳐 최신순.
+ */
 export async function getLayerDetailHistoryByTable(params: {
   tableName: string;
   limit?: number;
-}): Promise<{ success: boolean; data: LayerDetailHistoryByTableRow[]; error?: string }> {
+}): Promise<{ success: boolean; data: LayerTableHistoryUnifiedRow[]; error?: string }> {
   const tableName = params?.tableName?.trim();
   if (!tableName) return { success: false, data: [], error: 'tableName이 필요합니다.' };
   const limit = Math.min(200, Math.max(1, params?.limit ?? 50));
+  const perSource = Math.min(200, Math.max(limit, 50));
+
   try {
-    const res = await db.execute(sql`
-      SELECT
-        dh.dh_key AS "dhKey",
-        dh.dh_lh_key AS "dhLhKey",
-        dh.dh_group AS "dhGroup",
-        dh.dh_name AS "dhName",
-        dh.dh_kor_name AS "dhKorName",
-        dh.dh_type AS "dhType",
-        dh.dh_old_data AS "dhOldData",
-        dh.dh_new_data AS "dhNewData",
-        dh.dh_append_count AS "dhAppendCount",
-        dh.dh_conflict_count AS "dhConflictCount",
-        dh.dh_remove_count AS "dhRemoveCount",
-        dh.dh_contents AS "dhContents",
-        dh.dh_result AS "dhResult",
-        dh.dh_shp_path AS "dhShpPath",
-        lh.lh_create_date AS "lhCreateDate",
-        lh.lh_contents AS "lhContents"
-      FROM layer_detail_history dh
-      JOIN layer_history lh ON dh.dh_lh_key = lh.lh_key
-      WHERE LOWER(dh.dh_name) = LOWER(${tableName})
-      ORDER BY lh.lh_key DESC, dh.dh_key DESC
-      LIMIT ${limit}
-    `);
-    return {
-      success: true,
-      data: (res.rows as LayerDetailHistoryByTableRow[]) ?? [],
-    };
+    const unified: LayerTableHistoryUnifiedRow[] = [];
+
+    // 1) SHP 업로드 배치
+    try {
+      const shpRes = await db.execute(sql`
+        SELECT
+          dh.dh_key AS "dhKey",
+          dh.dh_type AS "dhType",
+          dh.dh_old_data AS "dhOldData",
+          dh.dh_new_data AS "dhNewData",
+          dh.dh_contents AS "dhContents",
+          dh.dh_result AS "dhResult",
+          lh.lh_create_date AS "lhCreateDate",
+          lh.lh_contents AS "lhContents"
+        FROM layer_detail_history dh
+        JOIN layer_history lh ON dh.dh_lh_key = lh.lh_key
+        WHERE LOWER(dh.dh_name) = LOWER(${tableName})
+        ORDER BY lh.lh_key DESC, dh.dh_key DESC
+        LIMIT ${perSource}
+      `);
+      for (const r of (shpRes.rows as Array<{
+        dhKey: number;
+        dhType: string | null;
+        dhOldData: number | null;
+        dhNewData: number | null;
+        dhContents: string | null;
+        dhResult: string | null;
+        lhCreateDate: string | null;
+        lhContents: string | null;
+      }>) ?? []) {
+        const oldN = r.dhOldData != null ? Number(r.dhOldData) : null;
+        const newN = r.dhNewData != null ? Number(r.dhNewData) : null;
+        unified.push({
+          id: `shp-${r.dhKey}`,
+          date: toDateString(r.lhCreateDate),
+          sortAt: toSortAt(r.lhCreateDate),
+          sourceLabel: 'SHP',
+          countOld: Number.isFinite(oldN as number) ? oldN : null,
+          countNew: Number.isFinite(newN as number) ? newN : null,
+          countSummary:
+            oldN != null || newN != null
+              ? `${formatCountKo(oldN)} → ${formatCountKo(newN)}`
+              : null,
+          contents: buildShpContents(r.dhType, r.dhContents, r.lhContents),
+          result: r.dhResult,
+        });
+      }
+    } catch {
+      /* SHP 이력 테이블 없거나 조회 실패 시 나머지 출처만 */
+    }
+
+    // 2) Excel 업로드 배치
+    try {
+      const excelRes = await db.execute(sql`
+        SELECT
+          eh.eh_key AS "ehKey",
+          eh.eh_old_row_count AS "ehOldRowCount",
+          eh.eh_row_count AS "ehRowCount",
+          eh.eh_contents AS "ehContents",
+          eh.eh_result AS "ehResult",
+          eh.eh_create_date AS "ehCreateDate"
+        FROM excel_upload_history eh
+        WHERE LOWER(eh.eh_table_name) = LOWER(${tableName})
+        ORDER BY eh.eh_key DESC
+        LIMIT ${perSource}
+      `);
+      for (const r of (excelRes.rows as Array<{
+        ehKey: number;
+        ehOldRowCount: number | null;
+        ehRowCount: number | null;
+        ehContents: string | null;
+        ehResult: string | null;
+        ehCreateDate: string | Date | null;
+      }>) ?? []) {
+        const oldN = r.ehOldRowCount != null ? Number(r.ehOldRowCount) : null;
+        const newN = r.ehRowCount != null ? Number(r.ehRowCount) : null;
+        const contents = String(r.ehContents ?? '').trim() || 'Excel 업로드';
+        unified.push({
+          id: `excel-${r.ehKey}`,
+          date: toDateString(r.ehCreateDate),
+          sortAt: toSortAt(r.ehCreateDate),
+          sourceLabel: 'Excel',
+          countOld: Number.isFinite(oldN as number) ? oldN : null,
+          countNew: Number.isFinite(newN as number) ? newN : null,
+          countSummary:
+            oldN != null || newN != null
+              ? `${formatCountKo(oldN)} → ${formatCountKo(newN)}`
+              : null,
+          contents,
+          result: r.ehResult,
+        });
+      }
+    } catch {
+      /* Excel 이력 없으면 스킵 */
+    }
+
+    // 3) 시스템 UI·기타 (업로드 미러·다운로드·되돌리기·조회·저장 제외)
+    try {
+      const sysRes = await db.execute(sql`
+        SELECT
+          dl.dl_key AS "dlKey",
+          dl.dl_date AS "dlDate",
+          dl.dl_source AS "dlSource",
+          dl.dl_service_name AS "dlServiceName",
+          dl.dl_type AS "dlType",
+          dl.dl_contents AS "dlContents"
+        FROM data_log dl
+        WHERE LOWER(dl.dl_table_name) = LOWER(${tableName})
+          AND COALESCE(dl.dl_source, '') NOT IN ('SHP 업로드', 'Excel 업로드', '레이어 관리(개발자모드)')
+          AND COALESCE(dl.dl_type, '') IN ('추가', '수정', '삭제')
+          AND (dl.dl_batch_key IS NULL OR btrim(dl.dl_batch_key) = '')
+        ORDER BY dl.dl_date DESC NULLS LAST, dl.dl_key DESC
+        LIMIT ${perSource}
+      `);
+      for (const r of (sysRes.rows as Array<{
+        dlKey: number;
+        dlDate: string | Date | null;
+        dlSource: string | null;
+        dlServiceName: string | null;
+        dlType: string | null;
+        dlContents: string | null;
+      }>) ?? []) {
+        const type = String(r.dlType ?? '').trim();
+        const detail = String(r.dlContents ?? '').trim();
+        const contents =
+          type && detail && !detail.startsWith(type) ? `${type} — ${detail}` : type || detail || '—';
+        unified.push({
+          id: `dl-${r.dlKey}`,
+          date: toDateString(r.dlDate),
+          sortAt: toSortAt(r.dlDate),
+          sourceLabel: resolveUiSourceLabel({
+            dlSource: r.dlSource,
+            dlServiceName: r.dlServiceName,
+          }),
+          countOld: null,
+          countNew: null,
+          countSummary: null,
+          contents,
+          result: '성공',
+        });
+      }
+    } catch {
+      /* data_log 미적용 환경 */
+    }
+
+    unified.sort((a, b) => b.sortAt - a.sortAt || b.id.localeCompare(a.id));
+    return { success: true, data: unified.slice(0, limit) };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, data: [], error: msg };
   }
 }
 
-export type LayerDetailHistoryByTableRow = LayerDetailRow & {
-  lhCreateDate: string | null;
-  lhContents: string | null;
-};
+/**
+ * 테이블별 최신 통합 이력일 (목록 갱신일용).
+ * SHP · Excel · 시스템 UI(data_log) 중 가장 최근.
+ */
+export async function getLatestHistoryDatesByTables(params?: {
+  tableNames?: string[];
+}): Promise<{ success: boolean; dates: Record<string, string>; error?: string }> {
+  const names = (params?.tableNames ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const dates: Record<string, string> = {};
+
+  const pickLatest = (table: string, raw: unknown) => {
+    const key = table.toLowerCase();
+    const next = toDateString(raw);
+    if (!next) return;
+    const prev = dates[key];
+    if (!prev || toSortAt(next) >= toSortAt(prev)) {
+      dates[key] = next;
+    }
+  };
+
+  try {
+    const nameFilter =
+      names.length > 0
+        ? sql`AND LOWER(dh.dh_name) IN (${sql.join(
+            names.map((n) => sql`${n.toLowerCase()}`),
+            sql`, `
+          )})`
+        : sql``;
+    try {
+      const shpRes = await db.execute(sql`
+        SELECT LOWER(dh.dh_name) AS "tableName", MAX(lh.lh_create_date) AS "lastDate"
+        FROM layer_detail_history dh
+        JOIN layer_history lh ON dh.dh_lh_key = lh.lh_key
+        WHERE dh.dh_result IN ('성공', '대기')
+        ${nameFilter}
+        GROUP BY LOWER(dh.dh_name)
+      `);
+      for (const r of (shpRes.rows as Array<{ tableName: string; lastDate: string | null }>) ?? []) {
+        if (r.tableName) pickLatest(r.tableName, r.lastDate);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const excelNameFilter =
+      names.length > 0
+        ? sql`AND LOWER(eh.eh_table_name) IN (${sql.join(
+            names.map((n) => sql`${n.toLowerCase()}`),
+            sql`, `
+          )})`
+        : sql``;
+    try {
+      const excelRes = await db.execute(sql`
+        SELECT LOWER(eh.eh_table_name) AS "tableName", MAX(eh.eh_create_date) AS "lastDate"
+        FROM excel_upload_history eh
+        WHERE (eh.eh_result IN ('성공', '대기') OR eh.eh_result IS NULL)
+        ${excelNameFilter}
+        GROUP BY LOWER(eh.eh_table_name)
+      `);
+      for (const r of (excelRes.rows as Array<{ tableName: string; lastDate: string | Date | null }>) ?? []) {
+        if (r.tableName) pickLatest(r.tableName, r.lastDate);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const dlNameFilter =
+      names.length > 0
+        ? sql`AND LOWER(dl.dl_table_name) IN (${sql.join(
+            names.map((n) => sql`${n.toLowerCase()}`),
+            sql`, `
+          )})`
+        : sql``;
+    try {
+      const dlRes = await db.execute(sql`
+        SELECT LOWER(dl.dl_table_name) AS "tableName", MAX(dl.dl_date) AS "lastDate"
+        FROM data_log dl
+        WHERE COALESCE(dl.dl_source, '') NOT IN ('SHP 업로드', 'Excel 업로드', '레이어 관리(개발자모드)')
+          AND COALESCE(dl.dl_type, '') IN ('추가', '수정', '삭제')
+          AND (dl.dl_batch_key IS NULL OR btrim(dl.dl_batch_key) = '')
+        ${dlNameFilter}
+        GROUP BY LOWER(dl.dl_table_name)
+      `);
+      for (const r of (dlRes.rows as Array<{ tableName: string; lastDate: string | Date | null }>) ?? []) {
+        if (r.tableName) pickLatest(r.tableName, r.lastDate);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return { success: true, dates };
+  } catch (e: unknown) {
+    return {
+      success: false,
+      dates,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
 
 /** 이력 목록 조회 (페이징) */
 export async function getLayerHistoryList(params?: {
