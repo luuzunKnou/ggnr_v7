@@ -6,141 +6,8 @@ import { KIND_TO_FOLDER_TOKEN } from './aerialMediaRoots';
  * locationLabel = EPSG:5181 (x, y). 기본 지도 중심(안동) 인근으로 배치해
  * 작업단위 선택 시 fit / 파일 선택 시 fly 확인용.
  */
-export const MOCK_ORTHO_UNITS: WorkUnitItem[] = [
-  {
-    id: 'ortho-1',
-    workDate: '2026-07-03',
-    workName: '안동 시내 정사',
-    folderName: '20260703_드론영상_5181_안동 시내 정사',
-    kind: 'ortho',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위', value: '안동 시내 정사' },
-      { label: '작업일', value: '2026-07-03' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '임무/작업 목적', value: '시내 시설 현황 파악 및 정사 제작' },
-      { label: '작성자', value: '김영상' },
-      { label: '제작일시', value: '2026-07-03 14:20' },
-      { label: '촬영기기', value: 'DJI Mavic 3 Enterprise' },
-      { label: '제작/배포 기관', value: '안동시' },
-      { label: '해상도', value: '5 cm/pixel' },
-      { label: '메타 작성일', value: '2026-07-03' },
-      { label: '메모', value: '안동 시청 인근' },
-    ],
-    files: [
-      {
-        id: 'of-1',
-        name: 'ortho_001.tif',
-        sizeLabel: '1.2 GB',
-        format: 'tif',
-        status: 'done',
-        locationLabel: '354231.4, 342276.5',
-      },
-      {
-        id: 'of-2',
-        name: 'ortho_002.tif',
-        sizeLabel: '980 MB',
-        format: 'tif',
-        status: 'converting',
-        locationLabel: '354682.8, 342573.3',
-      },
-      {
-        id: 'of-3',
-        name: 'ortho_003.tif',
-        sizeLabel: '1.1 GB',
-        format: 'tif',
-        status: 'pending',
-        locationLabel: '353801.5, 341780.4',
-      },
-    ],
-  },
-  {
-    id: 'ortho-2',
-    workDate: '2026-07-01',
-    workName: '안동 동측 정사',
-    folderName: '20260701_드론영상_5181_안동 동측 정사',
-    kind: 'ortho',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위', value: '안동 동측 정사' },
-      { label: '작업일', value: '2026-07-01' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '임무/작업 목적', value: '동측 일원 정사 갱신' },
-      { label: '작성자', value: '이정사' },
-      { label: '제작일시', value: '2026-07-01 09:10' },
-      { label: '촬영기기', value: 'WingtraOne GEN II' },
-      { label: '제작/배포 기관', value: '안동시' },
-      { label: '해상도', value: '8 cm/pixel' },
-      { label: '메타 작성일', value: '2026-07-01' },
-      { label: '메모', value: '—' },
-    ],
-    files: [
-      {
-        id: 'of-4',
-        name: 'east_mosaic_a.tif',
-        sizeLabel: '2.1 GB',
-        format: 'tif',
-        status: 'done',
-        locationLabel: '355303.5, 342917.5',
-      },
-      {
-        id: 'of-5',
-        name: 'east_mosaic_b.tif',
-        sizeLabel: '1.8 GB',
-        format: 'tif',
-        status: 'done',
-        locationLabel: '355745.0, 343258.6',
-      },
-    ],
-  },
-  {
-    id: 'ortho-3',
-    workDate: '2026-06-20',
-    workName: '안동 남서 정사',
-    folderName: '20260620_드론영상_5181_안동 남서 정사',
-    kind: 'ortho',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위', value: '안동 남서 정사' },
-      { label: '작업일', value: '2026-06-20' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '임무/작업 목적', value: '남서측 하천·제방 현황' },
-      { label: '작성자', value: '박하천' },
-      { label: '제작일시', value: '2026-06-20 16:45' },
-      { label: '촬영기기', value: 'DJI Phantom 4 RTK' },
-      { label: '제작/배포 기관', value: '안동시' },
-      { label: '해상도', value: '3 cm/pixel' },
-      { label: '메타 작성일', value: '2026-06-21' },
-      { label: '메모', value: '낙동강 인근' },
-    ],
-    files: [
-      {
-        id: 'of-6',
-        name: 'sw_a.tif',
-        sizeLabel: '720 MB',
-        format: 'tif',
-        status: 'done',
-        locationLabel: '353093.1, 341323.7',
-      },
-      {
-        id: 'of-7',
-        name: 'sw_b.tif',
-        sizeLabel: '690 MB',
-        format: 'tif',
-        status: 'done',
-        locationLabel: '353546.7, 340998.7',
-      },
-      {
-        id: 'of-8',
-        name: 'sw_c.tif',
-        sizeLabel: '710 MB',
-        format: 'tif',
-        status: 'done',
-        locationLabel: '352641.5, 341537.7',
-      },
-    ],
-  },
-];
+/** 드론영상 — DB 목록으로 교체. 초기값은 빈 배열(목업 시드 없음). */
+export const MOCK_ORTHO_UNITS: WorkUnitItem[] = [];
 
 export const MOCK_DRONE_UNITS: WorkUnitItem[] = [
   {
@@ -252,89 +119,8 @@ export const MOCK_DRONE_UNITS: WorkUnitItem[] = [
   },
 ];
 
-export const MOCK_PANO_UNITS: WorkUnitItem[] = [
-  {
-    id: 'pano-1',
-    workDate: '2026-07-06',
-    workName: '안동 서측 파노라마',
-    folderName: '20260706_파노라마_5181_안동 서측 파노라마',
-    kind: 'panorama',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위 명', value: '안동 서측 파노라마' },
-      { label: '작업일', value: '2026-07-06' },
-      { label: '작성자', value: '한파노' },
-      { label: '촬영자', value: '한파노' },
-      { label: '작업목적', value: '교차로 시야 확보용 파노라마' },
-      { label: '메모', value: '뷰어 연동 목업' },
-    ],
-    files: [
-      {
-        id: 'pf-1',
-        name: 'pano_001.jpg',
-        sizeLabel: '18 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'panorama',
-        locationLabel: '351985.4, 343191.3',
-      },
-      {
-        id: 'pf-2',
-        name: 'pano_002.jpg',
-        sizeLabel: '17 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'panorama',
-        locationLabel: '352337.5, 343530.6',
-      },
-      {
-        id: 'pf-3',
-        name: 'pano_003.jpg',
-        sizeLabel: '16 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'panorama',
-        locationLabel: '351722.7, 342853.6',
-      },
-    ],
-  },
-  {
-    id: 'pano-2',
-    workDate: '2026-07-02',
-    workName: '안동 남측 파노라마',
-    folderName: '20260702_파노라마_5181_안동 남측 파노라마',
-    kind: 'panorama',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위 명', value: '안동 남측 파노라마' },
-      { label: '작업일', value: '2026-07-02' },
-      { label: '작성자', value: '송공원' },
-      { label: '촬영자', value: '송공원' },
-      { label: '작업목적', value: '공원·광장 시야' },
-      { label: '메모', value: '—' },
-    ],
-    files: [
-      {
-        id: 'pf-4',
-        name: 'park_pano_a.jpg',
-        sizeLabel: '15 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'panorama',
-        locationLabel: '354919.8, 339358.0',
-      },
-      {
-        id: 'pf-5',
-        name: 'park_pano_b.jpg',
-        sizeLabel: '14 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'panorama',
-        locationLabel: '355363.5, 339588.0',
-      },
-    ],
-  },
-];
+/** 서버 listWorkUnits(panorama) 로 채움 */
+export const MOCK_PANO_UNITS: WorkUnitItem[] = [];
 
 export const MOCK_SAT_UNITS: WorkUnitItem[] = [
   {
@@ -470,8 +256,6 @@ export function updateWorkUnitAttrs(
 
 type MockUnitsListener = () => void;
 const mockUnitsListeners = new Set<MockUnitsListener>();
-const convertTimers = new Map<string, number>();
-
 /** 목록 리렌더용 — 업로드·변환 목업이 배열을 바꿀 때 */
 export function subscribeMockWorkUnits(listener: MockUnitsListener): () => void {
   mockUnitsListeners.add(listener);
@@ -488,75 +272,37 @@ function todayYmd(): string {
 }
 
 /**
- * 폴더 업로드 완료 목업 → 목록에 작업단위 추가.
- * 드론영상(정사): 바로 «변환중» → 수 초 후 «변환완료».
- * 사진·동영상·파노라마: «업로드완료»로 끝.
+ * 작업단위 폴더 생성 후 목록에 추가 (파일은 비움 — 상세에서 추가).
  */
-export function addWorkUnitFromUploadMock(params: {
+export function addWorkUnitFromFolderCreate(params: {
   kind: AerialKind;
   workName: string;
   folderName: string;
-  fileTotal: number;
   linkedRequestId?: string;
+  wuKey?: number;
 }): WorkUnitItem {
-  const { kind, workName, folderName, fileTotal, linkedRequestId } = params;
+  const { kind, workName, folderName, linkedRequestId, wuKey } = params;
   const workDate = todayYmd();
-  const id = `up-${kind}-${Date.now()}`;
-  const n = Math.max(1, Math.min(fileTotal, 4));
+  const id = wuKey != null ? `wu-${wuKey}` : `up-${kind}-${Date.now()}`;
   const kindToken = KIND_TO_FOLDER_TOKEN[kind];
-  const isOrtho = kind === 'ortho';
 
-  const files: WorkFileItem[] = Array.from({ length: n }, (_, i) => {
-    const idx = i + 1;
-    if (isOrtho) {
-      return {
-        id: `${id}-f${idx}`,
-        name: `ortho_${String(idx).padStart(3, '0')}.tif`,
-        sizeLabel: `${(0.8 + i * 0.2).toFixed(1)} GB`,
-        format: 'tif',
-        status: 'converting' as const,
-        locationLabel: `${(354200 + i * 120).toFixed(1)}, ${(342200 + i * 80).toFixed(1)}`,
-      };
-    }
-    if (kind === 'panorama') {
-      return {
-        id: `${id}-f${idx}`,
-        name: `pano_${String(idx).padStart(3, '0')}.jpg`,
-        sizeLabel: `${(40 + i * 5).toFixed(0)} MB`,
-        format: 'jpg',
-        status: 'registered' as const,
-        previewKind: 'panorama' as const,
-        locationLabel: `${(354200 + i * 90).toFixed(1)}, ${(342200 + i * 60).toFixed(1)}`,
-      };
-    }
-    if (kind === 'satellite') {
-      return {
-        id: `${id}-f${idx}`,
-        name: `aerial_${workDate.replace(/-/g, '')}_${idx}.tif`,
-        sizeLabel: `${(2.5 + i * 0.3).toFixed(1)} GB`,
-        format: 'tif',
-        status: 'done' as const,
-      };
-    }
-    const video = i % 2 === 1;
-    return {
-      id: `${id}-f${idx}`,
-      name: video ? `clip_${String(idx).padStart(3, '0')}.mp4` : `img_${String(idx).padStart(3, '0')}.jpg`,
-      sizeLabel: video ? `${(120 + i * 20).toFixed(0)} MB` : `${(8 + i).toFixed(0)} MB`,
-      format: video ? 'mp4' : 'jpg',
-      status: 'registered' as const,
-      previewKind: video ? ('video' as const) : ('image' as const),
-      locationLabel: `${(354200 + i * 100).toFixed(1)}, ${(342200 + i * 70).toFixed(1)}`,
-    };
-  });
+  // 이미 같은 폴더/키가 있으면 재사용
+  const existing = mockUnitsForKind(kind).find(
+    (u) => u.folderName === folderName || (wuKey != null && u.id === `wu-${wuKey}`)
+  );
+  if (existing) {
+    if (linkedRequestId) existing.linkedRequestId = linkedRequestId;
+    emitMockWorkUnits();
+    return existing;
+  }
 
   const attrs: AttrRow[] =
     kind === 'panorama'
       ? [
           { label: '작업단위 명', value: workName },
           { label: '작업일', value: workDate },
-          { label: '작성자', value: '업로드(목업)' },
-          { label: '촬영자', value: '업로드(목업)' },
+          { label: '작성자', value: '—' },
+          { label: '촬영자', value: '—' },
           { label: '작업목적', value: workName },
           { label: '메모', value: '—' },
         ]
@@ -566,9 +312,9 @@ export function addWorkUnitFromUploadMock(params: {
             { label: '작업일', value: workDate },
             { label: '좌표계', value: 'EPSG:5181' },
             { label: '임무/작업 목적', value: workName },
-            { label: '작성자', value: '업로드(목업)' },
-            { label: '촬영자', value: '업로드(목업)' },
-            { label: '상태', value: '업로드완료' },
+            { label: '작성자', value: '—' },
+            { label: '촬영자', value: '—' },
+            { label: '상태', value: '폴더생성' },
             { label: '메모', value: '—' },
           ]
         : kind === 'ortho'
@@ -577,8 +323,8 @@ export function addWorkUnitFromUploadMock(params: {
               { label: '작업일', value: workDate },
               { label: '좌표계', value: 'EPSG:5181' },
               { label: '임무/작업 목적', value: workName },
-              { label: '작성자', value: '업로드(목업)' },
-              { label: '상태', value: '타일 변환 중' },
+              { label: '작성자', value: '—' },
+              { label: '상태', value: '폴더생성' },
               { label: '메모', value: '—' },
             ]
           : [
@@ -588,11 +334,11 @@ export function addWorkUnitFromUploadMock(params: {
               { label: '구분', value: kindToken },
               { label: '좌표계', value: 'EPSG:5181' },
               { label: '임무/작업 목적', value: workName },
-              { label: '작성자', value: '업로드(목업)' },
-              { label: '상태', value: '업로드완료' },
+              { label: '작성자', value: '—' },
+              { label: '상태', value: '폴더생성' },
             ];
 
-  if (linkedRequestId) {
+  if (linkedRequestId && kind !== 'ortho') {
     attrs.push({ label: '연결 신청', value: linkedRequestId });
   }
 
@@ -603,41 +349,284 @@ export function addWorkUnitFromUploadMock(params: {
     folderName,
     kind,
     crsHint: '5181',
-    status: isOrtho ? 'converting' : kind === 'satellite' ? 'registered' : undefined,
+    status: 'pending',
     uploadedAt: workDate,
     linkedRequestId,
     attrs,
-    files,
+    files: [],
   };
 
   mockUnitsForKind(kind).unshift(unit);
   emitMockWorkUnits();
-
-  if (isOrtho) {
-    scheduleOrthoConvertMock(unit.id);
-  }
-
   return unit;
 }
 
-/** 드론영상: 업로드 직후 변환중 → 약 8초 후 변환완료 (목업) */
-function scheduleOrthoConvertMock(unitId: string): void {
-  const prev = convertTimers.get(unitId);
-  if (prev) window.clearTimeout(prev);
-
-  const t = window.setTimeout(() => {
-    convertTimers.delete(unitId);
-    const unit = MOCK_ORTHO_UNITS.find((u) => u.id === unitId);
-    if (!unit) return;
-    unit.status = 'done';
-    for (const f of unit.files) {
-      if (f.status === 'converting' || f.status === 'pending') f.status = 'done';
-    }
-    const st = unit.attrs.find((a) => a.label === '상태');
-    if (st) st.value = '변환완료';
-    else unit.attrs.push({ label: '상태', value: '변환완료' });
-    emitMockWorkUnits();
-  }, 8000);
-
-  convertTimers.set(unitId, t);
+/** DB 목록으로 작업단위 파일 배열 교체 (사진·동영상) */
+export function applyWorkUnitMediaFiles(
+  kind: AerialKind,
+  folderName: string,
+  mediaItems: Array<{
+    fuKey?: number;
+    wuKey?: number;
+    fileName: string;
+    sizeLabel: string;
+    format: string;
+    previewKind: 'image' | 'video' | 'panorama';
+    locationLabel: string | null;
+    relativePath?: string;
+    x5181?: number | null;
+    y5181?: number | null;
+  }>
+): void {
+  const unit = mockUnitsForKind(kind).find((u) => u.folderName === folderName);
+  if (!unit) return;
+  unit.files = mediaItems.map((m) => ({
+    id: m.fuKey != null ? `fu-${m.fuKey}` : `wu-${m.wuKey ?? m.fileName}`,
+    name: m.fileName,
+    sizeLabel: m.sizeLabel,
+    format: m.format,
+    status: 'registered' as const,
+    previewKind: kind === 'panorama' ? ('panorama' as const) : m.previewKind,
+    locationLabel: m.locationLabel ?? undefined,
+    x5181: m.x5181 ?? undefined,
+    y5181: m.y5181 ?? undefined,
+    relativePath: m.relativePath,
+  }));
+  const st = unit.attrs.find((a) => a.label === '상태');
+  if (st) st.value = mediaItems.length > 0 ? '업로드완료' : '폴더생성';
+  unit.status = mediaItems.length > 0 ? 'registered' : 'pending';
+  emitMockWorkUnits();
 }
+
+/**
+ * DB 작업단위 목록으로 사진·동영상 목록 교체.
+ */
+export function replaceDroneUnitsFromServer(
+  units: Parameters<typeof replaceMediaUnitsFromServer>[1]
+): void {
+  replaceMediaUnitsFromServer('drone', units);
+}
+
+export function replacePanoUnitsFromServer(
+  units: Parameters<typeof replaceMediaUnitsFromServer>[1]
+): void {
+  replaceMediaUnitsFromServer('panorama', units);
+}
+
+function mapConvertStatus(raw: string | undefined): WorkFileItem['status'] {
+  if (raw === 'done' || raw === 'converting' || raw === 'pending' || raw === 'failed' || raw === 'registered') {
+    return raw;
+  }
+  return 'pending';
+}
+
+/** DB 작업단위 목록으로 드론영상(ortho) 목록 교체 */
+export function replaceOrthoUnitsFromServer(
+  units: Array<{
+    wuKey: number;
+    folderName: string;
+    workName: string;
+    workDate: string | null;
+    srKey: number | null;
+    items: Array<{
+      tuKey?: number;
+      fuKey?: number;
+      fileName: string;
+      sizeLabel: string;
+      format: string;
+      convertStatus?: string;
+      tilesRelativePath?: string | null;
+      relativePath?: string;
+    }>;
+  }>
+): void {
+  MOCK_ORTHO_UNITS.length = 0;
+  for (const u of units) {
+    const workDate = u.workDate || todayYmd();
+    const workName = u.workName || u.folderName;
+    const files: WorkFileItem[] = u.items.map((m) => {
+      const status = mapConvertStatus(m.convertStatus);
+      const id =
+        m.tuKey != null
+          ? `tu-${m.tuKey}`
+          : m.fuKey != null
+            ? `fu-${m.fuKey}`
+            : `tif-${m.fileName}`;
+      return {
+        id,
+        name: m.fileName,
+        sizeLabel: m.sizeLabel,
+        format: m.format,
+        status,
+        tuKey: m.tuKey,
+        tilesRelativePath: m.tilesRelativePath,
+        relativePath: m.relativePath,
+      };
+    });
+    const unitStatus =
+      files.some((f) => f.status === 'converting')
+        ? 'converting'
+        : files.some((f) => f.status === 'failed')
+          ? 'failed'
+          : files.some((f) => f.status === 'pending')
+            ? 'pending'
+            : files.length > 0
+              ? 'done'
+              : 'pending';
+    MOCK_ORTHO_UNITS.push({
+      id: `wu-${u.wuKey}`,
+      workDate,
+      workName,
+      folderName: u.folderName,
+      kind: 'ortho',
+      crsHint: '5181',
+      status: unitStatus,
+      uploadedAt: workDate,
+      linkedRequestId: u.srKey != null ? String(u.srKey) : undefined,
+      attrs: [
+        { label: '작업단위', value: workName },
+        { label: '작업일', value: workDate },
+        { label: '좌표계', value: 'EPSG:5181' },
+        { label: '임무/작업 목적', value: workName },
+        { label: '작성자', value: '—' },
+        {
+          label: '상태',
+          value:
+            unitStatus === 'done'
+              ? '변환완료'
+              : unitStatus === 'converting'
+                ? '변환중'
+                : unitStatus === 'failed'
+                  ? '변환실패'
+                  : files.length > 0
+                    ? '대기'
+                    : '폴더생성',
+        },
+        { label: '메모', value: '—' },
+      ],
+      files,
+    });
+  }
+  emitMockWorkUnits();
+}
+
+export function removeOrthoUnitFromStore(unitId: string): void {
+  const idx = MOCK_ORTHO_UNITS.findIndex((u) => u.id === unitId);
+  if (idx < 0) return;
+  MOCK_ORTHO_UNITS.splice(idx, 1);
+  emitMockWorkUnits();
+}
+
+export function removeOrthoFileFromStore(unitId: string, fileId: string): void {
+  const unit = MOCK_ORTHO_UNITS.find((u) => u.id === unitId);
+  if (!unit) return;
+  unit.files = unit.files.filter((f) => f.id !== fileId);
+  emitMockWorkUnits();
+}
+
+/** 작업단위 삭제 후 목록에서 제거 */
+export function removeDroneUnitFromStore(unitId: string): void {
+  removeMediaUnitFromStore('drone', unitId);
+}
+
+/** 파일 1건 삭제 후 작업단위 파일 목록에서 제거 */
+export function removeDroneFileFromStore(unitId: string, fileId: string): void {
+  removeMediaFileFromStore('drone', unitId, fileId);
+}
+
+function mediaUnitsArray(kind: 'drone' | 'panorama'): WorkUnitItem[] {
+  return kind === 'drone' ? MOCK_DRONE_UNITS : MOCK_PANO_UNITS;
+}
+
+export function removeMediaUnitFromStore(kind: 'drone' | 'panorama', unitId: string): void {
+  const arr = mediaUnitsArray(kind);
+  const idx = arr.findIndex((u) => u.id === unitId);
+  if (idx < 0) return;
+  arr.splice(idx, 1);
+  emitMockWorkUnits();
+}
+
+export function removeMediaFileFromStore(
+  kind: 'drone' | 'panorama',
+  unitId: string,
+  fileId: string
+): void {
+  const unit = mediaUnitsArray(kind).find((u) => u.id === unitId);
+  if (!unit) return;
+  const next = unit.files.filter((f) => f.id !== fileId);
+  if (next.length === unit.files.length) return;
+  unit.files = next;
+  unit.status = next.length > 0 ? 'registered' : 'pending';
+  const st = unit.attrs.find((a) => a.label === '상태');
+  if (st) st.value = next.length > 0 ? '업로드완료' : '폴더생성';
+  emitMockWorkUnits();
+}
+
+/**
+ * DB 작업단위 목록으로 사진·동영상 또는 파노라마 목록 교체.
+ */
+export function replaceMediaUnitsFromServer(
+  kind: 'drone' | 'panorama',
+  units: Array<{
+    wuKey: number;
+    folderName: string;
+    workName: string;
+    workDate: string | null;
+    srKey: number | null;
+    items: Array<{
+      fuKey: number;
+      fileName: string;
+      sizeLabel: string;
+      format: string;
+      previewKind: 'image' | 'video' | 'panorama';
+      locationLabel: string | null;
+      relativePath?: string;
+      x5181?: number | null;
+      y5181?: number | null;
+    }>;
+  }>
+): void {
+  const arr = mediaUnitsArray(kind);
+  arr.length = 0;
+  for (const u of units) {
+    const workDate = u.workDate || todayYmd();
+    const workName = u.workName || u.folderName;
+    const files = u.items.map((m) => ({
+      id: `fu-${m.fuKey}`,
+      name: m.fileName,
+      sizeLabel: m.sizeLabel,
+      format: m.format,
+      status: 'registered' as const,
+      previewKind: m.previewKind,
+      locationLabel: m.locationLabel ?? undefined,
+      x5181: m.x5181 ?? undefined,
+      y5181: m.y5181 ?? undefined,
+      relativePath: m.relativePath,
+    }));
+    arr.push({
+      id: `wu-${u.wuKey}`,
+      workDate,
+      workName,
+      folderName: u.folderName,
+      kind,
+      crsHint: '5181',
+      status: files.length > 0 ? 'registered' : 'pending',
+      uploadedAt: workDate,
+      linkedRequestId: u.srKey != null ? String(u.srKey) : undefined,
+      attrs: [
+        { label: '작업단위 명', value: workName },
+        { label: '작업일', value: workDate },
+        { label: '좌표계', value: 'EPSG:5181' },
+        { label: '임무/작업 목적', value: workName },
+        { label: '작성자', value: '—' },
+        { label: '촬영자', value: '—' },
+        { label: '상태', value: files.length > 0 ? '업로드완료' : '폴더생성' },
+        { label: '메모', value: '—' },
+        ...(u.srKey != null ? [{ label: '연결 신청', value: String(u.srKey) }] : []),
+      ],
+      files,
+    });
+  }
+  emitMockWorkUnits();
+}
+

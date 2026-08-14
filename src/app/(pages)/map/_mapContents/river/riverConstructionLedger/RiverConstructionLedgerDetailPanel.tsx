@@ -7,11 +7,13 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import {
   Download,
   FileText,
+  Image as ImageIcon,
   MapPin,
   Paperclip,
   Plus,
@@ -39,9 +41,11 @@ import {
 import {
   requestServiceFileDataDelete,
   serviceFileDataDownloadUrl,
+  serviceFileDataZipDownloadUrl,
   triggerServiceFileDownload,
   useServiceFileChunkedUpload,
   useServiceFileData,
+  withServiceFileThumbQuery,
 } from "../../../_mapComponents/standard/useServiceFileData";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
@@ -71,6 +75,7 @@ import {
   type RiverConstructionLedgerRow,
 } from "./riverConstructionLedgerMock";
 import { RiverNameSelect } from "./RiverNameSelect";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   row: RiverConstructionLedgerRow;
@@ -78,11 +83,11 @@ type Props = {
 };
 
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
-const textareaClass =
-  "min-h-[2.75rem] w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "box-border h-[22px] w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 const btnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+const btnSecondary =
+  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
 
 type AttrDraft = {
   name: string;
@@ -106,7 +111,38 @@ type AttrDraft = {
   remark: string;
 };
 
+/** 사업비 숫자 파싱 — 빈 값은 0, 콤마·공백 제거 */
+function parseBudgetNumber(raw: string): number | null {
+  const s = String(raw ?? "")
+    .replace(/,/g, "")
+    .replace(/\s/g, "")
+    .trim();
+  if (!s) return 0;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 사업비_후 = 전 + 증가 − 감소 */
+function computeBudgetAfter(
+  before: string,
+  increase: string,
+  decrease: string
+): string {
+  if (!before.trim() && !increase.trim() && !decrease.trim()) return "";
+  const b = parseBudgetNumber(before);
+  const i = parseBudgetNumber(increase);
+  const d = parseBudgetNumber(decrease);
+  if (b == null || i == null || d == null) return "";
+  const n = b + i - d;
+  if (Number.isInteger(n)) return String(n);
+  // 부동소수 노이즈 완화
+  return String(Math.round(n * 1000) / 1000);
+}
+
 function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
+  const budgetBefore = row.budgetBefore;
+  const budgetIncrease = row.budgetIncrease;
+  const budgetDecrease = row.budgetDecrease;
   return {
     name: row.name,
     location: row.location,
@@ -121,10 +157,10 @@ function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
     companyAddress: row.companyAddress,
     supervisor: row.supervisor,
     supervisorName: row.supervisorName,
-    budgetBefore: row.budgetBefore,
-    budgetIncrease: row.budgetIncrease,
-    budgetDecrease: row.budgetDecrease,
-    budgetAfter: row.budgetAfter,
+    budgetBefore,
+    budgetIncrease,
+    budgetDecrease,
+    budgetAfter: computeBudgetAfter(budgetBefore, budgetIncrease, budgetDecrease) || row.budgetAfter,
     changeReason: row.changeReason,
     remark: row.remark,
   };
@@ -160,22 +196,103 @@ type AttrEntry = {
   fullWidth?: boolean;
 };
 
-/** 반칸에서 말줄임이 날 길이면 한 줄 전체 폭으로 표시 */
+/** 반칸에서 말줄임이 날 길이 — 목록 전체 최장값 기준(행마다 레이아웃이 바뀌지 않게) */
 const ATTR_FULL_WIDTH_MIN_LEN = 12;
 
-function withFullWidthIfLong(
+/** 레이아웃 판정에 쓰는 속성 키 (표시 순서와 무관, fullWidth 맵용) */
+const ATTR_LAYOUT_TEXT_KEYS = [
+  "name",
+  "location",
+  "riverNames",
+  "quantity",
+  "contractDate",
+  "startDate",
+  "endDate",
+  "actualEndDate",
+  "companyName",
+  "representative",
+  "phone",
+  "supervisor",
+  "supervisorName",
+  "budgetBefore",
+  "budgetIncrease",
+  "budgetDecrease",
+  "budgetAfter",
+  "companyAddress",
+  "changeReason",
+  "remark",
+] as const;
+
+type AttrLayoutTextKey = (typeof ATTR_LAYOUT_TEXT_KEYS)[number];
+
+/** 항상 한 줄 — textarea·장문·주소(업체명 바로 아래 단독 행) */
+const ATTR_ALWAYS_FULL_WIDTH = new Set<AttrLayoutTextKey>([
+  "changeReason",
+  "remark",
+  "companyAddress",
+]);
+
+/** 항상 반줄 — 짧은 식별·연락 정보 (목록 최장값이어도 반칸 유지) */
+const ATTR_ALWAYS_HALF_WIDTH = new Set<AttrLayoutTextKey>([
+  "companyName",
+  "representative",
+  "phone",
+  "supervisor",
+  "supervisorName",
+]);
+
+function attrTextCharLen(raw: unknown): number {
+  const t = String(raw ?? "").trim();
+  if (!t || t === "—") return 0;
+  return [...t].length;
+}
+
+function attrFieldTextFromRow(
+  row: RiverConstructionLedgerRow,
+  key: AttrLayoutTextKey
+): string {
+  if (key === "riverNames") {
+    return (row.riverNames ?? []).map((n) => String(n).trim()).filter(Boolean).join(", ");
+  }
+  return String(row[key] ?? "");
+}
+
+/**
+ * 목록 데이터에서 필드별 최장 문자열 길이를 보고 fullWidth 고정 맵을 만든다.
+ * → 상세를 바꿔도 속성 칸 위치(한 줄/반 줄)가 흔들리지 않음.
+ */
+function buildAttrFullWidthMap(
+  rows: RiverConstructionLedgerRow[]
+): Record<string, boolean> {
+  const maxLen: Record<string, number> = {};
+  for (const key of ATTR_LAYOUT_TEXT_KEYS) maxLen[key] = 0;
+
+  for (const row of rows) {
+    for (const key of ATTR_LAYOUT_TEXT_KEYS) {
+      const n = attrTextCharLen(attrFieldTextFromRow(row, key));
+      if (n > (maxLen[key] ?? 0)) maxLen[key] = n;
+    }
+  }
+
+  const out: Record<string, boolean> = {};
+  for (const key of ATTR_LAYOUT_TEXT_KEYS) {
+    if (ATTR_ALWAYS_HALF_WIDTH.has(key)) {
+      out[key] = false;
+      continue;
+    }
+    out[key] =
+      ATTR_ALWAYS_FULL_WIDTH.has(key) || (maxLen[key] ?? 0) >= ATTR_FULL_WIDTH_MIN_LEN;
+  }
+  return out;
+}
+
+function applyAttrFullWidthMap(
   entries: AttrEntry[],
-  textByKey?: Record<string, string>
+  fullWidthByKey: Record<string, boolean>
 ): AttrEntry[] {
   return entries.map((e) => {
     if (e.fullWidth) return e;
-    const raw =
-      textByKey?.[e.fieldKey] ??
-      (typeof e.value === "string" ? e.value : "");
-    const t = String(raw ?? "").trim();
-    if (t && t !== "—" && [...t].length >= ATTR_FULL_WIDTH_MIN_LEN) {
-      return { ...e, fullWidth: true };
-    }
+    if (fullWidthByKey[e.fieldKey]) return { ...e, fullWidth: true };
     return e;
   });
 }
@@ -208,7 +325,8 @@ function AttrLabelCell({
   return (
     <div
       className={cn(
-        "flex items-center bg-slate-100 px-2 py-1",
+        // 조회·수정 공통 행 높이 — 조회 기준(h-7), 수정 입력은 이 안에 맞춤
+        "flex h-7 items-center bg-slate-100 px-2",
         borderBottom && "border-b border-slate-200",
         borderRight && "border-r border-slate-200",
         roundedCorner === "tl" && "rounded-tl-[5px]",
@@ -236,13 +354,15 @@ function AttrValueCell({
   return (
     <div
       className={cn(
-        "min-w-0 px-2 py-1",
+        "flex h-7 min-w-0 items-center px-2",
         borderBottom && "border-b border-slate-200",
         borderRight && "border-r border-slate-200"
       )}
       style={gridColumn ? { gridColumn } : undefined}
     >
-      <AttrValue value={value} />
+      <div className="min-w-0 w-full">
+        <AttrValue value={value} />
+      </div>
     </div>
   );
 }
@@ -317,7 +437,13 @@ function AttrTable({ entries }: { entries: AttrEntry[] }) {
   );
 }
 
-/** 첨부 썸네일 — 클릭=미리보기, 호버 시 다운로드·삭제 (PDF는 아이콘만 — 그리드 pdfjs 렌더 렉 방지) */
+const ATTACH_GRID_GAP_PX = 8;
+/** 파일명 한 줄 + margin */
+const ATTACH_GRID_LABEL_PX = 14;
+/** 위·아래 여분 행 — 스크롤 시 빈칸 깜빡임 완화 */
+const ATTACH_GRID_OVERSCAN_ROWS = 2;
+
+/** 첨부 썸네일 — 이미지는 서버 저화질 JPEG, PDF/기타는 아이콘. 원본 미리보기는 클릭 시 */
 function AttachmentThumb({
   att,
   onPreview,
@@ -329,8 +455,13 @@ function AttachmentThumb({
   onDownload: () => void;
   onDelete: () => void;
 }) {
-  const isImage = att.previewKind === "image" && !!att.previewUrl;
+  const isImage = att.previewKind === "image";
   const isPdf = att.previewKind === "pdf";
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const thumbSrc =
+    isImage && att.previewUrl && !thumbFailed
+      ? withServiceFileThumbQuery(att.previewUrl, 160)
+      : null;
   return (
     <div className="group relative">
       <button
@@ -339,13 +470,25 @@ function AttachmentThumb({
         className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
         title={`${att.name} 미리보기`}
       >
-        {isImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={att.previewUrl} alt={att.name} className="h-full w-full object-cover" loading="lazy" />
+        {thumbSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 인증 쿠키 포함 동일출처 썸네일
+          <img
+            src={thumbSrc}
+            alt=""
+            decoding="async"
+            className="h-full w-full object-cover"
+            onError={() => setThumbFailed(true)}
+          />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
-            <FileText className="h-5 w-5" />
-            <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
+            {isImage ? (
+              <ImageIcon className="h-5 w-5" />
+            ) : (
+              <FileText className="h-5 w-5" />
+            )}
+            <span className="text-[10px] font-semibold">
+              {isImage ? "이미지" : isPdf ? "PDF" : "파일"}
+            </span>
           </div>
         )}
       </button>
@@ -380,19 +523,89 @@ function AttachmentThumb({
   );
 }
 
+type AttachGridWindow = {
+  cols: number;
+  rowH: number;
+  totalH: number;
+  offsetY: number;
+  start: number;
+  end: number;
+};
+
+/** 수백 건이어도 보이는 칸(+여분)만 마운트 — 썸네일 요청·DOM을 스크롤에 맞춤 */
 function AttachmentThumbGrid({
   items,
+  scrollRootRef,
   onPreview,
   onDownload,
   onDelete,
   emptyLabel,
 }: {
   items: RiverConstructionLedgerAttachment[];
+  scrollRootRef: RefObject<HTMLDivElement | null>;
   onPreview: (att: RiverConstructionLedgerAttachment) => void;
   onDownload: (att: RiverConstructionLedgerAttachment) => void;
   onDelete: (att: RiverConstructionLedgerAttachment) => void;
   emptyLabel: string;
 }) {
+  const [win, setWin] = useState<AttachGridWindow>({
+    cols: 3,
+    rowH: 96,
+    totalH: 0,
+    offsetY: 0,
+    start: 0,
+    end: 0,
+  });
+
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    if (!root || items.length === 0) {
+      setWin((prev) => ({ ...prev, totalH: 0, start: 0, end: 0, offsetY: 0 }));
+      return;
+    }
+
+    const measure = () => {
+      const el = scrollRootRef.current;
+      if (!el) return;
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      const cols = window.matchMedia("(min-width: 640px)").matches ? 4 : 3;
+      const cellW = (w - ATTACH_GRID_GAP_PX * (cols - 1)) / cols;
+      const rowH = cellW + ATTACH_GRID_LABEL_PX;
+      const stride = rowH + ATTACH_GRID_GAP_PX;
+      const rows = Math.ceil(items.length / cols);
+      const totalH = rows > 0 ? rows * rowH + Math.max(0, rows - 1) * ATTACH_GRID_GAP_PX : 0;
+      const firstRow = Math.max(
+        0,
+        Math.floor(el.scrollTop / stride) - ATTACH_GRID_OVERSCAN_ROWS
+      );
+      const lastRow = Math.min(
+        rows - 1,
+        Math.ceil((el.scrollTop + el.clientHeight) / stride) + ATTACH_GRID_OVERSCAN_ROWS
+      );
+      setWin({
+        cols,
+        rowH,
+        totalH,
+        offsetY: firstRow * stride,
+        start: firstRow * cols,
+        end: Math.min(items.length, (lastRow + 1) * cols),
+      });
+    };
+
+    measure();
+    root.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    const mq = window.matchMedia("(min-width: 640px)");
+    mq.addEventListener("change", measure);
+    return () => {
+      root.removeEventListener("scroll", measure);
+      ro.disconnect();
+      mq.removeEventListener("change", measure);
+    };
+  }, [items.length, scrollRootRef]);
+
   if (items.length === 0) {
     return (
       <div className="flex h-full min-h-[6rem] items-center justify-center">
@@ -400,17 +613,28 @@ function AttachmentThumbGrid({
       </div>
     );
   }
+
+  const visible = items.slice(win.start, win.end);
+
   return (
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-      {items.map((att) => (
-        <AttachmentThumb
-          key={att.id}
-          att={att}
-          onPreview={() => onPreview(att)}
-          onDownload={() => onDownload(att)}
-          onDelete={() => onDelete(att)}
-        />
-      ))}
+    <div className="relative w-full" style={{ height: win.totalH }}>
+      <div
+        className="absolute left-0 right-0 grid gap-2"
+        style={{
+          top: win.offsetY,
+          gridTemplateColumns: `repeat(${win.cols}, minmax(0, 1fr))`,
+        }}
+      >
+        {visible.map((att) => (
+          <AttachmentThumb
+            key={att.id}
+            att={att}
+            onPreview={() => onPreview(att)}
+            onDownload={() => onDownload(att)}
+            onDelete={() => onDelete(att)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -420,6 +644,7 @@ const RIVER_TABLE_PREVIEW_MAX = 2;
 export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const mapContext = useMapContext();
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const attachScrollRef = useRef<HTMLDivElement>(null);
   const isNewRow = isNewRiverConstructionLedgerRow(row);
   const [editing, setEditing] = useState(isNewRow || !row.name.trim());
   const [draft, setDraft] = useState<AttrDraft>(() => toDraft(row));
@@ -459,17 +684,80 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const draftParcelsRef = useRef(draftParcels);
   draftParcelsRef.current = draftParcels;
   const { selectParcel, movingParcelIdx } = useLayerParcelNavigation();
+  const [detailLoading, setDetailLoading] = useState(false);
+  const detailLoadGenRef = useRef(0);
+  const parcelGeomEditIdxRef = useRef(parcelGeomEditIdx);
+  parcelGeomEditIdxRef.current = parcelGeomEditIdx;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+
+  /** 목록 클릭은 extent만 — 상세·필지 도형은 패널에서 보강 */
+  useEffect(() => {
+    if (isNewRiverConstructionLedgerRow(row)) return;
+    const consCode = row.id;
+    const gen = ++detailLoadGenRef.current;
+    setDetailLoading(true);
+    let cancelled = false;
+    void call("", "POST", {
+      service: "consDataAsService",
+      action: "getDetailByConsCode",
+      params: { consCode, includeParcelGeometry: true },
+    })
+      .then((res) => {
+        if (cancelled || detailLoadGenRef.current !== gen) return;
+        const data = res?.data ?? res;
+        if (data?.error || !data?.row) return;
+        const mapped = mapConsDataAsApiToLedgerRow(data.row as ConsDataAsApiRow);
+        mapContext?.setRiverConstructionLedgerRows?.((prev) =>
+          prev.map((r) =>
+            r.id === consCode
+              ? {
+                  ...mapped,
+                  geom: mapped.geom ?? r.geom,
+                  attachments: r.attachments,
+                }
+              : r
+          )
+        );
+        // 사용자가 이미 편집 중이면 폼 덮어쓰지 않음
+        if (!editingRef.current) {
+          setDraft(toDraft(mapped));
+          setRiverNamesText(normalizeRiverNames(mapped.riverNames)[0] ?? "");
+        }
+        if (parcelGeomEditIdxRef.current == null) {
+          const filled = withRiverNameFallback(mapped.parcels ?? []);
+          parcelsSnapshotRef.current = [...filled];
+          setDraftParcels(filled);
+        }
+      })
+      .catch(() => {
+        /* 목록 행으로 계속 표시 */
+      })
+      .finally(() => {
+        if (!cancelled && detailLoadGenRef.current === gen) {
+          setDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- row.id 전환 시만
+  }, [row.id]);
 
   const fileSerEng = SER_FILE_ENG.riverConstructionLedger;
   const fileKey = isNewRow ? "" : row.id;
   const { upload: uploadChunked } = useServiceFileChunkedUpload();
+  /** 상세 보강이 끝난 뒤 첨부 목록 조회 — 클릭 직후 원본 이미지 다운로드와 경합 방지 */
+  const attachmentsReady = Boolean(fileKey) && !detailLoading;
   const { files: folderFiles, loading: filesLoading } = useServiceFileData({
     serEng: fileSerEng,
-    enabled: Boolean(fileKey) && Boolean(attachmentTab),
+    enabled: attachmentsReady && Boolean(attachmentTab),
     layerSegment: CONS_DATA_AS_FILE_LAYER,
     keyValue: fileKey || null,
     subfolder: attachmentTab,
     refreshNonce: attachRefreshNonce,
+    /** 그리드는 파일명만 필요 — 천 건 stat 생략 */
+    includeMeta: false,
   });
 
   const attachments = useMemo(() => {
@@ -486,8 +774,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   }, [attachmentTab, fileKey, fileSerEng, folderFiles]);
 
   useEffect(() => {
-    if (!fileKey) {
-      setAttachmentFolders([]);
+    if (!attachmentsReady || !fileKey) {
+      if (!fileKey) setAttachmentFolders([]);
       return;
     }
     let cancelled = false;
@@ -517,7 +805,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [fileKey, fileSerEng, foldersRefreshNonce]);
+  }, [attachmentsReady, fileKey, fileSerEng, foldersRefreshNonce]);
 
   const setRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus;
   const setGeomEditingId = mapContext?.setRiverConstructionLedgerGeomEditingId;
@@ -1112,17 +1400,23 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     const riverEntry: AttrEntry = {
       fieldKey: "riverNames",
       label: "대상 하천",
-      // 하천명 하나만 선택하는 값이라 다른 항목처럼 반칸이면 충분함
       value: riverNamesCell,
     };
-    // 공사명·공사위치 다음에 한 줄로 배치
+    // 공사명·공사위치 다음에 배치 (한 줄/반 줄은 fullWidth 맵이 결정)
     return [entries[0]!, entries[1]!, riverEntry, ...entries.slice(2)];
   };
 
+  /** 목록 전체 최장값 기준 — 행 전환해도 속성 칸 배치 고정 */
+  const attrFullWidthByKey = useMemo(() => {
+    const list = mapContext?.riverConstructionLedgerRows ?? [];
+    const hasCurrent = list.some((r) => r.id === row.id);
+    return buildAttrFullWidthMap(hasCurrent ? list : [row, ...list]);
+  }, [mapContext?.riverConstructionLedgerRows, row]);
+
   const viewEntries = useMemo(
     () =>
-      withRiverEntry(
-        withFullWidthIfLong([
+      applyAttrFullWidthMap(
+        withRiverEntry([
           { fieldKey: "name", label: "공사명", value: row.name || "—" },
           { fieldKey: "location", label: "공사위치", value: row.location || "—" },
           { fieldKey: "quantity", label: "공사량", value: row.quantity || "—" },
@@ -1132,24 +1426,40 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           { fieldKey: "actualEndDate", label: "실준공일자", value: row.actualEndDate || "—" },
           { fieldKey: "companyName", label: "업체명", value: row.companyName || "—" },
           { fieldKey: "representative", label: "대표자명", value: row.representative || "—" },
-          { fieldKey: "phone", label: "전화번호", value: row.phone || "—" },
+          { fieldKey: "companyAddress", label: "업체주소", value: row.companyAddress || "—" },
           { fieldKey: "supervisor", label: "감독관", value: row.supervisor || "—" },
           { fieldKey: "supervisorName", label: "감독관명", value: row.supervisorName || "—" },
+          { fieldKey: "phone", label: "전화번호", value: row.phone || "—" },
           { fieldKey: "budgetBefore", label: "사업비_전", value: row.budgetBefore || "—" },
           { fieldKey: "budgetIncrease", label: "사업비_증가", value: row.budgetIncrease || "—" },
           { fieldKey: "budgetDecrease", label: "사업비_감소", value: row.budgetDecrease || "—" },
           { fieldKey: "budgetAfter", label: "사업비_후", value: row.budgetAfter || "—" },
-          { fieldKey: "companyAddress", label: "업체주소", value: row.companyAddress || "—" },
           { fieldKey: "changeReason", label: "변경사유", value: row.changeReason || "—" },
           { fieldKey: "remark", label: "비고", value: row.remark || "—" },
-        ])
+        ]),
+        attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- riverNamesCell follows riverNames
-    [row, riverNames]
+    [row, riverNames, attrFullWidthByKey]
   );
 
   const setField = <K extends keyof AttrDraft>(key: K, value: AttrDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setBudgetField = (
+    key: "budgetBefore" | "budgetIncrease" | "budgetDecrease",
+    value: string
+  ) => {
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      next.budgetAfter = computeBudgetAfter(
+        next.budgetBefore,
+        next.budgetIncrease,
+        next.budgetDecrease
+      );
+      return next;
+    });
   };
 
   const textInput = (key: keyof AttrDraft) => (
@@ -1157,6 +1467,15 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       className={fieldClass}
       value={draft[key]}
       onChange={(e) => setField(key, e.target.value)}
+    />
+  );
+
+  const budgetInput = (key: "budgetBefore" | "budgetIncrease" | "budgetDecrease") => (
+    <input
+      className={fieldClass}
+      value={draft[key]}
+      inputMode="decimal"
+      onChange={(e) => setBudgetField(key, e.target.value)}
     />
   );
 
@@ -1171,54 +1490,32 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
   const editEntries = useMemo(
     () =>
-      withRiverEntry(
-        withFullWidthIfLong(
-          [
-            { fieldKey: "name", label: "공사명", value: textInput("name") },
-            { fieldKey: "location", label: "공사위치", value: textInput("location") },
-            { fieldKey: "quantity", label: "공사량", value: textInput("quantity") },
-            { fieldKey: "contractDate", label: "계약일", value: dateInput("contractDate") },
-            { fieldKey: "startDate", label: "착수일자", value: dateInput("startDate") },
-            { fieldKey: "endDate", label: "준공일자", value: dateInput("endDate") },
-            { fieldKey: "actualEndDate", label: "실준공일자", value: dateInput("actualEndDate") },
-            { fieldKey: "companyName", label: "업체명", value: textInput("companyName") },
-            { fieldKey: "representative", label: "대표자명", value: textInput("representative") },
-            { fieldKey: "phone", label: "전화번호", value: textInput("phone") },
-            { fieldKey: "supervisor", label: "감독관", value: textInput("supervisor") },
-            { fieldKey: "supervisorName", label: "감독관명", value: textInput("supervisorName") },
-            { fieldKey: "budgetBefore", label: "사업비_전", value: textInput("budgetBefore") },
-            { fieldKey: "budgetIncrease", label: "사업비_증가", value: textInput("budgetIncrease") },
-            { fieldKey: "budgetDecrease", label: "사업비_감소", value: textInput("budgetDecrease") },
-            { fieldKey: "budgetAfter", label: "사업비_후", value: textInput("budgetAfter") },
-            { fieldKey: "companyAddress", label: "업체주소", value: textInput("companyAddress") },
-            {
-              fieldKey: "changeReason",
-              label: "변경사유",
-              value: (
-                <textarea
-                  className={textareaClass}
-                  value={draft.changeReason}
-                  onChange={(e) => setField("changeReason", e.target.value)}
-                />
-              ),
-            },
-            {
-              fieldKey: "remark",
-              label: "비고",
-              value: (
-                <textarea
-                  className={textareaClass}
-                  value={draft.remark}
-                  onChange={(e) => setField("remark", e.target.value)}
-                />
-              ),
-            },
-          ],
-          draft
-        )
+      applyAttrFullWidthMap(
+        withRiverEntry([
+          { fieldKey: "name", label: "공사명", value: textInput("name") },
+          { fieldKey: "location", label: "공사위치", value: textInput("location") },
+          { fieldKey: "quantity", label: "공사량", value: textInput("quantity") },
+          { fieldKey: "contractDate", label: "계약일", value: dateInput("contractDate") },
+          { fieldKey: "startDate", label: "착수일자", value: dateInput("startDate") },
+          { fieldKey: "endDate", label: "준공일자", value: dateInput("endDate") },
+          { fieldKey: "actualEndDate", label: "실준공일자", value: dateInput("actualEndDate") },
+          { fieldKey: "companyName", label: "업체명", value: textInput("companyName") },
+          { fieldKey: "representative", label: "대표자명", value: textInput("representative") },
+          { fieldKey: "companyAddress", label: "업체주소", value: textInput("companyAddress") },
+          { fieldKey: "supervisor", label: "감독관", value: textInput("supervisor") },
+          { fieldKey: "supervisorName", label: "감독관명", value: textInput("supervisorName") },
+          { fieldKey: "phone", label: "전화번호", value: textInput("phone") },
+          { fieldKey: "budgetBefore", label: "사업비_전", value: budgetInput("budgetBefore") },
+          { fieldKey: "budgetIncrease", label: "사업비_증가", value: budgetInput("budgetIncrease") },
+          { fieldKey: "budgetDecrease", label: "사업비_감소", value: budgetInput("budgetDecrease") },
+          { fieldKey: "budgetAfter", label: "사업비_후", value: textInput("budgetAfter") },
+          { fieldKey: "changeReason", label: "변경사유", value: textInput("changeReason") },
+          { fieldKey: "remark", label: "비고", value: textInput("remark") },
+        ]),
+        attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draft + river cell
-    [draft, riverNames, riverNamesText]
+    [draft, riverNames, riverNamesText, attrFullWidthByKey]
   );
 
   const geomBannerHost =
@@ -1312,10 +1609,15 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       </div>
 
       {/* 본문 전체가 하나로 스크롤 — 상세 속성 · 필지 · 첨부파일 순서로 자연스럽게 이어짐 */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-2 text-xs scrollbar-hide">
+      <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-xs">
         <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-white py-0.5">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             상세 속성
+            {detailLoading ? (
+              <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">
+                불러오는 중…
+              </span>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <LayerRowEditToolbar
@@ -1454,23 +1756,52 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               <Paperclip className="h-3.5 w-3.5" />
               첨부파일
             </div>
-            <button
-              type="button"
-              className={btnPrimary}
-              disabled={!fileKey}
-              title={fileKey ? "첨부 업로드" : "저장 후 첨부할 수 있습니다"}
-              onClick={() => attachInputRef.current?.click()}
-            >
-              <Plus className="h-3 w-3" />
-              첨부
-            </button>
-            <input
-              ref={attachInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => void handleUploadFiles(e.target.files)}
-            />
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className={btnSecondary}
+                disabled={!fileKey}
+                title={
+                  fileKey
+                    ? "폴더 포함 첨부파일 전체 ZIP 다운로드"
+                    : "저장 후 다운로드할 수 있습니다"
+                }
+                onClick={() => {
+                  if (!fileKey) return;
+                  const label =
+                    String(row.name ?? "").trim() ||
+                    String(row.location ?? "").trim() ||
+                    "공사대장";
+                  const url = serviceFileDataZipDownloadUrl(
+                    fileSerEng,
+                    CONS_DATA_AS_FILE_LAYER,
+                    fileKey,
+                    { layerDisplayName: label }
+                  );
+                  triggerServiceFileDownload(url, `${label} 첨부파일.zip`);
+                }}
+              >
+                <Download className="h-3 w-3" />
+                전체
+              </button>
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={!fileKey}
+                title={fileKey ? "첨부 업로드" : "저장 후 첨부할 수 있습니다"}
+                onClick={() => attachInputRef.current?.click()}
+              >
+                <Plus className="h-3 w-3" />
+                첨부
+              </button>
+              <input
+                ref={attachInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => void handleUploadFiles(e.target.files)}
+              />
+            </div>
           </div>
 
           {fileKey ? (
@@ -1487,7 +1818,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
                       )}
-                      onClick={() => setAttachmentTab(folder)}
+                      onClick={() => {
+                        setAttachmentTab(folder);
+                        attachScrollRef.current?.scrollTo({ top: 0 });
+                      }}
                     >
                       {folder}
                       {attachmentTab === folder ? ` (${attachments.length})` : ""}
@@ -1496,12 +1830,17 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide">
-                {filesLoading ? (
+              <div
+                ref={attachScrollRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
+              >
+                {!attachmentsReady || filesLoading ? (
                   <p className="py-3 text-center text-[11px] text-slate-400">첨부 목록 불러오는 중…</p>
                 ) : (
                   <AttachmentThumbGrid
+                    key={attachmentTab}
                     items={attachments}
+                    scrollRootRef={attachScrollRef}
                     onPreview={openPreview}
                     onDownload={downloadAttachment}
                     onDelete={(att) => void handleDeleteAttachment(att)}
@@ -1516,7 +1855,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
             </div>
           )}
         </div>
-      </div>
+      </MapSideDetailScroll>
 
       {preview ? (
         <ServiceFileImagePreview

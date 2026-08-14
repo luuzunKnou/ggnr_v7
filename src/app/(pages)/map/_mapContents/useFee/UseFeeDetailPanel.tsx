@@ -5,7 +5,10 @@ import { useSearchParams } from 'next/navigation'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
+import { MapHitOverlapSelect } from '../../_mapComponents/MapHitOverlapSelect'
+import { useMapContext } from '../../_mapComponents/MapContext'
 import { USE_FEE_DETAIL_PRIMARY_COUNT } from './useFeeFieldLabels'
+import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 
 type ListRow = {
   id: string
@@ -26,11 +29,15 @@ type DetailAttr = {
 type DetailProps = {
   detailId: string
   onClose: () => void
+  onSelectId?: (id: string) => void
+  serEng: string
 }
 
-export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
+export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: DetailProps) {
   const searchParams = useSearchParams()
   const system = String(searchParams.get('system') ?? '').trim()
+  const mapContext = useMapContext()
+  const hitOptions = mapContext?.useFeeMapHitOptions ?? []
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +55,7 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
     void call('', 'POST', {
       service: 'useFeeService',
       action: 'getUseFeeDetail',
-      params: { id: detailId, system: system || undefined },
+      params: { id: detailId, system: system || undefined, serEng: serEng || undefined },
     })
       .then((res) => {
         if (cancelled) return
@@ -72,7 +79,7 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
     return () => {
       cancelled = true
     }
-  }, [detailId, system])
+  }, [detailId, system, serEng])
 
   const visibleAttributes = expanded
     ? attributes
@@ -89,11 +96,20 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
         onEdit={() => undefined}
         onSave={() => undefined}
         onCancel={onClose}
-        onClose={onClose}
+        onClose={() => {
+          mapContext?.setUseFeeMapHitOptions?.([])
+          onClose()
+        }}
         editable={false}
       />
+      <MapHitOverlapSelect
+        fieldLabel="대장번호"
+        options={hitOptions}
+        value={detailId}
+        onChange={(id) => onSelectId?.(id)}
+      />
 
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {loading && attributes.length === 0 ? (
           <div className="px-1 py-6 text-center text-slate-500">불러오는 중…</div>
         ) : error && attributes.length === 0 ? (
@@ -143,7 +159,7 @@ export function UseFeeDetailPanel({ detailId, onClose }: DetailProps) {
             연계된 점용대장이 없습니다.
           </div>
         </div>
-      </div>
+      </MapSideDetailScroll>
     </div>
   )
 }

@@ -7,8 +7,8 @@ import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
 import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
-import { cloneRoadNetworkRows } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
+import type { MapHitOverlapOption } from './MapHitOverlapSelect';
 
 export type RoadCctvOverlayState = {
   items: ItsCctvItem[];
@@ -102,6 +102,12 @@ export type MapContextValue = {
   /** 공간 필터 적용 시 레이어 목록에 표시할 테이블 이름 집합. null이면 전체 표시 */
   spatialFilteredLayerNames: Set<string> | null;
   setSpatialFilteredLayerNames: Dispatch<SetStateAction<Set<string> | null>>;
+  /**
+   * 서비스 WMS 레이어별 추가 CQL (예: 기본계획도 선택 하천 river_name='…').
+   * null/빈 객체면 속성 조건 없음. 키는 define_table_name.
+   */
+  serviceWmsCqlByLayer: Record<string, string> | null;
+  setServiceWmsCqlByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
   spatialDrawRequest: {
     type: 'rectangle' | 'polygon' | 'circle';
@@ -218,9 +224,14 @@ export type MapContextValue = {
     | ((pick: {
         consCode: string;
         extent3857?: [number, number, number, number] | null;
+        /** 겹친 도형 후보(2건 이상이면 상세 상단 선택) */
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
+  /** 지도 클릭 겹침 후보 — 울진 하천점용 상세 상단 select */
+  usageDataAsMapHitOptions: MapHitOverlapOption[];
+  setUsageDataAsMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 공통 점용대장 패널(URL opened=occupationLedger) 열림 */
   occupationLedgerPanelOpen: boolean;
   setOccupationLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -232,10 +243,14 @@ export type MapContextValue = {
     | ((pick: {
         rowKey: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
-  /** 점사용료 패널(URL opened=useFee) 열림 */
+  /** 지도 클릭 겹침 후보 — 공통 점용 상세 상단 select */
+  occupationLedgerMapHitOptions: MapHitOverlapOption[];
+  setOccupationLedgerMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
+  /** 점사용료 패널(URL opened=*NglFeeList) 열림 */
   useFeePanelOpen: boolean;
   setUseFeePanelOpen: Dispatch<SetStateAction<boolean>>;
   /**
@@ -246,9 +261,13 @@ export type MapContextValue = {
     | ((pick: {
         id: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
+  /** 지도 클릭 겹침 후보 — 점사용료 상세 상단 select */
+  useFeeMapHitOptions: MapHitOverlapOption[];
+  setUseFeeMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -279,10 +298,21 @@ export type MapContextValue = {
   /** URL opened 도로망도 패널 열림 */
   roadNetworkPanelOpen: boolean;
   setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
-  /** 필터 결과 지도 레이어 표시 */
+  /**
+   * 지도에서 도로망 WMS 식별 직후 목록이 행 선택·줌하도록 호출
+   * (RoadNetworkListPanel이 등록)
+   */
+  applyRoadNetworkMapPickRef: MutableRefObject<
+    | ((pick: {
+        rowId: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >;
+  /** @deprecated 배경은 GeoServer WMS — 유지(호환) */
   roadNetworkOverlayVisible: boolean;
   setRoadNetworkOverlayVisible: Dispatch<SetStateAction<boolean>>;
-  /** 목록 필터·검색 결과(지도 오버레이용) */
+  /** 목록 필터 결과 — 지도 도로명 라벨(OL)용 */
   roadNetworkOverlayRows: RoadNetworkRow[];
   setRoadNetworkOverlayRows: Dispatch<SetStateAction<RoadNetworkRow[]>>;
   /**
@@ -459,6 +489,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
+  const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
   const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
     type: 'rectangle' | 'polygon' | 'circle';
     onComplete: (wkt5181: string) => void;
@@ -508,25 +539,33 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     | ((pick: {
         consCode: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [usageDataAsMapHitOptions, setUsageDataAsMapHitOptions] = useState<MapHitOverlapOption[]>([]);
   const [occupationLedgerPanelOpen, setOccupationLedgerPanelOpen] = useState(false);
   const applyOccupationLedgerMapPickRef = useRef<
     | ((pick: {
         rowKey: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [occupationLedgerMapHitOptions, setOccupationLedgerMapHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
   const [useFeePanelOpen, setUseFeePanelOpen] = useState(false);
   const applyUseFeeMapPickRef = useRef<
     | ((pick: {
         id: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [useFeeMapHitOptions, setUseFeeMapHitOptions] = useState<MapHitOverlapOption[]>([]);
   const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
   const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
   const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
@@ -535,9 +574,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     defineTableTitle: string;
     pickFromMap?: boolean;
   } | null>(null);
-  const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>(() => cloneRoadNetworkRows());
+  const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
+  const applyRoadNetworkMapPickRef = useRef<
+    | ((pick: {
+        rowId: string;
+        extent3857?: [number, number, number, number] | null;
+      }) => void)
+    | null
+  >(null);
   const [roadNetworkOverlayVisible, setRoadNetworkOverlayVisible] = useState(false);
   const [roadNetworkOverlayRows, setRoadNetworkOverlayRows] = useState<RoadNetworkRow[]>([]);
   const roadNetworkPointPickRef = useRef<((lon: number, lat: number) => void) | null>(null);
@@ -649,6 +695,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSpatialFilterWkt,
         spatialFilteredLayerNames,
         setSpatialFilteredLayerNames,
+        serviceWmsCqlByLayer,
+        setServiceWmsCqlByLayer,
         spatialDrawRequest,
         setSpatialDrawRequest,
         measurementActive,
@@ -696,12 +744,18 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         usageDataAsPanelOpen,
         setUsageDataAsPanelOpen,
         applyUsageDataAsMapPickRef,
+        usageDataAsMapHitOptions,
+        setUsageDataAsMapHitOptions,
         occupationLedgerPanelOpen,
         setOccupationLedgerPanelOpen,
         applyOccupationLedgerMapPickRef,
+        occupationLedgerMapHitOptions,
+        setOccupationLedgerMapHitOptions,
         useFeePanelOpen,
         setUseFeePanelOpen,
         applyUseFeeMapPickRef,
+        useFeeMapHitOptions,
+        setUseFeeMapHitOptions,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,
@@ -714,6 +768,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkSelectedId,
         roadNetworkPanelOpen,
         setRoadNetworkPanelOpen,
+        applyRoadNetworkMapPickRef,
         roadNetworkOverlayVisible,
         setRoadNetworkOverlayVisible,
         roadNetworkOverlayRows,

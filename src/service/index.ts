@@ -24,6 +24,7 @@ import * as permissionService from './permissionService';
 import * as usrService from './usrService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as roadLedgerService from './roadLedgerService';
+import * as roadNetworkService from './roadNetworkService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
@@ -54,6 +55,7 @@ import * as geoserverProcessService from './geoserverProcessService';
 import * as shootingRequestService from './shootingRequestService';
 import * as flightLogbookService from './flightLogbookService';
 import * as aerialUploadService from './aerialUploadService';
+import * as aerialOrthoService from './aerialOrthoService';
 import * as useFeeService from './useFeeService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
@@ -85,6 +87,7 @@ export {
   usrService,
   riverBasicPlanService,
   roadLedgerService,
+  roadNetworkService,
   roadUseLedgerService,
   riverUseLedgerService,
   usageDataAsService,
@@ -113,6 +116,7 @@ export {
   shootingRequestService,
   flightLogbookService,
   aerialUploadService,
+  aerialOrthoService,
   useFeeService,
   groundwaterPermitService,
   bizNotifService,

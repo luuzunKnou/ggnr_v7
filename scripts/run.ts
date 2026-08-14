@@ -311,8 +311,12 @@ function spawnNext(cmd: NextCmd): void {
     '.bin',
     process.platform === 'win32' ? 'next.cmd' : 'next'
   );
+  // Windows + cwd 공백: shell:true 일 때 미인용 경로가 잘림 → next.cmd 인용
+  const bin =
+    process.platform === 'win32' && /[\s()]/.test(nextBin) ? `"${nextBin}"` : nextBin;
+  const args = cmd === 'dev' && /\s/.test(process.cwd()) ? [cmd, '--webpack'] : [cmd];
   console.log(`[run] starting Next.js (${cmd})...`);
-  const proc = spawn(nextBin, [cmd], {
+  const proc = spawn(bin, args, {
     cwd: process.cwd(),
     stdio: 'inherit',
     env: process.env,

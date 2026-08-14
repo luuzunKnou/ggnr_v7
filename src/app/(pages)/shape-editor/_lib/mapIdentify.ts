@@ -54,9 +54,10 @@ export function rowToAttributeValues(
 export function identifyFeatureKey(
   row: Record<string, unknown>,
   preferredKeyField?: string | null,
-  extraCandidates?: string[]
+  extraCandidates?: string[],
+  tableName?: string | null
 ): string {
-  const key = extractFeatureKeyForWms(row, preferredKeyField, extraCandidates);
+  const key = extractFeatureKeyForWms(row, preferredKeyField, extraCandidates, tableName);
   if (key) return formatWmsFeatureId(key);
   return `wms:tmp:${Date.now()}`;
 }

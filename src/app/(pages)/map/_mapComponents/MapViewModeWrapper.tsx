@@ -4,8 +4,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo, typ
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Map, Box, Crosshair, Globe } from 'lucide-react';
-import { toLonLat } from 'ol/proj';
+import { Crosshair, Globe } from 'lucide-react';
 import OpenLayersMap from './OpenLayersMap';
 import { MapControlPanel, defaultMapControlGroups } from './mapControlPanel/mapControlPanel';
 import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
@@ -23,7 +22,7 @@ import {
   type BackgroundMapGroup,
 } from './mapControlPanel/backgroundMapSelector';
 import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
-import { DEFAULT_CAMERA_HEIGHT_3D, DEFAULT_ZOOM_2D } from './config/mapDefaults';
+import { DEFAULT_CAMERA_HEIGHT_3D } from './config/mapDefaults';
 import { MapSplitLayout } from './mapSplit/MapSplitLayout';
 import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
 import { useSplitGutterControlOffset } from './mapSplit/useSplitGutterControlOffset';
@@ -43,58 +42,6 @@ type MapStartView = {
   lat: number;
   height?: number;
 };
-
-function build3dStartViewFrom2d(
-  map: import('ol/Map').default | null | undefined,
-  fallback: { lon: number; lat: number } | null
-): MapStartView | null {
-  const view = map?.getView();
-  const center = view?.getCenter();
-  const zoom = view?.getZoom();
-  if (!center || !Array.isArray(center) || center.length < 2) {
-    return fallback ? { ...fallback, height: DEFAULT_CAMERA_HEIGHT_3D } : null;
-  }
-  const [lon, lat] = toLonLat(center);
-  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-    return fallback ? { ...fallback, height: DEFAULT_CAMERA_HEIGHT_3D } : null;
-  }
-  const zoomNum = Number.isFinite(zoom) ? Number(zoom) : DEFAULT_ZOOM_2D;
-  const height = Math.min(
-    20_000_000,
-    Math.max(100, DEFAULT_CAMERA_HEIGHT_3D * Math.pow(2, DEFAULT_ZOOM_2D - zoomNum))
-  );
-  return { lon, lat, height };
-}
-
-function ViewModeButton({
-  label,
-  icon: Icon,
-  isActive,
-  onClick,
-}: {
-  label: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex h-[45px] w-full min-w-0 flex-col items-center justify-center gap-0 overflow-hidden box-border p-0 transition-colors cursor-pointer',
-        'hover:bg-slate-100 hover:text-blue-600',
-        'dark:text-white/90 dark:hover:bg-white/10 dark:hover:text-white',
-        isActive && 'bg-slate-100 text-blue-600 dark:bg-white/20 dark:text-white',
-        'rounded-b-[4px]'
-      )}
-      title={label}
-    >
-      <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
-      <span className="max-w-full leading-tight text-center whitespace-nowrap overflow-hidden truncate px-0.5" style={{ fontSize: '9px' }}>{label}</span>
-    </button>
-  );
-}
 
 export default function MapViewModeWrapper({
   defaultCenter = null,
@@ -327,27 +274,6 @@ export default function MapViewModeWrapper({
     setMeshTilesetZOffsetInput(String(next));
   }, [meshTilesetZOffsetM]);
 
-  const viewModeControls2d = (
-    <ViewModeButton
-      label="3D 지도"
-      icon={Box}
-      isActive={viewMode === '3d'}
-      onClick={() => {
-        setDefault3dView(build3dStartViewFrom2d(mapContext?.mapInstanceRef?.current, defaultCenter));
-        setViewMode('3d');
-      }}
-    />
-  );
-
-  const viewModeControls3d = (
-    <ViewModeButton
-      label="2D 지도"
-      icon={Map}
-      isActive={viewMode === '3d'}
-      onClick={() => setViewMode('2d')}
-    />
-  );
-
   const secondaryKind = mapContext?.mapSplitSecondaryKind ?? null;
   const mapSync = mapContext?.mapSplitMapSync ?? true;
   const streetViewActive = secondaryKind === 'streetView';
@@ -449,7 +375,6 @@ export default function MapViewModeWrapper({
           splitActive={secondaryKind != null}
           primary={
             <OpenLayersMap
-              extraControls={viewModeControls2d}
               defaultCenter={defaultCenter}
               projectName={projectName}
             />
@@ -534,7 +459,6 @@ export default function MapViewModeWrapper({
                   onItemClick={(id, isActive) => {
                     if (id === 'shooting-request') {
                       const current = new URLSearchParams(Array.from(searchParams.entries()));
-                      current.set('opened', 'shootingRequest');
                       current.set('shotForm', 'new');
                       router.push(`/map?${current.toString()}`);
                       return;
@@ -617,7 +541,6 @@ export default function MapViewModeWrapper({
                       }
                     }
                   }}
-                  extraAfterFirstGroup={viewModeControls3d}
                 />
               </div>
             </div>

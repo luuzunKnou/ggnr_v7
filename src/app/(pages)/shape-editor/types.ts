@@ -42,7 +42,7 @@ export interface ShapeEditorDraftState {
   originalAttributeValues: Record<string, string>;
 }
 
-export type PendingChangeKind = 'insert' | 'update';
+export type PendingChangeKind = 'insert' | 'update' | 'delete';
 
 export type PendingRowKey = {
   keyField: string;
@@ -51,7 +51,7 @@ export type PendingRowKey = {
 
 export type PendingChangeStatus = 'pending' | 'saving' | 'saved' | 'error';
 
-export type EditHistoryAction = 'select' | 'create' | 'move' | 'delete';
+export type EditHistoryAction = 'select' | 'create' | 'move' | 'delete' | 'attribute';
 
 /** undo/redo 스택 항목 — 도형·속성 스냅샷 */
 export type EditHistoryEntry = {
@@ -95,6 +95,10 @@ export type PendingShapeChange = {
 export type ShapeEditorAttributeField = {
   field: string;
   label: string;
+  /** defineLayer 필드 타입 (date, number, text …) */
+  type?: string;
+  /** define_field_read_only */
+  readOnly?: boolean;
 };
 
 /** 좌측 작업 레이어 목록 한 행 */

@@ -2,6 +2,7 @@
  * 서버 기동 시 앱 필수 layer 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 메모: memo 및 memo_* 계열
+ * - 영상: work_unit, file_unit
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -27,6 +28,20 @@ async function tableExists(schema: string, table: string): Promise<'BASE TABLE' 
   const t = String((res.rows?.[0] as { table_type?: string } | undefined)?.table_type ?? '');
   if (t === 'BASE TABLE' || t === 'VIEW') return t;
   return null;
+}
+
+async function columnExists(schema: string, table: string, column: string): Promise<boolean> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = '${schema.replace(/'/g, "''")}'
+         AND table_name = '${table.replace(/'/g, "''")}'
+         AND column_name = '${column.replace(/'/g, "''")}'
+       LIMIT 1`
+    )
+  );
+  return (res.rows?.length ?? 0) > 0;
 }
 
 async function ensureSchemaLayer(): Promise<void> {
@@ -117,6 +132,44 @@ CREATE INDEX IF NOT EXISTS road_use_ledger_jijuk_geom_gix
 COMMENT ON TABLE layer.road_use_ledger_jijuk IS '도로점용 대장 필지목록';
 `;
 
+const WORK_UNIT_SQL = `
+CREATE TABLE IF NOT EXISTS layer.work_unit (
+  wu_key SERIAL PRIMARY KEY,
+  work_name varchar NOT NULL,
+  kind varchar NOT NULL,
+  folder_name varchar NOT NULL,
+  sr_key integer,
+  wu_is_del boolean NOT NULL DEFAULT false,
+  wu_create_date timestamp,
+  wu_create_user varchar,
+  wu_update_date timestamp,
+  wu_update_user varchar
+);
+COMMENT ON TABLE layer.work_unit IS '영상작업단위';
+`;
+
+const FILE_UNIT_SQL = `
+CREATE TABLE IF NOT EXISTS layer.file_unit (
+  fu_key SERIAL PRIMARY KEY,
+  wu_key integer NOT NULL,
+  file_name varchar NOT NULL,
+  relative_path varchar NOT NULL,
+  media_type varchar NOT NULL,
+  file_size bigint,
+  x_5181 double precision,
+  y_5181 double precision,
+  geom geometry(Point, 5181),
+  fu_is_del boolean NOT NULL DEFAULT false,
+  fu_create_date timestamp,
+  fu_create_user varchar,
+  fu_update_date timestamp,
+  fu_update_user varchar
+);
+CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key);
+CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom);
+COMMENT ON TABLE layer.file_unit IS '영상작업단위파일';
+`;
+
 function memoCreateSql(tableName: string): string {
   const t = tableName.replace(/"/g, '""');
   return `
@@ -135,10 +188,44 @@ COMMENT ON TABLE layer."${t}" IS '메모';
 `;
 }
 
+/** public→layer 이동 후 geom 컬럼·인덱스·좌표 백필 */
+async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
+  const fq = 'layer.file_unit';
+  try {
+    if ((await tableExists('layer', 'file_unit')) !== 'BASE TABLE') return;
+
+    if (!(await columnExists('layer', 'file_unit', 'geom'))) {
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Point, 5181)`)
+      );
+      result.created.push(`${fq}.geom`);
+    }
+
+    await db.execute(
+      sql.raw(`
+        UPDATE layer.file_unit
+        SET geom = ST_SetSRID(ST_MakePoint(x_5181, y_5181), 5181)
+        WHERE geom IS NULL
+          AND x_5181 IS NOT NULL
+          AND y_5181 IS NOT NULL
+      `)
+    );
+
+    await db.execute(
+      sql.raw(`CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key)`)
+    );
+    await db.execute(
+      sql.raw(`CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom)`)
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.geom: ${msg}`);
+  }
+}
+
 export async function ensureRoadUseLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
-  // 부모 먼저
   await ensureBaseTable({
     table: 'road_use_ledger',
     createSql: ROAD_USE_LEDGER_SQL,
@@ -165,6 +252,23 @@ export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureRes
   return out;
 }
 
+export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'work_unit',
+    createSql: WORK_UNIT_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'file_unit',
+    createSql: FILE_UNIT_SQL,
+    result: out,
+  });
+  await ensureFileUnitGeom(out);
+  return out;
+}
+
 /** instrumentation / 수동 호출용 */
 export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
@@ -172,6 +276,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureSchemaLayer();
     await ensureRoadUseLedgerTables(result);
     await ensureMemoTables(result);
+    await ensureAerialWorkUnitTables(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

@@ -11,7 +11,14 @@ import {
 import { getNextGenLinkageConfig } from '@/lib/nextGenLinkage/config';
 import { postNextGenJson } from '@/lib/nextGenLinkage/httpsClient';
 import { mapArrearsItem, mapReceiptItem } from '@/lib/nextGenLinkage/mapper';
+import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
 import { insertNextGenErrorLog, upsertArrearsRow, upsertReceiptRow } from '@/lib/nextGenLinkage/upsertFee';
+import {
+  getUseFeePrefixForRprsTxmNm,
+  isUseFeePrefixAllowedBySystems,
+} from '@/lib/useFeeBinding';
+import { getEnabledSystemKeysFromRuntime } from '@/lib/runtimeEnvFile';
+import type { NglFeeListTable } from '@/database/schema/ngl_fee_list';
 
 const LOG = '[nextGenLinkage]';
 
@@ -89,6 +96,7 @@ async function fetchAndSave(params: {
   dptCd: string;
   runStamp: string;
   config: NonNullable<ReturnType<typeof getNextGenLinkageConfig>>;
+  feeTable: NglFeeListTable;
 }): Promise<boolean> {
   const { config } = params;
   const reqVo: Record<string, string> = {
@@ -169,15 +177,18 @@ async function fetchAndSave(params: {
   if (!resVo1?.length) return false;
 
   if (params.interfaceId === 'B-2') {
-    for (const item of resVo1) await upsertReceiptRow(mapReceiptItem(item));
+    for (const item of resVo1) await upsertReceiptRow(mapReceiptItem(item), params.feeTable);
   } else {
     // 조회에 쓰는 특별회계사업코드를 미납 행에도 저장 → 이후 과세번호 매칭 키에 포함
     for (const item of resVo1) {
       const mapped = mapArrearsItem(item);
-      await upsertArrearsRow({
-        ...mapped,
-        spacBizCd: mapped.spacBizCd || params.spacBizCd || null,
-      });
+      await upsertArrearsRow(
+        {
+          ...mapped,
+          spacBizCd: mapped.spacBizCd || params.spacBizCd || null,
+        },
+        params.feeTable
+      );
     }
   }
 
@@ -196,7 +207,7 @@ async function fetchAndSave(params: {
 
 let running = false;
 
-/** v6 NextGenInfoModule.run 이식 — 통합 테이블 ngl_fee_list 저장 */
+/** v6 NextGenInfoModule.run 이식 — rprs_txm_nm별 water|road|public_ngl_fee_list 저장 */
 export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<NextGenSyncResult> {
   if (running) {
     return { ok: false, skipped: 'already_running', success: 0, fail: 0, message: '이미 연계가 실행 중입니다.' };
@@ -221,6 +232,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
   })();
 
   try {
+    const enabledSystems = getEnabledSystemKeysFromRuntime();
     const queries = await db
       .select()
       .from(nglQueryTable)
@@ -237,10 +249,13 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
     }
 
     const fyrList = parseFyrList(params?.fyr);
-    console.info(`${LOG} start fyr=${fyrList.join(',')} queries=${queries.length} stamp=${runStamp}`);
+    console.info(
+      `${LOG} start fyr=${fyrList.join(',')} queries=${queries.length} stamp=${runStamp} enabledSystems=${enabledSystems?.join(',') ?? '(all)'}`
+    );
 
     let totalSuccess = 0;
     let totalFail = 0;
+    let skippedQuery = 0;
 
     for (const fyr of fyrList) {
       for (const query of queries) {
@@ -252,6 +267,21 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
         const actSeCd = String(query.actSeCd ?? '').trim();
         const dptCd = String(query.dptCd ?? '').trim();
         if (!interfaceId || !ifId || !rprsTxmCd) continue;
+
+        const prefix = getUseFeePrefixForRprsTxmNm(rprsTxmNm);
+        if (!prefix) {
+          skippedQuery++;
+          console.info(`${LOG} skip unknown rprs_txm_nm=${rprsTxmNm}`);
+          continue;
+        }
+        if (!isUseFeePrefixAllowedBySystems(prefix, enabledSystems)) {
+          skippedQuery++;
+          console.info(
+            `${LOG} skip rprs_txm_nm=${rprsTxmNm} prefix=${prefix} (ENABLED_SYSTEMS)`
+          );
+          continue;
+        }
+        const feeTable = getNglFeeListTableByPrefix(prefix);
 
         let nextLvyNo = 1;
         let emptyCount = 0;
@@ -274,6 +304,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
               dptCd,
               runStamp,
               config,
+              feeTable,
             });
             if (hasData) {
               success++;
@@ -304,12 +335,12 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
         totalSuccess += success;
         totalFail += fail;
         console.info(
-          `${LOG} done fyr=${fyr} rprsTxmCd=${rprsTxmCd} interface=${interfaceId} success=${success} fail=${fail}`
+          `${LOG} done fyr=${fyr} rprsTxmNm=${rprsTxmNm} table=${prefix}_ngl_fee_list interface=${interfaceId} success=${success} fail=${fail}`
         );
       }
     }
 
-    const message = `연계 완료 — 성공 ${totalSuccess}, 실패 ${totalFail}`;
+    const message = `연계 완료 — 성공 ${totalSuccess}, 실패 ${totalFail}${skippedQuery ? `, 스킵쿼리 ${skippedQuery}` : ''}`;
     console.info(`${LOG} end ${message}`);
     return { ok: true, success: totalSuccess, fail: totalFail, message };
   } finally {

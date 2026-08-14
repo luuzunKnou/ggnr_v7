@@ -569,7 +569,7 @@
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "",
+    "define_table_group": "행정경계",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "public_layer",
@@ -6229,8 +6229,32 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "ngl_fee_list",
-    "define_table_kor_name": "ngl_fee_list",
+    "define_table_name": "public_ngl_fee_list",
+    "define_table_kor_name": "국공유지점사용료",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점사용료",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_ngl_fee_list",
+    "define_table_kor_name": "도로점사용료",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점사용료",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_ngl_fee_list",
+    "define_table_kor_name": "하천점사용료",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9463,7 +9487,7 @@
   {
     "define_table_name": "jijuk",
     "define_table_kor_name": "지적",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "행정경계",
@@ -9487,7 +9511,7 @@
   {
     "define_table_name": "tl_spbd_entrc",
     "define_table_kor_name": "건물 출입구",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "행정경계",
@@ -9511,7 +9535,7 @@
   {
     "define_table_name": "tl_spbd_entrc_dong",
     "define_table_kor_name": "상세주소 출입구",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "행정경계",
@@ -9535,7 +9559,7 @@
   {
     "define_table_name": "tl_sprd_manage",
     "define_table_kor_name": "도로구간",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "행정경계",
@@ -9547,7 +9571,7 @@
   {
     "define_table_name": "tl_sprd_intrvl",
     "define_table_kor_name": "기초구간",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "행정경계",
@@ -9735,6 +9759,18 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "LPG배관",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "file_unit",
+    "define_table_kor_name": "촬영영상",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "촬영영상",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",

@@ -44,6 +44,10 @@ export type LayerRowDetailAttr = {
   value: string;
   /** false면 기본 숨김(더보기로 표시). 미지정은 기본 표시 */
   showDetail?: boolean;
+  /** defineLayer define_field_type (소문자) */
+  type?: string;
+  /** define_field_read_only */
+  readOnly?: boolean;
 };
 
 export type LayerRowParcelItem = {

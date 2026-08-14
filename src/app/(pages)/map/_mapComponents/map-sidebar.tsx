@@ -197,12 +197,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
-      if (
-        !SHOOTING_REQUEST_UI_ENABLED &&
-        (item.ser_eng === 'shootingRequest' || item.ser_eng === 'shootingApproval')
-      ) {
-        return false;
-      }
       return true;
     });
 

@@ -20,7 +20,7 @@ export function serviceFileDataDownloadUrl(
   layerSegment: string,
   keyValue: string | number,
   fileName: string,
-  options?: { subfolder?: string | null }
+  options?: { subfolder?: string | null; /** 목록용 저화질 썸네일 (서버 리사이즈) */ thumb?: boolean | number }
 ): string {
   const sub = String(options?.subfolder ?? '').trim();
   const rel =
@@ -31,7 +31,22 @@ export function serviceFileDataDownloadUrl(
     serEng: serEng.trim(),
     path: rel,
   });
+  if (options?.thumb != null && options.thumb !== false) {
+    qs.set('thumb', options.thumb === true ? '1' : String(options.thumb));
+  }
   return `/api/service-files/download?${qs.toString()}`;
+}
+
+/** 기존 다운로드 URL에 목록용 썸네일 쿼리 추가 */
+export function withServiceFileThumbQuery(downloadUrl: string, thumb: boolean | number = true): string {
+  try {
+    const u = new URL(downloadUrl, 'http://local.invalid');
+    u.searchParams.set('thumb', thumb === true ? '1' : String(thumb));
+    return `${u.pathname}?${u.searchParams.toString()}`;
+  } catch {
+    const sep = downloadUrl.includes('?') ? '&' : '?';
+    return `${downloadUrl}${sep}thumb=${thumb === true ? '1' : String(thumb)}`;
+  }
 }
 
 /** 해당 폴더 전체를 ZIP으로 한 번에 다운로드 (파일명: 타임스탬프_표시명 첨부파일.zip) */
@@ -103,10 +118,16 @@ export function useServiceFileData(params: {
   subfolder?: string | null;
   /** 업로드 완료 등 목록 재조회용 */
   refreshNonce?: number;
+  /**
+   * false면 파일명만 조회(용량·수정일 생략). 대량 첨부 그리드용.
+   * 기본 true — 표준 상세 등 용량 표시 화면.
+   */
+  includeMeta?: boolean;
 }): { files: ServiceFileDataRow[]; loading: boolean; error: string | null } {
   const [files, setFiles] = useState<ServiceFileDataRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const includeMeta = params.includeMeta !== false;
 
   useEffect(() => {
     const ser = params.serEng.trim();
@@ -134,6 +155,7 @@ export function useServiceFileData(params: {
       key,
     });
     if (sub && sub !== '기타') qs.set('subfolder', sub);
+    if (!includeMeta) qs.set('meta', '0');
     fetch(`/api/service-files?${qs.toString()}`, { credentials: 'include' })
       .then(async (r) => {
         if (!r.ok) {
@@ -164,6 +186,7 @@ export function useServiceFileData(params: {
     params.keyValue,
     params.subfolder,
     params.refreshNonce ?? 0,
+    includeMeta,
   ]);
 
   return { files, loading, error };

@@ -225,6 +225,36 @@ async function getCompExtent3857(
   }
 }
 
+/** 민원 신규 접수 시 초기 처리이력(상태 «접수») — 민원관리·도형편집기 공통 */
+export async function ensureInitialReceiptHistory(params: {
+  compKey: number;
+  compCu?: string | null;
+  compCt?: string | null;
+  compCg?: string | null;
+}) {
+  const key = Number(params.compKey);
+  if (!Number.isInteger(key) || key < 1) return null;
+
+  const existing = await db
+    .select({ compdKey: compd.compdKey })
+    .from(compd)
+    .where(eq(compd.compKey, key))
+    .limit(1);
+  if (existing.length > 0) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  return compdCreate({
+    compKey: key,
+    compdDate: today,
+    compdState: '접수',
+    compdCu: emptyToNull(params.compCu),
+    compdCt: emptyToNull(params.compCt),
+    compdCg: emptyToNull(params.compCg),
+    compdContents: '민원접수',
+    compdExtra: null,
+  });
+}
+
 /** 민원 접수 생성 (생성 시 상태 '접수' 이력 1건 자동 추가) */
 export async function create(params: {
   compDate?: string | null;
@@ -257,16 +287,11 @@ export async function create(params: {
       .returning();
     if (!inserted) return null;
 
-    const today = new Date().toISOString().slice(0, 10);
-    await db.insert(compd).values({
+    await ensureInitialReceiptHistory({
       compKey: inserted.compKey,
-      compdDate: today,
-      compdState: '접수',
-      compdCu: emptyToNull(params.compCu),
-      compdCt: emptyToNull(params.compCt),
-      compdCg: emptyToNull(params.compCg),
-      compdContents: '민원접수',
-      compdExtra: null,
+      compCu: params.compCu,
+      compCt: params.compCt,
+      compCg: params.compCg,
     });
 
     await syncCompGeomFromAddress({

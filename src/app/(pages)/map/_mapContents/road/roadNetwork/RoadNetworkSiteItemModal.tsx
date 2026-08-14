@@ -3,7 +3,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
-import { Download, FileText, Plus, Trash2, X } from "lucide-react";
+import { Download, FileText, Plus, Trash2 } from "lucide-react";
 import {
   ROAD_NETWORK_COMPLAINT_STATES,
   type RoadNetworkAttachment,
@@ -320,18 +320,10 @@ export function RoadNetworkSiteItemModal(props: RoadNetworkSiteItemModalProps) {
         className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 pr-10">
+        <div className="flex shrink-0 items-center border-b border-slate-200 px-3 py-2">
           <h3 id={titleId} className="text-sm font-semibold text-slate-800">
             {heading}
           </h3>
-          <button
-            type="button"
-            className="absolute right-3 top-2.5 rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            onClick={close}
-            aria-label="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 scrollbar-hide">

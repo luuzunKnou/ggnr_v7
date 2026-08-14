@@ -30,6 +30,7 @@ import { UsageDataAsAddressList } from "./UsageDataAsAddressList";
 import { useLayerRowParcelHighlight, type LayerRowParcelHighlightVariant } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight";
 import { useLayerRowParcelDraftPreview } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelDraftPreview";
 import { useUsageDataAsParentGeomHighlight } from "./useUsageDataAsParentGeomHighlight";
+import { MapHitOverlapSelect } from "../../../_mapComponents/MapHitOverlapSelect";
 import {
   ensureUsageDataAsWmsLayersVisible,
   refreshUsageDataAsMapView,
@@ -43,10 +44,12 @@ import { useLayerRowPlaceFromGeom } from "../../../_mapComponents/layerRowEdit/u
 import { computeAreaSqmFromWkt5181 } from "../../../_mapComponents/analysisArea";
 import { splitUsagePeriod } from "@/lib/usageDataAsFieldUtils";
 import { currentPermitYear } from "@/lib/occupationPermitNo";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   detailId: string;
   onClose: () => void;
+  onSelectDetailId?: (id: string) => void;
   onSaved?: () => void;
   onCreated?: (newKey: string) => void;
   onDeleted?: () => void;
@@ -55,11 +58,13 @@ type Props = {
 export function UsageDataAsDetailPanel({
   detailId,
   onClose,
+  onSelectDetailId,
   onSaved,
   onCreated,
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
+  const hitOptions = mapContext?.usageDataAsMapHitOptions ?? [];
   const preset = LAYER_ROW_EDIT_PRESETS.usageDataAs;
   const isCreateMode = detailId === LAYER_ROW_NEW_ID;
 
@@ -574,11 +579,20 @@ export function UsageDataAsDetailPanel({
       <LayerRowEditHeader
         title="하천점용 상세"
         actionsPlacement="footer"
-        onClose={onClose}
+        onClose={() => {
+          mapContext?.setUsageDataAsMapHitOptions?.([]);
+          onClose();
+        }}
         {...editToolbarProps}
       />
+      <MapHitOverlapSelect
+        fieldLabel="허가번호"
+        options={hitOptions}
+        value={detailId}
+        onChange={(id) => onSelectDetailId?.(id)}
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
@@ -652,7 +666,7 @@ export function UsageDataAsDetailPanel({
             등록할 필드 정의를 불러오지 못했습니다.
           </div>
         )}
-      </div>
+      </MapSideDetailScroll>
 
       <LayerRowEditFooter {...editToolbarProps} />
 

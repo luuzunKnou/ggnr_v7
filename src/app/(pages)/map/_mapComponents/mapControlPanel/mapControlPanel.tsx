@@ -13,7 +13,6 @@ import {
   Ruler,
   Scaling,
   Mountain,
-  TrendingUp,
   Printer,
   RotateCcw,
   Banknote,
@@ -75,10 +74,9 @@ function MapControlButton({
     <button
       onClick={onClick}
       onContextMenu={(e) => {
-        if (onRightClick) {
-          e.preventDefault()
-          onRightClick()
-        }
+        // 지도 컨트롤은 브라우저 기본 메뉴 대신 앱 동작(또는 무시)
+        e.preventDefault()
+        onRightClick?.()
       }}
       className={cn(
         "flex h-[45px] w-full min-w-0 flex-col items-center justify-center gap-1 overflow-hidden box-border p-0 transition-colors cursor-pointer",
@@ -204,7 +202,6 @@ export const defaultMapControlGroups: MapControlGroup[] = [
       { id: "distance", icon: Ruler, label: "거리" },
       { id: "area", icon: Scaling, label: "면적" },
       { id: "altitude", icon: Mountain, label: "고도" },
-      { id: "slope", icon: TrendingUp, label: "경사도" },
       { id: "reset-measurements", icon: RotateCcw, label: "초기화" },
     ],
   },

@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
+import { randomId } from "@/lib/randomId"
 import { Plus, Trash2 } from "lucide-react"
 
 type EnvRow = { id: string; key: string; value: string }
@@ -111,7 +112,7 @@ export function RuntimeEnvEditor() {
   }
 
   const addRow = () => {
-    setRows((prev) => [...prev, { id: `new-${crypto.randomUUID()}`, key: "", value: "" }])
+    setRows((prev) => [...prev, { id: `new-${randomId()}`, key: "", value: "" }])
   }
 
   const removeRow = (id: string) => {

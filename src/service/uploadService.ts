@@ -48,7 +48,13 @@ type UploadMetaServiceFileData = BaseMeta & {
   relativeDir: string;
 };
 
-type UploadMeta = UploadMetaStandard | UploadMetaServiceFileData;
+type UploadMetaAerialMedia = BaseMeta & {
+  uploadType: 'aerialMedia';
+  /** GGNR_DATA_DIR 기준 상대 디렉터리 aerial/{kind}/{folder} */
+  relativeDir: string;
+};
+
+type UploadMeta = UploadMetaStandard | UploadMetaServiceFileData | UploadMetaAerialMedia;
 
 export type InitChunkedUploadResult = {
   uploadId: string;
@@ -88,6 +94,45 @@ export async function initChunkedUpload(params: {
     totalSize,
     expectedChunks,
     chunkSize: CHUNK_SIZE,
+  };
+  await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
+  return {
+    uploadId,
+    chunkSize: CHUNK_SIZE,
+    expectedChunks,
+  };
+}
+
+/**
+ * 촬영(영상) 작업단위 폴더로 청크 업로드 세션 시작.
+ * relativeDir = aerial/{kind}/{folderName} (슬래시), fileName = 파일명만.
+ */
+export async function initAerialMediaUpload(params: {
+  fileName: string;
+  totalSize: number;
+  relativeDir: string;
+}): Promise<InitChunkedUploadResult> {
+  const rel = String(params.relativeDir ?? '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (!rel || rel.includes('..') || !rel.startsWith('aerial/')) {
+    throw new Error('Invalid aerial relativeDir');
+  }
+  const baseName = path.basename(String(params.fileName ?? '').replace(/\\/g, '/'));
+  if (!baseName || baseName === '.' || baseName === '..') {
+    throw new Error('유효하지 않은 파일명입니다.');
+  }
+  const expectedChunks = Math.ceil(params.totalSize / CHUNK_SIZE) || 1;
+  const uploadId = nanoid();
+  const tempDir = getUploadTempDir(uploadId);
+  await fs.mkdir(tempDir, { recursive: true });
+  const meta: UploadMetaAerialMedia = {
+    uploadType: 'aerialMedia',
+    fileName: baseName,
+    totalSize: params.totalSize,
+    expectedChunks,
+    chunkSize: CHUNK_SIZE,
+    relativeDir: rel,
   };
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
   return {
@@ -222,6 +267,9 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
   if (meta.uploadType === 'serviceFileData') {
     subDir = meta.relativeDir.replace(/\\/g, '/');
     saveFileName = meta.fileName;
+  } else if (meta.uploadType === 'aerialMedia') {
+    subDir = meta.relativeDir.replace(/\\/g, '/');
+    saveFileName = meta.fileName;
   } else if (meta.uploadType === 'tif') {
     subDir = 'tiles_tif';
     saveFileName = meta.fileName;
@@ -280,7 +328,8 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     meta.uploadType === 'excel' ||
     meta.uploadType === 'satelliteTif' ||
     meta.uploadType === 'source' ||
-    meta.uploadType === 'fileManager';
+    meta.uploadType === 'fileManager' ||
+    meta.uploadType === 'aerialMedia';
   const targetPath = preserveRelativePath
     ? path.join(targetDir, ...segments)
     : path.join(targetDir, segments[segments.length - 1] ?? normalized);
@@ -304,7 +353,8 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     meta.uploadType !== 'serviceFileData' &&
     meta.uploadType !== 'fileData' &&
     meta.uploadType !== 'source' &&
-    meta.uploadType !== 'fileManager'
+    meta.uploadType !== 'fileManager' &&
+    meta.uploadType !== 'aerialMedia'
   ) {
     await appendUploadConvertHistory({
       at: new Date().toISOString(),

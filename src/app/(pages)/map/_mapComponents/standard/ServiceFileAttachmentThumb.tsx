@@ -27,7 +27,9 @@ export function ServiceFileAttachmentThumb({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const url = serviceFileDataDownloadUrl(serEng, layerSegment, keyValue, fileName);
+  const url = serviceFileDataDownloadUrl(serEng, layerSegment, keyValue, fileName, {
+    thumb: 160,
+  });
 
   if (failed) {
     return (

@@ -1,21 +1,26 @@
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { nglErrorLog } from '@/database/schema/ngl_error_log';
-import { nglFeeList, type NewNglFeeList } from '@/database/schema/ngl_fee_list';
+import {
+  waterNglFeeList,
+  type NewNglFeeList,
+  type NglFeeListTable,
+} from '@/database/schema/ngl_fee_list';
 import { buildTaxnNoKey } from '@/lib/nextGenLinkage/mapper';
 
 const nowSql = sql`now()`;
 
-/** 미납 행에서 조합한 과세번호 키 (SQL) */
-const arrearsTaxnNoSql = sql`(
-  lpad(coalesce(trim(${nglFeeList.dptCd}), ''), 7, '0') ||
-  lpad(coalesce(trim(${nglFeeList.spacBizCd}), ''), 4, '0') ||
-  lpad(coalesce(trim(${nglFeeList.fyr}), ''), 4, '0') ||
-  lpad(coalesce(trim(${nglFeeList.actSeCd}), ''), 2, '0') ||
-  lpad(coalesce(trim(${nglFeeList.rprsTxmCd}), ''), 6, '0') ||
-  lpad(coalesce(trim(${nglFeeList.lvyNo}), ''), 6, '0') ||
-  lpad(coalesce(trim(${nglFeeList.itmSn}), ''), 2, '0')
+function arrearsTaxnNoSql(t: NglFeeListTable) {
+  return sql`(
+  lpad(coalesce(trim(${t.dptCd}), ''), 7, '0') ||
+  lpad(coalesce(trim(${t.spacBizCd}), ''), 4, '0') ||
+  lpad(coalesce(trim(${t.fyr}), ''), 4, '0') ||
+  lpad(coalesce(trim(${t.actSeCd}), ''), 2, '0') ||
+  lpad(coalesce(trim(${t.rprsTxmCd}), ''), 6, '0') ||
+  lpad(coalesce(trim(${t.lvyNo}), ''), 6, '0') ||
+  lpad(coalesce(trim(${t.itmSn}), ''), 2, '0')
 )`;
+}
 
 function arrearsUpdateSet(row: NewNglFeeList) {
   return {
@@ -231,7 +236,10 @@ function receiptOnlyMergeSet(row: NewNglFeeList) {
   };
 }
 
-export async function upsertArrearsRow(row: NewNglFeeList): Promise<void> {
+export async function upsertArrearsRow(
+  row: NewNglFeeList,
+  table: NglFeeListTable = waterNglFeeList
+): Promise<void> {
   const key = String(row.lvyKey ?? '').trim();
   if (!key) return;
   const values: NewNglFeeList = {
@@ -242,10 +250,10 @@ export async function upsertArrearsRow(row: NewNglFeeList): Promise<void> {
     syncedAt: new Date().toISOString(),
   };
   await db
-    .insert(nglFeeList)
+    .insert(table)
     .values(values)
     .onConflictDoUpdate({
-      target: [nglFeeList.lvyKey, nglFeeList.rcvmtSn],
+      target: [table.lvyKey, table.rcvmtSn],
       set: arrearsUpdateSet(values),
     });
 }
@@ -255,7 +263,10 @@ export async function upsertArrearsRow(row: NewNglFeeList): Promise<void> {
  * 1) 미납 조합키 = 수납 과세번호 → 기존 미납 행에 수납 전용 컬럼만 merge (미납 전용 값 유지)
  * 2) 매칭 없거나 (부과키,수납일련) 충돌 → 수납 행 upsert
  */
-export async function upsertReceiptRow(row: NewNglFeeList): Promise<void> {
+export async function upsertReceiptRow(
+  row: NewNglFeeList,
+  table: NglFeeListTable = waterNglFeeList
+): Promise<void> {
   const key = String(row.lvyKey ?? '').trim();
   const sn = String(row.rcvmtSn ?? '').trim();
   const taxnNo = String(row.taxnNo ?? '').trim() || buildTaxnNoKey(row);
@@ -270,31 +281,34 @@ export async function upsertReceiptRow(row: NewNglFeeList): Promise<void> {
 
   if (taxnNo) {
     const matched = await db
-      .select({ id: nglFeeList.id, lvyKey: nglFeeList.lvyKey })
-      .from(nglFeeList)
+      .select({ id: table.id, lvyKey: table.lvyKey })
+      .from(table)
       .where(
-        and(eq(nglFeeList.feeStatus, '미납'), eq(nglFeeList.rcvmtSn, ''), sql`${arrearsTaxnNoSql} = ${taxnNo}`)
+        and(
+          eq(table.feeStatus, '미납'),
+          eq(table.rcvmtSn, ''),
+          sql`${arrearsTaxnNoSql(table)} = ${taxnNo}`
+        )
       )
       .limit(1);
 
     const matchedRow = matched[0];
     if (matchedRow) {
-      // 유니크는 기존 미납 부과키 기준 — 미납에 있던 키·속성 유지
       const targetKey = String(matchedRow.lvyKey ?? '').trim() || key;
       if (targetKey) {
         const conflict = await db
-          .select({ id: nglFeeList.id })
-          .from(nglFeeList)
+          .select({ id: table.id })
+          .from(table)
           .where(
-            and(eq(nglFeeList.lvyKey, targetKey), eq(nglFeeList.rcvmtSn, sn), ne(nglFeeList.id, matchedRow.id))
+            and(eq(table.lvyKey, targetKey), eq(table.rcvmtSn, sn), ne(table.id, matchedRow.id))
           )
           .limit(1);
 
         if (!conflict[0]) {
           await db
-            .update(nglFeeList)
+            .update(table)
             .set(receiptOnlyMergeSet({ ...values, rcvmtSn: sn, taxnNo }))
-            .where(eq(nglFeeList.id, matchedRow.id));
+            .where(eq(table.id, matchedRow.id));
           return;
         }
       }
@@ -303,10 +317,10 @@ export async function upsertReceiptRow(row: NewNglFeeList): Promise<void> {
 
   if (!key) return;
   await db
-    .insert(nglFeeList)
+    .insert(table)
     .values({ ...values, lvyKey: key })
     .onConflictDoUpdate({
-      target: [nglFeeList.lvyKey, nglFeeList.rcvmtSn],
+      target: [table.lvyKey, table.rcvmtSn],
       set: receiptUpdateSet({ ...values, lvyKey: key }),
     });
 }

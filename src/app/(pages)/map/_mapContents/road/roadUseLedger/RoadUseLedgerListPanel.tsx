@@ -253,7 +253,7 @@ export function RoadUseLedgerListPanel({
         {error && (
           <div className="shrink-0 px-3 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">{error}</div>
         )}
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           <table className="w-full min-w-[560px] border-collapse text-left text-xs">
             <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
               <tr>
