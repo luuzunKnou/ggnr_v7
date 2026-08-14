@@ -7,7 +7,7 @@ import { call } from "@/lib/api"
 import { Check, X, Download, FileSpreadsheet, History, Loader2 } from "lucide-react"
 import type { LayerManagerRow } from "./types"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
-import { downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
+import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh } from "./layerManagerUploadBridge"
 import { StylePreviewSwatch } from "./StylePreviewSwatch"
@@ -399,6 +399,30 @@ export function LayerManagerListTab() {
     }
   }, [])
 
+  const handleExcelDownload = useCallback(async (row: LayerManagerRow) => {
+    const tableName = row.define_table_name
+    if (!tableName) return
+    const schema = row.define_table_schema === "public_layer" ? "public_layer" : "layer"
+    const isExcelSource = row.define_table_source.toLowerCase() === "excel"
+    const meta = excelMetaMap[tableName.toLowerCase()]
+    setDownloadingExcel(tableName)
+    try {
+      if (isExcelSource) {
+        try {
+          await downloadLayerExcel(meta?.lastSourcePath ?? null, tableName)
+          return
+        } catch {
+          /* 원본 없으면 DB→CSV */
+        }
+      }
+      await downloadLayerCsvFromDb(tableName, schema)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "표 형식 다운로드 실패")
+    } finally {
+      setDownloadingExcel(null)
+    }
+  }, [excelMetaMap])
+
   const handleShpDownload = useCallback(async (row: LayerManagerRow) => {
     const tableName = row.define_table_name
     if (!tableName) return
@@ -412,20 +436,6 @@ export function LayerManagerListTab() {
       setDownloadingShp(null)
     }
   }, [])
-
-  const handleExcelDownload = useCallback(async (row: LayerManagerRow) => {
-    const tableName = row.define_table_name
-    if (!tableName) return
-    const meta = excelMetaMap[tableName.toLowerCase()]
-    setDownloadingExcel(tableName)
-    try {
-      await downloadLayerExcel(meta?.lastSourcePath ?? null, tableName)
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Excel 다운로드 실패")
-    } finally {
-      setDownloadingExcel(null)
-    }
-  }, [excelMetaMap])
 
   useEffect(() => {
     void loadData()
@@ -585,8 +595,8 @@ export function LayerManagerListTab() {
               const styleName = styleInfo?.styleName
               const canShowLegend = hasCssStyle || published
               const updatedAt = updateDateMap[styleKey] ?? null
-              const excelMeta = excelMetaMap[styleKey]
-              const isExcelSource = row.define_table_source.toLowerCase() === "excel"
+              const sourceLower = row.define_table_source.toLowerCase()
+              const isExcelSource = sourceLower === "excel"
               const actionBusy = downloadingShp !== null || downloadingExcel !== null
 
               return (
@@ -672,10 +682,8 @@ export function LayerManagerListTab() {
                             onClick={() => void handleExcelDownload(row)}
                             title={
                               isExcelSource
-                                ? "Excel 다운로드"
-                                : excelMeta?.lastSourcePath
-                                  ? "Excel 다운로드"
-                                  : "Excel 다운로드 (경로 없으면 기본 경로 시도)"
+                                ? "Excel 원본 (없으면 CSV)"
+                                : "CSV 다운로드 (DB)"
                             }
                           >
                             {downloadingExcel === tableName ? (

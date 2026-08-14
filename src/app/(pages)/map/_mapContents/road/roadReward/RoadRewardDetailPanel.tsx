@@ -10,7 +10,13 @@ import {
   type SetStateAction,
 } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
 import Draw from "ol/interaction/Draw";
 import Modify from "ol/interaction/Modify";
 import VectorLayer from "ol/layer/Vector";
@@ -24,15 +30,12 @@ import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
+import type { LayerRowParcelItem } from "../../../_mapComponents/layerRowEdit";
 import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
   useSearchBarOffset,
 } from "../../../searchBarOffsetContext";
-import {
-  LayerRowEditHeader,
-  type LayerRowParcelItem,
-} from "../../../_mapComponents/layerRowEdit";
 import {
   fitMapToLayerRowParcel,
   fitMapToLayerRowParcels,
@@ -62,6 +65,7 @@ import {
   mapRoadRewardDtoToCase,
 } from "./roadRewardApi";
 import { RoadRewardParcelModal } from "./RoadRewardParcelModal";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   caseId: string;
@@ -75,10 +79,15 @@ type Props = {
   overlayWidthPx: number;
 };
 
-/** 조회·수정 공통 행 높이 — 수정 시 input 때문에 속성 영역이 늘어나지 않게 고정 */
-const ATTR_ROW_H = "h-7";
 const fieldClass =
-  "h-full w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+const attrLabelClass = "w-[64px] shrink-0";
+const btnPrimary =
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+const btnGhost =
+  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50";
+const btnDanger =
+  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50";
 
 type ParcelModalState = { mode: "new" | "edit" | "view"; draft: RoadRewardParcel };
 
@@ -101,21 +110,30 @@ function formatCell(value: unknown, numeric?: boolean): string {
   return s || "—";
 }
 
-function AttrRow({ label, value }: { label: string; value: ReactNode }) {
+function AttrRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
-    <div className={cn("flex items-stretch", ATTR_ROW_H)}>
-      <div className="flex w-16 shrink-0 items-center bg-slate-100 px-1.5">
-        <span className="min-w-0 w-full truncate text-[11px] leading-none text-[#666]" title={label}>
+    <div className="flex items-start">
+      <div
+        className={cn(
+          "flex min-w-0 shrink-0 items-center self-stretch bg-slate-100 px-1.5 py-1",
+          attrLabelClass
+        )}
+      >
+        <span className="min-w-0 w-full whitespace-normal break-keep text-left text-[11px] leading-snug text-[#666]">
           {label}
         </span>
       </div>
-      <div className="flex min-w-0 flex-1 items-center px-1.5 py-0.5">
+      <div className="min-w-0 flex-1 px-1.5 py-1">
         {typeof value === "string" ? (
-          <span className="truncate text-[11px] leading-none text-[#666]" title={value}>
-            {value}
-          </span>
+          <span className="break-all text-[11px] leading-snug text-[#666]">{value}</span>
         ) : (
-          <div className="h-full min-h-0 w-full min-w-0">{value}</div>
+          value
         )}
       </div>
     </div>
@@ -199,6 +217,7 @@ export function RoadRewardDetailPanel({
   }, [cases, caseId, isCreateMode]);
 
   const [isEditing, setIsEditing] = useState(() => isNewRoadRewardCaseId(caseId));
+  const [attrsOpen, setAttrsOpen] = useState(true);
   const [caseDraft, setCaseDraft] = useState<Record<string, string>>({});
   const caseDraftRef = useRef(caseDraft);
   caseDraftRef.current = caseDraft;
@@ -240,12 +259,6 @@ export function RoadRewardDetailPanel({
   );
 
   const displayParcels = isEditing ? draftParcels : caseItem?.parcels ?? [];
-  /**
-   * 상세 패널 ~480px. 헤더 문구가 늘면 다른 열·액션에서 폭을 뺏김 → 6열 합이 패널을 넘지 않게 맞춤.
-   * 액션 3rem(아이콘 2개), 지번(편입) 4.75rem, 나머지 최소폭+분배.
-   */
-  const parcelGridCols =
-    "grid-cols-[minmax(6.5rem,1fr)_4.75rem_2.25rem_5.25rem_minmax(6.5rem,1.3fr)_3rem]";
   const displayGeom = isEditing
     ? draftGeom
     : {
@@ -313,6 +326,7 @@ export function RoadRewardDetailPanel({
       setDraftGeom({ geometry3857: null, extent3857: null });
       setDraftParcels([]);
       draftParcelsRef.current = [];
+      setAttrsOpen(true);
       setIsEditing(true);
       caseGeomSnapshotRef.current = null;
       setCaseGeomEditMode("draw");
@@ -621,6 +635,7 @@ export function RoadRewardDetailPanel({
     setDraftGeom({ geometry3857, extent3857 });
     setDraftParcels(caseItem.parcels);
     draftParcelsRef.current = caseItem.parcels;
+    setAttrsOpen(true);
     setIsEditing(true);
     if (geometry3857) {
       caseGeomSnapshotRef.current = { geometry3857, extent3857 };
@@ -905,71 +920,154 @@ export function RoadRewardDetailPanel({
     ),
   }));
 
+  const headerName = isEditing
+    ? (caseDraft.name ?? "").trim() || (isCreateMode ? "(새 건)" : "(건명 없음)")
+    : caseItem.name.trim() || "(건명 없음)";
+
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
-      <LayerRowEditHeader
-        title="보상편입용지 상세"
-        isEditing={isEditing}
-        isCreateMode={isCreateMode}
-        saving={saving}
-        onEdit={beginEdit}
-        onSave={() => void handleSave()}
-        onCancel={cancelEdit}
-        onDelete={isCreateMode ? undefined : () => void handleDelete()}
-        onClose={isCreateMode ? discardCreateDraft : onClose}
-      />
-
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs scrollbar-hide">
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          상세 속성
+    <div className="relative flex min-h-0 h-full flex-col bg-white">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+        <div className="min-w-0">
+          <h2
+            className={cn(
+              "truncate text-sm font-semibold",
+              (isEditing ? (caseDraft.name ?? "").trim() : caseItem.name.trim())
+                ? "text-slate-800"
+                : "text-slate-400"
+            )}
+            title={headerName}
+          >
+            {headerName}
+          </h2>
         </div>
-        <AttrTable entries={isEditing ? caseEditEntries : caseViewEntries} />
+        <button
+          type="button"
+          onClick={isCreateMode ? discardCreateDraft : onClose}
+          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          title="닫기"
+          aria-label="닫기"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        <div className="mt-4">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              필지목록
-              {displayParcels.length > 0 ? (
-                <span className="ml-1 font-normal normal-case text-slate-400">
-                  ({displayParcels.length.toLocaleString()})
-                </span>
-              ) : null}
+      <section className="shrink-0 border-b border-slate-200">
+        <div className="flex items-center gap-1 px-2 py-1.5">
+          <button
+            type="button"
+            onClick={() => setAttrsOpen((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-slate-700"
+          >
+            {attrsOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            )}
+            속성정보
+          </button>
+          {attrsOpen ? (
+            <div className="flex shrink-0 items-center gap-1">
+              {!isEditing ? (
+                <>
+                  <button type="button" className={btnGhost} onClick={beginEdit}>
+                    <Pencil className="h-3 w-3" />
+                    수정
+                  </button>
+                  {!isCreateMode ? (
+                    <button
+                      type="button"
+                      className={btnDanger}
+                      onClick={() => void handleDelete()}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      삭제
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    onClick={cancelEdit}
+                    disabled={saving}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    onClick={() => void handleSave()}
+                    disabled={saving}
+                  >
+                    {saving ? "저장 중…" : isCreateMode ? "등록" : "저장"}
+                  </button>
+                </>
+              )}
             </div>
+          ) : null}
+        </div>
+        {attrsOpen ? (
+          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-hide">
+            <AttrTable entries={isEditing ? caseEditEntries : caseViewEntries} />
           </div>
+        ) : null}
+      </section>
 
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 pt-1.5"
+          role="tablist"
+          aria-label="필지목록"
+        >
+          <div className="flex min-w-0 flex-1 items-stretch gap-0.5 self-stretch">
+            <button
+              type="button"
+              role="tab"
+              aria-selected
+              className="relative flex shrink-0 items-center px-2.5 pb-1.5 text-[11px] font-medium text-primary"
+            >
+              필지목록 ({displayParcels.length.toLocaleString()})
+              {loadingParcels ? (
+                <span className="ml-1 text-[10px] font-normal text-slate-400">조회 중…</span>
+              ) : null}
+              <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-primary" />
+            </button>
+          </div>
+        </div>
+
+        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
           {displayParcels.length === 0 ? (
-            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+            <p className="py-6 text-center text-[11px] text-slate-500">
               {isEditing
                 ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다."
                 : "등록된 필지가 없습니다."}
-            </div>
+            </p>
           ) : (
             <div className="w-full overflow-hidden rounded border border-slate-200 text-[11px]">
               <div
                 className={cn(
                   "grid h-7 items-center border-b border-slate-200 bg-slate-50",
-                  parcelGridCols
+                  isEditing
+                    ? "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px_3rem]"
+                    : "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px]"
                 )}
               >
-                <div className="min-w-0 px-1.5 font-semibold text-slate-700 whitespace-nowrap">
-                  읍면동
-                </div>
-                <div className="min-w-0 px-1.5 font-semibold text-slate-700 whitespace-nowrap">
-                  지번(편입)
-                </div>
-                <div className="min-w-0 px-1.5 text-center font-semibold text-slate-700 whitespace-nowrap">
-                  지목
-                </div>
-                <div className="min-w-0 px-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 pl-1.5 pr-1 text-left font-semibold text-slate-700">주소</div>
+                <div className="min-w-0 px-1 text-center font-semibold text-slate-700">지목</div>
+                <div className="min-w-0 px-1 text-center font-semibold text-slate-700 whitespace-nowrap">
                   편입면적(㎡)
                 </div>
-                <div className="min-w-0 px-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 pl-1 pr-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
                   보상금액(원)
                 </div>
-                <div aria-hidden />
+                {isEditing ? <div aria-hidden /> : null}
               </div>
               {displayParcels.map((p) => {
                 const isSelected = p.id === selectedParcelId;
+                const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
+                const areaLabel = `${formatCell(p.areaIncluded, true)}㎡`;
+                const amountLabel = `${formatCell(p.compensationAmount, true)}원`;
                 return (
                   <div
                     key={p.id}
@@ -989,67 +1087,70 @@ export function RoadRewardDetailPanel({
                     }
                     className={cn(
                       "grid h-7 cursor-pointer items-center border-b border-slate-100 last:border-b-0 hover:bg-slate-50",
-                      parcelGridCols,
+                      isEditing
+                        ? "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px_3rem]"
+                        : "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px]",
                       isSelected && "bg-primary/5"
                     )}
                   >
-                    <div className="min-w-0 truncate px-1.5 text-slate-800" title={p.eupmyeonDong}>
-                      {formatCell(p.eupmyeonDong)}
+                    <div
+                      className="min-w-0 truncate pl-1.5 pr-1 text-left text-slate-800"
+                      title={addr || undefined}
+                    >
+                      {addr || "—"}
                     </div>
-                    <div className="min-w-0 truncate px-1.5 text-slate-800" title={p.jibunIncluded}>
-                      {formatCell(p.jibunIncluded)}
-                    </div>
-                    <div className="min-w-0 truncate px-1.5 text-center text-slate-800" title={p.jimok}>
+                    <div
+                      className="min-w-0 truncate px-1 text-center text-slate-800"
+                      title={p.jimok || undefined}
+                    >
                       {formatCell(p.jimok)}
                     </div>
                     <div
-                      className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800"
-                      title={formatCell(p.areaIncluded, true)}
+                      className="min-w-0 truncate px-1 text-center tabular-nums text-slate-800"
+                      title={areaLabel}
                     >
-                      {formatCell(p.areaIncluded, true)}
+                      {areaLabel}
                     </div>
                     <div
-                      className="min-w-0 truncate px-1.5 text-right tabular-nums text-slate-800"
-                      title={formatCell(p.compensationAmount, true)}
+                      className="min-w-0 truncate pl-1 pr-1.5 text-right tabular-nums text-slate-800"
+                      title={amountLabel}
                     >
-                      {formatCell(p.compensationAmount, true)}
+                      {amountLabel}
                     </div>
-                    <div className="flex w-full shrink-0 items-center justify-center gap-0">
-                      {isEditing ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenEditParcel(p);
-                            }}
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
-                            aria-label="필지 수정"
-                            title="수정"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteParcelFromList(p.id);
-                            }}
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            aria-label="필지 삭제"
-                            title="삭제"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
+                    {isEditing ? (
+                      <div className="flex w-full shrink-0 items-center justify-center gap-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditParcel(p);
+                          }}
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
+                          aria-label="필지 수정"
+                          title="수정"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteParcelFromList(p.id);
+                          }}
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          aria-label="필지 삭제"
+                          title="삭제"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
+        </MapSideDetailScroll>
       </div>
 
       {parcelModal ? (
@@ -1063,6 +1164,11 @@ export function RoadRewardDetailPanel({
           onApplyParcelAddress={handleApplyParcelAddress}
           onSave={handleSaveParcelModal}
           onClose={handleCloseParcelModal}
+          onDelete={
+            parcelModal.mode === "edit"
+              ? () => handleDeleteParcelFromList(parcelModal.draft.id)
+              : undefined
+          }
           overlayLeftPx={overlayLeftPx}
           overlayWidthPx={overlayWidthPx}
         />

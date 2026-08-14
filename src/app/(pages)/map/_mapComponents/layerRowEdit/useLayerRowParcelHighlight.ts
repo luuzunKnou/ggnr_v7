@@ -7,11 +7,16 @@ import GeoJSON from "ol/format/GeoJSON";
 import Feature from "ol/Feature";
 import { Polygon } from "ol/geom";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
+import {
+  occupationFillRgba,
+  occupationStrokeRgba,
+} from "@/lib/occupationLayerStyle";
 import { useMapContext } from "../MapContext";
 import { getParcelExtent3857 } from "./layerRowParcelUtils";
 import type { LayerRowParcelItem } from "./types";
 
-export type LayerRowParcelHighlightVariant = "blue" | "yellow";
+/** blue=필지, red=물건지 (GeoServer 팔레트와 동일) */
+export type LayerRowParcelHighlightVariant = "blue" | "red" | "yellow" | "black";
 
 const HIGHLIGHT_STYLES: Record<
   LayerRowParcelHighlightVariant,
@@ -19,26 +24,52 @@ const HIGHLIGHT_STYLES: Record<
 > = {
   blue: {
     polygon: new Style({
-      stroke: new Stroke({ color: "rgba(29, 78, 216, 0.95)", width: 3 }),
-      fill: new Fill({ color: "rgba(29, 78, 216, 0.28)" }),
+      stroke: new Stroke({ color: occupationStrokeRgba("parcel"), width: 2 }),
+      fill: new Fill({ color: occupationFillRgba("parcel") }),
     }),
     point: new Style({
       image: new CircleStyle({
         radius: 8,
-        fill: new Fill({ color: "rgba(29, 78, 216, 0.85)" }),
+        fill: new Fill({ color: occupationFillRgba("parcel", 0.85) }),
+        stroke: new Stroke({ color: "#fff", width: 2 }),
+      }),
+    }),
+  },
+  red: {
+    polygon: new Style({
+      stroke: new Stroke({ color: occupationStrokeRgba("mgj"), width: 2 }),
+      fill: new Fill({ color: occupationFillRgba("mgj") }),
+    }),
+    point: new Style({
+      image: new CircleStyle({
+        radius: 8,
+        fill: new Fill({ color: occupationFillRgba("mgj", 0.85) }),
         stroke: new Stroke({ color: "#fff", width: 2 }),
       }),
     }),
   },
   yellow: {
     polygon: new Style({
-      stroke: new Stroke({ color: "rgba(234, 179, 8, 0.95)", width: 3 }),
-      fill: new Fill({ color: "rgba(250, 204, 21, 0.35)" }),
+      stroke: new Stroke({ color: occupationStrokeRgba("facility"), width: 2 }),
+      fill: new Fill({ color: occupationFillRgba("facility") }),
     }),
     point: new Style({
       image: new CircleStyle({
         radius: 8,
-        fill: new Fill({ color: "rgba(234, 179, 8, 0.9)" }),
+        fill: new Fill({ color: occupationFillRgba("facility", 0.9) }),
+        stroke: new Stroke({ color: "#333", width: 2 }),
+      }),
+    }),
+  },
+  black: {
+    polygon: new Style({
+      stroke: new Stroke({ color: occupationStrokeRgba("mgj"), width: 2 }),
+      fill: new Fill({ color: occupationFillRgba("mgj") }),
+    }),
+    point: new Style({
+      image: new CircleStyle({
+        radius: 8,
+        fill: new Fill({ color: occupationFillRgba("mgj", 0.85) }),
         stroke: new Stroke({ color: "#fff", width: 2 }),
       }),
     }),

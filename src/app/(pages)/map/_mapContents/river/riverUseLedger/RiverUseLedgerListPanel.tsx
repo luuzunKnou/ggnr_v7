@@ -239,7 +239,7 @@ export function RiverUseLedgerListPanel({
             {error}
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           <table className="w-full min-w-[520px] border-collapse text-left text-xs">
             <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
               <tr>

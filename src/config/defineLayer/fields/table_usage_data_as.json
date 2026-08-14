@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "cons_code",
-    "define_field_kor_name": "공사코드",
+    "define_field_kor_name": "점용코드",
     "define_field_type": "text",
     "define_field_idx": 4,
     "define_field_is_required": "true",

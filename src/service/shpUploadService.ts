@@ -451,12 +451,24 @@ export async function detectShpCrsCandidates(params: { pathOrResult: string }): 
   candidates?: ShpCrsCandidate[];
   /** EPSG:5181(임포트 시 최종 목표 좌표계) 비교용 참고 값. 후보 목록(경계 교차)에 없어도 항상 계산해서 반환 */
   reference5181?: ShpCrsCandidate;
+  /** shp/shx/dbf 없거나 0바이트 — 범위·미리보기 불가 */
+  emptyShp?: boolean;
   error?: string;
 }> {
   try {
     const pathOrResult = params?.pathOrResult?.trim();
     if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
     const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+    const dir = path.dirname(absolutePath);
+    const basename = path.basename(absolutePath, '.shp');
+    if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+      return {
+        success: true,
+        candidates: [],
+        emptyShp: true,
+        error: '미리보기할 도형이 없습니다.',
+      };
+    }
     const box = await getShpRawExtent(absolutePath);
     if (!box) return { success: false, error: 'SHP 범위를 확인할 수 없습니다.' };
 
@@ -534,6 +546,7 @@ export async function detectShpCrsCandidates(params: { pathOrResult: string }): 
 export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatures?: number }): Promise<{
   success: boolean;
   geojson?: Record<string, unknown>;
+  emptyShp?: boolean;
   error?: string;
 }> {
   let tmpOut: string | null = null;
@@ -542,6 +555,16 @@ export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatur
     if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
     const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
     if (!fsSync.existsSync(absolutePath)) return { success: false, error: '파일을 찾을 수 없습니다.' };
+
+    const dir = path.dirname(absolutePath);
+    const basename = path.basename(absolutePath, '.shp');
+    if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+      return {
+        success: false,
+        emptyShp: true,
+        error: '미리보기할 도형이 없습니다.',
+      };
+    }
 
     // 미리보기만 필요하므로 변환 단계에서부터 feature 수 제한 (대용량 SHP 전체 GeoJSON화 방지)
     const maxFeatures = Math.max(1, Math.min(params?.maxFeatures ?? 2000, 5000));
@@ -682,6 +705,64 @@ async function resolveSyncTableWithColumns(
   return { ...resolved, colMap };
 }
 
+/**
+ * LINE↔POLYGON 등 재업로드를 위해 geom typmod를 Geometry(제한 없음)로 승격.
+ * Excel createTableFromExcel과 동일 패턴. 이미 Geometry면 no-op.
+ */
+async function ensureLayerGeomColumnUnrestricted(
+  schema: string,
+  table: string,
+  fq?: string,
+): Promise<void> {
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const safeSchema = String(schema).replace(/"/g, '');
+  const safeTable = String(table).replace(/"/g, '');
+  const tableFq =
+    fq ?? `"${safeSchema}"."${safeTable}"`;
+  try {
+    const typRes = await db.execute(sql.raw(
+      `SELECT UPPER(COALESCE(gc.type, '')) AS gtype,
+              COALESCE(NULLIF(gc.srid, 0), ${SHP_UPLOAD_TARGET_SRID})::int AS srid,
+              gc.f_geometry_column::text AS gcol
+       FROM geometry_columns gc
+       WHERE gc.f_table_schema = '${esc(safeSchema)}'
+         AND gc.f_table_name = '${esc(safeTable)}'
+       ORDER BY CASE WHEN LOWER(gc.f_geometry_column) = 'geom' THEN 0 ELSE 1 END
+       LIMIT 1`
+    ));
+    const row = (typRes.rows as Array<{ gtype?: string; srid?: number; gcol?: string }>)?.[0];
+    const gtype = String(row?.gtype ?? '').trim();
+    if (!gtype || gtype === 'GEOMETRY') return;
+    const srid = Number(row?.srid) || SHP_UPLOAD_TARGET_SRID;
+    const gcol = String(row?.gcol ?? 'geom').replace(/"/g, '') || 'geom';
+    await db.execute(sql.raw(
+      `ALTER TABLE ${tableFq}
+       ALTER COLUMN "${gcol}" TYPE geometry(Geometry, ${srid})
+       USING CASE
+         WHEN "${gcol}" IS NULL THEN NULL
+         ELSE ST_SetSRID("${gcol}"::geometry, ${srid})
+       END`
+    ));
+  } catch {
+    /* geometry_columns 없거나 ALTER 실패 시 INSERT/UPDATE에서 노출 */
+  }
+}
+
+/** sync 반영·롤백 등 geom 쓰기 전: 테이블 resolve + geom 타입 제한 해제 */
+async function resolveSyncTableForWrite(
+  tableGuess: string,
+): Promise<
+  | { fq: string; schema: 'layer' | 'public_layer'; table: string; colMap: SyncColNameMap }
+  | { error: string }
+> {
+  const resolved = await resolveSyncTableWithColumns(tableGuess);
+  if ('error' in resolved) return resolved;
+  await ensureLayerGeomColumnUnrestricted(resolved.schema, resolved.table, resolved.fq);
+  return resolved;
+}
+
 function pickSyncDataVal(data: Record<string, unknown>, col: string): unknown {
   if (Object.prototype.hasOwnProperty.call(data, col)) return data[col];
   const found = Object.keys(data).find((k) => k.toLowerCase() === col.toLowerCase());
@@ -803,6 +884,8 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
   } catch {
     // ignore
   }
+  const layerNameSet = new Set(layerNames.map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean));
+  const styleNameSet = new Set(styleNames.map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean));
 
   const tablesBySchema: Record<'layer' | 'public_layer', Set<string>> = {
     layer: new Set(),
@@ -886,10 +969,8 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
       epsg,
       geometryType,
       table: hasTable,
-      layer: layerNames.includes(dbTableName) || layerNames.includes(basename),
-      style: styleNames.some(
-        (s) => s.toLowerCase() === dbTableName || s.toLowerCase() === basename.toLowerCase()
-      ),
+      layer: layerNameSet.has(dbTableName) || layerNameSet.has(basename.toLowerCase()),
+      style: styleNameSet.has(dbTableName) || styleNameSet.has(basename.toLowerCase()),
       define: inDefine && hasDefineFields,
     });
   }
@@ -1034,9 +1115,111 @@ export async function getShpGeometryType(absoluteShpPath: string): Promise<ShpGe
   return 'POLYGON';
 }
 
+/** shp/shx/dbf 중 하나라도 없거나 0바이트면 ogr2ogr로 열 수 없음 */
+function isShpBundleEmptyOrUnreadable(dir: string, basename: string): boolean {
+  for (const ext of ['.shp', '.shx', '.dbf'] as const) {
+    const p = path.join(dir, basename + ext);
+    try {
+      if (fsSync.statSync(p).size === 0) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 빈·손상 SHP용: ogr2ogr 대신 ogc_fid+geom만 있는 빈 테이블 생성 (-overwrite와 동일하게 기존 테이블 교체) */
+async function createEmptyLayerTableFromShp(dbSchema: string, tableName: string): Promise<void> {
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const safeSchema = String(dbSchema).replace(/"/g, '');
+  const safeTable = String(tableName).replace(/"/g, '');
+  const fq = `"${safeSchema}"."${safeTable}"`;
+  await db.execute(sql.raw(`DROP TABLE IF EXISTS ${fq}`));
+  await db.execute(sql.raw(
+    `CREATE TABLE ${fq} (
+      ogc_fid serial PRIMARY KEY,
+      geom geometry(Geometry, ${SHP_UPLOAD_TARGET_SRID})
+    )`
+  ));
+}
+
+/**
+ * 0바이트·손상 SHP용: 대상 레이어와 동일 스키마의 빈 `_sync_*` 임시 테이블.
+ * 키·속성 컬럼이 있어야 정합성 비교(전체 삭제 후보)가 이어진다.
+ */
+async function createEmptySyncTempFromLayer(
+  dbSchema: string,
+  tableName: string,
+  syncTableName: string,
+): Promise<void> {
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const safeSchema = String(dbSchema).replace(/"/g, '');
+  const safeTable = String(tableName).replace(/"/g, '');
+  const safeSync = String(syncTableName).replace(/"/g, '');
+  await db.execute(sql.raw(`DROP TABLE IF EXISTS "${safeSchema}"."${safeSync}"`));
+  await db.execute(sql.raw(
+    `CREATE TABLE "${safeSchema}"."${safeSync}" (LIKE "${safeSchema}"."${safeTable}" INCLUDING DEFAULTS)`
+  ));
+}
+
+/** DBF 수치 필드(N/F). width=전체 폭, scale=소수 자리(헤더). */
+type DbfNumericField = { name: string; width: number; scale: number };
+
+/**
+ * .dbf 헤더에서 수치 필드 목록 읽기.
+ * Real(22.28)처럼 scale≥width 인 깨진 메타를 COLUMN_TYPES로 고칠 때 사용.
+ */
+function readDbfNumericFields(dir: string, basename: string): DbfNumericField[] {
+  const dbfPath = path.join(dir, `${basename}.dbf`);
+  try {
+    if (!fsSync.existsSync(dbfPath)) return [];
+    const buf = fsSync.readFileSync(dbfPath);
+    if (buf.length < 32) return [];
+    const headerLen = buf.readUInt16LE(8);
+    const out: DbfNumericField[] = [];
+    for (let pos = 32; pos + 32 <= headerLen && pos + 32 <= buf.length && buf[pos] !== 0x0d; pos += 32) {
+      const name = buf.subarray(pos, pos + 11).toString('ascii').replace(/\0.*$/, '').trim();
+      const typ = String.fromCharCode(buf[pos + 11] ?? 0).toUpperCase();
+      const width = buf[pos + 16] ?? 0;
+      const scale = buf[pos + 17] ?? 0;
+      if (!name || (typ !== 'N' && typ !== 'F')) continue;
+      out.push({ name, width, scale });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * DBF 수치 헤더가 깨졌는지 (scale≥width 또는 scale>15).
+ * 깨진 필드는 자릿수 없는 NUMERIC으로 올려 오버플로우를 피한다.
+ */
+function isBrokenDbfNumericMeta(width: number, scale: number): boolean {
+  const w = width > 0 ? width : 18;
+  const sc = scale < 0 ? 0 : scale;
+  return sc >= w || sc > 15;
+}
+
+/** ogr2ogr `-lco COLUMN_TYPES=…` — 비정상 수치 필드만 `NUMERIC`(자릿수 제한 없음). 없으면 null */
+function buildNumericColumnTypesLco(dir: string, basename: string): string | null {
+  const parts: string[] = [];
+  for (const f of readDbfNumericFields(dir, basename)) {
+    if (!isBrokenDbfNumericMeta(f.width, f.scale)) continue;
+    // OGR/PG 식별자: 쉼표·공백 없는 일반 SHP 필드명만
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(f.name)) continue;
+    parts.push(`${f.name}=NUMERIC`);
+  }
+  return parts.length > 0 ? parts.join(',') : null;
+}
+
 /**
  * GDAL ogr2ogr로 SHP → PostGIS layer 스키마 테이블 생성
  * - ogr2ogr 실행 파일: GGNR_GDAL_OGR2OGR 환경변수 또는 PATH의 ogr2ogr
+ * - Real(폭·소수 자리 비정상)은 COLUMN_TYPES로 자릿수 없는 NUMERIC (FLOAT8 전환 없음)
+ * - 0바이트·open 실패 SHP는 ogc_fid+geom 빈 테이블로 폴백
  */
 export async function createTableFromShp(params: {
   pathOrResult: string;
@@ -1049,7 +1232,6 @@ export async function createTableFromShp(params: {
 
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
-  const normalizedName = safeTableName(basename);
   const tableName = safeTableName(basename);
 
   try {
@@ -1062,6 +1244,7 @@ export async function createTableFromShp(params: {
   const dir = path.dirname(absolutePath);
   const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
   let dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
+  const columnTypesLco = buildNumericColumnTypesLco(dir, basename);
 
   const db = getDbConfig();
   const pgConnection = `PG:host=${db.host} port=${db.port} dbname=${db.database} user=${db.user} password=${db.password}`;
@@ -1099,6 +1282,8 @@ export async function createTableFromShp(params: {
         ...(sourceSrs ? (['-s_srs', sourceSrs] as const) : []),
         '-t_srs', targetSrs,
         '-lco', 'GEOMETRY_NAME=geom',
+        // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (PRECISION=NO/FLOAT8 사용 안 함)
+        ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
         '-overwrite',
       ];
       const execArgs = ogr2ogrRunPrefix.length > 0 ? [...ogr2ogrRunPrefix, ...ogr2ogrArgs] : ogr2ogrArgs;
@@ -1136,19 +1321,30 @@ export async function createTableFromShp(params: {
     return raw;
   };
 
-  let result = await runOgr2ogr(dbfEncoding);
-
-  // UTF-8 오판 시 PG 드라이버 Non UTF-8 → CP949로 1회 재시도
-  const isNonUtf8 =
-    result.code !== 0 && /Non UTF-8 content found/i.test(result.stderr ?? '');
-  if (isNonUtf8 && dbfEncoding.toUpperCase().replace(/_/g, '') !== 'CP949') {
-    dbfEncoding = 'CP949';
+  const emptyBundle = isShpBundleEmptyOrUnreadable(dir, basename);
+  let result: { code: number; stderr: string };
+  if (emptyBundle) {
+    result = { code: -1, stderr: 'empty or missing shp/shx/dbf' };
+  } else {
     result = await runOgr2ogr(dbfEncoding);
   }
 
   if (result.code !== 0) {
-    return { success: false, error: mapOgrError(result.code, result.stderr) };
+    const openFail = /Unable to open datasource/i.test(result.stderr ?? '');
+    if (emptyBundle || openFail) {
+      try {
+        await createEmptyLayerTableFromShp(dbSchema, tableName);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: `빈 SHP 테이블 생성 실패: ${msg}` };
+      }
+    } else {
+      return { success: false, error: mapOgrError(result.code, result.stderr) };
+    }
   }
+
+  // ogr2ogr가 MultiPolygon 등으로 typmod를 고정해도 Point/Line 재업로드가 되도록 Geometry로 승격
+  await ensureLayerGeomColumnUnrestricted(dbSchema, tableName);
 
   // 업로드에서 스키마를 명시했으면 defineLayer에 반영 (신규·기존 빈 값·강제 갱신)
   if (params.dbSchema === 'public_layer' || params.dbSchema === 'layer') {
@@ -1240,6 +1436,11 @@ function ensureDefineLayerEntry(
     const srcNorm = String(row.define_table_source ?? '').toLowerCase();
     if (srcNorm !== 'excel' && row.define_table_source !== 'shp') {
       row.define_table_source = 'shp';
+      mutated = true;
+    }
+    // LINE↔POLYGON 등 재업로드 시 define 도형 타입도 최신 SHP 기준으로 갱신
+    if (geometryType && String(row.define_table_shp_type ?? '').trim().toUpperCase() !== shpType) {
+      row.define_table_shp_type = shpType;
       mutated = true;
     }
     const curSchema = String(row.define_table_schema ?? '').trim();
@@ -2070,7 +2271,11 @@ export async function getLayerStatusList(params?: {
       if (lr.ok) {
         const ld = await lr.json();
         const arr = ld?.layers?.layer ?? ld?.layers ?? [];
-        geoLayerSet = new Set((Array.isArray(arr) ? arr : []).map((l: { name?: string }) => l?.name ?? String(l)));
+        geoLayerSet = new Set(
+          (Array.isArray(arr) ? arr : [])
+            .map((l: { name?: string }) => String(l?.name ?? l ?? '').trim().toLowerCase())
+            .filter(Boolean)
+        );
       }
     } catch { /* ignore */ }
     try {
@@ -2079,7 +2284,9 @@ export async function getLayerStatusList(params?: {
         const sd = await sr.json();
         const arr = sd?.styles?.style ?? sd?.style ?? [];
         geoStyleSet = new Set(
-          (Array.isArray(arr) ? arr : []).map((s: { name?: string }) => s?.name ?? '')
+          (Array.isArray(arr) ? arr : [])
+            .map((s: { name?: string }) => String(s?.name ?? '').trim().toLowerCase())
+            .filter(Boolean)
         );
       }
     } catch { /* ignore */ }
@@ -2111,8 +2318,8 @@ export async function getLayerStatusList(params?: {
           geometryType: geomTypes[t.table] ?? null,
           shpType: def?.shpType ?? '',
           table: true,
-          layer: geoLayerSet.has(t.table),
-          style: geoStyleSet.has(t.table),
+          layer: geoLayerSet.has(String(t.table).toLowerCase()),
+          style: geoStyleSet.has(String(t.table).toLowerCase()),
           define: defineMap.has(t.table) && defineFieldSet.has(t.table),
           updatedAt: updateDates[t.table.toLowerCase()] ?? null,
           dbSchema,
@@ -2967,31 +3174,44 @@ async function importShpToSyncTempForHydrate(params: {
   const dbSchema = await resolveDefineTableSchema(tableName);
   const dir = path.dirname(absolutePath);
   const basename = path.basename(pathOrResult, '.shp');
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
-  const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
-  if (!srsArgs) {
-    return {
-      success: false,
-      error: '소스 좌표계를 알 수 없습니다. 비교 시 선택한 EPSG가 sync_log에 없거나 .prj가 없습니다.',
-    };
-  }
-  const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
-  const dbCfg = getDbConfig();
-  const pgConnection = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
 
   await dropShpSyncTempTable(dbSchema, syncTableName);
-  const importResult = await runOgr2ogr([
-    '-f', 'PostgreSQL', pgConnection, absolutePath,
-    '-oo', `ENCODING=${dbfEncoding}`,
-    '-nlt', 'PROMOTE_TO_MULTI',
-    '-nln', `${dbSchema}.${syncTableName}`,
-    ...srsArgs,
-    '-lco', 'GEOMETRY_NAME=geom',
-    '-lco', 'PG_USE_COPY=YES',
-    '-overwrite',
-  ]);
-  if (importResult.code !== 0) {
-    return { success: false, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+  if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+    // 0바이트 SHP: 좌표계·ogr2ogr 없이 레이어 스키마 복제 빈 임시 테이블
+    try {
+      await createEmptySyncTempFromLayer(dbSchema, tableName, syncTableName);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { success: false, error: `빈 SHP 임시 테이블 생성 실패: ${msg}` };
+    }
+  } else {
+    const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
+    const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
+    if (!srsArgs) {
+      return {
+        success: false,
+        error: '소스 좌표계를 알 수 없습니다. 비교 시 선택한 EPSG가 sync_log에 없거나 .prj가 없습니다.',
+      };
+    }
+    const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
+    const columnTypesLco = buildNumericColumnTypesLco(dir, basename);
+    const dbCfg = getDbConfig();
+    const pgConnection = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
+
+    const importResult = await runOgr2ogr([
+      '-f', 'PostgreSQL', pgConnection, absolutePath,
+      '-oo', `ENCODING=${dbfEncoding}`,
+      '-nlt', 'PROMOTE_TO_MULTI',
+      '-nln', `${dbSchema}.${syncTableName}`,
+      ...srsArgs,
+      '-lco', 'GEOMETRY_NAME=geom',
+      // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (본 업로드와 동일)
+      ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
+      '-overwrite',
+    ]);
+    if (importResult.code !== 0) {
+      return { success: false, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+    }
   }
 
   const syncColumns = await fetchInfoSchemaColumns(dbSchema, syncTableName);
@@ -3410,24 +3630,40 @@ export async function compareShpWithTable(params: {
     await dropShpSyncTempTable(dbSchema, matchTableName);
     timing.mark('dropTemp');
 
-    const importResult = await runOgr2ogr([
-      '-f', 'PostgreSQL', pgConnection, absolutePath,
-      '-oo', `ENCODING=${dbfEncoding}`,
-      '-nlt', 'PROMOTE_TO_MULTI',
-      '-nln', `${dbSchema}.${syncTableName}`,
-      ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
-      '-t_srs', targetSrs,
-      '-lco', 'GEOMETRY_NAME=geom',
-      '-lco', 'PG_USE_COPY=YES',
-      '-overwrite',
-    ]);
-    syncImportAttempted = true;
-    timing.mark('ogr2ogrImport');
+    if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+      // 0바이트 SHP: 빈 sync로 비교 계속 → DB 기존 행은 전부 삭제 후보
+      try {
+        await createEmptySyncTempFromLayer(dbSchema, tableName, syncTableName);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        timing.flush({ success: false, error: 'empty_shp_sync_create_failed' });
+        flushed = true;
+        return { ...empty, error: `빈 SHP 임시 테이블 생성 실패: ${msg}` };
+      }
+      syncImportAttempted = true;
+      timing.mark('ogr2ogrImport');
+    } else {
+      const columnTypesLco = buildNumericColumnTypesLco(dir, basename);
+      const importResult = await runOgr2ogr([
+        '-f', 'PostgreSQL', pgConnection, absolutePath,
+        '-oo', `ENCODING=${dbfEncoding}`,
+        '-nlt', 'PROMOTE_TO_MULTI',
+        '-nln', `${dbSchema}.${syncTableName}`,
+        ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
+        '-t_srs', targetSrs,
+        '-lco', 'GEOMETRY_NAME=geom',
+        // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (본 업로드와 동일)
+        ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
+        '-overwrite',
+      ]);
+      syncImportAttempted = true;
+      timing.mark('ogr2ogrImport');
 
-    if (importResult.code !== 0) {
-      timing.flush({ success: false, error: 'ogr2ogr_import_failed' });
-      flushed = true;
-      return { ...empty, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+      if (importResult.code !== 0) {
+        timing.flush({ success: false, error: 'ogr2ogr_import_failed' });
+        flushed = true;
+        return { ...empty, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+      }
     }
 
     const { db } = await import('@/database/db');
@@ -4189,7 +4425,7 @@ export async function applySyncEntries(params: {
       const key = tbl.toLowerCase();
       const cached = tableCache.get(key);
       if (cached) return cached;
-      const resolved = await resolveSyncTableWithColumns(tbl);
+      const resolved = await resolveSyncTableForWrite(tbl);
       if ('error' in resolved) return resolved;
       const entry = { fq: resolved.fq, colMap: resolved.colMap };
       tableCache.set(key, entry);
@@ -4233,7 +4469,19 @@ export async function applySyncEntries(params: {
       const newData = newPrepared.data;
 
       if (!oldData && newData) {
-        const cols = filterColsToTable(Object.keys(newData), colMap);
+        // ogc_fid는 INSERT에서 제외하는 것이 기본이나, key가 ogc_fid이면
+        // SHP 쪽 번호를 넣지 않으면 serial이 새로 발급되어 이력 key와 불일치한다.
+        const keyIsOgcFid = kf.toLowerCase() === 'ogc_fid';
+        const fidCol = colMap.get('ogc_fid') ?? 'ogc_fid';
+        const insertData: Record<string, unknown> = { ...newData };
+        let cols = filterColsToTable(Object.keys(newData), colMap);
+        if (keyIsOgcFid) {
+          const kvNum = Number(String(kv).trim());
+          insertData[fidCol] = Number.isFinite(kvNum) ? Math.trunc(kvNum) : String(kv).trim();
+          if (!cols.some((c) => c.toLowerCase() === 'ogc_fid')) {
+            cols = [...cols, fidCol];
+          }
+        }
         if (cols.length === 0) {
           return {
             success: false,
@@ -4244,7 +4492,7 @@ export async function applySyncEntries(params: {
           };
         }
         const colNames = cols.map((c) => `"${c}"`).join(', ');
-        const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(newData, c))).join(', ');
+        const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(insertData, c))).join(', ');
         await db.execute(sql.raw(`INSERT INTO ${fq} (${colNames}) VALUES (${vals})`));
         await db.execute(sql.raw(
           `UPDATE sync_log SET sl_operation = 'append', sl_applied_at = NOW(), sl_dh_key = ${dhKeyVal} WHERE sl_key = ${log.sl_key}`
@@ -4404,7 +4652,7 @@ async function mirrorShpDhKeyToDataLog(params: {
     const already = await db.execute(sql.raw(
       `SELECT 1 AS ok FROM data_log WHERE dl_batch_key = '${batchKey.replace(/'/g, "''")}' LIMIT 1`
     ));
-    if ((already.rows as unknown[])?.length) return;
+    const alreadyMirrored = !!((already.rows as unknown[])?.length);
 
     let logUser = String(params.logUser ?? '').trim() || null;
     let group = String(params.group ?? '').trim() || null;
@@ -4433,50 +4681,83 @@ async function mirrorShpDhKeyToDataLog(params: {
       if (!tableKorName) tableKorName = String(meta?.dh_kor_name ?? '').trim() || null;
     }
 
-    const safeTbl = params.tableName.replace(/'/g, "''");
-    const res = await db.execute(sql.raw(
-      `SELECT sl_key, sl_key_field, sl_key_value, sl_operation, sl_old_data, sl_new_data
-       FROM sync_log
-       WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
-         AND LOWER(sl_table_name) = LOWER('${safeTbl}')
-         AND sl_operation IS NOT NULL
-         AND sl_operation <> 'kept'
-         AND sl_applied_at IS NOT NULL`
-    ));
-    const rawRows = res.rows as Array<{
-      sl_key: number;
-      sl_key_field: string;
-      sl_key_value: string;
-      sl_operation: string;
-      sl_old_data: Record<string, unknown> | null;
-      sl_new_data: Record<string, unknown> | null;
-    }>;
-    const rows = [];
-    for (const r of rawRows) {
-      const hydrated = await hydrateSyncRowFullGeom({
-        slKey: r.sl_key,
-        oldData: r.sl_old_data,
-        newData: r.sl_new_data,
-      });
-      rows.push({
-        keyField: r.sl_key_field,
-        keyValue: r.sl_key_value,
-        operation: r.sl_operation,
-        oldData: hydrated.oldData,
-        newData: hydrated.newData,
-      });
+    if (!alreadyMirrored) {
+      const safeTbl = params.tableName.replace(/'/g, "''");
+      const res = await db.execute(sql.raw(
+        `SELECT sl_key, sl_key_field, sl_key_value, sl_operation, sl_old_data, sl_new_data
+         FROM sync_log
+         WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
+           AND LOWER(sl_table_name) = LOWER('${safeTbl}')
+           AND sl_operation IS NOT NULL
+           AND sl_operation <> 'kept'
+           AND sl_applied_at IS NOT NULL`
+      ));
+      const rawRows = res.rows as Array<{
+        sl_key: number;
+        sl_key_field: string;
+        sl_key_value: string;
+        sl_operation: string;
+        sl_old_data: Record<string, unknown> | null;
+        sl_new_data: Record<string, unknown> | null;
+      }>;
+      const rows = [];
+      for (const r of rawRows) {
+        const hydrated = await hydrateSyncRowFullGeom({
+          slKey: r.sl_key,
+          oldData: r.sl_old_data,
+          newData: r.sl_new_data,
+        });
+        rows.push({
+          keyField: r.sl_key_field,
+          keyValue: r.sl_key_value,
+          operation: r.sl_operation,
+          oldData: hydrated.oldData,
+          newData: hydrated.newData,
+        });
+      }
+      if (rows.length > 0) {
+        await recordDataLogsFromSyncStyleRows({
+          source: 'SHP 업로드',
+          tableName: params.tableName,
+          tableKorName,
+          group,
+          batchKey,
+          serviceName: 'SHP 업로드',
+          user: logUser,
+          rows,
+        });
+      }
     }
-    if (rows.length === 0) return;
-    await recordDataLogsFromSyncStyleRows({
-      source: 'SHP 업로드',
-      tableName: params.tableName,
-      tableKorName,
-      group,
-      batchKey,
-      serviceName: 'SHP 업로드',
-      user: logUser,
-      rows,
-    });
+
+    try {
+      const safeTbl = params.tableName.replace(/'/g, "''");
+      const kfRes = await db.execute(sql.raw(
+        `SELECT sl_key_field
+         FROM sync_log
+         WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
+           AND LOWER(sl_table_name) = LOWER('${safeTbl}')
+           AND sl_key_field IS NOT NULL
+           AND btrim(sl_key_field) <> ''
+         LIMIT 1`
+      ));
+      const keyField = String(
+        (kfRes.rows as Array<{ sl_key_field?: string }>)[0]?.sl_key_field ?? ''
+      ).trim();
+      if (keyField) {
+        const { captureBatchSnapshot } = await import('./batchSnapshotService');
+        await captureBatchSnapshot({
+          batchKey,
+          tableName: params.tableName,
+          keyField,
+          user: logUser,
+          source: 'SHP 업로드',
+          group,
+          tableKorName,
+        });
+      }
+    } catch (snapErr) {
+      console.warn('[mirrorShpDhKeyToDataLog] snapshot', snapErr instanceof Error ? snapErr.message : snapErr);
+    }
   } catch (e) {
     console.warn('[mirrorShpDhKeyToDataLog]', e instanceof Error ? e.message : e);
   }
@@ -5390,7 +5671,7 @@ export async function rollbackSyncRows(params: {
       const key = tbl.toLowerCase();
       const cached = tableCache.get(key);
       if (cached) return cached;
-      const resolved = await resolveSyncTableWithColumns(tbl);
+      const resolved = await resolveSyncTableForWrite(tbl);
       if ('error' in resolved) return resolved;
       const entry = { fq: resolved.fq, colMap: resolved.colMap };
       tableCache.set(key, entry);
@@ -5524,7 +5805,7 @@ export async function reapplySyncRows(params: {
       const key = tbl.toLowerCase();
       const cached = tableCache.get(key);
       if (cached) return cached;
-      const resolved = await resolveSyncTableWithColumns(tbl);
+      const resolved = await resolveSyncTableForWrite(tbl);
       if ('error' in resolved) return resolved;
       const entry = { fq: resolved.fq, colMap: resolved.colMap };
       tableCache.set(key, entry);

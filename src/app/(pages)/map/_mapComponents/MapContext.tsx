@@ -9,6 +9,7 @@ import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import { cloneRoadNetworkRows } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
+import type { MapHitOverlapOption } from './MapHitOverlapSelect';
 
 export type RoadCctvOverlayState = {
   items: ItsCctvItem[];
@@ -218,9 +219,14 @@ export type MapContextValue = {
     | ((pick: {
         consCode: string;
         extent3857?: [number, number, number, number] | null;
+        /** 겹친 도형 후보(2건 이상이면 상세 상단 선택) */
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
+  /** 지도 클릭 겹침 후보 — 울진 하천점용 상세 상단 select */
+  usageDataAsMapHitOptions: MapHitOverlapOption[];
+  setUsageDataAsMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 공통 점용대장 패널(URL opened=occupationLedger) 열림 */
   occupationLedgerPanelOpen: boolean;
   setOccupationLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -232,9 +238,31 @@ export type MapContextValue = {
     | ((pick: {
         rowKey: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >;
+  /** 지도 클릭 겹침 후보 — 공통 점용 상세 상단 select */
+  occupationLedgerMapHitOptions: MapHitOverlapOption[];
+  setOccupationLedgerMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
+  /** 점사용료 패널(URL opened=*NglFeeList) 열림 */
+  useFeePanelOpen: boolean;
+  setUseFeePanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 점사용료 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (UseFeeListPanel이 등록)
+   */
+  applyUseFeeMapPickRef: MutableRefObject<
+    | ((pick: {
+        id: string;
+        extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >;
+  /** 지도 클릭 겹침 후보 — 점사용료 상세 상단 select */
+  useFeeMapHitOptions: MapHitOverlapOption[];
+  setUseFeeMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 도로대장 패널(URL opened) 열림 — 지도 식별 시 a0020000만 상세로 보내기 */
   roadLedgerPanelOpen: boolean;
   setRoadLedgerPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -351,6 +379,14 @@ export type MapContextValue = {
   layerRowGeomEditWktRef: MutableRefObject<string | null>;
   /** 사용자가 도형을 실제로 변경했는지 (로드만 한 경우 false) */
   layerRowGeomEditDirtyRef: MutableRefObject<boolean>;
+  /**
+   * 도형 그리기/수정 완료 시 상세 패널 콜백 (점용장소 중심주소 등).
+   * Handler가 호출 — 패널이 등록.
+   */
+  layerRowGeomDrawnRef: MutableRefObject<
+    | ((info: { wkt5181: string; source: "draw" | "modify" }) => void)
+    | null
+  >;
   /** 도형 영역 필지 자동/수동 반영 → 상세 패널 필지목록 */
   layerRowParcelApplyRef: MutableRefObject<
     | ((
@@ -418,6 +454,8 @@ export type LayerRowGeomEditState = {
   seedWkt5181?: string | null;
   /** true면 getTableRowGeomGeoJson3857 호출 생략 */
   protoGeom?: boolean;
+  /** true면 기존 도형 없어도 수정 세션 유지(도형추가로 입력) */
+  allowEmptyGeom?: boolean;
 } | null;
 
 const MapContext = createContext<MapContextValue | null>(null);
@@ -484,17 +522,33 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     | ((pick: {
         consCode: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [usageDataAsMapHitOptions, setUsageDataAsMapHitOptions] = useState<MapHitOverlapOption[]>([]);
   const [occupationLedgerPanelOpen, setOccupationLedgerPanelOpen] = useState(false);
   const applyOccupationLedgerMapPickRef = useRef<
     | ((pick: {
         rowKey: string;
         extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
       }) => void)
     | null
   >(null);
+  const [occupationLedgerMapHitOptions, setOccupationLedgerMapHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
+  const [useFeePanelOpen, setUseFeePanelOpen] = useState(false);
+  const applyUseFeeMapPickRef = useRef<
+    | ((pick: {
+        id: string;
+        extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >(null);
+  const [useFeeMapHitOptions, setUseFeeMapHitOptions] = useState<MapHitOverlapOption[]>([]);
   const [roadLedgerPanelOpen, setRoadLedgerPanelOpen] = useState(false);
   const [roadLedgerIdentifyRow, setRoadLedgerIdentifyRow] = useState<Record<string, unknown> | null>(null);
   const [roadLedgerFacilityModal, setRoadLedgerFacilityModal] = useState<{
@@ -551,6 +605,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
   const layerRowGeomEditDirtyRef = useRef(false);
+  const layerRowGeomDrawnRef = useRef<
+    | ((info: { wkt5181: string; source: "draw" | "modify" }) => void)
+    | null
+  >(null);
   const layerRowParcelApplyRef = useRef<
     | ((
         items: {
@@ -660,9 +718,18 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         usageDataAsPanelOpen,
         setUsageDataAsPanelOpen,
         applyUsageDataAsMapPickRef,
+        usageDataAsMapHitOptions,
+        setUsageDataAsMapHitOptions,
         occupationLedgerPanelOpen,
         setOccupationLedgerPanelOpen,
         applyOccupationLedgerMapPickRef,
+        occupationLedgerMapHitOptions,
+        setOccupationLedgerMapHitOptions,
+        useFeePanelOpen,
+        setUseFeePanelOpen,
+        applyUseFeeMapPickRef,
+        useFeeMapHitOptions,
+        setUseFeeMapHitOptions,
         roadLedgerPanelOpen,
         setRoadLedgerPanelOpen,
         roadLedgerIdentifyRow,
@@ -717,6 +784,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,
         layerRowGeomEditDirtyRef,
+        layerRowGeomDrawnRef,
         layerRowParcelApplyRef,
         layerRowParcelRemoveRef,
         layerRowDraftParcels,

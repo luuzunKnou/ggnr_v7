@@ -291,7 +291,7 @@ export function RoadCctvPanel({ onClose }: Props) {
             {error}
           </div>
         )}
-        <ul className="min-h-0 flex-1 overflow-y-auto">
+        <ul className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           {items.map((it) => {
             const active = it.key === selectedKey;
             return (

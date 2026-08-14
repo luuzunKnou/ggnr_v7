@@ -15,7 +15,7 @@ type Props = {
   isEditing: boolean
   items: LayerRowParcelItem[]
   selectedIdx?: number | null
-  /** 목록 행 선택 강조 — 물건지는 yellow */
+  /** 목록 행 선택 강조 — primary(파랑) / yellow */
   selectionTone?: 'primary' | 'yellow'
   onAdd?: () => void
   onRemove?: (index: number) => void

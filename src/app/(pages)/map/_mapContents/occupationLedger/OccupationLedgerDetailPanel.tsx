@@ -21,6 +21,7 @@ import { UsageDataAsAddressList } from '../river/usageDataAs/UsageDataAsAddressL
 import { OccupationLedgerAttributeSection } from './OccupationLedgerAttributeSection';
 import { fitMapToLayerRowParcel } from '../../_mapComponents/layerRowEdit/layerRowParcelUtils';
 import { resolveParcelGeoms } from '../../_mapComponents/layerRowEdit/resolveParcelGeoms';
+import { resolveParcelItemIntersectParentForHighlight } from '../../_mapComponents/layerRowEdit/resolveParcelItemIntersectParentForHighlight';
 import {
   useLayerRowParcelHighlight,
   type LayerRowParcelHighlightVariant,
@@ -34,7 +35,12 @@ import {
   refreshOccupationLedgerMapView,
 } from './occupationLedgerMapSync';
 import { useOccupationLedgerParentGeomHighlight } from './useOccupationLedgerParentGeomHighlight';
+import { MapHitOverlapSelect } from '../../_mapComponents/MapHitOverlapSelect';
 import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
+import { currentPermitYear } from '@/lib/occupationPermitNo';
+import { useAutoOccupationPermitNo } from '../../_mapComponents/layerRowEdit/useAutoOccupationPermitNo';
+import { useLayerRowPlaceFromGeom } from '../../_mapComponents/layerRowEdit/useLayerRowPlaceFromGeom';
+import { computeAreaSqmFromWkt5181 } from '../../_mapComponents/analysisArea';
 
 function draftFieldValue(draft: Record<string, string>, fieldLower: string): string {
   if (fieldLower in draft) return draft[fieldLower] ?? '';
@@ -50,6 +56,7 @@ type Props = {
   detailId: string;
   serEng: string;
   onClose: () => void;
+  onSelectDetailId?: (id: string) => void;
   onSaved?: () => void;
   onCreated?: (newKey: string) => void;
   onDeleted?: () => void;
@@ -87,11 +94,13 @@ export function OccupationLedgerDetailPanel({
   detailId,
   serEng,
   onClose,
+  onSelectDetailId,
   onSaved,
   onCreated,
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
+  const hitOptions = mapContext?.occupationLedgerMapHitOptions ?? [];
   const binding = getOccupationLedgerBinding({ serEng });
   const presetKey = (binding?.editPresetKey ?? 'waterOccupationLedger') as LayerRowEditPresetKey;
   const preset = LAYER_ROW_EDIT_PRESETS[presetKey] ?? LAYER_ROW_EDIT_PRESETS.waterOccupationLedger;
@@ -116,6 +125,8 @@ export function OccupationLedgerDetailPanel({
   const [highlightParcel, setHighlightParcel] = useState<LayerRowParcelItem | null>(null);
   const [highlightVariant, setHighlightVariant] = useState<LayerRowParcelHighlightVariant>('blue');
   const [showParentGeom, setShowParentGeom] = useState(true);
+  const [nextKey, setNextKey] = useState('');
+  const [nextPermitNo, setNextPermitNo] = useState('');
 
   const {
     selectParcel: selectSoloParcel,
@@ -232,10 +243,54 @@ export function OccupationLedgerDetailPanel({
     ]
   );
 
+  useEffect(() => {
+    if (!isCreateMode) {
+      setNextKey('');
+      setNextPermitNo('');
+      return;
+    }
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'occupationLedgerService',
+      action: 'getNextOccupationLedgerKey',
+      params: { serEng },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setNextKey(String(data?.key ?? '').trim());
+      })
+      .catch(() => {
+        if (!cancelled) setNextKey('');
+      });
+    void call('', 'POST', {
+      service: 'occupationLedgerService',
+      action: 'getNextOccupationLedgerPermitNo',
+      params: { year: currentPermitYear(), serEng },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setNextPermitNo(String(data?.permitNo ?? '').trim());
+      })
+      .catch(() => {
+        if (!cancelled) setNextPermitNo('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateMode, serEng]);
+
   const formAttributesForEdit = useMemo(() => {
-    if (isCreateMode) return formAttributes;
-    return attributes;
-  }, [attributes, formAttributes, isCreateMode]);
+    const base = isCreateMode ? formAttributes : attributes;
+    if (!isCreateMode) return base;
+    return base.map((row) => {
+      const fl = row.field.toLowerCase();
+      if (fl === 'id' && nextKey) return { ...row, value: nextKey };
+      if (fl === 'permit_no' && nextPermitNo) return { ...row, value: nextPermitNo };
+      return row;
+    });
+  }, [attributes, formAttributes, isCreateMode, nextKey, nextPermitNo]);
 
   const {
     isEditing,
@@ -296,8 +351,73 @@ export function OccupationLedgerDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집 모드·건 전환 시에만
   }, [isEditing, detailId]);
 
+  const startDateRaw = draftFieldValue(draft, 'perm_start_date');
+  const permitFieldKey = draftFieldKey(draft, 'permit_no');
+  const permitValue = draftFieldValue(draft, 'permit_no');
+
+  const fetchNextPermitNo = useCallback(
+    async (year: number) => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'occupationLedgerService',
+          action: 'getNextOccupationLedgerPermitNo',
+          params: {
+            year,
+            serEng,
+            excludeKey: isCreateMode ? undefined : detailId,
+          },
+        });
+        const data = res?.data ?? res;
+        const next = String(data?.permitNo ?? '').trim();
+        return next || null;
+      } catch {
+        return null;
+      }
+    },
+    [detailId, isCreateMode, serEng]
+  );
+
+  useAutoOccupationPermitNo({
+    enabled: isEditing,
+    sessionKey: `${serEng}:${detailId}:${isEditing ? 'edit' : 'view'}`,
+    startDateRaw,
+    permitValue,
+    permitFieldKey,
+    onSetPermit: handleDraftChange,
+    fetchNext: fetchNextPermitNo,
+    useCurrentYearWhenEmpty: isCreateMode,
+  });
+
+  const placeFieldKey = useMemo(() => {
+    const fromAttrs = formAttributesForEdit.find(
+      (a) => a.field.toLowerCase() === 'occup_place'
+    );
+    return fromAttrs?.field ?? 'occup_place';
+  }, [formAttributesForEdit]);
+
+  useLayerRowPlaceFromGeom({
+    enabled: isEditing,
+    placeFieldKey,
+    onSetPlace: handleDraftChange,
+    parcelAddresses: draftParcels.map((p) => p.address),
+  });
+
+  const handleAutoCalcArea = useCallback(
+    (field: string): string | null => {
+      const wkt = String(mapContext?.layerRowGeomEditWktRef?.current ?? '').trim();
+      if (!wkt) return '도형을 먼저 지정하거나 수정해 주세요.';
+      const areaSqm = computeAreaSqmFromWkt5181(wkt);
+      if (!Number.isFinite(areaSqm) || areaSqm <= 0) {
+        return '도형 면적을 계산할 수 없습니다.';
+      }
+      handleDraftChange(field, String(areaSqm));
+      return null;
+    },
+    [handleDraftChange, mapContext?.layerRowGeomEditWktRef]
+  );
+
   useLayerRowParcelHighlight(showParentGeom ? null : highlightParcel, highlightVariant);
-  useLayerRowParcelDraftPreview(draftMgj, 'yellow', isEditing);
+  useLayerRowParcelDraftPreview(draftMgj, 'red', isEditing);
   const { parentExtentRef } = useOccupationLedgerParentGeomHighlight(
     detailId,
     mainTable,
@@ -319,16 +439,12 @@ export function OccupationLedgerDetailPanel({
     const map = mapContext?.mapInstanceRef?.current;
     const ext = parentExtentRef.current;
     if (!map || !ext) return;
-    const lid = mainTable.toLowerCase();
-    mapContext?.setVisibleLayerNames?.((prev) => {
-      if (prev.has(lid)) return prev;
-      return new Set(prev).add(lid);
-    });
+    ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
     scheduleFitMapToExtent3857(map, ext, {
       maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
       applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
     });
-  }, [isEditing, mainTable, mapContext, parentExtentRef]);
+  }, [isEditing, mapContext, parentExtentRef, serEng]);
 
   useEffect(() => {
     if (isEditing) {
@@ -368,15 +484,15 @@ export function OccupationLedgerDetailPanel({
           prev.map((p) => (p.address.toLowerCase() === addrKey ? merged : p))
         );
         setShowParentGeom(false);
-        setHighlightVariant('yellow');
+        setHighlightVariant('red');
         setHighlightParcel(merged);
         clearSoloSelection();
+        ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
         const map = mapContext?.mapInstanceRef?.current;
         if (map) {
           fitMapToLayerRowParcel(map, merged, {
-            wmsLayerId: mgjTable,
-            setVisibleLayerNames: mapContext?.setVisibleLayerNames,
             applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+            enableWmsLayer: false,
           });
         }
       });
@@ -386,7 +502,7 @@ export function OccupationLedgerDetailPanel({
       mapContext?.applyMapViewPaddingRef,
       mapContext?.mapInstanceRef,
       mapContext?.setVisibleLayerNames,
-      mgjTable,
+      serEng,
     ]
   );
 
@@ -408,9 +524,34 @@ export function OccupationLedgerDetailPanel({
       clearMgjSelection();
       setShowParentGeom(false);
       setHighlightVariant('blue');
-      void selectSoloParcel(item, idx, { onHighlight: setHighlightParcel });
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      void (async () => {
+        const clipped = await resolveParcelItemIntersectParentForHighlight(item, {
+          childTable: jijukTable,
+          parentTable: mainTable,
+          parentKeyField: keyField,
+          parentKeyValue: detailId,
+        });
+        void selectSoloParcel(clipped, idx, {
+          onHighlight: setHighlightParcel,
+          enableWmsLayer: false,
+          useItemGeometry: true,
+        });
+      })();
     },
-    [clearMgjSelection, clearSoloSelection, focusParentGeomOnMap, selectSoloParcel, selectedSoloIdx]
+    [
+      clearMgjSelection,
+      clearSoloSelection,
+      detailId,
+      focusParentGeomOnMap,
+      jijukTable,
+      keyField,
+      mainTable,
+      mapContext?.setVisibleLayerNames,
+      selectSoloParcel,
+      selectedSoloIdx,
+      serEng,
+    ]
   );
 
   const handleSelectMgjParcel = useCallback(
@@ -422,10 +563,22 @@ export function OccupationLedgerDetailPanel({
       }
       clearSoloSelection();
       setShowParentGeom(false);
-      setHighlightVariant('yellow');
-      void selectMgjParcel(item, idx, { onHighlight: setHighlightParcel });
+      setHighlightVariant('red');
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      void selectMgjParcel(item, idx, {
+        onHighlight: setHighlightParcel,
+        enableWmsLayer: false,
+      });
     },
-    [clearMgjSelection, clearSoloSelection, focusParentGeomOnMap, selectMgjParcel, selectedMgjIdx]
+    [
+      clearMgjSelection,
+      clearSoloSelection,
+      focusParentGeomOnMap,
+      mapContext?.setVisibleLayerNames,
+      selectMgjParcel,
+      selectedMgjIdx,
+      serEng,
+    ]
   );
 
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
@@ -450,11 +603,21 @@ export function OccupationLedgerDetailPanel({
       <LayerRowEditHeader
         title={`${binding?.title ?? '점용'} 상세`}
         actionsPlacement="footer"
-        onClose={onClose}
+        onClose={() => {
+          mapContext?.setOccupationLedgerMapHitOptions?.([]);
+          onClose();
+        }}
         {...editToolbarProps}
       />
+      <MapHitOverlapSelect
+        fieldLabel="허가번호"
+        options={hitOptions}
+        value={detailId}
+        onChange={(id) => onSelectDetailId?.(id)}
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      {/* 울진하천 목록과 동일: overflow-auto scrollbar-thin (+ MapSideListPanel mr) */}
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs scrollbar-thin">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
@@ -480,6 +643,7 @@ export function OccupationLedgerDetailPanel({
               vworldApiKey={mapContext?.vworldApiKey ?? ''}
               onDraftChange={handleOccupationDraftChange}
               resetKey={detailId}
+              onAutoCalcArea={handleAutoCalcArea}
             />
 
             {(isEditing || !isCreateMode) && (
@@ -502,7 +666,7 @@ export function OccupationLedgerDetailPanel({
                 isEditing={isEditing}
                 items={mgjList}
                 selectedIdx={selectedMgjIdx}
-                selectionTone="yellow"
+                selectionTone="primary"
                 onAdd={isEditing ? () => setMgjAddModalOpen(true) : undefined}
                 onRemove={isEditing ? handleRemoveMgj : undefined}
                 onClick={handleSelectMgjParcel}

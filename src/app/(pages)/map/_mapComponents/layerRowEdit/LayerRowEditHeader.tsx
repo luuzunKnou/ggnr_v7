@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { LayerRowPanelButton } from "./LayerRowPanelButton";
 
 export type LayerRowEditToolbarProps = {
@@ -20,6 +21,7 @@ type HeaderProps = LayerRowEditToolbarProps & {
   onClose: () => void;
   /** header: 상단 제목줄 · footer: 하단 고정 툴바(헤더는 제목·닫기만) */
   actionsPlacement?: "header" | "footer";
+  className?: string;
 };
 
 export function LayerRowEditToolbar({
@@ -87,6 +89,7 @@ export function LayerRowEditHeader({
   onClose,
   editable = true,
   actionsPlacement = "header",
+  className,
 }: HeaderProps) {
   const busy = saving || deleting;
   const toolbarProps: LayerRowEditToolbarProps = {
@@ -102,7 +105,12 @@ export function LayerRowEditHeader({
   };
 
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5",
+        className
+      )}
+    >
       <span className="text-sm font-semibold text-slate-800">
         {isCreateMode ? `${title.replace(/ 상세$/, "")} 등록` : title}
       </span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { BookOpenText, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { LiveLogsPanel } from './LiveLogsPanel';
 import { ProgressStagesList, type StageItem } from './ProgressStagesList';
@@ -18,23 +18,21 @@ import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMac
 import { streamDownloadFile, streamDownloadResponse } from '@/lib/streamFileDownload';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
-  fetchGnmsLatestZipForBrowserSave,
+  fetchGnmsInstallZipViaLocal,
   notifyGnmsLatestDownloadCancel,
-  type GnmsClientConfigForDownload,
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
-import {
-  estimateRemainingByBytes,
-  estimateRemainingSeconds,
-  formatEtaMinutes,
-} from '@/lib/sourceProgressEta';
-
-const INSTALL_MANUAL_URL =
-  process.env.NEXT_PUBLIC_GGNR_INSTALL_MANUAL_URL?.trim() ||
-  'https://app.notion.com/p/daeguk/v7_-3a4f538d1f5980ceb743e8e410fb194d?source=copy_link';
 
 const HISTORY_OPTION_GNMS_LATEST = 'GNMS 최신';
+
+function openInstallManualPopup() {
+  window.open(
+    '/dev/install-manual',
+    'ggnrInstallManual',
+    'width=1200,height=800,scrollbars=yes,resizable=yes'
+  );
+}
 
 type DownloadSourceMode = 'gnms' | 'local';
 
@@ -55,24 +53,6 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
   return `${(n / (1024 * 1024)).toFixed(1)}MB`;
-}
-
-function estimateInstallZipTotalSeconds(
-  fileCount: number,
-  zipSizeBytes: number | undefined,
-  profile: SourcePackageProfile
-): number {
-  if (fileCount <= 0) return 0;
-  const closed = profile === 'closed';
-  const scanSec = Math.max(2, fileCount * 0.004);
-  const estZipBytes = zipSizeBytes ?? fileCount * (closed ? 100_000 : 6_000);
-  const zipSec = Math.max(
-    3,
-    fileCount * (closed ? 0.018 : 0.01) + (estZipBytes / (1024 * 1024)) * (closed ? 1.8 : 0.9)
-  );
-  const dlBytes = zipSizeBytes ?? estZipBytes * (closed ? 0.28 : 0.4);
-  const downloadSec = Math.max(2, (dlBytes / (1024 * 1024)) * 0.7);
-  return scanSec + zipSec + downloadSec;
 }
 
 function buildGnmsInstallBaseStages(): StageItem[] {
@@ -166,16 +146,15 @@ function ModeDescription({ mode }: { mode: DownloadSourceMode }) {
   if (mode === 'gnms') {
     return (
       <p className="text-xs text-muted-foreground">
-        GNMS에 올라간 최신 패키지를 받습니다. «소스코드 업로드»에서 제외된 파일·폴더는 포함되지
-        않습니다(예: .next, .git, 대용량·데이터 폴더, 업로드 시 node_modules 미포함이면 패키지 없음,
-        ggnr_start.bat 등). 설치 후 서버에서 별도 준비가 필요할 수 있습니다.
+        이 서버가 GNMS에 설치 ZIP을 요청한 뒤 브라우저로 전달합니다.<br />
+        GNMS에서 python/env의 분할 압축본을 ZIP에 포함시켜 제공하며, 설치 서버에서 시작 스크립트가 분할 압축을 복원합니다.
       </p>
     );
   }
   return (
     <p className="text-xs text-muted-foreground">
-      이 서버 워크스페이스를 지금 기준으로 설치용 ZIP으로 만듭니다. 폐쇄망/개방망으로 node_modules
-      포함 여부를 선택할 수 있습니다.
+      이 서버 워크스페이스를 지금 로컬 기준으로 설치용 ZIP으로 만듭니다.<br />
+      python/env 원본은 빼고 분할압축본을 생성합니다. 설치 서버에서 시작 스크립트가 분할 압축을 복원합니다.
     </p>
   );
 }
@@ -183,20 +162,16 @@ function ModeDescription({ mode }: { mode: DownloadSourceMode }) {
 function ProgressBar({
   pct,
   busy,
-  etaLabel,
 }: {
   pct: number | null;
   busy: boolean;
-  etaLabel?: string | null;
 }) {
   if (!busy || pct == null) return null;
   return (
     <div className="mt-2 rounded border bg-muted/20 px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-2 text-xs">
         <span className="flex shrink-0 items-center gap-1">진행 중</span>
-        {etaLabel ? (
-          <span className="truncate text-muted-foreground">(예상 소요 시간: {etaLabel})</span>
-        ) : null}
+        <span className="shrink-0 text-muted-foreground">{pct}%</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
@@ -221,27 +196,15 @@ export function InstallZipDownloadPanel() {
   const lastLogMessageRef = useRef('');
   const lastSkipLoggedRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const startedAtRef = useRef(0);
-  const downloadBytesRef = useRef<{ done: number; total: number } | null>(null);
-  const downloadStartedAtRef = useRef(0);
-  const [installMeta, setInstallMeta] = useState<{ fileCount?: number; zipSize?: number }>({});
-  const [etaTick, setEtaTick] = useState(0);
 
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
 
-  useEffect(() => {
-    if (!busy) return;
-    const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [busy]);
-
   // 소스 모드 전환 시에만 단계·로그 초기화 (다운로드 완료로 busy가 꺼질 때는 유지)
   useEffect(() => {
     setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
     setProgress(emptySideProgress());
-    setInstallMeta({});
     logRef.current = [];
     lastLogMessageRef.current = '';
   }, [sourceMode]);
@@ -266,12 +229,6 @@ export function InstallZipDownloadPanel() {
 
   const applyInstallProgress = (p: InstallZipProgress) => {
     setProgress((prev) => ({ ...prev, message: p.message, pct: p.progressPct }));
-    if (p.fileCount != null || p.zipSize != null) {
-      setInstallMeta((prev) => ({
-        fileCount: p.fileCount ?? prev.fileCount,
-        zipSize: p.zipSize ?? prev.zipSize,
-      }));
-    }
     setStages(buildInstallStagesFromProgress(p, infoDetailRef.current));
     if (p.phase !== lastPhaseRef.current && p.phase !== 'idle') {
       lastPhaseRef.current = p.phase;
@@ -318,19 +275,16 @@ export function InstallZipDownloadPanel() {
     setStages(buildGnmsInstallBaseStages());
     setStages((prev) => patchGnmsStages(prev, { latest: { state: 'active' } }));
 
-    let cfg: GnmsClientConfigForDownload | null = null;
     let gnmsJobId: string | null = null;
     let gnmsVersion: string | undefined;
     let gnmsFileName: string | undefined;
 
     try {
-      pushLog('GNMS 최신 설치파일 조회 시작');
-      const { cfg: loadedCfg, bundle } = await fetchGnmsLatestZipForBrowserSave({
+      pushLog('GNMS 최신 설치파일 조회 시작 (로컬 서버 경유)');
+      const { downloadRes, fileName, version, jobId } = await fetchGnmsInstallZipViaLocal({
         signal,
         log: pushLog,
       });
-      cfg = loadedCfg;
-      const { version, fileName, jobId, downloadRes } = bundle;
       gnmsVersion = version;
       gnmsFileName = fileName;
       gnmsJobId = jobId || null;
@@ -348,12 +302,6 @@ export function InstallZipDownloadPanel() {
         downloadRes,
         fileName,
         (received, total) => {
-          if (total && total > 0) {
-            if (downloadStartedAtRef.current <= 0 && received > 0) {
-              downloadStartedAtRef.current = Date.now();
-            }
-            downloadBytesRef.current = { done: received, total };
-          }
           const pct =
             total && total > 0 ? Math.min(99, 10 + Math.round((received / total) * 89)) : 50;
           const msg = total
@@ -400,9 +348,8 @@ export function InstallZipDownloadPanel() {
       const isAbort = isAbortError(e);
       const msg = isAbort ? '사용자가 취소했습니다.' : e instanceof Error ? e.message : String(e);
 
-      if (isAbort && cfg && gnmsJobId) {
+      if (isAbort && gnmsJobId) {
         await notifyGnmsLatestDownloadCancel({
-          cfg,
           jobId: gnmsJobId,
           version: gnmsVersion,
           fileName: gnmsFileName,
@@ -438,8 +385,6 @@ export function InstallZipDownloadPanel() {
 
   const downloadFromLocal = async (signal: AbortSignal) => {
     infoDetailRef.current = '';
-    startedAtRef.current = Date.now();
-    setInstallMeta({});
     lastPhaseRef.current = '';
     lastLogMessageRef.current = '';
     lastSkipLoggedRef.current = null;
@@ -527,10 +472,6 @@ export function InstallZipDownloadPanel() {
       pushLog(
         `ZIP 생성 완료: ${buildJson.zipName ?? ''} (포함 ${buildJson.fileCount ?? '?'} / 제외 ${skipCount})`
       );
-      setInstallMeta({
-        fileCount: buildJson.fileCount,
-        zipSize: buildJson.zipSize,
-      });
       setStages((prev) =>
         patchStages(setStageActive(prev, 'download'), {
           scan: {
@@ -625,10 +566,6 @@ export function InstallZipDownloadPanel() {
     lastLogMessageRef.current = '';
     lastSkipLoggedRef.current = null;
     lastPhaseRef.current = '';
-    startedAtRef.current = Date.now();
-    downloadBytesRef.current = null;
-    downloadStartedAtRef.current = 0;
-    setInstallMeta({});
     setProgress(emptySideProgress());
     setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
 
@@ -643,44 +580,22 @@ export function InstallZipDownloadPanel() {
     } finally {
       abortRef.current = null;
       setBusy(false);
-      downloadBytesRef.current = null;
-      downloadStartedAtRef.current = 0;
     }
   };
 
-  const etaLabel = (() => {
-    void etaTick;
-    if (!busy || startedAtRef.current <= 0) return null;
-    if (sourceMode === 'gnms') {
-      const bytes = downloadBytesRef.current;
-      if (bytes && bytes.total > 0 && bytes.done > 0 && downloadStartedAtRef.current > 0) {
-        const remain = estimateRemainingByBytes(bytes.done, bytes.total, downloadStartedAtRef.current);
-        if (remain != null) return formatEtaMinutes(remain);
-      }
-      if (progress.pct != null && progress.pct > 2) {
-        return formatEtaMinutes(estimateRemainingSeconds(180, progress.pct, startedAtRef.current));
-      }
-      return '산출 중...';
-    }
-    const fc = installMeta.fileCount;
-    if (fc == null || fc <= 0) return '산출 중...';
-    const total = estimateInstallZipTotalSeconds(fc, installMeta.zipSize, profile);
-    const remain = estimateRemainingSeconds(total, progress.pct, startedAtRef.current);
-    return formatEtaMinutes(remain);
-  })();
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded border p-3">
+    <div className="flex min-h-0 flex-1 flex-col rounded border p-3 gap-2">
       <div className="shrink-0 space-y-2">
-        <a
-          href={INSTALL_MANUAL_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block text-xs text-blue-600 underline"
+        <Button
+          type="button"
+          variant="outline"
+          onClick={openInstallManualPopup}
+          className="gap-1 cursor-pointer"
           title="설치 매뉴얼"
         >
+          <BookOpenText className="h-4 w-4" />
           설치 매뉴얼
-        </a>
+        </Button>
         <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={busy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (
@@ -709,7 +624,7 @@ export function InstallZipDownloadPanel() {
             취소
           </Button>
         </div>
-        <ProgressBar pct={progress.pct} busy={busy} etaLabel={etaLabel} />
+        <ProgressBar pct={progress.pct} busy={busy} />
         <p className="text-xs text-muted-foreground">{progress.message}</p>
         {progress.error && <p className="text-xs text-red-600">{progress.error}</p>}
         <ProgressStagesList stages={stages} />

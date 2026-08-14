@@ -20,8 +20,7 @@ import {
   type ListDirectoryResult,
 } from './fileManagerService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
 /** gdal2tiles 대용량 대비 (ms) */
 const ORTHO_JOB_TIMEOUT_MS = 3 * 60 * 60 * 1000;
@@ -29,6 +28,15 @@ const ORTHO_JOB_TIMEOUT_MS = 3 * 60 * 60 * 1000;
 const PYTHON_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
 
 const TIF_EXT = /\.(tif|tiff)$/i;
+
+function opaqueExists(p: string): boolean {
+  return fs.existsSync(turbopackOpaquePath(p));
+}
+
+/** 프로젝트 python/env — path.join(cwd,'python','env') 정적 추적 회피 */
+function projectPythonEnvRoot(): string {
+  return [process.cwd(), 'python', 'env'].join(path.sep);
+}
 
 export type SatelliteTifGroupedFile = {
   /** 그룹(직계 하위 폴더명) */
@@ -71,7 +79,7 @@ export type OrthophotoTileOutputsResult = {
 };
 
 function getBaseDir(): string {
-  return path.normalize(GGNR_DATA_DIR);
+  return resolveGgnrDataDir();
 }
 
 function resolveSafeRelative(rel: string): string | null {
@@ -97,27 +105,29 @@ function getPythonExeResolved(): string | null {
 function gdalToolPath(
   toolBaseName: 'gdalwarp' | 'gdalinfo' | 'gdal2tiles' | 'gdalbuildvrt' | 'gdal_translate'
 ): string {
-  const exeName = process.platform === 'win32' ? `${toolBaseName}.exe` : toolBaseName;
+  const exeName =
+    process.platform === 'win32' ? `${toolBaseName}${['.exe'].join('')}` : toolBaseName;
   const candidates: string[] = [];
   const pushCondaGdalDirs = (envRoot: string) => {
-    candidates.push(path.join(envRoot, 'Scripts', exeName));
+    candidates.push([envRoot, 'Scripts', exeName].join(path.sep));
     if (process.platform === 'win32') {
-      candidates.push(path.join(envRoot, 'Library', 'bin', exeName));
+      candidates.push([envRoot, 'Library', 'bin', exeName].join(path.sep));
     } else {
-      candidates.push(path.join(envRoot, 'bin', exeName));
+      candidates.push([envRoot, 'bin', exeName].join(path.sep));
     }
   };
   const py = getPythonExeResolved();
   if (py) {
     pushCondaGdalDirs(path.dirname(py));
   }
-  pushCondaGdalDirs(path.join(process.cwd(), 'python', 'env'));
-  const gdalScripts = (process.env.GGNR_GDAL_SCRIPTS_DIR ?? '').trim();
+  pushCondaGdalDirs(projectPythonEnvRoot());
+  const gdalScriptsKey = ['GGNR', 'GDAL', 'SCRIPTS', 'DIR'].join('_');
+  const gdalScripts = (process.env[gdalScriptsKey] ?? '').trim();
   if (gdalScripts) {
-    candidates.push(path.join(path.normalize(gdalScripts), exeName));
+    candidates.push([path.normalize(gdalScripts), exeName].join(path.sep));
   }
   for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
+    if (opaqueExists(c)) return c;
   }
   return exeName;
 }
@@ -153,7 +163,7 @@ function resolveCondaEnvRootForGdal(gdalExe: string): string | null {
   }
   const py = getPythonExeResolved();
   if (py) return path.dirname(py);
-  return path.join(process.cwd(), 'python', 'env');
+  return projectPythonEnvRoot();
 }
 
 /**
@@ -166,7 +176,7 @@ function buildGdalChildEnv(gdalExe: string): NodeJS.ProcessEnv {
 
   const projDirs = [path.join(root, 'Library', 'share', 'proj'), path.join(root, 'share', 'proj')];
   for (const d of projDirs) {
-    if (fs.existsSync(path.join(d, 'proj.db'))) {
+    if (opaqueExists(path.join(d, 'proj.db'))) {
       env.PROJ_LIB = d;
       env.PROJ_DATA = d;
       break;
@@ -175,7 +185,7 @@ function buildGdalChildEnv(gdalExe: string): NodeJS.ProcessEnv {
 
   const gdalDirs = [path.join(root, 'Library', 'share', 'gdal'), path.join(root, 'share', 'gdal')];
   for (const d of gdalDirs) {
-    if (fs.existsSync(d)) {
+    if (opaqueExists(d)) {
       env.GDAL_DATA = d;
       break;
     }
@@ -442,7 +452,7 @@ type SourceCornerBox = { minX: number; minY: number; maxX: number; maxY: number 
 
 async function getSourceCornerBoxFromTif(absSource: string): Promise<SourceCornerBox> {
   const gdalinfo = gdalToolPath('gdalinfo');
-  if (!isConcreteToolPath(gdalinfo) || !fs.existsSync(gdalinfo)) {
+  if (!isConcreteToolPath(gdalinfo) || !opaqueExists(gdalinfo)) {
     throw new Error('gdalinfo 실행 파일을 찾을 수 없습니다.');
   }
   const env = buildGdalChildEnv(gdalinfo);
@@ -669,10 +679,10 @@ export async function ensureOrthophotoCrsPreviewImage(params: {
 
   const gdalwarp = gdalToolPath('gdalwarp');
   const gdalTranslate = gdalToolPath('gdal_translate');
-  if (!isConcreteToolPath(gdalwarp) || !fs.existsSync(gdalwarp)) {
+  if (!isConcreteToolPath(gdalwarp) || !opaqueExists(gdalwarp)) {
     return { ok: false, error: 'gdalwarp 를 찾을 수 없습니다.' };
   }
-  if (!isConcreteToolPath(gdalTranslate) || !fs.existsSync(gdalTranslate)) {
+  if (!isConcreteToolPath(gdalTranslate) || !opaqueExists(gdalTranslate)) {
     return { ok: false, error: 'gdal_translate 를 찾을 수 없습니다.' };
   }
 
@@ -989,14 +999,14 @@ async function runOrthophotoJob(params: {
     await fsPromises.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
   };
 
-  if (!isConcreteToolPath(gdalwarp) || !fs.existsSync(gdalwarp)) {
+  if (!isConcreteToolPath(gdalwarp) || !opaqueExists(gdalwarp)) {
     const hint =
       'GDAL gdalwarp 실행 파일을 찾을 수 없습니다. conda 환경에 gdal 설치 또는 GGNR_GDAL_SCRIPTS_DIR 를 확인하세요.';
     console.error(`[orthophoto] ${hint} (resolve 결과: gdalwarp=${gdalwarp})`);
     await fail(hint);
     return;
   }
-  if (!isConcreteToolPath(gdal2tiles) || !fs.existsSync(gdal2tiles)) {
+  if (!isConcreteToolPath(gdal2tiles) || !opaqueExists(gdal2tiles)) {
     const hint =
       'GDAL gdal2tiles 실행 파일을 찾을 수 없습니다. conda 환경에 gdal 설치 또는 GGNR_GDAL_SCRIPTS_DIR 를 확인하세요.';
     console.error(`[orthophoto] ${hint} (resolve 결과: gdal2tiles=${gdal2tiles})`);
@@ -1189,7 +1199,7 @@ export async function runSatelliteTifGroupToXyz(params: {
 
       const gdalbuildvrt = gdalToolPath('gdalbuildvrt');
 
-      if (!isConcreteToolPath(gdalbuildvrt) || !fs.existsSync(gdalbuildvrt)) {
+      if (!isConcreteToolPath(gdalbuildvrt) || !opaqueExists(gdalbuildvrt)) {
         console.error('[orthophoto] gdalbuildvrt 를 찾을 수 없습니다. GDAL 설치 경로를 확인하세요.', gdalbuildvrt);
         return;
       }

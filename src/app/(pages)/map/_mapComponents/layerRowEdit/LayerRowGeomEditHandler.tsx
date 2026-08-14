@@ -12,6 +12,10 @@ import Feature from "ol/Feature";
 import type { FeatureLike } from "ol/Feature";
 import { MultiPolygon, Polygon } from "ol/geom";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
+import {
+  occupationFillRgba,
+  occupationStrokeRgba,
+} from "@/lib/occupationLayerStyle";
 import { useMapContext } from "../MapContext";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
@@ -73,19 +77,19 @@ function replaceParentFeaturesFromWkt5181(source: VectorSource, wkt5181: string)
 
 function createParentEditStyle() {
   return new Style({
-    stroke: new Stroke({ color: "rgba(239, 68, 68, 0.95)", width: 2.5 }),
-    fill: new Fill({ color: "rgba(239, 68, 68, 0.12)" }),
+    stroke: new Stroke({ color: occupationStrokeRgba("parentActive"), width: 2.5 }),
+    fill: new Fill({ color: occupationFillRgba("parentActive") }),
     image: new CircleStyle({
       radius: 5,
-      fill: new Fill({ color: "rgba(239, 68, 68, 0.95)" }),
+      fill: new Fill({ color: occupationFillRgba("parentActive", 0.95) }),
       stroke: new Stroke({ color: "#fff", width: 1.5 }),
     }),
   });
 }
 
 const parcelEditStyle = new Style({
-  stroke: new Stroke({ color: "#1d4ed8", width: 3 }),
-  fill: new Fill({ color: "rgba(29, 78, 216, 0.32)" }),
+  stroke: new Stroke({ color: occupationStrokeRgba("parcel"), width: 2 }),
+  fill: new Fill({ color: occupationFillRgba("parcel") }),
 });
 
 const parentEditStyle = createParentEditStyle();
@@ -197,6 +201,7 @@ export function LayerRowGeomEditHandler({
   const setEdit = mapContext?.setLayerRowGeomEdit;
   const wktRef = mapContext?.layerRowGeomEditWktRef;
   const dirtyRef = mapContext?.layerRowGeomEditDirtyRef;
+  const geomDrawnRef = mapContext?.layerRowGeomDrawnRef;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const setLayerRowDraftParcels = mapContext?.setLayerRowDraftParcels;
   const layerRowParcelRemoveRef = mapContext?.layerRowParcelRemoveRef;
@@ -304,13 +309,23 @@ export function LayerRowGeomEditHandler({
             } => x != null
           );
         apply(items, { replaceAuto: true });
+        // 도형 추가 직후 notify는 필지 폴백이 비어 실패할 수 있음 → 필지 반영 후 장소 재채움
+        const wktNow = String(wktRef?.current ?? "").trim();
+        if (wktNow && wktNow !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
+          queueMicrotask(() => {
+            mapContext?.layerRowGeomDrawnRef?.current?.({
+              wkt5181: wktNow,
+              source: "draw",
+            });
+          });
+        }
       } catch {
         if (!opts?.silent) window.alert("필지목록을 불러오지 못했습니다.");
       } finally {
         setLoadingParcels(false);
       }
     },
-    [mapContext?.layerRowParcelApplyRef, wktRef]
+    [mapContext?.layerRowGeomDrawnRef, mapContext?.layerRowParcelApplyRef, wktRef]
   );
 
   useEffect(() => {
@@ -359,6 +374,15 @@ export function LayerRowGeomEditHandler({
       if (opts?.markDirty && dirtyRef) dirtyRef.current = true;
       setHasParentGeom(getParentFeatures(source).length > 0);
       syncDraftParcelsFromSource(source, setLayerRowDraftParcels);
+    };
+
+    const notifyGeomDrawn = (sourceKind: "draw" | "modify") => {
+      const wkt = String(wktRef?.current ?? "").trim();
+      if (!wkt || wkt === LAYER_ROW_GEOM_CLEAR_SENTINEL) return;
+      // 클로저 ref가 아니라 최신 MapContext 콜백을 직접 호출
+      const cb =
+        mapContext?.layerRowGeomDrawnRef?.current ?? geomDrawnRef?.current;
+      cb?.({ wkt5181: wkt, source: sourceKind });
     };
 
     const subtractParcelFromParentGeom = async (parcel: {
@@ -427,6 +451,7 @@ export function LayerRowGeomEditHandler({
       modify = new Modify({ source });
       modify.on("modifyend", () => {
         syncFromSource({ markDirty: true });
+        notifyGeomDrawn("modify");
         void loadParcelsRef.current?.({ silent: true });
       });
       map.addInteraction(modify);
@@ -456,10 +481,14 @@ export function LayerRowGeomEditHandler({
       draw = new Draw({ source, type: "Polygon", stopClick: true });
       draw.on("drawend", (e) => {
         markAsParentFeature(e.feature);
-        syncFromSource({ markDirty: true });
-        detachDraw();
-        attachModify();
-        loadParcelsAfterDraw();
+        // drawend 직후 소스 반영이 한 틱 늦는 경우 대비
+        requestAnimationFrame(() => {
+          syncFromSource({ markDirty: true });
+          notifyGeomDrawn("draw");
+          detachDraw();
+          attachModify();
+          loadParcelsAfterDraw();
+        });
       });
       map.addInteraction(draw);
       isDrawActiveRef.current = true;
@@ -506,6 +535,13 @@ export function LayerRowGeomEditHandler({
           return false;
         }
         if (!data?.geometry) {
+          if (edit.allowEmptyGeom) {
+            wktRef.current = null;
+            if (dirtyRef) dirtyRef.current = false;
+            setHasParentGeom(false);
+            attachModify();
+            return true;
+          }
           window.alert("DB에서 기존 도형을 찾지 못했습니다.");
           setEdit?.(null);
           return false;

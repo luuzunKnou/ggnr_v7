@@ -13,6 +13,12 @@ import {
   isManagedApplyOrphanCandidate,
   isProtectedApplyResidualPath,
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { decodeChildOutput } from '@/lib/decodeChildOutput';
+import {
+  isPrebuildTsxAvailable,
+  NPM_INSTALL_DEV_ARGS,
+  resolveNpmInstallEnv,
+} from '@/lib/npmApplyEnv';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
 
@@ -73,32 +79,72 @@ export function buildApplySuccessHistoryMessage(opts: {
   return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
-function spawnInheritAsync(command: string, args: string[]): Promise<void> {
+function tailTextLines(text: string, maxLines = 20, maxChars = 3500): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.length > 0);
+  if (lines.length === 0) return '';
+  let tail = lines.slice(-maxLines).join('\n');
+  if (tail.length > maxChars) tail = `…\n${tail.slice(-maxChars)}`;
+  return tail;
+}
+
+function npmFailureDetail(output: string, code: number | null, label: string): string {
+  const moduleHint =
+    output.match(/Cannot find module[^\n]*/)?.[0] ??
+    output.match(/Cannot find package[^\n]*/)?.[0] ??
+    output.match(/MODULE_NOT_FOUND[^\n]*/)?.[0] ??
+    output.match(/npm ERR![^\n]*/)?.[0];
+  const tail = tailTextLines(output);
+  const parts = [`${label} 실패 (exit code ${code ?? '?'})`];
+  if (moduleHint) parts.push(moduleHint);
+  if (tail) parts.push(tail);
+  return parts.join('\n');
+}
+
+/** npm stdout/stderr → UI 로그·실패 원인 (stdio inherit 대신 캡처) */
+async function spawnNpmWithApplyLog(
+  args: string[],
+  onLine: (line: string) => void | Promise<void>,
+  envOverride?: NodeJS.ProcessEnv
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const usedCmdShell = process.platform === 'win32';
+    const child = spawn('npm', args, {
       cwd: process.cwd(),
-      stdio: 'inherit',
       shell: true,
-      env: process.env,
+      windowsHide: true,
+      env: envOverride ?? process.env,
     });
+    let combined = '';
+    const handleData = (buf: Buffer) => {
+      const chunk = decodeChildOutput(buf, usedCmdShell);
+      combined += chunk;
+      for (const line of chunk.split(/\r?\n/)) {
+        const trimmed = line.trimEnd();
+        if (trimmed) void Promise.resolve(onLine(trimmed)).catch(() => {});
+      }
+    };
+    child.stdout?.on('data', handleData);
+    child.stderr?.on('data', handleData);
     child.on('error', reject);
     child.on('close', (code) => {
       if ((code ?? 1) === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+      else reject(new Error(npmFailureDetail(combined, code, `npm ${args.join(' ')}`)));
     });
   });
 }
 
-async function runNpmInstallAsyncInProcess(): Promise<void> {
-  console.log('[SourceCodeUpload] npm install 시작 (사전·개방망)');
-  await spawnInheritAsync('npm', ['install', '--no-audit', '--no-fund']);
-  console.log('[SourceCodeUpload] npm install 완료');
+/** prebuild(tsx) 누락 시 devDependencies 포함 install (개방·폐쇄망 공통) */
+async function ensurePrebuildDevDeps(
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  if (isPrebuildTsxAvailable()) return;
+  await spawnNpmWithApplyLog([...NPM_INSTALL_DEV_ARGS], onLine, resolveNpmInstallEnv());
 }
 
-async function runNpmBuildAsyncInProcess(): Promise<void> {
-  console.log('[SourceCodeUpload] 사전 빌드 시작');
-  await spawnInheritAsync('npm', ['run', 'build']);
-  console.log('[SourceCodeUpload] 사전 빌드 완료');
+async function runApplyNpmInstallDev(
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  await spawnNpmWithApplyLog([...NPM_INSTALL_DEV_ARGS], onLine, resolveNpmInstallEnv());
 }
 
 export type ApplyLatestSourceOptions = {
@@ -156,6 +202,8 @@ const DEFAULT_EXCLUDE_PREFIXES = [
   'node_modules/',
   '.cursor/',
   '.vscode/',
+  'nssm/',
+  '.cursor-runtime/',
   '3dtiles_las/',
   'tiles_tif/',
   'tiles_jpg/',
@@ -763,10 +811,12 @@ export type GnmsClientConfig = {
   listUrl: string;
   downloadUrlFallback: string;
   cancelUrl: string;
+  installLatestUrl: string;
+  installDownloadUrl: string;
   bearer: string;
 };
 
-/** 브라우저가 GNMS에 직접 요청할 때 쓸 URL·토큰 (폐쇄망 중계, CORS 허용 전제) */
+/** 로컬 서버가 GNMS API를 호출할 때 쓸 URL·토큰 */
 export function getGnmsClientConfig(): GnmsClientConfig {
   const gnmsBaseUrl =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BASE_URL?.trim() ||
@@ -776,6 +826,10 @@ export function getGnmsClientConfig(): GnmsClientConfig {
   const listPath = process.env.GNMS_SOURCE_LIST_PATH?.trim() ?? '/list';
   const downloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
   const cancelPath = process.env.GNMS_SOURCE_CANCEL_PATH?.trim() ?? '/cancel';
+  const installLatestPath =
+    process.env.GNMS_SOURCE_INSTALL_LATEST_PATH?.trim() ?? '/install/latest';
+  const installDownloadPath =
+    process.env.GNMS_SOURCE_INSTALL_DOWNLOAD_PATH?.trim() ?? '/install/download/latest';
   const bearer =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BEARER?.trim() ||
     process.env.GNMS_SOURCE_BEARER?.trim() ||
@@ -786,6 +840,8 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     listUrl: resolveGnmsApiUrl(gnmsBaseUrl, listPath),
     downloadUrlFallback: resolveGnmsApiUrl(gnmsBaseUrl, downloadPath),
     cancelUrl: resolveGnmsApiUrl(gnmsBaseUrl, cancelPath),
+    installLatestUrl: resolveGnmsApiUrl(gnmsBaseUrl, installLatestPath),
+    installDownloadUrl: resolveGnmsApiUrl(gnmsBaseUrl, installDownloadPath),
     bearer,
   };
 }
@@ -996,33 +1052,41 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     const stopMessage = stopResult.message;
     let startMessage: string | undefined;
     let started = false;
-    /** 병합 후 재시작 여부와 관계없이 기동 시도. 응답 판정 실패해도 소스 롤백하지 않음(경고만). */
-    await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
-    let startResult = await ensureGeoServerRunning({ forceRestart: false });
-    if (!startResult.success) {
-      await sleep(2000);
-      startResult = await ensureGeoServerRunning({ forceRestart: true });
+    let deferredStart = false;
+
+    /** 재기동 예정이면 run.ts ensure에 맡김. «재시작 안 함»일 때만 병합 직후 기동 */
+    if (!doRestart) {
+      await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
+      let startResult = await ensureGeoServerRunning({ forceRestart: false });
+      if (!startResult.success) {
+        await sleep(2000);
+        startResult = await ensureGeoServerRunning({ forceRestart: true });
+      }
+      geoStartedOnSuccessPath = startResult.success;
+      started = startResult.success;
+      startMessage = startResult.success
+        ? startResult.action === 'already-ready'
+          ? '기동 OK(이미 응답)'
+          : startResult.action === 'restarted'
+            ? '기동 OK(재기동·응답)'
+            : '기동 OK(응답)'
+        : `기동 경고(응답 미확인): ${startResult.error ?? 'unknown'}`;
+      if (!startResult.success) {
+        console.warn(
+          `[SourceCodeUpload] GeoServer ${startMessage} — 소스 적용은 계속(롤백하지 않음). 프로세스·8080·GEOSERVER_URL 확인 권장`
+        );
+      }
+      await emit('geoserver-start', `GeoServer ${startMessage}`);
+    } else {
+      deferredStart = true;
+      startMessage = '재기동 파이프라인(run.ts)에서 기동 예정';
+      console.log('[SourceCodeUpload] GeoServer 기동 생략 — 재기동 시 run.ts ensure');
     }
-    geoStartedOnSuccessPath = startResult.success;
-    started = startResult.success;
-    startMessage = startResult.success
-      ? startResult.action === 'already-ready'
-        ? '기동 OK(이미 응답)'
-        : startResult.action === 'restarted'
-          ? '기동 OK(재기동·응답)'
-          : '기동 OK(응답)'
-      : `기동 경고(응답 미확인): ${startResult.error ?? 'unknown'}`;
-    if (!startResult.success) {
-      console.warn(
-        `[SourceCodeUpload] GeoServer ${startMessage} — 소스 적용은 계속(롤백하지 않음). 프로세스·8080·GEOSERVER_URL 확인 권장`
-      );
-    }
-    await emit('geoserver-start', `GeoServer ${startMessage}`);
 
     const geoserver: GeoServerApplyStep = {
       stopped: stopResult.success,
       started,
-      deferredStart: false,
+      deferredStart,
       message: `${stopMessage} / ${startMessage}`,
       stopMessage,
       startMessage,
@@ -1044,21 +1108,50 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 롤백 후 종료하지 않음 */
     if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
-      try {
-        if (!includeNodeModules && rollback) {
-          await emit('npm-install', 'node_modules 백업 중...');
-          await snapshotNodeModulesInto(rollback, workspaceRoot);
-          await emit('npm-install', 'npm install (개방망) 시작');
-          await runNpmInstallAsyncInProcess();
-          await emit('npm-install', 'npm install 완료');
+      if (!includeNodeModules && rollback) {
+        await emit('npm-install', 'node_modules 백업 중...');
+        await snapshotNodeModulesInto(rollback, workspaceRoot);
+        await emit('npm-install', 'npm install --include=dev (개방망) 시작');
+        try {
+          await runApplyNpmInstallDev(async (line) => {
+            await emit('npm-install', line, { logLine: `[npm install] ${line}` });
+          });
+        } catch (installErr: unknown) {
+          const detail = installErr instanceof Error ? installErr.message : String(installErr);
+          await emit('npm-install', 'npm install 실패', {
+            logLine: `[SourceCodeUpload] npm install 실패 (개방망):\n${detail}`,
+          });
+          throw new Error(`npm install 실패 (version=${version}, 개방망):\n${detail}`);
         }
-        await emit('build', '사전 빌드 시작');
-        await runNpmBuildAsyncInProcess();
-        await emit('build', '사전 빌드 완료');
-      } catch (buildErr: unknown) {
-        const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
-        throw new Error(`사전 빌드 실패 (version=${version}): ${msg}`);
+        await emit('npm-install', 'npm install 완료');
       }
+      if (!isPrebuildTsxAvailable()) {
+        await emit('npm-install', 'prebuild용 tsx 없음 — npm install --include=dev');
+        try {
+          await runApplyNpmInstallDev(async (line) => {
+            await emit('npm-install', line, { logLine: `[npm install] ${line}` });
+          });
+        } catch (installErr: unknown) {
+          const detail = installErr instanceof Error ? installErr.message : String(installErr);
+          await emit('npm-install', 'npm install 실패', {
+            logLine: `[SourceCodeUpload] tsx 보강 install 실패:\n${detail}`,
+          });
+          throw new Error(`tsx 보강 install 실패 (version=${version}):\n${detail}`);
+        }
+      }
+      await emit('build', '사전 빌드 시작');
+      try {
+        await spawnNpmWithApplyLog(['run', 'build'], async (line) => {
+          await emit('build', line, { logLine: `[npm run build] ${line}` });
+        });
+      } catch (buildErr: unknown) {
+        const detail = buildErr instanceof Error ? buildErr.message : String(buildErr);
+        await emit('build', '사전 빌드 실패', {
+          logLine: `[SourceCodeUpload] 사전 빌드 실패:\n${detail}`,
+        });
+        throw new Error(`사전 빌드 실패 (version=${version}):\n${detail}`);
+      }
+      await emit('build', '사전 빌드 완료');
     }
 
     /** 사전 빌드 완료분 — 재기동은 스키마 모달 [진행] 이후로 미룸 */
@@ -1122,6 +1215,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     console.error(`[SourceCodeUpload] 적용 실패:`, raw);
+    await Promise.resolve(
+      onProgress?.({
+        phase: 'build',
+        message: raw.split('\n')[0]?.trim() || '적용 실패',
+        logLine: `[SourceCodeUpload] 적용 실패:\n${raw}`,
+      })
+    ).catch(() => {});
 
     let failMessage = raw;
     let historyRecorded = false;
@@ -1391,7 +1491,7 @@ function scheduleRestart(mode: RestartMode): {
   /**
    * exit(nssm): 사전 빌드는 적용 경로에서 이미 완료.
    * process.exit(0) → nssm/외부 감시 또는 run 슈퍼바이저가 재기동.
-   * GeoServer는 적용 경로에서 기동·run.ts ensure로 재확인.
+   * GeoServer는 run.ts ensure에서 기동(적용 경로에서는 재기동 시 생략).
    */
   const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
   const exitHint = hasRunSupervisor()

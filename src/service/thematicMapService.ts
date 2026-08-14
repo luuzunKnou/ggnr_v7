@@ -266,3 +266,41 @@ export async function listAvailableBuildingRoadLayerNames() {
     return { success: false as const, error: msg, tableNames: [] as string[] };
   }
 }
+
+/** 지적도 패널 후보 (jijuk·ri·emd) */
+const CADASTRAL_TABLE_CANDIDATES = ['jijuk', 'ri', 'emd'] as const;
+const CADASTRAL_SCHEMA_CANDIDATES = ['public_layer', 'layer'] as const;
+
+/**
+ * 지적도 UI: 스키마에 테이블이 있고 행 1건 이상인 항목만.
+ * jijuk은 public_layer 우선, 없으면 layer.
+ */
+export async function listAvailableCadastralLayerNames() {
+  try {
+    const tableNames: string[] = [];
+    for (const name of CADASTRAL_TABLE_CANDIDATES) {
+      for (const schema of CADASTRAL_SCHEMA_CANDIDATES) {
+        const physical = await resolveLayerPhysicalRelName(schema, name);
+        if (!physical) continue;
+        const litName = escLit(name);
+        const qTable = `"${escIdent(schema)}"."${escIdent(physical)}"`;
+        const res = await db.execute(
+          sql.raw(
+            `SELECT '${litName}' AS name WHERE EXISTS (SELECT 1 FROM ${qTable} LIMIT 1)`
+          )
+        );
+        const hit = (res.rows as Array<{ name?: string }>).some(
+          (row) => String(row?.name ?? '').trim() === name
+        );
+        if (hit) {
+          tableNames.push(name);
+          break;
+        }
+      }
+    }
+    return { success: true as const, tableNames };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg, tableNames: [] as string[] };
+  }
+}

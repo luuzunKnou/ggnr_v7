@@ -58,11 +58,15 @@ function MapControlButton({
   isActive,
   onClick,
   onRightClick,
+  roundTop,
+  roundBottom,
 }: {
   item: MapControlItem
   isActive: boolean
   onClick: () => void
   onRightClick?: () => void
+  roundTop?: boolean
+  roundBottom?: boolean
 }) {
   const Icon = item.icon
 
@@ -70,22 +74,22 @@ function MapControlButton({
     <button
       onClick={onClick}
       onContextMenu={(e) => {
-        if (onRightClick) {
-          e.preventDefault()
-          onRightClick()
-        }
+        // 지도 컨트롤은 브라우저 기본 메뉴 대신 앱 동작(또는 무시)
+        e.preventDefault()
+        onRightClick?.()
       }}
       className={cn(
-        "flex flex-col items-center justify-center gap-1 shrink-0 box-border p-0 transition-colors cursor-pointer",
+        "flex h-[45px] w-full min-w-0 flex-col items-center justify-center gap-1 overflow-hidden box-border p-0 transition-colors cursor-pointer",
         "hover:bg-slate-100 hover:text-blue-600",
         "dark:text-white/90 dark:hover:bg-white/10 dark:hover:text-white",
-        isActive && "bg-slate-100 text-blue-600 dark:bg-white/20 dark:text-white"
+        isActive && "bg-slate-100 text-blue-600 dark:bg-white/20 dark:text-white",
+        roundTop && "rounded-t-[4px]",
+        roundBottom && "rounded-b-[4px]"
       )}
-      style={{ width: 45, height: 45 }}
       title={item.label}
     >
       <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-      <span className="leading-tight text-center whitespace-nowrap overflow-hidden truncate" style={{ maxWidth: 45, fontSize: '9px' }}>
+      <span className="max-w-full leading-tight text-center whitespace-nowrap overflow-hidden truncate px-0.5" style={{ fontSize: '9px' }}>
         {item.label}
       </span>
     </button>
@@ -104,30 +108,47 @@ export function MapControlPanel({
 }: MapControlPanelProps) {
   return (
     <div className={cn("flex flex-col gap-2.5 opacity-90 shrink-0", className)} style={{ width: 45 }}>
-      {groups.map((group, groupIndex) => (
-        <React.Fragment key={group.id}>
+      {groups.map((group, groupIndex) => {
+        const items = group.items.filter(
+          (item) => SHOOTING_REQUEST_UI_ENABLED || item.id !== "shooting-request"
+        )
+        return (
           <div
-            className="flex flex-col bg-white/95 text-foreground backdrop-blur-sm rounded-[5px] shadow-lg border border-slate-200 shrink-0 dark:bg-black/55 dark:text-white/90 dark:border-white/10 overflow-visible"
+            key={group.id}
+            className="relative shrink-0"
             style={{ width: 45, minWidth: 45, maxWidth: 45 }}
           >
-            {group.items
-              .filter(
-                (item) =>
-                  SHOOTING_REQUEST_UI_ENABLED || item.id !== "shooting-request"
-              )
-              .map((item) => {
-              const isActive = activeIds.includes(item.id)
+            {items.map((item, itemIndex) => {
               const itemPanel = renderItemPanel?.(item.id)
+              if (itemPanel == null) return null
               return (
-                <div key={item.id} className="relative shrink-0">
-                  {itemPanel != null && (
-                    <div className="pointer-events-auto absolute right-[calc(100%+12px)] bottom-0 z-10" data-map-control-expand-panel>
-                      {itemPanel}
-                    </div>
-                  )}
+                <div
+                  key={`panel-${item.id}`}
+                  className="pointer-events-auto absolute right-[calc(100%+12px)] z-10"
+                  data-map-control-expand-panel
+                  style={{
+                    top: (itemIndex + 1) * 45,
+                    transform: "translateY(-100%)",
+                  }}
+                >
+                  {itemPanel}
+                </div>
+              )
+            })}
+            <div className="flex w-full flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white/95 text-foreground shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-white/90">
+              {items.map((item, itemIndex) => {
+                const isActive = activeIds.includes(item.id)
+                const isFirst = itemIndex === 0
+                const isLast =
+                  itemIndex === items.length - 1 &&
+                  !(groupIndex === 0 && extraAfterFirstGroup != null)
+                return (
                   <MapControlButton
+                    key={item.id}
                     item={item}
                     isActive={isActive}
+                    roundTop={isFirst}
+                    roundBottom={isLast}
                     onClick={() => {
                       item.onClick?.()
                       onItemClick?.(item.id, isActive)
@@ -136,13 +157,13 @@ export function MapControlPanel({
                       onItemRightClick ? () => onItemRightClick(item.id) : undefined
                     }
                   />
-                </div>
-              )
-            })}
-            {groupIndex === 0 && extraAfterFirstGroup != null && extraAfterFirstGroup}
+                )
+              })}
+              {groupIndex === 0 && extraAfterFirstGroup != null ? extraAfterFirstGroup : null}
+            </div>
           </div>
-        </React.Fragment>
-      ))}
+        )
+      })}
     </div>
   )
 }

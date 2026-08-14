@@ -8,6 +8,10 @@ import { tryFormatToYmd } from '@/lib/formatDateYmd';
 import { splitUsagePeriod } from '@/lib/usageDataAsFieldUtils';
 import { incrementSuffixCode } from '@/lib/incrementSuffixCode';
 import {
+  formatOccupationPermitNo,
+  parseOccupationPermitNoSeq,
+} from '@/lib/occupationPermitNo';
+import {
   getOccupationLedgerBinding,
   type OccupationLedgerBinding,
 } from '@/lib/occupationLedgerBinding';
@@ -150,7 +154,8 @@ async function getChildAddressItems(params: {
     const res = await db.execute(sql.raw(sqlText));
     const items = (res.rows ?? []).map((r) => {
       const row = r as Record<string, unknown>;
-      const address = String(row.addr ?? '').trim();
+      const addressRaw = String(row.addr ?? '').trim();
+      const address = formatAddressStripSidoSigungu(addressRaw) || addressRaw;
       const xmin = Number(row.xmin);
       const ymin = Number(row.ymin);
       const xmax = Number(row.xmax);
@@ -280,6 +285,7 @@ export async function getOccupationLedgerList(params?: {
   }
 }
 
+/** 지도 이동용 extent — 점용 본표(geom)만. 필지·물건지 합치면 중심이 어긋남 */
 export async function getOccupationLedgerExtent3857ByKey(params: {
   key?: string;
   serEng?: string;
@@ -293,50 +299,27 @@ export async function getOccupationLedgerExtent3857ByKey(params: {
   const keyRaw = String(params?.key ?? '').trim();
   if (!keyRaw) return { extent3857: null, error: '키가 필요합니다.' };
 
-  const geomSelects: string[] = [];
   const mainMeta = await resolveTableWithSchema(binding.mainTable);
-  if (mainMeta) {
-    const cols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
-    const keyCol = findColumn(cols, binding.fields.keyField);
-    const geomCol = findColumn(cols, 'geom');
-    if (keyCol && geomCol) {
-      const safe = mainMeta.tableName.replace(/"/g, '""');
-      const safeSchema = mainMeta.schema.replace(/"/g, '""');
-      geomSelects.push(
-        `SELECT ST_Transform(t.${quoteIdent(geomCol)}, 3857) AS g
-         FROM "${safeSchema}"."${safe}" t
-         WHERE t.${quoteIdent(keyCol)}::text = '${esc(keyRaw)}' AND t.${quoteIdent(geomCol)} IS NOT NULL`
-      );
-    }
+  if (!mainMeta) {
+    return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
-
-  for (const childTable of [binding.jijukTable, binding.mgjTable]) {
-    const meta = await resolveTableWithSchema(childTable);
-    if (!meta) continue;
-    const cols = await getTableColumns(meta.schema, meta.tableName);
-    const parentCol = findColumn(cols, binding.fields.childParentField);
-    const geomCol = findColumn(cols, 'geom');
-    if (!parentCol || !geomCol) continue;
-    const safe = meta.tableName.replace(/"/g, '""');
-    const safeSchema = meta.schema.replace(/"/g, '""');
-    geomSelects.push(
-      `SELECT ST_Transform(c.${quoteIdent(geomCol)}, 3857) AS g
-       FROM "${safeSchema}"."${safe}" c
-       WHERE c.${quoteIdent(parentCol)}::text = '${esc(keyRaw)}' AND c.${quoteIdent(geomCol)} IS NOT NULL`
-    );
-  }
-
-  if (geomSelects.length === 0) {
+  const cols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
+  const keyCol = findColumn(cols, binding.fields.keyField);
+  const geomCol = findColumn(cols, 'geom');
+  if (!keyCol || !geomCol) {
     return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
 
+  const safe = mainMeta.tableName.replace(/"/g, '""');
+  const safeSchema = mainMeta.schema.replace(/"/g, '""');
   const sqlText = `
     SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
            ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
     FROM (
-      SELECT ST_Extent(g)::box2d AS ext
-      FROM (${geomSelects.join(' UNION ALL ')}) u
-      WHERE g IS NOT NULL
+      SELECT ST_Extent(ST_Transform(t.${quoteIdent(geomCol)}, 3857))::box2d AS ext
+      FROM "${safeSchema}"."${safe}" t
+      WHERE t.${quoteIdent(keyCol)}::text = '${esc(keyRaw)}'
+        AND t.${quoteIdent(geomCol)} IS NOT NULL
     ) s
     WHERE ext IS NOT NULL`;
 
@@ -433,17 +416,23 @@ export async function getOccupationLedgerDetailByKey(params: {
     const endYmd =
       tryFormatToYmd(endRaw) ?? (endRaw == null ? '' : String(endRaw).trim());
     const periodState = deriveOccupationPeriodState(endYmd);
+    const addressFields = new Set(['occup_place', 'applicant_addr']);
     const attributes: OccupationLedgerDetailAttr[] = dataFields.map((field) => {
       const def = metaByField.get(field.toLowerCase());
-      const isState = field.toLowerCase() === 'state';
+      const fl = field.toLowerCase();
+      const isState = fl === 'state';
+      let value = isState
+        ? periodState
+        : row[field] == null
+          ? ''
+          : String(row[field]);
+      if (!isState && addressFields.has(fl) && value) {
+        value = formatAddressStripSidoSigungu(value) || value;
+      }
       return {
         field,
         label: labelForOccupationLedgerField(field),
-        value: isState
-          ? periodState
-          : row[field] == null
-            ? ''
-            : String(row[field]),
+        value,
         showDetail: def?.showDetail !== false,
       };
     });
@@ -478,6 +467,76 @@ export async function getOccupationLedgerDetailByKey(params: {
   }
 }
 
+/**
+ * 허가번호 다음 번호 — 허가시작일 연도 기준 «YYYY-NN».
+ * 해당 연도 접두가 없으면 01, 해가 바뀌면 다시 01부터.
+ */
+export async function getNextOccupationLedgerPermitNo(params?: {
+  year?: number;
+  serEng?: string;
+  system?: string;
+  excludeKey?: string;
+}): Promise<{ permitNo: string; error?: string }> {
+  const year = Number(params?.year);
+  if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+    return { permitNo: '', error: '시작일 연도가 필요합니다.' };
+  }
+
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) {
+    return { permitNo: '', error: resolved.error };
+  }
+  const binding = resolved.binding;
+  const meta = await resolveTableWithSchema(binding.mainTable);
+  if (!meta) {
+    return {
+      permitNo: formatOccupationPermitNo(year, 1),
+      error: `${binding.mainTable} 테이블이 없습니다.`,
+    };
+  }
+
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const permitCol = findColumn(cols, 'permit_no');
+  if (!permitCol) {
+    return { permitNo: formatOccupationPermitNo(year, 1), error: 'permit_no 컬럼이 없습니다.' };
+  }
+  const keyCol = findColumn(cols, binding.fields.keyField);
+  const exclude = String(params?.excludeKey ?? '').trim();
+
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const prefix = `${year}-`;
+  const excludeClause =
+    exclude && keyCol
+      ? ` AND COALESCE(${quoteIdent(keyCol)}::text, '') <> '${esc(exclude)}'`
+      : '';
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT COALESCE(${quoteIdent(permitCol)}::text, '') AS code
+         FROM "${safeSchema}"."${safe}"
+         WHERE COALESCE(${quoteIdent(permitCol)}::text, '') LIKE '${esc(prefix)}%'
+         ${excludeClause}
+         LIMIT 5000`
+      )
+    );
+    let maxSeq = 0;
+    for (const row of res.rows ?? []) {
+      const code = String((row as { code?: string }).code ?? '').trim();
+      const seq = parseOccupationPermitNoSeq(code, year);
+      if (seq != null && seq > maxSeq) maxSeq = seq;
+    }
+    return { permitNo: formatOccupationPermitNo(year, maxSeq + 1) };
+  } catch (e: unknown) {
+    return {
+      permitNo: formatOccupationPermitNo(year, 1),
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+/** 신규 미리보기용 — 이전 키(숫자)가 5면 6. ogc_fid·id 숫자 최대+1 */
 export async function getNextOccupationLedgerKey(params?: {
   serEng?: string;
   system?: string;
@@ -488,32 +547,64 @@ export async function getNextOccupationLedgerKey(params?: {
   }
   const binding = resolved.binding;
   const meta = await resolveTableWithSchema(binding.mainTable);
-  if (!meta) return { key: 'OCC-0001', error: undefined };
+  if (!meta) return { key: '1' };
 
   const cols = await getTableColumns(meta.schema, meta.tableName);
   const keyCol = findColumn(cols, binding.fields.keyField);
-  if (!keyCol) return { key: 'OCC-0001' };
+  const ogcCol = findColumn(cols, 'ogc_fid');
+  if (!keyCol && !ogcCol) return { key: '1' };
 
   const safe = meta.tableName.replace(/"/g, '""');
   const safeSchema = meta.schema.replace(/"/g, '""');
+  const maxParts: string[] = [];
+  if (ogcCol) {
+    maxParts.push(`COALESCE(MAX(${quoteIdent(ogcCol)}), 0)`);
+  }
+  if (keyCol) {
+    maxParts.push(`COALESCE(
+      MAX(
+        CASE
+          WHEN COALESCE(${quoteIdent(keyCol)}::text, '') ~ '^[0-9]+$'
+          THEN (${quoteIdent(keyCol)}::text)::bigint
+          ELSE 0
+        END
+      ),
+      0
+    )`);
+  }
+
   try {
     const res = await db.execute(
       sql.raw(
-        `SELECT COALESCE(${quoteIdent(keyCol)}::text, '') AS k
-         FROM "${safeSchema}"."${safe}"
-         WHERE COALESCE(${quoteIdent(keyCol)}::text, '') <> ''
-         ORDER BY ${quoteIdent(keyCol)} DESC
-         LIMIT 200`
+        `SELECT GREATEST(${maxParts.join(', ')}) + 1 AS n
+         FROM "${safeSchema}"."${safe}"`
       )
     );
-    const keys = (res.rows ?? [])
-      .map((r) => String((r as { k?: string }).k ?? '').trim())
-      .filter(Boolean);
-    if (keys.length === 0) return { key: 'OCC-0001' };
-    const next = incrementSuffixCode(keys[0]!);
-    return { key: next && next !== keys[0] ? next : 'OCC-0001' };
+    const n = Number((res.rows?.[0] as { n?: string | number } | undefined)?.n ?? 1);
+    if (!Number.isFinite(n) || n < 1) return { key: '1' };
+    return { key: String(Math.floor(n)) };
   } catch {
-    return { key: 'OCC-0001' };
+    // 폴백: 접미사 증가
+    if (!keyCol) return { key: '1' };
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT COALESCE(${quoteIdent(keyCol)}::text, '') AS k
+           FROM "${safeSchema}"."${safe}"
+           WHERE COALESCE(${quoteIdent(keyCol)}::text, '') <> ''
+           ORDER BY ${quoteIdent(keyCol)} DESC
+           LIMIT 200`
+        )
+      );
+      const keys = (res.rows ?? [])
+        .map((r) => String((r as { k?: string }).k ?? '').trim())
+        .filter(Boolean);
+      if (keys.length === 0) return { key: '1' };
+      const next = incrementSuffixCode(keys[0]!);
+      return { key: next && next !== keys[0] ? next : '1' };
+    } catch {
+      return { key: '1' };
+    }
   }
 }
 

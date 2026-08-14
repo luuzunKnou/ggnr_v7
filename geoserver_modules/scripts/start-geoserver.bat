@@ -22,10 +22,8 @@ echo Java not found. Install to geoserver_modules\java
 exit /b 1
 
 :java_found
-REM 3. Log folder
-set "LOG_DIR=%GEOSERVER_DIR%\ggnr_log"
-if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
-set "LOG_FILE=%LOG_DIR%\geoserver.log"
+REM 3. App log is data_dir\logs (rolling). Do not append stdout to ggnr_log.
+set "APP_LOG=%DATA_DIR%\logs\geoserver.log"
 
 REM 4. Check startup.bat
 if not exist "%BIN_DIR%\startup.bat" (
@@ -37,10 +35,11 @@ echo Starting GeoServer [cmd]...
 echo GEOSERVER_DIR: %GEOSERVER_DIR%
 echo GEOSERVER_DATA_DIR: %DATA_DIR%
 echo JAVA_HOME: %JAVA_HOME%
-echo LOG_FILE: %LOG_FILE%
+echo APP_LOG: %APP_LOG%
+echo Note: stdout is not appended to ggnr_log (use data_dir\logs)
 
-REM 5. Run startup.bat (output to ggnr_log)
+REM 5. Run startup.bat — no unlimited ggnr_log append
 cd /d "%BIN_DIR%"
 set "GEOSERVER_HOME=%GEOSERVER_DIR%"
 set "GEOSERVER_DATA_DIR=%DATA_DIR%"
-call startup.bat >> "%LOG_FILE%" 2>&1
+call startup.bat

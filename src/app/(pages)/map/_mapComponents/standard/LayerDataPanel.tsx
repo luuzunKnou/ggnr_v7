@@ -235,6 +235,12 @@ export function LayerDataPanel({
   const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
   const [selectedRowData, setSelectedRowData] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('basic');
+  /**
+   * 목록 그리드 칸 수 — 선택 여부와 분리.
+   * 상세 닫기 직후 selectedRow=null 인데 rows는 아직 7건인 레이스에서
+   * pageSize만 30으로 바뀌어 찌그러지는 것 방지.
+   */
+  const [listPageSize, setListPageSize] = useState(PAGE_SIZE_LIST);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const attachUploadInputRef = useRef<HTMLInputElement>(null);
   const selectedIdentifyRowRef = useRef<HTMLButtonElement | null>(null);
@@ -246,6 +252,10 @@ export function LayerDataPanel({
   const [radarActive, setRadarActive] = useState(false);
   const prevLayerRef = useRef<string | null>(null);
   const [selectedIdentifyIndex, setSelectedIdentifyIndex] = useState<number | null>(null);
+  /** loadPage 응답 순서 보장 — 늦게 도착한 7건 응답이 30건 목록을 덮지 않게 */
+  const loadPageSeqRef = useRef(0);
+  /** 상세 닫기 후 URL dataKey 반영 전, 목록 재조회로 상세가 다시 열리는 것 방지 */
+  const suppressDataKeySelectRef = useRef(false);
 
   const prevHadIdentifyRef = useRef(false);
   /** 새 식별·검색 결과 시 목록 선택 초기화. 식별 종료 시에만 상세 상태 정리(일반 목록 조회와 충돌 방지). */
@@ -350,7 +360,7 @@ export function LayerDataPanel({
   }, [tableForLayerConfig]);
 
   const selectedRow = selectedRowData;
-  const pageSize = selectedRow != null ? PAGE_SIZE_DETAIL : PAGE_SIZE_LIST;
+  const pageSize = listPageSize;
 
   const rowKeyForAttachments =
     selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
@@ -724,6 +734,9 @@ export function LayerDataPanel({
       setHighlightedRow(null);
       setSelectedRowData(null);
       setSelectedIdentifyIndex(null);
+      setListPageSize(PAGE_SIZE_LIST);
+      suppressDataKeySelectRef.current = false;
+      loadPageSeqRef.current += 1;
     }
     setLoading(true);
     setError(null);
@@ -840,23 +853,6 @@ export function LayerDataPanel({
       });
   }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
 
-  // 앱 안에서 행 선택 시 URL의 dataKey만 반영 → 기존 목록 유지, 선택/하이라이트만 동기화
-  useEffect(() => {
-    if (!activeLayer || isIdentifyMode || !keyFieldName || rows.length === 0) return;
-    const key = initialDataKey != null ? String(initialDataKey).trim() : '';
-    if (key === '') return;
-    const idx = rows.findIndex((r) => {
-      const rowKey = getRowKey(r, keyFieldName);
-      return rowKey != null && String(rowKey) === key;
-    });
-    if (idx >= 0) {
-      setSelectedRowData(rows[idx] as Record<string, unknown>);
-      setHighlightedRow(idx);
-      // 첨부파일 탭을 보던 중 다른 행(URL dataKey)으로 바뀌어도 탭 유지
-      setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
-    }
-  }, [activeLayer, isIdentifyMode, keyFieldName, initialDataKey, rows]);
-
   // 팝업에서 항목 클릭 후 패널 열렸을 때 해당 행 선택 및 상세 표시 + 지도에서 도형 강조만 (확대/이동 없음)
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
@@ -880,8 +876,9 @@ export function LayerDataPanel({
   const loadPage = useCallback(
     (newPage: number, size?: number) => {
       if (!activeLayer) return;
-      const ps = size ?? pageSize;
+      const ps = size ?? listPageSize;
       const savedScrollTop = listScrollRef.current?.scrollTop ?? 0;
+      const seq = ++loadPageSeqRef.current;
       setLoading(true);
       setError(null);
 
@@ -898,9 +895,12 @@ export function LayerDataPanel({
         },
       })
         .then((res) => {
+          if (seq !== loadPageSeqRef.current) return;
           const data = res?.data ?? res;
           const dataRows = Array.isArray(data?.rows) ? data.rows : [];
           const dataTotal = typeof data?.total === 'number' ? data.total : total;
+          // 행·칸 수를 같이 맞춰 한 렌더에 반영 (30칸+7행 / 7칸+30행 방지)
+          setListPageSize(ps);
           setRows(dataRows);
           setTotal(dataTotal);
           setPage(newPage);
@@ -909,12 +909,54 @@ export function LayerDataPanel({
           showCurrentListOnMap(dataRows);
         })
         .catch((err) => {
+          if (seq !== loadPageSeqRef.current) return;
           setError(err?.message ?? String(err));
           setLoading(false);
         });
     },
-    [activeLayer, total, pageSize, mapContext, showCurrentListOnMap]
+    [activeLayer, total, listPageSize, mapContext, showCurrentListOnMap]
   );
+
+  // 앱 안에서 행 선택 시 URL의 dataKey만 반영 → 선택/하이라이트 동기화 (목록↔상세 칸 수 맞춤)
+  useEffect(() => {
+    if (!activeLayer || isIdentifyMode || !keyFieldName || rows.length === 0) return;
+    const key = initialDataKey != null ? String(initialDataKey).trim() : '';
+    if (key === '') {
+      suppressDataKeySelectRef.current = false;
+      return;
+    }
+    if (suppressDataKeySelectRef.current) return;
+    const idx = rows.findIndex((r) => {
+      const rowKey = getRowKey(r, keyFieldName);
+      return rowKey != null && String(rowKey) === key;
+    });
+    if (idx < 0) return;
+    if (listPageSize === PAGE_SIZE_LIST && selectedRowData == null) {
+      const absoluteOffset = (page - 1) * PAGE_SIZE_LIST + idx;
+      const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
+      const newRowIndex = absoluteOffset % PAGE_SIZE_DETAIL;
+      setHighlightedRow(newRowIndex);
+      setSelectedRowData(rows[idx] as Record<string, unknown>);
+      setRows([]);
+      setListPageSize(PAGE_SIZE_DETAIL);
+      setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
+      loadPage(newPage, PAGE_SIZE_DETAIL);
+      return;
+    }
+    setSelectedRowData(rows[idx] as Record<string, unknown>);
+    setHighlightedRow(idx);
+    setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
+  }, [
+    activeLayer,
+    isIdentifyMode,
+    keyFieldName,
+    initialDataKey,
+    rows,
+    listPageSize,
+    selectedRowData,
+    page,
+    loadPage,
+  ]);
 
   const handleClose = () => {
     mapContext?.setIdentifyResultList?.(null);
@@ -945,10 +987,12 @@ export function LayerDataPanel({
     }
     const firstItemOffset = (page - 1) * PAGE_SIZE_DETAIL;
     const newPage = Math.floor(firstItemOffset / PAGE_SIZE_LIST) + 1;
+    suppressDataKeySelectRef.current = true;
     setHighlightedRow(null);
     setSelectedRowData(null);
     onDataKeyChange?.(null);
     setRows([]);
+    // listPageSize는 loadPage 성공 시 30으로 맞춤(닫는 동안은 7 유지 → 찌그러짐 방지)
     loadPage(newPage, PAGE_SIZE_LIST);
   };
 
@@ -960,6 +1004,7 @@ export function LayerDataPanel({
       if (!rowData) return;
       const keyVal = getRowKey(rowData, keyFieldName);
       const wasDetailOpen = selectedRowData != null;
+      suppressDataKeySelectRef.current = false;
       if (wasDetailOpen) {
         setHighlightedRow(rowIndex);
         setSelectedRowData(rowData);
@@ -972,6 +1017,7 @@ export function LayerDataPanel({
         setHighlightedRow(newRowIndex);
         setSelectedRowData(rowData);
         setRows([]);
+        setListPageSize(PAGE_SIZE_DETAIL);
         setActiveTab('basic');
         onDataKeyChange?.(keyVal);
         loadPage(newPage, PAGE_SIZE_DETAIL);
@@ -1082,12 +1128,21 @@ export function LayerDataPanel({
   const listFieldsAll = (fields.length > 0 ? fields : detailFields.length > 0 ? detailFields : autoFields).filter(
     (f) => !isGeomLikeFieldName(String(f.define_field_name ?? ''))
   );
-  /** 데이터 조회와 동일: 최대 5열. 시설관리(도로대장 시설 컬럼)도 같은 레이아웃·클래스만 사용 */
+  /** 데이터 조회와 동일: 최대 5열. 시설관리 컬럼 순서는 도로대장 설정, 헤더는 defineLayer 한글명 */
   const listFields = useFacilityCols
-    ? facilityColumnKeys.slice(0, 5).map((k) => ({
-        define_field_name: k,
-        define_field_kor_name: k,
-      }))
+    ? facilityColumnKeys.slice(0, 5).map((k) => {
+        const kl = String(k).trim().toLowerCase();
+        const meta =
+          detailFields.find(
+            (f) => String(f.define_field_name ?? "").trim().toLowerCase() === kl
+          ) ??
+          fields.find((f) => String(f.define_field_name ?? "").trim().toLowerCase() === kl);
+        const kor = String(meta?.define_field_kor_name ?? "").trim();
+        return {
+          define_field_name: k,
+          define_field_kor_name: kor || k,
+        };
+      })
     : listFieldsAll.slice(0, 5);
 
   const isKeyField = (name: string) =>

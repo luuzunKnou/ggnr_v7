@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exportLayerTableToShp } from '@/service/shpUploadService';
+import { recordLayerDownloadLog } from '@/service/layerDownloadLog';
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
       );
     }
     console.log('[download/shp]', tableName, result.zipBuffer.length, 'bytes');
+    try {
+      await recordLayerDownloadLog({ tableName, format: 'SHP' });
+    } catch (e) {
+      console.warn('[download/shp] data_log', e instanceof Error ? e.message : e);
+    }
     const safeName = tableName.replace(/[^a-zA-Z0-9_가-힣-]/g, '_');
     return new NextResponse(new Uint8Array(result.zipBuffer), {
       headers: {

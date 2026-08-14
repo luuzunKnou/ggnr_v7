@@ -3,7 +3,7 @@
 -- 2) 수납은 1·2차(동일 부과키·다른 수납일련) 모두 insert
 -- 3) 수납 있는 부과키의 미납 행 제거
 
-INSERT INTO next_gen_linkage.ngl_fee_list (
+INSERT INTO layer.ngl_fee_list (
   fee_status,
   rcvmt_sn,
   sgb_cd,
@@ -222,7 +222,7 @@ FROM next_gen_linkage.ngl_arrears_list a
 WHERE a.lvy_key IS NOT NULL AND btrim(a.lvy_key) <> ''
 ON CONFLICT (lvy_key, rcvmt_sn) DO NOTHING;
 
-INSERT INTO next_gen_linkage.ngl_fee_list (
+INSERT INTO layer.ngl_fee_list (
   fee_status,
   sgb_cd,
   lvy_key,
@@ -468,10 +468,10 @@ ON CONFLICT (lvy_key, rcvmt_sn) DO UPDATE SET
   updated_at = now();
 
 -- 수납이 있는 부과키의 미납(수납일련='') 행 제거
-DELETE FROM next_gen_linkage.ngl_fee_list a
+DELETE FROM layer.ngl_fee_list a
 WHERE a.fee_status = '미납'
   AND a.rcvmt_sn = ''
   AND EXISTS (
-    SELECT 1 FROM next_gen_linkage.ngl_fee_list r
+    SELECT 1 FROM layer.ngl_fee_list r
     WHERE r.lvy_key = a.lvy_key AND r.fee_status = '수납'
   );

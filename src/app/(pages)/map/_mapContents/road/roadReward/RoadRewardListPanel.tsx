@@ -149,7 +149,12 @@ export function RoadRewardListPanel({
     const saved = cases.filter((c) => !isNewRoadRewardCaseId(c.id));
     const kw = keyword.trim().toLowerCase();
     if (!kw) return saved;
-    return saved.filter((c) => c.name.toLowerCase().includes(kw));
+    return saved.filter((c) => {
+      const name = c.name.toLowerCase();
+      const org = (c.org ?? "").toLowerCase();
+      const policy = (c.policy ?? "").toLowerCase();
+      return name.includes(kw) || org.includes(kw) || policy.includes(kw);
+    });
   }, [cases, keyword]);
 
   const handleAdd = () => {
@@ -203,63 +208,101 @@ export function RoadRewardListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-slate-200 px-2.5 py-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="검색 (건명)"
-            className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+            placeholder="건명·조직·정책"
+            className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
+        </div>
+        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+          <span>목록 {filtered.length.toLocaleString()}건</span>
+          {loading ? (
+            <span className="inline-flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              불러오는 중
+            </span>
+          ) : null}
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 px-3 py-8 text-xs text-slate-500">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+        {listError ? (
+          <div className="m-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+            {listError}
+          </div>
+        ) : null}
+        {loading && filtered.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 px-3 py-8 text-[12px] text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             불러오는 중…
           </div>
-        ) : listError ? (
-          <div className="px-3 py-8 text-center text-xs text-red-600">{listError}</div>
-        ) : filtered.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-slate-500">
+        ) : !loading && filtered.length === 0 ? (
+          <p className="px-3 py-2.5 text-xs text-slate-500">
             {cases.length === 0 ? "등록된 건이 없습니다." : "검색 결과가 없습니다."}
-          </div>
+          </p>
         ) : (
-          <ul className="list-none divide-y divide-slate-100">
-            {filtered.map((c) => {
-              const isSelected = c.id === selectedId;
-              const parcelCount = c.parcels.length || c.parcelCount || 0;
-              return (
-                <li key={c.id}>
-                  <button
-                    type="button"
+          <table className="w-full table-fixed border-collapse text-xs">
+            <colgroup>
+              <col />
+              <col className="w-[90px]" />
+            </colgroup>
+            <tbody>
+              {filtered.map((c) => {
+                const isSelected = c.id === selectedId;
+                const parcelCount = c.parcels.length || c.parcelCount || 0;
+                const displayName = c.name.trim() || "(건명 없음)";
+                return (
+                  <tr
+                    key={c.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => void handleSelect(c.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void handleSelect(c.id);
+                      }
+                    }}
                     className={cn(
-                      "w-full px-3 py-2 text-left text-xs transition-colors hover:bg-slate-50",
-                      isSelected && "bg-primary/10"
+                      "cursor-pointer border-b border-slate-200 align-middle transition-colors",
+                      isSelected
+                        ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
+                        : "border-l-[3px] border-l-transparent hover:bg-slate-50"
                     )}
                   >
-                    <div className="truncate font-medium text-slate-800">{c.name || "(건명 없음)"}</div>
-                    <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                    <td className="min-w-0 overflow-hidden px-3 py-1.5">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
+                            c.name.trim() ? "text-slate-800" : "text-slate-400"
+                          )}
+                          title={displayName}
+                        >
+                          {displayName}
+                        </p>
+                        {!c.geometry3857 ? (
+                          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-800">
+                            범위미정
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right text-[11px] tabular-nums text-slate-600">
                       필지 {parcelCount.toLocaleString()}건
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
-
-      {!!cases.length && !loading && (
-        <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
-          {filtered.length.toLocaleString()}건
-        </div>
-      )}
     </div>
   );
 }

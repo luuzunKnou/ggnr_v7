@@ -39,6 +39,7 @@ import {
 import {
   requestServiceFileDataDelete,
   serviceFileDataDownloadUrl,
+  serviceFileDataZipDownloadUrl,
   triggerServiceFileDownload,
   useServiceFileChunkedUpload,
   useServiceFileData,
@@ -71,6 +72,7 @@ import {
   type RiverConstructionLedgerRow,
 } from "./riverConstructionLedgerMock";
 import { RiverNameSelect } from "./RiverNameSelect";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   row: RiverConstructionLedgerRow;
@@ -83,6 +85,8 @@ const textareaClass =
   "min-h-[2.75rem] w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 const btnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+const btnSecondary =
+  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
 
 type AttrDraft = {
   name: string;
@@ -1312,7 +1316,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       </div>
 
       {/* 본문 전체가 하나로 스크롤 — 상세 속성 · 필지 · 첨부파일 순서로 자연스럽게 이어짐 */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-2 text-xs scrollbar-hide">
+      <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-xs">
         <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-white py-0.5">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             상세 속성
@@ -1454,23 +1458,52 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               <Paperclip className="h-3.5 w-3.5" />
               첨부파일
             </div>
-            <button
-              type="button"
-              className={btnPrimary}
-              disabled={!fileKey}
-              title={fileKey ? "첨부 업로드" : "저장 후 첨부할 수 있습니다"}
-              onClick={() => attachInputRef.current?.click()}
-            >
-              <Plus className="h-3 w-3" />
-              첨부
-            </button>
-            <input
-              ref={attachInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => void handleUploadFiles(e.target.files)}
-            />
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className={btnSecondary}
+                disabled={!fileKey}
+                title={
+                  fileKey
+                    ? "폴더 포함 첨부파일 전체 ZIP 다운로드"
+                    : "저장 후 다운로드할 수 있습니다"
+                }
+                onClick={() => {
+                  if (!fileKey) return;
+                  const label =
+                    String(row.name ?? "").trim() ||
+                    String(row.location ?? "").trim() ||
+                    "공사대장";
+                  const url = serviceFileDataZipDownloadUrl(
+                    fileSerEng,
+                    CONS_DATA_AS_FILE_LAYER,
+                    fileKey,
+                    { layerDisplayName: label }
+                  );
+                  triggerServiceFileDownload(url, `${label} 첨부파일.zip`);
+                }}
+              >
+                <Download className="h-3 w-3" />
+                전체
+              </button>
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={!fileKey}
+                title={fileKey ? "첨부 업로드" : "저장 후 첨부할 수 있습니다"}
+                onClick={() => attachInputRef.current?.click()}
+              >
+                <Plus className="h-3 w-3" />
+                첨부
+              </button>
+              <input
+                ref={attachInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => void handleUploadFiles(e.target.files)}
+              />
+            </div>
           </div>
 
           {fileKey ? (
@@ -1516,7 +1549,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
             </div>
           )}
         </div>
-      </div>
+      </MapSideDetailScroll>
 
       {preview ? (
         <ServiceFileImagePreview

@@ -16,6 +16,7 @@ import {
   type LayerRowParcelItem,
 } from "../../../_mapComponents/layerRowEdit";
 import { ROAD_USE_LEDGER_JIJUK_WMS_LAYER_ID } from "./roadUseLedgerLayerId";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
   detailId: string;
@@ -162,7 +163,7 @@ export function RoadUseLedgerDetailPanel({
         onClose={onClose}
       />
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {showLoading && (
           <div className="flex items-center gap-2 py-6 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
@@ -203,7 +204,7 @@ export function RoadUseLedgerDetailPanel({
             등록할 필드 정의를 불러오지 못했습니다.
           </div>
         )}
-      </div>
+      </MapSideDetailScroll>
     </div>
   );
 }

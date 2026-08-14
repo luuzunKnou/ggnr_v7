@@ -85,16 +85,19 @@ export function MapSideListPanel({
         role="separator"
         aria-label="패널 너비 조절"
         onMouseDown={handleResizeStart}
-        className="absolute right-0 top-0 bottom-0 z-10 flex w-2 cursor-col-resize items-center justify-center group hover:bg-muted/60"
+        className="absolute right-0 top-0 bottom-0 z-20 flex w-2.5 cursor-col-resize items-center justify-center group hover:bg-muted/50"
+        title="너비 조절"
       >
-        <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="pointer-events-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
           <GripVertical className="h-4 w-4" />
         </span>
       </div>
 
       <div
         className={cn(
-          'flex-1 min-h-0 flex flex-col',
+          'flex min-h-0 flex-1 flex-col',
+          // 목록 스크롤(scrollbar-thin)만 고정 여유. 상세는 MapSideDetailScroll(넘칠 때만)
+          '[&.scrollbar-thin]:mr-[10px] [&_.scrollbar-thin]:mr-[10px]',
           contentClassName ?? 'overflow-hidden',
         )}
       >

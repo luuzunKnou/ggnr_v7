@@ -9,8 +9,11 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { areGeomsEquivalentForHistory } from '@/lib/geomCompare';
-
-export type DataLogSource = '시스템' | 'SHP 업로드' | 'Excel 업로드';
+export type DataLogSource =
+  | '시스템'
+  | 'SHP 업로드'
+  | 'Excel 업로드'
+  | '레이어 관리(개발자모드)';
 export type DataLogType = '추가' | '수정' | '삭제' | '되돌리기' | '조회' | '저장';
 
 export type DataLogDetailInput = {
@@ -282,7 +285,11 @@ export async function recordDataLog(params: {
   details?: DataLogDetailInput[];
   oldData?: Record<string, unknown> | null;
   newData?: Record<string, unknown> | null;
-}): Promise<{ success: boolean; dlKey?: number; error?: string }> {
+  /**
+   * @deprecated public_layer도 layer와 동일하게 이력을 남긴다. 호출 호환용으로만 유지하며 무시된다.
+   */
+  allowPublicLayer?: boolean;
+}): Promise<{ success: boolean; dlKey?: number; skipped?: boolean; error?: string }> {
   const tableName = String(params.tableName ?? '').trim();
   const keyField = String(params.keyField ?? '').trim();
   const keyValue = String(params.keyValue ?? '').trim();
@@ -377,7 +384,7 @@ export async function recordDataLogsFromSyncStyleRows(params: {
     oldData?: Record<string, unknown> | null;
     newData?: Record<string, unknown> | null;
   }>;
-}): Promise<{ success: boolean; recorded: number; error?: string }> {
+}): Promise<{ success: boolean; recorded: number; skipped?: boolean; error?: string }> {
   let recorded = 0;
   try {
     for (const row of params.rows) {
@@ -405,6 +412,66 @@ export async function recordDataLogsFromSyncStyleRows(params: {
     return { success: true, recorded };
   } catch (e: unknown) {
     return { success: false, recorded, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 테이블 영문명 기준 통합 이력·회차 스냅샷 일괄 삭제.
+ * 스키마를 public_layer 로 전환할 때 선택적으로 호출.
+ */
+export async function deleteIntegratedDataHistoryForTable(tableName: string): Promise<{
+  success: boolean;
+  deletedLogs: number;
+  deletedSnapshots: number;
+  error?: string;
+}> {
+  const name = String(tableName ?? '').trim();
+  if (!name) {
+    return { success: false, deletedLogs: 0, deletedSnapshots: 0, error: 'tableName이 필요합니다.' };
+  }
+  const safe = name.replace(/'/g, "''");
+  try {
+    await db.execute(sql.raw(
+      `DELETE FROM data_detail_log
+       WHERE dd_dl_key IN (
+         SELECT dl_key FROM data_log
+         WHERE lower(dl_table_name) = lower('${safe}')
+       )`
+    ));
+    const logRes = await db.execute(sql.raw(
+      `DELETE FROM data_log
+       WHERE lower(dl_table_name) = lower('${safe}')
+       RETURNING dl_key`
+    ));
+    const deletedLogs = (logRes.rows as unknown[])?.length ?? 0;
+
+    let deletedSnapshots = 0;
+    try {
+      await db.execute(sql.raw(
+        `DELETE FROM data_batch_snapshot_row
+         WHERE dbsr_dbs_key IN (
+           SELECT dbs_key FROM data_batch_snapshot
+           WHERE lower(dbs_table_name) = lower('${safe}')
+         )`
+      ));
+      const snapRes = await db.execute(sql.raw(
+        `DELETE FROM data_batch_snapshot
+         WHERE lower(dbs_table_name) = lower('${safe}')
+         RETURNING dbs_key`
+      ));
+      deletedSnapshots = (snapRes.rows as unknown[])?.length ?? 0;
+    } catch {
+      // 스냅샷 테이블 미적용 환경에서는 이력만 삭제
+    }
+
+    return { success: true, deletedLogs, deletedSnapshots };
+  } catch (e: unknown) {
+    return {
+      success: false,
+      deletedLogs: 0,
+      deletedSnapshots: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 

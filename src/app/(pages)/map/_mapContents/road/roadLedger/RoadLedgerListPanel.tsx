@@ -230,7 +230,7 @@ export function RoadLedgerListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {loading ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중...</p>
         ) : error ? (

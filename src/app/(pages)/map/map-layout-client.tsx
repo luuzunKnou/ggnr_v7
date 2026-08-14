@@ -93,6 +93,10 @@ import {
   findOpenedOccupationLedgerSerEng,
   isOccupationLedgerOpenedToken,
 } from "@/lib/occupationLedgerBinding"
+import {
+  findOpenedUseFeeSerEng,
+  isUseFeeOpenedToken,
+} from "@/lib/useFeeBinding"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
@@ -106,6 +110,7 @@ import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
 import { LAYER_ROW_NEW_ID } from "./_mapComponents/layerRowEdit"
 import { UseFeeListPanel } from "./_mapContents/useFee/UseFeeListPanel"
 import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
+import { clearForeignUseFeeWmsLayers } from "./_mapContents/useFee/useFeeMapSync"
 import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
 import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
 import {
@@ -279,14 +284,14 @@ const USAGE_DATA_AS_OPENED_KEY = "usageDataAs"
 // const USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH = 340
 // const USE_LEDGER_PROTO_DETAIL_MIN_WIDTH = 340
 // const USE_LEDGER_PROTO_DETAIL_MAX_WIDTH = 480
-const USE_FEE_OPENED_KEY = "useFee"
+/** 레거시 opened=useFee → waterNglFeeList 로 취급 (findOpenedUseFeeSerEng) */
 /** 점용상세(343)와 동일 기준 */
 const USE_FEE_DETAIL_DEFAULT_WIDTH = 343
 const USE_FEE_DETAIL_MIN_WIDTH = 343
 const USE_FEE_DETAIL_MAX_WIDTH = 480
 /** 하천점용 목록(466)과 동일 기준 */
-const USE_FEE_PANEL_DEFAULT_WIDTH = 466
-const USE_FEE_PANEL_MIN_WIDTH = 466
+const USE_FEE_PANEL_DEFAULT_WIDTH = 540
+const USE_FEE_PANEL_MIN_WIDTH = 540
 const USE_FEE_PANEL_MAX_WIDTH = 960
 
 /** serviceList.ser_eng / systemList 메뉴 키와 동일 */
@@ -322,15 +327,15 @@ const RIVER_CONSTRUCTION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH = 640
 
-const USAGE_DATA_AS_PANEL_DEFAULT_WIDTH = 466
-const USAGE_DATA_AS_PANEL_MIN_WIDTH = 466
+const USAGE_DATA_AS_PANEL_DEFAULT_WIDTH = 612
+const USAGE_DATA_AS_PANEL_MIN_WIDTH = 612
 const USAGE_DATA_AS_PANEL_MAX_WIDTH = 960
 const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
 const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
 const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
 
-const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 466
-const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 466
+const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 619
+const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 619
 const OCCUPATION_LEDGER_PANEL_MAX_WIDTH = 960
 const OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const OCCUPATION_LEDGER_DETAIL_MIN_WIDTH = 320
@@ -365,6 +370,7 @@ function MapLayoutContent({
   const setRiverBasicPlanSelectedRiver = mapContext?.setRiverBasicPlanSelectedRiver
   const setUsageDataAsPanelOpen = mapContext?.setUsageDataAsPanelOpen
   const setOccupationLedgerPanelOpen = mapContext?.setOccupationLedgerPanelOpen
+  const setUseFeePanelOpen = mapContext?.setUseFeePanelOpen
   const setRoadLedgerPanelOpen = mapContext?.setRoadLedgerPanelOpen
   const setRoadLedgerIdentifyRow = mapContext?.setRoadLedgerIdentifyRow
   const setRoadLedgerFacilityModal = mapContext?.setRoadLedgerFacilityModal
@@ -483,7 +489,8 @@ function MapLayoutContent({
   const occupationLedgerSerEng = findOpenedOccupationLedgerSerEng(openedWindows)
   const occupationLedgerOpen = Boolean(occupationLedgerSerEng)
   const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
-  const useFeeOpen = openedWindows.includes(USE_FEE_OPENED_KEY)
+  const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
+  const useFeeOpen = Boolean(useFeeSerEng)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
@@ -845,9 +852,18 @@ function MapLayoutContent({
     occupationLedgerSerEng,
   ])
 
+  useEffect(() => {
+    setUseFeePanelOpen?.(useFeeOpen)
+  }, [setUseFeePanelOpen, useFeeOpen])
+
   /** 시스템 전환 시 — 다른 시스템 점용대장(하천·도로·국공유지) WMS만 끄기 */
   useEffect(() => {
     clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
+  }, [systemKeyFromUrl, setVisibleLayerNames])
+
+  /** 시스템 전환 시 — 다른 시스템 점사용료 WMS만 끄기 */
+  useEffect(() => {
+    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
   }, [systemKeyFromUrl, setVisibleLayerNames])
 
   useEffect(() => {
@@ -1122,7 +1138,7 @@ function MapLayoutContent({
 
   const handleCloseUseFee = () => {
     setUseFeeDetailId(null)
-    const next = openedWindows.filter((w) => w !== USE_FEE_OPENED_KEY)
+    const next = openedWindows.filter((w) => !isUseFeeOpenedToken(w))
     setOpened(next)
   }
 
@@ -1411,7 +1427,7 @@ function MapLayoutContent({
                 className="shadow-none"
               >
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0 bg-white">
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
                     <span className="text-sm font-semibold text-slate-800">시설관리</span>
                     <button
                       type="button"
@@ -1572,7 +1588,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadLedgerDetailLeftPx}
                 onWidthChange={setRoadLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-auto scrollbar-thin"
               >
                 <RoadLedgerDetailPanel
                   row={mapContext.roadLedgerIdentifyRow}
@@ -1643,7 +1659,7 @@ function MapLayoutContent({
                 maxWidth={BUILD_PUBLIC_LAND_DETAIL_MAX_WIDTH}
                 leftOffsetPx={buildPublicLandDetailLeftPx}
                 onWidthChange={setBuildPublicLandDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <BuildPublicLandDetailPanel
                   detailId={buildPublicLandSelectedId}
@@ -1688,7 +1704,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_USE_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadUseLedgerDetailLeftPx}
                 onWidthChange={setRoadUseLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RoadUseLedgerDetailPanel
                   detailId={roadUseLedgerDetailId}
@@ -1733,7 +1749,7 @@ function MapLayoutContent({
                 maxWidth={RIVER_USE_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={riverUseLedgerDetailLeftPx}
                 onWidthChange={setRiverUseLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RiverUseLedgerDetailPanel
                   detailId={riverUseLedgerDetailId}
@@ -1889,11 +1905,12 @@ function MapLayoutContent({
                 maxWidth={USAGE_DATA_AS_DETAIL_MAX_WIDTH}
                 leftOffsetPx={usageDataAsDetailLeftPx}
                 onWidthChange={setUsageDataAsDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <UsageDataAsDetailPanel
                   detailId={usageDataAsDetailId}
                   onClose={() => setUsageDataAsDetailId(null)}
+                  onSelectDetailId={setUsageDataAsDetailId}
                   onSaved={() => setUsageDataAsListRefreshKey((k) => k + 1)}
                   onCreated={(newKey) => {
                     setUsageDataAsListRefreshKey((k) => k + 1)
@@ -1935,12 +1952,13 @@ function MapLayoutContent({
                 maxWidth={OCCUPATION_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={occupationLedgerDetailLeftPx}
                 onWidthChange={setOccupationLedgerDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <OccupationLedgerDetailPanel
                   detailId={occupationLedgerDetailId}
                   serEng={occupationLedgerSerEng}
                   onClose={() => setOccupationLedgerDetailId(null)}
+                  onSelectDetailId={setOccupationLedgerDetailId}
                   onSaved={() => setOccupationLedgerListRefreshKey((k) => k + 1)}
                   onCreated={(newKey) => {
                     setOccupationLedgerListRefreshKey((k) => k + 1)
@@ -1981,7 +1999,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_REWARD_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadRewardDetailLeftPx}
                 onWidthChange={setRoadRewardDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RoadRewardDetailPanel
                   caseId={roadRewardSelectedId}
@@ -1992,7 +2010,8 @@ function MapLayoutContent({
                   onCaseIdChange={setRoadRewardSelectedId}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
-                    roadRewardPanelWidth + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+                    roadRewardPanelWidth +
+                    (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
                   }
                 />
               </MapSideListPanel>
@@ -2057,7 +2076,7 @@ function MapLayoutContent({
                 maxWidth={MEMO_DETAIL_MAX_WIDTH}
                 leftOffsetPx={memoDetailLeftPx}
                 onWidthChange={setMemoDetailWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <MemoDetailPanel
                   detailId={memoDetailId}
@@ -2191,7 +2210,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
                 leftOffsetPx={roadDocPanelLeftPx}
                 onWidthChange={setRoadDocPanelWidth}
-                contentClassName="overflow-y-auto overflow-x-hidden scrollbar-hide"
+                contentClassName="overflow-hidden"
               >
                 <RoadDocManualPanel onClose={handleCloseRoadDoc} />
               </MapSideListPanel>
@@ -2212,7 +2231,7 @@ function MapLayoutContent({
             </div>
           )}
           {/* 점용대장(프) 더미 패널 비활성 — UseLedgerProtoList/Detail + 연계 점사용료 */}
-          {useFeeOpen && (
+          {useFeeOpen && useFeeSerEng && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
                 width={useFeePanelWidth}
@@ -2222,16 +2241,15 @@ function MapLayoutContent({
                 onWidthChange={setUseFeePanelWidth}
               >
                 <UseFeeListPanel
+                  serEng={useFeeSerEng}
                   onClose={handleCloseUseFee}
                   selectedId={useFeeDetailId}
-                  onSelectId={(id) => {
-                    setUseFeeDetailId((prev) => (prev === id ? null : id))
-                  }}
+                  onSelectId={setUseFeeDetailId}
                 />
               </MapSideListPanel>
             </div>
           )}
-          {useFeeOpen && useFeeDetailId && (
+          {useFeeOpen && useFeeSerEng && useFeeDetailId && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
                 width={useFeeDetailWidth}
@@ -2242,8 +2260,10 @@ function MapLayoutContent({
                 contentClassName="overflow-hidden"
               >
                 <UseFeeDetailPanel
+                  serEng={useFeeSerEng}
                   detailId={useFeeDetailId}
                   onClose={() => setUseFeeDetailId(null)}
+                  onSelectId={setUseFeeDetailId}
                 />
               </MapSideListPanel>
             </div>
@@ -2314,7 +2334,7 @@ function MapLayoutContent({
                   setUsageDataAsDetailId(ledgerId)
                 }}
                 onOpenFee={(feeId) => {
-                  setOpened([USE_FEE_OPENED_KEY])
+                  setOpened(["waterNglFeeList"])
                   setUseFeeDetailId(feeId)
                 }}
               />

@@ -13,6 +13,10 @@ import {
 } from "./roadLedgerDocLayerMap";
 import { pickRoadLedgerField, pickRoadLedgerOgcFid } from "./roadLedgerFormat";
 import {
+  fetchRoadLedgerDefineFieldLabels,
+  resolveRoadLedgerFieldLabel,
+} from "./roadLedgerDefineFieldLabels";
+import {
   formatRoadLedgerFacilityCellValue,
   getRoadLedgerFacilityColumnKeys,
 } from "./roadLedgerTableDisplayFields";
@@ -83,6 +87,10 @@ export function RoadLedgerFacilityListSection({
   const [expandedFacilityTableKeys, setExpandedFacilityTableKeys] = useState<Set<string>>(
     () => new Set()
   );
+  /** defineTableName(소문자) → field(소문자) → 한글 라벨 */
+  const [fieldLabelsByTable, setFieldLabelsByTable] = useState<
+    Record<string, Record<string, string>>
+  >({});
 
   const handleFacilityRowClick = useCallback(
     async (defineTableName: string, tableTitle: string, facilityRow: Record<string, unknown>) => {
@@ -199,6 +207,35 @@ export function RoadLedgerFacilityListSection({
     };
   }, [rdid, hasRdidForFacilityList, activeGroupsKey, activeFacilityGroups]);
 
+  useEffect(() => {
+    const tables = [
+      ...new Set(
+        sections.flatMap((s) =>
+          s.tables.map((t) => String(t.defineTableName ?? "").trim().toLowerCase()).filter(Boolean)
+        )
+      ),
+    ];
+    if (tables.length === 0) {
+      setFieldLabelsByTable({});
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      tables.map(async (tn) => {
+        const labels = await fetchRoadLedgerDefineFieldLabels(tn);
+        return [tn, labels] as const;
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      const next: Record<string, Record<string, string>> = {};
+      for (const [tn, labels] of entries) next[tn] = labels;
+      setFieldLabelsByTable(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sections]);
+
   const selectedSection = useMemo(
     () => (selectedTabKey ? sections.find((s) => s.groupKey === selectedTabKey) : undefined),
     [sections, selectedTabKey]
@@ -278,6 +315,8 @@ export function RoadLedgerFacilityListSection({
               {selectedSection.tables.map((t) => {
                 const columnKeys =
                   t.rows.length > 0 ? getRoadLedgerFacilityColumnKeys(t.defineTableName, t.rows[0]!) : [];
+                const tableLabels =
+                  fieldLabelsByTable[String(t.defineTableName).trim().toLowerCase()] ?? {};
                 const tableExpandKey = facilityTableExpandKey(
                   selectedSection.groupKey,
                   t.defineTableName
@@ -325,15 +364,19 @@ export function RoadLedgerFacilityListSection({
                         <table className="w-max min-w-full border-collapse text-left text-[10px] text-slate-700">
                           <thead className={tableExpanded ? "sticky top-0 z-[1]" : undefined}>
                             <tr className="border-b border-slate-200 bg-slate-100">
-                              {columnKeys.map((col) => (
-                                <th
-                                  key={col}
-                                  scope="col"
-                                  className="max-w-[7.5rem] min-w-0 whitespace-normal break-words px-1.5 py-1 text-left align-top font-medium leading-tight text-slate-700"
-                                >
-                                  {col}
-                                </th>
-                              ))}
+                              {columnKeys.map((col) => {
+                                const kor = resolveRoadLedgerFieldLabel(tableLabels, col);
+                                return (
+                                  <th
+                                    key={col}
+                                    scope="col"
+                                    title={kor}
+                                    className="max-w-[7.5rem] min-w-0 whitespace-normal break-words px-1.5 py-1 text-left align-top font-medium leading-tight text-slate-700"
+                                  >
+                                    {kor}
+                                  </th>
+                                );
+                              })}
                             </tr>
                           </thead>
                           <tbody>

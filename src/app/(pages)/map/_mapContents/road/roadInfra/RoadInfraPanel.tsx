@@ -1182,7 +1182,7 @@ export function RoadInfraPanel({
       )}
 
       {/* 데이터조회 AttributeQueryUI — 레이어 그룹 영역과 동일 구조·클래스 */}
-      <div className="scrollbar-hide flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {(layerGroups.length === 0 || layerGroups.every((g) => g.layers.length === 0)) && (
           <div className="px-4 py-6 text-center text-sm text-slate-500">등록된 레이어가 없습니다.</div>
         )}

@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4785472f:19ff42d5832:-7293</id>
+  <name>water_ngl_fee_list</name>
+  <nativeName>water_ngl_fee_list</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>water_ngl_fee_list</title>
+  <keywords>
+    <string>features</string>
+    <string>water_ngl_fee_list</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>387550.73017949495</minx>
+    <maxx>421145.12620969216</maxx>
+    <miny>353062.2253446995</miny>
+    <maxy>406324.5125372676</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.09753044946802</minx>
+    <maxx>129.4884753484266</maxx>
+    <miny>36.650364680174135</miny>
+    <maxy>37.13719191522369</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -20,6 +20,7 @@ import {
   coerceExcelDateCellsInAoa,
   SHEET_TO_JSON_HEADER1_DISPLAY,
 } from '@/lib/excelSheetParse';
+import { readWorkbookFromBuffer } from '@/lib/excelWorkbookRead';
 import { LEDGER_ROW_KEY_HEADER, expandDevBehaviorLedgerRowsAsync } from '@/lib/excelDevLedgerExpand';
 import { cn } from '@/lib/utils';
 import { useSession } from 'next-auth/react';
@@ -36,6 +37,7 @@ import {
   EXCEL_LAYER_SYSTEM_COLS,
   type ExcelWizardKeyMode,
   buildExcelCompositeKeyValue,
+  isExcelSystemAttrField,
   isExcelSystemKeyColumn,
 } from './excelWizardKey';
 import { SyncDetailModal } from '../shp/SyncDetailModal';
@@ -236,7 +238,19 @@ function scoreUnifiedAddressColumn(header: string, samples: Record<string, unkno
   return scSample * 2 + Math.min(scHeader, 6);
 }
 
-function pickUnifiedAddressHeader(headers: string[], samples: Record<string, unknown[]>): string | null {
+function pickUnifiedAddressHeader(
+  headers: string[],
+  samples: Record<string, unknown[]>,
+  options?: { preferGeom?: boolean }
+): string | null {
+  if (options?.preferGeom) {
+    const geomHeader = headers.find((h) => h.trim().toLowerCase() === 'geom');
+    if (geomHeader) {
+      const vals = samples[geomHeader] ?? [];
+      const hasData = vals.some((v) => String(v ?? '').trim() !== '');
+      if (hasData) return geomHeader;
+    }
+  }
   let best: string | null = null;
   let bestSc = 0;
   for (const h of headers) {
@@ -307,6 +321,12 @@ function isLikelyMultiParcelAddress(raw: string): boolean {
 }
 
 const SINGLE_COLUMN_GPT_BATCH_MAX = 12;
+/** 신규 테이블 클라이언트 배치 INSERT 크기 */
+const EXCEL_CLIENT_INSERT_BATCH = 200;
+/** geom 모드에서 이 행 수 이상이면 서버 bulk 경로 */
+const EXCEL_GEOM_BULK_MIN_ROWS = 2000;
+/** geom 모드 상세 로그 간격 */
+const EXCEL_GEOM_LOG_EVERY = 1000;
 
 function extractJsonObjectFromGptText(text: string): unknown {
   const t = text.trim();
@@ -517,6 +537,8 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
   const useSyntheticKeyField = keyMode === 'synthetic';
   const usesCompositeKey = keyMode === 'composite';
   const [geometryType, setGeometryType] = useState<'Point' | 'Polygon' | null>(null);
+  /** geom 열 WKT 입력 좌표계 (저장은 항상 5181) */
+  const [excelGeomSridMode, setExcelGeomSridMode] = useState<'auto' | 4326 | 5181>('auto');
   /** 엑셀 타이틀(헤더) 1행 또는 2행(이중 헤더) */
   const [titleRowLines, setTitleRowLines] = useState<1 | 2 | 3>(1);
   const [step1Blocked, setStep1Blocked] = useState(true);
@@ -540,8 +562,8 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
   const integrityPendingRef = useRef<{
     stagedRows: Array<{
       attrs: Record<string, unknown>;
-      parcels: { address: string; x?: number; y?: number }[];
-      mulgunjis: { address: string; x?: number; y?: number }[];
+      parcels: { address: string; x?: number; y?: number; geom?: string }[];
+      mulgunjis: { address: string; x?: number; y?: number; geom?: string }[];
     }>;
     columns: Array<{
       define_field_name: string;
@@ -599,7 +621,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     setStep1Validating(true);
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const { workbook: wb, isCsv } = readWorkbookFromBuffer(buf, file.name);
       const sheetNames = wb.SheetNames;
       const sheetCount = sheetNames.length;
 
@@ -628,7 +650,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         setStep1Blocked(false);
         setStep1Warnings([]);
         setStep1MultiSheetWarning(
-          sheetCount > 1
+          !isCsv && sheetCount > 1
             ? `시트가 ${sheetCount}개 있습니다. 첫 번째 시트만 업로드·처리에 사용됩니다.`
             : null
         );
@@ -706,7 +728,16 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       : objectAddressSelectMode === 'singleColumn'
       ? !!selectedObjectAddressHeader
       : !!(objSplitEmdColumn && objSplitJibunColumn);
-  const canLeaveStep2 = !!geometryType && step2AddressOk && step2ObjectAddressOk;
+  const bothGeomConflict =
+    !isAndongRoadUseWorkflow &&
+    parcelSelectMode === 'singleColumn' &&
+    objectAddressSelectMode === 'singleColumn' &&
+    !!selectedGeocodingHeader &&
+    selectedGeocodingHeader.trim().toLowerCase() === 'geom' &&
+    !!selectedObjectAddressHeader &&
+    selectedObjectAddressHeader.trim().toLowerCase() === 'geom';
+  const canLeaveStep2 =
+    !!geometryType && step2AddressOk && step2ObjectAddressOk && !bothGeomConflict;
 
   /** 2~3단계: 원본 파싱 결과만 사용 (개발행위 행 확장은 4단계에서 수행) */
   const workflowParseResult = parseResult;
@@ -931,7 +962,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     if (initFileRef.current === fileRelPath) return;
     initFileRef.current = fileRelPath;
     const stem = fileName
-      .replace(/\.(xlsx|xls)$/i, '')
+      .replace(/\.(xlsx|xls|csv)$/i, '')
       .replace(/^\d{14}_/, '');
     const parentIsExcelRoot =
       !folderName.trim() || folderName.trim().toLowerCase() === 'excel_data';
@@ -1145,8 +1176,26 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     const headers = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
     const samples = workflowParseResult?.samples;
     if (!headers?.length || !samples) return null;
-    return pickUnifiedAddressHeader(headers, samples);
+    return pickUnifiedAddressHeader(headers, samples, { preferGeom: true });
   }, [workflowParseResult?.headers, workflowParseResult?.samples]);
+
+  const objectAddressRecommend = useMemo(() => {
+    const headers = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
+    const samples = workflowParseResult?.samples;
+    if (!headers?.length || !samples) return null;
+    // 필지가 geom을 쓰는 경우 물건지는 주소 점수만 (둘 다 geom 자동 추천 방지)
+    const parcelTakesGeom =
+      parcelSelectMode === 'singleColumn' &&
+      (selectedGeocodingHeader?.trim().toLowerCase() === 'geom' ||
+        pickUnifiedAddressHeader(headers, samples, { preferGeom: true })?.trim().toLowerCase() ===
+          'geom');
+    return pickUnifiedAddressHeader(headers, samples, { preferGeom: !parcelTakesGeom });
+  }, [
+    workflowParseResult?.headers,
+    workflowParseResult?.samples,
+    parcelSelectMode,
+    selectedGeocodingHeader,
+  ]);
 
   useEffect(() => {
     if (!isAndongRoadUseWorkflow) return;
@@ -1182,13 +1231,13 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     setSplitRiColumn((c) => c ?? picks.ri);
   }, [step, parcelSelectMode, workflowParseResult?.headers, workflowParseResult?.samples]);
 
-  /** 한 열 주소: 선택 없을 때만 추천 열을 기본 선택 */
+  /** 한 열 주소: 선택 없을 때만 추천 열을 기본 선택 (geom 열·데이터 있으면 우선) */
   useEffect(() => {
     if (step !== 2 || parcelSelectMode !== 'singleColumn') return;
     const headers = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
     const samples = workflowParseResult?.samples;
     if (!headers?.length || !samples) return;
-    const rec = pickUnifiedAddressHeader(headers, samples);
+    const rec = pickUnifiedAddressHeader(headers, samples, { preferGeom: true });
     if (!rec) return;
     setSelectedGeocodingHeader((prev) => {
       if (prev && headers.includes(prev)) return prev;
@@ -1210,19 +1259,41 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     setObjSplitRiColumn((c) => c ?? picks.ri);
   }, [step, objectAddressSelectMode, workflowParseResult?.headers, workflowParseResult?.samples]);
 
-  /** 물건지 한 열 주소: 선택 없을 때만 추천 열을 기본 선택 */
+  /** 물건지 한 열 주소: 선택 없을 때만 추천 열을 기본 선택 (필지가 geom이면 물건지는 geom 비우선) */
   useEffect(() => {
     if (step !== 2 || objectAddressSelectMode !== 'singleColumn') return;
     const headers = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
     const samples = workflowParseResult?.samples;
     if (!headers?.length || !samples) return;
-    const rec = pickUnifiedAddressHeader(headers, samples);
+    const parcelTakesGeom =
+      parcelSelectMode === 'singleColumn' &&
+      (selectedGeocodingHeader?.trim().toLowerCase() === 'geom' ||
+        pickUnifiedAddressHeader(headers, samples, { preferGeom: true })?.trim().toLowerCase() ===
+          'geom');
+    const rec = pickUnifiedAddressHeader(headers, samples, { preferGeom: !parcelTakesGeom });
     if (!rec) return;
+    if (parcelTakesGeom && rec.trim().toLowerCase() === 'geom') return;
     setSelectedObjectAddressHeader((prev) => {
-      if (prev && headers.includes(prev)) return prev;
+      if (prev && headers.includes(prev)) {
+        if (
+          parcelTakesGeom &&
+          prev.trim().toLowerCase() === 'geom' &&
+          selectedGeocodingHeader?.trim().toLowerCase() === 'geom'
+        ) {
+          return rec.trim().toLowerCase() === 'geom' ? null : rec;
+        }
+        return prev;
+      }
       return rec;
     });
-  }, [step, objectAddressSelectMode, workflowParseResult?.headers, workflowParseResult?.samples]);
+  }, [
+    step,
+    objectAddressSelectMode,
+    parcelSelectMode,
+    selectedGeocodingHeader,
+    workflowParseResult?.headers,
+    workflowParseResult?.samples,
+  ]);
 
   const runStep4 = useCallback(async () => {
     if (!parseResult || !tableEng.trim() || !geometryType) return;
@@ -1231,6 +1302,14 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       if (parcelSelectMode === 'singleColumn') {
         if (!selectedGeocodingHeader) return;
       } else if (!splitEmdColumn || !splitJibunColumn) return;
+      if (
+        parcelSelectMode === 'singleColumn' &&
+        objectAddressSelectMode === 'singleColumn' &&
+        selectedGeocodingHeader?.trim().toLowerCase() === 'geom' &&
+        selectedObjectAddressHeader?.trim().toLowerCase() === 'geom'
+      ) {
+        return;
+      }
     }
     setProcessingError(null);
     const lines: string[] = [];
@@ -1318,6 +1397,19 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     }
     if (parcelSelectMode === 'splitColumns') {
       pushLog('필지 주소: 열 구분 조합 방식 — 행마다 시·군구·읍·리·지번을 이어 붙입니다. (GPT 미사용)');
+    } else if (
+      parcelSelectMode === 'singleColumn' &&
+      selectedGeocodingHeader?.trim().toLowerCase() === 'geom'
+    ) {
+      pushLog(
+        `필지: geom 열 선택 — WKT를 도형으로 그대로 반영합니다. (GPT·지오코딩 생략, 입력 SRID=${excelGeomSridMode})`
+      );
+    }
+    if (
+      objectAddressSelectMode === 'singleColumn' &&
+      selectedObjectAddressHeader?.trim().toLowerCase() === 'geom'
+    ) {
+      pushLog('물건지: geom 열 선택 — WKT를 도형으로 그대로 반영합니다. (GPT·지오코딩 생략)');
     }
     const separateJijukTable = isLedgerWorkflow || createSeparateJijukTable;
     const separateMulgunjiTable = createSeparateMulgunjiTable;
@@ -1438,7 +1530,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       if (selectedFile) {
         try {
           const buf = await selectedFile.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const { workbook: wb } = readWorkbookFromBuffer(buf, selectedFile.name);
           const ws = wb.Sheets[wb.SheetNames[0] ?? ''];
           const merges = (ws?.['!merges'] ?? []) as Array<{ s: { r: number; c: number }; e: { r: number; c: number } }>;
           const infoFillHeaders = new Set<string>(
@@ -1651,6 +1743,10 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           }
         : null;
 
+    const attributeFieldDefs = activeFieldDefs.filter(
+      (f) => !isExcelSystemAttrField(f.headerEng, f.originalHeader)
+    );
+
     const columns =
       useSyntheticKeyField
         ? [
@@ -1661,7 +1757,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
               define_field_show_search: true,
               define_field_is_key: true,
             },
-            ...activeFieldDefs.map((f) => ({
+            ...attributeFieldDefs.map((f) => ({
               define_field_name: f.headerEng,
               define_field_kor_name: f.headerKor,
               define_field_show_list: f.showList,
@@ -1678,7 +1774,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                 define_field_show_search: true,
                 define_field_is_key: true,
               },
-              ...activeFieldDefs.map((f) => ({
+              ...attributeFieldDefs.map((f) => ({
                 define_field_name: f.headerEng,
                 define_field_kor_name: f.headerKor,
                 define_field_show_list: f.showList,
@@ -1695,7 +1791,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                   define_field_show_search: true,
                   define_field_is_key: true,
                 },
-                ...activeFieldDefs.map((f) => ({
+                ...attributeFieldDefs.map((f) => ({
                   define_field_name: f.headerEng,
                   define_field_kor_name: f.headerKor,
                   define_field_show_list: f.showList,
@@ -1703,7 +1799,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                   define_field_is_key: false,
                 })),
               ]
-            : activeFieldDefs.map((f) => ({
+            : attributeFieldDefs.map((f) => ({
                 define_field_name: f.headerEng,
                 define_field_kor_name: f.headerKor,
                 define_field_show_list: f.showList,
@@ -1727,6 +1823,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         define_field_is_key?: boolean;
       }> = [];
       for (const f of activeFieldDefs) {
+        if (isExcelSystemAttrField(f.headerEng, f.originalHeader)) continue;
         const cn = safeColumnName(f.headerEng);
         if (!dbNames.has(cn)) {
           addCols.push({
@@ -1794,14 +1891,65 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       }
     }
 
+    const useGeomAsParcel =
+      parcelSelectMode === 'singleColumn' &&
+      !!selectedGeocodingHeader &&
+      selectedGeocodingHeader.trim().toLowerCase() === 'geom';
+    const useGeomAsMulgunji =
+      objectAddressSelectMode === 'singleColumn' &&
+      !!selectedObjectAddressHeader &&
+      selectedObjectAddressHeader.trim().toLowerCase() === 'geom';
+
     const unifiedAddressByRow = new Map<number, string>();
     const objectUnifiedAddressByRow = new Map<number, string>();
     const addressesByRow = new Map<number, string[]>();
+    const geomByRow = new Map<number, string>();
+    const mulgunjiGeomByRow = new Map<number, string>();
     const mulgunjiByRow = new Map<number, string[]>();
     const pendingMultiRows: { i: number; text: string }[] = [];
     const pendingMultiMulgunjiRows: { i: number; text: string }[] = [];
     for (let i = 0; i < workRows.length; i++) {
       const row = workRows[i];
+
+      if (useGeomAsMulgunji && selectedObjectAddressHeader) {
+        const mgWkt = String(row[selectedObjectAddressHeader] ?? '').trim();
+        if (mgWkt) mulgunjiGeomByRow.set(i, mgWkt);
+        objectUnifiedAddressByRow.set(i, '');
+        mulgunjiByRow.set(i, []);
+      } else {
+        const objectUnifiedRaw =
+          objectAddressSelectMode === 'splitColumns'
+            ? buildUnifiedAddressFromSplit(row, {
+                sidoCol: objSplitSidoColumn,
+                sidoFixed: objSplitSidoFixed,
+                sigunguCol: objSplitSigunguColumn,
+                sigunguFixed: objSplitSigunguFixed,
+                emdCol: objSplitEmdColumn,
+                riCol: objSplitRiColumn,
+                jibunCol: objSplitJibunColumn,
+              })
+            : objectAddressSelectMode === 'singleColumn' && selectedObjectAddressHeader
+              ? String(row[selectedObjectAddressHeader] ?? '').trim()
+              : '';
+        objectUnifiedAddressByRow.set(i, normalizeExcelAddressForGeocode(objectUnifiedRaw));
+        const objectUnified = normalizeExcelAddressForGeocode(objectUnifiedRaw);
+        if (!objectUnified) {
+          mulgunjiByRow.set(i, []);
+        } else if (isLikelyMultiParcelAddress(objectUnified)) {
+          pendingMultiMulgunjiRows.push({ i, text: objectUnified });
+        } else {
+          mulgunjiByRow.set(i, [objectUnified]);
+        }
+      }
+
+      if (useGeomAsParcel && selectedGeocodingHeader) {
+        const wkt = String(row[selectedGeocodingHeader] ?? '').trim();
+        if (wkt) geomByRow.set(i, wkt);
+        unifiedAddressByRow.set(i, '');
+        addressesByRow.set(i, []);
+        continue;
+      }
+
       const unifiedRaw =
         parcelSelectMode === 'splitColumns' && splitCfg
           ? buildUnifiedAddressFromSplit(row, splitCfg)
@@ -1810,29 +1958,6 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
             : '';
       const unified = normalizeExcelAddressForGeocode(unifiedRaw);
       unifiedAddressByRow.set(i, unified);
-      const objectUnifiedRaw =
-        objectAddressSelectMode === 'splitColumns'
-          ? buildUnifiedAddressFromSplit(row, {
-              sidoCol: objSplitSidoColumn,
-              sidoFixed: objSplitSidoFixed,
-              sigunguCol: objSplitSigunguColumn,
-              sigunguFixed: objSplitSigunguFixed,
-              emdCol: objSplitEmdColumn,
-              riCol: objSplitRiColumn,
-              jibunCol: objSplitJibunColumn,
-            })
-          : objectAddressSelectMode === 'singleColumn' && selectedObjectAddressHeader
-            ? String(row[selectedObjectAddressHeader] ?? '').trim()
-            : '';
-      objectUnifiedAddressByRow.set(i, normalizeExcelAddressForGeocode(objectUnifiedRaw));
-      const objectUnified = normalizeExcelAddressForGeocode(objectUnifiedRaw);
-      if (!objectUnified) {
-        mulgunjiByRow.set(i, []);
-      } else if (isLikelyMultiParcelAddress(objectUnified)) {
-        pendingMultiMulgunjiRows.push({ i, text: objectUnified });
-      } else {
-        mulgunjiByRow.set(i, [objectUnified]);
-      }
       if (!unified) {
         addressesByRow.set(i, []);
         continue;
@@ -1937,11 +2062,153 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
 
     const stagedRows: Array<{
       attrs: Record<string, unknown>;
-      parcels: { address: string; x?: number; y?: number }[];
-      mulgunjis: { address: string; x?: number; y?: number }[];
+      parcels: { address: string; x?: number; y?: number; geom?: string }[];
+      mulgunjis: { address: string; x?: number; y?: number; geom?: string }[];
     }> = [];
 
-    for (let i = 0; i < workRows.length; i++) {
+    const canServerGeomBulk =
+      useGeomAsParcel &&
+      !integrityMode &&
+      !separateJijukTable &&
+      !separateMulgunjiTable &&
+      !isLedgerWorkflow &&
+      !usesCompositeKey &&
+      !!effectivePath &&
+      !!selectedGeocodingHeader &&
+      totalRows >= EXCEL_GEOM_BULK_MIN_ROWS;
+
+    let usedServerGeomBulk = false;
+    if (canServerGeomBulk) {
+      usedServerGeomBulk = true;
+      pushLog(
+        `대용량 geom: 서버 bulk 적재 (${totalRows.toLocaleString('ko-KR')}행, 배치 ${EXCEL_CLIENT_INSERT_BATCH}+, SRID=${excelGeomSridMode})`
+      );
+      const bulkJobId = `excel_geom_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const bulkEs = new EventSource(`/api/excel-wizard-events?jobId=${encodeURIComponent(bulkJobId)}`);
+      bulkEs.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data ?? '{}') as { message?: unknown };
+          const line = String(payload?.message ?? '').trim();
+          if (line) pushLog(line);
+        } catch {
+          /* ignore */
+        }
+      };
+      try {
+        const fieldMappings = attributeFieldDefs.map((f) => ({
+          originalHeader: f.originalHeader,
+          headerEng: f.headerEng,
+        }));
+        const bulkRes = await call('', 'POST', {
+          service: 'excelUploadService',
+          action: 'bulkLoadExcelGeomFromFile',
+          params: {
+            pathOrResult: effectivePath,
+            tableName: tableEng,
+            tableKorName: tableKor || tableEng,
+            keyField,
+            columns,
+            geometryType,
+            geomHeader: selectedGeocodingHeader,
+            fieldMappings,
+            geomInputSrid: excelGeomSridMode,
+            titleRowLines,
+            batchSize: EXCEL_CLIENT_INSERT_BATCH,
+            jobId: bulkJobId,
+            syntheticKeyField: useSyntheticKeyField ? skEngRaw : null,
+          },
+        });
+        const bulkData = bulkRes?.data ?? bulkRes;
+        if (!bulkData?.success) {
+          const err = bulkData?.error ?? '서버 geom bulk 실패';
+          setProcessingError(err);
+          pushLog(err);
+          await flushLogToFile(effectivePath);
+          bulkEs.close();
+          return;
+        }
+        totalInsertCount = Number(bulkData.rowCount ?? 0);
+        totalExtractCount = Number(bulkData.totalRows ?? totalRows);
+        totalCoordOk = Number(bulkData.polygonMatchedCount ?? 0);
+        totalPolygonMatched = Number(bulkData.polygonMatchedCount ?? 0);
+        totalPolygonNull = Number(bulkData.polygonNullCount ?? 0);
+        setProcessingProgress(80);
+        pushLog(
+          `서버 geom bulk 완료: 삽입 ${totalInsertCount.toLocaleString('ko-KR')}건`
+        );
+      } catch (e: unknown) {
+        const err = e instanceof Error ? e.message : String(e);
+        setProcessingError(err);
+        pushLog(err);
+        await flushLogToFile(effectivePath);
+        bulkEs.close();
+        return;
+      } finally {
+        bulkEs.close();
+      }
+    }
+
+    const pendingInsertRows: Array<{
+      attrs: Record<string, unknown>;
+      parcels: { address: string; x?: number; y?: number; geom?: string }[];
+      mulgunjis: { address: string; x?: number; y?: number; geom?: string }[];
+    }> = [];
+    let insertCallCount = 0;
+    const flushPendingInserts = async (): Promise<boolean> => {
+      if (pendingInsertRows.length === 0) return true;
+      const chunk = pendingInsertRows.splice(0, pendingInsertRows.length);
+      insertCallCount += 1;
+      try {
+        const createRes = await call('', 'POST', {
+          service: 'excelUploadService',
+          action: 'createTableFromExcel',
+          params: {
+            pathOrResult: effectivePath ?? undefined,
+            tableName: tableEng,
+            tableKorName: tableKor || tableEng,
+            keyField,
+            columns,
+            geometryType,
+            rows: chunk,
+            appendOnly: insertCallCount > 1,
+            separateJijukTable,
+            separateMulgunjiTable,
+            jijukTableComment: `${(tableKor || tableEng).trim()}_필지목록`,
+            mulgunjiTableComment: `${(tableKor || tableEng).trim()}_물건지`,
+            geomInputSrid: useGeomAsParcel ? excelGeomSridMode : 'auto',
+          },
+        });
+        const createData = createRes?.data ?? createRes;
+        if (!createData?.success) {
+          const err = createData?.error ?? '행 삽입 실패';
+          setProcessingError(err);
+          pushLog(err);
+          await flushLogToFile(effectivePath);
+          return false;
+        }
+        totalInsertCount += createData.rowCount ?? 0;
+        totalPnuAttempt += createData.pnuAttemptCount ?? 0;
+        totalPnuOk += createData.pnuOkCount ?? 0;
+        if (geometryType === 'Polygon') {
+          totalPolygonMatched += createData.polygonMatchedCount ?? 0;
+          totalPolygonNull += createData.polygonNullCount ?? 0;
+        }
+        if (useGeomAsParcel || insertCallCount === 1 || insertCallCount % 5 === 0) {
+          pushLog(
+            `INSERT 배치 ${insertCallCount}: ${chunk.length}행 (누적 삽입 ${totalInsertCount.toLocaleString('ko-KR')})`
+          );
+        }
+        return true;
+      } catch (e: unknown) {
+        const err = e instanceof Error ? e.message : String(e);
+        setProcessingError(err);
+        pushLog(err);
+        await flushLogToFile(effectivePath);
+        return false;
+      }
+    };
+
+    if (!usedServerGeomBulk) for (let i = 0; i < workRows.length; i++) {
       const row = workRows[i];
       let rawText = '';
       const attrs: Record<string, unknown> = {};
@@ -1952,6 +2219,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         }
         const def = activeFieldDefs.find((f) => f.originalHeader === h);
         if (!def) return;
+        if (isExcelSystemAttrField(def.headerEng, def.originalHeader)) return;
         attrs[safeColumnName(def.headerEng)] = row[h];
       });
       if (useSyntheticKeyField && skSafe) {
@@ -1981,56 +2249,77 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       const mulgunjiAddrs = (mulgunjiByRow.get(i) ?? [])
         .map((a) => normalizeExcelAddressForGeocode(a))
         .filter(Boolean);
-      const mulgunjis: { address: string; x?: number; y?: number }[] = [];
-      for (const addr of mulgunjiAddrs) {
-        if (!addr.trim()) continue;
-        try {
-          let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
-          if (!coord.ok) {
-            coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
-          }
-          if (coord.ok) {
-            mulgunjis.push({ address: addr, x: coord.lon, y: coord.lat });
-          } else {
+      const mulgunjis: { address: string; x?: number; y?: number; geom?: string }[] = [];
+      if (useGeomAsMulgunji) {
+        const mgWkt = mulgunjiGeomByRow.get(i) ?? '';
+        if (mgWkt) mulgunjis.push({ address: '', geom: mgWkt });
+      } else {
+        for (const addr of mulgunjiAddrs) {
+          if (!addr.trim()) continue;
+          try {
+            let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
+            if (!coord.ok) {
+              coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
+            }
+            if (coord.ok) {
+              mulgunjis.push({ address: addr, x: coord.lon, y: coord.lat });
+            } else {
+              mulgunjis.push({ address: addr });
+              pushGeocodeFail(addr, coord.message || '물건지 GetCoord 실패');
+            }
+          } catch (e: unknown) {
             mulgunjis.push({ address: addr });
-            pushGeocodeFail(addr, coord.message || '물건지 GetCoord 실패');
+            const msg = e instanceof Error ? e.message : String(e);
+            pushGeocodeFail(addr, msg || '물건지 API 오류');
           }
-        } catch (e: unknown) {
-          mulgunjis.push({ address: addr });
-          const msg = e instanceof Error ? e.message : String(e);
-          pushGeocodeFail(addr, msg || '물건지 API 오류');
         }
       }
 
-      const parcels: { address: string; x?: number; y?: number }[] = [];
-      for (const addr of addresses) {
-        if (!addr.trim()) continue;
-        try {
-          // 개발자 모드 지오코딩 테스트와 동일: VWorld Address API GetCoord (JSONP)
-          let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
-          if (!coord.ok) {
-            coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
-          }
-          if (coord.ok) {
-            parcels.push({ address: addr, x: coord.lon, y: coord.lat });
-          } else {
+      const parcels: { address: string; x?: number; y?: number; geom?: string }[] = [];
+      if (useGeomAsParcel) {
+        const wkt = geomByRow.get(i) ?? '';
+        if (wkt) {
+          parcels.push({ address: '', geom: wkt });
+        } else {
+          parcels.push({ address: '' });
+        }
+      } else {
+        for (const addr of addresses) {
+          if (!addr.trim()) continue;
+          try {
+            // 개발자 모드 지오코딩 테스트와 동일: VWorld Address API GetCoord (JSONP)
+            let coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'ROAD' });
+            if (!coord.ok) {
+              coord = await getCoordFromAddress(addr, { apiKey: vworldKey, type: 'PARCEL' });
+            }
+            if (coord.ok) {
+              parcels.push({ address: addr, x: coord.lon, y: coord.lat });
+            } else {
+              parcels.push({ address: addr });
+              pushGeocodeFail(addr, coord.message || 'GetCoord 실패');
+            }
+          } catch (e: unknown) {
             parcels.push({ address: addr });
-            pushGeocodeFail(addr, coord.message || 'GetCoord 실패');
+            const msg = e instanceof Error ? e.message : String(e);
+            pushGeocodeFail(addr, msg || 'API 오류');
           }
-        } catch (e: unknown) {
-          parcels.push({ address: addr });
-          const msg = e instanceof Error ? e.message : String(e);
-          pushGeocodeFail(addr, msg || 'API 오류');
         }
+        if (addresses.length === 0) parcels.push({ address: '' });
       }
-      if (addresses.length === 0) parcels.push({ address: '' });
 
-      const extractN = addresses.filter((a) => a.trim()).length;
-      const coordOk = parcels.filter((p) => p.x != null && p.y != null).length;
+      const extractN = useGeomAsParcel
+        ? (geomByRow.get(i) ? 1 : 0)
+        : addresses.filter((a) => a.trim()).length;
+      const coordOk = useGeomAsParcel
+        ? (geomByRow.get(i) ? 1 : 0)
+        : parcels.filter((p) => p.x != null && p.y != null).length;
       totalExtractCount += extractN;
       totalCoordOk += coordOk;
-      const resultText =
-        addresses.length > 0
+      const resultText = useGeomAsParcel
+        ? geomByRow.get(i)
+          ? ` — geom WKT 반영 (${String(geomByRow.get(i)).length}자)`
+          : ' — geom 없음 (셀 비어 있음)'
+        : addresses.length > 0
           ? ` — 필지 ${addresses.length}개 추출, ${coordOk}개 좌표 획득`
           : parcelSelectMode === 'splitColumns'
             ? ' — 주소 없음 (열 조합 결과 없음)'
@@ -2038,7 +2327,9 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
               ? ' — 주소 없음 (엑셀 셀 비어 있음)'
               : ' — 주소 없음 (필지 추출 결과 없음)';
       const rowLogLines = [`행 ${i + 1}/${totalRows} 처리${resultText}`];
-      if (rawText) {
+      if (useGeomAsParcel) {
+        if (geomByRow.get(i)) rowLogLines.push('  geom → 도형 그대로 삽입');
+      } else if (rawText) {
         if (parcelSelectMode === 'splitColumns') {
           addresses.filter((a) => a.trim()).forEach((a) => rowLogLines.push(`  조합 주소: ${a}`));
         } else {
@@ -2047,102 +2338,127 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       } else {
         addresses.filter((a) => a.trim()).forEach((a) => rowLogLines.push(`  · ${a}`));
       }
-      rowLogLines.push(`  물건지 주소: ${objectRawText || '(없음)'}`);
-      if (mulgunjis.length > 1) {
+      rowLogLines.push(
+        useGeomAsMulgunji
+          ? mulgunjiGeomByRow.get(i)
+            ? `  물건지: geom WKT 반영 (${String(mulgunjiGeomByRow.get(i)).length}자)`
+            : '  물건지: geom 없음'
+          : `  물건지 주소: ${objectRawText || '(없음)'}`
+      );
+      if (!useGeomAsMulgunji && mulgunjis.length > 1) {
         rowLogLines.push(`  물건지 분리: ${mulgunjis.length}건`);
+      }
+      if (useGeomAsMulgunji && mulgunjiGeomByRow.get(i)) {
+        rowLogLines.push('  물건지 geom → 도형 그대로 삽입');
       }
       parcels.filter((p) => p.x != null && p.y != null).forEach((p) => {
         rowLogLines.push(`    좌표 획득: ${p.address} → (x: ${p.x}, y: ${p.y})`);
       });
       setProcessingProgress(Math.round(15 + (65 * (i + 1)) / totalRows));
-      pushLog(...rowLogLines);
+      const shouldLogRow =
+        !useGeomAsParcel ||
+        i === 0 ||
+        i === totalRows - 1 ||
+        (i + 1) % EXCEL_GEOM_LOG_EVERY === 0;
+      if (shouldLogRow) {
+        pushLog(...rowLogLines);
+      }
 
       stagedRows.push({ attrs, parcels, mulgunjis });
 
-      // 신규 테이블만 행 단위 INSERT. 기존 테이블은 지오코딩 후 정합성 비교.
+      // 신규 테이블만 배치 INSERT. 기존 테이블은 지오코딩 후 정합성 비교.
       if (integrityMode) {
         continue;
       }
 
-      try {
-        const createRes = await call('', 'POST', {
-          service: 'excelUploadService',
-          action: 'createTableFromExcel',
-          params: {
-            pathOrResult: effectivePath ?? undefined,
-            tableName: tableEng,
-            tableKorName: tableKor || tableEng,
-            keyField,
-            columns,
-            geometryType,
-            rows: [{ attrs, parcels, mulgunjis }],
-            appendOnly: i > 0,
-            separateJijukTable,
-            separateMulgunjiTable,
-            jijukTableComment: `${(tableKor || tableEng).trim()}_필지목록`,
-            mulgunjiTableComment: `${(tableKor || tableEng).trim()}_물건지`,
-            excelRowNumber: i + 1,
-            rowKeyHint: rowKeyVal,
-          },
-        });
-        const createData = createRes?.data ?? createRes;
-        if (!createData?.success) {
-          const err = createData?.error ?? '행 삽입 실패';
-          setProcessingError(err);
-          pushLog(err);
-          await flushLogToFile(effectivePath);
-          return;
-        }
-        totalInsertCount += createData.rowCount ?? 0;
-        totalPnuAttempt += createData.pnuAttemptCount ?? 0;
-        totalPnuOk += createData.pnuOkCount ?? 0;
-        if (geometryType === 'Polygon') {
-          totalPolygonMatched += createData.polygonMatchedCount ?? 0;
-          totalPolygonNull += createData.polygonNullCount ?? 0;
-        }
-      } catch (e: unknown) {
-        const err = e instanceof Error ? e.message : String(e);
-        setProcessingError(err);
-        pushLog(err);
-        await flushLogToFile(effectivePath);
-        return;
+      pendingInsertRows.push({ attrs, parcels, mulgunjis });
+      if (pendingInsertRows.length >= EXCEL_CLIENT_INSERT_BATCH) {
+        const ok = await flushPendingInserts();
+        if (!ok) return;
       }
+    }
+
+    if (!usedServerGeomBulk && !integrityMode) {
+      const ok = await flushPendingInserts();
+      if (!ok) return;
     }
 
     if (integrityMode) {
       pushLog(`지오코딩 완료 ${stagedRows.length}건 — 키 기준 정합성 비교 중…`);
       try {
-        const prepRes = await call('', 'POST', {
-          service: 'excelUploadService',
-          action: 'prepareExcelIntegritySync',
-          params: {
-            tableName: tableEng.trim(),
-            keyField: syncKeyForCapture,
-            rows: stagedRows,
-            geometryType: geometryType ?? undefined,
-          },
-        });
-        const prep = prepRes?.data ?? prepRes;
-        if (!prep?.success) {
-          const err = prep?.error ?? '정합성 비교 실패';
+        const INTEGRITY_SYNC_CHUNK = 20;
+        const excelKeysUniverse = stagedRows
+          .map((r) =>
+            String(
+              r.attrs[syncKeyForCapture] ?? r.attrs.ledger_row_key ?? r.attrs[skSafe] ?? ''
+            ).trim()
+          )
+          .filter(Boolean);
+        const chunkTotal = Math.max(1, Math.ceil(stagedRows.length / INTEGRITY_SYNC_CHUNK));
+        let unchangedCount = 0;
+        let appendCount = 0;
+        let conflictCount = 0;
+        let removeCount = 0;
+        let appendKeys: string[] = [];
+        let prepOk = false;
+
+        for (let ci = 0; ci < chunkTotal; ci++) {
+          const chunk = stagedRows.slice(
+            ci * INTEGRITY_SYNC_CHUNK,
+            (ci + 1) * INTEGRITY_SYNC_CHUNK
+          );
+          if (chunk.length === 0) continue;
+          pushLog(`정합성 비교 배치 ${ci + 1}/${chunkTotal} (${chunk.length}행)…`);
+          const prepRes = await call('', 'POST', {
+            service: 'excelUploadService',
+            action: 'prepareExcelIntegritySync',
+            params: {
+              tableName: tableEng.trim(),
+              keyField: syncKeyForCapture,
+              rows: chunk,
+              geometryType: geometryType ?? undefined,
+              excelKeysUniverse,
+              chunkIndex: ci,
+              chunkTotal,
+            },
+          });
+          const prep = prepRes?.data ?? prepRes;
+          if (!prep?.success) {
+            const err = prep?.error ?? '정합성 비교 실패';
+            setProcessingError(err);
+            pushLog(err);
+            await flushLogToFile(effectivePath);
+            return;
+          }
+          unchangedCount += Number(prep.unchangedCount ?? 0);
+          appendCount += Number(prep.appendCount ?? 0);
+          conflictCount += Number(prep.conflictCount ?? 0);
+          removeCount += Number(prep.removeCount ?? 0);
+          if (Array.isArray(prep.appendKeys)) appendKeys = prep.appendKeys;
+          prepOk = true;
+        }
+
+        if (!prepOk) {
+          const err = '정합성 비교 실패';
           setProcessingError(err);
           pushLog(err);
           await flushLogToFile(effectivePath);
           return;
         }
+
         pushLog(
-          `정합성 비교: 동일 ${prep.unchangedCount ?? 0} · 신규 ${prep.appendCount ?? 0} · 충돌 ${prep.conflictCount ?? 0} · 삭제 ${prep.removeCount ?? 0}`
+          `정합성 비교: 동일 ${unchangedCount} · 신규 ${appendCount} · 충돌 ${conflictCount} · 삭제 ${removeCount}`
         );
-        if ((prep.conflictCount ?? 0) > 0 && geometryType) {
+        if (conflictCount > 0 && geometryType) {
           pushLog(
             `도형 모드(${geometryType}) 기준으로 속성·도형 차이를 충돌로 분류했습니다. 정합성 화면에서 geom 변경을 확인하세요.`
           );
         }
         if (
-          (prep.unchangedCount ?? 0) === 0 &&
-          (prep.conflictCount ?? 0) === 0 &&
-          (prep.appendCount ?? 0) > 0 &&
-          (prep.removeCount ?? 0) > 0
+          unchangedCount === 0 &&
+          conflictCount === 0 &&
+          appendCount > 0 &&
+          removeCount > 0
         ) {
           pushLog(
             '경고: 키가 하나도 겹치지 않습니다. 복합키 구성·영문명이 이전과 다르거나, DB에 키 값이 없을 수 있습니다. 삭제 탭에서 기존 행 삭제 여부를 확인하세요.'
@@ -2152,7 +2468,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           stagedRows,
           columns,
           keyField: syncKeyForCapture,
-          appendKeys: Array.isArray(prep.appendKeys) ? prep.appendKeys : [],
+          appendKeys,
           tableEng: tableEng.trim(),
           tableKor: tableKor || tableEng,
           tableGroup: tableGroup.trim(),
@@ -2169,11 +2485,9 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           geocodeFailCount,
           syncKeyField: syncKeyForCapture,
         };
-        if (
-          (prep.appendCount ?? 0) + (prep.conflictCount ?? 0) + (prep.removeCount ?? 0) === 0
-        ) {
+        if (appendCount + conflictCount + removeCount === 0) {
           pushLog(
-            `정합성 비교: 변경 없음 (동일 ${prep.unchangedCount ?? 0}건) — 모달 없이 이어서 마무리합니다.`
+            `정합성 비교: 변경 없음 (동일 ${unchangedCount}건) — 모달 없이 이어서 마무리합니다.`
           );
           integrityPendingRef.current = null;
           integrityAppliedWithoutModal = true;
@@ -2187,7 +2501,12 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           return;
         }
       } catch (e: unknown) {
-        const err = e instanceof Error ? e.message : String(e);
+        const err =
+          e && typeof e === 'object' && 'message' in e && (e as { message?: unknown }).message === 'Response is not JSON'
+            ? `서버 응답이 JSON이 아닙니다(HTTP ${(e as { status?: unknown }).status ?? '?'}). 요청이 너무 크거나 서버 오류일 수 있습니다.`
+            : e instanceof Error
+              ? e.message
+              : String(e);
         setProcessingError(err);
         pushLog(err);
         await flushLogToFile(effectivePath);
@@ -3268,7 +3587,11 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                           name="geocoding"
                           id={`geocode-col-${idx}`}
                           className="shrink-0"
-                          disabled={isAndongRoadUseWorkflow}
+                          disabled={
+                            isAndongRoadUseWorkflow ||
+                            (h.trim().toLowerCase() === 'geom' &&
+                              selectedObjectAddressHeader?.trim().toLowerCase() === 'geom')
+                          }
                           checked={selectedGeocodingHeader === h}
                           onChange={() => setSelectedGeocodingHeader(h)}
                         />
@@ -3295,6 +3618,46 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                     열 구분 방식에서는 위에서 시도·시군구·읍면동·리·지번 열을 지정했습니다. 추가로 선택할 항목이 없으면 다음으로 진행하세요.
                   </p>
                 )}
+                {parcelSelectMode === 'singleColumn' &&
+                selectedGeocodingHeader?.trim().toLowerCase() === 'geom' ? (
+                  <div className="mt-2 space-y-1.5 rounded-md border border-teal-600/30 bg-teal-600/5 p-2">
+                    <p className="text-xs font-medium text-teal-800 dark:text-teal-200">
+                      geom(WKT) 입력 좌표계 — DB 저장은 항상 EPSG:5181
+                    </p>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="excelGeomSridDb"
+                          checked={excelGeomSridMode === 'auto'}
+                          onChange={() => setExcelGeomSridMode('auto')}
+                        />
+                        자동(좌표 크기)
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="excelGeomSridDb"
+                          checked={excelGeomSridMode === 5181}
+                          onChange={() => setExcelGeomSridMode(5181)}
+                        />
+                        EPSG:5181
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="excelGeomSridDb"
+                          checked={excelGeomSridMode === 4326}
+                          onChange={() => setExcelGeomSridMode(4326)}
+                        />
+                        EPSG:4326 → 5181 변환
+                      </label>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      5179·5186 등 다른 TM은 지원하지 않습니다. 자동은 큰 좌표면 5181로 봅니다.
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="rounded-md border border-gray-200 bg-muted/30 p-3 space-y-2">
@@ -3453,13 +3816,17 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                           name="objectAddress"
                           id={`obj-address-col-${idx}`}
                           className="shrink-0"
-                          disabled={isAndongRoadUseWorkflow}
+                          disabled={
+                            isAndongRoadUseWorkflow ||
+                            (h.trim().toLowerCase() === 'geom' &&
+                              selectedGeocodingHeader?.trim().toLowerCase() === 'geom')
+                          }
                           checked={selectedObjectAddressHeader === h}
                           onChange={() => setSelectedObjectAddressHeader(h)}
                         />
                         <span className="flex min-w-0 items-center gap-1 text-sm font-medium" title={h}>
                           <span className="truncate">{h}</span>
-                          {unifiedAddressRecommend === h ? (
+                          {objectAddressRecommend === h ? (
                             <span className="shrink-0 rounded bg-teal-600/15 px-1 py-0 text-[10px] font-semibold leading-tight text-teal-700 dark:bg-teal-500/20 dark:text-teal-300">
                               추천
                             </span>
@@ -3481,6 +3848,15 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                   </p>
                 )}
               </div>
+
+              {bothGeomConflict ? (
+                <div
+                  role="alert"
+                  className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  필지와 물건지에 동시에 geom 열을 지정할 수 없습니다. 한쪽만 geom을 선택해 주세요.
+                </div>
+              ) : null}
             </div>
           )}
           {step === 3 && workflowParseResult && (

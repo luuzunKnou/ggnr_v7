@@ -1,19 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Layers, Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
-import { LAYER_ROW_NEW_ID, LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
-import { USAGE_DATA_AS_WMS_LAYER_IDS } from "./usageDataAsLayerId";
-import { clearUsageDataAsWmsLayers } from "./usageDataAsMapSync";
-
-function lowerLayerIds(ids: readonly string[]): string[] {
-  return ids.map((id) => id.toLowerCase());
-}
+import {
+  LAYER_ROW_NEW_ID,
+  LayerRowAddButton,
+  LayerRowPanelButton,
+} from "../../../_mapComponents/layerRowEdit";
+import {
+  clearUsageDataAsWmsLayers,
+  ensureUsageDataAsWmsLayersVisible,
+  isUsageDataAsSisulWmsVisible,
+  toggleUsageDataAsSisulWmsLayer,
+} from "./usageDataAsMapSync";
+import {
+  isUseFeeWmsVisible,
+  toggleUseFeeWmsLayer,
+} from "../../useFee/useFeeMapSync";
+import { occupationLayerToggleActiveStyle } from "@/lib/occupationLayerStyle";
 
 type ListRow = {
   rowKey: string;
@@ -41,7 +50,6 @@ export function UsageDataAsListPanel({
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
-  const layersAddedByPanelRef = useRef<Set<string>>(new Set());
 
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,47 +57,19 @@ export function UsageDataAsListPanel({
   const [items, setItems] = useState<ListRow[]>([]);
 
   useEffect(() => {
-    const ctx = mapContextRef.current;
-    const layerIds = lowerLayerIds(USAGE_DATA_AS_WMS_LAYER_IDS);
-    if (!ctx?.setVisibleLayerNames) return;
-
-    const visible = ctx.visibleLayerNames ?? new Set<string>();
-    const added = new Set<string>();
-    for (const lid of layerIds) {
-      if (!visible.has(lid)) added.add(lid);
-    }
-    if (added.size > 0) {
-      ctx.setVisibleLayerNames((prev) => {
-        const next = new Set(prev);
-        for (const lid of added) next.add(lid);
-        return next;
-      });
-      layersAddedByPanelRef.current = added;
-    } else {
-      layersAddedByPanelRef.current = new Set();
-    }
-
+    ensureUsageDataAsWmsLayersVisible(mapContextRef.current?.setVisibleLayerNames);
     return () => {
       // 이 패널이 켠 것만 아니라 점용 WMS 전부 끔 (시스템 이동·재진입 잔상 방지)
       clearUsageDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames);
-      layersAddedByPanelRef.current = new Set();
     };
   }, []);
 
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+  /** 지도 픽이 클릭 도형으로 맞춘 경우 — selectedDetailId 자동 fit 1회 건너뜀 */
+  const skipAutoFitOnceRef = useRef(false);
 
   const ensureUsageLayersVisible = useCallback(() => {
-    mapContext?.setVisibleLayerNames?.((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const lid of lowerLayerIds(USAGE_DATA_AS_WMS_LAYER_IDS)) {
-        if (!next.has(lid)) {
-          next.add(lid);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
   }, [mapContext]);
 
   /** 상세 패널 폭이 map padding에 반영된 뒤 fit (상세 오픈 직후 어긋남 방지) */
@@ -108,18 +88,17 @@ export function UsageDataAsListPanel({
     [mapContext, ensureUsageLayersVisible]
   );
 
-  const handleRowClick = useCallback(
+  const fitMapToDetailKey = useCallback(
     async (rowKey: string) => {
-      if (!rowKey) return;
-      onSelectDetailId(rowKey);
-      if (rowKey === LAYER_ROW_NEW_ID) return;
+      const key = String(rowKey ?? "").trim();
+      if (!key || key === LAYER_ROW_NEW_ID) return;
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
       try {
         const res = await call("", "POST", {
           service: "usageDataAsService",
           action: "getUsageDataAsExtent3857ByKey",
-          params: { key: rowKey },
+          params: { key },
         });
         const data = res?.data ?? res;
         if (data?.error) {
@@ -136,7 +115,35 @@ export function UsageDataAsListPanel({
         window.alert("지도 이동에 실패했습니다.");
       }
     },
-    [mapContext, onSelectDetailId, fitMapAfterDetailLayout]
+    [mapContext?.mapInstanceRef, fitMapAfterDetailLayout]
+  );
+
+  /**
+   * 상세 선택(목록·알림 등) 시 본표 범위로 지도 이동.
+   * 알림 컴포넌트는 상세 ID만 넣고, 이동은 여기서 처리한다.
+   */
+  useEffect(() => {
+    const key = String(selectedDetailId ?? "").trim();
+    if (!key || key === LAYER_ROW_NEW_ID) return;
+    if (skipAutoFitOnceRef.current) {
+      skipAutoFitOnceRef.current = false;
+      return;
+    }
+    void fitMapToDetailKey(key);
+  }, [selectedDetailId, fitMapToDetailKey]);
+
+  const handleRowClick = useCallback(
+    (rowKey: string) => {
+      if (!rowKey) return;
+      mapContext?.setUsageDataAsMapHitOptions?.([]);
+      // 같은 행 재클릭 — selectedDetailId 불변이라 effect가 안 도므로 직접 맞춤
+      if (rowKey === selectedDetailId && rowKey !== LAYER_ROW_NEW_ID) {
+        void fitMapToDetailKey(rowKey);
+        return;
+      }
+      onSelectDetailId(rowKey);
+    },
+    [selectedDetailId, onSelectDetailId, fitMapToDetailKey, mapContext]
   );
 
   /** 지도에서 점용 레이어 클릭 → 목록·상세 선택 + 클릭 도형을 지도 중앙에 맞춤 */
@@ -146,27 +153,28 @@ export function UsageDataAsListPanel({
     pickRef.current = (pick) => {
       const consCode = String(pick?.consCode ?? "").trim();
       if (!consCode) return;
-      onSelectDetailId(consCode);
+      // 겹침 옵션은 OpenLayersMap이 Context에 먼저 넣음 — 여기서 []로 덮어쓰지 않음
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
+      if (opts.length > 1) {
+        mapContextRef.current?.setUsageDataAsMapHitOptions?.(opts);
+      }
       const clickedExt = pick?.extent3857;
       if (
         Array.isArray(clickedExt) &&
         clickedExt.length === 4 &&
         clickedExt.every((v) => Number.isFinite(Number(v)))
       ) {
+        skipAutoFitOnceRef.current = true;
+        onSelectDetailId(consCode);
         fitMapAfterDetailLayout(clickedExt.map(Number));
         return;
       }
-      void handleRowClick(consCode);
+      onSelectDetailId(consCode);
     };
     return () => {
       pickRef.current = null;
     };
-  }, [
-    mapContext?.applyUsageDataAsMapPickRef,
-    onSelectDetailId,
-    fitMapAfterDetailLayout,
-    handleRowClick,
-  ]);
+  }, [mapContext?.applyUsageDataAsMapPickRef, onSelectDetailId, fitMapAfterDetailLayout]);
 
   useEffect(() => {
     if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;
@@ -211,11 +219,40 @@ export function UsageDataAsListPanel({
     return () => clearTimeout(t);
   }, [keyword, refreshKey]);
 
+  const sisulLayerOn = isUsageDataAsSisulWmsVisible(mapContext?.visibleLayerNames);
+  const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames, 'river');
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">하천점용</span>
         <div className="flex items-center gap-1">
+          <LayerRowPanelButton
+            type="button"
+            title={sisulLayerOn ? "점용시설물 레이어 끄기" : "점용시설물 레이어 켜기"}
+            aria-label={sisulLayerOn ? "점용시설물 레이어 끄기" : "점용시설물 레이어 켜기"}
+            aria-pressed={sisulLayerOn}
+            onClick={() => toggleUsageDataAsSisulWmsLayer(mapContext?.setVisibleLayerNames)}
+            style={sisulLayerOn ? occupationLayerToggleActiveStyle("facility") : undefined}
+            className={sisulLayerOn ? "hover:opacity-90" : undefined}
+          >
+            <Layers className="h-3 w-3 shrink-0" aria-hidden />
+            시설물
+          </LayerRowPanelButton>
+          <LayerRowPanelButton
+            type="button"
+            title={useFeeLayerOn ? "점사용료 레이어 끄기" : "점사용료 레이어 켜기"}
+            aria-label={useFeeLayerOn ? "점사용료 레이어 끄기" : "점사용료 레이어 켜기"}
+            aria-pressed={useFeeLayerOn}
+            onClick={() =>
+              toggleUseFeeWmsLayer(mapContext?.setVisibleLayerNames, 'river')
+            }
+            style={useFeeLayerOn ? occupationLayerToggleActiveStyle("useFee") : undefined}
+            className={useFeeLayerOn ? "hover:opacity-90" : undefined}
+          >
+            <Layers className="h-3 w-3 shrink-0" aria-hidden />
+            점사용료
+          </LayerRowPanelButton>
           <LayerRowAddButton
             onClick={() => {
               if (onAdd) onAdd();
@@ -252,14 +289,14 @@ export function UsageDataAsListPanel({
         {error && (
           <div className="shrink-0 border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
         )}
-        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           {loading ? (
             <div className="px-3 py-6 text-center text-xs text-slate-500">불러오는 중…</div>
           ) : (
-            <table className="w-full min-w-[466px] table-fixed border-collapse text-left text-xs">
+            <table className="w-full min-w-[548px] table-fixed border-collapse text-left text-xs">
               <colgroup>
-                <col className="w-[120px]" />
-                <col className="w-[170px]" />
+                <col className="w-[180px]" />
+                <col className="w-[192px]" />
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>

@@ -31,6 +31,7 @@ import {
 import { useThematicMapCatalog } from './hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from './hooks/useOwnershipCatalog';
 import { useBuildingRoadCatalog } from './hooks/useBuildingRoadCatalog';
+import { useCadastralCatalog } from './hooks/useCadastralCatalog';
 import { useJimokCatalog } from './hooks/useJimokCatalog';
 import { useMapInstance } from './hooks/useMapInstance';
 import { useMapContext } from './MapContext';
@@ -97,6 +98,7 @@ import {
 } from '../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import { pickRoadLedgerField } from '../_mapContents/road/roadLedger/roadLedgerFormat';
 import {
+  USAGE_DATA_AS_WMS_LAYER_ID,
   USAGE_DATA_AS_WMS_LAYER_IDS,
   isUsageDataAsWmsLayerId,
 } from '../_mapContents/river/usageDataAs/usageDataAsLayerId';
@@ -105,6 +107,12 @@ import {
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
 } from '@/lib/occupationLedgerBinding';
+import { getAllUseFeeWmsLayerIds, getUseFeeWmsLayerId } from '../_mapContents/useFee/useFeeLayerId';
+import {
+  USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID,
+  USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID,
+  USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID,
+} from '../_mapContents/useFee/useFeeMapSync';
 import { Crosshair } from 'lucide-react';
 import './config/projections';
 import VectorSource from 'ol/source/Vector';
@@ -268,6 +276,9 @@ export default function OpenLayersMap({
 }: OpenLayersMapProps = {}) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapContext = useMapContext();
+  /** Provider value는 매 렌더 새 객체 — identify effect deps에 mapContext 넣지 않기 위해 ref 유지 */
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const sharedMapRef = mapContext?.mapInstanceRef ?? null;
   const { mapInstanceRef, mapReady } = useMapInstance(
     mapRef,
@@ -375,6 +386,11 @@ export default function OpenLayersMap({
     loading: buildingRoadCatalogLoading,
   } = useBuildingRoadCatalog();
   const {
+    layers: cadastralPanelLayers,
+    availableLayerTableNames: cadastralAvailableTableNames,
+    loading: cadastralCatalogLoading,
+  } = useCadastralCatalog();
+  const {
     layers: jimokPanelLayers,
     availableLayerTableNames: jimokAvailableTableNames,
     loading: jimokCatalogLoading,
@@ -431,24 +447,19 @@ export default function OpenLayersMap({
     return () => ro.disconnect();
   }, [backgroundPanelVisible]);
 
-  /** 우측 메뉴·확장 패널 폭 — 상하 분할 거터 pill 가용 범위 */
+  /** 우측 메뉴(버튼 열) 폭만 — 상하 분할 거터·방향 전환용.
+   * 배경지도·레이어 선택 등 우측에서 뜨는 패널은 전부 오버레이 모달로 보고
+   * 지도 가용폭·좌우/상하 전환에 넣지 않음. */
   useEffect(() => {
     const setPaddingRight = mapContext?.setMapPaddingRight;
     const fixed = mapControlFixedRef.current;
     if (!setPaddingRight || !fixed) return;
 
     const syncPaddingRight = () => {
-      let leftEdge = window.innerWidth;
-      const row = mapControlOverlayRowRef.current;
-      if (row) {
-        leftEdge = Math.min(leftEdge, row.getBoundingClientRect().left);
-      }
-      fixed.querySelectorAll('[data-map-control-expand-panel]').forEach((el) => {
-        const r = el.getBoundingClientRect();
-        if (r.width > 1 && r.height > 1) {
-          leftEdge = Math.min(leftEdge, r.left);
-        }
-      });
+      const menu = fixed.querySelector('[data-map-control-menu]');
+      const leftEdge = menu
+        ? menu.getBoundingClientRect().left
+        : window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
       const next = Math.max(
         MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
         Math.ceil(window.innerWidth - leftEdge)
@@ -458,21 +469,15 @@ export default function OpenLayersMap({
 
     syncPaddingRight();
     const ro = new ResizeObserver(syncPaddingRight);
-    ro.observe(fixed);
-    if (mapControlOverlayRowRef.current) ro.observe(mapControlOverlayRowRef.current);
+    const menu = fixed.querySelector('[data-map-control-menu]');
+    if (menu) ro.observe(menu);
+    else ro.observe(fixed);
     window.addEventListener('resize', syncPaddingRight);
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', syncPaddingRight);
     };
-  }, [
-    mapContext?.setMapPaddingRight,
-    activeControls,
-    openSubPanel,
-    resetMeasurementsPanelVisible,
-    backgroundPanelVisible,
-    isAerialViewPanelExiting,
-  ]);
+  }, [mapContext?.setMapPaddingRight, activeControls, extraControls]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   useEffect(() => {
@@ -560,6 +565,19 @@ export default function OpenLayersMap({
       return next;
     });
   }, [buildingRoadCatalogLoading, buildingRoadAvailableTableNames]);
+
+  // 지적도: DB 무데이터 선택 제거
+  useEffect(() => {
+    if (cadastralCatalogLoading) return;
+    setVisibleCadastralLayerNames((prev) => {
+      if (prev == null) return prev;
+      const next = new Set(
+        [...prev].filter((t) => cadastralAvailableTableNames.has(t))
+      );
+      if (next.size === prev.size && [...next].every((t) => prev.has(t))) return prev;
+      return next;
+    });
+  }, [cadastralCatalogLoading, cadastralAvailableTableNames]);
 
   // 지목: tables.json·DB 미등록/무데이터 선택 제거
   useEffect(() => {
@@ -720,6 +738,29 @@ export default function OpenLayersMap({
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
 
+  /** 부서업무 본표는 위, 패널에서 켠 보조 레이어(점사용료·타 점용 등)는 아래 */
+  const wmsForceBottomLayerNames = useMemo(() => {
+    const useFeeOpen = mapContext?.useFeePanelOpen === true;
+    const usageOpen = mapContext?.usageDataAsPanelOpen === true;
+    const occupationOpen = mapContext?.occupationLedgerPanelOpen === true;
+    if (useFeeOpen) {
+      return [
+        USAGE_DATA_AS_WMS_LAYER_ID,
+        USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID,
+        USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID,
+        USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID,
+      ];
+    }
+    if (usageOpen || occupationOpen) {
+      return getAllUseFeeWmsLayerIds();
+    }
+    return [];
+  }, [
+    mapContext?.useFeePanelOpen,
+    mapContext?.usageDataAsPanelOpen,
+    mapContext?.occupationLedgerPanelOpen,
+  ]);
+
   // 맵 상태 자동 저장 (복원 완료 후에만 저장 시작 — 빈 상태 덮어쓰기 방지)
   const layerPanelSelections = useMemo(
     () => ({
@@ -801,7 +842,10 @@ export default function OpenLayersMap({
     visibleLayerNames,
     undefined,
     spatialFilterWkt,
-    layerGeometryTypes
+    layerGeometryTypes,
+    undefined,
+    mapContext?.occupationLedgerPanelOpen === true,
+    wmsForceBottomLayerNames
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -892,12 +936,13 @@ export default function OpenLayersMap({
     setSpatialDrawRequest,
     Boolean(layerRowGeomEdit) || resetMeasurementsPanelOpen
   );
-  // 지적도 레이어 동기화 (activeControls + visibleCadastralLayerNames)
+  // 지적도 레이어 동기화 (activeControls + 선택 + DB 가용분만)
   useCadastralLayerSync(
     mapInstanceRef.current,
     mapReady,
     activeControls,
-    visibleCadastralLayerNames
+    visibleCadastralLayerNames,
+    cadastralCatalogLoading ? null : cadastralAvailableTableNames
   );
   // 건물·도로 레이어 동기화 (activeControls + 선택 + tables.json·DB 가용분만)
   useBuildingRoadLayerSync(
@@ -1166,8 +1211,10 @@ export default function OpenLayersMap({
 
   // 지도 클릭 시 목록창(팝업) 없이 바로 '지도에서 선택된 항목' 데이터 패널로 열기
   // (좌측 popupState · 우측 mapSplitIdentifyPopup 공통)
+  // mapContext는 ref로만 읽음 — options/visibleLayer 갱신으로 effect가 재실행·cancel 되지 않게
   useEffect(() => {
-    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length || !mapContext) return;
+    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length) return;
+    if (!mapContextRef.current) return;
     let cancelled = false;
 
     const run = async () => {
@@ -1176,7 +1223,7 @@ export default function OpenLayersMap({
 
       const clearIdentifyIntake = () => {
         closePopup();
-        mapContext.setMapSplitIdentifyPopup?.(null);
+        mapContextRef.current?.setMapSplitIdentifyPopup?.(null);
       };
 
       const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
@@ -1197,6 +1244,10 @@ export default function OpenLayersMap({
         if (cancelled) return;
         openScanLayers = new Set();
       }
+
+      // await 이후 최신 panelOpen / setters
+      const mapContext = mapContextRef.current;
+      if (!mapContext || cancelled) return;
 
       const hitOpenScan = withFeat.some((r) => openScanLayers.has(String(r.tableName ?? '').trim()));
 
@@ -1314,6 +1365,7 @@ export default function OpenLayersMap({
         const usageLayerSet = new Set(
           USAGE_DATA_AS_WMS_LAYER_IDS.map((id) => id.toLowerCase())
         );
+        const parentTable = USAGE_DATA_AS_WMS_LAYER_ID.toLowerCase();
         const ranked = withFeat
           .map((r, wi) => {
             const tn = String(r.tableName ?? '')
@@ -1322,24 +1374,73 @@ export default function OpenLayersMap({
             if (!usageLayerSet.has(tn) || r.features.length === 0) return null;
             // 클릭 도형 중앙 맞춤: 필지·물건지(작은 도형)를 부모보다 우선
             const rank = tn === 'usage_data_as_solo' ? 0 : tn === 'usage_data_as_mgj' ? 1 : 2;
-            return { wi, rank, layer: r };
+            return { wi, rank, layer: r, tn };
           })
           .filter((x): x is NonNullable<typeof x> => x != null)
           .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
-        const usageHit = ranked[0]?.layer;
-        if (usageHit) {
-          const hitData = usageHit.features[0]?.data;
-          const consCode = pickIdentifyConsCode(hitData);
-          if (!consCode) {
+        if (ranked.length > 0) {
+          const pushOverlap = (
+            overlapOptions: {
+              value: string;
+              label: string;
+              extent3857?: [number, number, number, number] | null;
+            }[],
+            seen: Set<string>,
+            layer: (typeof ranked)[number]['layer']
+          ) => {
+            for (const feat of layer.features) {
+              const consCode = pickIdentifyConsCode(feat?.data);
+              if (!consCode || seen.has(consCode)) continue;
+              seen.add(consCode);
+              const permit =
+                pickIdentifyField(feat?.data, 'perm_num') ||
+                pickIdentifyField(feat?.data, 'permit_no') ||
+                pickIdentifyField(feat?.data, 'usage_name') ||
+                consCode;
+              overlapOptions.push({
+                value: consCode,
+                label: permit,
+                extent3857: pickIdentifyExtent3857(feat?.data),
+              });
+            }
+          };
+
+          // select 후보: 본표(겹친 점용) 우선 — 자식만 있으면 전체 ranked
+          const overlapOptions: {
+            value: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const seen = new Set<string>();
+          const parentRanked = ranked.filter((x) => x.tn === parentTable);
+          for (const { layer } of parentRanked.length > 0 ? parentRanked : ranked) {
+            pushOverlap(overlapOptions, seen, layer);
+          }
+
+          // 상세 오픈·줌: 필지/물건지 우선(작은 도형)
+          let primary: (typeof overlapOptions)[number] | null = null;
+          const primarySeen = new Set<string>();
+          const primaryOpts: typeof overlapOptions = [];
+          for (const { layer } of ranked) {
+            pushOverlap(primaryOpts, primarySeen, layer);
+          }
+          primary = primaryOpts[0] ?? overlapOptions[0] ?? null;
+
+          if (!primary) {
             if (!cancelled) {
               window.alert('클릭한 점용 도형의 대장번호(cons_code)를 읽을 수 없습니다.');
             }
             clearIdentifyIntake();
             return;
           }
+          // 목록 pick 핸들러보다 먼저 옵션 확정 (핸들러가 opts 누락 시 덮어쓰지 않도록)
+          mapContext.setUsageDataAsMapHitOptions?.(
+            overlapOptions.length > 1 ? overlapOptions : []
+          );
           mapContext.applyUsageDataAsMapPickRef.current?.({
-            consCode,
-            extent3857: pickIdentifyExtent3857(hitData),
+            consCode: primary.value,
+            extent3857: primary.extent3857,
+            overlapOptions,
           });
           clearIdentifyIntake();
           return;
@@ -1370,11 +1471,32 @@ export default function OpenLayersMap({
             })
             .filter((x): x is NonNullable<typeof x> => x != null)
             .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
-          const occHit = ranked[0]?.layer;
-          if (occHit) {
-            const hitData = occHit.features[0]?.data;
-            const rowKey = pickIdentifyField(hitData, binding.fields.keyField);
-            if (!rowKey) {
+          if (ranked.length > 0) {
+            const keyField = binding.fields.keyField;
+            const overlapOptions: {
+              value: string;
+              label: string;
+              extent3857?: [number, number, number, number] | null;
+            }[] = [];
+            const seen = new Set<string>();
+            for (const { layer } of ranked) {
+              for (const feat of layer.features) {
+                const rowKey = pickIdentifyField(feat?.data, keyField);
+                if (!rowKey || seen.has(rowKey)) continue;
+                seen.add(rowKey);
+                const permit =
+                  pickIdentifyField(feat?.data, 'permit_no') ||
+                  pickIdentifyField(feat?.data, 'work_name') ||
+                  rowKey;
+                overlapOptions.push({
+                  value: rowKey,
+                  label: permit,
+                  extent3857: pickIdentifyExtent3857(feat?.data),
+                });
+              }
+            }
+            const first = overlapOptions[0];
+            if (!first) {
               if (!cancelled) {
                 window.alert('클릭한 점용 도형의 대장번호를 읽을 수 없습니다.');
               }
@@ -1382,12 +1504,62 @@ export default function OpenLayersMap({
               return;
             }
             mapContext.applyOccupationLedgerMapPickRef.current?.({
-              rowKey,
-              extent3857: pickIdentifyExtent3857(hitData),
+              rowKey: first.value,
+              extent3857: first.extent3857,
+              overlapOptions,
             });
             clearIdentifyIntake();
             return;
           }
+        }
+      }
+
+      /** 점사용료: water|road|public_ngl_fee_list → 목록·상세 선택 */
+      if (mapContext?.useFeePanelOpen && mapContext.applyUseFeeMapPickRef) {
+        const system = String(searchParams.get('system') ?? '').trim();
+        const feeLid = getUseFeeWmsLayerId(system || 'river').toLowerCase();
+        const feeHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return tn === feeLid && r.features.length > 0;
+        });
+        if (feeHit) {
+          const overlapOptions: {
+            value: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const seen = new Set<string>();
+          for (const feat of feeHit.features) {
+            const feeId = pickIdentifyField(feat?.data, 'id');
+            if (!feeId || seen.has(feeId)) continue;
+            seen.add(feeId);
+            const ledger =
+              pickIdentifyField(feat?.data, 'ledger_no') ||
+              pickIdentifyField(feat?.data, 'ledgerNo') ||
+              feeId;
+            overlapOptions.push({
+              value: feeId,
+              label: ledger,
+              extent3857: pickIdentifyExtent3857(feat?.data),
+            });
+          }
+          const first = overlapOptions[0];
+          if (!first) {
+            if (!cancelled) {
+              window.alert('클릭한 점사용료 도형의 번호를 읽을 수 없습니다.');
+            }
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.applyUseFeeMapPickRef.current?.({
+            id: first.value,
+            extent3857: first.extent3857,
+            overlapOptions,
+          });
+          clearIdentifyIntake();
+          return;
         }
       }
 
@@ -1509,7 +1681,7 @@ export default function OpenLayersMap({
     return () => {
       cancelled = true;
     };
-  }, [totalIdentifyCount, identifyIntakePopup, mapContext, searchParams, router, closePopup]);
+  }, [totalIdentifyCount, identifyIntakePopup, searchParams, router, closePopup]);
 
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
   const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);
@@ -1649,9 +1821,14 @@ export default function OpenLayersMap({
       if (!id) return;
       const active = detail.active === true;
       if (active && id === 'cadastral') {
-        setVisibleCadastralLayerNames((prev) =>
-          prev != null && prev.size > 0 ? prev : new Set(CADASTRAL_LAYERS.map((l) => l.tableName))
-        );
+        setVisibleCadastralLayerNames((prev) => {
+          if (prev != null && prev.size > 0) return prev;
+          return new Set(
+            CADASTRAL_LAYERS.map((l) => l.tableName).filter((t) =>
+              cadastralAvailableTableNames.has(t)
+            )
+          );
+        });
       }
       setActiveControls((prev) => {
         const has = prev.includes(id);
@@ -1661,7 +1838,7 @@ export default function OpenLayersMap({
     };
     window.addEventListener('ggnr-map-control-set', onSet);
     return () => window.removeEventListener('ggnr-map-control-set', onSet);
-  }, []);
+  }, [cadastralAvailableTableNames]);
 
   /** 목록 패널 열기/닫기. 최초(null)면 빈 선택으로 열고, 기존 선택은 유지한다. */
   const togglePanelLayer = (id: PanelLayerId) => {
@@ -1695,6 +1872,8 @@ export default function OpenLayersMap({
   };
 
   const handleItemRightClick = (id: string) => {
+    // 지적도: 우클릭 비활성 (좌클릭으로만 목록 패널)
+    if (id === 'cadastral') return;
     if (isPanelLayerId(id)) {
       togglePanelLayer(id);
       return;
@@ -2019,12 +2198,15 @@ export default function OpenLayersMap({
             <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="지적도"
-                layers={CADASTRAL_LAYERS}
+                layers={cadastralPanelLayers}
                 selectedTableNames={visibleCadastralLayerNames ?? new Set()}
                 onSelectionChange={(next: Set<string>) => {
-                  setVisibleCadastralLayerNames(next);
+                  const filtered = new Set(
+                    [...next].filter((t) => cadastralAvailableTableNames.has(t))
+                  );
+                  setVisibleCadastralLayerNames(filtered);
                   setActiveControls((prev) =>
-                    next.size === 0
+                    filtered.size === 0
                       ? prev.filter((x) => x !== 'cadastral')
                       : prev.includes('cadastral')
                         ? prev
@@ -2082,7 +2264,7 @@ export default function OpenLayersMap({
             </div>
           )}
 
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto" data-map-control-menu>
             <MapControlPanel
               groups={mapControlGroups}
               activeIds={

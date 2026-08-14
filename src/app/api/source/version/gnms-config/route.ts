@@ -14,11 +14,6 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       gnmsBaseUrl: cfg.gnmsBaseUrl,
-      latestUrl: cfg.latestUrl,
-      listUrl: cfg.listUrl,
-      downloadUrlFallback: cfg.downloadUrlFallback,
-      cancelUrl: cfg.cancelUrl,
-      bearer: cfg.bearer,
       restartCommandConfigured,
     });
   } catch (err: unknown) {

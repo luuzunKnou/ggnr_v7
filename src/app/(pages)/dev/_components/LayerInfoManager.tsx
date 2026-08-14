@@ -213,6 +213,8 @@ export function LayerInfoManager({
     tableIdx: number
   } | null>(null)
   const [schemaSwitching, setSchemaSwitching] = useState(false)
+  /** public_layer 전환 시 데이터 통합이력 삭제 여부 */
+  const [schemaSwitchDeleteHistory, setSchemaSwitchDeleteHistory] = useState(false)
   const [attrDeleteOpen, setAttrDeleteOpen] = useState(false)
   const [attrDeleteTarget, setAttrDeleteTarget] = useState<string | null>(null)
   const [formName, setFormName] = useState("")
@@ -593,6 +595,7 @@ export function LayerInfoManager({
         toSchema,
         tableIdx,
       })
+      setSchemaSwitchDeleteHistory(false)
       setSchemaSwitchOpen(true)
     },
     []
@@ -601,6 +604,8 @@ export function LayerInfoManager({
   const handleSchemaSwitchConfirm = useCallback(async () => {
     if (!schemaSwitchTarget || !config) return
     const { tableName, toSchema, tableIdx } = schemaSwitchTarget
+    const deleteDataHistory =
+      toSchema === "public_layer" && schemaSwitchDeleteHistory
     setSchemaSwitching(true)
     setError(null)
     setSuccessMsg(null)
@@ -612,6 +617,7 @@ export function LayerInfoManager({
           tableName,
           toSchema,
           url: GEOSERVER_DEFAULT_URL,
+          deleteDataHistory,
         },
       })
       const data = res?.data ?? res
@@ -631,17 +637,19 @@ export function LayerInfoManager({
         )
         setSchemaSwitchOpen(false)
         setSchemaSwitchTarget(null)
+        setSchemaSwitchDeleteHistory(false)
         return
       }
       setSuccessMsg(data.message ?? `"${tableName}" 스키마 전환 완료`)
       setSchemaSwitchOpen(false)
       setSchemaSwitchTarget(null)
+      setSchemaSwitchDeleteHistory(false)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "스키마 전환 실패")
     } finally {
       setSchemaSwitching(false)
     }
-  }, [schemaSwitchTarget, config, updateCell, loadDbTableKeySet])
+  }, [schemaSwitchTarget, schemaSwitchDeleteHistory, config, updateCell, loadDbTableKeySet])
 
   const handleLayerDefineDeleteConfirm = useCallback(async () => {
     if (!layerDefineDeleteTarget || !config) return
@@ -1535,7 +1543,10 @@ export function LayerInfoManager({
         onOpenChange={(open) => {
           if (schemaSwitching) return
           setSchemaSwitchOpen(open)
-          if (!open) setSchemaSwitchTarget(null)
+          if (!open) {
+            setSchemaSwitchTarget(null)
+            setSchemaSwitchDeleteHistory(false)
+          }
         }}
       >
         <DialogContent>
@@ -1547,6 +1558,23 @@ export function LayerInfoManager({
               ? `테이블 "${schemaSwitchTarget.tableName}"의 스키마를\n${schemaSwitchTarget.fromSchema} → ${schemaSwitchTarget.toSchema}\n로 전환합니다.\n\n레이어 정의 · DB 테이블 · GeoServer 레이어를 함께 변경합니다.`
               : ""}
           </p>
+          {schemaSwitchTarget?.toSchema === "public_layer" && (
+            <label className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={schemaSwitchDeleteHistory}
+                disabled={schemaSwitching}
+                onChange={(e) => setSchemaSwitchDeleteHistory(e.target.checked)}
+                className="mt-0.5 rounded border-input"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="font-medium text-foreground">저장된 데이터 이력 삭제</span>
+                <span className="text-xs text-muted-foreground">
+                  전환 후에도 업로드·편집 이력은 계속 남습니다. 이미 저장된 통합 이력·스냅샷만 지금 지울지 선택합니다.
+                </span>
+              </span>
+            </label>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -1555,6 +1583,7 @@ export function LayerInfoManager({
               onClick={() => {
                 setSchemaSwitchOpen(false)
                 setSchemaSwitchTarget(null)
+                setSchemaSwitchDeleteHistory(false)
               }}
             >
               취소
