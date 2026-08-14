@@ -1323,7 +1323,14 @@ export async function putGeoServerCssStyle(params: {
 /**
  * elevation 등고선 분류·축척·라벨 CSS를 GeoServer에 올리고 레이어 기본 스타일로 지정
  */
-export async function applyElevationContourStyle(params: { url?: string; workspace?: string } = {}) {
+/** applyDefaultStyleToLayer / applyElevationContourStyle 공통 반환 — success 리터럴로 구분 */
+export type StyleApplyResult =
+  | { success: true; layerName?: string; styleName?: string; created?: boolean }
+  | { success: false; error: string; uploaded?: true };
+
+export async function applyElevationContourStyle(
+  params: { url?: string; workspace?: string } = {}
+): Promise<StyleApplyResult> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = ELEVATION_LAYER_NAME;
@@ -1911,7 +1918,7 @@ export async function applyDefaultStyleToLayer(params: {
   url?: string;
   workspace?: string;
   layerName: string;
-}) {
+}): Promise<StyleApplyResult> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim().toLowerCase();
@@ -2061,7 +2068,7 @@ export async function applyDefaultStyleToLayer(params: {
       styleName: layerName,
     });
     if (!setRes.success) return { success: false, error: setRes.error ?? '스타일 지정 실패' };
-    return { success: true };
+    return { success: true as const };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
