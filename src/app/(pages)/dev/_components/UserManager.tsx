@@ -151,6 +151,7 @@ function LabeledInput({
   placeholder,
   type = "text",
   disabled = false,
+  required = false,
 }: {
   label: string
   icon?: React.ReactNode
@@ -159,11 +160,15 @@ function LabeledInput({
   placeholder?: string
   type?: "text" | "password" | "email"
   disabled?: boolean
+  required?: boolean
 }) {
   return (
     <div className="flex items-center gap-2">
       <span className="flex h-8 shrink-0 items-center text-muted-foreground/80">{icon}</span>
-      <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">{label}</span>
+      <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </span>
       <Input
         type={type}
         value={value ?? ""}
@@ -186,6 +191,7 @@ function LabeledSuggestInput({
   options,
   placeholder = "직접 입력 또는 선택",
   disabled = false,
+  required = false,
 }: {
   label: string
   icon?: React.ReactNode
@@ -194,6 +200,7 @@ function LabeledSuggestInput({
   options: string[]
   placeholder?: string
   disabled?: boolean
+  required?: boolean
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -223,7 +230,10 @@ function LabeledSuggestInput({
   return (
     <div className="flex items-center gap-2" ref={rootRef}>
       <span className="flex h-8 shrink-0 items-center text-muted-foreground/80">{icon}</span>
-      <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">{label}</span>
+      <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </span>
       <div className="relative flex-1 min-w-0">
         <Input
           type="text"
@@ -641,6 +651,7 @@ export function UserManager() {
                     value={form.usr_id}
                     onChange={(v) => setForm((p) => ({ ...p, usr_id: v }))}
                     disabled={modalMode === "detail"}
+                    required={modalMode === "add"}
                   />
                   <LabeledInput
                     label="이름"
@@ -655,6 +666,7 @@ export function UserManager() {
                     onChange={(v) => setForm((p) => ({ ...p, ug_name: v, ut_name: "" }))}
                     options={ugSuggestOptions}
                     placeholder="직접 입력 또는 선택"
+                    required={modalMode === "add"}
                   />
                   <LabeledSuggestInput
                     label="팀"
@@ -663,6 +675,7 @@ export function UserManager() {
                     onChange={(v) => setForm((p) => ({ ...p, ut_name: v }))}
                     options={utSuggestOptions}
                     placeholder="직접 입력 또는 선택"
+                    required={modalMode === "add"}
                   />
                   <LabeledInput
                     label="연락처"
@@ -684,6 +697,7 @@ export function UserManager() {
                     value={form.usr_pwd}
                     onChange={(v) => setForm((p) => ({ ...p, usr_pwd: v }))}
                     placeholder={modalMode === "add" ? "필수" : "변경 시 입력"}
+                    required={modalMode === "add"}
                   />
                   <LabeledInput
                     label="비밀번호확인"
@@ -692,6 +706,7 @@ export function UserManager() {
                     value={form.usr_pwd_confirm}
                     onChange={(v) => setForm((p) => ({ ...p, usr_pwd_confirm: v }))}
                     placeholder={modalMode === "add" ? "필수" : "변경 시 함께 입력"}
+                    required={modalMode === "add"}
                   />
                   <LabeledInput
                     label="신청시간"
