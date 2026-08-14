@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
-import { ensureGeoServerRunning, stopGeoServerAndVerify } from '@/service/geoserverProcessService';
+import { stopGeoServerAndVerify } from '@/service/geoserverProcessService';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 import {
   APPLY_ORPHAN_WALK_ROOTS,
@@ -21,6 +21,41 @@ import {
 } from '@/lib/npmApplyEnv';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
+
+/** env 재로드 + GeoServer 기동 + REST 저장소 갱신 (적용·중단·실패 복구 공용) */
+async function ensureGeoServerRecoveredAfterApply(params?: {
+  geoAlreadyStopped?: boolean;
+  onProgressMessage?: (message: string) => Promise<void>;
+}): Promise<{ success: boolean; message: string }> {
+  const logPrefix = '[SourceCodeUpload]';
+  const project = process.env.GGNR_PROJECT?.trim();
+  const envType = process.env.GGNR_ENV?.trim();
+  if (project && envType) {
+    const { reloadProjectRuntimeEnv } = await import('@/lib/projectEnvReload');
+    reloadProjectRuntimeEnv(project, envType);
+  }
+  await params?.onProgressMessage?.('GeoServer·저장소 복구 중...');
+  const onLog = (message: string) => console.log(`${logPrefix} GeoServer: ${message}`);
+  console.log(`${logPrefix} GeoServer·저장소 복구 시작...`);
+  const { ensureGeoServerWithDbSetup } = await import('@/service/geoServerBootstrapService');
+  const r = await ensureGeoServerWithDbSetup({
+    geoAlreadyStopped: params?.geoAlreadyStopped ?? true,
+    retryOnceOnFail: true,
+    onLog,
+  });
+  const message = r.success
+    ? r.ensure.action === 'already-ready'
+      ? '복구 OK(이미 응답·저장소)'
+      : '복구 OK(기동·저장소)'
+    : `복구 경고: ${r.ensure.error ?? 'unknown'}`;
+  if (r.success) {
+    console.log(`${logPrefix} GeoServer·저장소 ${message}`);
+  } else {
+    console.warn(`${logPrefix} GeoServer·저장소 ${message}`);
+  }
+  await params?.onProgressMessage?.(`GeoServer ${message}`);
+  return { success: r.success, message };
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -476,6 +511,9 @@ function armPendingSchemaTimer(session: PendingSchemaConfirmSession): void {
         }).catch((histErr) => {
           console.error('[SourceCodeUpload] pending timeout 이력 기록 실패', histErr);
         });
+        await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true }).catch((geoErr) => {
+          console.error('[SourceCodeUpload] pending timeout 후 GeoServer 복구 실패', geoErr);
+        });
       } catch (e) {
         console.error('[SourceCodeUpload] pending timeout 롤백 실패', e);
       }
@@ -737,6 +775,9 @@ export async function abortPendingSchemaApply(params: {
       ip: session.clientIp,
     }).catch((histErr) => {
       console.error('[SourceCodeUpload] schema abort 이력 기록 실패', histErr);
+    });
+    await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true }).catch((geoErr) => {
+      console.error('[SourceCodeUpload] schema abort 후 GeoServer 복구 실패', geoErr);
     });
     console.log(`[SourceCodeUpload] 스키마 안내 중단·롤백: ${detail}`);
     return { ok: true, rollbackDetail: detail };
@@ -1054,24 +1095,19 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     let started = false;
     let deferredStart = false;
 
-    /** 재기동 예정이면 run.ts ensure에 맡김. «재시작 안 함»일 때만 병합 직후 기동 */
+    /** 재기동 예정이면 run.ts ensure에 맡김. «재시작 안 함»일 때만 병합 직후 기동·저장소 갱신 */
     if (!doRestart) {
-      await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
-      let startResult = await ensureGeoServerRunning({ forceRestart: false });
-      if (!startResult.success) {
-        await sleep(2000);
-        startResult = await ensureGeoServerRunning({ forceRestart: true });
-      }
-      geoStartedOnSuccessPath = startResult.success;
-      started = startResult.success;
-      startMessage = startResult.success
-        ? startResult.action === 'already-ready'
-          ? '기동 OK(이미 응답)'
-          : startResult.action === 'restarted'
-            ? '기동 OK(재기동·응답)'
-            : '기동 OK(응답)'
-        : `기동 경고(응답 미확인): ${startResult.error ?? 'unknown'}`;
-      if (!startResult.success) {
+      await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer·저장소 복구 중...' });
+      const recover = await ensureGeoServerRecoveredAfterApply({
+        geoAlreadyStopped: true,
+        onProgressMessage: async (message) => {
+          await emit('geoserver-start', message);
+        },
+      });
+      geoStartedOnSuccessPath = recover.success;
+      started = recover.success;
+      startMessage = recover.success ? recover.message : `기동 경고: ${recover.message}`;
+      if (!recover.success) {
         console.warn(
           `[SourceCodeUpload] GeoServer ${startMessage} — 소스 적용은 계속(롤백하지 않음). 프로세스·8080·GEOSERVER_URL 확인 권장`
         );
@@ -1253,10 +1289,10 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       console.error(`[SourceCodeUpload] 적용 실패 (롤백 없음): ${failMessage}`);
     }
 
-    /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
+    /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 복구 */
     if (!geoStartedOnSuccessPath) {
-      await ensureGeoServerRunning({ forceRestart: false }).catch((e) => {
-        console.error('[SourceCodeUpload] 실패 후 GeoServer ensure 실패', e);
+      await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true }).catch((e) => {
+        console.error('[SourceCodeUpload] 실패 후 GeoServer 복구 실패', e);
       });
     }
     const outErr = new Error(failMessage) as Error & { historyRecorded?: boolean };

@@ -273,6 +273,8 @@ export async function ensureGeoServerRunning(options?: {
   readyTimeoutMs?: number;
   /** starting 상태에서 stop 전 대기 (기본 90s) */
   startingWaitMs?: number;
+  /** true면 응답 없을 때 stop bat 생략 (적용 직후 중지 상태) */
+  skipStopIfDown?: boolean;
   /** 단계 로그 (run.ts 등) */
   onLog?: (message: string) => void;
 }): Promise<EnsureGeoServerResult> {
@@ -303,10 +305,20 @@ export async function ensureGeoServerRunning(options?: {
     log('강제 재기동 (forceRestart)');
   }
 
-  log('stop bat 실행...');
-  const stopResult = await stopGeoServer();
-  log(stopResult.success ? 'stop OK' : `stop 경고: ${stopResult.error ?? 'unknown'}`);
-  await sleep(settleMs);
+  let stopVerified = false;
+  const skipStop =
+    options?.skipStopIfDown === true && !(await checkGeoServerHealth()).ready;
+  if (skipStop) {
+    log('이미 중지 상태 — stop 생략');
+  } else {
+    log('stop bat 실행·응답 소멸 확인...');
+    const stopResult = await stopGeoServerAndVerify({ settleMs });
+    stopVerified = stopResult.success;
+    log(stopResult.success ? stopResult.message : `stop 경고: ${stopResult.message}`);
+    if (!stopResult.success) {
+      log('stop 미확인 — start 시도 계속');
+    }
+  }
 
   log('start bat 실행...');
   const startResult = await startGeoServer();
@@ -335,7 +347,7 @@ export async function ensureGeoServerRunning(options?: {
     log('응답 확인 OK');
     return {
       success: true,
-      action: forceRestart || stopResult.success ? 'restarted' : 'started',
+      action: forceRestart || stopVerified || skipStop ? 'restarted' : 'started',
       health,
     };
   }
