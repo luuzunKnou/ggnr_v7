@@ -186,6 +186,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
       { id: "basic-section", icon: Route, label: "기초구간", allowMultiple: true },
       { id: "land-category", icon: SquareStack, label: "지목", allowMultiple: true },
       { id: "ownership", icon: Users, label: "소유구분", allowMultiple: true },
+      { id: "official-land-price", icon: Banknote, label: "공시지가", allowMultiple: true },
     ],
   },
   {
@@ -193,7 +194,6 @@ export const defaultMapControlGroups: MapControlGroup[] = [
     items: [
       { id: "map-split", icon: MapSplitIcon, label: "지도분할", allowMultiple: true },
       { id: "street-view", icon: PersonStanding, label: "거리뷰", allowMultiple: true },
-      { id: "official-land-price", icon: Banknote, label: "공시지가", allowMultiple: true },
     ],
   },
   {
