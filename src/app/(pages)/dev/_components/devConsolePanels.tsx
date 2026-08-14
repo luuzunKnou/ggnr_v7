@@ -18,6 +18,8 @@ import { PermissionFeatureManager } from "./PermissionFeatureManager"
 import { AccessRequestQueue } from "./AccessRequestQueue"
 import { UserManager } from "./UserManager"
 import { SignUpApprove } from "./SignUpApprove"
+import { UserMgmtHistory } from "./UserMgmtHistory"
+import { UserAccessStats } from "./UserAccessStats"
 import { RuntimeEnvEditor } from "./RuntimeEnvEditor"
 import { SystemIntegrationManager } from "./SystemIntegrationManager"
 import { GeocodingTestPanel } from "./GeocodingTestPanel"
@@ -121,9 +123,9 @@ export function getDevMenuDescription(menuId: string): string {
     case "featureUsageStats":
       return "기능(서비스)별 사용 횟수·현황 통계 (구현 예정)"
     case "userAccessStats":
-      return "로그인·접속 건수 등 사용자 접속 현황 (구현 예정)"
+      return "로그인 접속 이력·기간별 통계 그래프·도표를 조회합니다."
     case "userMgmtHistory":
-      return "계정 생성·변경 등 사용자 관리 이력 조회 (구현 예정)"
+      return "계정 생성·변경·삭제 등 사용자 관리 이력을 조회합니다."
     case "userPermHistory":
       return "권한 부여·변경 이력 조회 (구현 예정)"
     case "layerManager":
@@ -186,13 +188,23 @@ export function renderDevMenuContent(menuId: string): ReactNode {
         </div>
       )
     case "featureUsageStats":
-    case "userAccessStats":
-    case "userMgmtHistory":
     case "userPermHistory":
       return (
         <div className="rounded-md border border-dashed border-muted-foreground/25 bg-muted/20 px-4 py-10 text-center">
           <p className="text-sm font-medium text-foreground">{devMenuLabel(menuId)}</p>
           <p className="mt-2 text-sm text-muted-foreground">화면은 추후 연동 예정입니다.</p>
+        </div>
+      )
+    case "userAccessStats":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <UserAccessStats />
+        </div>
+      )
+    case "userMgmtHistory":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <UserMgmtHistory />
         </div>
       )
     case "userManager":

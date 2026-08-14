@@ -1,14 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { pickHostMachinePrivateIpv4 } from '@/lib/hostMachineIpv4';
-
-export function normalizeClientIp(raw?: string | null): string | undefined {
-  if (!raw) return undefined;
-  const v = raw.trim();
-  if (!v) return undefined;
-  if (v.startsWith('::ffff:')) return v.slice(7);
-  if (v === '::1') return '127.0.0.1';
-  return v;
-}
+export { normalizeClientIp } from '@/lib/normalizeClientIp';
+import { normalizeClientIp } from '@/lib/normalizeClientIp';
 
 export function isLoopbackIp(ip?: string | null): boolean {
   if (!ip) return true;

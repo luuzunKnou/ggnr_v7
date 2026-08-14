@@ -98,6 +98,23 @@ const EMERGENCY_POLY_BEFORE = new Style({
   stroke: new Stroke({ color: 'rgba(107, 114, 128, 0.85)', width: 2, lineDash: [6, 5] }),
 });
 
+/** 읍면·리 행정경계 — 면 채우면 분석 영역을 덮어 건물 등이 안 보임. 테두리만. */
+const ADMIN_OUTLINE_AFTER = new Style({
+  zIndex: 3,
+  fill: new Fill({ color: 'rgba(0,0,0,0)' }),
+  stroke: new Stroke({ color: 'rgba(37, 99, 235, 0.95)', width: 2.5 }),
+});
+const ADMIN_OUTLINE_BEFORE = new Style({
+  zIndex: 2,
+  fill: new Fill({ color: 'rgba(0,0,0,0)' }),
+  stroke: new Stroke({ color: 'rgba(107, 114, 128, 0.9)', width: 2, lineDash: [6, 4] }),
+});
+
+function isAdminSectionTable(tableName: string): boolean {
+  const t = tableName.trim().toLowerCase();
+  return t.startsWith('lsmd_adm_sect') || /adm_sect_(umd|ri|sgg|sid)/.test(t);
+}
+
 /** 필지분석 캡처와 동일 — 영역이 화면에 크게 차도록 */
 const MAP_FIT_PADDING: [number, number, number, number] = [20, 20, 20, 20];
 /** 메인과 동일 — fit·자동 맞춤 19, 버튼·휠 수동 확대 20 */
@@ -294,12 +311,12 @@ export function ChangeHistoryLiveMap({
     const boundaryLayer = new VectorLayer({
       source: boundarySourceRef.current,
       style: BOUNDARY_STYLE,
-      zIndex: 5,
+      zIndex: 21,
     });
     const maskLayer = new VectorLayer({
       source: maskSourceRef.current,
       style: OUTSIDE_MASK_STYLE,
-      zIndex: 4,
+      zIndex: 20,
     });
     const featLayer = new VectorLayer({
       source: featSourceRef.current,
@@ -312,6 +329,9 @@ export function ChangeHistoryLiveMap({
       style: (f): Style => {
         const side = (f.get('compareSide') as 'before' | 'after' | undefined) ?? 'after';
         const gType = f.getGeometry()?.getType();
+        if (f.get('adminOutline')) {
+          return side === 'before' ? ADMIN_OUTLINE_BEFORE : ADMIN_OUTLINE_AFTER;
+        }
         // 점: SVG 404·Icon 실패가 많아 원으로 고정. 선·면은 GeoServer 색(실제 도형 종류 기준).
         if (gType === 'Point' || gType === 'MultiPoint') {
           return side === 'before' ? EMERGENCY_POINT_BEFORE : EMERGENCY_POINT_AFTER;
@@ -547,6 +567,7 @@ export function ChangeHistoryLiveMap({
       f.setId(`${row.side}:${row.tableName}:${row.keyValue}`);
       f.set('compareSide', row.side);
       f.set('tableName', row.tableName);
+      if (isAdminSectionTable(row.tableName)) f.set('adminOutline', true);
       source.addFeature(f);
     }
   }, [asOfFeatures, dayDiffFeatures, showBefore, showAfter]);

@@ -24,10 +24,9 @@ export const ANALYSIS_DRAW_STYLE = new Style({
   }),
 });
 
-/** 시군구 참고 경계 — 점선 + 연한 채움 */
+/** 시군구 참고 경계 — 점선만 (채움 없음) */
 export const ANALYSIS_SIGUNGU_BOUNDARY_STYLE = new Style({
   stroke: new Stroke({ color: areaBlueRgba(0.9), width: 2.5, lineDash: [6, 4] }),
-  fill: new Fill({ color: areaBlueRgba(0.05) }),
 });
 
 /** 필지분석 경로 호환 별칭 */
