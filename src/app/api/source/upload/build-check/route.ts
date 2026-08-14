@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { runIsolatedBuildCheck } from '@/service/sourceBuildCheckService';
+import { runWorkspaceTypeCheck } from '@/service/sourceBuildCheckService';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 1800;
@@ -31,14 +31,14 @@ export async function POST(req: NextRequest) {
           }
         };
         try {
-          const result = await runIsolatedBuildCheck(
+          const result = await runWorkspaceTypeCheck(
             workspaceRoot,
             async (logLine) => {
               await send({ type: 'log', line: logLine });
             },
             signal
           );
-          if (!result.ok && result.message === '빌드 확인이 이미 진행 중입니다.') {
+          if (!result.ok && result.message === '타입 검사가 이미 진행 중입니다.') {
             await send({ type: 'error', error: result.message });
             try {
               controller.close();
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
             /* ignore */
           }
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : 'build check failed';
+          const message = err instanceof Error ? err.message : 'type check failed';
           try {
             await send({ type: 'error', error: message });
             controller.close();
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'build check failed';
+    const message = err instanceof Error ? err.message : 'type check failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -3,7 +3,7 @@ import type { RestartMode, VersionRelayPhase } from '@/lib/sourceVersionClientRe
 import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
 import type { StageItem, StageState } from './ProgressStagesList';
 
-export type InstallStageId = 'info' | 'scan' | 'zip' | 'download';
+export type InstallStageId = 'typeCheck' | 'info' | 'scan' | 'zip' | 'download';
 export type RelayStageId =
   | 'latest'
   | 'download'
@@ -25,7 +25,7 @@ export type RelayStageOptions = {
   packageProfile?: SourcePackageProfile;
 };
 
-const INSTALL_STAGE_ORDER: InstallStageId[] = ['info', 'scan', 'zip', 'download'];
+const INSTALL_STAGE_ORDER: InstallStageId[] = ['typeCheck', 'info', 'scan', 'zip', 'download'];
 
 const INSTALL_PHASE_TO_STAGE: Partial<Record<InstallZipPhase, InstallStageId>> = {
   idle: 'info',
@@ -122,13 +122,27 @@ function firstRestartPipelineStage(order: RelayStageId[]): RelayStageId | null {
   return null;
 }
 
-export function buildInstallBaseStages(): StageItem[] {
-  return [
+export function buildInstallBaseStages(opts?: {
+  includeTypeCheck?: boolean;
+  typeCheckState?: StageState;
+  typeCheckDetail?: string;
+}): StageItem[] {
+  const stages: StageItem[] = [];
+  if (opts?.includeTypeCheck !== false) {
+    stages.push({
+      id: 'typeCheck',
+      label: '타입 검사',
+      state: opts?.typeCheckState ?? 'pending',
+      detail: opts?.typeCheckDetail,
+    });
+  }
+  stages.push(
     { id: 'info', label: '서버 정보 확인', state: 'pending' },
     { id: 'scan', label: '소스 스캔/필터링', state: 'pending' },
     { id: 'zip', label: 'ZIP 압축', state: 'pending' },
-    { id: 'download', label: '파일 다운로드', state: 'pending' },
-  ];
+    { id: 'download', label: '파일 다운로드', state: 'pending' }
+  );
+  return stages;
 }
 
 export function buildInstallStagesFromProgress(
@@ -143,17 +157,34 @@ export function buildInstallStagesFromProgress(
     zipName?: string;
     zipSize?: number;
   },
-  infoDetail?: string
+  infoDetail?: string,
+  typeCheckOpts?: { state?: StageState; detail?: string }
 ): StageItem[] {
-  const base = buildInstallBaseStages();
+  const typeCheckState = typeCheckOpts?.state ?? 'done';
+  const typeCheckDetail =
+    typeCheckOpts?.detail ?? (typeCheckState === 'warn' ? '오류 있음 · 진행' : '통과');
+  const base = buildInstallBaseStages({
+    includeTypeCheck: true,
+    typeCheckState,
+    typeCheckDetail,
+  });
   if (p.phase === 'error') {
     const failedId: InstallStageId = p.message.includes('다운로드')
       ? 'download'
       : p.message.includes('ZIP') || p.message.includes('압축')
         ? 'zip'
-        : 'scan';
+        : p.message.includes('타입')
+          ? 'typeCheck'
+          : 'scan';
     const activeIdx = INSTALL_STAGE_ORDER.indexOf(failedId);
     return base.map((s, idx) => {
+      if (s.id === 'typeCheck') {
+        return {
+          ...s,
+          state: typeCheckState,
+          detail: typeCheckDetail,
+        };
+      }
       if (s.id === failedId) {
         return { ...s, state: 'error' as StageState, detail: p.error ?? p.message };
       }
@@ -170,6 +201,10 @@ export function buildInstallStagesFromProgress(
     const id = s.id as InstallStageId;
     const idx = INSTALL_STAGE_ORDER.indexOf(id);
     const exclude = id === 'scan' ? scanExclude : {};
+
+    if (id === 'typeCheck') {
+      return { ...s, state: typeCheckState, detail: typeCheckDetail };
+    }
 
     if (p.phase === 'done') {
       let detail: string | undefined;
@@ -505,7 +540,7 @@ export function setStageActive(stages: StageItem[], activeId: string, detail?: s
   const activeIdx = order.indexOf(activeId);
   return stages.map((s, idx) => {
     if (s.id === activeId) return { ...s, state: 'active', detail: detail ?? s.detail };
-    if (idx < activeIdx && s.state !== 'error') return { ...s, state: 'done' };
+    if (idx < activeIdx && s.state !== 'error' && s.state !== 'warn') return { ...s, state: 'done' };
     return s;
   });
 }

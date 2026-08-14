@@ -828,26 +828,37 @@ export function VersionManagerContent() {
             <p className="whitespace-pre-wrap break-words text-xs text-red-600">{progress.error}</p>
           )}
         </div>
-        <div className="min-h-0 max-h-[35%] shrink overflow-y-auto space-y-2">
-          <ProgressStagesList
-            stages={stages}
-            className="rounded border px-3 py-2 text-xs"
-          />
-          {relayResult && (
-            <div className="rounded border bg-muted/10 p-2 text-xs">
-              <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
-              <div>적용: {relayResult.appliedFiles}건</div>
-              <div>제외: {relayResult.skippedFiles}건</div>
-              <div>GeoServer 중지: {relayResult.geoserver?.stopMessage ?? relayResult.geoserver?.message ?? '-'}</div>
-              {relayResult.geoserver?.startMessage ? (
-                <div>GeoServer 기동: {relayResult.geoserver.startMessage}</div>
-              ) : null}
-              <div>재시작: {relayResult.restart?.message}</div>
+        <ProgressStagesList
+          stages={stages}
+          className="shrink-0 rounded border px-3 py-2 text-xs"
+        />
+        <div className="flex min-h-0 flex-1 gap-2 overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden">
+            <LiveLogsPanel logs={progress.logs} />
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-[2] flex-col overflow-hidden rounded border bg-muted/10">
+            <div className="shrink-0 border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              적용 결과
             </div>
-          )}
-        </div>
-        <div className="flex min-h-[8rem] flex-1 flex-col overflow-hidden">
-          <LiveLogsPanel logs={progress.logs} />
+            <div className="min-h-0 flex-1 overflow-auto p-3 text-xs">
+              {relayResult ? (
+                <div className="space-y-1">
+                  <div>적용: {relayResult.appliedFiles}건</div>
+                  <div>제외: {relayResult.skippedFiles}건</div>
+                  <div>
+                    GeoServer 중지:{' '}
+                    {relayResult.geoserver?.stopMessage ?? relayResult.geoserver?.message ?? '-'}
+                  </div>
+                  {relayResult.geoserver?.startMessage ? (
+                    <div>GeoServer 기동: {relayResult.geoserver.startMessage}</div>
+                  ) : null}
+                  <div>재시작: {relayResult.restart?.message}</div>
+                </div>
+              ) : (
+                <div className="text-muted-foreground">적용 결과가 없습니다.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
       <SchemaSyncPreviewModal
