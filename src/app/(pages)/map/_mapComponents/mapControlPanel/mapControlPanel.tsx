@@ -75,10 +75,9 @@ function MapControlButton({
     <button
       onClick={onClick}
       onContextMenu={(e) => {
-        if (onRightClick) {
-          e.preventDefault()
-          onRightClick()
-        }
+        // 지도 컨트롤은 브라우저 기본 메뉴 대신 앱 동작(또는 무시)
+        e.preventDefault()
+        onRightClick?.()
       }}
       className={cn(
         "flex h-[45px] w-full min-w-0 flex-col items-center justify-center gap-1 overflow-hidden box-border p-0 transition-colors cursor-pointer",
