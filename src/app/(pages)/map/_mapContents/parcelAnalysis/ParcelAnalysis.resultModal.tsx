@@ -443,9 +443,21 @@ function ResultTable({
   );
 }
 
-function DataCell({ value }: { value?: string | null }) {
+function DataCell({
+  value,
+  title,
+}: {
+  value?: string | null;
+  /** 마우스 오버 시 표시 (PNU 등) */
+  title?: string | null;
+}) {
   const text = value?.trim() ? value : '-';
-  return <td className={TD_CELL}>{text}</td>;
+  const tip = title?.trim() || undefined;
+  return (
+    <td className={TD_CELL} title={tip}>
+      {text}
+    </td>
+  );
 }
 
 /** 토지현황 — 연계 출처 색·텍스트·연계실패(주황) */
@@ -453,22 +465,30 @@ function LandLinkageValueCell({
   value,
   linkageSource,
   showSourceText = false,
+  title: titleOverride,
 }: {
   value?: string | null;
   linkageSource?: string;
   /** true면 값 아래에 출처 텍스트(브이월드 등) */
   showSourceText?: boolean;
+  /** 지정 시 연계 출처 title 대신 사용 (PNU 등) */
+  title?: string | null;
 }) {
   const text = value?.trim() ? value : '-';
   const isFail = text === PARCEL_LAND_LINKAGE_FAIL_LABEL;
   const hasValue = text !== '-' && !isFail;
   const srcClass = hasValue ? parcelLandLinkageSourceCellClass(linkageSource) : undefined;
   const srcLabel = hasValue ? parcelLandLinkageSourceLabel(linkageSource) : undefined;
-  const title = hasValue ? parcelLandLinkageSourceTitle(linkageSource) : isFail ? PARCEL_LAND_LINKAGE_FAIL_TITLE : undefined;
+  const linkageTitle = hasValue
+    ? parcelLandLinkageSourceTitle(linkageSource)
+    : isFail
+      ? PARCEL_LAND_LINKAGE_FAIL_TITLE
+      : undefined;
+  const tip = titleOverride?.trim() || linkageTitle;
   return (
     <td
       className={cn(TD_CELL, isFail && 'font-medium text-amber-800 dark:text-amber-300')}
-      title={title}
+      title={tip}
     >
       <span className={cn(hasValue && srcClass)}>{text}</span>
       {showSourceText && hasValue && srcLabel ? (
@@ -1158,10 +1178,14 @@ function renderSectionBody(
                 {result.buildingRows.map((row, index) => (
                   <tr key={`${row.pnu}-${index}`}>
                     <td className={TD_CELL}>{index + 1}</td>
-                    <LandLinkageValueCell value={row.bldNm} linkageSource={row.linkageSource} />
-                    <DataCell value={row.platLoc} />
-                    <DataCell value={row.jibun} />
-                    <DataCell value={row.roadAddr} />
+                    <LandLinkageValueCell
+                      value={row.bldNm}
+                      linkageSource={row.linkageSource}
+                      title={row.pnu}
+                    />
+                    <DataCell value={row.platLoc} title={row.pnu} />
+                    <DataCell value={row.jibun} title={row.pnu} />
+                    <DataCell value={row.roadAddr} title={row.pnu} />
                     <LandLinkageValueCell value={row.bcRat} linkageSource={row.linkageSource} />
                     <LandLinkageValueCell value={row.vlRat} linkageSource={row.linkageSource} />
                     <LandLinkageValueCell value={row.platArea} linkageSource={row.linkageSource} />
@@ -1178,19 +1202,27 @@ function renderSectionBody(
 
   if (section.kind === 'facility') {
     const rows = result.facilityStats[section.id] ?? [];
-    /** 캡처 WMS는 표에 나온 레이어만 (그룹 publish 전체 아님) · GeoServer에 있는 것만 */
+    /** 캡처 WMS는 표∩발행 목록만. 발행 목록이 비면 WMS 요청하지 않음(항공·영역만) */
     const publishedSet = new Set(
       (section.facilityWmsLayerKeys ?? []).map((k) => k.toLowerCase())
     );
-    const wmsKeysForMap = rows
-      .map((r) => r.layerKey.trim())
-      .filter((key) => key && (!publishedSet.size || publishedSet.has(key.toLowerCase())))
-      .map((k) => k.toLowerCase());
+    const wmsKeysForMap = publishedSet.size
+      ? rows
+          .map((r) => r.layerKey.trim())
+          .filter((key) => key && publishedSet.has(key.toLowerCase()))
+          .map((k) => k.toLowerCase())
+      : [];
     const wmsGeomTypes = Object.fromEntries(
       rows
         .filter((r) => wmsKeysForMap.includes(r.layerKey.toLowerCase()))
         .map((r) => [r.layerKey.toLowerCase(), r.geomType])
     ) as Record<string, LayerDbGeometryKind>;
+    const publishNotice =
+      rows.length > 0 && publishedSet.size === 0
+        ? '발행된 GeoServer 레이어가 없어 항공·분석영역만 표시합니다.'
+        : rows.length > 0 && wmsKeysForMap.length === 0 && publishedSet.size > 0
+          ? '표의 레이어가 GeoServer에 없어 항공·분석영역만 표시합니다.'
+          : null;
     const mapBlock =
       result.wkt5181 && rows.length > 0 ? (
         <ParcelAnalysisMapCapture
@@ -1209,6 +1241,9 @@ function renderSectionBody(
     return (
       <div className="space-y-3">
         {mapBlock}
+        {publishNotice ? (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">{publishNotice}</p>
+        ) : null}
         {!rows.length ? (
           <div className="rounded-md border border-dashed border-border bg-muted px-3 py-6 text-center text-xs text-muted-foreground">
             분석 영역에서 해당 시설을 찾지 못했습니다.
@@ -1373,8 +1408,7 @@ function renderSectionBody(
             <thead>
               <tr className="text-left text-foreground">
                 <th className={TH_CELL_STICKY}>순번</th>
-                <th className={TH_CELL_STICKY}>PNU</th>
-                <th className={TH_CELL_STICKY}>지번</th>
+                <th className={TH_CELL_STICKY}>주소</th>
                 <th className={TH_CELL_STICKY}>지목</th>
                 <th className={TH_CELL_STICKY}>면적</th>
                 {showOwnerType ? <th className={TH_CELL_STICKY}>소유구분</th> : null}
@@ -1386,8 +1420,7 @@ function renderSectionBody(
               {result.landRows.map((row, index) => (
                 <tr key={row.pnu}>
                   <td className={TD_CELL}>{index + 1}</td>
-                  <td className={cn(TD_CELL, 'font-mono text-[10px]')}>{row.pnu}</td>
-                  <DataCell value={row.addr} />
+                  <DataCell value={row.addr} title={row.pnu} />
                   <DataCell value={row.jimok} />
                   <td className={TD_CELL}>{row.area}</td>
                   {showOwnerType ? (

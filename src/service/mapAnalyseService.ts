@@ -22,6 +22,7 @@ import {
   enrichParcelLandsByPnus,
   fetchLandUseZonesByPnus as fetchLandUseZonesByPnusLinkage,
 } from '@/service/landLinkageService';
+import { resolvePlatLocAndLotByPnus } from '@/service/layerRowService';
 import { toParcelAnalyzeUserError } from '@/lib/parcelAnalyzeUserError';
 import {
   PARCEL_THEME_MAP_SIMPLIFY_TOLERANCE_M,
@@ -78,7 +79,8 @@ function buildHitCteSql(wkt: string): string {
         j.pnu::text AS pnu,
         j.jibun::text AS jibun,
         ST_Area(${jijukGeom}) AS area_sqm,
-        NULL::text AS jimok,
+        -- jibun = 지번+지목(예: 634-1도, 240답) → 끝 한글을 지목으로
+        NULLIF(TRIM(SUBSTRING(j.jibun::text FROM '(?:산?[0-9]+(?:-[0-9]+)?)[[:space:]]*([가-힣]+)$')), '') AS jimok,
         NULL::text AS ownship_se
       FROM ${JIJUK_SCHEMA}.jijuk j
       WHERE ${hitWhere}
@@ -171,6 +173,65 @@ function mapLandRowResults(
     source: r.source,
     linkageFailed: r.linkageFailed,
   }));
+}
+
+/** 지적 jibun(예: 452-4대)에서 지번 숫자만 — 주소 표시용 */
+function lotLabelFromJijukJibun(jibunRaw: string): string {
+  const s = String(jibunRaw ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^(산?\d+(?:-\d+)?)/u);
+  return m?.[1]?.trim() ?? '';
+}
+
+/** 지적 jibun(예: 634-1도)에서 지목만 */
+function jimokFromJijukJibun(jibunRaw: string): string {
+  const s = String(jibunRaw ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^(?:산?\d+(?:-\d+)?)[\s]*([가-힣]+)$/u);
+  return m?.[1]?.trim() ?? '';
+}
+
+function isUnknownJimok(value: unknown): boolean {
+  const s = String(value ?? '').trim();
+  return !s || s === '미상';
+}
+
+/**
+ * 토지현황 표시용 주소: «영양읍 서부리 452-4» (PNU·읍면동리명 + 지번).
+ * jibun 필드에 주소 문자열을 넣어 클라 addr 매핑과 맞춘다.
+ * 지목은 연계 전·후 비어 있으면 지적 jibun 끝 글자(도·대·답 등)로 채운다.
+ */
+async function applyLandRowDisplayAddresses(
+  landRows: AnalyzeLandRowResult[]
+): Promise<AnalyzeLandRowResult[]> {
+  if (!landRows.length) return landRows;
+
+  const withJimokFallback = (r: AnalyzeLandRowResult, rawJibun: string): AnalyzeLandRowResult => {
+    const fromJibun = jimokFromJijukJibun(rawJibun);
+    const jimok = isUnknownJimok(r.jimok) && fromJibun ? fromJibun : r.jimok;
+    return jimok === r.jimok ? r : { ...r, jimok };
+  };
+
+  try {
+    const addrByPnu = await resolvePlatLocAndLotByPnus(landRows.map((r) => r.pnu));
+    return landRows.map((r) => {
+      const rawJibun = r.jibun;
+      const base = withJimokFallback(r, rawJibun);
+      const resolved = addrByPnu.get(String(r.pnu ?? '').trim());
+      const lot =
+        (resolved?.jibunLot ?? '').trim() || lotLabelFromJijukJibun(rawJibun) || '';
+      const plat = (resolved?.platLoc ?? '').trim();
+      const addr = [plat, lot].filter(Boolean).join(' ');
+      return { ...base, jibun: addr || lot || rawJibun || r.pnu };
+    });
+  } catch {
+    return landRows.map((r) => {
+      const rawJibun = r.jibun;
+      const base = withJimokFallback(r, rawJibun);
+      const lot = lotLabelFromJijukJibun(rawJibun);
+      return { ...base, jibun: lot || rawJibun || r.pnu };
+    });
+  }
 }
 
 /**
@@ -300,12 +361,13 @@ export async function listAnalyzeLandRows(params: {
       client.release();
     }
 
-    const landRows: AnalyzeLandRowResult[] = rows.map((r) => ({
+    const landRowsRaw: AnalyzeLandRowResult[] = rows.map((r) => ({
       pnu: String(r.pnu ?? '').trim(),
       jibun: String(r.jibun ?? '').trim(),
       jimok: String(r.jimok ?? '미상'),
       areaSqm: toInt(r.area_sqm),
     }));
+    const landRows = await applyLandRowDisplayAddresses(landRowsRaw);
     return { ok: true, landRows };
   } catch (e: unknown) {
     return { ...empty, error: toParcelAnalyzeUserError(e) };
