@@ -9,6 +9,7 @@ import { AttributeSection, SectionTitle, StatusBadge } from './AerialMediaUi';
 import { updateWorkUnitAttrs } from './aerialMediaMockData';
 import { FlightLogbookForm } from './FlightLogbookForm';
 import { SHOOT_TYPE_LABEL, type ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
+import { ServiceFileImagePreview } from '../../_mapComponents/standard/ServiceFileImagePreview';
 
 /** 속성정보 인라인 수정 상태 (목업 저장) */
 function useAttrEdit(unit: WorkUnitItem) {
@@ -244,7 +245,9 @@ type OrthoDetailProps = {
   viewOnly?: boolean;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
+  onAddFiles?: () => void;
   onClearLink?: () => void;
+  onDelete?: () => void;
 };
 
 export function OrthoWorkUnitDetailPanel({
@@ -259,7 +262,9 @@ export function OrthoWorkUnitDetailPanel({
   viewOnly = false,
   linkedRequest,
   onFolderUpload,
+  onAddFiles,
   onClearLink,
+  onDelete,
 }: OrthoDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -302,13 +307,13 @@ export function OrthoWorkUnitDetailPanel({
             <section>
               <SectionTitle
                 action={
-                  viewOnly ? undefined : (
+                  viewOnly || !onAddFiles ? undefined : (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="h-7 gap-1 px-2 text-[11px]"
-                      onClick={() => window.alert('목업: 파일 추가 API 없음')}
+                      onClick={onAddFiles}
                     >
                       <Plus className="h-3 w-3" />
                       추가
@@ -319,8 +324,8 @@ export function OrthoWorkUnitDetailPanel({
                 파일 목록
               </SectionTitle>
               <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
-                변환완료 파일만 체크하면 지도 타일을 켤 수 있습니다. 파일을 클릭하면 지도가 촬영 위치로
-                이동합니다.
+                변환완료 파일만 체크하면 지도 타일을 켤 수 있습니다. (자체항공영상이 아닌 드론영상
+                오버레이)
               </p>
               <FileRows
                 files={unit.files}
@@ -338,9 +343,7 @@ export function OrthoWorkUnitDetailPanel({
       )}
       <DetailFooter
         onClose={onClose}
-        onDelete={
-          showInfoActions && !edit.editing ? () => window.alert('목업: 삭제 API 없음') : undefined
-        }
+        onDelete={showInfoActions && !edit.editing ? onDelete : undefined}
         editing={showInfoActions ? edit.editing : false}
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
@@ -361,7 +364,9 @@ type DroneDetailProps = {
   viewOnly?: boolean;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
+  onAddFiles?: () => void;
   onClearLink?: () => void;
+  onDelete?: () => void;
 };
 
 export function DroneWorkUnitDetailPanel({
@@ -374,7 +379,9 @@ export function DroneWorkUnitDetailPanel({
   viewOnly = false,
   linkedRequest,
   onFolderUpload,
+  onAddFiles,
   onClearLink,
+  onDelete,
 }: DroneDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -415,8 +422,27 @@ export function DroneWorkUnitDetailPanel({
           onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
-              <SectionTitle>파일 목록</SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">파일을 선택하면 옆에 미리보기가 열립니다.</p>
+              <SectionTitle
+                action={
+                  viewOnly || !onAddFiles ? undefined : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-[11px]"
+                      onClick={onAddFiles}
+                    >
+                      <Plus className="h-3 w-3" />
+                      추가
+                    </Button>
+                  )
+                }
+              >
+                파일 목록
+              </SectionTitle>
+              <p className="mb-2 text-[10px] text-slate-400">
+                파일을 클릭하면 지도가 촬영 위치로 이동합니다. GPS 없는 동영상은 목록만 표시됩니다.
+              </p>
               <FileRows
                 files={unit.files}
                 selectedId={selectedFileId}
@@ -430,9 +456,7 @@ export function DroneWorkUnitDetailPanel({
       )}
       <DetailFooter
         onClose={onClose}
-        onDelete={
-          showInfoActions && !edit.editing ? () => window.alert('목업: 삭제 API 없음') : undefined
-        }
+        onDelete={showInfoActions && !edit.editing ? onDelete : undefined}
         editing={showInfoActions ? edit.editing : false}
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
@@ -445,11 +469,58 @@ export function DroneWorkUnitDetailPanel({
 
 type DroneFileProps = {
   file: WorkFileItem;
+  /** 같은 작업단위 이미지 — 뷰어 이전/다음 */
+  files?: WorkFileItem[];
   onClose: () => void;
+  onDelete?: () => void;
 };
 
-export function DroneFileDetailPanel({ file, onClose }: DroneFileProps) {
+function aerialMediaUrl(relativePath: string, download = false): string {
+  const q = new URLSearchParams({ path: relativePath.replace(/\\/g, '/') });
+  if (download) q.set('download', '1');
+  return `/api/aerial/media?${q.toString()}`;
+}
+
+export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: DroneFileProps) {
   const isVideo = file.previewKind === 'video';
+  const mediaSrc = file.relativePath ? aerialMediaUrl(file.relativePath) : null;
+  const [viewerOpen, setViewerOpen] = useState(false);
+
+  useEffect(() => {
+    setViewerOpen(false);
+  }, [file.id]);
+
+  const galleryItems = (files.length > 0 ? files : [file])
+    .filter((f) => f.previewKind === 'image' && f.relativePath)
+    .map((f) => ({
+      url: aerialMediaUrl(f.relativePath!),
+      fileName: f.name,
+      kind: 'image' as const,
+    }));
+
+  const viewerInitialIndex = Math.max(
+    0,
+    galleryItems.findIndex((i) => i.fileName === file.name)
+  );
+
+  const handleDownload = () => {
+    if (!file.relativePath) {
+      window.alert('다운로드 경로가 없습니다.');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = aerialMediaUrl(file.relativePath, true);
+    a.download = file.name;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const openViewer = () => {
+    if (!isVideo && galleryItems.length > 0) setViewerOpen(true);
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-white">
       <DetailHeader title="파일 상세" onClose={onClose} />
@@ -486,7 +557,8 @@ export function DroneFileDetailPanel({ file, onClose }: DroneFileProps) {
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1 px-2 text-[11px]"
-                onClick={() => window.alert('목업: 다운로드 API 없음')}
+                disabled={!file.relativePath}
+                onClick={handleDownload}
               >
                 <Download className="h-3 w-3" />
                 다운로드
@@ -496,27 +568,59 @@ export function DroneFileDetailPanel({ file, onClose }: DroneFileProps) {
             미리보기
           </SectionTitle>
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900 shadow-sm">
-            <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
-              {isVideo ? (
-                <div className="flex flex-col items-center gap-2 text-slate-300">
+            {mediaSrc && !isVideo ? (
+              <button
+                type="button"
+                className="group relative block w-full cursor-zoom-in bg-slate-950 text-left"
+                onClick={openViewer}
+                title="클릭하여 크게 보기"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- 인증 쿠키 포함 미디어 미리보기 */}
+                <img
+                  src={mediaSrc}
+                  alt={file.name}
+                  className="mx-auto max-h-[min(56vh,420px)] w-full object-contain"
+                />
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-2 text-center text-[10px] text-white/90 opacity-0 transition-opacity group-hover:opacity-100">
+                  클릭하여 크게 보기
+                </span>
+              </button>
+            ) : mediaSrc && isVideo ? (
+              <video
+                key={mediaSrc}
+                src={mediaSrc}
+                controls
+                playsInline
+                preload="metadata"
+                className="mx-auto max-h-[min(56vh,420px)] w-full bg-black"
+              >
+                이 브라우저는 동영상 재생을 지원하지 않습니다.
+              </video>
+            ) : (
+              <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-800 to-slate-950 px-4 text-center text-slate-300">
+                {isVideo ? (
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
                     <Play className="h-5 w-5 fill-current" />
                   </div>
-                  <span className="max-w-[90%] truncate px-2 text-[11px]">{file.name}</span>
-                  <span className="text-[10px] text-slate-500">동영상 미리보기 (목업)</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 px-4 text-center text-slate-300">
+                ) : (
                   <div className="h-24 w-36 rounded border border-dashed border-slate-500/60 bg-slate-800/80" />
-                  <span className="max-w-[90%] truncate text-[11px]">{file.name}</span>
-                  <span className="text-[10px] text-slate-500">사진 미리보기 (목업)</span>
-                </div>
-              )}
-            </div>
+                )}
+                <span className="max-w-[90%] truncate text-[11px]">{file.name}</span>
+                <span className="text-[10px] text-slate-500">미리보기 경로가 없습니다</span>
+              </div>
+            )}
           </div>
         </section>
       </div>
-      <DetailFooter onClose={onClose} hint="파일 상세" />
+      <DetailFooter onClose={onClose} onDelete={onDelete} hint="파일 상세" />
+
+      {viewerOpen && galleryItems.length > 0 ? (
+        <ServiceFileImagePreview
+          items={galleryItems}
+          initialIndex={viewerInitialIndex}
+          onClose={() => setViewerOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -531,7 +635,9 @@ type PanoDetailProps = {
   viewOnly?: boolean;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
+  onAddFiles?: () => void;
   onClearLink?: () => void;
+  onDelete?: () => void;
 };
 
 export function PanoramaWorkUnitDetailPanel({
@@ -544,7 +650,9 @@ export function PanoramaWorkUnitDetailPanel({
   viewOnly = false,
   linkedRequest,
   onFolderUpload,
+  onAddFiles,
   onClearLink,
+  onDelete,
 }: PanoDetailProps) {
   const edit = useAttrEdit(unit);
   const workLabel =
@@ -585,8 +693,27 @@ export function PanoramaWorkUnitDetailPanel({
           onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
-              <SectionTitle>파일 목록</SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">파일을 선택하면 옆에 미리보기가 열립니다.</p>
+              <SectionTitle
+                action={
+                  viewOnly || !onAddFiles ? undefined : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-[11px]"
+                      onClick={onAddFiles}
+                    >
+                      <Plus className="h-3 w-3" />
+                      추가
+                    </Button>
+                  )
+                }
+              >
+                파일 목록
+              </SectionTitle>
+              <p className="mb-2 text-[10px] text-slate-400">
+                파일을 선택하면 360 미리보기가 열립니다. GPS가 있으면 지도가 이동합니다.
+              </p>
               <FileRows
                 files={unit.files}
                 selectedId={selectedFileId}
@@ -600,9 +727,7 @@ export function PanoramaWorkUnitDetailPanel({
       )}
       <DetailFooter
         onClose={onClose}
-        onDelete={
-          showInfoActions && !edit.editing ? () => window.alert('목업: 삭제 API 없음') : undefined
-        }
+        onDelete={showInfoActions && !edit.editing ? onDelete : undefined}
         editing={showInfoActions ? edit.editing : false}
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}

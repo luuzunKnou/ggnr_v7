@@ -4,7 +4,7 @@
  */
 export const USAGE_DATA_AS_FIELD_LABELS: Record<string, string> = {
   gkey_code: '관리코드',
-  cons_code: '공사코드',
+  cons_code: '점용코드',
   river_type: '하천유형',
   river_code: '하천코드',
   river_name: '하천명',

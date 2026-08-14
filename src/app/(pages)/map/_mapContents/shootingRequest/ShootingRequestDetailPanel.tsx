@@ -10,13 +10,24 @@ import {
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog';
 import { FlightLogbookForm } from '../aerialView/FlightLogbookForm';
-import { FolderBatchUploadDialog } from '../aerialView/FolderBatchUploadDialog';
+import {
+  FolderBatchUploadDialog,
+  type FolderCreatedInfo,
+} from '../aerialView/FolderBatchUploadDialog';
+import { WorkUnitMediaUploadDialog } from '../aerialView/WorkUnitMediaUploadDialog';
+import {
+  applyWorkUnitMediaFiles,
+  replaceOrthoUnitsFromServer,
+} from '../aerialView/aerialMediaMockData';
+import { setUploadCompleteNotice } from '../aerialView/aerialUploadProgressStore';
+import { subscribeAerialMediaUploadComplete } from '../aerialView/aerialMediaUploadRunner';
 import { ShootingRequestForm } from './ShootingRequestForm';
 import { REQUEST_STATUS_LABEL, canStartMediaRegister } from './shootingRequestMockData';
 import {
   addShootingRequest,
   beginMediaRegistration,
   cancelShootingApproval,
+  completeMediaRegistration,
   decideShootingRequest,
   findShootingRequest,
   getShootingRequests,
@@ -26,6 +37,7 @@ import {
 } from './shootingRequestMockStore';
 import { shootTypeToAerialKind } from './shootTypeToAerialKind';
 import type { ShootingListMode } from './ShootingRequestPanel';
+import { call } from '@/lib/api';
 
 /** 작업단위 상세 하단과 동일 — 색 강조·아이콘 버튼 쓰지 않음 */
 const footerBtnClass =
@@ -56,6 +68,7 @@ export function ShootingRequestDetailPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [flightOpen, setFlightOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [mediaTarget, setMediaTarget] = useState<FolderCreatedInfo | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -74,6 +87,65 @@ export function ShootingRequestDetailPanel({
       .catch(() => undefined)
       .finally(() => setDetailLoading(false));
   }, [detailId, isNew]);
+
+  useEffect(() => {
+    return subscribeAerialMediaUploadComplete((event) => {
+      if (event.aborted || (event.error && event.fileCount === 0)) return;
+      if (!event.linkedRequestId || event.linkedRequestId !== detailId) return;
+      if (event.kind === 'drone' || event.kind === 'panorama') {
+        void call('', 'POST', {
+          service: 'aerialUploadService',
+          action: 'listWorkUnitMedia',
+          params: {
+            kind: event.kind,
+            folderName: event.folderName,
+            ...(event.wuKey != null ? { wuKey: event.wuKey } : {}),
+          },
+        }).then((res) => {
+          if (!res?.success) return;
+          const data = (res.data ?? res) as {
+            items?: Array<{
+              fuKey: number;
+              wuKey: number;
+              fileName: string;
+              sizeLabel: string;
+              format: string;
+              previewKind: 'image' | 'video' | 'panorama';
+              locationLabel: string | null;
+              relativePath?: string;
+            }>;
+          };
+          applyWorkUnitMediaFiles(event.kind, event.folderName, data.items ?? []);
+        });
+      } else if (event.kind === 'ortho') {
+        void call('', 'POST', {
+          service: 'aerialUploadService',
+          action: 'listWorkUnits',
+          params: { kind: 'ortho' },
+        }).then((res) => {
+          if (!res?.success) return;
+          const data = (res.data ?? res) as {
+            units?: Parameters<typeof replaceOrthoUnitsFromServer>[0];
+          };
+          replaceOrthoUnitsFromServer(data.units ?? []);
+        });
+      }
+      completeMediaRegistration(event.linkedRequestId, event.workName);
+      setUploadCompleteNotice({
+        kind: event.kind,
+        workName: event.workName,
+        folderName: event.folderName,
+        progressFilePath: '',
+        fileTotal: event.fileCount,
+      });
+      setNotice(
+        event.kind === 'ortho'
+          ? `TIF ${event.fileCount}개 업로드·변환을 진행했습니다.`
+          : `파일 ${event.fileCount}개를 올렸습니다.`
+      );
+      setMediaTarget(null);
+    });
+  }, [detailId]);
 
   if (!isNew && !existing) {
     return (
@@ -390,10 +462,27 @@ export function ShootingRequestDetailPanel({
             onOpenChange={setUploadOpen}
             expectedKind={shootTypeToAerialKind(existing.shootType)}
             linkedRequest={existing}
-            onUploadMockComplete={() =>
-              setNotice('폴더 업로드가 반영되었습니다. 상태가 등록완료로 바뀔 수 있습니다.')
-            }
+            onFolderCreated={(info) => {
+              setNotice('작업단위 폴더가 생성되었습니다.');
+              if (info.kind === 'drone' || info.kind === 'ortho' || info.kind === 'panorama') {
+                setMediaTarget(info);
+              }
+            }}
           />
+          {mediaTarget ? (
+            <WorkUnitMediaUploadDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) setMediaTarget(null);
+              }}
+              kind={mediaTarget.kind}
+              folderName={mediaTarget.folderName}
+              workName={mediaTarget.workName}
+              wuKey={mediaTarget.wuKey}
+              srKey={Number(existing.id)}
+              linkedRequestId={existing.id}
+            />
+          ) : null}
         </>
       ) : null}
     </div>

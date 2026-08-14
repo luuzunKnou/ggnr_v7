@@ -71,19 +71,13 @@ function isNoDataError(error: FloodUiError | null | undefined) {
   return error?.code === 990;
 }
 
-function dist2(a: SafetyWaterStation, b: SafetyWaterStation) {
-  const dx = a.lon - b.lon;
-  const dy = a.lat - b.lat;
-  return dx * dx + dy * dy;
-}
-
 function findNearestOpposite(from: SafetyWaterStation, all: SafetyWaterStation[]) {
   const targetKind = from.kind === 'water' ? 'rain' : 'water';
   let best: SafetyWaterStation | null = null;
   let bestD = Infinity;
   for (const s of all) {
     if (s.kind !== targetKind) continue;
-    const d = dist2(from, s);
+    const d = haversineM(from.lon, from.lat, s.lon, s.lat);
     if (d < bestD) {
       bestD = d;
       best = s;

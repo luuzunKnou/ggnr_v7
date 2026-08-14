@@ -8,6 +8,7 @@ import {
 import { refreshServiceWmsLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
+import { clearUseFeeWmsLayer } from '../useFee/useFeeMapSync';
 
 type SetVisible = (updater: (prev: Set<string>) => Set<string>) => void;
 
@@ -30,6 +31,7 @@ export function clearOccupationLedgerWmsLayers(
     }
     return changed ? next : prev;
   });
+  clearUseFeeWmsLayer(setVisibleLayerNames);
 }
 
 /** 시스템 전환 시 — 현재 시스템이 아닌 점용대장 레이어만 끄기 */
@@ -52,7 +54,12 @@ export function clearForeignOccupationLedgerWmsLayers(
 
 export function ensureOccupationLedgerWmsLayers(
   setVisibleLayerNames: SetVisible | null | undefined,
-  params?: { serEng?: string | null; system?: string | null }
+  params?: {
+    serEng?: string | null;
+    system?: string | null;
+    /** true면 필지·물건지 WMS도 켬. 기본은 본표만 (목록 선택 시 자식 도형 숨김) */
+    includeChildren?: boolean;
+  }
 ) {
   if (!setVisibleLayerNames) return;
   const binding = getOccupationLedgerBinding({
@@ -60,14 +67,26 @@ export function ensureOccupationLedgerWmsLayers(
     system: params?.system,
   });
   if (!binding) return;
-  const ids = getOccupationLedgerWmsLayerIds(binding);
+  const mainId = binding.mainTable.trim().toLowerCase();
+  const childIds = [binding.jijukTable, binding.mgjTable].map((t) => t.trim().toLowerCase());
+  const includeChildren = params?.includeChildren === true;
   setVisibleLayerNames((prev) => {
     const next = new Set(prev);
     let changed = false;
-    for (const id of ids) {
-      if (!next.has(id)) {
-        next.add(id);
-        changed = true;
+    if (!next.has(mainId)) {
+      next.add(mainId);
+      changed = true;
+    }
+    if (includeChildren) {
+      for (const id of childIds) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+    } else {
+      for (const id of childIds) {
+        if (next.delete(id)) changed = true;
       }
     }
     return changed ? next : prev;

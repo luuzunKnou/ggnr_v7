@@ -1,10 +1,11 @@
 /**
  * Config 파일 읽기/쓰기 (systemList.config 등)
  * - 서버 측에서만 실행되며, 프로젝트 src/config 경로를 사용합니다.
- * - runtime.env, serviceList.config, systemList.config 는 호출 시마다 파일을 읽어 재시작 없이 반영됩니다.
+ * - common.runtime.env + <project>.runtime.env, serviceList.config, systemList.config 는 호출 시마다 파일을 읽어 재시작 없이 반영됩니다.
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
+import { unstable_noStore as noStore } from "next/cache"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -44,13 +45,15 @@ function resolveRuntimeEnvPath(): { project: string; path: string } {
   return { project, path }
 }
 
-/** 현재 프로젝트의 src/config/projects/<project>.runtime.env 를 읽어 키-값 맵 반환 (재시작 없이 실시간 반영) */
-function getRuntimeEnvVars(): Record<string, string> {
-  const { project, path: runtimeEnvPath } = resolveRuntimeEnvPath()
-  if (!project) return {}
-  if (!existsSync(runtimeEnvPath)) return {}
+function resolveCommonRuntimeEnvPath(): string {
+  return join(getProjectRoot(), "src", "config", "projects", "common.runtime.env")
+}
+
+/** .env 스타일 파일을 키-값 맵으로 파싱 (#·빈 줄 제외) */
+function parseEnvFileToMap(filePath: string): Record<string, string> {
+  if (!existsSync(filePath)) return {}
   try {
-    const content = readFileSync(runtimeEnvPath, "utf-8")
+    const content = readFileSync(filePath, "utf-8")
     const out: Record<string, string> = {}
     for (const line of content.split(/\r?\n/)) {
       const trimmed = line.trim()
@@ -67,6 +70,52 @@ function getRuntimeEnvVars(): Record<string, string> {
   }
 }
 
+/** .env 스타일 파일을 행 배열로 파싱 (파일 순서 유지, #·빈 줄 제외) */
+function parseEnvFileToRows(filePath: string): { key: string; value: string }[] {
+  if (!existsSync(filePath)) return []
+  const content = readFileSync(filePath, "utf-8")
+  const rows: { key: string; value: string }[] = []
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const eq = trimmed.indexOf("=")
+    if (eq <= 0) continue
+    const key = trimmed.slice(0, eq).trim()
+    const value = trimmed.slice(eq + 1).trim()
+    if (key) rows.push({ key, value })
+  }
+  return rows
+}
+
+function writeEnvRowsToFile(filePath: string, rows: { key: string; value: string }[]): number {
+  const lines: string[] = []
+  for (const r of rows) {
+    const key = String(r.key ?? "").trim()
+    if (!key) continue
+    if (key.includes("=") || /\s/.test(key)) {
+      throw new Error(`유효하지 않은 변수명: "${key}" (공백·= 사용 불가)`)
+    }
+    const value = String(r.value ?? "")
+    lines.push(`${key}=${value}`)
+  }
+  const body = lines.length ? `${lines.join("\n")}\n` : ""
+  writeFileSync(filePath, body, "utf-8")
+  return lines.length
+}
+
+/**
+ * 공용 common.runtime.env ∪ 프로젝트 runtime.env (프로젝트 우선).
+ * 재시작 없이 실시간 반영.
+ */
+function getRuntimeEnvVars(): Record<string, string> {
+  noStore()
+  const common = parseEnvFileToMap(resolveCommonRuntimeEnvPath())
+  const { project, path: runtimeEnvPath } = resolveRuntimeEnvPath()
+  if (!project) return common
+  const projectVars = parseEnvFileToMap(runtimeEnvPath)
+  return { ...common, ...projectVars }
+}
+
 /**
  * 개발자 콘솔용: 현재 GGNR_PROJECT 의 runtime.env 를 행 배열로 반환 (파일 순서 유지, #·빈 줄 제외).
  */
@@ -79,21 +128,7 @@ export function getRuntimeEnvRows(_params?: unknown): {
   if (!project) {
     throw new Error("GGNR_PROJECT가 설정되어 있지 않습니다. (npm run dev -- <project> …)")
   }
-  if (!existsSync(runtimeEnvPath)) {
-    return { project, path: runtimeEnvPath, rows: [] }
-  }
-  const content = readFileSync(runtimeEnvPath, "utf-8")
-  const rows: { key: string; value: string }[] = []
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith("#")) continue
-    const eq = trimmed.indexOf("=")
-    if (eq <= 0) continue
-    const key = trimmed.slice(0, eq).trim()
-    const value = trimmed.slice(eq + 1).trim()
-    if (key) rows.push({ key, value })
-  }
-  return { project, path: runtimeEnvPath, rows }
+  return { project, path: runtimeEnvPath, rows: parseEnvFileToRows(runtimeEnvPath) }
 }
 
 /**
@@ -108,19 +143,31 @@ export function saveRuntimeEnvRows(params: { rows: { key: string; value: string 
   if (!project) {
     throw new Error("GGNR_PROJECT가 설정되어 있지 않습니다.")
   }
-  const lines: string[] = []
-  for (const r of rows) {
-    const key = String(r.key ?? "").trim()
-    if (!key) continue
-    if (key.includes("=") || /\s/.test(key)) {
-      throw new Error(`유효하지 않은 변수명: "${key}" (공백·= 사용 불가)`)
-    }
-    const value = String(r.value ?? "")
-    lines.push(`${key}=${value}`)
+  return { saved: writeEnvRowsToFile(runtimeEnvPath, rows) }
+}
+
+/**
+ * 개발자 콘솔용: common.runtime.env 행 배열 (파일 순서 유지, #·빈 줄 제외).
+ */
+export function getCommonRuntimeEnvRows(_params?: unknown): {
+  project: string
+  path: string
+  rows: { key: string; value: string }[]
+} {
+  const path = resolveCommonRuntimeEnvPath()
+  return { project: "common", path, rows: parseEnvFileToRows(path) }
+}
+
+/**
+ * common.runtime.env 전체를 KEY=VALUE 행으로 덮어씁니다. (주석 줄은 유지되지 않음)
+ */
+export function saveCommonRuntimeEnvRows(params: { rows: { key: string; value: string }[] }): { saved: number } {
+  const rows = params?.rows
+  if (!Array.isArray(rows)) {
+    throw new Error("rows 배열이 필요합니다.")
   }
-  const body = lines.length ? `${lines.join("\n")}\n` : ""
-  writeFileSync(runtimeEnvPath, body, "utf-8")
-  return { saved: lines.length }
+  const path = resolveCommonRuntimeEnvPath()
+  return { saved: writeEnvRowsToFile(path, rows) }
 }
 
 /** runtime.env 의 SYSTEM_KOR_NAME (사이트/플랫폼 한글 타이틀). 없으면 기본값 반환 */
@@ -513,6 +560,7 @@ export async function fetchSafetydataDssp10941Test(params?: {
  * ParcelSlider 배경용. 서버에서만 호출.
  */
 export function getIndexSliderImages(projectName: string): string[] {
+  noStore()
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")
   const out: string[] = []
@@ -532,6 +580,7 @@ export function getIndexSliderImages(projectName: string): string[] {
  * 1) {project}_index_logo.svg → 2) {project}_index_logo.png → 3) default_index_logo.svg (공간누리)
  */
 export function getIndexLogoSrc(projectName?: string): string {
+  noStore()
   const name = (projectName ?? process.env.GGNR_PROJECT ?? "build_yy").trim()
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")

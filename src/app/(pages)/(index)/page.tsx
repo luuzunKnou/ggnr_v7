@@ -1,5 +1,7 @@
 import Link from "next/link"
 import { Layers, Mouse } from "lucide-react"
+
+export const dynamic = "force-dynamic"
 import { ParcelSlider } from "@/app/(pages)/(index)/parcel-slider"
 import { SystemManagementSection, type SystemItem } from "@/app/(pages)/(index)/system-management-section"
 import { SiteIndexShell } from "@/app/(pages)/(index)/site-index-shell"

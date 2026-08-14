@@ -7,8 +7,8 @@
         <sld:Rule>
           <sld:PolygonSymbolizer>
             <sld:Fill>
-              <sld:CssParameter name="fill">#2563EB</sld:CssParameter>
-              <sld:CssParameter name="fill-opacity">0.28</sld:CssParameter>
+              <sld:CssParameter name="fill">#1D4ED8</sld:CssParameter>
+              <sld:CssParameter name="fill-opacity">0.35</sld:CssParameter>
             </sld:Fill>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
@@ -21,3 +21,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

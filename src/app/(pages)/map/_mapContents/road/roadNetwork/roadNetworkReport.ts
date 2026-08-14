@@ -2,6 +2,7 @@ import {
   type RoadNetworkAttachment,
   type RoadNetworkRow,
 } from "./roadNetworkMock";
+import { formatRoadNetworkNumericAttr } from "./roadNetworkFormat";
 
 function esc(s: string) {
   return String(s ?? "")
@@ -60,13 +61,20 @@ function attachmentReportBlock(list: RoadNetworkAttachment[], emptyText: string)
 
 function attrTwoColTable(row: RoadNetworkRow): string {
   const pairs: [string, string][] = [
-    ["도로명", row.roadName],
+    ["도로명", row.roadName || "—"],
     ["도로종류", row.roadType],
-    ["노선번호", row.roadNo || "—"],
-    ["관리기관", row.dept || "—"],
-    ["담당자", row.manager || "—"],
+    ["개설여부", row.openStatus ?? "—"],
+    ["도로번호", row.roadNo || "—"],
   ];
-    pairs.splice(2, 0, ["개설여부", row.openStatus ?? "—"]);
+  if (row.dept?.trim()) pairs.push(["관리기관", row.dept]);
+  if (row.lengthAttr?.trim()) pairs.push(["길이", row.lengthAttr]);
+  if (row.defense?.trim()) pairs.push(["방위", row.defense]);
+  if (row.sinuosity?.trim()) {
+    const s = formatRoadNetworkNumericAttr(row.sinuosity);
+    if (s) pairs.push(["굴곡도", s]);
+  }
+  if (row.detailReason?.trim()) pairs.push(["상세", row.detailReason]);
+  if (row.address?.trim()) pairs.push(["주소", row.address]);
   const rowsHtml: string[] = [];
   for (let i = 0; i < pairs.length; i += 2) {
     const left = pairs[i]!;
@@ -162,7 +170,7 @@ export function buildRoadNetworkReportHtml(row: RoadNetworkRow): string {
   <div class="doc-head">
     <h1>${esc(title)}</h1>
     <div class="meta-row">
-      <span>${esc(row.roadType)} · 노선번호 ${esc(row.roadNo || "—")}</span>
+      <span>${esc(row.roadType)} · 도로번호 ${esc(row.roadNo || "—")}</span>
       <span>관리기관 ${esc(row.dept || "—")} / ${esc(row.manager || "—")}</span>
       <span>작성일시 ${esc(now)}</span>
     </div>

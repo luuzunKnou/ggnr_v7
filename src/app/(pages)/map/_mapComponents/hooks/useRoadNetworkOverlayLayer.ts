@@ -13,34 +13,15 @@ import type { FeatureLike } from 'ol/Feature';
 import type { MapBrowserEvent } from 'ol';
 import { unByKey } from 'ol/Observable';
 import { useMapContext } from '../MapContext';
-import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
-import type { RoadNetworkType } from '@/app/(pages)/map/_mapContents/road/roadNetwork/roadNetworkMock';
+import { formatRoadNetworkListTitle } from '@/app/(pages)/map/_mapContents/road/roadNetwork/roadNetworkFormat';
+import type { RoadNetworkRow } from '@/app/(pages)/map/_mapContents/road/roadNetwork/roadNetworkMock';
 
-export const ROAD_NETWORK_OVERLAY_LAYER_KEY = 'roadNetworkOverlay';
-export const ROAD_NETWORK_FEATURE_ID_PROP = 'roadNetworkId';
+export const ROAD_NETWORK_LABEL_LAYER_KEY = 'roadNetworkLabels';
 export const ROAD_NETWORK_POINT_LAYER_KEY = 'roadNetworkSitePoints';
 
-const TYPE_STROKE: Record<RoadNetworkType, string> = {
-  국도: '#1d4ed8',
-  지방도: '#0284c7',
-  국지도: '#4f46e5',
-  군도: '#059669',
-  농도: '#d97706',
-  일반도로: '#475569',
-  임도: '#65a30d',
-  입체교차로: '#7c3aed',
-};
-
-function strokeForFeature(f: FeatureLike): Style {
-  const type = String(f.get('roadType') ?? '') as RoadNetworkType;
-  const openStatus = f.get('openStatus');
-  const color = TYPE_STROKE[type] ?? '#64748b';
-  const width = openStatus === '미개설' ? 2.5 : 3.5;
-  const lineDash = openStatus === '미개설' ? [8, 6] : undefined;
-  return new Style({
-    stroke: new Stroke({ color, width, lineDash }),
-  });
-}
+const LABEL_PROP = 'roadNetworkLabel';
+/** 이 줌 미만에서는 라벨 숨김(과밀 방지) */
+const LABEL_MIN_ZOOM = 11;
 
 function sitePointStyle(kind: string, focused: boolean): Style {
   if (kind === 'start' || kind === 'end') {
@@ -71,17 +52,37 @@ function sitePointStyle(kind: string, focused: boolean): Style {
   });
 }
 
-/** 도로망도 패널 열림 시 필터 결과 항시 표시 + 현장 점 + 클릭 선택/점찍기 */
+function labelStyleForFeature(f: FeatureLike, selected: boolean): Style | undefined {
+  const text = String(f.get(LABEL_PROP) ?? '').trim();
+  if (!text) return undefined;
+  return new Style({
+    text: new Text({
+      text,
+      font: selected ? '700 12px sans-serif' : '600 11px sans-serif',
+      fill: new Fill({ color: selected ? '#0f172a' : '#334155' }),
+      stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: selected ? 4 : 3 }),
+      placement: 'line',
+      overflow: false,
+      maxAngle: Math.PI / 5,
+      padding: [2, 4, 2, 4],
+    }),
+  });
+}
+
+/**
+ * 도로망도 — 배경 선은 GeoServer WMS.
+ * 목록과 동일한 도로명 라벨 + 기·종점·현장 점 + 점찍기.
+ */
 export function useRoadNetworkOverlayLayer(mapReady: boolean) {
   const mapContext = useMapContext();
-  const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
-  const sourceRef = useRef<VectorSource | null>(null);
+  const labelLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  const labelSourceRef = useRef<VectorSource | null>(null);
   const pointLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const pointSourceRef = useRef<VectorSource | null>(null);
   const panelOpenRef = useRef(false);
-  const setSelectedIdRef = useRef(mapContext?.setRoadNetworkSelectedId);
   const pointPickRef = useRef(mapContext?.roadNetworkPointPickRef);
   const pointPickActiveRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
 
   const panelOpen = mapContext?.roadNetworkPanelOpen ?? false;
   const rows = mapContext?.roadNetworkOverlayRows ?? [];
@@ -96,30 +97,38 @@ export function useRoadNetworkOverlayLayer(mapReady: boolean) {
   focusedSiteKeyRef.current = focusedSiteKey;
 
   panelOpenRef.current = panelOpen;
-  setSelectedIdRef.current = mapContext?.setRoadNetworkSelectedId;
   pointPickRef.current = mapContext?.roadNetworkPointPickRef;
   pointPickActiveRef.current = pointPickActive;
-  const didFitRef = useRef(false);
-
-  useEffect(() => {
-    if (!panelOpen) didFitRef.current = false;
-  }, [panelOpen]);
+  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current;
     if (!mapReady || !map) return;
 
-    const source = new VectorSource();
-    sourceRef.current = source;
-    const layer = new VectorLayer({
-      source,
-      renderOrder: compareFeaturesByGeometryStackOrder,
-      style: strokeForFeature,
-      zIndex: 1090,
+    const labelSource = new VectorSource();
+    labelSourceRef.current = labelSource;
+    const labelLayer = new VectorLayer({
+      source: labelSource,
+      declutter: true,
+      style: (f) => {
+        const zoom = map.getView().getZoom() ?? 0;
+        if (zoom < LABEL_MIN_ZOOM) return undefined;
+        const id = String(f.getId() ?? '');
+        return labelStyleForFeature(f, id === selectedIdRef.current);
+      },
+      // 선택 하이라이트(1101)보다 위 — 라벨이 펄스에 가려지지 않게
+      zIndex: 1103,
+      updateWhileAnimating: false,
+      updateWhileInteracting: false,
     });
-    layer.set(ROAD_NETWORK_OVERLAY_LAYER_KEY, true);
-    map.getLayers().push(layer);
-    layerRef.current = layer;
+    labelLayer.set(ROAD_NETWORK_LABEL_LAYER_KEY, true);
+    map.getLayers().push(labelLayer);
+    labelLayerRef.current = labelLayer;
+
+    const onZoom = () => {
+      labelLayer.changed();
+    };
+    const zoomKey = map.getView().on('change:resolution', onZoom);
 
     const pointSource = new VectorSource();
     pointSourceRef.current = pointSource;
@@ -138,26 +147,11 @@ export function useRoadNetworkOverlayLayer(mapReady: boolean) {
 
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (!panelOpenRef.current) return;
-
       const pickCb = pointPickRef.current?.current;
       if (pointPickActiveRef.current && pickCb) {
         const [lon, lat] = transform(evt.coordinate, 'EPSG:3857', 'EPSG:4326');
         pickCb(lon, lat);
         evt.stopPropagation();
-        return;
-      }
-
-      const hit = map.forEachFeatureAtPixel(
-        evt.pixel,
-        (feature) => {
-          const id = feature.get(ROAD_NETWORK_FEATURE_ID_PROP);
-          return typeof id === 'string' && id ? id : undefined;
-        },
-        { hitTolerance: 10 }
-      );
-      if (hit) {
-        evt.stopPropagation();
-        setSelectedIdRef.current?.(hit);
       }
     };
 
@@ -165,10 +159,11 @@ export function useRoadNetworkOverlayLayer(mapReady: boolean) {
 
     return () => {
       unByKey(key);
-      map.removeLayer(layer);
+      unByKey(zoomKey);
+      map.removeLayer(labelLayer);
       map.removeLayer(pointLayer);
-      layerRef.current = null;
-      sourceRef.current = null;
+      labelLayerRef.current = null;
+      labelSourceRef.current = null;
       pointLayerRef.current = null;
       pointSourceRef.current = null;
     };
@@ -187,31 +182,34 @@ export function useRoadNetworkOverlayLayer(mapReady: boolean) {
     el.style.cursor = '';
   }, [panelOpen, pointPickActive, mapContext?.mapInstanceRef]);
 
+  /** 목록과 동일 제목의 라인 라벨 */
   useEffect(() => {
-    const layer = layerRef.current;
-    const source = sourceRef.current;
+    const layer = labelLayerRef.current;
+    const source = labelSourceRef.current;
     const map = mapContext?.mapInstanceRef?.current;
     if (!layer || !source || !map) return;
 
     layer.setVisible(panelOpen);
     source.clear();
-    if (!panelOpen || rows.length === 0) return;
+    if (!panelOpen || rows.length === 0) {
+      layer.changed();
+      return;
+    }
 
     const viewProj = map.getView().getProjection()?.getCode() || 'EPSG:3857';
     const format = new GeoJSONFormat();
-    const features = rows.flatMap((row) => {
+    const features = rows.flatMap((row: RoadNetworkRow) => {
       if (!row.geom) return [];
+      const title = formatRoadNetworkListTitle(row).trim();
+      if (!title) return [];
       const geojson = {
         type: 'FeatureCollection' as const,
         features: [
           {
             type: 'Feature' as const,
+            id: row.id,
             geometry: row.geom,
-            properties: {
-              [ROAD_NETWORK_FEATURE_ID_PROP]: row.id,
-              roadType: row.roadType,
-              openStatus: row.openStatus,
-            },
+            properties: { [LABEL_PROP]: title },
           },
         ],
       };
@@ -220,30 +218,18 @@ export function useRoadNetworkOverlayLayer(mapReady: boolean) {
         featureProjection: viewProj,
       });
       for (const f of read) {
-        f.set(ROAD_NETWORK_FEATURE_ID_PROP, row.id);
-        f.set('roadType', row.roadType);
-        f.set('openStatus', row.openStatus);
+        f.setId(row.id);
+        f.set(LABEL_PROP, title);
       }
       return read;
     });
     source.addFeatures(features);
-
-    if (!didFitRef.current && features.length > 0) {
-      try {
-        const extent = source.getExtent();
-        if (extent && extent.every((v) => Number.isFinite(v))) {
-          map.getView().fit(extent, {
-            padding: [80, 80, 80, 320],
-            maxZoom: 13,
-            duration: 350,
-          });
-          didFitRef.current = true;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
+    layer.changed();
   }, [panelOpen, rows, mapContext?.mapInstanceRef, mapReady]);
+
+  useEffect(() => {
+    labelLayerRef.current?.changed();
+  }, [selectedId]);
 
   useEffect(() => {
     const pointLayer = pointLayerRef.current;

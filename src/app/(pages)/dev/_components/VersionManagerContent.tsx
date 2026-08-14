@@ -23,15 +23,7 @@ import {
   type VersionRelayResult,
 } from '@/lib/sourceVersionClientRelay';
 import { prefetchClientMachineIp } from '@/lib/clientMachineIp';
-import {
-  estimateRemainingByBytes,
-  estimateRemainingSeconds,
-  estimateMergeApplyRemainingSeconds,
-  estimateVersionApplyTotalSeconds,
-  formatEtaMinutes,
-  mergeApplyStepPct,
-  type MergeApplyEtaStep,
-} from '@/lib/sourceProgressEta';
+import { mergeApplyStepPct, type MergeApplyEtaStep } from '@/lib/sourceProgressEta';
 import {
   closeDevVersionHistory,
   notifyDevVersionHistoryRefresh,
@@ -90,14 +82,8 @@ export function VersionManagerContent() {
   const abortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const startedAtRef = useRef(0);
   const mergeCountRef = useRef<{ applied: number; total: number } | null>(null);
   const mergeStepRef = useRef<MergeApplyEtaStep | null>(null);
-  const mergeStepStartedAtRef = useRef(0);
-  const mergeCopyStartedAtRef = useRef(0);
-  const byteProgressRef = useRef<{ done: number; total: number } | null>(null);
-  const byteStartedAtRef = useRef(0);
-  const [etaTick, setEtaTick] = useState(0);
 
   const restart = restartMode !== 'none';
   const stageOpts = {
@@ -119,12 +105,6 @@ export function VersionManagerContent() {
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
-
-  useEffect(() => {
-    if (!busy) return;
-    const id = setInterval(() => setEtaTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [busy]);
 
   const refreshAppliedVersion = async () => {
     try {
@@ -302,13 +282,8 @@ export function VersionManagerContent() {
     setRelayResult(null);
     logRef.current = [];
     versionDetailRef.current = '';
-    startedAtRef.current = Date.now();
     mergeCountRef.current = null;
     mergeStepRef.current = null;
-    mergeStepStartedAtRef.current = 0;
-    mergeCopyStartedAtRef.current = 0;
-    byteProgressRef.current = null;
-    byteStartedAtRef.current = 0;
     setProgress({
       ...emptySideProgress(),
       message: selectedEntry.isLatest ? 'GNMS 최신 버전 조회 중...' : 'GNMS 선택 버전 준비 중...',
@@ -339,31 +314,13 @@ export function VersionManagerContent() {
                 : mergeStepRef.current ?? 'extract');
             if (mergeStepRef.current !== step) {
               mergeStepRef.current = step;
-              mergeStepStartedAtRef.current = Date.now();
-              if (step === 'copy' && mergeCopyStartedAtRef.current <= 0) {
-                mergeCopyStartedAtRef.current = Date.now();
-              }
             }
             if (p.totalFiles != null && p.totalFiles > 0 && p.appliedFiles != null) {
               mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
-              if (p.appliedFiles > 0 && mergeCopyStartedAtRef.current <= 0) {
-                mergeCopyStartedAtRef.current = Date.now();
-              }
             }
           } else {
             mergeCountRef.current = null;
             mergeStepRef.current = null;
-            mergeStepStartedAtRef.current = 0;
-            mergeCopyStartedAtRef.current = 0;
-          }
-          if (p.phase === 'merge-apply' || p.phase === 'geoserver-stop' || p.phase === 'relay-complete') {
-            byteProgressRef.current = null;
-            byteStartedAtRef.current = 0;
-          } else if (p.totalBytes != null && p.totalBytes > 0 && p.bytesDone != null) {
-            if (byteStartedAtRef.current <= 0 && p.bytesDone > 0) {
-              byteStartedAtRef.current = Date.now();
-            }
-            byteProgressRef.current = { done: p.bytesDone, total: p.totalBytes };
           }
           const merge = mergeCountRef.current;
           const mergePct =
@@ -472,22 +429,24 @@ export function VersionManagerContent() {
                 ? '적용 완료 · 재시작 파이프라인 예약'
                 : '적용 완료',
             versionDetail: versionDetailRef.current,
-            applyDetail: `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
+            applyDetail: json.pendingSchemaConfirm
+              ? `prepare 완료 · commit 대기 ${json.appliedFiles}건`
+              : `적용 ${json.appliedFiles}건 · 제외 ${json.skippedFiles}건`,
             geoserverStopDetail: json.geoserver?.stopMessage ?? json.geoserver?.message,
             geoserverStartDetail: json.geoserver?.startMessage,
             appStopDetail: json.pendingSchemaConfirm
-              ? '스키마 안내 대기'
+              ? '스키마 안내 대기 (commit 전)'
               : json.restart?.scheduled
                 ? doneMode === 'exit'
                   ? '앱 종료 단계 완료 · process.exit 예약'
                   : '앱 종료 단계 완료 · 런처가 Next 종료'
                 : undefined,
             npmInstallDetail:
-              (json.pendingSchemaConfirm || json.restart?.scheduled) && profile === 'open'
+              json.restart?.scheduled && !json.pendingSchemaConfirm && profile === 'open'
                 ? '사전 npm install 완료'
                 : undefined,
             buildDetail:
-              json.pendingSchemaConfirm || json.restart?.scheduled
+              json.restart?.scheduled && !json.pendingSchemaConfirm
                 ? '사전 빌드 완료'
                 : undefined,
             appStartDetail:
@@ -496,7 +455,7 @@ export function VersionManagerContent() {
                 : json.restart?.message,
             restartScheduled: Boolean(json.restart?.scheduled),
             schemaWaiting: Boolean(json.pendingSchemaConfirm),
-            preRestartCompleted: Boolean(json.pendingSchemaConfirm) || doneMode !== 'none',
+            preRestartCompleted: Boolean(json.restart?.scheduled) && !json.pendingSchemaConfirm,
             geoserverStartOk: !(
               json.geoserver?.started === false && !json.geoserver?.deferredStart
             ),
@@ -508,7 +467,7 @@ export function VersionManagerContent() {
         message: json.restart?.scheduled
           ? '적용 완료. 스키마 변경 안내 확인 후 재기동합니다…'
           : json.pendingSchemaConfirm
-            ? '적용 완료. 스키마 변경 안내에서 진행 또는 중단을 선택하세요…'
+            ? 'prepare 완료. 스키마 안내에서 [진행] 시 commit·재기동…'
             : '최신 소스 적용 완료. 스키마 변경 안내…',
         pct: 100,
         logs: logRef.current,
@@ -746,44 +705,13 @@ export function VersionManagerContent() {
     </div>
   );
 
-  const etaLabel = (() => {
-    void etaTick;
-    if (!busy || startedAtRef.current <= 0) return null;
-    if (mergeStepRef.current) {
-      const merge = mergeCountRef.current;
-      const remain = estimateMergeApplyRemainingSeconds({
-        packageProfile: profile,
-        mergeStep: mergeStepRef.current,
-        applied: merge?.applied ?? 0,
-        total: merge?.total ?? 0,
-        stepStartedAtMs: mergeStepStartedAtRef.current,
-        copyStartedAtMs: mergeCopyStartedAtRef.current,
-      });
-      return formatEtaMinutes(remain);
-    }
-    const bytes = byteProgressRef.current;
-    if (bytes && bytes.total > 0 && bytes.done > 0 && byteStartedAtRef.current > 0) {
-      const remain = estimateRemainingByBytes(bytes.done, bytes.total, byteStartedAtRef.current);
-      if (remain != null) return formatEtaMinutes(remain);
-    }
-    const total = estimateVersionApplyTotalSeconds(profile, restart);
-    const remain = estimateRemainingSeconds(total, progress.pct, startedAtRef.current);
-    if (remain <= 0) return '산출 중...';
-    return formatEtaMinutes(remain);
-  })();
-
   const ProgressBar = () => {
     if (!busy || progress.pct == null) return null;
     return (
       <div className="mt-2 rounded border bg-muted/20 px-3 py-2">
         <div className="mb-1 flex items-center justify-between gap-2 text-xs">
           <span>진행 중</span>
-          <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
-            {etaLabel ? (
-              <span className="truncate">(예상 소요 시간: {etaLabel})</span>
-            ) : null}
-            <span className="shrink-0">{progress.pct}%</span>
-          </span>
+          <span className="shrink-0 text-muted-foreground">{progress.pct}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-muted">
           <div
@@ -802,8 +730,7 @@ export function VersionManagerContent() {
         <div className="shrink-0 space-y-2">
           <div className="text-sm font-medium">최신 소스 적용</div>
           <p className="text-xs text-muted-foreground">
-            GNMS 소스 ZIP을 브라우저가 중계해 운영 서버에 반영합니다. 버전을 고른 뒤 서버 상태를
-            선택하세요.
+            이 서버가 GNMS에서 소스 ZIP을 받아 반영합니다. 버전을 고른 뒤 서버 상태를 선택하세요.
           </p>
           <div className="space-y-2">
             <div className={sectionClass}>
@@ -899,28 +826,41 @@ export function VersionManagerContent() {
           </div>
           <ProgressBar />
           <p className="text-xs text-muted-foreground">{progress.message}</p>
-          {progress.error && <p className="text-xs text-red-600">{progress.error}</p>}
-        </div>
-        <div className="min-h-0 max-h-[35%] shrink overflow-y-auto space-y-2">
-          <ProgressStagesList
-            stages={stages}
-            className="rounded border px-3 py-2 text-xs"
-          />
-          {relayResult && (
-            <div className="rounded border bg-muted/10 p-2 text-xs">
-              <div className="mb-1 font-medium text-muted-foreground">적용 결과</div>
-              <div>적용: {relayResult.appliedFiles}건</div>
-              <div>제외: {relayResult.skippedFiles}건</div>
-              <div>GeoServer 중지: {relayResult.geoserver?.stopMessage ?? relayResult.geoserver?.message ?? '-'}</div>
-              {relayResult.geoserver?.startMessage ? (
-                <div>GeoServer 기동: {relayResult.geoserver.startMessage}</div>
-              ) : null}
-              <div>재시작: {relayResult.restart?.message}</div>
-            </div>
+          {progress.error && (
+            <p className="whitespace-pre-wrap break-words text-xs text-red-600">{progress.error}</p>
           )}
         </div>
-        <div className="flex min-h-[8rem] flex-1 flex-col overflow-hidden">
-          <LiveLogsPanel logs={progress.logs} />
+        <ProgressStagesList
+          stages={stages}
+          className="shrink-0 rounded border px-3 py-2 text-xs"
+        />
+        <div className="flex min-h-0 flex-1 gap-2 overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden">
+            <LiveLogsPanel logs={progress.logs} />
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-[2] flex-col overflow-hidden rounded border bg-muted/10">
+            <div className="shrink-0 border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              적용 결과
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-3 text-xs">
+              {relayResult ? (
+                <div className="space-y-1">
+                  <div>적용: {relayResult.appliedFiles}건</div>
+                  <div>제외: {relayResult.skippedFiles}건</div>
+                  <div>
+                    GeoServer 중지:{' '}
+                    {relayResult.geoserver?.stopMessage ?? relayResult.geoserver?.message ?? '-'}
+                  </div>
+                  {relayResult.geoserver?.startMessage ? (
+                    <div>GeoServer 기동: {relayResult.geoserver.startMessage}</div>
+                  ) : null}
+                  <div>재시작: {relayResult.restart?.message}</div>
+                </div>
+              ) : (
+                <div className="text-muted-foreground">적용 결과가 없습니다.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
       <SchemaSyncPreviewModal

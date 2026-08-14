@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Circle,
@@ -18,15 +18,26 @@ import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
+import {
+  LayerRowAddButton,
+  LayerRowPanelButton,
+} from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { exportRoadNetworkExcel } from "./exportRoadNetworkExcel";
+import { formatRoadNetworkListTitle } from "./roadNetworkFormat";
 import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
 import {
+  clearRoadNetworkWmsLayers,
+  ensureRoadNetworkWmsLayers,
+} from "./roadNetworkMapSync";
+import {
+  ROAD_NETWORK_NEW_ID,
   ROAD_NETWORK_OPEN_STATUS_BADGE,
   ROAD_NETWORK_OPEN_STATUS_FILTERS,
   ROAD_NETWORK_TYPE_BADGE,
   ROAD_NETWORK_TYPE_FILTERS,
   createEmptyRoadNetworkRow,
+  isNewRoadNetworkRowId,
   matchesRoadNetworkTypeFilter,
   type RoadNetworkOpenStatusFilter,
   type RoadNetworkTypeFilter,
@@ -59,6 +70,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   const selectedId = mapContext?.roadNetworkSelectedId ?? null;
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt;
+  const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const setRoadNetworkOverlayRows = mapContext?.setRoadNetworkOverlayRows;
   const setRoadNetworkRows = mapContext?.setRoadNetworkRows;
   const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId;
@@ -81,9 +93,75 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     []
   );
   const [boundaryLoading, setBoundaryLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const listLoadSeqRef = useRef(0);
 
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   const isSpatialActive = !!(spatialWkt || spatialDrawRequest);
+
+  const reloadList = useCallback(async () => {
+    const seq = ++listLoadSeqRef.current;
+    setListLoading(true);
+    setListError(null);
+    try {
+      const res = await call("", "POST", {
+        service: "roadNetworkService",
+        action: "getRoadNetworkList",
+        params: {},
+      });
+      if (seq !== listLoadSeqRef.current) return;
+      const data = res?.data ?? res;
+      const next = Array.isArray(data?.rows) ? data.rows : [];
+      // API 목록으로 덮되, 미저장·로컬 추가 행은 유지 (로드 중 추가 시 사라짐 방지)
+      setRoadNetworkRows?.((prev) => {
+        const clientRows = prev.filter(
+          (r) => isNewRoadNetworkRowId(r.id) || String(r.id).startsWith("local-")
+        );
+        return [...clientRows, ...next];
+      });
+    } catch (e: unknown) {
+      if (seq !== listLoadSeqRef.current) return;
+      setListError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+    } finally {
+      if (seq === listLoadSeqRef.current) setListLoading(false);
+    }
+  }, [setRoadNetworkRows]);
+
+  useEffect(() => {
+    void reloadList();
+  }, [reloadList]);
+
+  /** GeoServer WMS — 종류·개설 필터에 맞는 레이어만 표시 */
+  useEffect(() => {
+    ensureRoadNetworkWmsLayers(setVisibleLayerNames, {
+      typeFilter,
+      openStatusFilter,
+    });
+  }, [typeFilter, openStatusFilter, setVisibleLayerNames]);
+
+  useEffect(() => {
+    return () => {
+      clearRoadNetworkWmsLayers(setVisibleLayerNames);
+    };
+  }, [setVisibleLayerNames]);
+
+  /** 지도 WMS 클릭 → 목록 선택 */
+  useEffect(() => {
+    const pickRef = mapContext?.applyRoadNetworkMapPickRef;
+    if (!pickRef) return;
+    pickRef.current = (pick) => {
+      const rowId = String(pick?.rowId ?? "").trim();
+      if (!rowId) return;
+      setRoadNetworkRows?.((prev) =>
+        prev.filter((r) => !isNewRoadNetworkRowId(r.id))
+      );
+      setRoadNetworkSelectedId?.(rowId);
+    };
+    return () => {
+      pickRef.current = null;
+    };
+  }, [mapContext?.applyRoadNetworkMapPickRef, setRoadNetworkRows, setRoadNetworkSelectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,35 +373,53 @@ export function RoadNetworkListPanel({ onClose }: Props) {
 
   const items = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    return filterRoadNetworkRowsByWkt5181(rows, spatialWkt).filter((row) => {
-      if (typeFilter !== "전체" && !matchesRoadNetworkTypeFilter(row.roadType, typeFilter))
-        return false;
-      if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
-        return false;
-      }
-      if (!q) return true;
-      const hay = [
-        row.roadName,
-        row.roadNo,
-        row.roadType,
-        row.openStatus ?? "",
-        row.sect,
-        row.dept,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
+    return filterRoadNetworkRowsByWkt5181(rows, spatialWkt)
+      .filter((row) => {
+        // 미저장 신규는 목록에 표시하지 않음
+        if (isNewRoadNetworkRowId(row.id)) return false;
+        if (typeFilter !== "전체" && !matchesRoadNetworkTypeFilter(row.roadType, typeFilter))
+          return false;
+        if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
+          return false;
+        }
+        if (!q) return true;
+        const hay = [
+          row.roadName,
+          row.roadNo,
+          row.roadType,
+          row.openStatus ?? "",
+          row.sect,
+          row.dept,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      })
+      // 입체교차로는 목록 최하단
+      .sort((a, b) => {
+        const aBottom = a.roadType === "입체교차로" ? 1 : 0;
+        const bBottom = b.roadType === "입체교차로" ? 1 : 0;
+        return aBottom - bBottom;
+      });
   }, [keyword, typeFilter, openStatusFilter, rows, spatialWkt]);
 
+  /** 지도 도로명 라벨용 — 필터된 목록과 동일 */
   useEffect(() => {
     setRoadNetworkOverlayRows?.(items);
   }, [items, setRoadNetworkOverlayRows]);
 
   const handleAdd = () => {
-    const created = createEmptyRoadNetworkRow(String(historyUser));
-    setRoadNetworkRows?.((prev) => [created, ...prev]);
-    setRoadNetworkSelectedId?.(created.id);
+    // 목록 행은 만들지 않고 상세 등록만 연다(저장 시 목록에 반영)
+    setRoadNetworkRows?.((prev) => {
+      const withoutDraft = prev.filter((r) => !isNewRoadNetworkRowId(r.id));
+      return [createEmptyRoadNetworkRow(String(historyUser), ROAD_NETWORK_NEW_ID), ...withoutDraft];
+    });
+    setRoadNetworkSelectedId?.(ROAD_NETWORK_NEW_ID);
+  };
+
+  const handleSelectRow = (id: string) => {
+    setRoadNetworkRows?.((prev) => prev.filter((r) => !isNewRoadNetworkRowId(r.id)));
+    setRoadNetworkSelectedId?.(id);
   };
 
   const handleExport = () => {
@@ -345,25 +441,15 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     <div className="flex min-h-0 h-full flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">도로망도</span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
-            title="엑셀 내보내기"
-          >
-            <Download className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-1">
+          <LayerRowPanelButton type="button" onClick={handleExport} title="엑셀 내보내기">
+            <Download className="h-3 w-3 shrink-0" aria-hidden />
             엑셀
-          </button>
-          <button
-            type="button"
+          </LayerRowPanelButton>
+          <LayerRowAddButton
             onClick={handleAdd}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-            title="도로 추가"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            추가
-          </button>
+            disabled={isNewRoadNetworkRowId(selectedId)}
+          />
           <button
             type="button"
             onClick={() => {
@@ -436,12 +522,12 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 <input
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="도로명·노선번호·종류·관리기관"
+                  placeholder="도로명·도로번호·종류·관리기관"
                   className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
                 />
               </div>
               <div
-                className="flex shrink-0 rounded-md border border-slate-200 bg-slate-50 p-0.5"
+                className="flex h-8 shrink-0 items-stretch gap-0.5"
                 role="group"
                 aria-label="개설 여부 필터"
                 title="개설 여부"
@@ -453,11 +539,12 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       key={filter}
                       type="button"
                       onClick={() => setOpenStatusFilter(filter)}
+                      title={filter}
                       className={cn(
-                        "rounded px-1.5 py-1 text-[10px] font-medium transition-colors",
+                        "rounded border px-1.5 text-[10px] font-medium leading-tight transition-colors",
                         active
-                          ? "bg-white text-teal-800 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                       )}
                       aria-pressed={active}
                     >
@@ -654,19 +741,23 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
-        {items.length === 0 ? (
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+        {listLoading ? (
+          <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중...</p>
+        ) : listError ? (
+          <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
+        ) : items.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
         ) : (
           <table className="w-full table-fixed border-collapse text-xs">
             <colgroup>
               <col />
-              <col className="w-[7.5rem]" />
+              <col className="w-[5.75rem]" />
             </colgroup>
             <tbody>
               {items.map((item) => {
-                const displayName = item.roadName.trim() || "(이름 없음)";
-                const titleLine = `${displayName} (${item.roadNo || "—"})`;
+                const titleLine = formatRoadNetworkListTitle(item);
+                const hasName = Boolean(item.roadName.trim());
                 const isSelected = selectedId === item.id;
                 const badge = ROAD_NETWORK_TYPE_BADGE[item.roadType];
                 const openBadge =
@@ -678,11 +769,11 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                     key={item.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setRoadNetworkSelectedId?.(item.id)}
+                    onClick={() => handleSelectRow(item.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setRoadNetworkSelectedId?.(item.id);
+                        handleSelectRow(item.id);
                       }
                     }}
                     className={cn(
@@ -696,7 +787,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       <div className="flex min-w-0 items-center gap-1.5">
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center justify-center rounded border px-1 py-0.5 text-[10px] font-semibold leading-none",
+                            "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                             item.roadType === "입체교차로"
                               ? "max-w-[5.5rem] truncate"
                               : "w-[3.5rem]",
@@ -711,7 +802,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         {openBadge ? (
                           <span
                             className={cn(
-                              "inline-flex w-[2.5rem] shrink-0 items-center justify-center rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none",
+                              "inline-flex w-[2.5rem] shrink-0 items-center justify-center whitespace-nowrap rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none",
                               openBadge.bg,
                               openBadge.text,
                               openBadge.border
@@ -723,23 +814,16 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         <p
                           className={cn(
                             "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
-                            item.roadName.trim()
-                              ? "text-slate-800"
-                              : "text-slate-400"
+                            hasName ? "text-slate-800" : "text-slate-400"
                           )}
                           title={titleLine}
                         >
                           {titleLine}
                         </p>
-                        {!item.geom ? (
-                          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-800">
-                            노선미정
-                          </span>
-                        ) : null}
                       </div>
                     </td>
                     <td
-                      className="min-w-0 px-3 py-1.5 text-right text-[11px] text-slate-600"
+                      className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] text-slate-500"
                       title={item.dept || undefined}
                     >
                       <span className="block truncate">{item.dept || "—"}</span>

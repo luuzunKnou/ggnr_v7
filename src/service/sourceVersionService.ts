@@ -6,15 +6,65 @@ import { spawn } from 'node:child_process';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { resolveAppStartCommand, pickBootForSignalMerge, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
-import { ensureGeoServerRunning, stopGeoServerAndVerify } from '@/service/geoserverProcessService';
+import { stopGeoServerAndVerify } from '@/service/geoserverProcessService';
+import {
+  releaseSourceApplyLock,
+  tryAcquireSourceApplyLock,
+} from '@/service/sourceApplyLock';
+import { runStagingTypeCheck } from '@/service/sourceApplyStagingService';
+import {
+  disableMaintenanceForApply,
+  enableMaintenanceForApply,
+} from '@/lib/maintenanceMode';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
 import {
   APPLY_ORPHAN_WALK_ROOTS,
   isManagedApplyOrphanCandidate,
   isProtectedApplyResidualPath,
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
+import { decodeChildOutput } from '@/lib/decodeChildOutput';
+import {
+  isPrebuildTsxAvailable,
+  NPM_INSTALL_DEV_ARGS,
+  resolveNpmInstallEnv,
+} from '@/lib/npmApplyEnv';
 
 const GEOSERVER_STOP_SETTLE_MS = 2000;
+
+/** env 재로드 + GeoServer 기동 + REST 저장소 갱신 (적용·중단·실패 복구 공용) */
+async function ensureGeoServerRecoveredAfterApply(params?: {
+  geoAlreadyStopped?: boolean;
+  onProgressMessage?: (message: string) => Promise<void>;
+}): Promise<{ success: boolean; message: string }> {
+  const logPrefix = '[SourceCodeUpload]';
+  const project = process.env.GGNR_PROJECT?.trim();
+  const envType = process.env.GGNR_ENV?.trim();
+  if (project && envType) {
+    const { reloadProjectRuntimeEnv } = await import('@/lib/projectEnvReload');
+    reloadProjectRuntimeEnv(project, envType);
+  }
+  await params?.onProgressMessage?.('GeoServer·저장소 복구 중...');
+  const onLog = (message: string) => console.log(`${logPrefix} GeoServer: ${message}`);
+  console.log(`${logPrefix} GeoServer·저장소 복구 시작...`);
+  const { ensureGeoServerWithDbSetup } = await import('@/service/geoServerBootstrapService');
+  const r = await ensureGeoServerWithDbSetup({
+    geoAlreadyStopped: params?.geoAlreadyStopped ?? true,
+    retryOnceOnFail: true,
+    onLog,
+  });
+  const message = r.success
+    ? r.ensure.action === 'already-ready'
+      ? '복구 OK(이미 응답·저장소)'
+      : '복구 OK(기동·저장소)'
+    : `복구 경고: ${r.ensure.error ?? 'unknown'}`;
+  if (r.success) {
+    console.log(`${logPrefix} GeoServer·저장소 ${message}`);
+  } else {
+    console.warn(`${logPrefix} GeoServer·저장소 ${message}`);
+  }
+  await params?.onProgressMessage?.(`GeoServer ${message}`);
+  return { success: r.success, message };
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -73,32 +123,72 @@ export function buildApplySuccessHistoryMessage(opts: {
   return `mode=${opts.mode} / command=${command} / 적용 ${opts.appliedFiles}건 / 제외 ${opts.skippedFiles}건 / ${opts.netLabel} / GeoServer: ${opts.geoserverMsg}`;
 }
 
-function spawnInheritAsync(command: string, args: string[]): Promise<void> {
+function tailTextLines(text: string, maxLines = 20, maxChars = 3500): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.length > 0);
+  if (lines.length === 0) return '';
+  let tail = lines.slice(-maxLines).join('\n');
+  if (tail.length > maxChars) tail = `…\n${tail.slice(-maxChars)}`;
+  return tail;
+}
+
+function npmFailureDetail(output: string, code: number | null, label: string): string {
+  const moduleHint =
+    output.match(/Cannot find module[^\n]*/)?.[0] ??
+    output.match(/Cannot find package[^\n]*/)?.[0] ??
+    output.match(/MODULE_NOT_FOUND[^\n]*/)?.[0] ??
+    output.match(/npm ERR![^\n]*/)?.[0];
+  const tail = tailTextLines(output);
+  const parts = [`${label} 실패 (exit code ${code ?? '?'})`];
+  if (moduleHint) parts.push(moduleHint);
+  if (tail) parts.push(tail);
+  return parts.join('\n');
+}
+
+/** npm stdout/stderr → UI 로그·실패 원인 (stdio inherit 대신 캡처) */
+async function spawnNpmWithApplyLog(
+  args: string[],
+  onLine: (line: string) => void | Promise<void>,
+  envOverride?: NodeJS.ProcessEnv
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const usedCmdShell = process.platform === 'win32';
+    const child = spawn('npm', args, {
       cwd: process.cwd(),
-      stdio: 'inherit',
       shell: true,
-      env: process.env,
+      windowsHide: true,
+      env: envOverride ?? process.env,
     });
+    let combined = '';
+    const handleData = (buf: Buffer) => {
+      const chunk = decodeChildOutput(buf, usedCmdShell);
+      combined += chunk;
+      for (const line of chunk.split(/\r?\n/)) {
+        const trimmed = line.trimEnd();
+        if (trimmed) void Promise.resolve(onLine(trimmed)).catch(() => {});
+      }
+    };
+    child.stdout?.on('data', handleData);
+    child.stderr?.on('data', handleData);
     child.on('error', reject);
     child.on('close', (code) => {
       if ((code ?? 1) === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+      else reject(new Error(npmFailureDetail(combined, code, `npm ${args.join(' ')}`)));
     });
   });
 }
 
-async function runNpmInstallAsyncInProcess(): Promise<void> {
-  console.log('[SourceCodeUpload] npm install 시작 (사전·개방망)');
-  await spawnInheritAsync('npm', ['install', '--no-audit', '--no-fund']);
-  console.log('[SourceCodeUpload] npm install 완료');
+/** prebuild(tsx) 누락 시 devDependencies 포함 install (개방·폐쇄망 공통) */
+async function ensurePrebuildDevDeps(
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  if (isPrebuildTsxAvailable()) return;
+  await spawnNpmWithApplyLog([...NPM_INSTALL_DEV_ARGS], onLine, resolveNpmInstallEnv());
 }
 
-async function runNpmBuildAsyncInProcess(): Promise<void> {
-  console.log('[SourceCodeUpload] 사전 빌드 시작');
-  await spawnInheritAsync('npm', ['run', 'build']);
-  console.log('[SourceCodeUpload] 사전 빌드 완료');
+async function runApplyNpmInstallDev(
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  await spawnNpmWithApplyLog([...NPM_INSTALL_DEV_ARGS], onLine, resolveNpmInstallEnv());
 }
 
 export type ApplyLatestSourceOptions = {
@@ -156,6 +246,8 @@ const DEFAULT_EXCLUDE_PREFIXES = [
   'node_modules/',
   '.cursor/',
   '.vscode/',
+  'nssm/',
+  '.cursor-runtime/',
   '3dtiles_las/',
   'tiles_tif/',
   'tiles_jpg/',
@@ -357,11 +449,25 @@ async function removeApplyRollbackSnapshot(snapshot: ApplyRollbackSnapshot | nul
 
 const PENDING_SCHEMA_TTL_MS = 30 * 60 * 1000;
 
+/** prepare 단계 산출물 — live 병합 전 스키마 모달 대기용 */
+type ApplyPrepareBundle = {
+  tmpBase: string;
+  extractedRoot: string;
+  excludePrefixes: string[];
+  totalFiles: number;
+  preSkipped: number;
+  lockOwner: string;
+};
+
 type PendingSchemaConfirmSession = {
   id: string;
   createdAt: number;
   requestedBy: string;
-  snapshot: ApplyRollbackSnapshot;
+  /** prepareOnly=false(레거시) 일 때만 사용 */
+  snapshot: ApplyRollbackSnapshot | null;
+  /** true: live 미변경, [진행] 시 commit */
+  prepareOnly?: boolean;
+  prepareBundle?: ApplyPrepareBundle;
   workspaceRoot: string;
   includeNodeModules: boolean;
   doRestart: boolean;
@@ -421,13 +527,20 @@ function armPendingSchemaTimer(session: PendingSchemaConfirmSession): void {
         await recordVersionHistory({
           historyType: 'apply_latest',
           status: 'cancel',
-          message: `스키마 안내 대기 시간 초과 — 적용 직전 소스로 롤백 (${s.version})`,
+          message: s.prepareOnly
+            ? `스키마 안내 대기 시간 초과 — prepare 취소 (${s.version})`
+            : `스키마 안내 대기 시간 초과 — 적용 직전 소스로 롤백 (${s.version})`,
           option: s.historyOption,
           version: s.historyVersion,
           ip: s.clientIp,
         }).catch((histErr) => {
           console.error('[SourceCodeUpload] pending timeout 이력 기록 실패', histErr);
         });
+        if (!s.prepareOnly) {
+          await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true }).catch((geoErr) => {
+            console.error('[SourceCodeUpload] pending timeout 후 GeoServer 복구 실패', geoErr);
+          });
+        }
       } catch (e) {
         console.error('[SourceCodeUpload] pending timeout 롤백 실패', e);
       }
@@ -444,8 +557,17 @@ async function discardPendingSession(session: PendingSchemaConfirmSession, resto
   clearPendingTimer(session);
   pendingSchemaSessions.delete(session.id);
   await deletePendingSchemaFile(session.id);
+
+  if (session.prepareOnly) {
+    if (session.prepareBundle) {
+      await fs.rm(session.prepareBundle.tmpBase, { recursive: true, force: true }).catch(() => {});
+      releaseSourceApplyLock(session.prepareBundle.lockOwner);
+    }
+    return restore ? 'prepare 취소 — live 변경 없음' : 'prepare 세션 삭제';
+  }
+
   let detail = '';
-  if (restore) {
+  if (restore && session.snapshot) {
     const result = await restoreApplyRollbackSnapshot({
       snapshot: session.snapshot,
       workspaceRoot: session.workspaceRoot,
@@ -453,7 +575,9 @@ async function discardPendingSession(session: PendingSchemaConfirmSession, resto
     });
     detail = result.detail;
   }
-  await removeApplyRollbackSnapshot(session.snapshot);
+  if (session.snapshot) {
+    await removeApplyRollbackSnapshot(session.snapshot);
+  }
   return detail;
 }
 
@@ -526,7 +650,144 @@ export type SchemaConfirmResult = {
   rollbackDetail?: string;
 };
 
-/** 스키마 모달 [진행] — 잔여 정리·재기동 예약·스냅샷 삭제 */
+type PreparedCommitResult = {
+  appliedFiles: number;
+  skippedFiles: number;
+  skippedSamples: string[];
+  geoserver: GeoServerApplyStep;
+  rollback: ApplyRollbackSnapshot | null;
+};
+
+/** [진행] — prepare 세션을 live commit (Geo stop → 병합 → 빌드) */
+async function executePreparedSourceApplyCommit(
+  session: PendingSchemaConfirmSession
+): Promise<PreparedCommitResult> {
+  const bundle = session.prepareBundle;
+  if (!bundle) {
+    throw new Error('prepare 세션에 bundle 이 없습니다.');
+  }
+
+  const {
+    workspaceRoot,
+    includeNodeModules,
+    doRestart,
+    restartMode,
+  } = session;
+  const { extractedRoot, excludePrefixes, totalFiles, tmpBase, lockOwner } = bundle;
+
+  let rollback: ApplyRollbackSnapshot | null = null;
+  let geoStartedOnSuccessPath = false;
+
+  const log = (message: string) => console.log(`[SourceCodeUpload] commit: ${message}`);
+
+  try {
+    await enableMaintenanceForApply(`최신소스 적용 commit version=${session.version}`);
+
+    log('GeoServer 중지...');
+    const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
+    if (!stopResult.success) {
+      throw new Error(
+        `GeoServer 중지 실패 — commit 중단: ${stopResult.message}. GeoServer·8080 확인 후 다시 시도하세요.`
+      );
+    }
+
+    log('적용 직전 백업...');
+    const mergeRelPaths = await listMergeRelFiles(extractedRoot, excludePrefixes);
+    rollback = await createSourceRollbackSnapshot({
+      workspaceRoot,
+      mergeRelPaths,
+      includeNodeModules,
+      includeNext: !doRestart,
+    });
+
+    log('live 병합...');
+    const copyResult = await copyRecursive({
+      srcRoot: extractedRoot,
+      dstRoot: workspaceRoot,
+      excludePrefixes,
+      totalFiles,
+    });
+
+    const stopMessage = stopResult.message;
+    let startMessage: string | undefined;
+    let started = false;
+    let deferredStart = false;
+
+    if (!doRestart) {
+      const recover = await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true });
+      geoStartedOnSuccessPath = recover.success;
+      started = recover.success;
+      startMessage = recover.success ? recover.message : `기동 경고: ${recover.message}`;
+    } else {
+      deferredStart = true;
+      startMessage = '재기동 파이프라인(run.ts)에서 기동 예정';
+    }
+
+    const geoserver: GeoServerApplyStep = {
+      stopped: stopResult.success,
+      started,
+      deferredStart,
+      message: `${stopMessage} / ${startMessage}`,
+      stopMessage,
+      startMessage,
+    };
+
+    if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
+      if (!includeNodeModules && rollback) {
+        await snapshotNodeModulesInto(rollback, workspaceRoot);
+        await runApplyNpmInstallDev(async (line) => {
+          log(`npm: ${line}`);
+        });
+      }
+      if (!isPrebuildTsxAvailable()) {
+        await runApplyNpmInstallDev(async (line) => {
+          log(`npm(tsx): ${line}`);
+        });
+      }
+      log('사전 빌드...');
+      await spawnNpmWithApplyLog(['run', 'build'], async (line) => {
+        log(`build: ${line}`);
+      });
+    }
+
+    await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    releaseSourceApplyLock(lockOwner);
+
+    return {
+      appliedFiles: copyResult.appliedFiles,
+      skippedFiles: copyResult.skippedFiles,
+      skippedSamples: copyResult.skippedSamples,
+      geoserver,
+      rollback,
+    };
+  } catch (err) {
+    await disableMaintenanceForApply().catch(() => {});
+    if (rollback) {
+      try {
+        await restoreApplyRollbackSnapshot({
+          snapshot: rollback,
+          workspaceRoot,
+          includeNodeModules,
+        });
+      } catch (restoreErr) {
+        console.error('[SourceCodeUpload] commit 실패 후 롤백 실패', restoreErr);
+      }
+      await removeApplyRollbackSnapshot(rollback).catch(() => {});
+    }
+    if (!geoStartedOnSuccessPath) {
+      await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true }).catch((e) => {
+        console.error('[SourceCodeUpload] commit 실패 후 GeoServer 복구 실패', e);
+      });
+    }
+    await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    releaseSourceApplyLock(lockOwner);
+    throw err;
+  } finally {
+    await disableMaintenanceForApply().catch(() => {});
+  }
+}
+
+/** 스키마 모달 [진행] — commit 또는 레거시 잔여 정리·재기동 */
 export async function confirmPendingSchemaApply(params: {
   pendingId: string;
   requestedBy: string;
@@ -561,15 +822,39 @@ export async function confirmPendingSchemaApply(params: {
     clientIp,
     historyVersion,
     historyOption,
-    successMessage,
+    successMessage: prepareSuccessMessage,
     bootCommand,
-    appliedFiles,
-    skippedFiles,
-    geoserverMessage,
+    appliedFiles: prepareAppliedFiles,
+    skippedFiles: prepareSkippedFiles,
+    geoserverMessage: prepareGeoserverMessage,
     netLabel,
+    prepareOnly,
   } = session;
 
   try {
+    let appliedFiles = prepareAppliedFiles;
+    let skippedFiles = prepareSkippedFiles;
+    let geoserverMessage = prepareGeoserverMessage;
+    let successMessage = prepareSuccessMessage;
+    let commitRollback: ApplyRollbackSnapshot | null = snapshot;
+
+    if (prepareOnly) {
+      const commit = await executePreparedSourceApplyCommit(session);
+      appliedFiles = commit.appliedFiles;
+      skippedFiles = commit.skippedFiles;
+      geoserverMessage = commit.geoserver.message;
+      commitRollback = commit.rollback;
+      successMessage = buildApplySuccessHistoryMessage({
+        version,
+        mode: restartMode,
+        command: bootCommand ?? '',
+        appliedFiles,
+        skippedFiles,
+        netLabel,
+        geoserverMsg: geoserverMessage,
+      });
+    }
+
     try {
       const orphanRemoved = await cleanupOrphanManagedFiles({
         workspaceRoot,
@@ -602,7 +887,7 @@ export async function confirmPendingSchemaApply(params: {
       historyPayload: doRestart
         ? {
             mode: restartMode,
-            command: bootCommand,
+            command: bootCommand ?? '',
             version: historyVersion,
             appliedFiles,
             skippedFiles,
@@ -628,10 +913,12 @@ export async function confirmPendingSchemaApply(params: {
       });
     }
 
-    await removeApplyRollbackSnapshot(snapshot);
+    if (commitRollback) {
+      await removeApplyRollbackSnapshot(commitRollback);
+    }
 
     const restartResult = scheduleRestart(restartMode);
-    console.log(`[SourceCodeUpload] 스키마 안내 확인 후 재기동: ${restartResult.message}`);
+    console.log(`[SourceCodeUpload] 스키마 안내 확인 후 commit·재기동: ${restartResult.message}`);
 
     return {
       ok: true,
@@ -647,16 +934,18 @@ export async function confirmPendingSchemaApply(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[SourceCodeUpload] schema confirm 처리 실패 id=${params.pendingId}:`, msg);
-    try {
-      await restoreApplyRollbackSnapshot({
-        snapshot,
-        workspaceRoot,
-        includeNodeModules,
-      });
-    } catch (restoreErr) {
-      console.error('[SourceCodeUpload] schema confirm 실패 후 롤백도 실패', restoreErr);
+    if (!prepareOnly && snapshot) {
+      try {
+        await restoreApplyRollbackSnapshot({
+          snapshot,
+          workspaceRoot,
+          includeNodeModules,
+        });
+      } catch (restoreErr) {
+        console.error('[SourceCodeUpload] schema confirm 실패 후 롤백도 실패', restoreErr);
+      }
+      await removeApplyRollbackSnapshot(snapshot).catch(() => {});
     }
-    await removeApplyRollbackSnapshot(snapshot).catch(() => {});
     return { ok: false, error: msg };
   }
 }
@@ -690,7 +979,12 @@ export async function abortPendingSchemaApply(params: {
     }).catch((histErr) => {
       console.error('[SourceCodeUpload] schema abort 이력 기록 실패', histErr);
     });
-    console.log(`[SourceCodeUpload] 스키마 안내 중단·롤백: ${detail}`);
+    if (!session.prepareOnly) {
+      await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: true }).catch((geoErr) => {
+        console.error('[SourceCodeUpload] schema abort 후 GeoServer 복구 실패', geoErr);
+      });
+    }
+    console.log(`[SourceCodeUpload] 스키마 안내 중단: ${detail}`);
     return { ok: true, rollbackDetail: detail };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -763,10 +1057,12 @@ export type GnmsClientConfig = {
   listUrl: string;
   downloadUrlFallback: string;
   cancelUrl: string;
+  installLatestUrl: string;
+  installDownloadUrl: string;
   bearer: string;
 };
 
-/** 브라우저가 GNMS에 직접 요청할 때 쓸 URL·토큰 (폐쇄망 중계, CORS 허용 전제) */
+/** 로컬 서버가 GNMS API를 호출할 때 쓸 URL·토큰 */
 export function getGnmsClientConfig(): GnmsClientConfig {
   const gnmsBaseUrl =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BASE_URL?.trim() ||
@@ -776,6 +1072,10 @@ export function getGnmsClientConfig(): GnmsClientConfig {
   const listPath = process.env.GNMS_SOURCE_LIST_PATH?.trim() ?? '/list';
   const downloadPath = process.env.GNMS_SOURCE_DOWNLOAD_PATH?.trim() ?? '/download/latest';
   const cancelPath = process.env.GNMS_SOURCE_CANCEL_PATH?.trim() ?? '/cancel';
+  const installLatestPath =
+    process.env.GNMS_SOURCE_INSTALL_LATEST_PATH?.trim() ?? '/install/latest';
+  const installDownloadPath =
+    process.env.GNMS_SOURCE_INSTALL_DOWNLOAD_PATH?.trim() ?? '/install/download/latest';
   const bearer =
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BEARER?.trim() ||
     process.env.GNMS_SOURCE_BEARER?.trim() ||
@@ -786,12 +1086,15 @@ export function getGnmsClientConfig(): GnmsClientConfig {
     listUrl: resolveGnmsApiUrl(gnmsBaseUrl, listPath),
     downloadUrlFallback: resolveGnmsApiUrl(gnmsBaseUrl, downloadPath),
     cancelUrl: resolveGnmsApiUrl(gnmsBaseUrl, cancelPath),
+    installLatestUrl: resolveGnmsApiUrl(gnmsBaseUrl, installLatestPath),
+    installDownloadUrl: resolveGnmsApiUrl(gnmsBaseUrl, installDownloadPath),
     bearer,
   };
 }
 
 /** 적용 중 UI 단계 보고 */
 export type ApplySourceProgressPhase =
+  | 'type-check'
   | 'geoserver-stop'
   | 'merge-apply'
   | 'geoserver-start'
@@ -857,6 +1160,11 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     throw new Error(LAUNCHER_MISSING_MSG);
   }
 
+  const lockOwner = `${requestedBy}:${version}:${Date.now()}`;
+  if (!tryAcquireSourceApplyLock(lockOwner)) {
+    throw new Error('다른 최신소스 적용이 진행 중입니다. 완료 후 다시 시도하세요.');
+  }
+
   const workspaceRoot = process.cwd();
   const stat = await fs.stat(zipPath);
   const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `${Date.now()}`);
@@ -900,18 +1208,16 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   };
 
   await emit(
-    'geoserver-stop',
+    'merge-apply',
     `적용 시작 version=${version} mode=${restartMode} net=${includeNodeModules ? '폐쇄망' : '개방망'}`
   );
 
-  try {
-    await onProgress?.({ phase: 'geoserver-stop', message: 'GeoServer 중지 중...' });
-    const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
-    await emit('geoserver-stop', `GeoServer ${stopResult.message}`);
+  let pendingRegistered = false;
 
+  try {
     await onProgress?.({
       phase: 'merge-apply',
-      message: '소스 병합·적용 중...',
+      message: '소스 prepare 중...',
       mergeStep: 'extract',
     });
     await emit('merge-apply', 'ZIP 압축 해제 시작', { mergeStep: 'extract' });
@@ -933,145 +1239,62 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       appliedFiles: 0,
     });
 
-    await emit('merge-apply', '적용 직전 소스 백업 중...', { mergeStep: 'backup' });
-    rollback = await createSourceRollbackSnapshot({
+    const stagingRoot = path.join(tmpBase, 'typecheck-staging');
+    await onProgress?.({ phase: 'type-check', message: '타입 검사 준비 중...' });
+    await emit('type-check', '스테이징 병합 후 타입 검사 시작');
+    const typeCheck = await runStagingTypeCheck({
       workspaceRoot,
-      mergeRelPaths,
-      includeNodeModules,
-      includeNext: !doRestart,
-    });
-    const nextLabel = doRestart
-      ? '생략(재시작·빌드)'
-      : rollback.nextDir
-        ? '포함'
-        : '없음';
-    await emit(
-      'merge-apply',
-      `백업 완료 (파일 ${rollback.backedUp.length}건, 신규 ${rollback.created.length}건, .next ${nextLabel})`,
-      { mergeStep: 'backup' }
-    );
-
-    const copyResult = await copyRecursive({
-      srcRoot: extractedRoot,
-      dstRoot: workspaceRoot,
+      extractRoot: extractedRoot,
+      stagingRoot,
       excludePrefixes,
-      totalFiles,
-      onProgress: (() => {
-        let lastEmitAt = 0;
-        return async (p: {
-          appliedFiles: number;
-          skippedFiles: number;
-          totalFiles: number;
-        }) => {
-          const now = Date.now();
-          const done = p.appliedFiles + p.skippedFiles;
-          const isLast = p.totalFiles > 0 && done >= p.totalFiles;
-          if (!isLast && now - lastEmitAt < 400) return;
-          lastEmitAt = now;
-          const pct =
-            p.totalFiles > 0 ? Math.min(100, Math.round((p.appliedFiles / p.totalFiles) * 100)) : 0;
-          const msg = `병합 진행 ${p.appliedFiles}/${p.totalFiles} (${pct}%) · 제외 ${p.skippedFiles}`;
-          await emit('merge-apply', msg, {
-            mergeStep: 'copy',
-            appliedFiles: p.appliedFiles,
-            skippedFiles: p.skippedFiles,
-            totalFiles: p.totalFiles,
-          });
-        };
-      })(),
+      onLine: (line) => {
+        console.log(`[SourceCodeUpload] tsc: ${line}`);
+      },
     });
-    await emit(
-      'merge-apply',
-      `파일 복사 완료 applied=${copyResult.appliedFiles} skipped=${copyResult.skippedFiles}`,
-      {
-        mergeStep: 'copy',
-        appliedFiles: copyResult.appliedFiles,
-        skippedFiles: copyResult.skippedFiles,
-        totalFiles,
-      }
-    );
+    if (!typeCheck.ok) {
+      await emit('type-check', '타입 검사 실패 — 적용 중단', {
+        logLine: `[SourceCodeUpload] 타입 검사 실패:\n${typeCheck.message}`,
+      });
+      throw new Error(`타입 검사 실패 (version=${version}):\n${typeCheck.message}`);
+    }
+    await emit('type-check', '타입 검사 통과');
 
     const signalFile = path.join(workspaceRoot, '.cursor-runtime', 'restart-request.json');
-
-    const stopMessage = stopResult.message;
-    let startMessage: string | undefined;
-    let started = false;
-    /** 병합 후 재시작 여부와 관계없이 기동 시도. 응답 판정 실패해도 소스 롤백하지 않음(경고만). */
-    await onProgress?.({ phase: 'geoserver-start', message: 'GeoServer 기동 중...' });
-    let startResult = await ensureGeoServerRunning({ forceRestart: false });
-    if (!startResult.success) {
-      await sleep(2000);
-      startResult = await ensureGeoServerRunning({ forceRestart: true });
-    }
-    geoStartedOnSuccessPath = startResult.success;
-    started = startResult.success;
-    startMessage = startResult.success
-      ? startResult.action === 'already-ready'
-        ? '기동 OK(이미 응답)'
-        : startResult.action === 'restarted'
-          ? '기동 OK(재기동·응답)'
-          : '기동 OK(응답)'
-      : `기동 경고(응답 미확인): ${startResult.error ?? 'unknown'}`;
-    if (!startResult.success) {
-      console.warn(
-        `[SourceCodeUpload] GeoServer ${startMessage} — 소스 적용은 계속(롤백하지 않음). 프로세스·8080·GEOSERVER_URL 확인 권장`
-      );
-    }
-    await emit('geoserver-start', `GeoServer ${startMessage}`);
-
-    const geoserver: GeoServerApplyStep = {
-      stopped: stopResult.success,
-      started,
-      deferredStart: false,
-      message: `${stopMessage} / ${startMessage}`,
-      stopMessage,
-      startMessage,
-    };
-
     const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
     const ipTrim = clientIp?.trim() || undefined;
     const historyOption = applyLatestHistoryOptions(includeNodeModules, restartMode);
     const historyVersion = resolveAppliedVersionLabel(version);
+    const prepareBundle: ApplyPrepareBundle = {
+      tmpBase,
+      extractedRoot,
+      excludePrefixes,
+      totalFiles,
+      preSkipped,
+      lockOwner,
+    };
+    const geoserver: GeoServerApplyStep = {
+      stopped: false,
+      started: false,
+      deferredStart: doRestart,
+      message: 'prepare 완료 — 스키마 확인 후 commit',
+      stopMessage: 'commit 대기(Geo 미중지)',
+      startMessage: doRestart ? 'commit 후 재기동 예정' : 'commit 후 Geo·저장소 갱신',
+    };
     const successMessage = buildApplySuccessHistoryMessage({
       version,
       mode: restartMode,
       command: bootCommand,
-      appliedFiles: copyResult.appliedFiles,
-      skippedFiles: copyResult.skippedFiles,
+      appliedFiles: totalFiles,
+      skippedFiles: preSkipped,
       netLabel,
-      geoserverMsg: `${stopMessage}; ${startMessage}`,
+      geoserverMsg: geoserver.message,
     });
-
-    /** exit·launcher: 서버 가동 중 사전 install(개방망)·빌드. 실패 시 롤백 후 종료하지 않음 */
-    if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
-      try {
-        if (!includeNodeModules && rollback) {
-          await emit('npm-install', 'node_modules 백업 중...');
-          await snapshotNodeModulesInto(rollback, workspaceRoot);
-          await emit('npm-install', 'npm install (개방망) 시작');
-          await runNpmInstallAsyncInProcess();
-          await emit('npm-install', 'npm install 완료');
-        }
-        await emit('build', '사전 빌드 시작');
-        await runNpmBuildAsyncInProcess();
-        await emit('build', '사전 빌드 완료');
-      } catch (buildErr: unknown) {
-        const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
-        throw new Error(`사전 빌드 실패 (version=${version}): ${msg}`);
-      }
-    }
-
-    /** 사전 빌드 완료분 — 재기동은 스키마 모달 [진행] 이후로 미룸 */
-
-    /** 성공 확정 전 잔여 정리는 confirm 시 수행 (중단 시 롤백과 충돌 방지) */
-
-    if (!rollback) {
-      throw new Error('적용 직전 백업 스냅샷이 없어 스키마 안내를 진행할 수 없습니다.');
-    }
 
     const pendingId = await registerPendingSchemaConfirm({
       requestedBy,
-      snapshot: rollback,
+      snapshot: null,
+      prepareOnly: true,
+      prepareBundle,
       workspaceRoot,
       includeNodeModules,
       doRestart,
@@ -1085,18 +1308,18 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       historyOption,
       successMessage,
       bootCommand,
-      appliedFiles: copyResult.appliedFiles,
-      skippedFiles: copyResult.skippedFiles,
+      appliedFiles: totalFiles,
+      skippedFiles: preSkipped,
       geoserverMessage: geoserver.message,
       netLabel,
     });
-    rollback = null;
+    pendingRegistered = true;
 
     await emit(
       'schema-wait',
       doRestart
-        ? '스키마 변경 안내 대기 중 — 확인 후 재기동'
-        : '스키마 변경 안내 대기 중 — 확인 후 적용 확정'
+        ? 'prepare 완료 — 스키마 확인 후 commit·재기동'
+        : 'prepare 완료 — 스키마 확인 후 commit'
     );
 
     return {
@@ -1104,9 +1327,9 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       fileName,
       downloadedBytes: stat.size,
       extractedRoot: normalizeSlashes(path.relative(workspaceRoot, extractedRoot) || '.'),
-      appliedFiles: copyResult.appliedFiles,
-      skippedFiles: copyResult.skippedFiles,
-      skippedSamples: copyResult.skippedSamples,
+      appliedFiles: totalFiles,
+      skippedFiles: preSkipped,
+      skippedSamples: [],
       geoserver,
       restart: {
         requested: doRestart,
@@ -1114,7 +1337,7 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
         commandConfigured: isRestartCommandConfigured(),
         scheduled: false,
         signalFile: normalizeSlashes(path.relative(workspaceRoot, signalFile)),
-        message: '스키마 안내 확인 후 재기동',
+        message: '스키마 안내 확인 후 commit',
       },
       pendingSchemaConfirm: true,
       pendingId,
@@ -1122,6 +1345,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     console.error(`[SourceCodeUpload] 적용 실패:`, raw);
+    await Promise.resolve(
+      onProgress?.({
+        phase: 'build',
+        message: raw.split('\n')[0]?.trim() || '적용 실패',
+        logLine: `[SourceCodeUpload] 적용 실패:\n${raw}`,
+      })
+    ).catch(() => {});
 
     let failMessage = raw;
     let historyRecorded = false;
@@ -1153,18 +1383,21 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       console.error(`[SourceCodeUpload] 적용 실패 (롤백 없음): ${failMessage}`);
     }
 
-    /** 복사 등 실패 시에도 GeoServer가 꺼진 채로 남지 않도록 ensure */
-    if (!geoStartedOnSuccessPath) {
-      await ensureGeoServerRunning({ forceRestart: false }).catch((e) => {
-        console.error('[SourceCodeUpload] 실패 후 GeoServer ensure 실패', e);
+    /** prepare 실패: Geo 미중지 — 복구 불필요 */
+    if (!pendingRegistered && !geoStartedOnSuccessPath) {
+      await ensureGeoServerRecoveredAfterApply({ geoAlreadyStopped: false }).catch((e) => {
+        console.error('[SourceCodeUpload] 실패 후 GeoServer 복구 실패', e);
       });
     }
     const outErr = new Error(failMessage) as Error & { historyRecorded?: boolean };
     outErr.historyRecorded = historyRecorded;
     throw outErr;
   } finally {
-    await removeApplyRollbackSnapshot(rollback);
-    await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    if (!pendingRegistered) {
+      releaseSourceApplyLock(lockOwner);
+      await removeApplyRollbackSnapshot(rollback);
+      await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
@@ -1391,7 +1624,7 @@ function scheduleRestart(mode: RestartMode): {
   /**
    * exit(nssm): 사전 빌드는 적용 경로에서 이미 완료.
    * process.exit(0) → nssm/외부 감시 또는 run 슈퍼바이저가 재기동.
-   * GeoServer는 적용 경로에서 기동·run.ts ensure로 재확인.
+   * GeoServer는 run.ts ensure에서 기동(적용 경로에서는 재기동 시 생략).
    */
   const exitDelayMs = Math.max(MIN_EXIT_DELAY_MS, safeDelay);
   const exitHint = hasRunSupervisor()

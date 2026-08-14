@@ -31,7 +31,7 @@ const FILTER_CHIPS: { id: StationListFilter; label: string; title: string }[] = 
 
 function chipActiveClass(id: StationListFilter) {
   if (id === 'water') return 'bg-[#3B8DE0] text-white';
-  if (id === 'rain') return 'bg-[#26A69A] text-white';
+  if (id === 'rain') return 'bg-[#FB8C00] text-white';
   if (id === 'cctv') return 'bg-sky-500 text-white';
   return 'bg-foreground text-background';
 }

@@ -24,6 +24,7 @@ import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
+import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -337,6 +338,7 @@ export function MapSearchBar({
     if (sysKey) current.set('system', sysKey);
     else current.delete('system');
     scrubOccupationLedgerFromMapSearchParams(current, sysKey);
+    scrubUseFeeFromMapSearchParams(current, sysKey);
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };
@@ -499,11 +501,17 @@ export function MapSearchBar({
                 <div className="py-4 text-center text-[12px] text-slate-500 dark:text-white/50">
                   검색 결과가 없습니다
                 </div>
+              ) : recentQueries.length === 0 ? (
+                <div className="py-6 text-center text-[12px] text-slate-400">
+                  주소 또는 지번을 입력하세요
+                </div>
               ) : null}
 
               {recentQueries.length > 0 && (
                 <>
-                  <div className="border-t border-slate-100 dark:border-white/10" />
+                  {(addressSearchLoading || addressResults.length > 0 || Boolean(query.trim())) && (
+                    <div className="border-t border-slate-100 dark:border-white/10" />
+                  )}
                   <div className="px-3 py-2">
                     <p className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-white/50 mb-1.5">
                       <History className="w-3.5 h-3.5" />

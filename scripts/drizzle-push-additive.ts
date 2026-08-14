@@ -2,6 +2,7 @@
  * 운영 기동(start) 전용 — drizzle 스키마 «고정 정책» 반영.
  * CREATE/ADD COLUMN 등 생성만 적용.
  * DROP · DELETE · TRUNCATE · ALTER(수정·타입변경)는 실행하지 않고 로그만 남김.
+ * 집계·미리보기는 drizzle 정의 테이블만 대상 (DB 전용 테이블 DROP 제외).
  *
  * create vs rename 충돌(drizzle-kit 대화형):
  *   - 스키마·테이블명이 모두 같지 않으면 create
@@ -26,15 +27,73 @@ const MAX_PREVIEW_ITEMS = 100;
 
 const SCHEMA_FILTERS = ['public', 'layer', 'next_gen_linkage'];
 
-/** drizzle 스키마에 정의된 테이블명만 introspect — DB 전용 테이블이 rename 후보로 섞이지 않게 */
+/**
+ * drizzle 스키마에 정의된 테이블명만 introspect — DB 전용 테이블이 rename 후보로 섞이지 않게
+ */
 function collectManagedTableNames(schemaMod: Record<string, unknown>): string[] {
+  return collectManagedTableKeys(schemaMod).names;
+}
+
+/** drizzle 스키마에 정의된 테이블 (schema.table + 테이블명) — DB 전용 객체 제외용 */
+function collectManagedTableKeys(schemaMod: Record<string, unknown>): {
+  names: string[];
+  keys: Set<string>;
+} {
   const names = new Set<string>();
+  const keys = new Set<string>();
   for (const value of Object.values(schemaMod)) {
     if (is(value, PgTable)) {
-      names.add(getTableConfig(value).name);
+      const cfg = getTableConfig(value);
+      const schemaName = (cfg.schema ?? 'public').trim() || 'public';
+      const tableName = cfg.name.trim();
+      if (!tableName) continue;
+      names.add(tableName);
+      keys.add(tableName);
+      keys.add(`${schemaName}.${tableName}`);
     }
   }
-  return [...names].sort();
+  return { names: [...names].sort(), keys };
+}
+
+function normalizeSqlIdent(raw: string): string {
+  return String(raw ?? '')
+    .replace(/^"+|"+$/g, '')
+    .trim();
+}
+
+/** DROP/ALTER/CREATE SQL에서 참조 릴레이션 키(schema.table · table) 추출 */
+function extractSqlRelationKeys(stmt: string): string[] {
+  const n = stmt.replace(/\s+/g, ' ').trim();
+  const out: string[] = [];
+  const re =
+    /\b(?:TABLE|INDEX|VIEW|FROM|ON)\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:"([^"]+)"|([a-zA-Z_][\w$]*))(?:\s*\.\s*(?:"([^"]+)"|([a-zA-Z_][\w$]*)))?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(n))) {
+    const a = normalizeSqlIdent(m[1] || m[2] || '');
+    const b = normalizeSqlIdent(m[3] || m[4] || '');
+    if (a && b) {
+      out.push(`${a}.${b}`, b);
+    } else if (a) {
+      out.push(`public.${a}`, a);
+    }
+  }
+  return out;
+}
+
+/**
+ * drizzle 정의 테이블에 대한 문만 남김.
+ * DB에만 있는 레이어 테이블 DROP 등은 비교·통계에서 제외 (업로드 dbCompare와 동일 취지).
+ */
+function filterStatementsToManagedScope(statements: string[], managedKeys: Set<string>): string[] {
+  return statements.filter((stmt) => {
+    const category = classifySql(stmt);
+    if (category === 'create') return true;
+    const keys = extractSqlRelationKeys(stmt);
+    if (keys.length === 0) {
+      return category !== 'drop' && category !== 'delete';
+    }
+    return keys.some((k) => managedKeys.has(k));
+  });
 }
 
 /**
@@ -335,7 +394,7 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
     };
   }
 
-  const managedTables = collectManagedTableNames(schemaMod);
+  const { names: managedTables, keys: managedKeys } = collectManagedTableKeys(schemaMod);
   if (managedTables.length === 0) {
     log(`${LOG} skip — drizzle 스키마에 테이블이 없음`);
     return {
@@ -349,7 +408,9 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
   log(
     `${LOG} info — create/rename: 스키마·테이블명 불일치면 create 자동 (동일 스키마+동일 테이블만 rename)`
   );
-  log(`${LOG} info — introspect 관리 테이블 ${managedTables.length}개 (DB 전용 테이블은 rename 후보 제외)`);
+  log(
+    `${LOG} info — 비교 범위: drizzle 정의 테이블 ${managedTables.length}개 (DB 전용 테이블 DROP 등은 제외)`
+  );
 
   const pool = new Pool({
     host: process.env.DATABASE_HOST || 'localhost',
@@ -372,8 +433,16 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
       PUSH_SCHEMA_TIMEOUT_MS,
       'pushSchema'
     );
+    const rawStatements = result.statementsToExecute ?? [];
+    const statements = filterStatementsToManagedScope(rawStatements, managedKeys);
+    const omitted = rawStatements.length - statements.length;
+    if (omitted > 0) {
+      log(
+        `${LOG} info — DB 전용·비관리 객체 관련 SQL ${omitted}건 제외 (정의 테이블만 집계)`
+      );
+    }
     return {
-      statements: result.statementsToExecute ?? [],
+      statements,
       warnings: (result.warnings ?? []).map(String),
       hasDataLoss: result.hasDataLoss === true,
       pool,

@@ -9,30 +9,57 @@ import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
+import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '../src/lib/npmApplyEnv';
+import { reloadProjectRuntimeEnv } from '../src/lib/projectEnvReload';
 
 const COMMAND = process.argv[2]; // dev | start
-const PROJECT = process.argv[3]; // e.g. river_yd
-const TYPE = process.argv[4]; // dev | demo | prod
+/** ggnr_start.bat / nssm AppEnvironmentExtra 가 넣은 값을 argv보다 우선 (잘못된 npm 인자·package.json 고정 인자 방어) */
+function resolveProjectArg(): string {
+  const fromEnv = (process.env.GGNR_PROJECT ?? '').trim();
+  const fromArgv = (process.argv[3] ?? '').trim();
+  if (fromEnv && fromArgv && fromEnv !== fromArgv) {
+    console.warn(
+      `[run] GGNR_PROJECT 불일치 — env=${fromEnv} argv=${fromArgv} → env 사용 (argv=${JSON.stringify(process.argv.slice(2))})`
+    );
+    return fromEnv;
+  }
+  return fromEnv || fromArgv;
+}
+function resolveTypeArg(): string {
+  const fromEnv = (process.env.GGNR_ENV ?? '').trim();
+  const fromArgv = (process.argv[4] ?? '').trim();
+  if (fromEnv && fromArgv && fromEnv !== fromArgv) {
+    console.warn(
+      `[run] GGNR_ENV 불일치 — env=${fromEnv} argv=${fromArgv} → env 사용`
+    );
+    return fromEnv;
+  }
+  return fromEnv || fromArgv;
+}
+const PROJECT = resolveProjectArg();
+const TYPE = resolveTypeArg();
 
 const SIGNAL_PATH = path.join(process.cwd(), '.cursor-runtime', 'restart-request.json');
 const RELAUNCH_POLL_MS = 1000;
 
-/** src/config/projects/<project>.runtime.env 의 KEY=VALUE 를 process.env 에 병합 */
+/** common.runtime.env + 프로젝트 runtime.env (loadProjectEnv 이후 호출) */
 function loadRuntimeEnv(projectName: string): void {
-  const root = process.cwd();
-  const filePath = path.join(root, 'src', 'config', 'projects', `${projectName}.runtime.env`);
-  if (!fs.existsSync(filePath)) return;
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const lines = content.split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim();
-    if (key) (process.env as Record<string, string>)[key] = value;
-  }
+  const dir = path.join(process.cwd(), 'src', 'config', 'projects');
+  const applyRuntimeEnvFile = (filePath: string): void => {
+    if (!fs.existsSync(filePath)) return;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const value = trimmed.slice(eq + 1).trim();
+      if (key) (process.env as Record<string, string>)[key] = value;
+    }
+  };
+  applyRuntimeEnvFile(path.join(dir, 'common.runtime.env'));
+  applyRuntimeEnvFile(path.join(dir, `${projectName}.runtime.env`));
 }
 
 function usage(): never {
@@ -220,12 +247,12 @@ function isSupervisedRestartMode(mode: string | undefined): boolean {
 }
 
 function runNpmInstallSync(): void {
-  console.log('[SourceCodeUpload] npm install --no-audit --no-fund (재기동 전)');
-  execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
+  console.log('[SourceCodeUpload] npm install --include=dev --no-audit --no-fund (재기동 전)');
+  execFileSync('npm', [...NPM_INSTALL_DEV_ARGS], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
-    env: process.env,
+    env: resolveNpmInstallEnv(),
   });
 }
 
@@ -240,32 +267,109 @@ function runNpmBuildSync(): void {
   console.log('[SourceCodeUpload] npm run build OK');
 }
 
+async function setupDbOnRelaunch(logPrefix: string): Promise<void> {
+  const host = process.env.DATABASE_HOST || 'localhost';
+  const port = parseInt(process.env.DATABASE_PORT || '5432', 10);
+  const database = process.env.DATABASE_NAME || '';
+  const user = process.env.DATABASE_USER || '';
+  const password = process.env.DATABASE_PASSWORD || '';
+
+  if (!database || !user) {
+    console.warn(`${logPrefix} DATABASE env 없음 — 재기동 DB 동기화 생략`);
+    return;
+  }
+
+  try {
+    const { default: pg } = await import('pg');
+    const client = new pg.Client({ host, port, database, user, password });
+    try {
+      await client.connect();
+      await client.query('CREATE EXTENSION IF NOT EXISTS postgis;');
+      console.log(`${logPrefix} PostGIS extension ensured (relaunch).`);
+    } finally {
+      await client.end();
+    }
+  } catch (e) {
+    console.warn(`${logPrefix} PostGIS ensure 실패:`, e instanceof Error ? e.message : e);
+  }
+
+  if (COMMAND === 'start') {
+    try {
+      const { runAdditiveSchemaSync } = await import('./drizzle-push-additive');
+      await runAdditiveSchemaSync();
+      console.log(`${logPrefix} additive schema sync OK (relaunch).`);
+    } catch (e) {
+      console.warn(`${logPrefix} additive schema sync 실패:`, e instanceof Error ? e.message : e);
+    }
+  }
+
+  try {
+    const { applyAllSchemaComments } = await import('../src/service/dbManagerService');
+    const result = await applyAllSchemaComments();
+    if (result.applied > 0) {
+      console.log(`${logPrefix} 코멘트 적용:`, result.applied, '건 (relaunch)');
+    }
+    if (result.error) console.warn(`${logPrefix} 코멘트 적용 일부 실패:`, result.error);
+  } catch (e) {
+    console.warn(`${logPrefix} 코멘트 적용 스킵:`, e instanceof Error ? e.message : e);
+  }
+}
+
+let geoRelaunchInFlight = false;
+
 async function ensureGeoServerOnRelaunch(): Promise<void> {
-  console.log('[SourceCodeUpload] GeoServer 기동·응답 확인...');
+  if (geoRelaunchInFlight) {
+    console.log('[SourceCodeUpload] GeoServer 백그라운드 작업 이미 진행 중 — 생략');
+    return;
+  }
+  geoRelaunchInFlight = true;
+  const logPrefix = '[SourceCodeUpload]';
+  console.log(
+    `${logPrefix} GeoServer·저장소 백그라운드 준비 시작 (Next는 이미 기동, 지도 레이어는 최대 2분 소요 가능)`
+  );
   const onLog = (message: string) => {
-    console.log(`[SourceCodeUpload] GeoServer: ${message}`);
+    console.log(`${logPrefix} GeoServer: ${message}`);
   };
   try {
-    const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
-    let r = await ensureGeoServerRunning({ forceRestart: false, onLog });
-    if (!r.success) {
-      console.warn(
-        '[SourceCodeUpload] GeoServer 1차 기동 실패, forceRestart 재시도:',
-        r.error ?? 'unknown'
-      );
-      r = await ensureGeoServerRunning({ forceRestart: true, onLog });
-    }
+    reloadProjectRuntimeEnv(PROJECT, TYPE);
+    const { ensureGeoServerWithDbSetup } = await import('../src/service/geoServerBootstrapService');
+    const r = await ensureGeoServerWithDbSetup({
+      onLog,
+      geoAlreadyStopped: true,
+      readyTimeoutMs: 120_000,
+      retryOnceOnFail: true,
+    });
     if (r.success) {
-      console.log(`[SourceCodeUpload] GeoServer 기동 OK (action=${r.action})`);
+      console.log(`${logPrefix} GeoServer·저장소 준비 OK (action=${r.ensure.action})`);
     } else {
       console.warn(
-        '[SourceCodeUpload] GeoServer 기동 실패(Next는 계속 기동):',
-        r.error ?? 'unknown'
+        `${logPrefix} GeoServer·저장소 준비 실패(Next는 기동됨):`,
+        r.ensure.error ?? 'unknown'
       );
     }
   } catch (e) {
-    console.warn('[SourceCodeUpload] GeoServer 기동 오류:', e instanceof Error ? e.message : e);
+    console.warn(`${logPrefix} GeoServer 준비 오류:`, e instanceof Error ? e.message : e);
+  } finally {
+    geoRelaunchInFlight = false;
   }
+}
+
+/** Next·DB 동기화는 백그라운드 — Geo는 startGeoServerAfter 신호에 따름 */
+function startRelaunchBackgroundTasks(signal?: RestartSignal | null): void {
+  void (async () => {
+    reloadProjectRuntimeEnv(PROJECT, TYPE);
+    await setupDbOnRelaunch('[SourceCodeUpload]');
+  })();
+  startGeoServerOnRelaunchInBackground(signal);
+}
+
+/** Next를 막지 않음 — GeoServer·DB 동기화는 백그라운드 */
+function startGeoServerOnRelaunchInBackground(signal?: RestartSignal | null): void {
+  if (signal?.startGeoServerAfter === false) {
+    console.log('[SourceCodeUpload] startGeoServerAfter=false — GeoServer 백그라운드 기동 생략');
+    return;
+  }
+  void ensureGeoServerOnRelaunch();
 }
 
 type NextCmd = 'dev' | 'start';
@@ -282,8 +386,12 @@ function spawnNext(cmd: NextCmd): void {
     '.bin',
     process.platform === 'win32' ? 'next.cmd' : 'next'
   );
+  // Windows + cwd 공백: shell:true 일 때 미인용 경로가 잘림 → next.cmd 인용
+  const bin =
+    process.platform === 'win32' && /[\s()]/.test(nextBin) ? `"${nextBin}"` : nextBin;
+  const args = cmd === 'dev' && /\s/.test(process.cwd()) ? [cmd, '--webpack'] : [cmd];
   console.log(`[run] starting Next.js (${cmd})...`);
-  const proc = spawn(nextBin, [cmd], {
+  const proc = spawn(bin, args, {
     cwd: process.cwd(),
     stdio: 'inherit',
     env: process.env,
@@ -362,11 +470,12 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       runNpmInstallSync();
     } catch (e) {
       console.error('[SourceCodeUpload] npm install 실패:', e instanceof Error ? e.message : e);
-      await ensureGeoServerOnRelaunch();
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
       await ensurePortFreeForNext(port);
+      reloadProjectRuntimeEnv(PROJECT, TYPE);
       spawnNext(cmd);
+      startRelaunchBackgroundTasks(signal);
       return;
     }
   }
@@ -376,23 +485,27 @@ async function relaunchNextOnly(signal: RestartSignal, cmd: NextCmd): Promise<vo
       runNpmBuildSync();
     } catch (e) {
       console.error('[SourceCodeUpload] npm run build 실패:', e instanceof Error ? e.message : e);
-      await ensureGeoServerOnRelaunch();
       relaunchInFlight = false;
       expectNextExitForRelaunch = false;
       await ensurePortFreeForNext(port);
+      reloadProjectRuntimeEnv(PROJECT, TYPE);
       spawnNext(cmd);
+      startRelaunchBackgroundTasks(signal);
       return;
     }
   } else {
     console.log('[SourceCodeUpload] runBuild=false — 사전 빌드 완료분, 후행 빌드 생략');
   }
 
-  await ensureGeoServerOnRelaunch();
-
   expectNextExitForRelaunch = false;
   relaunchInFlight = false;
   await ensurePortFreeForNext(port);
+  reloadProjectRuntimeEnv(PROJECT, TYPE);
   spawnNext(cmd);
+  console.log(
+    '[SourceCodeUpload] Next 기동 — GeoServer·지도 레이어는 백그라운드 준비 중(최대 약 2분)'
+  );
+  startRelaunchBackgroundTasks(signal);
 }
 
 function startLauncherPoll(cmd: NextCmd): void {
@@ -457,51 +570,43 @@ async function main(): Promise<void> {
   }
 
   // GeoServer: 꺼져 있으면 기동 후, 워크스페이스 ggnr 고정·저장소(현재 프로젝트 env DB) 확인/갱신
-  const geoUrl = process.env.GEOSERVER_URL || 'http://localhost:8080/geoserver';
   const tryGeoServerSetup = async (): Promise<boolean> => {
-    try {
-      const { setupGeoServerDb } = await import('../src/service/devTestService');
-      const gs = await setupGeoServerDb({ workspace: 'ggnr', url: geoUrl });
-      if (gs.success) {
-        const created = gs.datastores?.filter((d) => d.status === 'created').length ?? 0;
-        const updated = gs.datastores?.filter((d) => d.status === 'updated').length ?? 0;
-        if (created > 0) console.log('[run] GeoServer 워크스페이스 ggnr 저장소 생성:', created, '건');
-        if (updated > 0) console.log('[run] GeoServer 저장소 DB 연결 갱신:', updated, '건 (현재 프로젝트:', PROJECT, ')');
-        return true;
-      }
-      console.warn('[run] GeoServer 설정 실패:', gs.error);
-      return false;
-    } catch (e) {
-      console.warn('[run] GeoServer 연결 실패:', e instanceof Error ? e.message : e);
-      return false;
-    }
+    const { trySetupGeoServerDb } = await import('../src/service/geoServerBootstrapService');
+    return trySetupGeoServerDb({
+      onLog: (m) => console.log(`[run] GeoServer: ${m}`),
+    });
   };
-
-  let geoOk = await tryGeoServerSetup();
-  if (!geoOk) {
-    try {
-      console.log('[run] GeoServer ensure (응답 확인 후 필요 시 기동)...');
-      const { ensureGeoServerRunning } = await import('../src/service/geoserverProcessService');
-      const ens = await ensureGeoServerRunning({ forceRestart: false, readyTimeoutMs: 120_000 });
-      if (ens.success) {
-        console.log(`[run] GeoServer 기동 OK (action=${ens.action})`);
-        geoOk = await tryGeoServerSetup();
-      } else {
-        console.warn('[run] GeoServer 기동 실패:', ens.error ?? 'unknown');
-      }
-      if (!geoOk) {
-        console.warn('[run] GeoServer 기동·응답 확인 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');
-      }
-    } catch (e) {
-      console.warn('[run] GeoServer 기동 스킵:', e instanceof Error ? e.message : e);
-    }
-  }
 
   console.log('[run] DB setup done.');
   const nextCmd = COMMAND as NextCmd;
   startLauncherPoll(nextCmd);
   await ensurePortFreeForNext(getAppListenPort());
   spawnNext(nextCmd);
+
+  // Next 기동을 막지 않음. GeoServer 응답·저장소 설정은 백그라운드.
+  void (async () => {
+    let geoOk = await tryGeoServerSetup();
+    if (geoOk) return;
+    try {
+      console.log('[run] GeoServer ensure (백그라운드, 응답 확인 후 필요 시 기동)...');
+      const { ensureGeoServerWithDbSetup } = await import('../src/service/geoServerBootstrapService');
+      const ens = await ensureGeoServerWithDbSetup({
+        readyTimeoutMs: 120_000,
+        retryOnceOnFail: true,
+        onLog: (m) => console.log(`[run] GeoServer: ${m}`),
+      });
+      if (ens.success) {
+        console.log(`[run] GeoServer·저장소 OK (action=${ens.ensure.action})`);
+      } else {
+        console.warn('[run] GeoServer 기동·저장소 실패:', ens.ensure.error ?? 'unknown');
+      }
+      if (!ens.setupOk) {
+        console.warn('[run] GeoServer 기동·응답 확인 후에도 설정 실패. 수동으로 npm run geoserver 후 재시도하세요.');
+      }
+    } catch (e) {
+      console.warn('[run] GeoServer 기동 스킵:', e instanceof Error ? e.message : e);
+    }
+  })();
 }
 
 main().catch((err) => {

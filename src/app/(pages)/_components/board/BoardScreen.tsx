@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
+import { randomId } from '@/lib/randomId';
 import { cn } from '@/lib/utils';
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { BoardAttachmentsPanel } from './BoardAttachmentsPanel';
@@ -243,7 +244,7 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
     setFormStartDate('');
     setFormEndDate('');
     setError(null);
-    setWriteAttachKey(crypto.randomUUID());
+    setWriteAttachKey(randomId());
     setView('write');
   };
 

@@ -21,14 +21,23 @@ const ALWAYS_EXCLUDE_PREFIXES = [
   'out/',
   'build/',
   'docs/',
+  '.tmp/',
   '.cad-preview-work/',
+  'nssm/',
+  '.cursor-runtime/',
   'python/env/',
+  'python/env_parts/',
   'geoserver_modules/data_dir/logs/',
   'geoserver_modules/data_dir/gwc/',
 ];
 
 /** 운영 서버마다 다른 기동 bat·Next 생성 타입 등은 패키지에 넣지 않음 */
-const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts', 'ggnr_start.bat'];
+const ALWAYS_EXCLUDE_EXACT = ['next-env.d.ts', 'ggnr_start.bat', 'python/env.zip'];
+
+/** python/env 옆의 env.zip·env.z01 — 분할본은 python/env_parts/ 만 사용 */
+function isPythonEnvRootSplitFile(p: string): boolean {
+  return p === 'python/env.zip' || /^python\/env\.z\d+$/i.test(p);
+}
 
 const RUNTIME_PREFIXES = [
   'scripts/',
@@ -87,6 +96,7 @@ export function isExcludedSourcePath(
   const p = normalizeRelPath(relativePath);
   if (!p) return true;
   if (ALWAYS_EXCLUDE_EXACT.includes(p)) return true;
+  if (isPythonEnvRootSplitFile(p)) return true;
   if (p.endsWith('.log')) return true;
   if (hasAnyPrefix(p, ALWAYS_EXCLUDE_PREFIXES)) return true;
   if (!includeNodeModules && (p === 'node_modules' || p.startsWith('node_modules/'))) return true;
@@ -134,6 +144,8 @@ export function shouldSkipSourceDir(
  * 소스 업로드·설치 ZIP 제외 + 데이터/대용량 + 적용 시 병합 제외와 합집합.
  */
 const APPLY_EXTRA_PROTECT_PREFIXES = [
+  'python/env/',
+  'python/env_parts/',
   '3dtiles_las/',
   'tiles_tif/',
   'tiles_jpg/',

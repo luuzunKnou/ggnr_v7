@@ -32,6 +32,11 @@ export type UploadProgressSnapshot = {
   /** 진행 파일에 쓴 JSON 문자열(목업 미리보기) */
   progressFileBody: string;
   updatedAt: string;
+  /**
+   * mock: 타이머 목업 / client: 실제 청크 업로드(클라이언트 훅이 갱신)
+   * 미지정은 mock으로 취급
+   */
+  drivenBy?: 'mock' | 'client';
 };
 
 export type UploadCompleteNotice = {
@@ -112,9 +117,9 @@ function reloadFromProgressFileMock() {
   if (!jobsChanged && !noticeChanged) return;
   jobs = nextJobs;
   completionNotice = nextNotice;
-  // 디스크에 uploading 이 있으면 타이머 재개 (메뉴 전환 후 복귀 대비)
+  // 디스크에 uploading 이 있으면 타이머 재개 (메뉴 전환 후 복귀 대비) — 실업로드는 제외
   for (const j of jobs) {
-    if (j.status === 'uploading') ensureTimer(j);
+    if (j.status === 'uploading' && j.drivenBy !== 'client') ensureTimer(j);
   }
   notifyListeners();
 }
@@ -242,6 +247,20 @@ export function getUploadingJobsForKind(kind: AerialKind): UploadProgressSnapsho
   return jobs.filter((j) => j.kind === kind && j.status === 'uploading');
 }
 
+/** 목록 배너용 — 업로드 중·완료·실패(자동 정리 전) */
+export function getVisibleUploadJobsForKind(kind: AerialKind): UploadProgressSnapshot[] {
+  return jobs.filter(
+    (j) => j.kind === kind && (j.status === 'uploading' || j.status === 'done' || j.status === 'failed')
+  );
+}
+
+/** 종류 무관 — 사진동영상 관리 화면에서 진행 배너를 항상 보이도록 */
+export function getVisibleUploadJobs(): UploadProgressSnapshot[] {
+  return jobs.filter(
+    (j) => j.status === 'uploading' || j.status === 'done' || j.status === 'failed'
+  );
+}
+
 export function getJobByFolder(kind: AerialKind, folderName: string): UploadProgressSnapshot | null {
   return jobs.find((j) => j.id === jobId(kind, folderName)) ?? null;
 }
@@ -353,6 +372,7 @@ function ensureTimer(
   onComplete?: (job: UploadProgressSnapshot) => void
 ) {
   if (typeof window === 'undefined') return;
+  if (job.drivenBy === 'client') return;
   if (timers.has(job.id)) return;
   if (job.status !== 'uploading') return;
 
@@ -423,6 +443,140 @@ function ensureTimer(
 export function resumeUploadingTimersFromStorage(): void {
   if (typeof window === 'undefined') return;
   for (const j of jobs) {
-    if (j.status === 'uploading') ensureTimer(j);
+    if (j.status === 'uploading' && j.drivenBy !== 'client') ensureTimer(j);
+  }
+}
+
+/**
+ * 실제 청크 업로드 진행 시작 (사진·동영상 관리 배너용).
+ * 같은 폴더가 이미 uploading이면 교체한다.
+ */
+export function beginClientUploadJob(params: {
+  kind: AerialKind;
+  folderName: string;
+  workName: string;
+  fileTotal: number;
+  currentFileName?: string;
+}): UploadProgressSnapshot {
+  const id = jobId(params.kind, params.folderName);
+  stopTimer(id);
+  jobs = jobs.filter((j) => j.id !== id);
+
+  const fileTotal = Math.max(1, params.fileTotal);
+  const base = {
+    id,
+    folderName: params.folderName,
+    kind: params.kind,
+    workName: params.workName,
+    status: 'uploading' as const,
+    percent: 0,
+    fileIndex: 1,
+    fileTotal,
+    currentFileName: params.currentFileName ?? '',
+    chunkIndex: 0,
+    chunkTotal: 0,
+    progressFilePath: progressPath(params.kind, params.folderName),
+    updatedAt: nowIso(),
+    drivenBy: 'client' as const,
+  };
+  const initial: UploadProgressSnapshot = {
+    ...base,
+    progressFileBody: buildProgressBody(base),
+  };
+  upsertJob(initial);
+  return initial;
+}
+
+/** 실제 업로드 중 진행률 갱신 */
+export function updateClientUploadJob(params: {
+  kind: AerialKind;
+  folderName: string;
+  fileIndex: number;
+  fileTotal: number;
+  currentFileName: string;
+  chunkIndex: number;
+  chunkTotal: number;
+  /** 생략 시 파일·청크 비율로 계산 */
+  percent?: number;
+}): void {
+  const id = jobId(params.kind, params.folderName);
+  const prev = jobs.find((j) => j.id === id);
+  if (!prev || prev.status !== 'uploading') return;
+
+  const fileTotal = Math.max(1, params.fileTotal);
+  const chunkTotal = Math.max(0, params.chunkTotal);
+  const chunkIndex = Math.max(0, params.chunkIndex);
+  const fileIndex = Math.max(1, Math.min(params.fileIndex, fileTotal));
+
+  let percent = params.percent;
+  if (percent == null) {
+    const fileDone = fileIndex - 1;
+    const chunkFrac = chunkTotal > 0 ? Math.min(1, chunkIndex / chunkTotal) : 0;
+    percent = Math.min(99, Math.round(((fileDone + chunkFrac) / fileTotal) * 100));
+  }
+
+  patchJob(id, {
+    drivenBy: 'client',
+    fileIndex,
+    fileTotal,
+    currentFileName: params.currentFileName,
+    chunkIndex: chunkTotal > 0 ? Math.max(1, chunkIndex) : 0,
+    chunkTotal,
+    percent: Math.max(0, Math.min(100, percent)),
+  });
+}
+
+export function completeClientUploadJob(params: {
+  kind: AerialKind;
+  folderName: string;
+  workName?: string;
+  fileTotal?: number;
+}): void {
+  const id = jobId(params.kind, params.folderName);
+  stopTimer(id);
+  const prev = jobs.find((j) => j.id === id);
+  if (!prev) return;
+
+  const fileTotal = params.fileTotal ?? prev.fileTotal;
+  patchJob(id, {
+    drivenBy: 'client',
+    status: 'done',
+    percent: 100,
+    fileIndex: fileTotal,
+    fileTotal,
+    chunkIndex: prev.chunkTotal || 1,
+    chunkTotal: prev.chunkTotal || 1,
+    ...(params.workName ? { workName: params.workName } : {}),
+  });
+
+  if (typeof window !== 'undefined') {
+    window.setTimeout(() => {
+      dismissUploadJob(id);
+    }, 8000);
+  }
+}
+
+export function failClientUploadJob(params: {
+  kind: AerialKind;
+  folderName: string;
+  /** true면 목록에서 바로 제거 */
+  dismiss?: boolean;
+}): void {
+  const id = jobId(params.kind, params.folderName);
+  stopTimer(id);
+  if (params.dismiss) {
+    dismissUploadJob(id);
+    return;
+  }
+  const prev = jobs.find((j) => j.id === id);
+  if (!prev) return;
+  patchJob(id, {
+    drivenBy: 'client',
+    status: 'failed',
+  });
+  if (typeof window !== 'undefined') {
+    window.setTimeout(() => {
+      dismissUploadJob(id);
+    }, 6000);
   }
 }

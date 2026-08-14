@@ -1,0 +1,19 @@
+<layer>
+  <name>file_unit</name>
+  <id>LayerInfoImpl--16a846bd:19ff88039eb:-7fff</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-file-unit-20260812</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--16a846bd:19ff88039eb:-8000</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-13 00:23:00.868 UTC</dateCreated>
+  <dateModified>2026-08-13 00:23:03.327 UTC</dateModified>
+</layer>

@@ -70,7 +70,11 @@ export function ShapeEditorWorkHistory() {
   );
 }
 
-function ActionBadge({ action }: { action: 'select' | 'create' | 'move' | 'delete' }) {
+function ActionBadge({
+  action,
+}: {
+  action: 'select' | 'create' | 'move' | 'delete' | 'attribute';
+}) {
   if (action === 'move') {
     return (
       <span className="shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold text-violet-700">
@@ -89,6 +93,13 @@ function ActionBadge({ action }: { action: 'select' | 'create' | 'move' | 'delet
     return (
       <span className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-semibold text-red-700">
         삭제
+      </span>
+    );
+  }
+  if (action === 'attribute') {
+    return (
+      <span className="shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold text-sky-700">
+        속성
       </span>
     );
   }

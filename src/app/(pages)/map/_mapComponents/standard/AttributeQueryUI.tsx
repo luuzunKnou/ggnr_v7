@@ -78,6 +78,9 @@ const DATA_QUERY_ETC_BLOCKLIST = new Set([
   'lsmd_adm_sect_umd',
 ]);
 
+/** road 시스템이 꺼진 프로젝트(예: 울산 UAV)에서 데이터조회에 숨길 그룹 */
+const DATA_QUERY_GROUPS_REQUIRE_ROAD = new Set(['도로점용허가']);
+
 type BoundaryBadgeItem = { key: string; kind: 'emd' | 'ri'; code: string; label: string };
 
 type PersistedSearchForm = {
@@ -285,8 +288,9 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     let cancelled = false;
     const dbPromise = call('', 'POST', { service: 'devTestService', action: 'getLayerTableList', params: {} });
     const metaPromise = fetch('/api/config/defineLayer').then((r) => r.json());
-    Promise.all([dbPromise, metaPromise])
-      .then(([dbRes, metaRes]) => {
+    const sysPromise = call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} });
+    Promise.all([dbPromise, metaPromise, sysPromise])
+      .then(([dbRes, metaRes, sysRes]) => {
         if (cancelled) return;
         const dbData = dbRes?.data ?? dbRes;
         const tables: LayerSchemaTable[] = Array.isArray(dbData?.tables) ? dbData.tables : [];
@@ -297,6 +301,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
             .map((t) => t.table.toLowerCase())
         );
+
+        const sysData = (sysRes?.data ?? sysRes) as { systems?: Array<{ sys_key?: string }> };
+        const enabledSysKeys = new Set(
+          (Array.isArray(sysData?.systems) ? sysData.systems : [])
+            .map((s) => String(s.sys_key ?? '').trim().toLowerCase())
+            .filter(Boolean)
+        );
+        const hideRoadOccGroups = enabledSysKeys.size > 0 && !enabledSysKeys.has('road');
 
         type TableMeta = {
           define_table_name?: string;
@@ -328,10 +340,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (p && divQ) parentTablesWithSplitDefs.add(p);
         }
 
+        const shouldSkipGroup = (groupName: string) =>
+          hideRoadOccGroups && DATA_QUERY_GROUPS_REQUIRE_ROAD.has(groupName);
+
         for (const tblName of dbSet) {
           if (parentTablesWithSplitDefs.has(tblName)) continue;
           const meta = metaMap.get(tblName);
           const groupName = meta?.define_table_group?.trim() || '기타';
+          if (shouldSkipGroup(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(tblName)) continue;
           const korName = meta?.define_table_kor_name?.trim() || tblName;
           if (!groupMap.has(groupName)) {
@@ -361,6 +377,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (!dbSet.has(parentLower)) continue;
           if (dbSet.has(engLower)) continue;
           const groupName = String(m.define_table_group ?? '').trim() || '기타';
+          if (shouldSkipGroup(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(engLower)) continue;
           const korName = String(m.define_table_kor_name ?? '').trim() || eng;
           if (!groupMap.has(groupName)) {

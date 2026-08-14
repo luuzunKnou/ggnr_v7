@@ -7,6 +7,7 @@ import {
   sortLayerNamesForWmsStack,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
+import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
 
 const WORKSPACE = 'ggnr';
 
@@ -55,19 +56,49 @@ function escapeCqlString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-export function buildExcludeFeatureKeysCql(items: HiddenWmsFeatureKey[]): string | null {
+/**
+ * GeoServer PostGIS는 기본으로 PK를 attribute로 노출하지 않음.
+ * `{layer}_key` / ogc_fid 등은 attribute CQL이 실패하므로 FID(`NOT IN ('layer.1')`)로 숨김.
+ */
+function isFidBasedHideKeyField(layerName: string, keyField: string): boolean {
+  const layer = layerName.trim().toLowerCase();
+  const field = keyField.trim().toLowerCase();
+  if (!layer || !field) return false;
+  return (
+    field === `${layer}_key` ||
+    field === 'ogc_fid' ||
+    field === 'fid' ||
+    field === 'gid'
+  );
+}
+
+export function buildExcludeFeatureKeysCql(
+  items: HiddenWmsFeatureKey[],
+  layerName?: string
+): string | null {
   if (items.length === 0) return null;
+  const layer = layerName?.trim() ?? '';
+  const fidValues: string[] = [];
   const byField = new Map<string, string[]>();
   for (const { keyField, keyValue } of items) {
     const field = String(keyField).trim();
     const val = String(keyValue).trim();
     if (!field || !val) continue;
+    if (layer && isFidBasedHideKeyField(layer, field)) {
+      fidValues.push(val);
+      continue;
+    }
     const list = byField.get(field) ?? [];
     list.push(val);
     byField.set(field, list);
   }
 
   const clauses: string[] = [];
+  if (fidValues.length > 0 && layer) {
+    const unique = [...new Set(fidValues)];
+    const list = unique.map((v) => `'${escapeCqlString(`${layer}.${v}`)}'`).join(',');
+    clauses.push(`NOT IN (${list})`);
+  }
   for (const [field, values] of byField) {
     const unique = [...new Set(values)];
     if (unique.length === 0) continue;
@@ -99,6 +130,10 @@ function mergeCqlParts(...parts: Array<string | null | undefined>): string {
   return clauses.join(' AND ');
 }
 
+/** fetch 실패 시 empty src 대신 사용 — OL decode 가 Image load error 로 reject 되는 것 방지 */
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 /** 이 길이 초과 시에만 POST (CQL 등으로 414 방지). 그 외는 GET — GeoServer가 POST body의 REQUEST를 못 읽는 환경 회피 */
 const WMS_GET_URL_MAX_LEN = 1800;
 
@@ -110,6 +145,9 @@ const WMS_GET_URL_MAX_LEN = 1800;
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
   const img = image.getImage() as HTMLImageElement;
+  const fail = () => {
+    img.src = TRANSPARENT_PIXEL;
+  };
   try {
     if (!src || src.length <= WMS_GET_URL_MAX_LEN) {
       img.src = src;
@@ -148,16 +186,21 @@ function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
         return blob;
       })
       .then((blob) => {
+        const type = String(blob.type || '').toLowerCase();
+        if (type.includes('xml') || type.includes('text')) {
+          throw new Error('WMS exception');
+        }
         const blobUrl = URL.createObjectURL(blob);
         img.onload = () => URL.revokeObjectURL(blobUrl);
-        img.onerror = () => URL.revokeObjectURL(blobUrl);
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          fail();
+        };
         img.src = blobUrl;
       })
-      .catch(() => {
-        img.src = '';
-      });
+      .catch(fail);
   } catch {
-    img.src = '';
+    fail();
   }
 }
 
@@ -178,7 +221,7 @@ export function createServiceLayer(): ImageLayer<ImageWMS> {
         STYLES: '',
         // 미설정 시 GeoServer가 흰 배경 이미지를 내려 배경지도·타일을 통째로 가림
         TRANSPARENT: true,
-        // inimage 예외는 오류 시에도 뷰포트 전체를 덮는 이미지가 됨 → XML로 두고 콘솔/네트워크에서 확인
+        // inimage 예외는 PNG로 에러 문구가 그려져 실패 감지 불가 → xml로 받아 투명 픽셀로 대체
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       },
       serverType: 'geoserver',
@@ -216,8 +259,11 @@ export function refreshServiceWmsLayer(map: OLMap | null | undefined): void {
 }
 
 /**
- * visibleLayerNames / layerFilterRows / spatialFilterWkt 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
+ * visibleLayerNames / layerFilterRows / spatialFilterWkt / serviceWmsCqlByLayer /
+ * occupationDeptPanelOpen 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.
+ * serviceWmsCqlByLayer는 레이어별 추가 속성 CQL(기본계획도 선택 하천 등).
+ * occupationDeptPanelOpen이면 점용 부서업무 레이어에 울진 팔레트 스타일을 적용.
  * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점(아래→위)으로 맞춘다.
  */
 export function useServiceLayerSync(
@@ -229,12 +275,29 @@ export function useServiceLayerSync(
   layerGeometryTypes?: Record<string, LayerDbGeometryKind>,
   /** 레이어별 WMS에서 숨길 feature key (도형편집기 등) */
   hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
+  /** 레이어별 추가 CQL (define_table_name → CQL). null이면 없음 */
+  serviceWmsCqlByLayer?: Record<string, string> | null,
+  /** 공통 점용 부서업무 패널 열림 — 울진과 동일 팔레트 스타일 사용 */
+  occupationDeptPanelOpen?: boolean,
+  /**
+   * WMS에서 본표보다 아래에 깔 레이어 id
+   * (부서업무 본표는 위, 패널에서 켠 점사용료 등은 아래)
+   */
+  wmsForceBottomLayerNames?: Iterable<string>,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
   const hiddenRef = useRef(hiddenFeaturesByLayer);
   hiddenRef.current = hiddenFeaturesByLayer;
+  const extraCqlRef = useRef(serviceWmsCqlByLayer);
+  extraCqlRef.current = serviceWmsCqlByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
+  const deptOpen = occupationDeptPanelOpen === true;
+  const forceBottomKey = Array.from(wmsForceBottomLayerNames ?? [])
+    .map((n) => String(n).trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join(',');
 
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -242,7 +305,11 @@ export function useServiceLayerSync(
     const serviceLayer = map.getLayers().getArray().find((l) => l.get('serviceLayer')) as
       | {
           getVisible(): boolean;
-          getSource(): { getParams(): Record<string, string | undefined>; changed(): void } | null;
+          getSource(): {
+            getParams(): Record<string, string | undefined>;
+            updateParams?(p: Record<string, string | undefined>): void;
+            changed(): void;
+          } | null;
           setVisible(v: boolean): void;
         }
       | undefined;
@@ -251,35 +318,57 @@ export function useServiceLayerSync(
     if (!source) return;
     const params = source.getParams();
 
+    const update =
+      typeof source.updateParams === 'function'
+        ? (next: Record<string, string | undefined>) => source.updateParams!(next)
+        : (next: Record<string, string | undefined>) => {
+            Object.assign(params, next);
+            source.changed();
+          };
+
     if (visibleLayerNames.size === 0) {
       const syncKey = 'empty';
       if (lastSyncKeyRef.current === syncKey && !serviceLayer.getVisible()) return;
       lastSyncKeyRef.current = syncKey;
-      params.LAYERS = '';
-      params.STYLES = '';
+      update({ LAYERS: '', STYLES: '', CQL_FILTER: undefined });
       delete params.CQL_FILTER;
       serviceLayer.setVisible(false);
       return;
     }
 
     const rawNames = Array.from(visibleLayerNames);
-    const names =
-      layerGeometryTypes && Object.keys(layerGeometryTypes).length > 0
-        ? sortLayerNamesForWmsStack(rawNames, layerGeometryTypes)
-        : rawNames;
+    // 기하 타입 없어도 강제 하단(시설물·보조 레이어) 정렬은 항상 적용
+    const names = sortLayerNamesForWmsStack(
+      rawNames,
+      layerGeometryTypes ?? {},
+      wmsForceBottomLayerNames
+    );
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    const stylesParam = names.join(',');
+    // 부서업무 점용: 울진 usage_data_as* 스타일 재사용 / 데이터조회: 테이블명(기본 SLD)
+    const stylesParam = names
+      .map((n) => resolveOccupationDeptWmsStyleName(n, deptOpen) ?? n)
+      .join(',');
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
+    const extraByLayer = extraCqlRef.current;
     const cqlArr = names.map((n) => {
       const base = filterRowsToCql(filters?.get(n) ?? []);
       const spatialCql = wkt ? `INTERSECTS(geom, ${wkt})` : null;
-      const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? []);
-      return mergeCqlParts(base, spatialCql, excludeCql);
+      const excludeCql = buildExcludeFeatureKeysCql(hidden?.get(n) ?? [], n);
+      const extraRaw =
+        extraByLayer?.[n] ??
+        extraByLayer?.[n.toLowerCase()] ??
+        null;
+      const extraCql =
+        typeof extraRaw === 'string' && extraRaw.trim() && extraRaw.trim() !== 'INCLUDE'
+          ? extraRaw.trim()
+          : null;
+      return mergeCqlParts(base, spatialCql, excludeCql, extraCql);
     });
-    const cqlParam = cqlArr.join(';');
-    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}`;
+    const allInclude = cqlArr.every((c) => c === 'INCLUDE');
+    const cqlParam = allInclude ? '' : cqlArr.join(';');
+    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}|fb:${forceBottomKey}`;
 
     if (
       lastSyncKeyRef.current === syncKey &&
@@ -292,14 +381,38 @@ export function useServiceLayerSync(
     }
     lastSyncKeyRef.current = syncKey;
 
-    params.LAYERS = layersParam;
-    params.STYLES = stylesParam;
-    params.CQL_FILTER = cqlParam;
-    params.TRANSPARENT = 'true';
-    params.EXCEPTIONS = 'application/vnd.ogc.se_xml';
+    if (allInclude) {
+      update({
+        LAYERS: layersParam,
+        STYLES: stylesParam,
+        CQL_FILTER: undefined,
+        TRANSPARENT: 'true',
+        EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      });
+      delete params.CQL_FILTER;
+    } else {
+      update({
+        LAYERS: layersParam,
+        STYLES: stylesParam,
+        CQL_FILTER: cqlParam,
+        TRANSPARENT: 'true',
+        EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      });
+    }
     serviceLayer.setVisible(true);
     source.changed();
-  }, [map, mapReady, visibleLayerNames, spatialFilterWkt, layerGeometryTypes, hiddenFeaturesByLayer]);
+  }, [
+    map,
+    mapReady,
+    visibleLayerNames,
+    spatialFilterWkt,
+    layerGeometryTypes,
+    hiddenFeaturesByLayer,
+    serviceWmsCqlByLayer,
+    deptOpen,
+    forceBottomKey,
+    wmsForceBottomLayerNames,
+  ]);
 }
 
 export { WORKSPACE };

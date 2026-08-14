@@ -1,6 +1,8 @@
 import { SiteIndexShell } from '@/app/(pages)/(index)/site-index-shell';
 import { BoardScreen } from '@/app/(pages)/_components/board/BoardScreen';
 
+export const dynamic = 'force-dynamic';
+
 type PageProps = {
   params: Promise<{ id: string }>;
 };

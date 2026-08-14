@@ -60,13 +60,16 @@ export function fitMapToLayerRowParcel(
     wmsLayerId?: string;
     setVisibleLayerNames?: (updater: (prev: Set<string>) => Set<string>) => void;
     applyMapViewPadding?: (() => void) | null;
+    /** false면 WMS 레이어를 켜지 않고 지도 이동만 (선택 도형 하이라이트용) */
+    enableWmsLayer?: boolean;
   }
 ): boolean {
   const ext = getParcelExtent3857(item);
   if (!ext) return false;
 
+  const enableWms = opts?.enableWmsLayer !== false;
   const wmsLayerId = String(opts?.wmsLayerId ?? "").trim();
-  if (wmsLayerId && opts?.setVisibleLayerNames) {
+  if (enableWms && wmsLayerId && opts?.setVisibleLayerNames) {
     const lid = wmsLayerId.toLowerCase();
     opts.setVisibleLayerNames((prev) => {
       if (prev.has(lid)) return prev;

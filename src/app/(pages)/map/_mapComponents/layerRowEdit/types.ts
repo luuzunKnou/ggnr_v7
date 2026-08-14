@@ -31,6 +31,11 @@ export type LayerRowEditPreset = {
    * key는 컬럼명(대소문자 무시). 있으면 해당 맵만 사용.
    */
   fieldLabels?: Record<string, string>;
+  /**
+   * 저장 시 점용기간(시작·종료)·도형 필수.
+   * 울진 하천점용·공통 점용대장용. 없으면 저장 막고 안내 후 편집 유지.
+   */
+  requirePeriodAndGeomOnSave?: boolean;
 };
 
 export type LayerRowDetailAttr = {
@@ -39,6 +44,10 @@ export type LayerRowDetailAttr = {
   value: string;
   /** false면 기본 숨김(더보기로 표시). 미지정은 기본 표시 */
   showDetail?: boolean;
+  /** defineLayer define_field_type (소문자) */
+  type?: string;
+  /** define_field_read_only */
+  readOnly?: boolean;
 };
 
 export type LayerRowParcelItem = {

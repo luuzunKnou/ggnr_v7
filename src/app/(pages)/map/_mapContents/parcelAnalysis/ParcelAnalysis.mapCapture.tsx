@@ -417,9 +417,9 @@ function waitForBasemapTiles(
     }, BASEMAP_TILE_IDLE_MS);
   }
 
-  source.on('tileloadstart', onStart);
-  source.on('tileloadend', onEnd);
-  source.on('tileloaderror', onEnd);
+  tileSource.on('tileloadstart', onStart);
+  tileSource.on('tileloadend', onEnd);
+  tileSource.on('tileloaderror', onEnd);
 
   map.renderSync();
   idleTimer = window.setTimeout(() => {

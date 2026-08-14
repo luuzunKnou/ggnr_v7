@@ -20,6 +20,7 @@ import {
 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
+import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { CONS_DATA_AS_WMS_LAYER_IDS } from "./consDataAsLayerId";
 import {
@@ -192,17 +193,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       setSelectedId?.(rowId);
       setRiverFocus?.(null);
       if (isNewRiverConstructionLedgerRow({ id: rowId })) return;
+      // 클릭 즉시 지도만 이동 — 상세·필지 GeoJSON은 DetailPanel에서 비동기 로드
       try {
-        const res = await call("", "POST", {
-          service: "consDataAsService",
-          action: "getDetailByConsCode",
-          params: { consCode: rowId },
-        });
-        const data = res?.data ?? res;
-        if (data?.error || !data?.row) return;
-        const mapped = mapConsDataAsApiToLedgerRow(data.row as ConsDataAsApiRow);
-        setRows?.((prev) => prev.map((r) => (r.id === rowId ? { ...mapped, geom: r.geom ?? mapped.geom } : r)));
-
         const map = mapContext?.mapInstanceRef?.current;
         if (!map) return;
         const extRes = await call("", "POST", {
@@ -219,10 +211,10 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
           });
         }
       } catch {
-        /* 상세 보강 실패 시 목록 행으로 표시 */
+        /* extent 실패 시 목록 행 geom 강조에 맡김 */
       }
     },
-    [mapContext, setRiverFocus, setRows, setSelectedId]
+    [mapContext, setRiverFocus, setSelectedId]
   );
 
   useEffect(() => {
@@ -450,16 +442,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
     <div className="flex min-h-0 h-full flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">공사대장</span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-            title="공사 추가"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            추가
-          </button>
+        <div className="flex items-center gap-1">
+          <LayerRowAddButton onClick={handleAdd} />
           <button
             type="button"
             onClick={() => {
@@ -677,7 +661,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {listError ? (
           <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
         ) : null}
@@ -686,7 +670,13 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         ) : items.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
         ) : (
-          <table className="w-full min-w-[420px] border-collapse text-left text-xs">
+          <table className="w-full table-fixed border-collapse text-left text-xs">
+            <colgroup>
+              <col />
+              <col className="w-[4.5rem]" />
+              <col className="w-[4.75rem]" />
+              <col className="w-[5.25rem]" />
+            </colgroup>
             <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
               <tr>
                 <th className="px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">공사명</th>
@@ -724,19 +714,19 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                     )}
                   >
                     <td
-                      className="max-w-[10rem] truncate px-2 py-1.5 text-slate-800"
+                      className="min-w-0 truncate px-2 py-1.5 text-slate-800"
                       title={row.name}
                     >
                       {row.name || "—"}
                     </td>
                     <td
-                      className="max-w-[8rem] truncate px-2 py-1.5 text-slate-700"
+                      className="min-w-0 truncate px-2 py-1.5 text-slate-700"
                       title={formatRiverNamesLabel(row.riverNames)}
                     >
                       {formatRiverNamesShort(row.riverNames)}
                     </td>
                     <td
-                      className="max-w-[8rem] truncate px-2 py-1.5 text-slate-700"
+                      className="min-w-0 truncate px-2 py-1.5 text-slate-700"
                       title={row.companyName}
                     >
                       {row.companyName || "—"}

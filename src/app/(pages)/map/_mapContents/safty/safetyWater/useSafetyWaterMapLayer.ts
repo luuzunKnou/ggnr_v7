@@ -71,7 +71,7 @@ function stationStyle(
 ): Style[] {
   const selected = selectedId != null && selectedId === featureId;
   const isRain = kind === 'rain';
-  const labelColor = isRain ? '#00897B' : '#0B65C6';
+  const labelColor = isRain ? '#E65100' : '#0B65C6';
   const op = selected ? 1 : opacity;
 
   const image = new Icon({

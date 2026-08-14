@@ -3,12 +3,13 @@ import type { RestartMode, VersionRelayPhase } from '@/lib/sourceVersionClientRe
 import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
 import type { StageItem, StageState } from './ProgressStagesList';
 
-export type InstallStageId = 'info' | 'scan' | 'zip' | 'download';
+export type InstallStageId = 'typeCheck' | 'info' | 'scan' | 'zip' | 'download';
 export type RelayStageId =
   | 'latest'
   | 'download'
   | 'relay-init'
   | 'relay-chunk'
+  | 'type-check'
   | 'geoserver-stop'
   | 'merge-apply'
   | 'geoserver-start'
@@ -25,7 +26,7 @@ export type RelayStageOptions = {
   packageProfile?: SourcePackageProfile;
 };
 
-const INSTALL_STAGE_ORDER: InstallStageId[] = ['info', 'scan', 'zip', 'download'];
+const INSTALL_STAGE_ORDER: InstallStageId[] = ['typeCheck', 'info', 'scan', 'zip', 'download'];
 
 const INSTALL_PHASE_TO_STAGE: Partial<Record<InstallZipPhase, InstallStageId>> = {
   idle: 'info',
@@ -41,6 +42,7 @@ const RELAY_COMMON_STAGES: RelayStageId[] = [
   'download',
   'relay-init',
   'relay-chunk',
+  'type-check',
   'geoserver-stop',
   'merge-apply',
 ];
@@ -50,6 +52,7 @@ const RELAY_STAGE_LABEL_BASE: Record<RelayStageId, string> = {
   download: 'GNMS ZIP 다운로드',
   'relay-init': '운영 서버 relay 세션 생성',
   'relay-chunk': '청크 전송',
+  'type-check': '타입 검사',
   'geoserver-stop': 'GeoServer 중지',
   'merge-apply': '병합·적용(백업·정리)',
   'geoserver-start': 'GeoServer 기동',
@@ -65,7 +68,8 @@ const PHASE_TO_RELAY_STAGE: Partial<Record<VersionRelayPhase | 'done', RelayStag
   download: 'download',
   'relay-init': 'relay-init',
   'relay-chunk': 'relay-chunk',
-  'relay-complete': 'geoserver-stop',
+  'relay-complete': 'type-check',
+  'type-check': 'type-check',
   'merge-apply': 'merge-apply',
   'geoserver-stop': 'geoserver-stop',
   'geoserver-start': 'geoserver-start',
@@ -88,7 +92,7 @@ function effectiveRestartMode(opts?: RelayStageOptions): RestartMode | 'off' {
 /** 재시작 방법·패키지 프로필에 따른 단계 목록 */
 export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
   const mode = effectiveRestartMode(opts);
-  /** 병합 후 GeoServer 기동은 재시작 여부와 무관하게 적용 경로에서 수행 */
+  /** «재시작 안 함»일 때만 병합 후 GeoServer 기동. 재기동은 run.ts ensure */
   if (mode === 'off') return [...RELAY_COMMON_STAGES, 'geoserver-start'];
 
   const withNpm =
@@ -96,7 +100,7 @@ export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
   /** exit·launcher 공통: 사전 install(개방망)·사전 빌드 → 앱 종료. 런처만 재기동 안내 단계 */
   const restartTail: RelayStageId[] =
     mode === 'launcher' ? ['app-stop', 'app-start'] : ['app-stop'];
-  return [...RELAY_COMMON_STAGES, 'geoserver-start', ...withNpm, 'build', ...restartTail];
+  return [...RELAY_COMMON_STAGES, ...withNpm, 'build', ...restartTail];
 }
 
 export function relayStageLabel(id: RelayStageId, opts?: RelayStageOptions): string {
@@ -122,13 +126,27 @@ function firstRestartPipelineStage(order: RelayStageId[]): RelayStageId | null {
   return null;
 }
 
-export function buildInstallBaseStages(): StageItem[] {
-  return [
+export function buildInstallBaseStages(opts?: {
+  includeTypeCheck?: boolean;
+  typeCheckState?: StageState;
+  typeCheckDetail?: string;
+}): StageItem[] {
+  const stages: StageItem[] = [];
+  if (opts?.includeTypeCheck !== false) {
+    stages.push({
+      id: 'typeCheck',
+      label: '타입 검사',
+      state: opts?.typeCheckState ?? 'pending',
+      detail: opts?.typeCheckDetail,
+    });
+  }
+  stages.push(
     { id: 'info', label: '서버 정보 확인', state: 'pending' },
     { id: 'scan', label: '소스 스캔/필터링', state: 'pending' },
     { id: 'zip', label: 'ZIP 압축', state: 'pending' },
-    { id: 'download', label: '파일 다운로드', state: 'pending' },
-  ];
+    { id: 'download', label: '파일 다운로드', state: 'pending' }
+  );
+  return stages;
 }
 
 export function buildInstallStagesFromProgress(
@@ -143,17 +161,34 @@ export function buildInstallStagesFromProgress(
     zipName?: string;
     zipSize?: number;
   },
-  infoDetail?: string
+  infoDetail?: string,
+  typeCheckOpts?: { state?: StageState; detail?: string }
 ): StageItem[] {
-  const base = buildInstallBaseStages();
+  const typeCheckState = typeCheckOpts?.state ?? 'done';
+  const typeCheckDetail =
+    typeCheckOpts?.detail ?? (typeCheckState === 'warn' ? '오류 있음 · 진행' : '통과');
+  const base = buildInstallBaseStages({
+    includeTypeCheck: true,
+    typeCheckState,
+    typeCheckDetail,
+  });
   if (p.phase === 'error') {
     const failedId: InstallStageId = p.message.includes('다운로드')
       ? 'download'
       : p.message.includes('ZIP') || p.message.includes('압축')
         ? 'zip'
-        : 'scan';
+        : p.message.includes('타입')
+          ? 'typeCheck'
+          : 'scan';
     const activeIdx = INSTALL_STAGE_ORDER.indexOf(failedId);
     return base.map((s, idx) => {
+      if (s.id === 'typeCheck') {
+        return {
+          ...s,
+          state: typeCheckState,
+          detail: typeCheckDetail,
+        };
+      }
       if (s.id === failedId) {
         return { ...s, state: 'error' as StageState, detail: p.error ?? p.message };
       }
@@ -170,6 +205,10 @@ export function buildInstallStagesFromProgress(
     const id = s.id as InstallStageId;
     const idx = INSTALL_STAGE_ORDER.indexOf(id);
     const exclude = id === 'scan' ? scanExclude : {};
+
+    if (id === 'typeCheck') {
+      return { ...s, state: typeCheckState, detail: typeCheckDetail };
+    }
 
     if (p.phase === 'done') {
       let detail: string | undefined;
@@ -467,6 +506,7 @@ export function buildRelayStagesFromProgress(
       }
       if (id === 'latest' && p.versionDetail) detail = p.versionDetail;
       if (id === 'geoserver-stop' && !detail) detail = '중지 중...';
+      if (id === 'type-check' && !detail) detail = '타입 검사 중...';
       if (id === 'merge-apply') {
         detail = p.applyDetail ?? detail ?? '병합·적용 중...';
       }
@@ -505,7 +545,7 @@ export function setStageActive(stages: StageItem[], activeId: string, detail?: s
   const activeIdx = order.indexOf(activeId);
   return stages.map((s, idx) => {
     if (s.id === activeId) return { ...s, state: 'active', detail: detail ?? s.detail };
-    if (idx < activeIdx && s.state !== 'error') return { ...s, state: 'done' };
+    if (idx < activeIdx && s.state !== 'error' && s.state !== 'warn') return { ...s, state: 'done' };
     return s;
   });
 }

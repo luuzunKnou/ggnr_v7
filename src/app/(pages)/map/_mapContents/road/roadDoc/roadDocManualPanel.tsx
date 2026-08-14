@@ -19,6 +19,7 @@ import type { RoadDocListItem } from "@/lib/roadDocTypes";
 import { roadDocPreviewPngFileName } from "@/lib/roadDocPreviewPngName";
 import { ServiceFileImagePreview } from "@/app/(pages)/map/_mapComponents/standard/ServiceFileImagePreview";
 import { ServiceFileDxfPreview } from "@/app/(pages)/map/_mapComponents/standard/ServiceFileDxfPreview";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 
 type FileKind = "hwp" | "pdf" | "image" | "zip" | "dwg" | "dxf" | "other";
 
@@ -406,7 +407,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2">
+        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
           {loading ? (
             <p className="px-1 py-2 text-[12px] text-slate-500">불러오는 중…</p>
           ) : listError || uploadError ? (
@@ -534,7 +535,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
               )}
             </>
           )}
-        </div>
+        </MapSideDetailScroll>
       </div>
 
       {mediaPreview ? (

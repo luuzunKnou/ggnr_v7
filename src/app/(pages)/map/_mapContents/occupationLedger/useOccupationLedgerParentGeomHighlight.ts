@@ -6,12 +6,17 @@ import VectorSource from 'ol/source/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import { Style, Stroke, Fill } from 'ol/style';
 import { call } from '@/lib/api';
+import {
+  occupationFillRgba,
+  occupationStrokeRgba,
+} from '@/lib/occupationLayerStyle';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { LAYER_ROW_NEW_ID } from '../../_mapComponents/layerRowEdit';
 
+/** 목록·상세 선택 시 본표 강조 — 기존 빨간 표시 */
 const PARENT_GEOM_STYLE = new Style({
-  stroke: new Stroke({ color: 'rgba(239, 68, 68, 0.95)', width: 2.5 }),
-  fill: new Fill({ color: 'rgba(239, 68, 68, 0.12)' }),
+  stroke: new Stroke({ color: occupationStrokeRgba('parentActive'), width: 2.5 }),
+  fill: new Fill({ color: occupationFillRgba('parentActive') }),
 });
 
 /** 상세 조회 — 점용(부모) 도형 활성 표시 (하천점용과 동일) */
