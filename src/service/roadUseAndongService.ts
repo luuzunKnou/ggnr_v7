@@ -372,17 +372,29 @@ async function getPnuFromAddress(address: string): Promise<string | null> {
     }
   }
   if (!emdCd) return null;
+  // 행정리(서부3리) → 법정리(서부리) 폴백 — 지적 PNU는 법정리 기준
+  const toBeopjeongRi = (n: string) => {
+    const t = n.trim();
+    const m = t.match(/^(.+?)\d+리$/u);
+    return m ? `${m[1]}리` : t;
+  };
+  const riCandidates = [parsed.riName, toBeopjeongRi(parsed.riName)].filter(
+    (n, i, arr) => n && arr.indexOf(n) === i
+  );
   let riCd: string | null = null;
-  for (const nameCol of EMD_RI_NAME_COLUMNS) {
-    const r = await pool.query(
-      `SELECT "ri_cd" AS code FROM "${EMD_RI_SCHEMA}"."ri" WHERE "ri_cd" LIKE $1 AND "${nameCol}" = $2 LIMIT 1`,
-      [`${esc(emdCd)}%`, parsed.riName]
-    ).catch(() => null);
-    const v = s(r?.rows?.[0]?.code);
-    if (v) {
-      riCd = v;
-      break;
+  for (const candidate of riCandidates) {
+    for (const nameCol of EMD_RI_NAME_COLUMNS) {
+      const r = await pool.query(
+        `SELECT "ri_cd" AS code FROM "${EMD_RI_SCHEMA}"."ri" WHERE "ri_cd" LIKE $1 AND "${nameCol}" = $2 LIMIT 1`,
+        [`${emdCd}%`, candidate]
+      ).catch(() => null);
+      const v = s(r?.rows?.[0]?.code);
+      if (v) {
+        riCd = v;
+        break;
+      }
     }
+    if (riCd) break;
   }
   if (!riCd) return null;
   return `${riCd}${parsed.bonbun}${parsed.bubun}`;
