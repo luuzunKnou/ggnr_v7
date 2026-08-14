@@ -37,9 +37,9 @@ export function Switch({
       onClick={() => onCheckedChange(!on)}
       className={cn(
         'inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        on || indeterminate ? 'bg-blue-600' : 'bg-slate-300/90 dark:bg-input',
+        on || indeterminate ? 'bg-primary' : 'bg-slate-300/90 dark:bg-input',
         className
       )}
     >
