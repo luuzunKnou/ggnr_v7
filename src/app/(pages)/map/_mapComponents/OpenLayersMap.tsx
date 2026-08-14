@@ -31,6 +31,7 @@ import {
 import { useThematicMapCatalog } from './hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from './hooks/useOwnershipCatalog';
 import { useBuildingRoadCatalog } from './hooks/useBuildingRoadCatalog';
+import { useCadastralCatalog } from './hooks/useCadastralCatalog';
 import { useJimokCatalog } from './hooks/useJimokCatalog';
 import { useMapInstance } from './hooks/useMapInstance';
 import { useMapContext } from './MapContext';
@@ -384,6 +385,11 @@ export default function OpenLayersMap({
     loading: buildingRoadCatalogLoading,
   } = useBuildingRoadCatalog();
   const {
+    layers: cadastralPanelLayers,
+    availableLayerTableNames: cadastralAvailableTableNames,
+    loading: cadastralCatalogLoading,
+  } = useCadastralCatalog();
+  const {
     layers: jimokPanelLayers,
     availableLayerTableNames: jimokAvailableTableNames,
     loading: jimokCatalogLoading,
@@ -558,6 +564,19 @@ export default function OpenLayersMap({
       return next;
     });
   }, [buildingRoadCatalogLoading, buildingRoadAvailableTableNames]);
+
+  // 지적도: DB 무데이터 선택 제거
+  useEffect(() => {
+    if (cadastralCatalogLoading) return;
+    setVisibleCadastralLayerNames((prev) => {
+      if (prev == null) return prev;
+      const next = new Set(
+        [...prev].filter((t) => cadastralAvailableTableNames.has(t))
+      );
+      if (next.size === prev.size && [...next].every((t) => prev.has(t))) return prev;
+      return next;
+    });
+  }, [cadastralCatalogLoading, cadastralAvailableTableNames]);
 
   // 지목: tables.json·DB 미등록/무데이터 선택 제거
   useEffect(() => {
@@ -916,12 +935,13 @@ export default function OpenLayersMap({
     setSpatialDrawRequest,
     Boolean(layerRowGeomEdit) || resetMeasurementsPanelOpen
   );
-  // 지적도 레이어 동기화 (activeControls + visibleCadastralLayerNames)
+  // 지적도 레이어 동기화 (activeControls + 선택 + DB 가용분만)
   useCadastralLayerSync(
     mapInstanceRef.current,
     mapReady,
     activeControls,
-    visibleCadastralLayerNames
+    visibleCadastralLayerNames,
+    cadastralCatalogLoading ? null : cadastralAvailableTableNames
   );
   // 건물·도로 레이어 동기화 (activeControls + 선택 + tables.json·DB 가용분만)
   useBuildingRoadLayerSync(
@@ -1796,9 +1816,14 @@ export default function OpenLayersMap({
       if (!id) return;
       const active = detail.active === true;
       if (active && id === 'cadastral') {
-        setVisibleCadastralLayerNames((prev) =>
-          prev != null && prev.size > 0 ? prev : new Set(CADASTRAL_LAYERS.map((l) => l.tableName))
-        );
+        setVisibleCadastralLayerNames((prev) => {
+          if (prev != null && prev.size > 0) return prev;
+          return new Set(
+            CADASTRAL_LAYERS.map((l) => l.tableName).filter((t) =>
+              cadastralAvailableTableNames.has(t)
+            )
+          );
+        });
       }
       setActiveControls((prev) => {
         const has = prev.includes(id);
@@ -1808,7 +1833,7 @@ export default function OpenLayersMap({
     };
     window.addEventListener('ggnr-map-control-set', onSet);
     return () => window.removeEventListener('ggnr-map-control-set', onSet);
-  }, []);
+  }, [cadastralAvailableTableNames]);
 
   /** 목록 패널 열기/닫기. 최초(null)면 빈 선택으로 열고, 기존 선택은 유지한다. */
   const togglePanelLayer = (id: PanelLayerId) => {
@@ -1842,6 +1867,8 @@ export default function OpenLayersMap({
   };
 
   const handleItemRightClick = (id: string) => {
+    // 지적도: 우클릭 비활성 (좌클릭으로만 목록 패널)
+    if (id === 'cadastral') return;
     if (isPanelLayerId(id)) {
       togglePanelLayer(id);
       return;
@@ -2166,12 +2193,15 @@ export default function OpenLayersMap({
             <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
               <JimokLandownLayerSelector
                 title="지적도"
-                layers={CADASTRAL_LAYERS}
+                layers={cadastralPanelLayers}
                 selectedTableNames={visibleCadastralLayerNames ?? new Set()}
                 onSelectionChange={(next: Set<string>) => {
-                  setVisibleCadastralLayerNames(next);
+                  const filtered = new Set(
+                    [...next].filter((t) => cadastralAvailableTableNames.has(t))
+                  );
+                  setVisibleCadastralLayerNames(filtered);
                   setActiveControls((prev) =>
-                    next.size === 0
+                    filtered.size === 0
                       ? prev.filter((x) => x !== 'cadastral')
                       : prev.includes('cadastral')
                         ? prev
