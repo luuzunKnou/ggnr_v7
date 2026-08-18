@@ -144,8 +144,9 @@ export function UserAccountProtoPanel({
     }
   }, [open, session])
 
-  const handleLogout = useCallback(() => {
-    void signOut({ callbackUrl: '/' })
+  const handleLogout = useCallback(async () => {
+    await signOut({ redirect: false })
+    window.location.assign('/')
   }, [])
 
   const handleDismissNotif = useCallback((item: ProtoNotifItem) => {
