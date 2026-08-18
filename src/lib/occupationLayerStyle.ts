@@ -10,7 +10,7 @@ export const OCCUPATION_LAYER_STYLE = {
   /** 점용대장 WMS */
   parent: {
     fill: "#68CCCA",
-    stroke: "#3BA8A6",
+    stroke: "#FFFFFF",
     fillOpacity: 0.35,
   },
   /** 점용대장 선택·도형수정 강조 (기존 빨강) */

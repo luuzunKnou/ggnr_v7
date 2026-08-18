@@ -113,7 +113,11 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
         </ToolbarButton>
       ))}
 
-      <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
+      {statusMessage ? (
+        <span className="ml-2 min-w-0 flex-1 truncate text-xs text-slate-500">{statusMessage}</span>
+      ) : (
+        <span className="min-w-0 flex-1" />
+      )}
 
       <ToolbarButton
         title="변경된 도형 일괄 저장"
@@ -125,12 +129,6 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
           ? '저장 중…'
           : `일괄저장${dirtySaveItems.length > 0 ? ` (${dirtySaveItems.length})` : ''}`}
       </ToolbarButton>
-
-      {statusMessage ? (
-        <span className="ml-2 min-w-0 flex-1 truncate text-xs text-slate-500">{statusMessage}</span>
-      ) : (
-        <span className="min-w-0 flex-1" />
-      )}
 
       <ToolbarButton title="닫기" onClick={handleClose}>
         <X className="h-3.5 w-3.5" />
