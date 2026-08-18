@@ -34,12 +34,12 @@ export const OCCUPATION_LEDGER_SER_ENGS = [
 export type OccupationLedgerSerEng = (typeof OCCUPATION_LEDGER_SER_ENGS)[number];
 
 const COMMON_FIELDS: OccupationLedgerFieldMap = {
-  keyField: 'id',
+  keyField: 'permit_no',
   nameField: 'work_name',
   placeField: 'occup_place',
   startField: 'perm_start_date',
   endField: 'perm_end_date',
-  childParentField: 'id',
+  childParentField: 'permit_no',
   childAddressField: 'occup_place',
 };
 

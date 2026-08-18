@@ -29,10 +29,19 @@ function isDefinedTable(tableName: string): boolean {
 /** GeoServer jijuk.sld — 지번 TextSymbolizer MaxScaleDenominator (이 축척 이하에서만 지번 표시) */
 export const JIJUK_JIBUN_LABEL_MAX_SCALE_DENOMINATOR = 2000;
 
+/** GeoServer jijuk.sld — 필지선 Rule MaxScaleDenominator (이 축척 이하에서 지적선 표시) */
+export const JIJUK_STROKE_MAX_SCALE_DENOMINATOR = 35000;
+
 /** GeoServer SLD scale (0.28mm 픽셀) 기준 — 지번 라벨이 보이는 줌/해상도인지 */
 export function isJijukJibunLabelVisible(resolution: number): boolean {
   if (!Number.isFinite(resolution) || resolution <= 0) return false;
   return resolution / 0.00028 <= JIJUK_JIBUN_LABEL_MAX_SCALE_DENOMINATOR;
+}
+
+/** GeoServer SLD scale 기준 — 지적 경계선이 그려지는 해상도인지 */
+export function isJijukStrokeVisible(resolution: number): boolean {
+  if (!Number.isFinite(resolution) || resolution <= 0) return false;
+  return resolution / 0.00028 <= JIJUK_STROKE_MAX_SCALE_DENOMINATOR;
 }
 
 /** 지적도 레이어 목록 — 상세 패널·동기화용 export */
@@ -47,6 +56,16 @@ export const CADASTRAL_LAYERS: {
   { tableName: 'emd', layerName: '읍면동', minZoom: 8, maxZoom: 18 },
 ];
 
+/**
+ * 지도에 지적이 실제로 보이는지.
+ * OL Layer minZoom은 exclusive(zoom > minZoom)이고, SLD MaxScaleDenominator도 함께 본다.
+ */
+export function isJijukVisibleAtView(zoom: number, resolution: number): boolean {
+  const minZoom =
+    CADASTRAL_LAYERS.find((l) => l.tableName === 'jijuk')?.minZoom ?? 16;
+  if (!(zoom > minZoom)) return false;
+  return isJijukStrokeVisible(resolution);
+}
 /** 건물·도로 레이어 목록 — tables.json 에 있는 항목만 (패널 후보) */
 export const BUILDING_ROAD_LAYERS = BUILDING_ROAD_LAYER_DEFS.filter((l) =>
   isDefinedTable(l.tableName)

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import * as fs from "fs"
 import * as path from "path"
 import * as XLSX from "xlsx"
-import { normalizeDefineTableSource } from "@/lib/defineLayerTablesNormalize"
+import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from "@/lib/defineLayerTablesNormalize"
 import { reorderDefineLayerTablesArray } from "@/lib/defineLayerTableRowOrder"
 
 const TABLES_PATH = path.join(process.cwd(), "src", "config", "defineLayer", "tables.json")
@@ -53,7 +53,8 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Invalid tables format" }, { status: 500 })
     }
     normalizeDefineTableSource(tables)
-    const reordered = reorderDefineLayerTablesArray(tables)
+    const deduped = dedupeDefineLayerTablesByName(tables)
+    const reordered = reorderDefineLayerTablesArray(deduped)
     const sorted = sortTables(reordered)
 
     const rows: Record<string, string>[] = sorted.map((row) => {

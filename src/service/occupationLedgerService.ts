@@ -42,6 +42,7 @@ export type OccupationLedgerDetailAttr = {
   label: string;
   value: string;
   showDetail?: boolean;
+  required?: boolean;
 };
 
 function esc(value: string): string {
@@ -106,6 +107,36 @@ function findColumn(columns: string[], name: string): string | null {
   return columns.find((c) => c.toLowerCase() === lower) ?? null;
 }
 
+function resolveChildParentCol(columns: string[], hint: string): string | null {
+  const ordered = [hint, 'parent_id', 'permit_no', 'cons_code', 'id']
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  for (const name of ordered) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const found = findColumn(columns, name);
+    if (found) return found;
+  }
+  return null;
+}
+
+function resolveChildAddressCol(columns: string[], hint: string): string | null {
+  const ordered = [hint, 'occup_place', 'parcel_address', 'usage_loc']
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  for (const name of ordered) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const found = findColumn(columns, name);
+    if (found) return found;
+  }
+  return null;
+}
+
 async function getChildAddressItems(params: {
   childTableName: string;
   parentKey: string;
@@ -123,8 +154,8 @@ async function getChildAddressItems(params: {
 
   const { tableName, schema } = meta;
   const cols = await getTableColumns(schema, tableName);
-  const parentCol = findColumn(cols, params.parentField);
-  const addressCol = findColumn(cols, params.addressField);
+  const parentCol = resolveChildParentCol(cols, params.parentField);
+  const addressCol = resolveChildAddressCol(cols, params.addressField);
   if (!parentCol || !addressCol) return { items: [] };
 
   const hasGeom = findColumn(cols, 'geom');
@@ -369,7 +400,7 @@ export async function getOccupationLedgerDetailByKey(params: {
   const fieldDefs = await getEditableFieldDefinitionsForTable({
     table: binding.mainTable,
     schema: DEFAULT_SCHEMA,
-    excludeFields: ['ogc_fid'],
+    excludeFields: ['ogc_fid', 'id'],
     includeHiddenDetail: true,
   });
   if (fieldDefs.error) {
@@ -434,6 +465,7 @@ export async function getOccupationLedgerDetailByKey(params: {
         label: labelForOccupationLedgerField(field),
         value,
         showDetail: def?.showDetail !== false,
+        required: def?.required === true,
       };
     });
 

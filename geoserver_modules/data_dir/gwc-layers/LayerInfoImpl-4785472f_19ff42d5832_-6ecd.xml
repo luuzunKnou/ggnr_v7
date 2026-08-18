@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4f3eec4a:19f5e05f5aa:-e0d</id>
+  <id>LayerInfoImpl-4785472f:19ff42d5832:-6ecd</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:rdl_perch_uopn_ls</name>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>129.11672517167096</double>
-          <double>36.65284115179493</double>
-          <double>129.47789936541133</double>
-          <double>37.14966872323656</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4373208099005459E7</double>
-          <double>4390827.160414717</double>
-          <double>1.4413413826340308E7</double>
-          <double>4459989.260611447</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>rdl_perch_uopn_ls</defaultStyle>
+      <defaultStyle>line</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

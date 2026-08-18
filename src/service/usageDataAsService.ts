@@ -54,6 +54,7 @@ export type UsageDataAsDetailAttr = {
   value: string;
   /** false면 기본 숨김(더보기로 표시) */
   showDetail?: boolean;
+  required?: boolean;
 };
 
 function esc(value: string): string {
@@ -450,6 +451,7 @@ export async function getUsageDataAsDetailByKey(params: {
         label: labelForUsageDataAsField(field),
         value,
         showDetail: def?.showDetail !== false,
+        required: def?.required === true,
       };
     });
 
