@@ -257,7 +257,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-col gap-3 overflow-y-auto bg-muted/30 p-3">
+      <div className="flex shrink-0 flex-col gap-3 overflow-y-auto scrollbar-thin bg-muted/30 p-3">
         {(uiError || obsError) && (
           <div
             className={cn(
@@ -512,7 +512,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
           {riskError ? (
             <p className="mt-1 text-[11px] text-rose-600">{riskError}</p>
           ) : null}
-          <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+          <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto scrollbar-thin">
             {riskAreas.map((r) => (
               <li key={r.id}>
                 <button

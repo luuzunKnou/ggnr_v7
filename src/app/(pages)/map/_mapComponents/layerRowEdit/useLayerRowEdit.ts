@@ -10,7 +10,10 @@ import { LAYER_ROW_GEOM_CLEAR_SENTINEL } from "./LayerRowGeomEditHandler";
 import { fetchReadOnlyFieldSet } from "./buildFormAttributes";
 import { parcelAddressesFromItems, fitMapToLayerRowParcel } from "./layerRowParcelUtils";
 import { resolveParcelGeoms } from "./resolveParcelGeoms";
-import { validateOccupationPeriodAndGeom } from "./validateOccupationPeriodAndGeom";
+import {
+  validateDefineRequiredFields,
+  validateOccupationPeriodAndGeom,
+} from "./validateOccupationPeriodAndGeom";
 import type { LayerRowDetailAttr, LayerRowEditPreset, LayerRowParcelItem } from "./types";
 
 function toDateInputValue(raw: string): string {
@@ -125,7 +128,8 @@ export function useLayerRowEdit({
         keyField: preset.keyField ?? "id",
         keyValue,
         mode,
-        allowEmptyGeom: !!preset.requirePeriodAndGeomOnSave,
+        allowEmptyGeom:
+          preset.allowEmptyGeom === true || !!preset.requirePeriodAndGeomOnSave,
       });
     },
     [
@@ -133,6 +137,7 @@ export function useLayerRowEdit({
       layerRowGeomEditWktRef,
       mapContext?.clearMapDrawInteractionsRef,
       mapContext?.setSpatialDrawRequest,
+      preset.allowEmptyGeom,
       preset.keyField,
       preset.requirePeriodAndGeomOnSave,
       preset.schema,
@@ -436,9 +441,15 @@ export function useLayerRowEdit({
           ? wktRaw
           : null;
 
-      const requiredMsg = validateOccupationPeriodAndGeom(preset, draft, wktRaw);
-      if (requiredMsg) {
-        setEditError(requiredMsg);
+      const defineRequiredMsg = validateDefineRequiredFields(attributes, draft);
+      if (defineRequiredMsg) {
+        setEditError(defineRequiredMsg);
+        return;
+      }
+
+      const periodGeomMsg = validateOccupationPeriodAndGeom(preset, draft, wktRaw);
+      if (periodGeomMsg) {
+        setEditError(periodGeomMsg);
         return;
       }
 

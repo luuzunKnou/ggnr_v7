@@ -61,24 +61,31 @@ export function buildFormAttributesFromDefineFields(
         showDetail,
         type: String(raw.define_field_type ?? "text").trim().toLowerCase() || "text",
         readOnly: isTrueFlag(raw.define_field_read_only),
+        required: isTrueFlag(raw.define_field_is_required),
         idx: parseInt(String(raw.define_field_idx ?? "999999"), 10) || 999999,
       };
     })
     .filter(
-      (x): x is LayerRowDetailAttr & { idx: number; showDetail: boolean; type: string; readOnly: boolean } =>
-        x != null
+      (x): x is LayerRowDetailAttr & {
+        idx: number;
+        showDetail: boolean;
+        type: string;
+        readOnly: boolean;
+        required: boolean;
+      } => x != null
     )
     .sort((a, b) => {
       if (a.showDetail !== b.showDetail) return a.showDetail ? -1 : 1;
       return a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field);
     })
-    .map(({ field, label, value, showDetail, type, readOnly }) => ({
+    .map(({ field, label, value, showDetail, type, readOnly, required }) => ({
       field,
       label,
       value,
       showDetail,
       type,
       readOnly,
+      required,
     }));
 }
 
@@ -106,6 +113,7 @@ export async function fetchFormAttributesForPreset(
           showDetail?: boolean;
           type?: string;
           readOnly?: boolean;
+          required?: boolean;
         }) => {
           const field = String(d.field ?? "").trim();
           return {
@@ -115,6 +123,7 @@ export async function fetchFormAttributesForPreset(
             showDetail: d.showDetail !== false,
             type: String(d.type ?? "text").trim().toLowerCase() || "text",
             readOnly: d.readOnly === true,
+            required: d.required === true,
           };
         }
       );

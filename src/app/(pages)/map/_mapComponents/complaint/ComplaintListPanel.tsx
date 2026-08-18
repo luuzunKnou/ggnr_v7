@@ -292,14 +292,14 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
     <div className="h-full flex flex-col min-h-0 bg-background">
       <div className="flex flex-col h-full bg-background">
         <div className="flex-shrink-0 border-b border-border">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary/5">
-                <MessageSquareText className="h-[18px] w-[18px] text-primary/80" />
+          <div className="flex items-center justify-between px-3 pt-3 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/5">
+                <MessageSquareText className="h-4 w-4 text-primary/80" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground/90">민원관리</h1>
-                <p className="text-xs text-muted-foreground">
+                <h1 className="text-sm font-semibold text-foreground/90">민원관리</h1>
+                <p className="text-[11px] text-muted-foreground">
                   전체 <span className="font-medium text-foreground/80">{complaints.length}</span>건
                 </p>
               </div>
@@ -314,19 +314,19 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
             </Button>
           </div>
 
-          <div className="px-5 pb-3">
+          <div className="px-3 pb-2">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="접수번호, 민원인, 주소 검색..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 rounded-lg bg-muted/50 border-transparent focus:bg-background focus:border-border text-sm"
+                className="pl-8 h-8 rounded-lg bg-muted/50 border-transparent focus:bg-background focus:border-border text-xs"
               />
             </div>
           </div>
 
-          <div className="px-5 pb-3">
+          <div className="px-3 pb-2">
             <div className="flex gap-1.5 flex-wrap">
               <button
                 onClick={() => setFilterState(null)}
@@ -357,10 +357,10 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="flex flex-col gap-1.5 p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+          <div className="flex flex-col gap-2 py-3 pl-3 pr-0">
             {filtered.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground/80">
+              <div className="flex flex-col items-center justify-center py-16 pr-3 text-muted-foreground/80">
                 <Search className="h-10 w-10 mb-3 opacity-25" />
                 <p className="text-sm font-medium text-foreground/70">검색 결과가 없습니다</p>
                 <p className="text-xs mt-1">다른 검색어를 입력해보세요</p>
@@ -376,18 +376,18 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
                   key={comp.compKey}
                   onClick={() => handleSelect(comp)}
                   className={cn(
-                    'w-full text-left rounded-[10px] border px-4 pt-2.5 pb-4 transition-all',
+                    'w-full text-left rounded-lg border px-3 py-2 transition-colors',
                     isSelected
                       ? 'border-primary/30 bg-primary/[0.03] ring-1 ring-primary/15'
-                      : 'border-border/80 bg-card hover:border-border/70 hover:bg-muted/20'
+                      : 'border-border/80 bg-card hover:border-border hover:bg-muted/20'
                   )}
                 >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground/90 min-h-[1.5rem]">
-                      <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground/90">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium border shrink-0',
+                            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border shrink-0',
                             stateStyle.bg,
                             stateStyle.text,
                             stateStyle.border
@@ -396,29 +396,32 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
                           {stateStyle.icon}
                           {latestState}
                         </span>
-                        <span className="text-[12px] font-mono shrink-0">#{comp.compKey}</span>
-                        <span className="inline-flex items-center gap-1 shrink-0 text-[12px]">
+                        <span className="text-[11px] font-mono shrink-0">#{comp.compKey}</span>
+                        <span className="inline-flex items-center gap-1 shrink-0 text-[11px]">
                           <User className="h-3 w-3" />
                           <span className="truncate max-w-[4rem]">{comp.compName || '-'}</span>
                         </span>
-                        <span className="inline-flex items-center gap-1 shrink-0 text-[12px]">
+                        <span className="inline-flex items-center gap-1 shrink-0 text-[11px]">
                           <Calendar className="h-3 w-3" />
                           {comp.compDate ? comp.compDate.slice(0, 10) : '-'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <ChevronRight
-                          className={cn('h-4 w-4 transition-colors', isSelected ? 'text-primary/80' : 'text-muted-foreground/40')}
-                        />
-                      </div>
+                      <ChevronRight
+                        className={cn('h-4 w-4 shrink-0 transition-colors', isSelected ? 'text-primary/80' : 'text-muted-foreground/40')}
+                      />
                     </div>
-                    <div className="flex items-center gap-1 text-[12px] text-muted-foreground/90 min-w-0 overflow-hidden">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{comp.compAdr || '-'}</span>
+                    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-[11px] leading-snug">
+                      <MapPin className="h-3 w-3 shrink-0 text-muted-foreground/90" />
+                      <span className="shrink-0 text-muted-foreground/90">
+                        {comp.compAdr || '-'}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground/35" aria-hidden>
+                        ·
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-foreground/90">
+                        {comp.compContent || '-'}
+                      </span>
                     </div>
-                    <p className="text-[12px] text-foreground/90 line-clamp-2 leading-relaxed">
-                      {comp.compContent || '-'}
-                    </p>
                   </div>
                 </button>
               );
