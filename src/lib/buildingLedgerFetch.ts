@@ -300,6 +300,10 @@ export type BuildingLedgerDisplayRow = {
   jijigu: string;
   platArea: string;
   totArea: string;
+  /** 세움 고유번호 또는 포털 관리건축물대장PK */
+  mgmBldrgstPk?: string;
+  /** 포털 원문 키(camelCase) — 우클릭 상세 이중화용 */
+  raw?: BuildingLedgerRawRow;
   source?: BuildingLedgerSource;
 };
 
@@ -462,6 +466,9 @@ export function normalizeBuildingLedgerRow(
     jijigu: getField(row, 'jijigu_nm', 'jijiguNm') || '-',
     platArea: formatUnit(getField(row, 'plat_area', 'platArea'), '㎡'),
     totArea: formatUnit(getField(row, 'totarea', 'totArea'), '㎡'),
+    mgmBldrgstPk:
+      getField(row, 'comm_bld_esnc_no', 'mgmBldrgstPk', 'mgm_bldrgst_pk') || undefined,
+    raw: row,
   };
 }
 

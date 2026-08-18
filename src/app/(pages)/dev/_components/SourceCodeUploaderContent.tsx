@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CircleQuestionMark, Loader2, Hammer, Upload } from 'lucide-react';
+import { CircleQuestionMark, Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
@@ -9,7 +9,6 @@ import {
   buildSourceUploadFailBody,
   buildSourceUploadHistoryFields,
   buildSourceUploadSuccessBody,
-  formatBuildCheckSkippedWarning,
   formatDbSchemaMismatchWarning,
 } from '@/lib/sourceUploadHistoryMessage';
 import {
@@ -23,6 +22,7 @@ import { type SourceUploadCategory, type SourceUploadMode } from './sourceUpload
 import {
   uploadCompletePhasePct,
 } from '@/lib/sourceProgressEta';
+import { useTypeCheckGate } from './sourceTypeCheckGate';
 
 type MainTab = 'install_download' | 'source_upload';
 
@@ -35,7 +35,17 @@ type UploadRow = {
   errorTitle?: string;
 };
 
-type StageId = 'preflight' | 'scan' | 'dbCompare' | 'zip' | 'init' | 'chunk' | 'complete' | 'npmInstall' | 'finalize';
+type StageId =
+  | 'typeCheck'
+  | 'preflight'
+  | 'scan'
+  | 'dbCompare'
+  | 'zip'
+  | 'init'
+  | 'chunk'
+  | 'complete'
+  | 'npmInstall'
+  | 'finalize';
 type StageItem = {
   id: StageId;
   label: string;
@@ -77,8 +87,17 @@ type UploadProgressPayload = {
   done: boolean;
 };
 
-function buildBaseStages(includeNodeModules: boolean): StageItem[] {
+function buildBaseStages(
+  includeNodeModules: boolean,
+  typeCheck?: { state: StageState; detail?: string }
+): StageItem[] {
   const stages: StageItem[] = [
+    {
+      id: 'typeCheck',
+      label: '타입 검사',
+      state: typeCheck?.state ?? 'pending',
+      detail: typeCheck?.detail,
+    },
     { id: 'preflight', label: '대상 서버 상태 확인', state: 'pending' },
     { id: 'scan', label: '소스 스캔/필터링', state: 'pending' },
     { id: 'dbCompare', label: '스키마 SQL ↔ DB 비교', state: 'pending' },
@@ -95,6 +114,7 @@ function buildBaseStages(includeNodeModules: boolean): StageItem[] {
 }
 
 const PHASE_TO_STAGE: Record<string, StageId> = {
+  typeCheck: 'typeCheck',
   preflight: 'preflight',
   scan: 'scan',
   dbCompare: 'dbCompare',
@@ -108,6 +128,7 @@ const PHASE_TO_STAGE: Record<string, StageId> = {
 };
 
 const STAGE_LABEL: Record<StageId, string> = {
+  typeCheck: '타입 검사 중...',
   preflight: '대상 서버 상태 확인 중...',
   scan: '소스 스캔/필터링 중...',
   dbCompare: '스키마 SQL ↔ DB 비교 중...',
@@ -196,9 +217,13 @@ function scanExcludeFields(p: UploadProgressPayload): Pick<StageItem, 'detailExc
 function buildStagesFromProgress(
   p: UploadProgressPayload,
   preflightDetail?: string,
-  includeNodeModules = false
+  includeNodeModules = false,
+  typeCheck?: { state: StageState; detail?: string }
 ): StageItem[] {
-  const baseStages = buildBaseStages(includeNodeModules);
+  const baseStages = buildBaseStages(
+    includeNodeModules,
+    typeCheck ?? { state: 'done', detail: '통과' }
+  );
   const stageOrder = baseStages.map((s) => s.id);
   const activeStage: StageId =
     p.phase === 'error' && p.failedStage && isStageId(p.failedStage)
@@ -210,6 +235,14 @@ function buildStagesFromProgress(
     const idx = stageOrder.indexOf(base.id);
     const exclude =
       base.id === 'scan' && p.scanIncluded != null ? scanExcludeFields(p) : {};
+
+    if (base.id === 'typeCheck') {
+      return {
+        ...base,
+        state: typeCheck?.state ?? 'done',
+        detail: typeCheck?.detail ?? base.detail ?? '통과',
+      };
+    }
 
     if (p.phase === 'error' && base.id === activeStage) {
       return { ...base, state: 'error' as StageState, detail: p.error ?? p.message };
@@ -264,12 +297,10 @@ export function SourceCodeUploaderContent() {
     summary: string;
     progressId: string;
   } | null>(null);
-  const [buildCheckSkipConfirmOpen, setBuildCheckSkipConfirmOpen] = useState(false);
   const [date, setDate] = useState(todayYmd());
   const [changeNote, setChangeNote] = useState('');
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [buildChecking, setBuildChecking] = useState(false);
   const [progressPhase, setProgressPhase] = useState<string>('idle');
   const [lastSavedRoot, setLastSavedRoot] = useState<string | null>(null);
   const [progressPct, setProgressPct] = useState(0);
@@ -279,11 +310,12 @@ export function SourceCodeUploaderContent() {
   const [chunkProgress, setChunkProgress] = useState<{ sent: number; expected: number } | null>(null);
   const [uploadMeta, setUploadMeta] = useState<{ zipSize?: number }>({});
   const abortControllerRef = useRef<AbortController | null>(null);
-  const buildAbortRef = useRef<AbortController | null>(null);
-  /** 이 페이지에서 취소 없이 빌드 검사가 1회라도 완료되면 true */
-  const buildCheckCompletedOnceRef = useRef(false);
-  /** 빌드 검사 없이 업로드 진행 확인을 한 경우 — 성공 이력 본문에 경고 */
-  const buildCheckSkippedRef = useRef(false);
+  const {
+    checking: typeChecking,
+    runGate: runTypeCheckGate,
+    abort: abortTypeCheck,
+    modal: typeCheckModal,
+  } = useTypeCheckGate();
   const remoteUploadIdRef = useRef<string | null>(null);
   const progressIdRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -299,6 +331,10 @@ export function SourceCodeUploaderContent() {
   const stagesRef = useRef(stages);
   const includeNodeModulesRef = useRef(includeNodeModules);
   const changeNoteRef = useRef(changeNote);
+  const typeCheckStageRef = useRef<{ state: StageState; detail?: string }>({
+    state: 'done',
+    detail: '통과',
+  });
 
   useEffect(() => {
     stagesRef.current = stages;
@@ -361,9 +397,6 @@ export function SourceCodeUploaderContent() {
     setLastSavedRoot(null);
     setRows([]);
     setDbConfirm(null);
-    setBuildCheckSkipConfirmOpen(false);
-    buildCheckCompletedOnceRef.current = false;
-    buildCheckSkippedRef.current = false;
     setProgressPhase('idle');
     progressPhaseRef.current = 'idle';
     setProgressPct(0);
@@ -376,7 +409,7 @@ export function SourceCodeUploaderContent() {
 
   const handleMainTabChange = (next: MainTab) => {
     if (next === mainTab) return;
-    if (uploading || buildChecking) return;
+    if (uploading || typeChecking) return;
     resetSourceUploadForm();
     setMainTab(next);
   };
@@ -386,7 +419,7 @@ export function SourceCodeUploaderContent() {
     return `[${ts}] ${line}`;
   };
 
-  /** 새 빌드 확인·업로드 시작 시 로그 패널 초기화 (React 배치로 clear+append가 섞이지 않게) */
+  /** 새 타입 검사·업로드 시작 시 로그 패널 초기화 (React 배치로 clear+append가 섞이지 않게) */
   const beginLiveLogSession = (firstLine: string) => {
     setLiveLogs([formatLogLine(firstLine)]);
   };
@@ -454,7 +487,12 @@ export function SourceCodeUploaderContent() {
         zipSize: p.zipSize ?? prev.zipSize,
       }));
     }
-    const nextStages = buildStagesFromProgress(p, preflightDetailRef.current, includeNodeModules);
+    const nextStages = buildStagesFromProgress(
+      p,
+      preflightDetailRef.current,
+      includeNodeModules,
+      typeCheckStageRef.current
+    );
     setStages(nextStages);
 
     if (p.sentChunks != null && p.expectedChunks != null && p.expectedChunks > 0) {
@@ -569,7 +607,9 @@ export function SourceCodeUploaderContent() {
       prev.map((s) => {
         const sidx = stageOrder.indexOf(s.id);
         if (s.id === id) return { ...s, state: 'active', detail: detail ?? s.detail };
-        if (sidx < idx && s.state !== 'error') return { ...s, state: 'done' };
+        if (sidx < idx && s.state !== 'error' && s.state !== 'warn') {
+          return { ...s, state: 'done' };
+        }
         return s;
       })
     );
@@ -582,89 +622,24 @@ export function SourceCodeUploaderContent() {
     return merged;
   };
 
-  const runBuildCheck = async () => {
-    buildAbortRef.current?.abort();
-    buildAbortRef.current = new AbortController();
-    const signal = buildAbortRef.current.signal;
-    setBuildChecking(true);
-    beginLiveLogSession('빌드 확인 시작 (demo env · NODE_ENV=production · 임시 복사본)...');
-    try {
-      const res = await fetch('/api/source/upload/build-check', {
-        method: 'POST',
-        signal,
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(json.error ?? `빌드 확인 실패 (${res.status})`);
-      }
-      if (!res.body) {
-        throw new Error('응답 본문이 없습니다.');
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const handleNdjsonLine = (line: string) => {
-        const trimmed = line.trim();
-        if (!trimmed) return;
-        let parsed: {
-          type?: string;
-          line?: string;
-          ok?: boolean;
-          message?: string;
-          error?: string;
-          cancelled?: boolean;
-        };
-        try {
-          parsed = JSON.parse(trimmed) as typeof parsed;
-        } catch {
-          return;
-        }
-        if (parsed.type === 'log' && parsed.line) {
-          appendLog(parsed.line);
-        } else if (parsed.type === 'done') {
-          if (parsed.cancelled) {
-            appendLog('빌드 확인이 취소되었습니다.');
-          } else {
-            buildCheckCompletedOnceRef.current = true;
-            buildCheckSkippedRef.current = false;
-            appendLog(parsed.ok ? '빌드 성공' : `빌드 실패: ${parsed.message ?? ''}`);
-          }
-        } else if (parsed.type === 'error') {
-          appendLog(`오류: ${parsed.error ?? 'unknown'}`);
-        }
-      };
-      while (true) {
-        if (signal.aborted) {
-          try {
-            await reader.cancel();
-          } catch {
-            /* ignore */
-          }
-          break;
-        }
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          handleNdjsonLine(line);
-        }
-      }
-      if (buffer.trim()) {
-        handleNdjsonLine(buffer);
-      }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') {
-        appendLog('빌드 확인이 취소되었습니다.');
-      } else {
-        appendLog(`오류: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    } finally {
-      setBuildChecking(false);
-      buildAbortRef.current = null;
+  const startUploadWithTypeCheck = async () => {
+    beginLiveLogSession('업로드 전 타입 검사...');
+    setStages(buildBaseStages(includeNodeModules));
+    setStageActive('typeCheck');
+    setProgressText('타입 검사 중...');
+    const outcome = await runTypeCheckGate({ onLog: appendLog });
+    if (outcome === 'aborted') {
+      patchStages({ typeCheck: { state: 'error', detail: '취소' } });
+      setProgressText('타입 검사 취소');
+      return;
     }
+    const typeCheck =
+      outcome === 'continued'
+        ? { state: 'warn' as StageState, detail: '오류 있음 · 진행' }
+        : { state: 'done' as StageState, detail: '통과' };
+    typeCheckStageRef.current = typeCheck;
+    patchStages({ typeCheck });
+    await runUploadCurrentWorkspace(false);
   };
 
   const runUploadCurrentWorkspace = async (confirmDbMismatch = false) => {
@@ -672,7 +647,7 @@ export function SourceCodeUploaderContent() {
       setRows([]);
       setChunkProgress(null);
       setUploadMeta({});
-      beginLiveLogSession('preflight 시작');
+      appendLog('preflight 시작');
     } else {
       appendLog('DB 불일치 확인 후 업로드 계속');
     }
@@ -680,7 +655,7 @@ export function SourceCodeUploaderContent() {
     setUploading(true);
     setProgressPhase('idle');
     setProgressPct(2);
-    setStages(buildBaseStages(includeNodeModules));
+    setStages(buildBaseStages(includeNodeModules, typeCheckStageRef.current));
     setDbConfirm(null);
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
@@ -762,7 +737,6 @@ export function SourceCodeUploaderContent() {
           progressId,
           includeNodeModules,
           confirmDbMismatch,
-          buildCheckSkipped: buildCheckSkippedRef.current,
           clientIp: await resolveClientMachineIp(),
         }),
         signal,
@@ -921,9 +895,6 @@ export function SourceCodeUploaderContent() {
         if (schemaWarn && !warnings.some((w) => w.includes('스키마'))) {
           warnings.push(formatDbSchemaMismatchWarning(dbCompareJson?.diffCount ?? 0));
         }
-        if (buildCheckSkippedRef.current && !warnings.some((w) => w.includes('빌드 검사'))) {
-          warnings.push(formatBuildCheckSkippedWarning());
-        }
         await recordFinalUploadHistoryClient({
           status: 'success',
           body: buildSourceUploadSuccessBody(
@@ -936,7 +907,6 @@ export function SourceCodeUploaderContent() {
           version: typeof json.bundleRoot === 'string' ? json.bundleRoot : undefined,
         });
       }
-      buildCheckSkippedRef.current = false;
 
       setProgressPct(100);
       appendLog('업로드 전체 완료');
@@ -995,6 +965,8 @@ export function SourceCodeUploaderContent() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+      {typeCheckModal}
+
       {dbConfirm?.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded border bg-background p-4 shadow-lg">
@@ -1041,38 +1013,6 @@ export function SourceCodeUploaderContent() {
         </div>
       )}
 
-      {buildCheckSkipConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded border bg-background p-4 shadow-lg">
-            <div className="mb-2 text-sm font-medium">빌드 검사를 하지 않았습니다.</div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              빌드 검사 없이 현재 코드를 바로 업로드하시겠습니까?
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                title="중단"
-                onClick={() => setBuildCheckSkipConfirmOpen(false)}
-              >
-                중단
-              </Button>
-              <Button
-                type="button"
-                title="계속 진행"
-                onClick={() => {
-                  setBuildCheckSkipConfirmOpen(false);
-                  buildCheckSkippedRef.current = true;
-                  void runUploadCurrentWorkspace(false);
-                }}
-              >
-                계속 진행
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex shrink-0 gap-1 border-b text-sm">
         <button
           type="button"
@@ -1081,7 +1021,7 @@ export function SourceCodeUploaderContent() {
               ? 'border-primary font-medium text-foreground'
               : 'border-transparent text-muted-foreground'
           }`}
-          disabled={uploading || buildChecking}
+          disabled={uploading || typeChecking}
           title="설치파일 다운로드"
           onClick={() => handleMainTabChange('install_download')}
         >
@@ -1094,7 +1034,7 @@ export function SourceCodeUploaderContent() {
               ? 'border-primary font-medium text-foreground'
               : 'border-transparent text-muted-foreground'
           }`}
-          disabled={uploading || buildChecking}
+          disabled={uploading || typeChecking}
           title="소스코드 업로드"
           onClick={() => handleMainTabChange('source_upload')}
         >
@@ -1108,14 +1048,11 @@ export function SourceCodeUploaderContent() {
         <>
       <div className="rounded border p-3">
         <p className="mb-2 text-xs text-muted-foreground">
-            - 빌드 검사: 현재 소스 임시 복사본에서 npm run build해 빌드 가능한 상태인지 검사
-        </p>
-        <p className="mb-2 text-xs text-muted-foreground">
-            - 현재 코드 자동 업로드: GNMS로 현재 소스 업로드
+            - 현재 코드 자동 업로드: GNMS로 현재 소스 업로드 (실행 전 타입 검사)
         </p>
         <div className="mb-2 flex items-center gap-3 text-sm">
           <label className="flex items-center gap-1">
-            <input type="radio" checked={mode === 'install'} onChange={() => setMode('install')} disabled={uploading || buildChecking} />
+            <input type="radio" checked={mode === 'install'} onChange={() => setMode('install')} disabled={uploading || typeChecking} />
             설치
           </label>
           <label className="flex items-center gap-1 opacity-50">
@@ -1135,7 +1072,7 @@ export function SourceCodeUploaderContent() {
               type="radio"
               checked={includeNodeModules}
               onChange={() => setIncludeNodeModules(true)}
-              disabled={uploading || buildChecking}
+              disabled={uploading || typeChecking}
             />
             node_modules 포함
           </label>
@@ -1144,7 +1081,7 @@ export function SourceCodeUploaderContent() {
               type="radio"
               checked={!includeNodeModules}
               onChange={() => setIncludeNodeModules(false)}
-              disabled={uploading || buildChecking}
+              disabled={uploading || typeChecking}
             />
             node_modules 미포함
           </label>
@@ -1155,55 +1092,38 @@ export function SourceCodeUploaderContent() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            disabled={uploading || buildChecking}
+            disabled={uploading || typeChecking}
           />
           <input
             className="h-9 rounded border px-2 text-sm md:col-span-2"
             placeholder="변경 사항 메모 (선택)"
             value={changeNote}
             onChange={(e) => setChangeNote(e.target.value)}
-            disabled={uploading || buildChecking}
+            disabled={uploading || typeChecking}
           />
         </div>
         <div className="mt-3 flex items-center gap-2">
           <Button
-              type="button"
-              variant="outline"
-              disabled={uploading || buildChecking}
-              title="빌드 확인 (demo env · NODE_ENV=production · 임시 복사본 · 원본 무영향)"
-              onClick={() => void runBuildCheck()}
-              className="gap-1"
-            >
-              {buildChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hammer className="h-4 w-4" />}
-              빌드 검사
-          </Button>
-          <Button
             type="button"
-            disabled={uploading || buildChecking}
+            disabled={uploading || typeChecking}
             title="현재 코드 자동 업로드"
-            onClick={() => {
-              if (!buildCheckCompletedOnceRef.current) {
-                setBuildCheckSkipConfirmOpen(true);
-                return;
-              }
-              void runUploadCurrentWorkspace(false);
-            }}
+            onClick={() => void startUploadWithTypeCheck()}
             className="gap-1"
           >
-            <Upload className="h-4 w-4" />
+            {typeChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             현재 코드 자동 업로드
           </Button>
           <Button
             type="button"
             variant="outline"
             disabled={
-              buildChecking
+              typeChecking
                 ? false
                 : !uploading || cancelBlocked
             }
             title={
-              buildChecking
-                ? '빌드 검사 취소'
+              typeChecking
+                ? '타입 검사 취소'
                 : cancelBlocked
                   ? cancelBlockedTitle
                   : uploading
@@ -1211,8 +1131,8 @@ export function SourceCodeUploaderContent() {
                     : '취소'
             }
             onClick={() => {
-              if (buildChecking) {
-                buildAbortRef.current?.abort();
+              if (typeChecking) {
+                abortTypeCheck();
                 return;
               }
               if (cancelBlocked) return;

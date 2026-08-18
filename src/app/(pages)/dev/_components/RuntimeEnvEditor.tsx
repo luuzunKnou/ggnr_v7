@@ -16,6 +16,7 @@ import { randomId } from "@/lib/randomId"
 import { Plus, Trash2 } from "lucide-react"
 
 type EnvRow = { id: string; key: string; value: string }
+type Scope = "project" | "common"
 
 function rowsFromServer(rows: { key: string; value: string }[]): EnvRow[] {
   return rows.map((r, i) => ({
@@ -26,6 +27,7 @@ function rowsFromServer(rows: { key: string; value: string }[]): EnvRow[] {
 }
 
 export function RuntimeEnvEditor() {
+  const [scope, setScope] = useState<Scope>("project")
   const [rows, setRows] = useState<EnvRow[]>([])
   const [meta, setMeta] = useState<{ project: string; path: string } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,14 +37,14 @@ export function RuntimeEnvEditor() {
   const skipNextSave = useRef(true)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (nextScope: Scope) => {
     setLoading(true)
     setError(null)
     setStatus(null)
     try {
       const res = await call("", "POST", {
         service: "configService",
-        action: "getRuntimeEnvRows",
+        action: nextScope === "common" ? "getCommonRuntimeEnvRows" : "getRuntimeEnvRows",
         params: {},
       })
       if (!res.success) throw new Error(res.error ?? "조회 실패")
@@ -63,28 +65,31 @@ export function RuntimeEnvEditor() {
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    void load(scope)
+  }, [load, scope])
 
-  const persist = useCallback(async (nextRows: EnvRow[]) => {
-    setSaving(true)
-    setError(null)
-    setStatus(null)
-    try {
-      const payload = nextRows.map(({ key, value }) => ({ key, value }))
-      const res = await call("", "POST", {
-        service: "configService",
-        action: "saveRuntimeEnvRows",
-        params: { rows: payload },
-      })
-      if (!res.success) throw new Error(res.error ?? "저장 실패")
-      setStatus("파일에 반영되었습니다.")
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "저장 실패")
-    } finally {
-      setSaving(false)
-    }
-  }, [])
+  const persist = useCallback(
+    async (nextRows: EnvRow[], nextScope: Scope) => {
+      setSaving(true)
+      setError(null)
+      setStatus(null)
+      try {
+        const payload = nextRows.map(({ key, value }) => ({ key, value }))
+        const res = await call("", "POST", {
+          service: "configService",
+          action: nextScope === "common" ? "saveCommonRuntimeEnvRows" : "saveRuntimeEnvRows",
+          params: { rows: payload },
+        })
+        if (!res.success) throw new Error(res.error ?? "저장 실패")
+        setStatus("파일에 반영되었습니다.")
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "저장 실패")
+      } finally {
+        setSaving(false)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     if (loading || !meta) return
@@ -95,12 +100,12 @@ export function RuntimeEnvEditor() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null
-      void persist(rows)
+      void persist(rows, scope)
     }, 550)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
-  }, [rows, loading, meta, persist])
+  }, [rows, loading, meta, persist, scope])
 
   const updateRow = (id: string, patch: Partial<Pick<EnvRow, "key" | "value">>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -114,6 +119,16 @@ export function RuntimeEnvEditor() {
     setRows((prev) => prev.filter((r) => r.id !== id))
   }
 
+  const switchScope = (next: Scope) => {
+    if (next === scope) return
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    skipNextSave.current = true
+    setScope(next)
+  }
+
   if (loading && !meta) {
     return <p className="text-sm text-muted-foreground">불러오는 중…</p>
   }
@@ -122,7 +137,7 @@ export function RuntimeEnvEditor() {
     return (
       <div className="space-y-2">
         <p className="text-sm text-destructive">{error}</p>
-        <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+        <Button type="button" variant="outline" size="sm" onClick={() => void load(scope)} title="다시 시도">
           다시 시도
         </Button>
       </div>
@@ -131,17 +146,47 @@ export function RuntimeEnvEditor() {
 
   return (
     <div className="flex flex-col gap-3 min-h-0 w-full">
+      <div className="flex shrink-0 gap-1 border-b text-sm">
+        <button
+          type="button"
+          title="프로젝트"
+          className={`cursor-pointer border-b-2 px-3 py-2 ${
+            scope === "project"
+              ? "border-primary font-medium text-foreground"
+              : "border-transparent text-muted-foreground"
+          }`}
+          onClick={() => switchScope("project")}
+        >
+          프로젝트
+        </button>
+        <button
+          type="button"
+          title="공용"
+          className={`cursor-pointer border-b-2 px-3 py-2 ${
+            scope === "common"
+              ? "border-primary font-medium text-foreground"
+              : "border-transparent text-muted-foreground"
+          }`}
+          onClick={() => switchScope("common")}
+        >
+          공용
+        </button>
+      </div>
+
       {meta ? (
         <div className="text-xs text-muted-foreground space-y-0.5 font-mono break-all">
           <div>
-            프로젝트: <span className="text-foreground/90">{meta.project}</span>
+            {scope === "common" ? "범위" : "프로젝트"}:{" "}
+            <span className="text-foreground/90">
+              {scope === "common" ? "전체 프로젝트 내 공용 사용되는 값 관리" : meta.project}
+            </span>
           </div>
           <div>{meta.path}</div>
         </div>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="secondary" size="sm" onClick={addRow} className="gap-1">
+        <Button type="button" variant="secondary" size="sm" onClick={addRow} className="gap-1" title="행 추가">
           <Plus className="h-4 w-4" />
           행 추가
         </Button>
@@ -150,9 +195,10 @@ export function RuntimeEnvEditor() {
           variant="outline"
           size="sm"
           disabled={saving}
+          title="파일에서 다시 읽기"
           onClick={() => {
             skipNextSave.current = true
-            void load()
+            void load(scope)
           }}
         >
           파일에서 다시 읽기
@@ -210,6 +256,7 @@ export function RuntimeEnvEditor() {
                       className="h-7 w-9 text-muted-foreground hover:text-destructive"
                       onClick={() => removeRow(r.id)}
                       aria-label="행 삭제"
+                      title="행 삭제"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -223,6 +270,9 @@ export function RuntimeEnvEditor() {
 
       <p className="text-xs text-muted-foreground">
         입력 후 잠시 두면 자동으로 디스크에 저장됩니다. 서버는 매 요청마다 파일을 다시 읽으므로 재시작 없이 반영됩니다.
+        {scope === "common"
+          ? " 공용 탭 저장 시 파일의 주석 줄은 유지되지 않을 수 있습니다."
+          : null}
       </p>
     </div>
   )

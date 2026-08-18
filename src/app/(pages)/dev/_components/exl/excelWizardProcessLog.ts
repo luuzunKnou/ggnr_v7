@@ -52,6 +52,8 @@ export function buildExcelWizardClosingLines(p: {
   defineResult: string;
   geoserverResult: string;
   fieldMapResult?: string;
+  /** 행정리→법정리 보정 후 지오코딩/지적 성공 */
+  hangjeongRiFixOk?: number;
 }): string[] {
   const lines = [
     '',
@@ -60,12 +62,17 @@ export function buildExcelWizardClosingLines(p: {
     `좌표 획득: 성공 ${p.coordOk} / 실패 ${p.coordFail}`,
     `PNU 폴백: 시도 ${p.pnuAttempt} / 성공 ${p.pnuOk}`,
     `지적 매칭: 성공 ${p.jijukOk} / 미매칭 ${p.jijukNull}`,
+  ];
+  if ((p.hangjeongRiFixOk ?? 0) > 0) {
+    lines.push(`행정리→법정리 보정 성공: ${p.hangjeongRiFixOk}건`);
+  }
+  lines.push(
     `DB 삽입: ${p.insertCount}행`,
     '',
     '======== 후처리 ========',
     `레이어 정의: ${p.defineResult}`,
     `GeoServer: ${p.geoserverResult}`,
-  ];
+  );
   if (p.fieldMapResult) lines.push(`필드명 맵: ${p.fieldMapResult}`);
   lines.push(`종료: ${p.endedAtLabel}`, `소요: ${p.durationLabel}`, '========');
   return lines;

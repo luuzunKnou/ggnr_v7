@@ -128,7 +128,7 @@ export function LandLinkageLegend({
   if (!set.size && !showFail) return null;
   return (
     <p className="text-[10px] leading-relaxed text-slate-600">
-      {showJijukHint ? <span className="mr-2">PNU·지번·면적 = 지적 DB</span> : null}
+      {showJijukHint ? <span className="mr-2">주소·면적 = 지적 DB</span> : null}
       {set.has('kras') ? <span className="mr-2 font-medium text-blue-700">파랑·행망</span> : null}
       {set.has('koreps') ? <span className="mr-2 font-medium text-indigo-700">남색·코렙스</span> : null}
       {set.has('vworld') ? <span className="mr-2 font-medium text-emerald-700">초록·브이월드</span> : null}

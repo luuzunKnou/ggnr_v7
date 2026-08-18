@@ -251,8 +251,9 @@ function normalizeEupmyeonDong(raw: string): string {
 
 /**
  * 읍면동·지번만으로 본번/부번·산 여부를 분해.
- * excelUploadService.parseAddressForPnu 는 전체 주소에서 «산»을 무차별 제거해
- * «구산리» → «구 리» 로 깨지므로 보상편입용지는 별도 파서를 쓴다.
+ * excelUploadService.parseAddressForPnu(현: excelUploadAddressNormalize) 예전에는
+ * 전체 주소에서 «산»을 무차별 제거해 «구산리» → «구 리» 로 깨졌음.
+ * 보상편입용지는 지번 앞 «산»만 산 지번으로 보는 별도 파서를 유지한다.
  */
 function parseEmdJibunForPnu(
   eupmyeonDong: string,
@@ -305,20 +306,31 @@ async function resolveRiCd(emdName: string, riName: string): Promise<string | nu
   }
   if (!emdCd) return null;
 
+  // 행정리(서부3리) → 법정리(서부리) 폴백 — 지적 PNU는 법정리 기준
+  const toBeopjeongRi = (n: string) => {
+    const t = n.trim();
+    const m = t.match(/^(.+?)\d+리$/u);
+    return m ? `${m[1]}리` : t;
+  };
+  const riCandidates = [riName, toBeopjeongRi(riName)].filter(
+    (n, i, arr) => n && arr.indexOf(n) === i
+  );
   const riNameCols = ['ri_nm', 'adm_nm', 'name'];
-  for (const col of riNameCols) {
-    try {
-      const res = await db.execute(
-        sql.raw(
-          `SELECT ri_cd AS code FROM public_layer.ri
-           WHERE ri_cd LIKE '${esc(emdCd)}%' AND ${quoteIdent(col)} = '${esc(riName)}'
-           LIMIT 1`
-        )
-      );
-      const code = String((res.rows?.[0] as { code?: string } | undefined)?.code ?? '').trim();
-      if (code) return code;
-    } catch {
-      /* ignore */
+  for (const candidate of riCandidates) {
+    for (const col of riNameCols) {
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT ri_cd AS code FROM public_layer.ri
+             WHERE ri_cd LIKE '${esc(emdCd)}%' AND ${quoteIdent(col)} = '${esc(candidate)}'
+             LIMIT 1`
+          )
+        );
+        const code = String((res.rows?.[0] as { code?: string } | undefined)?.code ?? '').trim();
+        if (code) return code;
+      } catch {
+        /* ignore */
+      }
     }
   }
   return null;

@@ -107,6 +107,12 @@ export const useParcelAnalysisAreaLayer = useAnalysisAreaLayer;
  */
 const TARGET_VIEWPORT_FILL = 1.5;
 
+/**
+ * 진입 시 시군구 맞춤을 건너뛸 최소 줌.
+ * 이미 동네·필지 스케일(16~19)이면 강제 축소하지 않고 현재 뷰를 유지한다.
+ */
+const SKIP_PROJECT_FIT_MIN_ZOOM = 16;
+
 function extent5181To3857(
   minX: number,
   minY: number,
@@ -137,8 +143,8 @@ function extent5181To3857(
 }
 
 /**
- * 필지분석 진입 시 사업 시군구(schema.emd 전체) 범위를 중심 좌표 기준으로 확대.
- * 좌측 패널이 없는 진입 단계에서 대상 지역을 크게 보여주기 위한 용도.
+ * 필지분석·변동이력 진입 시 사업 시군구(schema.emd 전체) 범위를 중심 기준으로 맞춤.
+ * 현재 줌이 16 이상이면 맞춤을 생략하고 화면을 유지한다.
  */
 export function useAnalysisProjectMapZoom() {
   const mapContext = useMapContext();
@@ -148,6 +154,14 @@ export function useAnalysisProjectMapZoom() {
     if (zoomedRef.current) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
+
+    const view = map.getView();
+    const currentZoom = view.getZoom();
+    // 확대된 상태(16+)에서는 시군구로 강제 축소하지 않음 — 필지·변동이력 공용
+    if (currentZoom != null && Number.isFinite(currentZoom) && currentZoom >= SKIP_PROJECT_FIT_MIN_ZOOM) {
+      zoomedRef.current = true;
+      return;
+    }
 
     try {
       const res = await call('', 'POST', {
@@ -171,7 +185,6 @@ export function useAnalysisProjectMapZoom() {
       const extentHeight = ymax - ymin;
 
       const size = map.getSize();
-      const view = map.getView();
       if (!size || extentWidth <= 0 || extentHeight <= 0) return;
 
       // 좌측 패널이 없는 진입 단계 — 사이드바 패딩만 가시영역에서 제외

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { RefreshCw } from 'lucide-react';
@@ -18,6 +19,7 @@ type SignUpRow = {
   usrReqTime: string | null;
   usrOkTime: string | null;
   usrCancleTime: string | null;
+  usrRejectReason: string | null;
 };
 
 type StatusFilter = 'all' | 'pending' | 'rejected';
@@ -76,6 +78,8 @@ export function SignUpApprove() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReasonDraft, setRejectReasonDraft] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +98,10 @@ export function SignUpApprove() {
           usrCancleTime:
             r.usrCancleTime ??
             (r as { usr_cancle_time?: string | null }).usr_cancle_time ??
+            null,
+          usrRejectReason:
+            r.usrRejectReason ??
+            (r as { usr_reject_reason?: string | null }).usr_reject_reason ??
             null,
         }))
       );
@@ -130,6 +138,7 @@ export function SignUpApprove() {
         return;
       }
       setMsg(`승인됨: ${usrId}`);
+      setRejectingId((id) => (id === usrId ? null : id));
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '승인 실패');
@@ -138,8 +147,19 @@ export function SignUpApprove() {
     }
   }
 
-  async function reject(usrId: string) {
-    if (!window.confirm(`${usrId} 가입 신청을 반려할까요?`)) return;
+  function openReject(usrId: string) {
+    setRejectingId(usrId);
+    setRejectReasonDraft('');
+    setMsg('');
+    setError(null);
+  }
+
+  function cancelReject() {
+    setRejectingId(null);
+    setRejectReasonDraft('');
+  }
+
+  async function confirmReject(usrId: string) {
     setBusyId(usrId);
     setMsg('');
     setError(null);
@@ -147,7 +167,10 @@ export function SignUpApprove() {
       const res = await call('', 'POST', {
         service: 'usrService',
         action: 'rejectSignUp',
-        params: { usr_id: usrId },
+        params: {
+          usr_id: usrId,
+          reject_reason: rejectReasonDraft.trim() || null,
+        },
       });
       const inner = res.data as { success?: boolean; error?: string } | undefined;
       if (inner?.success === false) {
@@ -156,13 +179,8 @@ export function SignUpApprove() {
       }
       setMsg(`반려됨: ${usrId}`);
       setFilter((f) => (f === 'pending' ? 'all' : f));
-      setRows((prev) =>
-        prev.map((r) =>
-          r.usrId === usrId
-            ? { ...r, usrCancleTime: new Date().toISOString(), usrOkTime: null }
-            : r
-        )
-      );
+      setRejectingId(null);
+      setRejectReasonDraft('');
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '반려 실패');
@@ -224,7 +242,7 @@ export function SignUpApprove() {
       </div>
 
       <div className={uiStyle.tableWrap}>
-        <table className={cn(uiStyle.table, 'min-w-[64rem] table-fixed')}>
+        <table className={cn(uiStyle.table, 'min-w-[72rem] table-fixed')}>
           <thead className={cn('sticky top-0', uiStyle.tableHead)}>
             <tr>
               <th className={cn('w-20 text-left', uiStyle.tableCell)}>상태</th>
@@ -235,19 +253,20 @@ export function SignUpApprove() {
               <th className={cn('w-40 text-left', uiStyle.tableCell)}>이메일</th>
               <th className={cn('w-40 text-left', uiStyle.tableCell)}>비고</th>
               <th className={cn('w-36 text-left', uiStyle.tableCell)}>신청시간</th>
+              <th className={cn('w-40 text-left', uiStyle.tableCell)}>반려사유</th>
               <th className={cn('w-[8.5rem] text-left', uiStyle.tableCell)}>처리</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={9}>
+                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={10}>
                   불러오는 중…
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={9}>
+                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={10}>
                   {emptyText}
                 </td>
               </tr>
@@ -297,37 +316,92 @@ export function SignUpApprove() {
                     <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
                       {formatTime(r.usrReqTime)}
                     </td>
+                    <td
+                      className={cn('truncate', uiStyle.tableCell)}
+                      title={
+                        status === 'rejected' && r.usrRejectReason?.trim()
+                          ? r.usrRejectReason
+                          : undefined
+                      }
+                    >
+                      {status === 'rejected'
+                        ? r.usrRejectReason?.trim()
+                          ? r.usrRejectReason
+                          : '—'
+                        : '—'}
+                    </td>
                     <td className={uiStyle.tableCell}>
                       {pending ? (
-                        <div className="flex flex-nowrap gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className={cn(
-                              'h-6 rounded-none px-2 text-[11px]',
-                              uiStyle.primaryButton
-                            )}
-                            disabled={busyId === r.usrId}
-                            onClick={() => void approve(r.usrId)}
-                            title={`${r.usrId} 승인`}
-                          >
-                            승인
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className={cn(
-                              'h-6 rounded-none px-2 text-[11px]',
-                              uiStyle.secondaryButton
-                            )}
-                            disabled={busyId === r.usrId}
-                            onClick={() => void reject(r.usrId)}
-                            title={`${r.usrId} 반려`}
-                          >
-                            반려
-                          </Button>
-                        </div>
+                        rejectingId === r.usrId ? (
+                          <div className="flex flex-col gap-1.5">
+                            <Input
+                              placeholder="반려 사유 (선택)"
+                              className="h-7 rounded-none text-xs"
+                              value={rejectReasonDraft}
+                              onChange={(e) => setRejectReasonDraft(e.target.value)}
+                              disabled={busyId === r.usrId}
+                              title="반려 사유"
+                              autoFocus
+                            />
+                            <div className="flex flex-wrap gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className={cn(
+                                  'h-6 rounded-none px-2 text-[11px]',
+                                  uiStyle.secondaryButton
+                                )}
+                                disabled={busyId === r.usrId}
+                                onClick={() => void confirmReject(r.usrId)}
+                                title={`${r.usrId} 반려 확정`}
+                              >
+                                반려 확정
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 rounded-none px-2 text-[11px]"
+                                disabled={busyId === r.usrId}
+                                onClick={cancelReject}
+                                title="반려 취소"
+                              >
+                                취소
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-nowrap gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className={cn(
+                                'h-6 rounded-none px-2 text-[11px]',
+                                uiStyle.primaryButton
+                              )}
+                              disabled={busyId === r.usrId}
+                              onClick={() => void approve(r.usrId)}
+                              title={`${r.usrId} 승인`}
+                            >
+                              승인
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className={cn(
+                                'h-6 rounded-none px-2 text-[11px]',
+                                uiStyle.secondaryButton
+                              )}
+                              disabled={busyId === r.usrId}
+                              onClick={() => openReject(r.usrId)}
+                              title={`${r.usrId} 반려`}
+                            >
+                              반려
+                            </Button>
+                          </div>
+                        )
                       ) : (
                         <span className="text-[11px] text-muted-foreground">—</span>
                       )}

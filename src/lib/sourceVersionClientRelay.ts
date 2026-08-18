@@ -11,6 +11,7 @@ export type VersionRelayPhase =
   | 'relay-init'
   | 'relay-chunk'
   | 'relay-complete'
+  | 'type-check'
   | 'merge-apply'
   | 'geoserver'
   | 'geoserver-stop'

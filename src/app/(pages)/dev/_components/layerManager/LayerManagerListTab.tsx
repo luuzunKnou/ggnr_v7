@@ -341,7 +341,7 @@ export function LayerManagerListTab() {
   const loadRowMeta = useCallback(async () => {
     setMetaLoading(true)
     try {
-      const [layerRes, publicRes, excelRes] = await Promise.all([
+      const [layerRes, publicRes, excelRes, histDatesRes] = await Promise.all([
         call("", "POST", {
           service: "shpUploadService",
           action: "getLayerStatusList",
@@ -355,6 +355,11 @@ export function LayerManagerListTab() {
         call("", "POST", {
           service: "excelUploadService",
           action: "getExcelDataStatusList",
+          params: {},
+        }),
+        call("", "POST", {
+          service: "layerHistoryService",
+          action: "getLatestHistoryDatesByTables",
           params: {},
         }),
       ])
@@ -387,6 +392,16 @@ export function LayerManagerListTab() {
           if (r.lastCreateDate) {
             dateMap[name] = pickLatestDate(dateMap[name], r.lastCreateDate) ?? r.lastCreateDate
           }
+        }
+      }
+
+      // SHP·Excel·시스템 UI 통합 최신일 — 모달 최신과 목록 갱신일 맞춤
+      const hd = histDatesRes?.data ?? histDatesRes
+      if (hd?.success && hd.dates && typeof hd.dates === "object") {
+        for (const [name, raw] of Object.entries(hd.dates as Record<string, string>)) {
+          const key = String(name).toLowerCase()
+          if (!key || !raw) continue
+          dateMap[key] = pickLatestDate(dateMap[key], raw) ?? raw
         }
       }
 

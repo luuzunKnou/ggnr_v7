@@ -60,7 +60,7 @@ export function GeocodingTestPanel() {
       ? `로드됨 (${apiKey.length}자, 끝 4자 …${apiKey.slice(-4)})`
       : apiKey
         ? "로드됨"
-        : "없음 (runtime.env 의 VWORLD_API_KEY 확인)";
+        : "없음 (시스템 변수 «공용» 탭의 VWORLD_API_KEY 확인)";
 
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-1 text-sm">
