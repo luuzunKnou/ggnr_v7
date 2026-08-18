@@ -1,6 +1,4 @@
-/**
- * 클라이언트 API 유틸리티
- */
+import { notifyAuthRequired } from '@/lib/authRequiredEvent';
 
 const API_BASE_URL = '/api';
 
@@ -76,10 +74,12 @@ export function call(
     .then((response) => {
       if (response.status === 401 || response.status === 403) {
         clearSession();
-        return Promise.reject({
-          status: response.status,
-          message: response.status === 401 ? 'Unauthorized' : 'Forbidden',
-        });
+        if (response.status === 401) notifyAuthRequired();
+        const err = new Error(
+          response.status === 401 ? '로그인이 필요합니다.' : '권한이 없습니다.'
+        ) as Error & { status: number };
+        err.status = response.status;
+        return Promise.reject(err);
       }
 
       return response.text().then((text) => {
