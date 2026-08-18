@@ -13,9 +13,10 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { useSession } from 'next-auth/react';
 import { useChunkedUpload, folderUploadOverallPercent } from '../useChunkedUpload';
-import { Check, Loader2, X, ChevronLeft, ChevronRight, Minus, AlertTriangle, Download } from 'lucide-react';
+import { Check, Loader2, X, ChevronLeft, ChevronRight, ChevronDown, Minus, AlertTriangle, Download } from 'lucide-react';
 import { cn, copyTextToClipboard } from '@/lib/utils';
 import { parseShpFolderName } from './parseShpFolderMeta';
+import { shpTableNameFromRelPath } from '@/lib/shpTableName';
 import { type FolderPickFile } from './pickShpFolderFiles';
 import { SyncDetailModal } from './SyncDetailModal';
 import { isShpSyncDetailModalTarget } from './shpModalLayers';
@@ -99,13 +100,13 @@ type ConsistencyRow = {
 };
 
 function tableNameFromShpPath(pathOrResult: string, sourceFile: string): string {
-  const base = pathOrResult.split(/[/\\]/).pop() ?? sourceFile;
-  return base.replace(/\.shp$/i, '');
+  return shpTableNameFromRelPath(pathOrResult || sourceFile);
 }
 
 /** defineLayer 매칭용 — 서버 safeTableName과 동일 규칙 */
 function defineTableNameFromShpFile(fileName: string): string {
-  const base = fileName.replace(/\.shp$/i, '');
+  const leaf = fileName.split(/[/\\]/).pop() ?? fileName;
+  const base = leaf.replace(/\.shp$/i, '');
   const s = base.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'layer_table';
   return s.toLowerCase();
 }
@@ -389,6 +390,21 @@ function folderNameFromLocalFiles(files: FolderPickFile[]): string {
   return 'uploaded_folder';
 }
 
+/** 선택한 폴더 기준 상대경로 (하위 폴더/파일.shp). 메타는 상위 폴더명만 사용 */
+function shpRelFromLocalFile(file: FolderPickFile): string {
+  const rel = file.webkitRelativePath?.replace(/\\/g, '/') ?? file.name;
+  const parts = rel.split('/').filter(Boolean);
+  if (parts.length >= 2) return parts.slice(1).join('/');
+  return file.name;
+}
+
+function layerRelFromReadyPath(pathOrResult: string, ready: string | null): string {
+  const p = pathOrResult.replace(/\\/g, '/');
+  const prefix = (ready ?? '').replace(/\\/g, '/').replace(/\/$/, '');
+  if (prefix && p.startsWith(`${prefix}/`)) return p.slice(prefix.length + 1);
+  return p.split('/').pop() ?? p;
+}
+
 function StatusCell({ ok }: { ok: boolean }) {
   return ok ? (
     <Check className="mx-auto h-3.5 w-3.5 text-green-600" aria-label="존재" />
@@ -491,6 +507,8 @@ export function ShpWizardModal({
   const [targetDbSchema, setTargetDbSchema] = useState<'layer' | 'public_layer'>('layer');
   /** 사용자가 라디오를 직접 바꾼 뒤에는 define 자동선택을 덮어쓰지 않음 */
   const targetDbSchemaTouchedRef = useRef(false);
+  /** 1단계 그룹명·저장 스키마 (상세 옵션) */
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [folderEpsg, setFolderEpsg] = useState<string | null>(null);
   type CrsDetectionResult = { candidates: ShpCrsCandidate[]; reference5181?: ShpCrsCandidate };
   const [crsCandidatesByFile, setCrsCandidatesByFile] = useState<Record<string, CrsDetectionResult>>({});
@@ -500,7 +518,7 @@ export function ShpWizardModal({
   const [crsCandidates, setCrsCandidates] = useState<ShpCrsCandidate[]>([]);
   const [crsReference5181, setCrsReference5181] = useState<ShpCrsCandidate | undefined>(undefined);
   const [crsCandidateGeojson, setCrsCandidateGeojson] = useState<Record<string, unknown> | null>(null);
-  /** 좌표계 확인 미리보기 로딩 중인 파일 경로(pathOrResult). null이면 대기 */
+  /** 좌표계 미리보기 로딩 중인 파일 경로(pathOrResult). null이면 대기 */
   const [crsModalLoadingPath, setCrsModalLoadingPath] = useState<string | null>(null);
   const crsDetectStartedRef = useRef(false);
   const [layers, setLayers] = useState<LayerRow[]>([]);
@@ -578,6 +596,7 @@ export function ShpWizardModal({
     setGroupName('');
     setTargetDbSchema('layer');
     targetDbSchemaTouchedRef.current = false;
+    setShowAdvancedOptions(false);
     workNameRef.current = '';
     groupNameRef.current = '';
     setFolderEpsg(null);
@@ -650,9 +669,9 @@ export function ShpWizardModal({
           ? ((shpRelated[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.replace(/\\/g, '/') ??
             shpRelated[0].name)
           : '';
-        const parts = slashPath.split('/');
-        if (parts.length > 1) {
-          return `shp_data/${parts.slice(0, -1).join('/')}`;
+        const parts = slashPath.split('/').filter(Boolean);
+        if (parts.length > 0) {
+          return `shp_data/${parts[0]}`;
         }
         const rp = relativePath.replace(/\\/g, '/').replace(/\/$/, '');
         return `${rp}/${local.folderName}`;
@@ -670,7 +689,7 @@ export function ShpWizardModal({
     const res = await call('', 'POST', {
       service: 'shpUploadService',
       action: 'getShpStatusList',
-      params: { relativePath: path },
+      params: { relativePath: path, recursive: true },
     });
     const data = res?.data ?? res;
     return (data?.rows ?? []) as ShpStatusRow[];
@@ -1240,6 +1259,7 @@ export function ShpWizardModal({
           relativePath: relPath,
           dbSchema: targetDbSchema,
           waiversByFile,
+          recursive: true,
         },
       });
       const d = res?.data ?? res;
@@ -1591,18 +1611,18 @@ export function ShpWizardModal({
       step1NextClickRef.current = 0;
       try {
         const res = await call('', 'POST', {
-          service: 'fileManagerService',
-          action: 'listDirectory',
-          params: { relativePath: relPath },
+          service: 'shpUploadService',
+          action: 'getShpStatusList',
+          params: { relativePath: relPath, recursive: true },
         });
         const data = res?.data ?? res;
-        const shpFiles: LayerRow[] = (data?.files ?? [])
-          .filter((f: { name: string }) => /\.shp$/i.test(f.name))
-          .map((f: { name: string; size: number; modified?: string }) => ({
-            name: f.name,
-            size: f.size,
-            modified: f.modified,
-          }));
+        const shpFiles: LayerRow[] = (data?.rows ?? []).map(
+          (r: { sourceFile: string; size?: number; at?: string }) => ({
+            name: r.sourceFile,
+            size: r.size,
+            modified: r.at,
+          })
+        );
 
         if (shpFiles.length === 0) {
           setLayersError('선택한 폴더에 SHP 파일이 없습니다.');
@@ -1637,8 +1657,6 @@ export function ShpWizardModal({
     void loadServerFolder(serverFolderSelection.relativePath, serverFolderSelection.folderName);
     onClearServerFolderSelection?.();
   }, [open, serverFolderSelection, loadServerFolder, onClearServerFolderSelection]);
-
-  const fileNameOfPath = (pathOrResult: string) => pathOrResult.split(/[\\/]/).pop() ?? pathOrResult;
 
   const setLayerEpsg = useCallback((fileName: string, epsg: number | null, epsgSource: EpsgSource) => {
     setLayers((prev) => prev.map((l) => (l.name === fileName ? { ...l, epsg, epsgSource, crsChecked: true } : l)));
@@ -1734,10 +1752,10 @@ export function ShpWizardModal({
   // 행의 "확인" 버튼: 캐시된 후보(없으면 재조회) + 미리보기 도형을 불러와 모달로 확인
   const openCrsModalForFile = useCallback(async (pathOrResult: string, currentEpsg: number | null, fileSize?: number | null) => {
     if (crsModalLoadingPath) return;
-    const fileName = fileNameOfPath(pathOrResult);
+    const fileName = layerRelFromReadyPath(pathOrResult, readyPath);
     if (fileSize === 0) {
       markLayerCrsChecked(fileName);
-      setLayersError(`좌표계 확인 (${fileName}): 미리보기할 도형이 없습니다.`);
+      setLayersError(`좌표계 미리보기 (${fileName}): 미리보기할 도형이 없습니다.`);
       return;
     }
     setCrsModalLoadingPath(pathOrResult);
@@ -1755,11 +1773,11 @@ export function ShpWizardModal({
         const cd = candRes?.data ?? candRes;
         if (cd?.emptyShp) {
           markLayerCrsChecked(fileName);
-          setLayersError(`좌표계 확인 (${fileName}): 미리보기할 도형이 없습니다.`);
+          setLayersError(`좌표계 미리보기 (${fileName}): 미리보기할 도형이 없습니다.`);
           return;
         }
         if (cd && cd.success === false) {
-          setLayersError(`좌표계 확인 (${fileName}): 후보 조회 실패 - ${cd.error ?? '알 수 없는 오류'}`);
+          setLayersError(`좌표계 미리보기 (${fileName}): 후보 조회 실패 - ${cd.error ?? '알 수 없는 오류'}`);
           return;
         }
         result = {
@@ -1776,12 +1794,12 @@ export function ShpWizardModal({
       const gd = geoRes?.data ?? geoRes;
       if (gd?.emptyShp) {
         markLayerCrsChecked(fileName);
-        setLayersError(`좌표계 확인 (${fileName}): 미리보기할 도형이 없습니다.`);
+        setLayersError(`좌표계 미리보기 (${fileName}): 미리보기할 도형이 없습니다.`);
         return;
       }
       const geojson = gd?.success && gd.geojson ? (gd.geojson as Record<string, unknown>) : null;
       if (!geojson) {
-        setLayersError(`좌표계 확인 (${fileName}): 미리보기 도형 변환 실패 - ${gd?.error ?? '알 수 없는 오류'}`);
+        setLayersError(`좌표계 미리보기 (${fileName}): 미리보기 도형 변환 실패 - ${gd?.error ?? '알 수 없는 오류'}`);
         return;
       }
       setCrsCandidates(result.candidates);
@@ -1789,16 +1807,16 @@ export function ShpWizardModal({
       setCrsCandidateGeojson(geojson);
       setCrsModalOpen(true);
     } catch (e: unknown) {
-      setLayersError(`좌표계 확인 중 오류 (${fileName}): ${e instanceof Error ? e.message : String(e)}`);
+      setLayersError(`좌표계 미리보기 중 오류 (${fileName}): ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setCrsModalLoadingPath(null);
     }
-  }, [crsCandidatesByFile, crsModalLoadingPath, markLayerCrsChecked]);
+  }, [crsCandidatesByFile, crsModalLoadingPath, markLayerCrsChecked, readyPath]);
 
   const handleCrsConfirm = useCallback((epsg: number) => {
-    if (crsModalTarget) setLayerEpsg(fileNameOfPath(crsModalTarget), epsg, 'candidate');
+    if (crsModalTarget) setLayerEpsg(layerRelFromReadyPath(crsModalTarget, readyPath), epsg, 'candidate');
     setCrsModalOpen(false);
-  }, [crsModalTarget, setLayerEpsg]);
+  }, [crsModalTarget, readyPath, setLayerEpsg]);
 
   const handleCrsCancel = useCallback(() => {
     setCrsModalOpen(false);
@@ -1822,9 +1840,13 @@ export function ShpWizardModal({
       applyFolderMeta(folderName);
       targetDbSchemaTouchedRef.current = false;
       setTargetDbSchema('layer');
-      setLayers(shpFiles.map((f) => ({ name: f.name, size: f.size, schemaStatus: 'pending' as const })));
+      setLayers(shpFiles.map((f) => ({
+        name: shpRelFromLocalFile(f),
+        size: f.size,
+        schemaStatus: 'pending' as const,
+      })));
       setLayersError(null);
-      void syncTargetSchemaFromDefine(shpFiles.map((f) => f.name));
+      void syncTargetSchemaFromDefine(shpFiles.map((f) => shpRelFromLocalFile(f)));
       setReadyPath(null);
       setStatusRows([]);
       setConsistencyRows([]);
@@ -2570,9 +2592,22 @@ export function ShpWizardModal({
                 </div>
 
                 <div className="space-y-3 rounded-md border border-gray-200 bg-muted/30 p-3">
-                  <p className="flex items-center gap-2 text-sm font-medium text-black dark:text-zinc-100">
-                    <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-                    작업명 · 그룹명 · 현황
+                  <p className="flex items-center text-sm font-medium text-black dark:text-zinc-100">
+                    <Check className="mr-2 h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
+                    <span className="mr-4">작업명 · 현황</span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowAdvancedOptions((v) => !v)}
+                      aria-expanded={showAdvancedOptions}
+                    >
+                      {showAdvancedOptions ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                      상세 옵션
+                    </button>
                   </p>
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex flex-col gap-1">
@@ -2585,49 +2620,53 @@ export function ShpWizardModal({
                         disabled={!source || isBusy}
                       />
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">그룹명</span>
-                      <Input
-                        value={groupName}
-                        onChange={(e) => setGroupName(e.target.value)}
-                        className="h-8 w-48 text-sm"
-                        placeholder="그룹명"
-                        disabled={!source || isBusy}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">저장 스키마</span>
-                      <div className="flex h-8 items-center gap-3 px-1">
-                        <label className="inline-flex items-center gap-1.5 text-sm cursor-pointer">
-                          <input
-                            type="radio"
-                            name="shp-target-schema"
-                            className="accent-primary"
-                            checked={targetDbSchema === 'layer'}
-                            onChange={() => {
-                              targetDbSchemaTouchedRef.current = true;
-                              setTargetDbSchema('layer');
-                            }}
-                            disabled={isBusy}
+                    {showAdvancedOptions ? (
+                      <>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">그룹명</span>
+                          <Input
+                            value={groupName}
+                            onChange={(e) => setGroupName(e.target.value)}
+                            className="h-8 w-48 text-sm"
+                            placeholder="그룹명"
+                            disabled={!source || isBusy}
                           />
-                          layer
-                        </label>
-                        <label className="inline-flex items-center gap-1.5 text-sm cursor-pointer">
-                          <input
-                            type="radio"
-                            name="shp-target-schema"
-                            className="accent-primary"
-                            checked={targetDbSchema === 'public_layer'}
-                            onChange={() => {
-                              targetDbSchemaTouchedRef.current = true;
-                              setTargetDbSchema('public_layer');
-                            }}
-                            disabled={isBusy}
-                          />
-                          public_layer
-                        </label>
-                      </div>
-                    </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">저장 스키마</span>
+                          <div className="flex h-8 items-center gap-3 px-1">
+                            <label className="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="shp-target-schema"
+                                className="accent-primary"
+                                checked={targetDbSchema === 'layer'}
+                                onChange={() => {
+                                  targetDbSchemaTouchedRef.current = true;
+                                  setTargetDbSchema('layer');
+                                }}
+                                disabled={isBusy}
+                              />
+                              layer
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="shp-target-schema"
+                                className="accent-primary"
+                                checked={targetDbSchema === 'public_layer'}
+                                onChange={() => {
+                                  targetDbSchemaTouchedRef.current = true;
+                                  setTargetDbSchema('public_layer');
+                                }}
+                                disabled={isBusy}
+                              />
+                              public_layer
+                            </label>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
                     <div className="flex flex-col px-4">
                       <span className="text-xs text-muted-foreground">좌표계 탐지 진행 현황</span>
                       <div className="flex h-8 items-center gap-1.5 px-2">
@@ -2728,7 +2767,7 @@ export function ShpWizardModal({
                                       onClick={() => void openCrsModalForFile(`${readyPath.replace(/\/$/, '')}/${row.name}`, row.epsg ?? null, row.size)}
                                       className="shrink-0 text-[11px] text-blue-600 hover:underline disabled:pointer-events-none disabled:opacity-40 dark:text-blue-400"
                                     >
-                                      {crsModalLoadingPath === `${readyPath.replace(/\/$/, '')}/${row.name}` ? '확인 중…' : row.size === 0 ? '빈 파일' : '확인'}
+                                      {crsModalLoadingPath === `${readyPath.replace(/\/$/, '')}/${row.name}` ? '미리보기 중…' : row.size === 0 ? '빈 파일' : '미리보기'}
                                     </button>
                                   ) : null}
                                 </div>
@@ -3269,7 +3308,7 @@ export function ShpWizardModal({
 
       <ShpCrsCandidateModal
         open={crsModalOpen}
-        fileName={crsModalTarget ? fileNameOfPath(crsModalTarget) : null}
+        fileName={crsModalTarget ? layerRelFromReadyPath(crsModalTarget, readyPath) : null}
         candidates={crsCandidates}
         reference5181={crsReference5181}
         currentEpsg={crsModalCurrentEpsg}
