@@ -1329,16 +1329,27 @@ export async function putGeoServerCssStyle(params: {
 /**
  * elevation 등고선 분류·축척·라벨 CSS를 GeoServer에 올리고 레이어 기본 스타일로 지정
  */
-export async function applyElevationContourStyle(params: { url?: string; workspace?: string } = {}) {
+/** applyDefaultStyleToLayer / applyElevationContourStyle 공통 반환 — success 리터럴로 구분 */
+export type StyleApplyResult =
+  | { success: true; layerName?: string; styleName?: string; created?: boolean }
+  | { success: false; error: string; uploaded?: true };
+
+export async function applyElevationContourStyle(
+  params: { url?: string; workspace?: string } = {}
+): Promise<StyleApplyResult> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = ELEVATION_LAYER_NAME;
   const cssBody = buildElevationContourCss();
 
   try {
-    const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
-    if (!putRes.success) {
-      return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+    let created = false;
+    if (!dataDirCssMatches(layerName, cssBody)) {
+      const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
+      if (!putRes.success) {
+        return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+      }
+      created = putRes.created === true;
     }
 
     const setRes = await setLayerDefaultStyle({
@@ -1359,7 +1370,7 @@ export async function applyElevationContourStyle(params: { url?: string; workspa
       success: true,
       layerName,
       styleName: layerName,
-      created: putRes.created === true,
+      created,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1435,6 +1446,22 @@ function writeCssStyleToDataDir(name: string, cssBody: string): void {
     fs.writeFileSync(path.join(stylesDir, `${name}.css`), cssBody, 'utf-8');
   } catch {
     // non-fatal — GeoServer REST 등록은 이미 됐을 수 있음
+  }
+}
+
+function normalizeCssForCompare(css: string): string {
+  return css.replace(/\r\n/g, '\n').trim();
+}
+
+/** data_dir CSS가 생성본과 같으면 true — 같으면 PUT 생략 (dateModified 유지) */
+function dataDirCssMatches(name: string, cssBody: string): boolean {
+  try {
+    const cssPath = path.join(getStylesDir(), `${name}.css`);
+    if (!fs.existsSync(cssPath)) return false;
+    const existing = fs.readFileSync(cssPath, 'utf-8');
+    return normalizeCssForCompare(existing) === normalizeCssForCompare(cssBody);
+  } catch {
+    return false;
   }
 }
 
@@ -1917,7 +1944,7 @@ export async function applyDefaultStyleToLayer(params: {
   url?: string;
   workspace?: string;
   layerName: string;
-}) {
+}): Promise<StyleApplyResult> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim().toLowerCase();
@@ -2067,7 +2094,7 @@ export async function applyDefaultStyleToLayer(params: {
       styleName: layerName,
     });
     if (!setRes.success) return { success: false, error: setRes.error ?? '스타일 지정 실패' };
-    return { success: true };
+    return { success: true as const };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
