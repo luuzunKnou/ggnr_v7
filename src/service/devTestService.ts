@@ -1343,9 +1343,13 @@ export async function applyElevationContourStyle(
   const cssBody = buildElevationContourCss();
 
   try {
-    const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
-    if (!putRes.success) {
-      return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+    let created = false;
+    if (!dataDirCssMatches(layerName, cssBody)) {
+      const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
+      if (!putRes.success) {
+        return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+      }
+      created = putRes.created === true;
     }
 
     const setRes = await setLayerDefaultStyle({
@@ -1366,7 +1370,7 @@ export async function applyElevationContourStyle(
       success: true,
       layerName,
       styleName: layerName,
-      created: putRes.created === true,
+      created,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1442,6 +1446,22 @@ function writeCssStyleToDataDir(name: string, cssBody: string): void {
     fs.writeFileSync(path.join(stylesDir, `${name}.css`), cssBody, 'utf-8');
   } catch {
     // non-fatal — GeoServer REST 등록은 이미 됐을 수 있음
+  }
+}
+
+function normalizeCssForCompare(css: string): string {
+  return css.replace(/\r\n/g, '\n').trim();
+}
+
+/** data_dir CSS가 생성본과 같으면 true — 같으면 PUT 생략 (dateModified 유지) */
+function dataDirCssMatches(name: string, cssBody: string): boolean {
+  try {
+    const cssPath = path.join(getStylesDir(), `${name}.css`);
+    if (!fs.existsSync(cssPath)) return false;
+    const existing = fs.readFileSync(cssPath, 'utf-8');
+    return normalizeCssForCompare(existing) === normalizeCssForCompare(cssBody);
+  } catch {
+    return false;
   }
 }
 

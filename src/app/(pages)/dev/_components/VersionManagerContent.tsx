@@ -75,7 +75,6 @@ export function VersionManagerContent() {
   const [schemaModalOpen, setSchemaModalOpen] = useState(false);
   const [schemaPreview, setSchemaPreview] = useState<SchemaSyncPreviewResult | null>(null);
   const [schemaPreviewLoading, setSchemaPreviewLoading] = useState(false);
-  const [schemaActionBusy, setSchemaActionBusy] = useState(false);
   const schemaDecisionRef = useRef<((action: 'continue' | 'abort') => void) | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
@@ -173,7 +172,6 @@ export function VersionManagerContent() {
   ): Promise<'continue' | 'abort'> => {
     setSchemaPreviewLoading(true);
     setSchemaPreview(null);
-    setSchemaActionBusy(false);
     setSchemaModalOpen(true);
     pushLog('스키마 변경 미리보기 조회 중…');
     try {
@@ -207,57 +205,51 @@ export function VersionManagerContent() {
     const action = await new Promise<'continue' | 'abort'>((resolve) => {
       schemaDecisionRef.current = (a) => {
         schemaDecisionRef.current = null;
+        setSchemaModalOpen(false);
         resolve(a);
       };
     });
 
     if (!pendingId?.trim()) {
-      setSchemaModalOpen(false);
       throw new Error(
         '스키마 안내 대기 세션이 없습니다. 적용을 다시 시도하거나 서버 로그를 확인하세요.'
       );
     }
 
-    setSchemaActionBusy(true);
-    try {
-      if (action === 'abort') {
-        pushLog('적용 중단 — 직전 소스로 롤백 중…');
-        const res = await fetch('/api/dev/schema-sync/abort', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pendingId }),
-        });
-        const json = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          error?: string;
-          rollbackDetail?: string;
-        };
-        if (!res.ok || json.ok === false) {
-          throw new Error(json.error ?? `중단 실패 (HTTP ${res.status})`);
-        }
-        pushLog(`롤백 완료${json.rollbackDetail ? ` — ${json.rollbackDetail}` : ''}`);
-      } else {
-        pushLog('스키마 안내 확인 — 재기동 예약 중…');
-        const res = await fetch('/api/dev/schema-sync/confirm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pendingId }),
-        });
-        const json = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          error?: string;
-          restart?: { message?: string; scheduled?: boolean };
-        };
-        if (!res.ok || json.ok === false) {
-          throw new Error(json.error ?? `진행 확정 실패 (HTTP ${res.status})`);
-        }
-        if (json.restart?.message) {
-          pushLog(`재시작: ${json.restart.message}`);
-        }
+    if (action === 'abort') {
+      pushLog('적용 중단 — 직전 소스로 롤백 중…');
+      const res = await fetch('/api/dev/schema-sync/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingId }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        rollbackDetail?: string;
+      };
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error ?? `중단 실패 (HTTP ${res.status})`);
       }
-    } finally {
-      setSchemaActionBusy(false);
-      setSchemaModalOpen(false);
+      pushLog(`롤백 완료${json.rollbackDetail ? ` — ${json.rollbackDetail}` : ''}`);
+    } else {
+      pushLog('스키마 안내 확인 — 재기동 예약 중…');
+      const res = await fetch('/api/dev/schema-sync/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingId }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        restart?: { message?: string; scheduled?: boolean };
+      };
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error ?? `진행 확정 실패 (HTTP ${res.status})`);
+      }
+      if (json.restart?.message) {
+        pushLog(`재시작: ${json.restart.message}`);
+      }
     }
 
     return action;
@@ -867,7 +859,6 @@ export function VersionManagerContent() {
         open={schemaModalOpen}
         preview={schemaPreview}
         loading={schemaPreviewLoading}
-        busyAction={schemaActionBusy}
         onContinue={() => {
           schemaDecisionRef.current?.('continue');
         }}
