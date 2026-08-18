@@ -122,113 +122,8 @@ export const MOCK_DRONE_UNITS: WorkUnitItem[] = [
 /** 서버 listWorkUnits(panorama) 로 채움 */
 export const MOCK_PANO_UNITS: WorkUnitItem[] = [];
 
-export const MOCK_SAT_UNITS: WorkUnitItem[] = [
-  {
-    id: 'sat-1',
-    workDate: '2024-01-01',
-    workName: '2024 항공',
-    folderName: '20240101_항공영상_5181_2024 항공',
-    kind: 'satellite',
-    crsHint: '5181',
-    status: 'registered',
-    uploadedAt: '2024-03-12',
-    attrs: [
-      { label: '작업단위 파일명', value: '20240101_항공영상_5181_2024 항공' },
-      { label: '작업일', value: '2024-01-01' },
-      { label: '업로드일', value: '2024-03-12' },
-      { label: '작업명', value: '2024 항공' },
-      { label: '임무/작업 목적', value: '연간 항공영상 갱신' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '상태', value: '배경지도 자체항공영상 등록' },
-    ],
-    files: [
-      {
-        id: 'sf-1',
-        name: 'aerial_2024_n.tif',
-        sizeLabel: '4.2 GB',
-        format: 'tif',
-        status: 'done',
-      },
-      {
-        id: 'sf-2',
-        name: 'aerial_2024_ne.tif',
-        sizeLabel: '3.9 GB',
-        format: 'tif',
-        status: 'done',
-      },
-      {
-        id: 'sf-3',
-        name: 'aerial_2024_c.tif',
-        sizeLabel: '4.0 GB',
-        format: 'tif',
-        status: 'done',
-      },
-    ],
-  },
-  {
-    id: 'sat-2',
-    workDate: '2023-01-01',
-    workName: '2023 항공',
-    folderName: '20230101_항공영상_5181_2023 항공',
-    kind: 'satellite',
-    crsHint: '5181',
-    status: 'registered',
-    uploadedAt: '2023-04-08',
-    attrs: [
-      { label: '작업단위 파일명', value: '20230101_항공영상_5181_2023 항공' },
-      { label: '작업일', value: '2023-01-01' },
-      { label: '업로드일', value: '2023-04-08' },
-      { label: '작업명', value: '2023 항공' },
-      { label: '임무/작업 목적', value: '연간 항공영상 갱신' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '상태', value: '배경지도 자체항공영상 등록' },
-    ],
-    files: [
-      {
-        id: 'sf-4',
-        name: 'aerial_2023_nw.tif',
-        sizeLabel: '3.5 GB',
-        format: 'tif',
-        status: 'done',
-      },
-      {
-        id: 'sf-5',
-        name: 'aerial_2023_n.tif',
-        sizeLabel: '3.6 GB',
-        format: 'tif',
-        status: 'done',
-      },
-    ],
-  },
-  {
-    id: 'sat-3',
-    workDate: '2022-01-01',
-    workName: '2022 항공',
-    folderName: '20220101_항공영상_5181_2022 항공',
-    kind: 'satellite',
-    crsHint: '5181',
-    status: 'converting',
-    uploadedAt: '2022-05-20',
-    attrs: [
-      { label: '작업단위 파일명', value: '20220101_항공영상_5181_2022 항공' },
-      { label: '작업일', value: '2022-01-01' },
-      { label: '업로드일', value: '2022-05-20' },
-      { label: '작업명', value: '2022 항공' },
-      { label: '임무/작업 목적', value: '연간 항공영상 갱신' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '상태', value: '타일 변환 중' },
-    ],
-    files: [
-      {
-        id: 'sf-6',
-        name: 'aerial_2022_c.tif',
-        sizeLabel: '3.1 GB',
-        format: 'tif',
-        status: 'converting',
-      },
-    ],
-  },
-];
+/** 서버 listWorkUnits(satellite) 로 채움 */
+export const MOCK_SAT_UNITS: WorkUnitItem[] = [];
 
 export function mockUnitsForKind(kind: WorkUnitItem['kind']): WorkUnitItem[] {
   switch (kind) {
@@ -428,6 +323,9 @@ export function replaceOrthoUnitsFromServer(
     workName: string;
     workDate: string | null;
     srKey: number | null;
+    workPurpose?: string | null;
+    author?: string | null;
+    memo?: string | null;
     items: Array<{
       tuKey?: number;
       fuKey?: number;
@@ -487,8 +385,8 @@ export function replaceOrthoUnitsFromServer(
         { label: '작업단위', value: workName },
         { label: '작업일', value: workDate },
         { label: '좌표계', value: 'EPSG:5181' },
-        { label: '임무/작업 목적', value: workName },
-        { label: '작성자', value: '—' },
+        { label: '임무/작업 목적', value: u.workPurpose || workName },
+        { label: '작성자', value: u.author || '—' },
         {
           label: '상태',
           value:
@@ -502,11 +400,99 @@ export function replaceOrthoUnitsFromServer(
                     ? '대기'
                     : '폴더생성',
         },
-        { label: '메모', value: '—' },
+        { label: '메모', value: u.memo || '—' },
       ],
       files,
     });
   }
+  emitMockWorkUnits();
+}
+
+/** DB 작업단위 목록으로 항공영상(satellite) 목록 교체 */
+export function replaceSatelliteUnitsFromServer(
+  units: Parameters<typeof replaceOrthoUnitsFromServer>[0]
+): void {
+  MOCK_SAT_UNITS.length = 0;
+  for (const u of units) {
+    const workDate = u.workDate || todayYmd();
+    const workName = u.workName || u.folderName;
+    const files: WorkFileItem[] = u.items.map((m) => {
+      const status = mapConvertStatus(m.convertStatus);
+      const id =
+        m.tuKey != null
+          ? `tu-${m.tuKey}`
+          : m.fuKey != null
+            ? `fu-${m.fuKey}`
+            : `tif-${m.fileName}`;
+      return {
+        id,
+        name: m.fileName,
+        sizeLabel: m.sizeLabel,
+        format: m.format,
+        status,
+        tuKey: m.tuKey,
+        tilesRelativePath: m.tilesRelativePath,
+        relativePath: m.relativePath,
+      };
+    });
+    const unitStatus =
+      files.some((f) => f.status === 'converting')
+        ? 'converting'
+        : files.some((f) => f.status === 'failed')
+          ? 'failed'
+          : files.some((f) => f.status === 'pending')
+            ? 'pending'
+            : files.length > 0
+              ? 'done'
+              : 'pending';
+    MOCK_SAT_UNITS.push({
+      id: `wu-${u.wuKey}`,
+      workDate,
+      workName,
+      folderName: u.folderName,
+      kind: 'satellite',
+      crsHint: '5181',
+      status: unitStatus === 'done' ? 'registered' : unitStatus,
+      uploadedAt: workDate,
+      linkedRequestId: u.srKey != null ? String(u.srKey) : undefined,
+      attrs: [
+        { label: '작업단위', value: workName },
+        { label: '작업일', value: workDate },
+        { label: '좌표계', value: 'EPSG:5181' },
+        { label: '임무/작업 목적', value: u.workPurpose || workName },
+        { label: '작성자', value: u.author || '—' },
+        {
+          label: '상태',
+          value:
+            unitStatus === 'done'
+              ? '배경지도 자체항공영상 등록'
+              : unitStatus === 'converting'
+                ? '자체항공영상 등록 중'
+                : unitStatus === 'failed'
+                  ? '등록 실패'
+                  : files.length > 0
+                    ? '대기'
+                    : '폴더생성',
+        },
+        { label: '메모', value: u.memo || '—' },
+      ],
+      files,
+    });
+  }
+  emitMockWorkUnits();
+}
+
+export function removeSatelliteUnitFromStore(unitId: string): void {
+  const idx = MOCK_SAT_UNITS.findIndex((u) => u.id === unitId);
+  if (idx < 0) return;
+  MOCK_SAT_UNITS.splice(idx, 1);
+  emitMockWorkUnits();
+}
+
+export function removeSatelliteFileFromStore(unitId: string, fileId: string): void {
+  const unit = MOCK_SAT_UNITS.find((u) => u.id === unitId);
+  if (!unit) return;
+  unit.files = unit.files.filter((f) => f.id !== fileId);
   emitMockWorkUnits();
 }
 
@@ -573,6 +559,10 @@ export function replaceMediaUnitsFromServer(
     workName: string;
     workDate: string | null;
     srKey: number | null;
+    workPurpose?: string | null;
+    author?: string | null;
+    photographer?: string | null;
+    memo?: string | null;
     items: Array<{
       fuKey: number;
       fileName: string;
@@ -617,11 +607,11 @@ export function replaceMediaUnitsFromServer(
         { label: '작업단위 명', value: workName },
         { label: '작업일', value: workDate },
         { label: '좌표계', value: 'EPSG:5181' },
-        { label: '임무/작업 목적', value: workName },
-        { label: '작성자', value: '—' },
-        { label: '촬영자', value: '—' },
+        { label: '임무/작업 목적', value: u.workPurpose || workName },
+        { label: '작성자', value: u.author || '—' },
+        { label: '촬영자', value: u.photographer || '—' },
         { label: '상태', value: files.length > 0 ? '업로드완료' : '폴더생성' },
-        { label: '메모', value: '—' },
+        { label: '메모', value: u.memo || '—' },
         ...(u.srKey != null ? [{ label: '연결 신청', value: String(u.srKey) }] : []),
       ],
       files,

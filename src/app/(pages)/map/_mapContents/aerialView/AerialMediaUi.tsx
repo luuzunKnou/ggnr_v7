@@ -54,6 +54,8 @@ export function AttributeSection({
   emptyText = '표시할 속성이 없습니다.',
   dense = false,
   editable = false,
+  editableLabels,
+  hiddenLabels,
   onChangeValue,
 }: {
   title: string;
@@ -61,9 +63,13 @@ export function AttributeSection({
   emptyText?: string;
   dense?: boolean;
   editable?: boolean;
+  editableLabels?: string[];
+  hiddenLabels?: string[];
   onChangeValue?: (index: number, value: string) => void;
 }) {
-  const visible = rows.filter((row) => row.label !== '좌표계');
+  const visible = rows.filter(
+    (row) => row.label !== '좌표계' && !hiddenLabels?.includes(row.label)
+  );
 
   return (
     <section className="mb-4">
@@ -85,7 +91,7 @@ export function AttributeSection({
             >
               <dt className="shrink-0 text-[10px] font-medium leading-5 text-slate-500">{row.label}</dt>
               <dd className="min-w-0 break-words text-[11px] leading-5 text-slate-800">
-                {editable ? (
+                {editable && (!editableLabels || editableLabels.includes(row.label)) ? (
                   <input
                     value={row.value}
                     onChange={(e) => {

@@ -33,8 +33,8 @@ import { completeChunkedUpload, initAerialMediaUpload } from '@/service/uploadSe
 const APPROVAL_SER = 'shootingApproval';
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
-/** 파일 업로드 허용 종류 — drone=사진·동영상, panorama=파노라마, ortho=드론영상 TIF */
-const MEDIA_FILE_KINDS = new Set<AerialUploadKind>(['drone', 'panorama', 'ortho']);
+/** 파일 업로드 허용 종류 — drone=사진·동영상, panorama=파노라마, ortho=드론영상 TIF, satellite=항공영상 TIF */
+const MEDIA_FILE_KINDS = new Set<AerialUploadKind>(['drone', 'panorama', 'ortho', 'satellite']);
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.tif', '.tiff']);
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.webm', '.avi', '.mkv']);
@@ -87,6 +87,19 @@ function resolveWithinBase(relativeDir: string): { abs: string; rel: string } | 
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function renamedMediaFolderName(currentFolderName: string, workName: string): string | null {
+  const parts = currentFolderName.split('_');
+  if (parts.length < 4) return null;
+  const normalizedName = workName.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalizedName) return null;
+  return sanitizeAerialFolderName(`${parts.slice(0, 3).join('_')}_${normalizedName}`);
+}
+
+function optionalText(value: unknown, maxLength: number): string | null {
+  const text = typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+  return text || null;
 }
 
 function mediaTypeFromName(fileName: string): 'image' | 'video' | null {
@@ -236,6 +249,225 @@ export async function createWorkUnitFolder(params: {
   };
 }
 
+type MediaFolderKind = 'drone' | 'panorama';
+
+async function updateMediaFolderWorkUnit(
+  expectedKind: MediaFolderKind,
+  params: {
+    wuKey?: number;
+    workName?: string;
+    workPurpose?: string;
+    author?: string;
+    photographer?: string;
+    memo?: string;
+  } = {}
+): Promise<{
+  wuKey: number;
+  workName: string;
+  folderName: string;
+  workPurpose: string | null;
+  author: string | null;
+  photographer: string | null;
+  memo: string | null;
+}> {
+  const usrId = await requireSession();
+  const wuKey =
+    params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
+  if (wuKey == null) throwHttp(400, '작업단위 키가 필요합니다.');
+
+  const current = (
+    await db
+      .select()
+      .from(workUnit)
+      .where(and(eq(workUnit.wuKey, wuKey), eq(workUnit.wuIsDel, false)))
+      .limit(1)
+  )[0];
+  if (!current || current.kind !== expectedKind) {
+    throwHttp(
+      404,
+      expectedKind === 'drone'
+        ? '사진·동영상 작업단위를 찾을 수 없습니다.'
+        : '파노라마 작업단위를 찾을 수 없습니다.'
+    );
+  }
+
+  const workName = String(params.workName ?? '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!workName) throwHttp(400, '작업단위명이 필요합니다.');
+  const workPurpose = optionalText(params.workPurpose, 1000);
+  const author = optionalText(params.author, 200);
+  const photographer = optionalText(params.photographer, 200);
+  const memo = optionalText(params.memo, 4000);
+
+  const nextFolderName = renamedMediaFolderName(current.folderName, workName);
+  if (!nextFolderName) throwHttp(400, '작업단위 폴더명을 변경할 수 없습니다.');
+
+  const oldRelativeDir = aerialWorkUnitRelativeDir(expectedKind, current.folderName);
+  const nextRelativeDir = aerialWorkUnitRelativeDir(expectedKind, nextFolderName);
+  if (!oldRelativeDir || !nextRelativeDir) throwHttp(400, '작업단위 경로가 올바르지 않습니다.');
+
+  const oldResolved = resolveWithinBase(oldRelativeDir);
+  const nextResolved = resolveWithinBase(nextRelativeDir);
+  if (!oldResolved || !nextResolved) throwHttp(400, '작업단위 경로가 올바르지 않습니다.');
+
+  const files = await db.select().from(fileUnit).where(eq(fileUnit.wuKey, wuKey));
+  const oldPrefix = `${oldResolved.rel}/`;
+  const nextPaths = files.map((file) => {
+    const currentPath = file.relativePath.replace(/\\/g, '/');
+    if (!currentPath.startsWith(oldPrefix)) {
+      throwHttp(409, `파일 경로를 변경할 수 없습니다: ${file.fileName}`);
+    }
+    return {
+      fuKey: file.fuKey,
+      relativePath: `${nextResolved.rel}/${currentPath.slice(oldPrefix.length)}`,
+    };
+  });
+
+  const renameFolder = current.folderName !== nextFolderName;
+  let diskRenamed = false;
+  if (renameFolder) {
+    try {
+      await fs.access(nextResolved.abs);
+      throwHttp(409, '같은 이름의 작업단위 폴더가 이미 있습니다.');
+    } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error) throw error;
+    }
+    await fs.rename(oldResolved.abs, nextResolved.abs);
+    diskRenamed = true;
+  }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      for (const file of nextPaths) {
+        await tx
+          .update(fileUnit)
+          .set({
+            relativePath: file.relativePath,
+            fuUpdateDate: nowIso(),
+            fuUpdateUser: usrId,
+          })
+          .where(eq(fileUnit.fuKey, file.fuKey));
+      }
+
+      const [row] = await tx
+        .update(workUnit)
+        .set({
+          workName,
+          folderName: nextFolderName,
+          workPurpose,
+          author,
+          photographer,
+          memo,
+          wuUpdateDate: nowIso(),
+          wuUpdateUser: usrId,
+        })
+        .where(eq(workUnit.wuKey, wuKey))
+        .returning({
+          wuKey: workUnit.wuKey,
+          workName: workUnit.workName,
+          folderName: workUnit.folderName,
+          workPurpose: workUnit.workPurpose,
+          author: workUnit.author,
+          photographer: workUnit.photographer,
+          memo: workUnit.memo,
+        });
+      return row;
+    });
+    if (!updated) throwHttp(500, '작업단위 수정에 실패했습니다.');
+    return updated;
+  } catch (error) {
+    if (diskRenamed) {
+      await fs.rename(nextResolved.abs, oldResolved.abs).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+/** 사진·동영상 작업단위명·폴더·경로·업무 속성 수정 */
+export async function updateDroneWorkUnit(params: {
+  wuKey?: number;
+  workName?: string;
+  workPurpose?: string;
+  author?: string;
+  photographer?: string;
+  memo?: string;
+} = {}) {
+  return updateMediaFolderWorkUnit('drone', params);
+}
+
+/** 파노라마 작업단위명·폴더·경로·업무 속성 수정 */
+export async function updatePanoramaWorkUnit(params: {
+  wuKey?: number;
+  workName?: string;
+  workPurpose?: string;
+  author?: string;
+  photographer?: string;
+  memo?: string;
+} = {}) {
+  return updateMediaFolderWorkUnit('panorama', params);
+}
+
+export async function updateOrthoWorkUnitAttrs(params: {
+  wuKey?: number;
+  workDate?: string;
+  workPurpose?: string;
+  author?: string;
+  memo?: string;
+} = {}): Promise<{
+  wuKey: number;
+  workDate: string;
+  workPurpose: string | null;
+  author: string | null;
+  memo: string | null;
+}> {
+  const usrId = await requireSession();
+  const wuKey =
+    params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
+  if (wuKey == null) throwHttp(400, '작업단위 키가 필요합니다.');
+
+  const current = (
+    await db
+      .select()
+      .from(workUnit)
+      .where(and(eq(workUnit.wuKey, wuKey), eq(workUnit.wuIsDel, false)))
+      .limit(1)
+  )[0];
+  if (!current || (current.kind !== 'ortho' && current.kind !== 'satellite')) {
+    throwHttp(404, '영상 작업단위를 찾을 수 없습니다.');
+  }
+
+  const workDate = String(params.workDate ?? '').trim();
+  const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(workDate)
+    ? new Date(`${workDate}T00:00:00Z`)
+    : null;
+  if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== workDate) {
+    throwHttp(400, '작업일은 올바른 날짜여야 합니다.');
+  }
+
+  const [updated] = await db
+    .update(workUnit)
+    .set({
+      workDate,
+      workPurpose: optionalText(params.workPurpose, 1000),
+      author: optionalText(params.author, 200),
+      memo: optionalText(params.memo, 4000),
+      wuUpdateDate: nowIso(),
+      wuUpdateUser: usrId,
+    })
+    .where(eq(workUnit.wuKey, wuKey))
+    .returning({
+      wuKey: workUnit.wuKey,
+      workDate: workUnit.workDate,
+      workPurpose: workUnit.workPurpose,
+      author: workUnit.author,
+      memo: workUnit.memo,
+    });
+  if (!updated || !updated.workDate) throwHttp(500, '드론영상 속성 수정에 실패했습니다.');
+  return { ...updated, workDate: updated.workDate };
+}
+
 export type InitMediaUploadResult = {
   uploadId: string;
   chunkSize: number;
@@ -295,9 +527,14 @@ export async function initMediaUpload(params: {
   wuKey = wu.wuKey;
 
   const fileName = path.basename(String(params.fileName ?? '').replace(/\\/g, '/'));
-  if (params.kind === 'ortho') {
+  if (params.kind === 'ortho' || params.kind === 'satellite') {
     if (!isOrthoTifFileName(fileName)) {
-      throwHttp(400, '드론영상은 TIF(TIFF) 파일만 업로드할 수 있습니다.');
+      throwHttp(
+        400,
+        params.kind === 'ortho'
+          ? '드론영상은 TIF(TIFF) 파일만 업로드할 수 있습니다.'
+          : '항공영상은 TIF(TIFF) 파일만 업로드할 수 있습니다.'
+      );
     }
   } else if (params.kind === 'panorama') {
     const mediaType = mediaTypeFromName(fileName);
@@ -484,10 +721,15 @@ export async function completeMediaUpload(params: {
   const relativePath = String(saved.savedPath ?? '').replace(/\\/g, '/');
   const fileName = path.basename(relativePath);
 
-  /** 드론영상 TIF → tif_unit */
-  if (params.kind === 'ortho') {
+  /** 드론영상·항공영상 TIF → tif_unit */
+  if (params.kind === 'ortho' || params.kind === 'satellite') {
     if (!isOrthoTifFileName(fileName)) {
-      throwHttp(400, '드론영상은 TIF(TIFF) 파일만 업로드할 수 있습니다.');
+      throwHttp(
+        400,
+        params.kind === 'ortho'
+          ? '드론영상은 TIF(TIFF) 파일만 업로드할 수 있습니다.'
+          : '항공영상은 TIF(TIFF) 파일만 업로드할 수 있습니다.'
+      );
     }
     const absSaved = path.isAbsolute(String(saved.savedPath ?? ''))
       ? String(saved.savedPath)
@@ -625,8 +867,11 @@ export async function listWorkUnitMedia(params: {
   }
   if (!wu) throwHttp(404, '작업단위를 찾을 수 없습니다.');
 
-  if (wu.kind === 'ortho') {
-    const ortho = await listOrthoWorkUnitTifs({ wuKey: wu.wuKey });
+  if (wu.kind === 'ortho' || wu.kind === 'satellite') {
+    const ortho = await listOrthoWorkUnitTifs({
+      wuKey: wu.wuKey,
+      kind: wu.kind === 'satellite' ? 'satellite' : 'ortho',
+    });
     return {
       wuKey: wu.wuKey,
       kind: wu.kind,
@@ -672,6 +917,10 @@ export type WorkUnitListItem = {
   workDate: string | null;
   fileCount: number;
   srKey: number | null;
+  workPurpose: string | null;
+  author: string | null;
+  photographer: string | null;
+  memo: string | null;
   items: WorkUnitMediaItem[];
 };
 
@@ -685,8 +934,8 @@ export async function listWorkUnits(params: { kind?: string } = {}): Promise<{
   }
   const kind = params.kind;
 
-  if (kind === 'ortho') {
-    const ortho = await listOrthoWorkUnits();
+  if (kind === 'ortho' || kind === 'satellite') {
+    const ortho = await listOrthoWorkUnits(kind);
     return {
       units: ortho.units.map((u) => ({
         wuKey: u.wuKey,
@@ -696,6 +945,10 @@ export async function listWorkUnits(params: { kind?: string } = {}): Promise<{
         workDate: u.workDate,
         fileCount: u.fileCount,
         srKey: u.srKey,
+        workPurpose: u.workPurpose,
+        author: u.author,
+        photographer: null,
+        memo: u.memo,
         items: u.items.map((o) => ({
           tuKey: o.tuKey,
           wuKey: o.wuKey,
@@ -738,6 +991,10 @@ export async function listWorkUnits(params: { kind?: string } = {}): Promise<{
       workDate: created,
       fileCount: files.length,
       srKey: wu.srKey,
+      workPurpose: wu.workPurpose,
+      author: wu.author,
+      photographer: wu.photographer,
+      memo: wu.memo,
       items: await enrichMediaItemsWithJibun(files.map((r) => toMediaItem(r, kind))),
     });
   }
@@ -805,7 +1062,8 @@ export async function deleteWorkUnit(params: {
     .from(fileUnit)
     .where(eq(fileUnit.wuKey, wuKey));
 
-  const tifCount = wu.kind === 'ortho' ? await deleteTifUnitsForWorkUnit(wuKey) : 0;
+  const tifCount =
+    wu.kind === 'ortho' || wu.kind === 'satellite' ? await deleteTifUnitsForWorkUnit(wuKey) : 0;
   await db.delete(fileUnit).where(eq(fileUnit.wuKey, wuKey));
   await db.delete(workUnit).where(eq(workUnit.wuKey, wuKey));
 

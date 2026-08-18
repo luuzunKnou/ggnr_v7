@@ -4,9 +4,11 @@
  */
 import {
   boolean,
+  date,
   integer,
   pgSchema,
   serial,
+  text,
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -26,6 +28,13 @@ export const workUnit = layer.table('work_unit', {
   folderName: varchar('folder_name').notNull(),
   /** 연결 촬영요청 */
   srKey: integer('sr_key'),
+  /** 실제 작업일 */
+  workDate: date('work_date', { mode: 'string' }),
+  /** 작업 목적 */
+  workPurpose: text('work_purpose'),
+  author: varchar('author'),
+  photographer: varchar('photographer'),
+  memo: text('memo'),
   wuIsDel: boolean('wu_is_del').notNull().default(false),
   wuCreateDate: timestamp('wu_create_date', { mode: 'string' }),
   wuCreateUser: varchar('wu_create_user'),
@@ -41,6 +50,11 @@ export const workUnitColumnComments: Record<string, string> = {
   kind: '유형(ortho|drone|panorama|satellite)',
   folder_name: '작업단위폴더명',
   sr_key: '촬영요청키',
+  work_date: '작업일',
+  work_purpose: '작업목적',
+  author: '작성자',
+  photographer: '촬영자',
+  memo: '메모',
   wu_is_del: '삭제여부',
   wu_create_date: '등록일시',
   wu_create_user: '등록자',
