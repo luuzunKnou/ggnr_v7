@@ -3,7 +3,6 @@
  * 하위 폴더(공사대장 탭 등) 파일도 상대 경로 유지해 포함.
  */
 import fs from 'node:fs/promises';
-import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import archiver from 'archiver';
@@ -66,7 +65,7 @@ async function collectFilesRecursive(
   absDir: string,
   prefix = ''
 ): Promise<ZipFileEntry[]> {
-  let entries: Dirent[];
+  let entries;
   try {
     entries = await fs.readdir(absDir, { withFileTypes: true });
   } catch {

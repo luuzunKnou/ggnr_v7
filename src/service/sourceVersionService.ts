@@ -1248,7 +1248,13 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       stagingRoot,
       excludePrefixes,
       onLine: (line) => {
-        console.log(`[SourceCodeUpload] tsc: ${line}`);
+        const logLine = `[SourceCodeUpload] ${line}`;
+        console.log(logLine);
+        void onProgress?.({
+          phase: 'type-check',
+          message: line.startsWith('staging:') ? line : `타입 검사: ${line}`,
+          logLine,
+        });
       },
     });
     if (!typeCheck.ok) {
