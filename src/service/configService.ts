@@ -345,23 +345,43 @@ export function getMapConfig(_params?: unknown): {
   dataPotalKey: string
   KAKAO_MAP_API_KEY: string
 } {
-  const vars = getRuntimeEnvVars()
-  const dataPortalKey =
-    vars.DATA_PORTAL_KEY?.trim() ??
-    vars.dataPotalKey?.trim() ??
-    vars.DATA_POTAL_KEY?.trim() ??
-    vars.PUBLIC_DATA_KEY?.trim() ??
-    vars.DATA_GO_KR_KEY?.trim() ??
-    ""
-  return {
-    VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
-    VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
-    OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
-    SAFEMAP_API_KEY: vars.SAFEMAP_API_KEY?.trim() ?? '',
-    SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
-    DATA_PORTAL_KEY: dataPortalKey,
-    dataPotalKey: dataPortalKey,
-    KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+  const empty = {
+    VWORLD_API_KEY: '',
+    VWORLD_DOMAIN: '',
+    OPENAI_API_KEY: '',
+    SAFEMAP_API_KEY: '',
+    SAFETYDATA_API_KEY: '',
+    DATA_PORTAL_KEY: '',
+    dataPotalKey: '',
+    KAKAO_MAP_API_KEY: '',
+  }
+  try {
+    const vars = getRuntimeEnvVars()
+    const dataPortalKey =
+      vars.DATA_PORTAL_KEY?.trim() ??
+      vars.dataPotalKey?.trim() ??
+      vars.DATA_POTAL_KEY?.trim() ??
+      vars.PUBLIC_DATA_KEY?.trim() ??
+      vars.DATA_GO_KR_KEY?.trim() ??
+      ""
+    let safemapKey = ''
+    try {
+      safemapKey = vars.SAFEMAP_API_KEY?.trim() ?? ''
+    } catch {
+      safemapKey = ''
+    }
+    return {
+      VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
+      VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
+      OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
+      SAFEMAP_API_KEY: safemapKey,
+      SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
+      DATA_PORTAL_KEY: dataPortalKey,
+      dataPotalKey: dataPortalKey,
+      KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+    }
+  } catch {
+    return empty
   }
 }
 

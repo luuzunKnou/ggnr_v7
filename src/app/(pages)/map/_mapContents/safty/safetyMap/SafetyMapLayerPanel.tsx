@@ -183,11 +183,23 @@ function buildSafemapWmsImageUrl(
   return u.toString();
 }
 
-/** ImageStatic용: 500/CORS 시 투명 이미지로 대체 */
-function safemapStaticImageLoadFunction(image: ImageWrapper, src: string) {
+/** ImageStatic용: 500/CORS 시 투명 이미지로 대체. 실패는 onFailed로 알리고 재요청은 호출측에서 중단 */
+function safemapStaticImageLoadFunction(
+  image: ImageWrapper,
+  src: string,
+  onFailed?: () => void
+) {
+  const failOnce = () => {
+    try {
+      onFailed?.();
+    } catch {
+      /* 지도·서버는 유지 */
+    }
+  };
   try {
     const el = image.getImage() as HTMLImageElement;
     if (!src) {
+      failOnce();
       el.src = TRANSPARENT_PNG;
       return;
     }
@@ -199,6 +211,7 @@ function safemapStaticImageLoadFunction(image: ImageWrapper, src: string) {
     el.onload = cleanup;
     el.onerror = () => {
       cleanup();
+      failOnce();
       try {
         el.removeAttribute('crossorigin');
         el.src = TRANSPARENT_PNG;
@@ -208,12 +221,17 @@ function safemapStaticImageLoadFunction(image: ImageWrapper, src: string) {
     };
     el.src = src;
   } catch {
+    failOnce();
     try {
       (image.getImage() as HTMLImageElement).src = TRANSPARENT_PNG;
     } catch {
       /* ignore */
     }
   }
+}
+
+function bindSafemapImageLoadFunction(onFailed?: () => void) {
+  return (image: ImageWrapper, src: string) => safemapStaticImageLoadFunction(image, src, onFailed);
 }
 
 function createSafemapFloodImageLayer(
@@ -224,7 +242,8 @@ function createSafemapFloodImageLayer(
   zIndex: number,
   layerOpacity: number,
   emdWgs84: EmdWgs84Bbox | null,
-  wmsExtra?: SafemapWmsQueryExtra
+  wmsExtra?: SafemapWmsQueryExtra,
+  onFailed?: () => void
 ): ImageLayer<ImageStatic> {
   const size = map.getSize();
   const view = map.getView();
@@ -245,7 +264,7 @@ function createSafemapFloodImageLayer(
       projection: 'EPSG:3857',
       crossOrigin: 'anonymous',
       interpolate: true,
-      imageLoadFunction: safemapStaticImageLoadFunction,
+      imageLoadFunction: bindSafemapImageLoadFunction(onFailed),
     }),
   });
   layer.set(SAFETY_MAP_OL_LAYER_KEY, layerKind);
@@ -263,30 +282,59 @@ function useSafemapFloodWmsSync(
   layerOpacity: number,
   emdWgs84: EmdWgs84Bbox | null,
   onImageLoadingChange?: (loading: boolean) => void,
+  onCallFailed?: () => void,
+  onCallOk?: () => void,
   wmsExtra?: SafemapWmsQueryExtra
 ) {
   useEffect(() => {
-    const want = wantLayer && safemapApiKey.length > 0;
-
     const detach = () => {
       const map = mapContext?.mapInstanceRef?.current;
       if (map) removeSafetyMapLayersByKind(map, layerKind);
     };
 
-    if (!want) {
+    if (!wantLayer) {
       onImageLoadingChange?.(false);
       detach();
       return;
     }
 
+    if (!safemapApiKey) {
+      onImageLoadingChange?.(false);
+      detach();
+      onCallFailed?.();
+      return;
+    }
+
     let cancelled = false;
+    let halted = false;
     let intervalId: ReturnType<typeof setInterval> | undefined;
     let debounceId: ReturnType<typeof setTimeout> | null = null;
     let imageLayer: ImageLayer<ImageStatic> | null = null;
     let loadGeneration = 0;
 
+    const haltAfterFail = () => {
+      if (cancelled || halted) return;
+      halted = true;
+      loadGeneration += 1;
+      onImageLoadingChange?.(false);
+      if (debounceId != null) {
+        clearTimeout(debounceId);
+        debounceId = null;
+      }
+      const map = mapContext?.mapInstanceRef?.current;
+      if (map) {
+        map.un('moveend', scheduleApply);
+        map.un('change:size', scheduleApply);
+      }
+      try {
+        onCallFailed?.();
+      } catch {
+        /* 지도·서버는 유지 */
+      }
+    };
+
     const applyViewport = () => {
-      if (cancelled || !imageLayer) return;
+      if (cancelled || halted || !imageLayer) return;
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
       const size = map.getSize();
@@ -303,18 +351,31 @@ function useSafemapFloodWmsSync(
         projection: 'EPSG:3857',
         crossOrigin: 'anonymous',
         interpolate: true,
-        imageLoadFunction: safemapStaticImageLoadFunction,
+        imageLoadFunction: bindSafemapImageLoadFunction(haltAfterFail),
       });
       const finish = () => {
-        if (cancelled || gen !== loadGeneration) return;
+        if (cancelled || halted || gen !== loadGeneration) return;
         onImageLoadingChange?.(false);
       };
-      src.once('imageloadend', finish);
-      src.once('imageloaderror', finish);
+      src.once('imageloadend', () => {
+        finish();
+        if (!cancelled && !halted) {
+          try {
+            onCallOk?.();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+      src.once('imageloaderror', () => {
+        finish();
+        haltAfterFail();
+      });
       imageLayer.setSource(src);
     };
 
     const scheduleApply = () => {
+      if (cancelled || halted) return;
       if (debounceId != null) clearTimeout(debounceId);
       debounceId = setTimeout(() => {
         debounceId = null;
@@ -336,7 +397,7 @@ function useSafemapFloodWmsSync(
 
     const tryAttach = (): boolean => {
       const map = mapContext?.mapInstanceRef?.current;
-      if (!map || cancelled) return false;
+      if (!map || cancelled || halted) return false;
       const existing = map
         .getLayers()
         .getArray()
@@ -350,7 +411,8 @@ function useSafemapFloodWmsSync(
           zIndex,
           layerOpacity,
           emdWgs84,
-          wmsExtra
+          wmsExtra,
+          haltAfterFail
         );
         map.addLayer(layer);
         imageLayer = layer;
@@ -367,6 +429,7 @@ function useSafemapFloodWmsSync(
     if (tryAttach()) {
       return () => {
         cancelled = true;
+        halted = true;
         loadGeneration += 1;
         onImageLoadingChange?.(false);
         cleanupListeners();
@@ -376,7 +439,7 @@ function useSafemapFloodWmsSync(
     }
 
     intervalId = setInterval(() => {
-      if (cancelled) return;
+      if (cancelled || halted) return;
       if (tryAttach() && intervalId != null) {
         clearInterval(intervalId);
         intervalId = undefined;
@@ -385,6 +448,7 @@ function useSafemapFloodWmsSync(
 
     return () => {
       cancelled = true;
+      halted = true;
       loadGeneration += 1;
       onImageLoadingChange?.(false);
       if (intervalId != null) clearInterval(intervalId);
@@ -402,6 +466,8 @@ function useSafemapFloodWmsSync(
     emdWgs84,
     mapContext?.mapInstanceRef,
     onImageLoadingChange,
+    onCallFailed,
+    onCallOk,
     wmsExtra,
   ]);
 }
@@ -424,7 +490,20 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
   const setVisibleRecord = mapContext?.setSafetyMapLayerVisibility;
   const [safemapApiKey, setSafemapApiKey] = useState('');
   const [wmsImageLoading, setWmsImageLoading] = useState<Record<string, boolean>>({});
+  const [wmsCallFailed, setWmsCallFailed] = useState<Record<string, boolean>>({});
   const [emdWgs84, setEmdWgs84] = useState<EmdWgs84Bbox | null>(null);
+
+  const markWmsCallFailed = useCallback((id: string) => {
+    setWmsCallFailed((p) => (p[id] ? p : { ...p, [id]: true }));
+  }, []);
+  const clearWmsCallFailed = useCallback((id: string) => {
+    setWmsCallFailed((p) => {
+      if (!p[id]) return p;
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+  }, []);
 
   const onFloodLocalLoading = useCallback((loading: boolean) => {
     setWmsImageLoading((p) => ({ ...p, floodRiverLocal: loading }));
@@ -441,6 +520,36 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
   const onMoisFloodTraceLoading = useCallback((loading: boolean) => {
     setWmsImageLoading((p) => ({ ...p, moisFloodTrace: loading }));
   }, []);
+  const onFloodLocalFailed = useCallback(() => {
+    markWmsCallFailed(FLOOD_RIVER_LOCAL_KIND);
+  }, [markWmsCallFailed]);
+  const onFloodNationalFailed = useCallback(() => {
+    markWmsCallFailed(FLOOD_RIVER_NATIONAL_KIND);
+  }, [markWmsCallFailed]);
+  const onLandslideFailed = useCallback(() => {
+    markWmsCallFailed(LANDSLIDE_RISK_KIND);
+  }, [markWmsCallFailed]);
+  const onWaterPlayManagedFailed = useCallback(() => {
+    markWmsCallFailed(WATER_PLAY_MANAGED_KIND);
+  }, [markWmsCallFailed]);
+  const onMoisFloodTraceFailed = useCallback(() => {
+    markWmsCallFailed('moisFloodTrace');
+  }, [markWmsCallFailed]);
+  const onFloodLocalOk = useCallback(() => {
+    clearWmsCallFailed(FLOOD_RIVER_LOCAL_KIND);
+  }, [clearWmsCallFailed]);
+  const onFloodNationalOk = useCallback(() => {
+    clearWmsCallFailed(FLOOD_RIVER_NATIONAL_KIND);
+  }, [clearWmsCallFailed]);
+  const onLandslideOk = useCallback(() => {
+    clearWmsCallFailed(LANDSLIDE_RISK_KIND);
+  }, [clearWmsCallFailed]);
+  const onWaterPlayManagedOk = useCallback(() => {
+    clearWmsCallFailed(WATER_PLAY_MANAGED_KIND);
+  }, [clearWmsCallFailed]);
+  const onMoisFloodTraceOk = useCallback(() => {
+    clearWmsCallFailed('moisFloodTrace');
+  }, [clearWmsCallFailed]);
 
   const activeCount = useMemo(
     () => LAYERS.filter((l) => visible[l.id] === true).length,
@@ -506,7 +615,9 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
     115,
     SAFETY_RASTER_OPACITY.floodRiverLocal,
     emdWgs84,
-    onFloodLocalLoading
+    onFloodLocalLoading,
+    onFloodLocalFailed,
+    onFloodLocalOk
   );
   useSafemapFloodWmsSync(
     mapContext,
@@ -517,7 +628,9 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
     116,
     SAFETY_RASTER_OPACITY.floodRiverNational,
     emdWgs84,
-    onFloodNationalLoading
+    onFloodNationalLoading,
+    onFloodNationalFailed,
+    onFloodNationalOk
   );
   useSafemapFloodWmsSync(
     mapContext,
@@ -528,7 +641,9 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
     117,
     SAFETY_RASTER_OPACITY.landslideRisk,
     emdWgs84,
-    onLandslideLoading
+    onLandslideLoading,
+    onLandslideFailed,
+    onLandslideOk
   );
   useSafemapFloodWmsSync(
     mapContext,
@@ -540,6 +655,8 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
     SAFETY_RASTER_OPACITY.moisFloodTrace,
     emdWgs84,
     onMoisFloodTraceLoading,
+    onMoisFloodTraceFailed,
+    onMoisFloodTraceOk,
     SAFEMAP_FLOOD_TRACE_WMS_EXTRA
   );
   useSafemapFloodWmsSync(
@@ -551,21 +668,25 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
     121,
     SAFETY_RASTER_OPACITY.waterPlayManaged,
     emdWgs84,
-    onWaterPlayManagedLoading
+    onWaterPlayManagedLoading,
+    onWaterPlayManagedFailed,
+    onWaterPlayManagedOk
   );
 
   const toggle = useCallback(
     (id: string) => {
       setVisibleRecord?.((prev) => {
         const cur = prev[id] === true;
+        if (cur) clearWmsCallFailed(id);
         return { ...prev, [id]: !cur };
       });
     },
-    [setVisibleRecord]
+    [clearWmsCallFailed, setVisibleRecord]
   );
 
   const setAll = useCallback(
     (on: boolean) => {
+      if (!on) setWmsCallFailed({});
       setVisibleRecord?.(Object.fromEntries(LAYERS.map((l) => [l.id, on])));
     },
     [setVisibleRecord]
@@ -619,8 +740,9 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
           <span className="flex-1" />
           <button
             type="button"
+            title="모두 켜기"
             onClick={() => setAll(true)}
-            className="rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+            className="cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
           >
             모두 켜기
           </button>
@@ -629,8 +751,9 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
           </span>
           <button
             type="button"
+            title="모두 끄기"
             onClick={() => setAll(false)}
-            className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+            className="cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
           >
             모두 끄기
           </button>
@@ -641,35 +764,57 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
         <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="list">
           {LAYERS.map((layer) => {
             const isOn = visible[layer.id] === true;
+            const isFailed = isOn && wmsCallFailed[layer.id] === true;
+            const failLabel = '호출실패: 관리자에게 문의하세요';
             const showWmsProgress =
-              SAFEMAP_WMS_PROGRESS_LAYER_IDS.has(layer.id) && isOn && wmsImageLoading[layer.id];
+              SAFEMAP_WMS_PROGRESS_LAYER_IDS.has(layer.id) &&
+              isOn &&
+              !isFailed &&
+              wmsImageLoading[layer.id];
             return (
               <li key={layer.id}>
                 <button
                   type="button"
                   role="switch"
+                  title={isFailed ? failLabel : layer.label}
                   aria-checked={isOn}
                   aria-busy={showWmsProgress || undefined}
+                  aria-invalid={isFailed || undefined}
                   onClick={() => toggle(layer.id)}
                   className={cn(
-                    'relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-[5px] border px-3 py-2.5 text-left shadow-sm transition-all',
-                    isOn
-                      ? 'border-primary/35 bg-white ring-1 ring-primary/15'
-                      : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                    'relative flex w-full cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-[5px] border px-3 py-2.5 text-left shadow-sm transition-all',
+                    isFailed
+                      ? 'border-destructive bg-white ring-1 ring-destructive/30'
+                      : isOn
+                        ? 'border-primary/35 bg-white ring-1 ring-primary/15'
+                        : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'
                   )}
                 >
-                  <span
-                    className={cn(
-                      'min-w-0 flex-1 text-[12px] leading-snug',
-                      isOn ? 'font-medium text-slate-900' : 'text-slate-700'
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span
+                      className={cn(
+                        'min-w-0 text-[12px] leading-snug',
+                        isFailed
+                          ? 'font-medium text-destructive'
+                          : isOn
+                            ? 'font-medium text-slate-900'
+                            : 'text-slate-700'
+                      )}
+                    >
+                      {layer.label}
+                    </span>
+                    {isFailed && (
+                      <span className="text-[11px] leading-snug text-destructive">{failLabel}</span>
                     )}
-                  >
-                    {layer.label}
                   </span>
                   <span
                     className={cn(
                       'shrink-0 rounded-[5px] px-2 py-0.5 text-[10px] font-medium tabular-nums',
-                      isOn ? 'bg-primary/15 text-primary' : 'bg-slate-100 text-slate-500'
+                      isFailed
+                        ? 'bg-destructive/15 text-destructive'
+                        : isOn
+                          ? 'bg-primary/15 text-primary'
+                          : 'bg-slate-100 text-slate-500'
                     )}
                   >
                     {isOn ? '표시' : '숨김'}
