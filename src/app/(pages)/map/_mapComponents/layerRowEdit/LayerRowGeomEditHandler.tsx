@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type Map from "ol/Map";
+import type OlMap from "ol/Map";
 import Draw from "ol/interaction/Draw";
 import DoubleClickZoom from "ol/interaction/DoubleClickZoom";
 import Modify from "ol/interaction/Modify";
@@ -238,7 +238,7 @@ export function LayerRowGeomEditHandler({
   const layerRowParcelRemoveRef = mapContext?.layerRowParcelRemoveRef;
   const draftParcels = mapContext?.layerRowDraftParcels ?? [];
   const map = mapContext?.mapInstanceRef?.current ?? null;
-  const mapRef = (mapContext?.mapInstanceRef ?? { current: null }) as RefObject<Map | null>;
+  const mapRef = (mapContext?.mapInstanceRef ?? { current: null }) as RefObject<OlMap | null>;
   const { inputBottomPx } = useSearchBarOffset();
   const hintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
   const mapOpsRef = useRef<GeomMapOps | null>(null);
