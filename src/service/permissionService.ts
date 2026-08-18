@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import db from '@/database/db';
 import { perm } from '@/database/schema/perm';
 import { ser } from '@/database/schema/ser';
@@ -310,48 +310,71 @@ export async function submitAccessRequest(p: Params) {
   const usrId = requireSession(p);
   const targetType = String(p.targetType ?? '');
   if (targetType !== TARGET_SER && targetType !== TARGET_SYS) throw new Error('targetType ser|sys');
-  const serEng = p.serEng != null ? String(p.serEng) : null;
-  const sysKeyStr = targetType === TARGET_SYS ? normalizePermSysKey(p.sysKey) : null;
+
   const requestedSerpType =
     p.requestedSerpType != null ? Number(p.requestedSerpType) : SERP_TYPE_WRITE;
-  if (targetType === TARGET_SER && !serEng) throw new Error('serEng required');
-  if (targetType === TARGET_SYS && !sysKeyStr) throw new Error('sysKey required');
-
   const requestReasonRaw = p.requestReason != null ? String(p.requestReason).trim() : '';
   const requestReason = requestReasonRaw.length > 0 ? requestReasonRaw.slice(0, 4000) : null;
-
-  if (targetType === TARGET_SER) {
-    const rows = await db.select().from(ser).where(eq(ser.serEng, serEng!)).limit(1);
-    const cfgPrivate = getServiceList().ser.some(
-      (s) => s.ser_eng?.trim() === serEng!.trim() && s.ser_is_private === true
-    );
-    if (!rows[0]?.serIsPrivate && !cfgPrivate) throw new Error('서비스가 비공개가 아닙니다.');
-  } else {
-    const ok = await isPrivateSysKey(sysKeyStr!);
-    if (!ok) throw new Error('시스템이 비공개가 아닙니다.');
-  }
-
   const now = new Date().toISOString();
 
-  // 동일 대상 승인대기 중이면 중복 신청 방지 (반려·승인 후 재신청은 허용)
-  const pendingConds =
-    targetType === TARGET_SER
-      ? and(
+  // 대상 키를 trim·검증한 뒤 그 값만 조회·삽입에 사용 (공백만·미검증 ! 방지)
+  if (targetType === TARGET_SER) {
+    const serEng = p.serEng != null ? String(p.serEng).trim() : '';
+    if (!serEng) throw new Error('serEng required');
+
+    const rows = await db.select().from(ser).where(eq(ser.serEng, serEng)).limit(1);
+    const cfgPrivate = getServiceList().ser.some(
+      (s) => s.ser_eng?.trim() === serEng && s.ser_is_private === true
+    );
+    if (!rows[0]?.serIsPrivate && !cfgPrivate) throw new Error('서비스가 비공개가 아닙니다.');
+
+    const [pending] = await db
+      .select({ uarKey: usrAccessRequest.uarKey })
+      .from(usrAccessRequest)
+      .where(
+        and(
           eq(usrAccessRequest.usrId, usrId),
           eq(usrAccessRequest.targetType, TARGET_SER),
-          eq(usrAccessRequest.serEng, serEng!),
+          eq(usrAccessRequest.serEng, serEng),
           eq(usrAccessRequest.state, ACCESS_REQ_PENDING)
         )
-      : and(
-          eq(usrAccessRequest.usrId, usrId),
-          eq(usrAccessRequest.targetType, TARGET_SYS),
-          eq(usrAccessRequest.sysKey, sysKeyStr!),
-          eq(usrAccessRequest.state, ACCESS_REQ_PENDING)
-        );
+      )
+      .limit(1);
+    if (pending) throw new Error('이미 신청 대기 중입니다.');
+
+    const [row] = await db
+      .insert(usrAccessRequest)
+      .values({
+        usrId,
+        targetType,
+        serEng,
+        sysKey: null,
+        requestedSerpType,
+        requestReason,
+        state: ACCESS_REQ_PENDING,
+        createdAt: now,
+      })
+      .returning();
+    return row;
+  }
+
+  const sysKeyStr = normalizePermSysKey(p.sysKey);
+  if (!sysKeyStr) throw new Error('sysKey required');
+
+  const ok = await isPrivateSysKey(sysKeyStr);
+  if (!ok) throw new Error('시스템이 비공개가 아닙니다.');
+
   const [pending] = await db
     .select({ uarKey: usrAccessRequest.uarKey })
     .from(usrAccessRequest)
-    .where(pendingConds!)
+    .where(
+      and(
+        eq(usrAccessRequest.usrId, usrId),
+        eq(usrAccessRequest.targetType, TARGET_SYS),
+        eq(usrAccessRequest.sysKey, sysKeyStr),
+        eq(usrAccessRequest.state, ACCESS_REQ_PENDING)
+      )
+    )
     .limit(1);
   if (pending) throw new Error('이미 신청 대기 중입니다.');
 
@@ -360,9 +383,9 @@ export async function submitAccessRequest(p: Params) {
     .values({
       usrId,
       targetType,
-      serEng: targetType === TARGET_SER ? serEng : null,
-      sysKey: targetType === TARGET_SYS ? sysKeyStr : null,
-      requestedSerpType: targetType === TARGET_SER ? requestedSerpType : null,
+      serEng: null,
+      sysKey: sysKeyStr,
+      requestedSerpType: null,
       requestReason,
       state: ACCESS_REQ_PENDING,
       createdAt: now,
@@ -403,13 +426,19 @@ export async function getMyLatestAccessRequest(p: Params) {
   return row ?? null;
 }
 
-/** 관리자 큐: 승인대기만 (새 처리 UI 확정 전 — 팀 공유는 대기 목록 유지) */
+/** 관리자 큐: 대기·승인·반려 전부 (처리 후 목록에 남아 필터로 확인) */
 export async function listPendingAccessRequests(_p: Params) {
   requireSession(_p);
   return db
     .select()
     .from(usrAccessRequest)
-    .where(eq(usrAccessRequest.state, ACCESS_REQ_PENDING))
+    .where(
+      inArray(usrAccessRequest.state, [
+        ACCESS_REQ_PENDING,
+        ACCESS_REQ_REJECTED,
+        ACCESS_REQ_APPROVED,
+      ])
+    )
     .orderBy(desc(usrAccessRequest.createdAt));
 }
 
