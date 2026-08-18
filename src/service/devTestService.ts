@@ -4270,3 +4270,107 @@ export async function switchLayerTableSchema(params: {
   }
 }
 
+const DEFINE_META_FIELDS = ['define_table_group', 'define_table_kor_name'] as const;
+type DefineMetaField = (typeof DEFINE_META_FIELDS)[number];
+
+/** 레이어 목록에서 그룹명·한글명만 저장 */
+export async function updateDefineLayerTableMeta(params: {
+  tableName: string;
+  field: DefineMetaField;
+  value: string;
+}) {
+  const tableName = String(params.tableName ?? '').trim();
+  const field = params.field;
+  const value = String(params.value ?? '').trim();
+  if (!tableName) return { success: false as const, error: 'tableName이 필요합니다.' };
+  if (!DEFINE_META_FIELDS.includes(field)) {
+    return { success: false as const, error: '수정할 수 없는 항목입니다.' };
+  }
+
+  try {
+    if (!fs.existsSync(DEFINE_LAYER_TABLES_PATH)) {
+      return { success: false as const, error: '레이어 설정 파일이 없습니다.' };
+    }
+    const raw = fs.readFileSync(DEFINE_LAYER_TABLES_PATH, 'utf-8');
+    const tables = JSON.parse(raw) as Record<string, unknown>[];
+    if (!Array.isArray(tables)) {
+      return { success: false as const, error: '레이어 설정 형식이 올바르지 않습니다.' };
+    }
+
+    const rowIdx = tables.findIndex(
+      (r) =>
+        String(r.define_table_name ?? '')
+          .trim()
+          .toLowerCase() === tableName.toLowerCase()
+    );
+    if (rowIdx < 0) {
+      return { success: false as const, error: '레이어 설정에 해당 테이블이 없습니다.' };
+    }
+
+    tables[rowIdx] = { ...tables[rowIdx], [field]: value };
+    normalizeDefineTableSource(tables);
+    const sorted = sortDefineLayerTables(tables as DefineLayerRow[]);
+    fs.mkdirSync(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
+    fs.writeFileSync(DEFINE_LAYER_TABLES_PATH, JSON.stringify(sorted, null, 2), 'utf-8');
+    return { success: true as const, value };
+  } catch (e: unknown) {
+    return { success: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const LAYER_TABLE_NAME_RE = /^[A-Za-z0-9_]+$/;
+
+/** 레이어 목록에서 DB 테이블 삭제 후 이력 기록. layer / public_layer 만 허용. */
+export async function dropLayerDbTable(params: {
+  tableName: string;
+  schema?: 'layer' | 'public_layer';
+}) {
+  const tableName = String(params.tableName ?? '').trim();
+  const schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
+  if (!tableName) return { success: false as const, error: 'tableName이 필요합니다.' };
+  if (!LAYER_TABLE_NAME_RE.test(tableName)) {
+    return { success: false as const, error: '테이블명이 올바르지 않습니다.' };
+  }
+
+  try {
+    const listRes = await getLayerTableList();
+    if (!listRes.success) {
+      return { success: false as const, error: listRes.error ?? '테이블 목록을 확인할 수 없습니다.' };
+    }
+    const match = (listRes.tables ?? []).find(
+      (t) =>
+        t.schema === schema && String(t.table).toLowerCase() === tableName.toLowerCase()
+    );
+    if (!match) {
+      return { success: false as const, error: 'DB에 해당 테이블이 없습니다.' };
+    }
+
+    const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+    const dropSql = `DROP TABLE IF EXISTS ${schema}.${quoteIdent(match.table)} CASCADE`;
+    await db.execute(sql.raw(dropSql));
+
+    const operator = await resolveAutofixOperatorLabel();
+    try {
+      const { recordDataLog } = await import('./dataLogService');
+      await recordDataLog({
+        source: '시스템',
+        type: '삭제',
+        user: operator,
+        tableName: match.table,
+        keyField: '테이블',
+        keyValue: match.table,
+        contents: 'DB 테이블 삭제',
+      });
+    } catch (logErr) {
+      console.warn(
+        '[dropLayerDbTable] data_log',
+        logErr instanceof Error ? logErr.message : logErr
+      );
+    }
+
+    return { success: true as const };
+  } catch (e: unknown) {
+    return { success: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
