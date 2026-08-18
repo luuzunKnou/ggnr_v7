@@ -231,7 +231,11 @@ export function MapSearchBar({
     const t = setTimeout(() => {
       setAddressSearchLoading(true);
       const trimmed = query.trim();
-      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+      searchAddress(trimmed, {
+        maxResults: ADDRESS_RESULT_MAX,
+        type: 'address',
+        apiKey: vworldApiKey,
+      })
         .then((items) => {
           setAddressResults(items);
           setAddressPanelOpen(true);
@@ -366,7 +370,11 @@ export function MapSearchBar({
     if (!trimmed || !vworldApiKey) return;
     setAddressSearchLoading(true);
     setAddressPanelOpen(true);
-    searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+    searchAddress(trimmed, {
+        maxResults: ADDRESS_RESULT_MAX,
+        type: 'address',
+        apiKey: vworldApiKey,
+      })
       .then((items) => setAddressResults(items))
       .finally(() => setAddressSearchLoading(false));
   }, [query, vworldApiKey]);
@@ -528,7 +536,11 @@ export function MapSearchBar({
                               setQuery(q);
                               if (!vworldApiKey) return;
                               setAddressSearchLoading(true);
-                              searchAddress(q, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+                              searchAddress(q, {
+                                maxResults: ADDRESS_RESULT_MAX,
+                                type: 'address',
+                                apiKey: vworldApiKey,
+                              })
                                 .then((items) => setAddressResults(items))
                                 .finally(() => setAddressSearchLoading(false));
                             }}

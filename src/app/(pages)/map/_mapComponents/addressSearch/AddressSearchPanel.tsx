@@ -98,7 +98,11 @@ export function AddressSearchPanel({
         return;
       }
       setLoading(true);
-      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: "address", apiKey: vworldApiKey })
+      searchAddress(trimmed, {
+        maxResults: ADDRESS_RESULT_MAX,
+        type: "address",
+        apiKey: vworldApiKey,
+      })
         .then((items) => setAddressResults(items))
         .finally(() => setLoading(false));
     },
