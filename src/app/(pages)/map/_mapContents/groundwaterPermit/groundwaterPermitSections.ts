@@ -35,13 +35,6 @@ export const GROUNDWATER_PERMIT_DETAIL_SECTIONS: GroundwaterPermitSection[] = [
       { key: 'rep_or_trade', label: '대표자또는상호' },
       { key: 'phone', label: '전화번호' },
       { key: 'address', label: '주소' },
-      { key: 'biz_reg_no', label: '법인·사업자·생년월일' },
-      { key: 'remark', label: '비고' },
-      { key: 'zip_code', label: '우편번호' },
-      { key: 'sido', label: '시도' },
-      { key: 'sigungu', label: '시군구' },
-      { key: 'eupmyeondong', label: '읍면동' },
-      { key: 'ri', label: '리' },
     ],
   },
   {

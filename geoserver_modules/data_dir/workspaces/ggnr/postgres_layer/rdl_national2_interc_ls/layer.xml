@@ -1,16 +1,16 @@
 <layer>
   <name>rdl_national2_interc_ls</name>
-  <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7ff5</id>
+  <id>LayerInfoImpl-4785472f:19ff42d5832:-6eb3</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7fff</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7ff6</id>
+    <id>FeatureTypeInfoImpl-4785472f:19ff42d5832:-6eb4</id>
   </resource>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-08-06 07:30:59.254 UTC</dateCreated>
+  <dateCreated>2026-08-14 07:32:28.159 UTC</dateCreated>
 </layer>

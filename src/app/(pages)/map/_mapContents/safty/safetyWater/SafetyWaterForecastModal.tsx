@@ -174,7 +174,7 @@ export function SafetyWaterForecastModal() {
             );
           })}
         </div>
-        <div className="min-h-0 max-h-[240px] flex-1 overflow-y-auto">
+        <div className="min-h-0 max-h-[240px] flex-1 overflow-y-auto scrollbar-thin">
           {forecastLoading ? (
             <p className="py-4 text-center text-[12px] text-muted-foreground/70">불러오는 중…</p>
           ) : filtered.length === 0 ? (

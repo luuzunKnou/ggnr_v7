@@ -18,6 +18,7 @@ import {
   type BackgroundMapGroup,
 } from './mapControlPanel/backgroundMapSelector';
 import { JimokLandownLayerSelector } from './mapControlPanel/JimokLandownLayerSelector';
+import { CadastralZoomHint } from './mapControlPanel/CadastralZoomHint';
 import { ThematicMapLayerSelector } from './mapControlPanel/ThematicMapLayerSelector';
 import { JIMOK_LAYERS } from './layerFactory/jimokLayerFactory';
 import {
@@ -1882,9 +1883,9 @@ export default function OpenLayersMap({
   const togglePanelLayer = (id: PanelLayerId) => {
     const opening = openSubPanel !== id;
     if (opening) {
-      // 배경지도·드론영상 펼침 패널과 배타
-      if (activeControls.includes('background-map')) setIsBackgroundPanelExiting(true);
-      if (activeControls.includes('aerial-view')) setIsAerialViewPanelExiting(true);
+      // 배경지도·드론영상과 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
+      setIsBackgroundPanelExiting(false);
+      setIsAerialViewPanelExiting(false);
       setActiveControls((prev) =>
         prev.filter((x) => x !== 'background-map' && x !== 'aerial-view')
       );
@@ -2102,6 +2103,10 @@ export default function OpenLayersMap({
       ? 'pointer-events-none'
       : 'pointer-events-auto';
 
+  const jijukLayerEnabled =
+    activeControls.includes('cadastral') &&
+    (visibleCadastralLayerNames?.has('jijuk') ?? false);
+
   const renderMapControlItemPanel = useCallback(
     (itemId: string) => {
       if (itemId !== 'reset-measurements' || !resetMeasurementsPanelVisible) return null;
@@ -2144,6 +2149,12 @@ export default function OpenLayersMap({
         />
       </div>
       )}
+
+      <CadastralZoomHint
+        map={mapReady ? mapInstanceRef.current : null}
+        mapReady={mapReady}
+        jijukEnabled={jijukLayerEnabled}
+      />
 
       {/* 오른쪽 맵 컨트롤 패널 — 분할 시에도 화면 오른쪽 고정
           래퍼는 pointer-events-none: 배경지도 등 하위 패널이 버튼열보다 짧을 때
