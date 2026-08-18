@@ -283,7 +283,8 @@ function PdfPreviewStage({
       <canvas
         ref={canvasRef}
         className={cn(
-          'max-h-[min(85vh,100%)] max-w-[min(96vw,100%)] object-contain shadow-2xl transition-opacity duration-150',
+          // 100%는 부모 높이 auto일 때 무효 → vh/vw만 사용 (원본 캔버스가 잘려 확대처럼 보이는 문제 방지)
+          'h-auto w-auto max-h-[85vh] max-w-[96vw] object-contain shadow-2xl transition-opacity duration-150',
           phase !== 'ready' ? 'opacity-0' : 'opacity-100'
         )}
         aria-hidden={phase !== 'ready'}
@@ -613,7 +614,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         {/* flex 오버플로 치우침 방지 — 화면 정중앙에 맞춤 */}
         <div className="absolute inset-0 overflow-hidden">
           <div
-            className="absolute left-1/2 top-1/2"
+            className="absolute left-1/2 top-1/2 flex max-h-[85vh] max-w-[96vw] items-center justify-center"
             onDoubleClick={(e) => {
               e.stopPropagation();
               resetView();
@@ -630,7 +631,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
                 src={current.url}
                 alt=""
                 draggable={false}
-                className="block h-auto w-auto max-h-[70vh] max-w-[70vw] object-contain shadow-2xl"
+                className="block h-auto w-auto max-h-[85vh] max-w-[96vw] object-contain shadow-2xl"
               />
             ) : (
               <PdfPreviewStage

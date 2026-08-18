@@ -1,11 +1,16 @@
 'use client';
 
+import { tryFormatToYmd } from '@/lib/formatDateYmd';
 import { useShapeEditorContext } from '../ShapeEditorContext';
 import { useShapeEditorAttributeFields } from '../_hooks/useShapeEditorAttributeFields';
 
+function toDateInputValue(raw: string): string {
+  return tryFormatToYmd(raw) ?? '';
+}
+
 export function ShapeEditorFeatureAttributes() {
   const { activeEditLayer, draft, setAttributeValue } = useShapeEditorContext();
-  const { fields, loading } = useShapeEditorAttributeFields(activeEditLayer);
+  const { fields, loading, isDateFieldType } = useShapeEditorAttributeFields(activeEditLayer);
 
   const hasSelection = draft.selectedFeatureId != null;
 
@@ -41,24 +46,39 @@ export function ShapeEditorFeatureAttributes() {
           <p className="px-1 py-4 text-center text-[10px] text-slate-400">속성 없음</p>
         ) : (
           <dl className="divide-y divide-slate-100 rounded border border-slate-200 bg-white">
-            {fields.map((row) => (
-              <div
-                key={row.field}
-                className="grid grid-cols-[minmax(0,38%)_1fr] gap-x-1.5 px-2 py-1.5"
-              >
-                <dt className="truncate text-[11px] font-medium text-slate-600" title={row.label}>
-                  {row.label}
-                </dt>
-                <dd className="min-w-0">
-                  <input
-                    type="text"
-                    value={draft.attributeValues[row.field] ?? ''}
-                    onChange={(e) => setAttributeValue(row.field, e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-[11px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
-                  />
-                </dd>
-              </div>
-            ))}
+            {fields.map((row) => {
+              const isDate = isDateFieldType(row.type);
+              const locked = row.readOnly === true;
+              const raw = draft.attributeValues[row.field] ?? '';
+              const inputValue = isDate ? toDateInputValue(raw) : raw;
+              return (
+                <div
+                  key={row.field}
+                  className="grid grid-cols-[minmax(0,38%)_1fr] gap-x-1.5 px-2 py-1.5"
+                >
+                  <dt className="truncate text-[11px] font-medium text-slate-600" title={row.label}>
+                    {row.label}
+                  </dt>
+                  <dd className="min-w-0">
+                    <input
+                      type={isDate ? 'date' : 'text'}
+                      value={inputValue}
+                      readOnly={locked}
+                      disabled={locked}
+                      onChange={(e) => {
+                        if (locked) return;
+                        setAttributeValue(row.field, e.target.value);
+                      }}
+                      className={
+                        locked
+                          ? 'w-full cursor-not-allowed rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-500'
+                          : 'w-full rounded border border-slate-200 px-1.5 py-0.5 text-[11px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30'
+                      }
+                    />
+                  </dd>
+                </div>
+              );
+            })}
           </dl>
         )}
       </div>

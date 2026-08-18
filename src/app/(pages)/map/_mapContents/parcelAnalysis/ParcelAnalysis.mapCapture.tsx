@@ -160,24 +160,76 @@ export async function loadMapCaptureImage(
   }
 }
 
-/** WMS GetMap — POST 전송 (큐 없음: 캡처당 보통 1회, 지연·레이어 누락 방지) */
+export type WmsCaptureFailKind =
+  | 'network'
+  | 'layer_not_defined'
+  | 'style_not_defined'
+  | 'service_exception'
+  | 'invalid_response';
+
+export type WmsCaptureLoadResult =
+  | { ok: true }
+  | { ok: false; kind: WmsCaptureFailKind };
+
+function classifyWmsErrorText(text: string): WmsCaptureFailKind {
+  if (/LayerNotDefined/i.test(text)) return 'layer_not_defined';
+  if (/StyleNotDefined/i.test(text)) return 'style_not_defined';
+  if (/ServiceException|ExceptionReport|Rendering process failed/i.test(text)) {
+    return 'service_exception';
+  }
+  return 'invalid_response';
+}
+
+function formatWmsCaptureNotice(
+  failed: Array<{ key: string; kind: WmsCaptureFailKind }>,
+  totalRequested: number
+): string {
+  if (!failed.length) return '';
+  const groups: Record<WmsCaptureFailKind, string[]> = {
+    layer_not_defined: [],
+    style_not_defined: [],
+    network: [],
+    service_exception: [],
+    invalid_response: [],
+  };
+  for (const f of failed) groups[f.kind].push(f.key);
+  const label: Record<WmsCaptureFailKind, string> = {
+    layer_not_defined: '미등록',
+    style_not_defined: '스타일 없음',
+    network: '네트워크',
+    service_exception: '서버 오류',
+    invalid_response: '응답 오류',
+  };
+  const parts = (Object.keys(groups) as WmsCaptureFailKind[])
+    .filter((k) => groups[k].length > 0)
+    .map((k) => `${label[k]}: ${groups[k].join(', ')}`);
+  const detail = parts.join(' · ');
+  if (failed.length >= totalRequested) {
+    return `GeoServer 레이어를 불러오지 못했습니다 (${detail}). 위 지도는 항공·분석영역만 표시됩니다.`;
+  }
+  return `일부 레이어를 지도에 그리지 못했습니다 (${detail}). 나머지는 표시됩니다.`;
+}
+
+/** WMS GetMap — POST 전송 (레이어별 1회, 실패 종류 구분) */
 export async function loadWmsCapturePost(
   img: HTMLImageElement,
   src: string,
-  onFail?: () => void,
-  networkRetries = 1
-): Promise<void> {
-  const fallback = () => {
-    onFail?.();
+  onFail?: (kind: WmsCaptureFailKind) => void,
+  networkRetries = 2
+): Promise<WmsCaptureLoadResult> {
+  const fail = (kind: WmsCaptureFailKind): WmsCaptureLoadResult => {
+    onFail?.(kind);
     applyTransparent(img);
+    return { ok: false, kind };
   };
 
   if (!src || src.startsWith('data:')) {
-    fallback();
-    return;
+    return fail('invalid_response');
   }
 
-  const postOnce = async (): Promise<'ok' | 'retry' | 'fail'> => {
+  type Once = { status: 'ok' } | { status: 'retry' } | { status: 'fail'; kind: WmsCaptureFailKind };
+
+  const postOnce = async (): Promise<Once> => {
     try {
       const url = new URL(src);
       const baseUrl = url.origin + url.pathname;
@@ -188,34 +240,41 @@ export async function loadWmsCapturePost(
         body,
         cache: 'no-store',
       });
-      if (!res.ok) return 'retry';
+      if (!res.ok) return { status: 'retry' };
       const contentType = res.headers.get('content-type') ?? '';
-      if (/xml|text\/html|text\/plain/i.test(contentType)) return 'fail';
       const blob = await res.blob();
-      if (await isWmsErrorPayload(blob)) return 'fail';
-      if (!(await isImageBlob(blob))) return 'fail';
+      if (/xml|text\/html|text\/plain/i.test(contentType) || (await isWmsErrorPayload(blob))) {
+        const text = await blob.slice(0, 800).text();
+        return { status: 'fail', kind: classifyWmsErrorText(text) };
+      }
+      if (!(await isImageBlob(blob))) {
+        return { status: 'fail', kind: 'invalid_response' };
+      }
       const blobUrl = URL.createObjectURL(blob);
       img.crossOrigin = 'anonymous';
-      img.onload = () => URL.revokeObjectURL(blobUrl);
-      img.onerror = () => {
-        URL.revokeObjectURL(blobUrl);
-        fallback();
-      };
-      img.src = blobUrl;
-      return 'ok';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          URL.revokeObjectURL(blobUrl);
+          resolve();
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          reject(new Error('img'));
+        };
+        img.src = blobUrl;
+      });
+      return { status: 'ok' };
     } catch {
-      return 'retry';
+      return { status: 'retry' };
     }
   };
 
   let left = networkRetries;
   while (true) {
     const result = await postOnce();
-    if (result === 'ok') return;
-    if (result === 'fail' || left <= 0) {
-      fallback();
-      return;
-    }
+    if (result.status === 'ok') return { ok: true };
+    if (result.status === 'fail') return fail(result.kind);
+    if (left <= 0) return fail('network');
     left -= 1;
   }
 }
@@ -370,7 +429,8 @@ type MapCaptureProps = {
 const WMS_EXCEPTIONS = 'application/vnd.ogc.se_xml';
 const WMS_VIEWPORT_RATIO = 1;
 /** 타일 단색 폴백(8s) 이후 여유를 두고 최종 합성 */
-const CAPTURE_FALLBACK_MS = PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS + 3_000;
+/** 레이어별 WMS 병렬 로드 여유 (기본 타일 타임아웃 이후) */
+const CAPTURE_FALLBACK_MS = PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS + 8_000;
 const BASEMAP_TILE_IDLE_MS = 200;
 
 /**
@@ -417,9 +477,9 @@ function waitForBasemapTiles(
     }, BASEMAP_TILE_IDLE_MS);
   }
 
-  source.on('tileloadstart', onStart);
-  source.on('tileloadend', onEnd);
-  source.on('tileloaderror', onEnd);
+  tileSource.on('tileloadstart', onStart);
+  tileSource.on('tileloadend', onEnd);
+  tileSource.on('tileloaderror', onEnd);
 
   map.renderSync();
   idleTimer = window.setTimeout(() => {
@@ -525,8 +585,8 @@ function ParcelAnalysisMapCaptureInner({
     let disposeTileWait: (() => void) | null = null;
     let wmsReady = false;
     let tilesReady = false;
-    let wmsFailed = false;
-    let failedWmsKeys: string[] = [];
+    const wmsFailures: Array<{ key: string; kind: WmsCaptureFailKind }> = [];
+    let wmsPending = 0;
 
     const teardownMap = () => {
       if (map) {
@@ -564,10 +624,8 @@ function ParcelAnalysisMapCaptureInner({
       if (hideOnFailure) setCaptureVisible(true);
       lastCaptureSessionRef.current = captureSessionKey;
       setPreparing(false);
-      if (wmsFailed && !hideOnFailure) {
-        setWmsNotice(
-          `GeoServer 레이어(${failedWmsKeys.join(', ')})를 불러오지 못했습니다. 위 지도는 항공·분석영역만 표시됩니다.`
-        );
+      if (wmsFailures.length > 0 && !hideOnFailure) {
+        setWmsNotice(formatWmsCaptureNotice(wmsFailures, wmsKeys.length));
       }
       teardownMap();
     };
@@ -576,6 +634,14 @@ function ParcelAnalysisMapCaptureInner({
       if (cancelled || composed || !map || !wmsReady || !tilesReady) return;
       map.once('rendercomplete', finishCapture);
       map.renderSync();
+    };
+
+    const markOneWmsDone = () => {
+      wmsPending = Math.max(0, wmsPending - 1);
+      if (wmsPending <= 0) {
+        wmsReady = true;
+        tryScheduleCompose();
+      }
     };
 
     try {
@@ -591,36 +657,37 @@ function ParcelAnalysisMapCaptureInner({
       );
       const layers: BaseLayer[] = [new TileLayer({ source: basemapSource })];
 
-      let wmsLayer: ImageLayer<ImageWMS> | null = null;
-      if (wmsKeys.length > 0) {
-        const wmsKeysLower = wmsKeys.map((k) => k.toLowerCase());
+      const wmsKeysLower = wmsKeys.map((k) => k.toLowerCase());
+      if (wmsKeysLower.length > 0) {
         const wmsBase = `${resolveGeoServerBase(geoserverUrl)}/${workspace}/wms`;
-        wmsLayer = new ImageLayer({
-          source: new ImageWMS({
-            url: wmsBase,
-            params: {
-              LAYERS: wmsKeysLower.map((key) => `${workspace}:${key}`).join(','),
-              STYLES: wmsKeysLower.join(','),
-              VERSION: '1.1.1',
-              EXCEPTIONS: WMS_EXCEPTIONS,
-              TRANSPARENT: true,
-            },
-            serverType: 'geoserver',
-            ratio: WMS_VIEWPORT_RATIO,
-            imageLoadFunction: (image: ImageWrapper, src: string) => {
-              const img = image.getImage() as HTMLImageElement;
-              void loadWmsCapturePost(img, src, () => {
-                if (cancelled) return;
-                wmsFailed = true;
-                failedWmsKeys = wmsKeys;
-                // 실패해도 항공·노란영역은 보여야 하므로 합성 진행 (안내는 합성 완료 후)
-                wmsReady = true;
-                tryScheduleCompose();
-              });
-            },
-          }),
-        });
-        layers.push(wmsLayer);
+        wmsPending = wmsKeysLower.length;
+        for (const key of wmsKeysLower) {
+          const wmsLayer = new ImageLayer({
+            source: new ImageWMS({
+              url: wmsBase,
+              params: {
+                LAYERS: `${workspace}:${key}`,
+                STYLES: key,
+                VERSION: '1.1.1',
+                EXCEPTIONS: WMS_EXCEPTIONS,
+                TRANSPARENT: true,
+              },
+              serverType: 'geoserver',
+              ratio: WMS_VIEWPORT_RATIO,
+              imageLoadFunction: (image: ImageWrapper, src: string) => {
+                const img = image.getImage() as HTMLImageElement;
+                void loadWmsCapturePost(img, src).then((result) => {
+                  if (cancelled) return;
+                  if (!result.ok) {
+                    wmsFailures.push({ key, kind: result.kind });
+                  }
+                  markOneWmsDone();
+                });
+              },
+            }),
+          });
+          layers.push(wmsLayer);
+        }
       }
 
       map = new OlMap({
@@ -632,7 +699,7 @@ function ParcelAnalysisMapCaptureInner({
       });
       map.updateSize();
 
-      wmsReady = !wmsLayer;
+      wmsReady = wmsPending === 0;
       disposeTileWait = waitForBasemapTiles(
         basemapSource,
         map,
@@ -644,16 +711,7 @@ function ParcelAnalysisMapCaptureInner({
         PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS + 2_000
       );
 
-      const wmsSource = wmsLayer?.getSource() ?? null;
-      if (wmsSource) {
-        wmsSource.once('imageloadend', () => {
-          wmsReady = true;
-          tryScheduleCompose();
-        });
-        wmsSource.once('imageloaderror', () => {
-          wmsReady = true;
-          tryScheduleCompose();
-        });
+      if (wmsPending > 0) {
         map.renderSync();
       }
 

@@ -23,6 +23,8 @@ import {
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
 import type { InstallZipProgress } from '@/service/sourceInstallZipProgress';
+import { useTypeCheckGate } from './sourceTypeCheckGate';
+import type { StageState } from './ProgressStagesList';
 
 const HISTORY_OPTION_GNMS_LATEST = 'GNMS 최신';
 
@@ -196,6 +198,16 @@ export function InstallZipDownloadPanel() {
   const lastLogMessageRef = useRef('');
   const lastSkipLoggedRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const typeCheckStageRef = useRef<{ state: StageState; detail?: string }>({
+    state: 'done',
+    detail: '통과',
+  });
+  const {
+    checking: typeChecking,
+    runGate: runTypeCheckGate,
+    abort: abortTypeCheck,
+    modal: typeCheckModal,
+  } = useTypeCheckGate();
 
   useEffect(() => {
     prefetchClientMachineIp();
@@ -203,10 +215,15 @@ export function InstallZipDownloadPanel() {
 
   // 소스 모드 전환 시에만 단계·로그 초기화 (다운로드 완료로 busy가 꺼질 때는 유지)
   useEffect(() => {
-    setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
+    setStages(
+      sourceMode === 'gnms'
+        ? buildGnmsInstallBaseStages()
+        : buildInstallBaseStages({ includeTypeCheck: true })
+    );
     setProgress(emptySideProgress());
     logRef.current = [];
     lastLogMessageRef.current = '';
+    typeCheckStageRef.current = { state: 'done', detail: '통과' };
   }, [sourceMode]);
 
   const isAbortError = (e: unknown): boolean => e instanceof Error && e.name === 'AbortError';
@@ -229,7 +246,9 @@ export function InstallZipDownloadPanel() {
 
   const applyInstallProgress = (p: InstallZipProgress) => {
     setProgress((prev) => ({ ...prev, message: p.message, pct: p.progressPct }));
-    setStages(buildInstallStagesFromProgress(p, infoDetailRef.current));
+    setStages(
+      buildInstallStagesFromProgress(p, infoDetailRef.current, typeCheckStageRef.current)
+    );
     if (p.phase !== lastPhaseRef.current && p.phase !== 'idle') {
       lastPhaseRef.current = p.phase;
     }
@@ -388,9 +407,18 @@ export function InstallZipDownloadPanel() {
     lastPhaseRef.current = '';
     lastLogMessageRef.current = '';
     lastSkipLoggedRef.current = null;
-    setProgress({ ...emptySideProgress(), message: '서버 정보 확인 중...', pct: 2 });
-    setStages(buildInstallBaseStages());
-    setStages((prev) => setStageActive(prev, 'info'));
+    setProgress({ ...emptySideProgress(), message: '서버 정보 확인 중...', pct: 2, logs: logRef.current });
+    setStages((prev) =>
+      setStageActive(
+        patchStages(prev, {
+          typeCheck: {
+            state: typeCheckStageRef.current.state,
+            detail: typeCheckStageRef.current.detail,
+          },
+        }),
+        'info'
+      )
+    );
 
     const progressId = createInstallZipProgressId();
 
@@ -567,9 +595,40 @@ export function InstallZipDownloadPanel() {
     lastSkipLoggedRef.current = null;
     lastPhaseRef.current = '';
     setProgress(emptySideProgress());
-    setStages(sourceMode === 'gnms' ? buildGnmsInstallBaseStages() : buildInstallBaseStages());
+    setStages(
+      sourceMode === 'gnms'
+        ? buildGnmsInstallBaseStages()
+        : buildInstallBaseStages({ includeTypeCheck: true })
+    );
 
     try {
+      if (sourceMode === 'local') {
+        pushLog('다운로드 전 타입 검사...');
+        setStages((prev) => setStageActive(prev, 'typeCheck'));
+        setProgress((p) => ({ ...p, message: '타입 검사 중...', logs: logRef.current }));
+        const outcome = await runTypeCheckGate({
+          signal,
+          onLog: pushLog,
+        });
+        if (outcome === 'aborted') {
+          setStages((prev) =>
+            patchStages(prev, { typeCheck: { state: 'error', detail: '취소' } })
+          );
+          setProgress({
+            message: '사용자가 취소했습니다.',
+            pct: null,
+            logs: logRef.current,
+            error: null,
+          });
+          return;
+        }
+        const typeCheck =
+          outcome === 'continued'
+            ? { state: 'warn' as StageState, detail: '오류 있음 · 진행' }
+            : { state: 'done' as StageState, detail: '통과' };
+        typeCheckStageRef.current = typeCheck;
+        setStages((prev) => patchStages(prev, { typeCheck }));
+      }
       if (sourceMode === 'gnms') {
         await downloadFromGnms(signal);
       } else {
@@ -583,8 +642,11 @@ export function InstallZipDownloadPanel() {
     }
   };
 
+  const uiBusy = busy || typeChecking;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded border p-3 gap-2">
+      {typeCheckModal}
       <div className="shrink-0 space-y-2">
         <Button
           type="button"
@@ -596,30 +658,36 @@ export function InstallZipDownloadPanel() {
           <BookOpenText className="h-4 w-4" />
           설치 매뉴얼
         </Button>
-        <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={busy} />
+        <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={uiBusy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (
-          <ProfileRadios profile={profile} setProfile={setProfile} disabled={busy} />
+          <ProfileRadios profile={profile} setProfile={setProfile} disabled={uiBusy} />
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
-            disabled={busy}
+            disabled={uiBusy}
             onClick={() => void downloadInstallZip()}
             className="gap-1 cursor-pointer"
             title="설치파일 다운로드"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {uiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             설치파일 다운로드
           </Button>
           <Button
             type="button"
             variant="outline"
-            disabled={!busy}
-            onClick={() => abortRef.current?.abort()}
+            disabled={!uiBusy}
+            onClick={() => {
+              if (typeChecking) {
+                abortTypeCheck();
+                return;
+              }
+              abortRef.current?.abort();
+            }}
             className="cursor-pointer"
-            title="취소"
+            title={typeChecking ? '타입 검사 취소' : '취소'}
           >
             취소
           </Button>

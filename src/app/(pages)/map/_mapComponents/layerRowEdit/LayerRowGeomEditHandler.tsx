@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
+import type Map from "ol/Map";
 import Draw from "ol/interaction/Draw";
 import DoubleClickZoom from "ol/interaction/DoubleClickZoom";
 import Modify from "ol/interaction/Modify";
@@ -10,7 +12,9 @@ import GeoJSON from "ol/format/GeoJSON";
 import WKT from "ol/format/WKT";
 import Feature from "ol/Feature";
 import type { FeatureLike } from "ol/Feature";
+import type Geometry from "ol/geom/Geometry";
 import { MultiPolygon, Polygon } from "ol/geom";
+import { createEmpty, extend as extendExtent, type Extent } from "ol/extent";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import {
   occupationFillRgba,
@@ -22,7 +26,11 @@ import {
   useSearchBarOffset,
 } from "../../searchBarOffsetContext";
 import { call } from "@/lib/api";
-import { layerRowPanelButtonClass } from "./layerRowPanelButtonStyles";
+import {
+  DrawToolbarActions,
+  useDrawToolbarPosition,
+  type DrawToolbarMapAnchor,
+} from "../analysisArea";
 import type { LayerRowParcelItem } from "./types";
 
 const EDIT_LAYER_Z = 900;
@@ -61,6 +69,26 @@ function writeCombinedWkt5181FromParentFeatures(source: VectorSource): string | 
 
 function getParentFeatures(source: VectorSource): Feature[] {
   return source.getFeatures().filter((f) => f.get(LAYER_ROW_KIND_KEY) === LAYER_ROW_KIND_PARENT);
+}
+
+function buildToolbarAnchorFromSource(source: VectorSource): DrawToolbarMapAnchor | null {
+  const parents = getParentFeatures(source);
+  if (parents.length === 0) return null;
+  const extent: Extent = createEmpty();
+  let has = false;
+  for (const feature of parents) {
+    const geom = feature.getGeometry() as Geometry | undefined;
+    if (!geom) continue;
+    extendExtent(extent, geom.getExtent());
+    has = true;
+  }
+  if (!has) return null;
+  return { topCenter: [(extent[0] + extent[2]) / 2, extent[3]] };
+}
+
+function buildToolbarAnchorFromGeom(geom: Geometry): DrawToolbarMapAnchor {
+  const ext = geom.getExtent();
+  return { topCenter: [(ext[0] + ext[2]) / 2, ext[3]] };
 }
 
 function replaceParentFeaturesFromWkt5181(source: VectorSource, wkt5181: string) {
@@ -185,12 +213,15 @@ function syncDraftParcelsFromSource(
 }
 
 type GeomMapOps = {
-  reset: () => void | Promise<void>;
+  confirmApply: () => void;
+  redrawShape: () => void;
+  cancelDraw: () => void | Promise<void>;
+  addGeom: () => void;
+  modifyGeom: () => void;
   deleteGeom: () => void;
-  startDraw: () => void;
 };
 
-/** MapContext.layerRowGeomEdit — 지도 도형 그리기/수정 */
+/** MapContext.layerRowGeomEdit — 지도 도형 그리기/수정 (변동이력 알약 툴바·적용 흐름) */
 export function LayerRowGeomEditHandler({
   centerPixel,
 }: {
@@ -207,6 +238,7 @@ export function LayerRowGeomEditHandler({
   const layerRowParcelRemoveRef = mapContext?.layerRowParcelRemoveRef;
   const draftParcels = mapContext?.layerRowDraftParcels ?? [];
   const map = mapContext?.mapInstanceRef?.current ?? null;
+  const mapRef = (mapContext?.mapInstanceRef ?? { current: null }) as RefObject<Map | null>;
   const { inputBottomPx } = useSearchBarOffset();
   const hintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
   const mapOpsRef = useRef<GeomMapOps | null>(null);
@@ -214,24 +246,48 @@ export function LayerRowGeomEditHandler({
   const attachModifyRef = useRef<(() => void) | null>(null);
   const loadParcelsRef = useRef<((opts?: { silent?: boolean }) => Promise<void>) | null>(null);
   const isDrawActiveRef = useRef(false);
-  const [loadingParcels, setLoadingParcels] = useState(false);
-  const [uiMode, setUiMode] = useState<"draw" | "modify">("modify");
+  /** 적용 전 — 필지목록·점용장소는 «적용»에서만 반영 */
+  const pendingApplyRef = useRef(true);
+  const baselineWktRef = useRef<string | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [drawPhase, setDrawPhase] = useState<"drawing" | "editing" | "managed">("drawing");
   const [hasParentGeom, setHasParentGeom] = useState(false);
+  const [toolbarAnchor, setToolbarAnchor] = useState<DrawToolbarMapAnchor | null>(null);
+  const setToolbarAnchorRef = useRef(setToolbarAnchor);
+  setToolbarAnchorRef.current = setToolbarAnchor;
+  const drawPhaseRef = useRef(drawPhase);
+  drawPhaseRef.current = drawPhase;
 
-  useEffect(() => {
-    setUiMode(edit?.mode ?? "draw");
-  }, [edit?.mode, edit?.keyValue, edit?.layerName]);
+  const shapeToolbarActive = Boolean(edit) && drawPhase === "editing" && toolbarAnchor != null;
+  const toolbarPlacement = useDrawToolbarPosition(
+    mapRef,
+    toolbarAnchor,
+    toolbarRef,
+    shapeToolbarActive
+  );
 
-  const handleReset = useCallback(() => {
-    void mapOpsRef.current?.reset();
+  const handleConfirmApply = useCallback(() => {
+    mapOpsRef.current?.confirmApply();
+  }, []);
+
+  const handleRedrawShape = useCallback(() => {
+    mapOpsRef.current?.redrawShape();
+  }, []);
+
+  const handleCancelDraw = useCallback(() => {
+    void mapOpsRef.current?.cancelDraw();
+  }, []);
+
+  const handleAddGeom = useCallback(() => {
+    mapOpsRef.current?.addGeom();
+  }, []);
+
+  const handleModifyGeom = useCallback(() => {
+    mapOpsRef.current?.modifyGeom();
   }, []);
 
   const handleDeleteGeom = useCallback(() => {
     mapOpsRef.current?.deleteGeom();
-  }, []);
-
-  const handleAddGeom = useCallback(() => {
-    mapOpsRef.current?.startDraw();
   }, []);
 
   const loadParcelsFromParentGeom = useCallback(
@@ -255,7 +311,6 @@ export function LayerRowGeomEditHandler({
         return;
       }
 
-      setLoadingParcels(true);
       try {
         const res = await call("", "POST", {
           service: "layerRowService",
@@ -321,8 +376,6 @@ export function LayerRowGeomEditHandler({
         }
       } catch {
         if (!opts?.silent) window.alert("필지목록을 불러오지 못했습니다.");
-      } finally {
-        setLoadingParcels(false);
       }
     },
     [mapContext?.layerRowGeomDrawnRef, mapContext?.layerRowParcelApplyRef, wktRef]
@@ -379,10 +432,18 @@ export function LayerRowGeomEditHandler({
     const notifyGeomDrawn = (sourceKind: "draw" | "modify") => {
       const wkt = String(wktRef?.current ?? "").trim();
       if (!wkt || wkt === LAYER_ROW_GEOM_CLEAR_SENTINEL) return;
-      // 클로저 ref가 아니라 최신 MapContext 콜백을 직접 호출
       const cb =
         mapContext?.layerRowGeomDrawnRef?.current ?? geomDrawnRef?.current;
       cb?.({ wkt5181: wkt, source: sourceKind });
+    };
+
+    const setPending = (next: boolean) => {
+      pendingApplyRef.current = next;
+    };
+
+    const rememberBaseline = () => {
+      const wkt = writeCombinedWkt5181FromParentFeatures(source);
+      baselineWktRef.current = wkt;
     };
 
     const subtractParcelFromParentGeom = async (parcel: {
@@ -413,13 +474,22 @@ export function LayerRowGeomEditHandler({
           removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
           wktRef.current = edit.mode === "modify" ? LAYER_ROW_GEOM_CLEAR_SENTINEL : null;
           setHasParentGeom(false);
+          setToolbarAnchorRef.current(null);
         } else {
           replaceParentFeaturesFromWkt5181(source, String(data.wkt5181));
           wktRef.current = String(data.wkt5181);
           setHasParentGeom(true);
+          setToolbarAnchorRef.current(buildToolbarAnchorFromSource(source));
         }
         syncFromSource({ markDirty: true });
-        attachModifyRef.current?.();
+        if (!pendingApplyRef.current) {
+          rememberBaseline();
+          notifyGeomDrawn("modify");
+          void loadParcelsRef.current?.({ silent: true });
+          // managed 유지 — 꼭짓점 편집은 도형수정으로만
+        } else {
+          attachModifyRef.current?.();
+        }
       } catch {
         // 필지 목록 삭제는 유지, 도형 갱신만 생략
       }
@@ -446,53 +516,121 @@ export function LayerRowGeomEditHandler({
       }
     };
 
+    const syncToolbarAnchor = () => {
+      setToolbarAnchorRef.current(buildToolbarAnchorFromSource(source));
+    };
+
+    const clearToolbarAnchor = () => {
+      setToolbarAnchorRef.current(null);
+    };
+
     const attachModify = () => {
       detachModify();
       modify = new Modify({ source });
+      let anchorRaf = 0;
+      const scheduleAnchor = () => {
+        if (anchorRaf) return;
+        anchorRaf = requestAnimationFrame(() => {
+          anchorRaf = 0;
+          syncToolbarAnchor();
+        });
+      };
       modify.on("modifyend", () => {
         syncFromSource({ markDirty: true });
-        notifyGeomDrawn("modify");
-        void loadParcelsRef.current?.({ silent: true });
+        scheduleAnchor();
+        setDrawPhase("editing");
       });
       map.addInteraction(modify);
-      setUiMode("modify");
+      syncToolbarAnchor();
+      setDrawPhase("editing");
     };
-    attachModifyRef.current = attachModify;
+    attachModifyRef.current = () => {
+      // managed에서는 꼭짓점 수정 비활성 — 도형수정으로만 진입
+      if (drawPhaseRef.current === "managed" || isDrawActiveRef.current) return;
+      if (pendingApplyRef.current) attachModify();
+    };
+
+    const goManaged = () => {
+      detachDraw();
+      detachModify();
+      setPending(false);
+      syncToolbarAnchor();
+      setDrawPhase("managed");
+    };
 
     const invalidateLoad = () => {
       loadSeq += 1;
     };
 
-    const loadParcelsAfterDraw = (attempt = 0) => {
+    const loadParcelsAfterApply = (attempt = 0) => {
       requestAnimationFrame(() => {
         const fn = loadParcelsRef.current;
         if (!fn) {
-          if (attempt < 8) loadParcelsAfterDraw(attempt + 1);
+          if (attempt < 8) loadParcelsAfterApply(attempt + 1);
           return;
         }
         void fn({ silent: true });
       });
     };
 
-    const startDraw = () => {
+    const startDraw = (opts?: { clearParents?: boolean }) => {
+      const clearParents = opts?.clearParents !== false;
       invalidateLoad();
       detachDraw();
       detachModify();
+      if (clearParents) {
+        removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
+        if (wktRef.current !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
+          wktRef.current = null;
+        }
+        setHasParentGeom(false);
+        clearToolbarAnchor();
+      }
+      setPending(true);
+      setDrawPhase("drawing");
       draw = new Draw({ source, type: "Polygon", stopClick: true });
       draw.on("drawend", (e) => {
         markAsParentFeature(e.feature);
-        // drawend 직후 소스 반영이 한 틱 늦는 경우 대비
+        const geom = e.feature.getGeometry();
         requestAnimationFrame(() => {
           syncFromSource({ markDirty: true });
-          notifyGeomDrawn("draw");
+          setPending(true);
+          if (geom) {
+            setToolbarAnchorRef.current(
+              buildToolbarAnchorFromSource(source) ?? buildToolbarAnchorFromGeom(geom)
+            );
+          } else {
+            syncToolbarAnchor();
+          }
           detachDraw();
           attachModify();
-          loadParcelsAfterDraw();
         });
       });
       map.addInteraction(draw);
       isDrawActiveRef.current = true;
-      setUiMode("draw");
+    };
+
+    const restoreBaselineOrDraw = async () => {
+      const baseline = baselineWktRef.current;
+      detachDraw();
+      removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
+      if (baseline && baseline !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
+        replaceParentFeaturesFromWkt5181(source, baseline);
+        syncFromSource();
+        if (dirtyRef) dirtyRef.current = false;
+        goManaged();
+        void loadParcelsRef.current?.({ silent: true });
+        return;
+      }
+      wktRef.current =
+        edit.mode === "modify" && baseline === LAYER_ROW_GEOM_CLEAR_SENTINEL
+          ? LAYER_ROW_GEOM_CLEAR_SENTINEL
+          : null;
+      if (dirtyRef) dirtyRef.current = false;
+      setHasParentGeom(false);
+      mapContext?.layerRowParcelApplyRef?.current?.([], { replaceAuto: true });
+      clearToolbarAnchor();
+      goManaged();
     };
 
     const loadModifyGeom = async (): Promise<boolean> => {
@@ -501,11 +639,15 @@ export function LayerRowGeomEditHandler({
         if (seed && seed !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
           replaceParentFeaturesFromWkt5181(source, seed);
           syncFromSource();
-          attachModify();
+          rememberBaseline();
+          setPending(false);
+          goManaged();
           void loadParcelsRef.current?.({ silent: true });
           return true;
         }
-        attachModify();
+        baselineWktRef.current = null;
+        goManaged();
+        clearToolbarAnchor();
         return true;
       }
 
@@ -539,7 +681,10 @@ export function LayerRowGeomEditHandler({
             wktRef.current = null;
             if (dirtyRef) dirtyRef.current = false;
             setHasParentGeom(false);
-            attachModify();
+            baselineWktRef.current = null;
+            setPending(false);
+            clearToolbarAnchor();
+            goManaged();
             return true;
           }
           window.alert("DB에서 기존 도형을 찾지 못했습니다.");
@@ -565,7 +710,9 @@ export function LayerRowGeomEditHandler({
         source.addFeatures(features);
         syncFromSource();
         if (dirtyRef) dirtyRef.current = false;
-        attachModify();
+        rememberBaseline();
+        setPending(false);
+        goManaged();
         void loadParcelsRef.current?.({ silent: true });
         return true;
       } catch {
@@ -578,21 +725,40 @@ export function LayerRowGeomEditHandler({
     };
 
     mapOpsRef.current = {
-      reset: async () => {
-        detachDraw();
-        if (edit.mode === "modify") {
-          removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
-          wktRef.current = null;
-          if (dirtyRef) dirtyRef.current = false;
-          await loadModifyGeom();
+      confirmApply: () => {
+        const wkt = writeCombinedWkt5181FromParentFeatures(source);
+        if (!wkt) {
+          window.alert("그린 도형이 없습니다. 지도에 도형을 그려 주세요.");
           return;
         }
-        if (getParentFeatures(source).length === 0) return;
-        removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
-        wktRef.current = null;
-        if (dirtyRef) dirtyRef.current = false;
-        setHasParentGeom(false);
+        syncFromSource({ markDirty: true });
+        setPending(false);
+        rememberBaseline();
+        notifyGeomDrawn("draw");
+        loadParcelsAfterApply();
+        goManaged();
+      },
+      redrawShape: () => {
+        invalidateLoad();
         mapContext?.layerRowParcelApplyRef?.current?.([], { replaceAuto: true });
+        if (dirtyRef) dirtyRef.current = true;
+        startDraw({ clearParents: true });
+      },
+      cancelDraw: async () => {
+        await restoreBaselineOrDraw();
+      },
+      addGeom: () => {
+        if (dirtyRef) dirtyRef.current = true;
+        startDraw({ clearParents: false });
+      },
+      modifyGeom: () => {
+        if (getParentFeatures(source).length === 0) {
+          window.alert("수정할 도형이 없습니다. 먼저 도형을 추가해 주세요.");
+          return;
+        }
+        rememberBaseline();
+        setPending(true);
+        if (dirtyRef) dirtyRef.current = true;
         attachModify();
       },
       deleteGeom: () => {
@@ -603,19 +769,26 @@ export function LayerRowGeomEditHandler({
         wktRef.current =
           edit.mode === "modify" ? LAYER_ROW_GEOM_CLEAR_SENTINEL : null;
         if (dirtyRef) dirtyRef.current = true;
+        baselineWktRef.current =
+          edit.mode === "modify" ? LAYER_ROW_GEOM_CLEAR_SENTINEL : null;
         mapContext?.layerRowParcelApplyRef?.current?.([], { replaceAuto: true });
-        attachModify();
+        clearToolbarAnchor();
+        goManaged();
       },
-      startDraw: () => startDraw(),
     };
 
     void (async () => {
+      baselineWktRef.current = null;
+      clearToolbarAnchor();
       if (edit.mode === "modify") {
         const loaded = await loadModifyGeom();
-        if (!loaded && source.getFeatures().length > 0) attachModify();
+        if (!loaded && source.getFeatures().length > 0) {
+          goManaged();
+        }
         return;
       }
-      attachModify();
+      // 신규: 도형 없을 때 바로 그리기
+      startDraw({ clearParents: true });
     })();
 
     return () => {
@@ -625,6 +798,7 @@ export function LayerRowGeomEditHandler({
       mapOpsRef.current = null;
       geomEditSourceRef.current = null;
       attachModifyRef.current = null;
+      clearToolbarAnchor();
       detachDraw();
       detachModify();
       map.removeLayer(layer);
@@ -644,57 +818,51 @@ export function LayerRowGeomEditHandler({
 
   if (!edit) return null;
 
-  const showReset = edit.mode === "modify" || hasParentGeom;
-  const hintText = loadingParcels
-    ? "필지목록 조회 중…"
-    : uiMode === "draw"
-      ? "지도에서 도형을 그려 주세요."
-      : hasParentGeom
-        ? "도형을 수정하면 필지목록이 자동으로 갱신됩니다."
-        : "도형추가 버튼으로 부모 도형을 그리세요.";
+  const toolbar = (
+    <DrawToolbarActions
+      drawPhase={drawPhase}
+      confirmDraw={handleConfirmApply}
+      redrawShape={handleRedrawShape}
+      cancelDraw={handleCancelDraw}
+      applyDisabled={drawPhase === "editing" && !hasParentGeom}
+      addGeom={handleAddGeom}
+      modifyGeom={handleModifyGeom}
+      deleteGeom={handleDeleteGeom}
+      showDeleteGeom={hasParentGeom || edit.mode === "modify"}
+      showModifyGeom={hasParentGeom}
+    />
+  );
 
+  // 그리기·적용 후(도형추가/삭제/수정) — 검색창 아래 상단 고정 (왔다갔다 최소화)
+  if (drawPhase === "drawing" || drawPhase === "managed") {
+    return (
+      <div
+        className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col items-center gap-1.5"
+        style={
+          centerPixel
+            ? { left: centerPixel.x, top: hintTopPx }
+            : { left: "50%", top: hintTopPx }
+        }
+      >
+        {toolbar}
+      </div>
+    );
+  }
+
+  // 적용 전 편집 — 도형 위에 적용/다시그리기/취소
   return (
     <div
-      className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm"
+      ref={toolbarRef}
+      className="pointer-events-none fixed z-[1200] flex flex-col items-start gap-1.5"
       style={
-        centerPixel
-          ? { left: centerPixel.x, top: hintTopPx }
-          : { left: "50%", top: hintTopPx }
+        toolbarPlacement
+          ? { left: toolbarPlacement.left, top: toolbarPlacement.top }
+          : centerPixel
+            ? { left: centerPixel.x, top: hintTopPx, transform: "translateX(-50%)" }
+            : { left: "50%", top: hintTopPx, transform: "translateX(-50%)" }
       }
     >
-      <span className="whitespace-nowrap text-center">{hintText}</span>
-      <div className="pointer-events-none flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          className={layerRowPanelButtonClass(
-            "default",
-            "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
-          )}
-          disabled={uiMode === "draw"}
-          onClick={handleAddGeom}
-        >
-          도형추가
-        </button>
-        {showReset && (
-          <button
-            type="button"
-            className={layerRowPanelButtonClass(
-              "default",
-              "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
-            )}
-            onClick={handleReset}
-          >
-            초기화
-          </button>
-        )}
-        <button
-          type="button"
-          className={layerRowPanelButtonClass("danger", "pointer-events-auto shrink-0")}
-          onClick={handleDeleteGeom}
-        >
-          도형삭제
-        </button>
-      </div>
+      {toolbar}
     </div>
   );
 }

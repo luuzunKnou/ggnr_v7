@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ListChevronsUpDown, UnfoldHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/app/(pages)/(index)/theme-provider';
 import {
   MAP_SPLIT_ANIM_MS,
   MAP_SPLIT_CONTROL_BTN_GAP_PX,
@@ -223,6 +224,8 @@ export function MapSplitterGutter({
   mapPaddingLeft = 0,
   mapPaddingRight = MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
 }: MapSplitterGutterProps) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const isHorizontal = orientation === 'horizontal';
   /** 좌우 분할 → 세로 거터 → 버튼 세로 나열 / 상하 분할 → 가로 나열 */
   const stackAlongGutter = isHorizontal;
@@ -230,6 +233,8 @@ export function MapSplitterGutter({
   const effectiveOffsetRatio = offsetMoveEnabled ? controlOffsetRatio : 0.5;
   const gutterRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
+  /** 분할선 hit 호버(거터 pill 제외) — 실선 두께 확대 */
+  const [hitHovered, setHitHovered] = useState(false);
   const offsetDragRef = useRef(false);
   const expandPointerRef = useRef<{
     pointerId: number;
@@ -516,16 +521,7 @@ export function MapSplitterGutter({
       role="separator"
       aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
     >
-      {/* 실선(표시만) — hit은 pill 아래 z-[5] 슬랫 */}
-      <div
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute z-0 bg-slate-500 dark:bg-muted/60',
-          isHorizontal
-            ? 'inset-y-0 left-1/2 w-[3px] -translate-x-1/2'
-            : 'inset-x-0 top-1/2 h-[3px] -translate-y-1/2'
-        )}
-      />
+      {/* 분할선 hit — pill 위에서는 leave로 두께 원복 */}
       {!ratioLocked ? (
         <div
           aria-hidden
@@ -534,10 +530,14 @@ export function MapSplitterGutter({
             'pointer-events-auto absolute z-[1] bg-transparent',
             ratioCursor,
             isHorizontal
-              ? 'inset-y-0 left-1/2 w-2 -translate-x-1/2'
-              : 'inset-x-0 top-1/2 h-2 -translate-y-1/2'
+              ? 'inset-y-0 left-1/2 w-2.5 -translate-x-1/2'
+              : 'inset-x-0 top-1/2 h-2.5 -translate-y-1/2'
           )}
-          onPointerEnter={() => onRatioDragApproach?.()}
+          onPointerEnter={() => {
+            setHitHovered(true);
+            onRatioDragApproach?.();
+          }}
+          onPointerLeave={() => setHitHovered(false)}
           onPointerDown={(e) => {
             if ((e.target as HTMLElement).closest('[data-split-controls]')) return;
             e.preventDefault();
@@ -546,6 +546,23 @@ export function MapSplitterGutter({
           }}
         />
       ) : null}
+      {/* 실선 — dark: 유틸이 빌드 CSS에 없을 수 있어 resolvedTheme로 배경 분기 */}
+      <div
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute z-0 transition-[width,height] duration-150',
+          isDark ? 'bg-slate-800' : 'bg-slate-500',
+          isHorizontal
+            ? cn(
+                'inset-y-0 left-1/2 -translate-x-1/2',
+                hitHovered && !ratioLocked ? 'w-2' : 'w-[3px]'
+              )
+            : cn(
+                'inset-x-0 top-1/2 -translate-y-1/2',
+                hitHovered && !ratioLocked ? 'h-2' : 'h-[3px]'
+              )
+        )}
+      />
       <div
         ref={pillRef}
         data-split-controls

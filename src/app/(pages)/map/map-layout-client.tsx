@@ -19,6 +19,7 @@ import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedger
 import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/RoadLedgerFacilityAttrModal"
 import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetworkListPanel"
 import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
+import { clearRoadNetworkWmsLayers } from "./_mapContents/road/roadNetwork/roadNetworkMapSync"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
@@ -400,6 +401,7 @@ function MapLayoutContent({
   const setSafetyMapLayerVisibility = mapContext?.setSafetyMapLayerVisibility
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt
   const setSpatialFilteredLayerNames = mapContext?.setSpatialFilteredLayerNames
+  const setServiceWmsCqlByLayer = mapContext?.setServiceWmsCqlByLayer
   /** 색인도 식별 시 하천·탭을 동기 갱신 (상세 패널 effect보다 먼저 반영되도록 ref에 등록) */
   if (mapContext?.applyRiverBasicPlanMapPickRef) {
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
@@ -541,6 +543,7 @@ function MapLayoutContent({
       setSafetyMapLayerVisibility,
       setSpatialFilterWkt,
       setSpatialFilteredLayerNames,
+      setServiceWmsCqlByLayer,
       setIdentifyResultList,
       setIdentifySelectedRow,
     }
@@ -564,6 +567,7 @@ function MapLayoutContent({
     setSafetyMapLayerVisibility,
     setSpatialFilterWkt,
     setSpatialFilteredLayerNames,
+    setServiceWmsCqlByLayer,
     setIdentifyResultList,
     setIdentifySelectedRow,
   ])
@@ -885,6 +889,10 @@ function MapLayoutContent({
       if (mapContext?.roadNetworkPointPickRef) {
         mapContext.roadNetworkPointPickRef.current = null
       }
+      if (mapContext?.applyRoadNetworkMapPickRef) {
+        mapContext.applyRoadNetworkMapPickRef.current = null
+      }
+      clearRoadNetworkWmsLayers(setVisibleLayerNames)
     }
   }, [
     roadNetworkOpen,
@@ -899,6 +907,8 @@ function MapLayoutContent({
     setRoadNetworkEndpointMarkers,
     setRoadNetworkFocusedSitePointKey,
     mapContext?.roadNetworkPointPickRef,
+    mapContext?.applyRoadNetworkMapPickRef,
+    setVisibleLayerNames,
   ])
 
   useEffect(() => {
@@ -1404,7 +1414,7 @@ function MapLayoutContent({
       <div className="relative w-full h-screen overflow-hidden bg-slate-100">
         {mapContext?.layerRowGeomEdit && (
           <div
-            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-red-500"
+            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-primary/40"
             aria-hidden
           />
         )}
@@ -1598,20 +1608,21 @@ function MapLayoutContent({
             </div>
           )}
           {roadNetworkOpen && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={roadNetworkListWidth}
                 minWidth={ROAD_NETWORK_LIST_MIN_WIDTH}
                 maxWidth={ROAD_NETWORK_LIST_MAX_WIDTH}
                 leftOffsetPx={roadNetworkListLeftPx}
                 onWidthChange={setRoadNetworkListWidth}
+                contentClassName="overflow-hidden"
               >
                 <RoadNetworkListPanel onClose={handleHideRoadNetwork} />
               </MapSideListPanel>
             </div>
           )}
           {roadNetworkOpen && roadNetworkSelectedRow && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={roadNetworkDetailWidth}
                 minWidth={ROAD_NETWORK_DETAIL_MIN_WIDTH}

@@ -51,6 +51,7 @@ export function useRiverConstructionLedgerMapHighlight(mapReady: boolean) {
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const sourceRef = useRef<VectorSource | null>(null);
   const pulsePhaseRef = useRef(0);
+  const lastFitKeyRef = useRef('');
   const [radarActive, setRadarActive] = useState(false);
 
   useEffect(() => {
@@ -130,31 +131,43 @@ export function useRiverConstructionLedgerMapHighlight(mapReady: boolean) {
       }
     }
 
-    // 도형 편집 중 fit은 편집 세션이 담당 — 강조 재진입 시만 이동
-    if (!fitExtent || geomEditingId) return;
-
-    const runFit = () => {
-      if (!map.getTargetElement()) return;
-      prepareMapForPanelAwareNavigation(map, () => mapContext?.applyMapViewPaddingRef?.current?.());
-      fitMapToExtent3857(map, fitExtent!, {
-        fitPadding: [...FIT_PADDING],
-        maxZoom: FIT_MAX_ZOOM,
+    // 목록 클릭 extent fit과 중복되지 않게 — 선택/하천 focus 키가 바뀔 때만 이동
+    const fitKey = riverFocus?.extent3857?.length === 4
+      ? `river:${riverFocus.extent3857.join(',')}`
+      : selectedId
+        ? `row:${selectedId}`
+        : '';
+    const shouldFit =
+      Boolean(fitExtent) &&
+      !geomEditingId &&
+      fitKey !== '' &&
+      fitKey !== lastFitKeyRef.current;
+    if (shouldFit && fitExtent) {
+      lastFitKeyRef.current = fitKey;
+      const runFit = () => {
+        if (!map.getTargetElement()) return;
+        prepareMapForPanelAwareNavigation(map, () => mapContext?.applyMapViewPaddingRef?.current?.());
+        fitMapToExtent3857(map, fitExtent!, {
+          fitPadding: [...FIT_PADDING],
+          maxZoom: FIT_MAX_ZOOM,
+        });
+      };
+      queueMicrotask(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(runFit);
+        });
       });
-    };
-
-    queueMicrotask(() => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(runFit);
-      });
-    });
+    } else if (!fitKey) {
+      lastFitKeyRef.current = '';
+    }
   }, [
-    highlightRow,
+    highlightRow?.id,
+    highlightRow?.geom,
     riverFocus,
     geomEditingId,
     mapReady,
     mapContext?.applyMapViewPaddingRef,
     mapContext?.mapInstanceRef,
     selectedId,
-    mapContext?.riverConstructionLedgerRows,
   ]);
 }

@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
     layerName: layer,
     keyValue: key,
     subfolder,
+    includeMeta: req.nextUrl.searchParams.get('meta') !== '0',
   });
   return NextResponse.json({ files }, { headers: { 'Cache-Control': 'no-store' } });
 }

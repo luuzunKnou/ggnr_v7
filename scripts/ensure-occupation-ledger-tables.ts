@@ -1,6 +1,9 @@
 /**
- * layer 스키마에 공통 점용대장 빈 테이블 생성 (본대·지적·물건지 × 하천/도로/국공유지)
+ * layer 스키마에 공통 점용대장·점사용료 빈 테이블 생성
+ * (본대·지적·물건지 × 하천/도로/국공유지 + ngl_fee_list × 3 = 12개)
  * 사용: npx tsx scripts/ensure-occupation-ledger-tables.ts build_uj dev
+ *
+ * 실제 DDL은 ensureLayerAppTables(기동 시와 동일)를 호출한다.
  */
 import { loadProjectEnv } from './load-project-env';
 
@@ -10,57 +13,30 @@ loadProjectEnv(project, type);
 process.env.GGNR_PROJECT = project;
 process.env.GGNR_ENV = type;
 
-const PREFIXES = ['water', 'road', 'public'] as const;
-
-const MAIN_COLS = `
-  ogc_fid serial PRIMARY KEY,
-  id text,
-  work_name text,
-  occup_place text,
-  occup_purpose text,
-  perm_start_date date,
-  perm_end_date date,
-  perm_area text,
-  permit_no text,
-  permit_date date,
-  occup_name text,
-  occup_phone text,
-  applicant_addr text,
-  manage_name text,
-  state text,
-  remark text,
-  geom geometry(MultiPolygon, 5181)
-`;
-
-const CHILD_COLS = `
-  ogc_fid serial PRIMARY KEY,
-  id text,
-  occup_place text,
-  geom geometry(MultiPolygon, 5181)
-`;
-
 async function main() {
-  const { db } = await import('../src/database/db');
-  const { sql } = await import('drizzle-orm');
+  const {
+    ensureOccupationLedgerTables,
+    ensureNglFeeListTables,
+  } = await import('../src/service/ensureLayerAppTables');
 
-  await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS layer`));
-  await db.execute(sql.raw(`CREATE EXTENSION IF NOT EXISTS postgis`));
+  const result = {
+    created: [] as string[],
+    moved: [] as string[],
+    existed: [] as string[],
+    errors: [] as string[],
+  };
+  await ensureOccupationLedgerTables(result);
+  await ensureNglFeeListTables(result);
 
-  for (const prefix of PREFIXES) {
-    const base = `${prefix}_occupationledger`;
-    const specs: Array<{ table: string; cols: string }> = [
-      { table: base, cols: MAIN_COLS },
-      { table: `${base}_jijuk`, cols: CHILD_COLS },
-      { table: `${base}_mgj`, cols: CHILD_COLS },
-    ];
-    for (const { table, cols } of specs) {
-      const ddl = `CREATE TABLE IF NOT EXISTS layer.${table} (${cols})`;
-      await db.execute(sql.raw(ddl));
-      console.log('[ok]', `layer.${table}`);
-    }
-  }
-  console.log('[done] occupation ledger empty tables ready');
-  process.exit(0);
+  for (const t of result.created) console.log('[created]', t);
+  for (const t of result.moved) console.log('[moved]', t);
+  for (const t of result.existed) console.log('[exists]', t);
+  for (const t of result.errors) console.error('[error]', t);
+
+  console.log(
+    `[done] occupation+fee tables — created ${result.created.length}, existed ${result.existed.length}, errors ${result.errors.length}`
+  );
+  process.exit(result.errors.length > 0 ? 1 : 0);
 }
 
 main().catch((e) => {

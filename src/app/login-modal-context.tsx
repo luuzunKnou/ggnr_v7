@@ -20,6 +20,8 @@ import {
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { SignUpApplyForm } from '@/app/(pages)/(index)/SignUpApplyForm';
+import { call } from '@/lib/api';
+import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
 
 type LoginModalContextValue = {
   openLogin: () => void;
@@ -118,8 +120,24 @@ function LoginModalDialog({
       });
       if (res?.error) {
         if (res.code === 'signup_rejected') {
+          let reason = '';
+          try {
+            const hint = await call('', 'POST', {
+              service: 'usrService',
+              action: 'getSignUpRejectReason',
+              params: { usr_id: usrId },
+            });
+            const inner = hint?.data as
+              | { data?: { reason?: string | null }; success?: boolean }
+              | undefined;
+            reason = String(inner?.data?.reason ?? '').trim();
+          } catch {
+            reason = '';
+          }
           setError(
-            '반려가 되었으니 재가입신청을 하시거나 담당자에게 문의하세요.'
+            reason
+              ? `반려되었습니다.\n사유: ${reason}\n재가입신청을 하시거나 담당자에게 문의하세요.`
+              : '반려가 되었으니 재가입신청을 하시거나 담당자에게 문의하세요.'
           );
         } else if (res.code === 'signup_pending') {
           setError('승인대기중입니다.');
@@ -129,8 +147,16 @@ function LoginModalDialog({
         setLoading(false);
         return;
       }
+      const here =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : '/';
       const dest =
-        pendingNext && pendingNext.startsWith('/') ? pendingNext : '/';
+        pendingNext && pendingNext.startsWith('/')
+          ? pendingNext
+          : here.startsWith('/')
+            ? here
+            : '/';
       window.location.href = dest;
     } catch {
       setError('로그인에 실패했습니다.');
@@ -146,7 +172,9 @@ function LoginModalDialog({
           <DialogDescription>시스템 계정으로 로그인하세요.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4 pt-2">
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="whitespace-pre-wrap text-sm text-destructive">{error}</p>
+          ) : null}
           <div className="space-y-2">
             <label className="text-sm font-medium">아이디</label>
             <Input
@@ -231,6 +259,10 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
     if (typeof window !== 'undefined') {
       const n = new URLSearchParams(window.location.search).get('next');
       if (n && n.startsWith('/')) setPendingNext(n);
+      else {
+        const here = `${window.location.pathname}${window.location.search}`;
+        if (here.startsWith('/')) setPendingNext(here);
+      }
     }
     setSignUpOpen(false);
     setLoginOpen(true);
@@ -242,6 +274,12 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const onClearNext = useCallback(() => setPendingNext(''), []);
+
+  useEffect(() => {
+    const onAuthRequired = () => openLogin();
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+  }, [openLogin]);
 
   return (
     <LoginModalContext.Provider value={{ openLogin, openSignUp }}>

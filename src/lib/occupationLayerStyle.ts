@@ -10,7 +10,7 @@ export const OCCUPATION_LAYER_STYLE = {
   /** 점용대장 WMS */
   parent: {
     fill: "#68CCCA",
-    stroke: "#3BA8A6",
+    stroke: "#FFFFFF",
     fillOpacity: 0.35,
   },
   /** 점용대장 선택·도형수정 강조 (기존 빨강) */
@@ -81,12 +81,13 @@ export function occupationFillRgba(
   key: OccupationLayerStyleKey,
   opacity: number = OCCUPATION_LAYER_STYLE[key].fillOpacity
 ): string {
+  const alpha = opacity ?? OCCUPATION_LAYER_STYLE[key].fillOpacity;
   const hex = OCCUPATION_LAYER_STYLE[key].fill.replace("#", "");
   const n = parseInt(hex, 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function occupationStrokeRgba(

@@ -415,6 +415,20 @@ async function getLedgerList(keyword: string): Promise<{
     }
   }
 
+  // 도로점용과 동일: 필지 주소 → 본대 parcel_address → 물건지주소(value_014)
+  const parentParcelExpr = hasCol('parcel_address')
+    ? `COALESCE(${q('parcel_address')}::text, '')`
+    : `''::text`;
+  const mulgunjiAddrExpr = hasCol('value_014')
+    ? `COALESCE(${q('value_014')}::text, '')`
+    : `''::text`;
+  const spotExpr = `COALESCE(
+      NULLIF(${firstJijukExpr}, ''),
+      NULLIF(${parentParcelExpr}, ''),
+      NULLIF(${mulgunjiAddrExpr}, ''),
+      ''
+    )`;
+
   const permitNoExpr = hasCol('value_005')
     ? `COALESCE(${q('value_005')}::text, '')`
     : hasCol('ledger_row_key')
@@ -435,7 +449,7 @@ async function getLedgerList(keyword: string): Promise<{
     SELECT
       COALESCE(${q('id')}::text, '') AS "rowKey",
       ${permitNoExpr} AS "permitNo",
-      ${firstJijukExpr} AS "spot",
+      ${spotExpr} AS "spot",
       ${yearExpr} AS "col3",
       ${dateExpr} AS "col4"
     FROM "${safeSchema}"."${safe}" ${t}

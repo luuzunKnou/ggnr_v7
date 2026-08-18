@@ -30,6 +30,22 @@ function pushItem(items: SchemaDiffItem[], item: SchemaDiffItem): void {
 }
 
 /**
+ * 소스코드 업로드 전용 — 공유 normalizeColumnTypeForCompare 결과를 한 번 더 거름.
+ * 예: geometry(Geometry, 5181) vs geometry(Geometry,5181) 공백 차이.
+ * dbManagerService 공유 유틸은 수정하지 않는다.
+ */
+function normalizeTypeForSourceUploadCompare(type: string): string {
+  return type.toLowerCase().replace(/\s+/g, '');
+}
+
+function isSameTypeForSourceUpload(definedType: string, actualType: string): boolean {
+  return (
+    normalizeTypeForSourceUploadCompare(definedType) ===
+    normalizeTypeForSourceUploadCompare(actualType)
+  );
+}
+
+/**
  * 소스코드 업로드용: Drizzle(database/schema)에 정의된 테이블만 DB와 비교.
  * DB에만 있는 layer.* 등은 차이로 보지 않는다.
  */
@@ -78,12 +94,18 @@ export async function compareDrizzleSchemaForSourceUpload(
       });
     }
     for (const m of colDiff.toModify) {
+      const typeSame = isSameTypeForSourceUpload(m.defined.type, m.actual.type);
+      const notNullSame = m.defined.notNull === m.actual.notNull;
+      // 공유 비교의 표기 차이만인 경우(공백 등) 업로드 경고에서 제외
+      if (typeSame && notNullSame) continue;
       pushItem(items, {
         kind: 'modified_column',
         schema: t.schema,
         table: t.table,
         column: m.name,
-        detail: `${m.actual.type} → ${m.defined.type}`,
+        detail: typeSame
+          ? `NOT NULL ${m.actual.notNull} → ${m.defined.notNull}`
+          : `${m.actual.type} → ${m.defined.type}`,
       });
     }
   }

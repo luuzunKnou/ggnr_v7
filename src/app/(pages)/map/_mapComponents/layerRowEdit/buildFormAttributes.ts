@@ -59,15 +59,34 @@ export function buildFormAttributesFromDefineFields(
           : defineLabel,
         value: "",
         showDetail,
+        type: String(raw.define_field_type ?? "text").trim().toLowerCase() || "text",
+        readOnly: isTrueFlag(raw.define_field_read_only),
+        required: isTrueFlag(raw.define_field_is_required),
         idx: parseInt(String(raw.define_field_idx ?? "999999"), 10) || 999999,
       };
     })
-    .filter((x): x is LayerRowDetailAttr & { idx: number; showDetail: boolean } => x != null)
+    .filter(
+      (x): x is LayerRowDetailAttr & {
+        idx: number;
+        showDetail: boolean;
+        type: string;
+        readOnly: boolean;
+        required: boolean;
+      } => x != null
+    )
     .sort((a, b) => {
       if (a.showDetail !== b.showDetail) return a.showDetail ? -1 : 1;
       return a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field);
     })
-    .map(({ field, label, value, showDetail }) => ({ field, label, value, showDetail }));
+    .map(({ field, label, value, showDetail, type, readOnly, required }) => ({
+      field,
+      label,
+      value,
+      showDetail,
+      type,
+      readOnly,
+      required,
+    }));
 }
 
 export async function fetchFormAttributesForPreset(
@@ -87,15 +106,27 @@ export async function fetchFormAttributesForPreset(
     const data = res?.data ?? res;
     const fields = Array.isArray(data?.fields) ? data.fields : [];
     if (fields.length > 0) {
-      return fields.map((d: { field?: string; label?: string; showDetail?: boolean }) => {
-        const field = String(d.field ?? "").trim();
-        return {
-          field,
-          label: resolvePresetFieldLabel(field, preset, d.label),
-          value: "",
-          showDetail: d.showDetail !== false,
-        };
-      });
+      return fields.map(
+        (d: {
+          field?: string;
+          label?: string;
+          showDetail?: boolean;
+          type?: string;
+          readOnly?: boolean;
+          required?: boolean;
+        }) => {
+          const field = String(d.field ?? "").trim();
+          return {
+            field,
+            label: resolvePresetFieldLabel(field, preset, d.label),
+            value: "",
+            showDetail: d.showDetail !== false,
+            type: String(d.type ?? "text").trim().toLowerCase() || "text",
+            readOnly: d.readOnly === true,
+            required: d.required === true,
+          };
+        }
+      );
     }
   } catch {
     // fallback below

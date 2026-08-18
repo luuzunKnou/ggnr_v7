@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   riverBasicPlanAsDefineTable,
   riverBasicPlanIndexDefineTable,
+  buildRiverBasicPlanRiverNameCqlByLayer,
   type RiverBasicPlanTab,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
@@ -79,8 +80,16 @@ export function RiverBasicPlanListPanel({
         }
         return changed ? next : prev;
       });
+      c.setServiceWmsCqlByLayer?.(null);
     };
   }, [tab]);
+
+  /** 목록에서 하천 선택 시 해당 하천만 WMS 표시 */
+  useEffect(() => {
+    const setCql = mapContextRef.current?.setServiceWmsCqlByLayer;
+    if (!setCql) return;
+    setCql(buildRiverBasicPlanRiverNameCqlByLayer(tab, selectedRiver));
+  }, [tab, selectedRiver]);
 
   useEffect(() => {
     const t = setTimeout(async () => {

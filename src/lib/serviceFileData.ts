@@ -43,6 +43,7 @@ export function isAllowedServiceFileDataDownloadPath(relativePath: string): bool
   const fileName = parts[parts.length - 1];
   if (!fileName || UNSAFE_SEGMENT.test(fileName) || fileName.includes('..')) return false;
   if (isServiceFileDataTmpMarkedFileName(fileName)) return false;
+  if (isServiceFileDataSystemJunkFileName(fileName)) return false;
   return true;
 }
 
@@ -52,10 +53,32 @@ export function assertSafeServiceFileBasename(name: string): string | null {
   if (!base || base === '.' || base === '..' || base.includes('..')) return null;
   if (UNSAFE_SEGMENT.test(base)) return null;
   if (base.length > 240) return null;
+  if (isServiceFileDataSystemJunkFileName(base)) return null;
   return base;
 }
 
 /** 소프트삭제(rename → *.tmp)된 파일 — 목록·다운로드에서 제외 */
 export function isServiceFileDataTmpMarkedFileName(fileName: string): boolean {
   return fileName.endsWith('.tmp');
+}
+
+/** OS가 폴더 탐색 시 만드는 캐시·설정 파일 — 첨부 목록·다운로드에서 제외 */
+const SERVICE_FILE_DATA_SYSTEM_JUNK = new Set([
+  'thumbs.db',
+  'ehthumbs.db',
+  'desktop.ini',
+  '.ds_store',
+]);
+
+export function isServiceFileDataSystemJunkFileName(fileName: string): boolean {
+  const name = String(fileName ?? '').trim();
+  if (!name) return false;
+  return SERVICE_FILE_DATA_SYSTEM_JUNK.has(name.toLowerCase());
+}
+
+/** 목록·다운로드·루트파일 판정에서 숨길 파일 */
+export function shouldHideServiceFileDataFileName(fileName: string): boolean {
+  return (
+    isServiceFileDataTmpMarkedFileName(fileName) || isServiceFileDataSystemJunkFileName(fileName)
+  );
 }

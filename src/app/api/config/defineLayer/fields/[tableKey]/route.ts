@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as fs from "fs"
 import * as path from "path"
+import { normalizeDefineFieldsTypes } from "@/lib/defineLayerFieldTypeNormalize"
+import { safeTableName } from "@/lib/shpTableName"
 
 const FIELDS_DIR = path.join(process.cwd(), "src", "config", "defineLayer", "fields")
 
@@ -17,7 +19,7 @@ function sortFields<T extends Record<string, unknown>>(arr: T[]): T[] {
 }
 
 function getFilePath(tableKey: string): string {
-  const safe = String(tableKey).replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase()
+  const safe = safeTableName(tableKey)
   return path.join(FIELDS_DIR, `table_${safe}.json`)
 }
 
@@ -90,7 +92,8 @@ export async function POST(
     }
     const filePath = getFilePath(tableKey)
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    const sorted = sortFields(fields)
+    const normalized = normalizeDefineFieldsTypes(fields as Record<string, unknown>[])
+    const sorted = sortFields(normalized)
     fs.writeFileSync(filePath, JSON.stringify(sorted, null, 2), "utf-8")
     return NextResponse.json({ success: true })
   } catch (e) {

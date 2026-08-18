@@ -112,7 +112,7 @@ export function explainKakaoRoadviewFailure(raw: unknown): string | null {
   }
 
   if (/invalid.?app.?key|appkey.*(invalid|denied)|인증.*실패/i.test(text)) {
-    return '카카오 지도 API 키(JavaScript 키)가 올바르지 않거나 사용할 수 없습니다.\nruntime.env 의 KAKAO_MAP_API_KEY 를 확인하세요.';
+    return '카카오 지도 API 키(JavaScript 키)가 올바르지 않거나 사용할 수 없습니다.\n개발자 모드 «시스템 변수» 공용 탭의 KAKAO_MAP_API_KEY 를 확인하세요.';
   }
 
   if (/code["\s:=]+-?401|-401|AccessDenied/i.test(text)) {
@@ -271,7 +271,7 @@ export function StreetViewPanel({
         if (!key) {
           if (!cancelled) {
             setError(
-              '카카오 지도 API 키가 없습니다.\nruntime.env 에 KAKAO_MAP_API_KEY 를 설정하세요.'
+              '카카오 지도 API 키가 없습니다.\n개발자 모드 «시스템 변수» 공용 탭에 KAKAO_MAP_API_KEY 를 설정하세요.'
             );
           }
           return;

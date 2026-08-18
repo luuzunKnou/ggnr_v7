@@ -65,7 +65,7 @@ async function collectFilesRecursive(
   absDir: string,
   prefix = ''
 ): Promise<ZipFileEntry[]> {
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let entries;
   try {
     entries = await fs.readdir(absDir, { withFileTypes: true });
   } catch {

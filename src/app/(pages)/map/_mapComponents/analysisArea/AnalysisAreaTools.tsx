@@ -107,6 +107,12 @@ export const useParcelAnalysisAreaLayer = useAnalysisAreaLayer;
  */
 const TARGET_VIEWPORT_FILL = 1.5;
 
+/**
+ * 진입 시 시군구 맞춤을 건너뛸 최소 줌.
+ * 이미 동네·필지 스케일(16~19)이면 강제 축소하지 않고 현재 뷰를 유지한다.
+ */
+const SKIP_PROJECT_FIT_MIN_ZOOM = 16;
+
 function extent5181To3857(
   minX: number,
   minY: number,
@@ -137,8 +143,8 @@ function extent5181To3857(
 }
 
 /**
- * 필지분석 진입 시 사업 시군구(schema.emd 전체) 범위를 중심 좌표 기준으로 확대.
- * 좌측 패널이 없는 진입 단계에서 대상 지역을 크게 보여주기 위한 용도.
+ * 필지분석·변동이력 진입 시 사업 시군구(schema.emd 전체) 범위를 중심 기준으로 맞춤.
+ * 현재 줌이 16 이상이면 맞춤을 생략하고 화면을 유지한다.
  */
 export function useAnalysisProjectMapZoom() {
   const mapContext = useMapContext();
@@ -148,6 +154,14 @@ export function useAnalysisProjectMapZoom() {
     if (zoomedRef.current) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
+
+    const view = map.getView();
+    const currentZoom = view.getZoom();
+    // 확대된 상태(16+)에서는 시군구로 강제 축소하지 않음 — 필지·변동이력 공용
+    if (currentZoom != null && Number.isFinite(currentZoom) && currentZoom >= SKIP_PROJECT_FIT_MIN_ZOOM) {
+      zoomedRef.current = true;
+      return;
+    }
 
     try {
       const res = await call('', 'POST', {
@@ -171,7 +185,6 @@ export function useAnalysisProjectMapZoom() {
       const extentHeight = ymax - ymin;
 
       const size = map.getSize();
-      const view = map.getView();
       if (!size || extentWidth <= 0 || extentHeight <= 0) return;
 
       // 좌측 패널이 없는 진입 단계 — 사이드바 패딩만 가시영역에서 제외
@@ -420,21 +433,32 @@ export function AnalysisAreaSummary({
 }
 
 type DrawToolbarActionsProps = {
-  drawPhase: 'drawing' | 'editing';
+  drawPhase: 'drawing' | 'editing' | 'managed';
   confirmDraw: () => void;
   redrawShape: () => void;
   cancelDraw: () => void;
   /** 필지: 사업구역 밖이면 true. 변동이력 등은 생략(기본 false) */
   applyDisabled?: boolean;
+  /** managed(적용 후) — 점용대장·하천점용 */
+  addGeom?: () => void;
+  modifyGeom?: () => void;
+  deleteGeom?: () => void;
+  showDeleteGeom?: boolean;
+  showModifyGeom?: boolean;
 };
 
-/** 도형 그리기·편집 지도 위 알약 툴바 (필지분석·변동이력 공용) */
+/** 도형 그리기·편집 지도 위 알약 툴바 (필지분석·변동이력·점용 공용) */
 export function DrawToolbarActions({
   drawPhase,
   confirmDraw,
   redrawShape,
   cancelDraw,
   applyDisabled = false,
+  addGeom,
+  modifyGeom,
+  deleteGeom,
+  showDeleteGeom = true,
+  showModifyGeom = true,
 }: DrawToolbarActionsProps) {
   const pillShell =
     'pointer-events-auto flex max-w-[min(100vw-16px,560px)] flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 py-2 pr-2 pl-4 text-foreground shadow-lg backdrop-blur';
@@ -453,6 +477,47 @@ export function DrawToolbarActions({
           <X className="size-3.5" />
           취소
         </button>
+      </div>
+    );
+  }
+
+  if (drawPhase === 'managed') {
+    const managedBtn =
+      'cursor-pointer rounded-full bg-muted px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground sm:text-sm';
+
+    return (
+      <div className={cn(pillShell, 'justify-center gap-1.5 px-2')}>
+        {showModifyGeom ? (
+          <button
+            type="button"
+            onClick={modifyGeom}
+            title="도형수정"
+            aria-label="도형수정"
+            className={managedBtn}
+          >
+            도형수정
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={addGeom}
+          title="도형추가"
+          aria-label="도형추가"
+          className={managedBtn}
+        >
+          도형추가
+        </button>
+        {showDeleteGeom ? (
+          <button
+            type="button"
+            onClick={deleteGeom}
+            title="도형삭제"
+            aria-label="도형삭제"
+            className={managedBtn}
+          >
+            도형삭제
+          </button>
+        ) : null}
       </div>
     );
   }

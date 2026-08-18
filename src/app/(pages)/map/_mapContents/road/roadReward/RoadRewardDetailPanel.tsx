@@ -40,6 +40,7 @@ import {
   fitMapToLayerRowParcel,
   fitMapToLayerRowParcels,
 } from "../../../_mapComponents/layerRowEdit/layerRowParcelUtils";
+import { useLayerRowParcelHighlight } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import type { VWorldAddressItem } from "../../../_mapComponents/addressSearch/vworldAddressSearch";
@@ -266,7 +267,15 @@ export function RoadRewardDetailPanel({
         extent3857: caseItem?.extent3857 ?? null,
       };
 
-  /** 직접 그린 편입 범위만 지도에 표시 — 필지 개별 도형은 그리지 않음. 편집 중엔 편집 레이어가 대신 그림 */
+  /** 필지목록에서 선택한 필지 — 지도 강조 */
+  const selectedParcelHighlight = useMemo((): LayerRowParcelItem | null => {
+    if (!selectedParcelId) return null;
+    const hit = displayParcels.find((p) => p.id === selectedParcelId);
+    return hit ? toParcelItem(hit) : null;
+  }, [displayParcels, selectedParcelId]);
+  useLayerRowParcelHighlight(selectedParcelHighlight, "blue");
+
+  /** 직접 그린 편입 범위 표시. 필지 선택은 위 강조 레이어로 표시. 편집 중엔 편집 레이어가 대신 그림 */
   useEffect(() => {
     if (caseGeomEditMode != null) return;
     const map = mapContext?.mapInstanceRef?.current;
@@ -1008,7 +1017,7 @@ export function RoadRewardDetailPanel({
           ) : null}
         </div>
         {attrsOpen ? (
-          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-hide">
+          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-thin">
             <AttrTable entries={isEditing ? caseEditEntries : caseViewEntries} />
           </div>
         ) : null}

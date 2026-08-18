@@ -82,6 +82,49 @@ export function riverBasicPlanGdParentDefineTable(tab: RiverBasicPlanTab): strin
   return tab === 'smallRiver' ? 'river_plan_s_gd_ps' : 'river_plan_gd_ps';
 }
 
+/** 목록에서 하천 선택 시 WMS에 river_name 조건을 걸 수 있는 define_table_name */
+export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab): readonly string[] {
+  if (tab === 'smallRiver') {
+    return [
+      RIVER_BASIC_PLAN_SMALL_INDEX_DEFINE_TABLE,
+      'river_plan_s_as',
+      'river_plan_s_jd_lm',
+      'river_plan_s_hd_lm',
+      ...RIVER_PLAN_S_GD_STRUCTURE_DEFINE_TABLES,
+    ];
+  }
+  return [
+    RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE,
+    'river_plan_as',
+    'river_plan_jd_lm',
+    'river_plan_hd_lm',
+    ...RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES,
+  ];
+}
+
+/** GeoServer CQL — 선택 하천만 표시 */
+export function buildRiverBasicPlanRiverNameCql(riverName: string): string {
+  const v = String(riverName ?? '').trim().replace(/'/g, "''");
+  if (!v) return 'INCLUDE';
+  return `river_name='${v}'`;
+}
+
+/** 선택 하천·탭에 대한 레이어별 CQL 맵 (비우면 null) */
+export function buildRiverBasicPlanRiverNameCqlByLayer(
+  tab: RiverBasicPlanTab,
+  riverName: string
+): Record<string, string> | null {
+  const name = String(riverName ?? '').trim();
+  if (!name) return null;
+  const cql = buildRiverBasicPlanRiverNameCql(name);
+  if (cql === 'INCLUDE') return null;
+  const out: Record<string, string> = {};
+  for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
+    out[layer] = cql;
+  }
+  return out;
+}
+
 /**
  * 지도 식별 결과가 겹칠 때 처리 순서: 포인트(0) → 라인(1) → 폴리곤(2).
  * defineLayer `define_table_shp_type`·테이블명과 맞춤.

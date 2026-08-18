@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7fe0</id>
+  <id>FeatureTypeInfoImpl-4785472f:19ff42d5832:-6ece</id>
   <name>rdl_perch_uopn_ls</name>
   <nativeName>rdl_perch_uopn_ls</nativeName>
   <namespace>
@@ -28,7 +28,7 @@
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
   <store class="dataStore">
-    <id>DataStoreInfoImpl--7d7f4649:19fd5fa9345:-8000</id>
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
   <maxFeatures>0</maxFeatures>

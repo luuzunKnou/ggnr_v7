@@ -20,7 +20,7 @@ import {
   buildElevationContourCss,
   ELEVATION_LAYER_NAME,
 } from '@/lib/geoserverStyles/elevationContourStyle';
-import { normalizeDefineTableSource } from '@/lib/defineLayerTablesNormalize';
+import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 
@@ -367,6 +367,22 @@ export async function setupGeoServerDb(params: {
   ] as const;
 
   try {
+    // 앱 필수 layer 테이블(도로점용·공통점용 9·점사용료 3·메모·영상 등) 선확보
+    let layerAppTables:
+      | { created: string[]; moved: string[]; existed: string[]; errors: string[] }
+      | undefined;
+    try {
+      const { ensureLayerAppTables } = await import('@/service/ensureLayerAppTables');
+      layerAppTables = await ensureLayerAppTables();
+    } catch (e: unknown) {
+      layerAppTables = {
+        created: [],
+        moved: [],
+        existed: [],
+        errors: [e instanceof Error ? e.message : String(e)],
+      };
+    }
+
     const wsRes = await geoserverFetch(baseUrl, `/rest/workspaces/${workspace}.json`);
     if (!wsRes.ok && wsRes.status !== 404) {
       const text = await wsRes.text();
@@ -442,6 +458,7 @@ export async function setupGeoServerDb(params: {
       datastoreName: targets.map((t) => t.name).join(','),
       datastores,
       elevationStyle,
+      layerAppTables,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -919,6 +936,7 @@ export async function createOrUpdateGeoServerLayer(params: {
     if (!dsOk.success) return { success: false as const, error: dsOk.error };
 
     // 재생성: 기존 레이어·FeatureType 삭제 (없으면 404 무시)
+    // 스키마 이동 후에는 반대편 datastore에 FeatureType이 남을 수 있어 양쪽 모두 삭제
     const delLayerRes = await geoserverFetch(
       baseUrl,
       `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}`,
@@ -929,14 +947,19 @@ export async function createOrUpdateGeoServerLayer(params: {
       return { success: false as const, error: `레이어 삭제 실패: ${delLayerRes.status} ${text}` };
     }
 
-    const delFtRes = await geoserverFetch(
-      baseUrl,
-      `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(layerName)}`,
-      { method: 'DELETE' }
-    );
-    if (!delFtRes.ok && delFtRes.status !== 404) {
-      const text = await delFtRes.text();
-      return { success: false as const, error: `FeatureType 삭제 실패: ${delFtRes.status} ${text}` };
+    for (const ds of ['postgres_layer', 'postgres_public_layer'] as const) {
+      const delFtRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${ds}/featuretypes/${encodeURIComponent(layerName)}`,
+        { method: 'DELETE' }
+      );
+      if (!delFtRes.ok && delFtRes.status !== 404) {
+        const text = await delFtRes.text();
+        return {
+          success: false as const,
+          error: `FeatureType 삭제 실패(${ds}): ${delFtRes.status} ${text}`,
+        };
+      }
     }
 
     const ftBody = {
@@ -1323,16 +1346,27 @@ export async function putGeoServerCssStyle(params: {
 /**
  * elevation 등고선 분류·축척·라벨 CSS를 GeoServer에 올리고 레이어 기본 스타일로 지정
  */
-export async function applyElevationContourStyle(params: { url?: string; workspace?: string } = {}) {
+/** applyDefaultStyleToLayer / applyElevationContourStyle 공통 반환 — success 리터럴로 구분 */
+export type StyleApplyResult =
+  | { success: true; layerName?: string; styleName?: string; created?: boolean }
+  | { success: false; error: string; uploaded?: true };
+
+export async function applyElevationContourStyle(
+  params: { url?: string; workspace?: string } = {}
+): Promise<StyleApplyResult> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = ELEVATION_LAYER_NAME;
   const cssBody = buildElevationContourCss();
 
   try {
-    const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
-    if (!putRes.success) {
-      return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+    let created = false;
+    if (!dataDirCssMatches(layerName, cssBody)) {
+      const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
+      if (!putRes.success) {
+        return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+      }
+      created = putRes.created === true;
     }
 
     const setRes = await setLayerDefaultStyle({
@@ -1353,7 +1387,7 @@ export async function applyElevationContourStyle(params: { url?: string; workspa
       success: true,
       layerName,
       styleName: layerName,
-      created: putRes.created === true,
+      created,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1429,6 +1463,22 @@ function writeCssStyleToDataDir(name: string, cssBody: string): void {
     fs.writeFileSync(path.join(stylesDir, `${name}.css`), cssBody, 'utf-8');
   } catch {
     // non-fatal — GeoServer REST 등록은 이미 됐을 수 있음
+  }
+}
+
+function normalizeCssForCompare(css: string): string {
+  return css.replace(/\r\n/g, '\n').trim();
+}
+
+/** data_dir CSS가 생성본과 같으면 true — 같으면 PUT 생략 (dateModified 유지) */
+function dataDirCssMatches(name: string, cssBody: string): boolean {
+  try {
+    const cssPath = path.join(getStylesDir(), `${name}.css`);
+    if (!fs.existsSync(cssPath)) return false;
+    const existing = fs.readFileSync(cssPath, 'utf-8');
+    return normalizeCssForCompare(existing) === normalizeCssForCompare(cssBody);
+  } catch {
+    return false;
   }
 }
 
@@ -1591,7 +1641,8 @@ export async function getDefineLayerTables(): Promise<{
       return { success: false, error: 'Invalid tables format', tables: [] };
     }
     normalizeDefineTableSource(tables as Record<string, unknown>[]);
-    return { success: true, tables: sortDefineLayerTables(tables) };
+    const deduped = dedupeDefineLayerTablesByName(tables as Record<string, unknown>[]);
+    return { success: true, tables: sortDefineLayerTables(deduped as DefineLayerRow[]) };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg, tables: [] };
@@ -1911,7 +1962,7 @@ export async function applyDefaultStyleToLayer(params: {
   url?: string;
   workspace?: string;
   layerName: string;
-}) {
+}): Promise<StyleApplyResult> {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim().toLowerCase();
@@ -2061,7 +2112,7 @@ export async function applyDefaultStyleToLayer(params: {
       styleName: layerName,
     });
     if (!setRes.success) return { success: false, error: setRes.error ?? '스타일 지정 실패' };
-    return { success: true };
+    return { success: true as const };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -3001,6 +3052,12 @@ function isShpSyncTempTableName(tableName: string): boolean {
   return tableName.startsWith('_sync_');
 }
 
+/** 스키마 재생성 임시·백업 테이블(_rctmp_*) — 오류수정 목록에 올리지 않음 */
+function isShpSchemaRecreateTempTableName(tableName: string): boolean {
+  const n = String(tableName ?? '').trim().toLowerCase();
+  return n.startsWith('_rctmp_') || n.endsWith('_rctmp');
+}
+
 function normalizeLayerSchema(value: unknown): 'layer' | 'public_layer' {
   return String(value ?? '').trim() === 'public_layer' ? 'public_layer' : 'layer';
 }
@@ -3150,6 +3207,9 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
       const schema = t.schema === 'public_layer' ? 'public_layer' : 'layer';
       const tableName = String(t.table ?? '').trim();
       if (!tableName) continue;
+
+      // 스키마 재생성 임시 테이블 — 오류수정에 노출하지 않음
+      if (isShpSchemaRecreateTempTableName(tableName)) continue;
 
       const defineKey = `${schema}:${tableName.toLowerCase()}`;
 
@@ -4252,6 +4312,110 @@ export async function switchLayerTableSchema(params: {
       steps,
       ...stepsDone,
     };
+  }
+}
+
+const DEFINE_META_FIELDS = ['define_table_group', 'define_table_kor_name'] as const;
+type DefineMetaField = (typeof DEFINE_META_FIELDS)[number];
+
+/** 레이어 목록에서 그룹명·한글명만 저장 */
+export async function updateDefineLayerTableMeta(params: {
+  tableName: string;
+  field: DefineMetaField;
+  value: string;
+}) {
+  const tableName = String(params.tableName ?? '').trim();
+  const field = params.field;
+  const value = String(params.value ?? '').trim();
+  if (!tableName) return { success: false as const, error: 'tableName이 필요합니다.' };
+  if (!DEFINE_META_FIELDS.includes(field)) {
+    return { success: false as const, error: '수정할 수 없는 항목입니다.' };
+  }
+
+  try {
+    if (!fs.existsSync(DEFINE_LAYER_TABLES_PATH)) {
+      return { success: false as const, error: '레이어 설정 파일이 없습니다.' };
+    }
+    const raw = fs.readFileSync(DEFINE_LAYER_TABLES_PATH, 'utf-8');
+    const tables = JSON.parse(raw) as Record<string, unknown>[];
+    if (!Array.isArray(tables)) {
+      return { success: false as const, error: '레이어 설정 형식이 올바르지 않습니다.' };
+    }
+
+    const rowIdx = tables.findIndex(
+      (r) =>
+        String(r.define_table_name ?? '')
+          .trim()
+          .toLowerCase() === tableName.toLowerCase()
+    );
+    if (rowIdx < 0) {
+      return { success: false as const, error: '레이어 설정에 해당 테이블이 없습니다.' };
+    }
+
+    tables[rowIdx] = { ...tables[rowIdx], [field]: value };
+    normalizeDefineTableSource(tables);
+    const sorted = sortDefineLayerTables(tables as DefineLayerRow[]);
+    fs.mkdirSync(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
+    fs.writeFileSync(DEFINE_LAYER_TABLES_PATH, JSON.stringify(sorted, null, 2), 'utf-8');
+    return { success: true as const, value };
+  } catch (e: unknown) {
+    return { success: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const LAYER_TABLE_NAME_RE = /^[A-Za-z0-9_]+$/;
+
+/** 레이어 목록에서 DB 테이블 삭제 후 이력 기록. layer / public_layer 만 허용. */
+export async function dropLayerDbTable(params: {
+  tableName: string;
+  schema?: 'layer' | 'public_layer';
+}) {
+  const tableName = String(params.tableName ?? '').trim();
+  const schema = params.schema === 'public_layer' ? 'public_layer' : 'layer';
+  if (!tableName) return { success: false as const, error: 'tableName이 필요합니다.' };
+  if (!LAYER_TABLE_NAME_RE.test(tableName)) {
+    return { success: false as const, error: '테이블명이 올바르지 않습니다.' };
+  }
+
+  try {
+    const listRes = await getLayerTableList();
+    if (!listRes.success) {
+      return { success: false as const, error: listRes.error ?? '테이블 목록을 확인할 수 없습니다.' };
+    }
+    const match = (listRes.tables ?? []).find(
+      (t) =>
+        t.schema === schema && String(t.table).toLowerCase() === tableName.toLowerCase()
+    );
+    if (!match) {
+      return { success: false as const, error: 'DB에 해당 테이블이 없습니다.' };
+    }
+
+    const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+    const dropSql = `DROP TABLE IF EXISTS ${schema}.${quoteIdent(match.table)} CASCADE`;
+    await db.execute(sql.raw(dropSql));
+
+    const operator = await resolveAutofixOperatorLabel();
+    try {
+      const { recordDataLog } = await import('./dataLogService');
+      await recordDataLog({
+        source: '시스템',
+        type: '삭제',
+        user: operator,
+        tableName: match.table,
+        keyField: '테이블',
+        keyValue: match.table,
+        contents: 'DB 테이블 삭제',
+      });
+    } catch (logErr) {
+      console.warn(
+        '[dropLayerDbTable] data_log',
+        logErr instanceof Error ? logErr.message : logErr
+      );
+    }
+
+    return { success: true as const };
+  } catch (e: unknown) {
+    return { success: false as const, error: e instanceof Error ? e.message : String(e) };
   }
 }
 

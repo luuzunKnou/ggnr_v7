@@ -21,6 +21,12 @@ import {
 } from '@/lib/excelSheetParse';
 import { isSpreadsheetFileName, readWorkbookFromBuffer, stripSpreadsheetExt } from '@/lib/excelWorkbookRead';
 import {
+  buildPnu19,
+  parseAddressForPnu,
+  riNameLookupCandidates,
+  type ExcelUploadParsedPnuParts,
+} from '@/lib/excelUploadAddressNormalize';
+import {
   insertExcelSyncLogGeomFromLayer,
   insertExcelSyncLogGeomFromLonLat,
   insertExcelSyncLogGeomFromWkt,
@@ -31,6 +37,10 @@ import {
   excelLayerRowJsonbSql,
 } from '@/lib/syncLogGeom';
 import { broadcastExcelWizardLog } from '@/lib/excelWizardEvents';
+import type { ExcelDefineLayerFieldMeta, ExcelDefineLayerMeta } from '@/lib/excelDefineLayerFieldApply';
+import { pickDefineLayerRowByExcelFileName } from '@/lib/excelDefineLayerFieldApply';
+
+export type { ExcelDefineLayerFieldMeta, ExcelDefineLayerMeta };
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
@@ -354,8 +364,121 @@ export async function writeExcelFieldNameMap(params: { entries: Record<string, s
 
 const EXCEL_LAYER_SYSTEM_COLUMNS = new Set(['id', 'geom', 'parcel_address']);
 
+/** defineLayer tables.json + fields/table_*.json 조회 (엑셀 위저드 자동입력용) */
+async function loadExcelDefineLayerMeta(tableName: string): Promise<ExcelDefineLayerMeta> {
+  const empty: ExcelDefineLayerMeta = { exists: false };
+  try {
+    const defineRes = await getDefineLayerTables();
+    if (!defineRes.success || !Array.isArray(defineRes.tables)) return empty;
+    const row = defineRes.tables.find(
+      (r) => String((r as Record<string, unknown>).define_table_name ?? '').trim().toLowerCase() === tableName
+    ) as Record<string, unknown> | undefined;
+    if (!row) return empty;
+
+    const tableKorName = String(row.define_table_kor_name ?? '').trim();
+    const tableGroup = String(row.define_table_group ?? '').trim();
+    const fields: ExcelDefineLayerFieldMeta[] = [];
+    const fieldsPath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${tableName}.json`);
+    if (fsSync.existsSync(fieldsPath)) {
+      const raw = await fs.readFile(fieldsPath, 'utf-8');
+      const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
+      if (Array.isArray(parsed)) {
+        for (const f of parsed) {
+          const name = String(f.define_field_name ?? '').trim();
+          if (!name || EXCEL_LAYER_SYSTEM_COLUMNS.has(name.toLowerCase())) continue;
+          const kor = String(f.define_field_kor_name ?? name).trim();
+          const isKeyRaw = f.define_field_is_key;
+          fields.push({
+            define_field_name: name,
+            define_field_kor_name: kor || name,
+            define_field_show_list: Boolean(f.define_field_show_list),
+            define_field_show_search: Boolean(f.define_field_show_search),
+            define_field_is_key:
+              isKeyRaw === true || String(isKeyRaw ?? '').toLowerCase() === 'true',
+          });
+        }
+      }
+    }
+    return {
+      exists: true,
+      tableKorName: tableKorName || undefined,
+      tableGroup: tableGroup || undefined,
+      fields,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/**
+ * 엑셀 파일명이 레이어 설정의 테이블명 또는 한글명과 같거나,
+ * 그 이름 뒤에 _업로드용 같은 접미가 붙으면 그룹·영문·한글명을 반환.
+ * 완전 일치(테이블명 > 한글명) 우선, 접두 일치는 더 긴 이름 우선.
+ */
+export async function findExcelDefineLayerByFileName(params: {
+  fileName: string;
+}): Promise<{
+  success: boolean;
+  matched?: boolean;
+  tableName?: string;
+  tableKorName?: string;
+  tableGroup?: string;
+  error?: string;
+}> {
+  try {
+    const defineRes = await getDefineLayerTables();
+    if (!defineRes.success || !Array.isArray(defineRes.tables)) {
+      return { success: true, matched: false };
+    }
+    const row = pickDefineLayerRowByExcelFileName(
+      params.fileName ?? '',
+      defineRes.tables as Array<Record<string, unknown>>
+    );
+    if (!row) return { success: true, matched: false };
+    return {
+      success: true,
+      matched: true,
+      tableName: String(row.define_table_name ?? '').trim() || undefined,
+      tableKorName: String(row.define_table_kor_name ?? '').trim() || undefined,
+      tableGroup: String(row.define_table_group ?? '').trim() || undefined,
+    };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 신규 키로 다시 올릴 때 기존 layer 테이블과 필지·물건지 자식 테이블을 지운다.
+ */
+export async function dropExcelLayerTablesForReload(params: {
+  tableName: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const tableName = safeTableName(params.tableName ?? '');
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  const quote = (n: string) => `"${n.replace(/"/g, '""')}"`;
+  const names = [
+    safeTableName(`${tableName}_jijuk`),
+    safeTableName(`${tableName}_mulgunji`),
+    tableName,
+  ];
+  try {
+    for (const n of names) {
+      await db.execute(sql.raw(`DROP TABLE IF EXISTS layer.${quote(n)} CASCADE`));
+    }
+    try {
+      await discardExcelIntegrityReview({ tableName });
+    } catch {
+      /* 미결 정합성 없으면 무시 */
+    }
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /**
  * layer 스키마에 동일 영문 테이블이 있는지와 컬럼·코멘트 목록 반환 (엑셀 재업로드 DIFF용).
+ * 레이어 설정(defineLayer)에 동일 이름이 있으면 한글명·필드 메타도 함께 반환.
  */
 export async function getExcelLayerTableColumnMeta(params: {
   tableName: string;
@@ -364,11 +487,13 @@ export async function getExcelLayerTableColumnMeta(params: {
   exists?: boolean;
   normalizedTableName?: string;
   columns?: { name: string; comment: string | null }[];
+  define?: ExcelDefineLayerMeta;
   error?: string;
 }> {
   const tableName = safeTableName(params.tableName ?? '');
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const esc = tableName.replace(/'/g, "''");
+  const define = await loadExcelDefineLayerMeta(tableName);
   try {
     const exRes = await db.execute(
       sql.raw(
@@ -380,7 +505,7 @@ export async function getExcelLayerTableColumnMeta(params: {
     );
     const exists = Boolean((exRes.rows as { ex?: boolean }[])[0]?.ex);
     if (!exists) {
-      return { success: true, exists: false, normalizedTableName: tableName, columns: [] };
+      return { success: true, exists: false, normalizedTableName: tableName, columns: [], define };
     }
     const colRes = await db.execute(
       sql.raw(`SELECT a.attname::text AS name,
@@ -396,7 +521,7 @@ export async function getExcelLayerTableColumnMeta(params: {
     const columns = rows
       .map((r) => ({ name: String(r.name ?? ''), comment: r.comment != null ? String(r.comment) : null }))
       .filter((r) => r.name);
-    return { success: true, exists: true, normalizedTableName: tableName, columns };
+    return { success: true, exists: true, normalizedTableName: tableName, columns, define };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -479,52 +604,52 @@ const PARCEL_ADDRESS_COL = 'parcel_address';
 
 const EMD_RI_SCHEMA = 'public_layer';
 const EMD_RI_NAME_COLUMNS = ['adm_nm', 'name', 'emd_nm', 'ri_nm'];
-const BONBUN_LEN = 4;
-const BUBUN_LEN = 4;
 
-export type ParsedPnuParts = {
-  emdName: string;
-  riName: string;
-  bonbun: string;
-  bubun: string;
-};
-
-export function parseAddressForPnu(address: string): ParsedPnuParts | null {
-  let s = String(address ?? '').trim();
-  if (!s) return null;
-  s = s.replace(/번지/g, '').trim();
-  s = s.replace(/\s*산\s*/g, ' ').trim();
-  const parts = s.split(/\s+/).filter(Boolean);
-  if (parts.length < 5) return null;
-  const emdName = parts[2].trim();
-  const riName = parts[3].trim();
-  const rest = parts.slice(4).join(' ');
-  const addrParts = rest.split('-').map((p) => p.trim());
-  const bonbunRaw = (addrParts[0] ?? '0').replace(/\D/g, '') || '0';
-  const bubunRaw = (addrParts[1] ?? '0').replace(/\D/g, '') || '0';
-  const bonbun = bonbunRaw.padStart(BONBUN_LEN, '0').slice(-BONBUN_LEN);
-  const bubun = bubunRaw.padStart(BUBUN_LEN, '0').slice(-BUBUN_LEN);
-  return { emdName, riName, bonbun, bubun };
-}
+/** 엑셀 업로드 PNU 파싱 결과 — `@/lib/excelUploadAddressNormalize` 와 동일 */
+export type ParsedPnuParts = ExcelUploadParsedPnuParts;
 
 /** PNU 폴백 .log 한 줄 (plain text, `|` 구분) */
 function formatPnuFallbackLogLine(p: {
   rowTag: string;
   address: string;
-  parsed: ParsedPnuParts | null;
+  parsed: ExcelUploadParsedPnuParts | null;
   pnu: string | null;
   jijukFound: boolean;
+  usedHangjeongToBeopjeong?: boolean;
+  matchedRi?: string | null;
 }): string {
   const parsePart = p.parsed
-    ? `parse=ok | emd=${p.parsed.emdName} | ri=${p.parsed.riName} | bonbun=${p.parsed.bonbun} | bubun=${p.parsed.bubun}`
+    ? `parse=ok | emd=${p.parsed.emdName} | ri=${p.parsed.riName} | mountain=${p.parsed.isMountain ? 'Y' : 'N'} | bonbun=${p.parsed.bonbun} | bubun=${p.parsed.bubun}`
     : 'parse=fail';
-  return `${p.rowTag}${p.address} | ${parsePart} | pnu=${p.pnu ?? 'fail'} | jijuk=${p.jijukFound ? 'found' : 'not_found'}`;
+  const riFix =
+    p.usedHangjeongToBeopjeong && p.parsed && p.matchedRi
+      ? ` | riFix=${p.parsed.riName}→${p.matchedRi}`
+      : '';
+  const riFixOk =
+    p.usedHangjeongToBeopjeong && p.jijukFound ? ' | riFixResult=ok' : '';
+  return `${p.rowTag}${p.address} | ${parsePart}${riFix}${riFixOk} | pnu=${p.pnu ?? 'fail'} | jijuk=${p.jijukFound ? 'found' : 'not_found'}`;
 }
 
-export async function getPnuFromAddress(address: string): Promise<string | null> {
+export type ResolvePnuFromAddressResult = {
+  pnu: string | null;
+  originalRi: string | null;
+  matchedRi: string | null;
+  /** 원 리명 실패 후 법정리명으로 매칭됨 */
+  usedHangjeongToBeopjeong: boolean;
+};
+
+export async function resolvePnuFromAddress(
+  address: string
+): Promise<ResolvePnuFromAddressResult> {
+  const empty: ResolvePnuFromAddressResult = {
+    pnu: null,
+    originalRi: null,
+    matchedRi: null,
+    usedHangjeongToBeopjeong: false,
+  };
   const parsed = parseAddressForPnu(address);
-  if (!parsed) return null;
-  const { emdName, riName, bonbun, bubun } = parsed;
+  if (!parsed) return empty;
+  const { emdName, riName, bonbun, bubun, isMountain } = parsed;
   const esc = (v: string) => v.replace(/'/g, "''");
   let emdCd: string | null = null;
   for (const nameCol of EMD_RI_NAME_COLUMNS) {
@@ -543,41 +668,79 @@ export async function getPnuFromAddress(address: string): Promise<string | null>
       continue;
     }
   }
-  if (!emdCd) return null;
-  let riCd: string | null = null;
-  for (const nameCol of EMD_RI_NAME_COLUMNS) {
-    try {
-      const res = await db.execute(
-        sql.raw(
-          `SELECT "ri_cd" AS code FROM "${EMD_RI_SCHEMA}"."ri" WHERE "ri_cd" LIKE '${esc(emdCd)}%' AND "${nameCol}" = '${esc(riName)}' LIMIT 1`
-        )
-      );
-      const row = (res.rows as { code?: string }[])[0];
-      if (row?.code) {
-        riCd = String(row.code).trim();
-        break;
-      }
-    } catch {
-      continue;
-    }
+  if (!emdCd) {
+    return { ...empty, originalRi: riName };
   }
-  if (!riCd) return null;
-  return riCd + bonbun + bubun;
+  const riCandidates = riNameLookupCandidates(riName);
+  let riCd: string | null = null;
+  let matchedRi: string | null = null;
+  for (const candidate of riCandidates) {
+    for (const nameCol of EMD_RI_NAME_COLUMNS) {
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT "ri_cd" AS code FROM "${EMD_RI_SCHEMA}"."ri" WHERE "ri_cd" LIKE '${esc(emdCd)}%' AND "${nameCol}" = '${esc(candidate)}' LIMIT 1`
+          )
+        );
+        const row = (res.rows as { code?: string }[])[0];
+        if (row?.code) {
+          riCd = String(row.code).trim();
+          matchedRi = candidate;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (riCd) break;
+  }
+  if (!riCd || !matchedRi) {
+    return { ...empty, originalRi: riName };
+  }
+  return {
+    pnu: buildPnu19(riCd, { bonbun, bubun, isMountain }),
+    originalRi: riName,
+    matchedRi,
+    usedHangjeongToBeopjeong: matchedRi !== riName,
+  };
+}
+
+export async function getPnuFromAddress(address: string): Promise<string | null> {
+  return (await resolvePnuFromAddress(address)).pnu;
 }
 
 export async function getJijukGeomByPnu(pnu: string, geomSrid: number = 5181): Promise<string | null> {
   const esc = (v: string) => v.replace(/'/g, "''");
-  try {
+  const digits = String(pnu ?? '').replace(/\D/g, '');
+  const candidates =
+    digits.length === 19
+      ? [
+          digits,
+          `${digits.slice(0, 10)}${digits[10] === '1' ? '2' : '1'}${digits.slice(11)}`,
+        ]
+      : digits.length === 18
+        ? [`${digits.slice(0, 10)}1${digits.slice(10)}`, `${digits.slice(0, 10)}2${digits.slice(10)}`]
+        : digits
+          ? [digits]
+          : [];
+
+  const queryOne = async (key: string): Promise<string | null> => {
     const res = await db.execute(
       sql.raw(
-        `SELECT ST_AsText(ST_SetSRID(geom, ${geomSrid})) AS wkt,
-                ST_GeometryType(ST_SetSRID(geom, ${geomSrid})) AS gtype
-         FROM ${EMD_RI_SCHEMA}.jijuk WHERE pnu = '${esc(pnu)}' LIMIT 1`
+        `SELECT ST_AsText(ST_SetSRID(geom, ${geomSrid})) AS wkt
+         FROM ${EMD_RI_SCHEMA}.jijuk WHERE pnu = '${esc(key)}' LIMIT 1`
       )
     );
-    const row = (res.rows as { wkt?: string; gtype?: string }[])[0];
-    if (!row?.wkt) return null;
-    return row.wkt;
+    const wkt = String((res.rows as { wkt?: string }[])[0]?.wkt ?? '').trim();
+    return wkt || null;
+  };
+
+  try {
+    for (const key of candidates) {
+      const wkt = await queryOne(key);
+      if (wkt) return wkt;
+    }
+    return null;
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[excelUploadService] getJijukGeomByPnu 오류:', msg);
@@ -629,6 +792,8 @@ export async function createTableFromExcel(params: {
   polygonNullCount?: number;
   pnuAttemptCount?: number;
   pnuOkCount?: number;
+  /** 행정리→법정리로 맞춰 지적 매칭 성공한 건수 */
+  hangjeongRiFixOkCount?: number;
 }> {
   const tableName = safeTableName(params.tableName);
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
@@ -791,6 +956,7 @@ export async function createTableFromExcel(params: {
     let polygonNullCount = 0;
     let pnuAttemptCount = 0;
     let pnuOkCount = 0;
+    let hangjeongRiFixOkCount = 0;
     const rowTag =
       params.excelRowNumber != null || params.rowKeyHint?.trim()
         ? `row=${params.excelRowNumber ?? '?'} key=${(params.rowKeyHint ?? '').trim() || '(없음)'} | `
@@ -850,9 +1016,11 @@ export async function createTableFromExcel(params: {
           if (!wkt && parcel.address?.trim()) {
             pnuAttemptCount++;
             const parsed = parseAddressForPnu(parcel.address);
-            const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
+            const resolved = parsed ? await resolvePnuFromAddress(parcel.address) : null;
+            const pnu = resolved?.pnu ?? null;
             if (pnu) wkt = await getJijukGeomByPnu(pnu, geomSrid);
             if (wkt) pnuOkCount++;
+            if (wkt && resolved?.usedHangjeongToBeopjeong) hangjeongRiFixOkCount++;
             await appendPnuLog(
               formatPnuFallbackLogLine({
                 rowTag,
@@ -860,6 +1028,8 @@ export async function createTableFromExcel(params: {
                 parsed,
                 pnu,
                 jijukFound: !!wkt,
+                usedHangjeongToBeopjeong: resolved?.usedHangjeongToBeopjeong,
+                matchedRi: resolved?.matchedRi,
               })
             );
           }
@@ -874,9 +1044,11 @@ export async function createTableFromExcel(params: {
       } else if (geometryType === 'Polygon' && parcel.address?.trim()) {
         pnuAttemptCount++;
         const parsed = parseAddressForPnu(parcel.address);
-        const pnu = parsed ? await getPnuFromAddress(parcel.address) : null;
+        const resolved = parsed ? await resolvePnuFromAddress(parcel.address) : null;
+        const pnu = resolved?.pnu ?? null;
         const wkt = pnu ? await getJijukGeomByPnu(pnu, geomSrid) : null;
         if (wkt) pnuOkCount++;
+        if (wkt && resolved?.usedHangjeongToBeopjeong) hangjeongRiFixOkCount++;
         await appendPnuLog(
           formatPnuFallbackLogLine({
             rowTag,
@@ -884,6 +1056,8 @@ export async function createTableFromExcel(params: {
             parsed,
             pnu,
             jijukFound: !!wkt,
+            usedHangjeongToBeopjeong: resolved?.usedHangjeongToBeopjeong,
+            matchedRi: resolved?.matchedRi,
           })
         );
         if (wkt) {
@@ -1013,11 +1187,21 @@ export async function createTableFromExcel(params: {
       console.log(`[excelUploadService] 폴리곤 매칭 결과: 성공 ${polygonMatchedCount}건, 미매칭(geom NULL) ${polygonNullCount}건`);
     }
 
+    if (hangjeongRiFixOkCount > 0) {
+      await appendPnuLog(
+        `### 행정리→법정리 보정 후 지적 매칭 성공 ${hangjeongRiFixOkCount}건 (${new Date().toISOString()})`
+      );
+      console.log(
+        `[excelUploadService] 행정리→법정리 보정 후 지적 매칭 성공 ${hangjeongRiFixOkCount}건`
+      );
+    }
+
     return {
       success: true,
       rowCount: insertCount,
       pnuAttemptCount,
       pnuOkCount,
+      hangjeongRiFixOkCount,
       ...(geometryType === 'Polygon' && { polygonMatchedCount, polygonNullCount }),
     };
   } catch (e: unknown) {
@@ -1145,7 +1329,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
     fieldList.push({
       define_field_name: 'id',
       define_field_kor_name: 'id',
-      define_field_type: 'integer',
+      define_field_type: 'NUMBER',
       define_field_idx: idx++,
       define_field_is_required: false,
       define_field_show_search: false,
@@ -1170,7 +1354,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
     fieldList.push({
       define_field_name: 'geom',
       define_field_kor_name: 'geom',
-      define_field_type: 'text',
+      define_field_type: 'TEXT',
       define_field_idx: idx++,
       define_field_is_required: false,
       define_field_show_search: false,
@@ -1195,7 +1379,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
     fieldList.push({
       define_field_name: PARCEL_ADDRESS_COL,
       define_field_kor_name: '필지이름',
-      define_field_type: 'text',
+      define_field_type: 'TEXT',
       define_field_idx: idx++,
       define_field_is_required: false,
       define_field_show_search: true,
@@ -1221,7 +1405,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
       fieldList.push({
         define_field_name: safeColumnName(col.define_field_name),
         define_field_kor_name: col.define_field_kor_name ?? col.define_field_name,
-        define_field_type: 'text',
+        define_field_type: 'TEXT',
         define_field_idx: idx++,
         define_field_is_required: false,
         define_field_show_search: col.define_field_show_search ?? false,
@@ -1295,7 +1479,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushJ({
           define_field_name: 'id',
           define_field_kor_name: 'id',
-          define_field_type: 'integer',
+          define_field_type: 'NUMBER',
           define_field_is_required: false,
           define_field_show_search: false,
           define_field_show_list: true,
@@ -1319,7 +1503,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushJ({
           define_field_name: 'parent_id',
           define_field_kor_name: '부모 id',
-          define_field_type: 'integer',
+          define_field_type: 'NUMBER',
           define_field_is_required: true,
           define_field_show_search: false,
           define_field_show_list: true,
@@ -1343,7 +1527,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushJ({
           define_field_name: 'geom',
           define_field_kor_name: 'geom',
-          define_field_type: 'text',
+          define_field_type: 'TEXT',
           define_field_is_required: false,
           define_field_show_search: false,
           define_field_show_list: false,
@@ -1367,7 +1551,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushJ({
           define_field_name: PARCEL_ADDRESS_COL,
           define_field_kor_name: '필지이름',
-          define_field_type: 'text',
+          define_field_type: 'TEXT',
           define_field_is_required: false,
           define_field_show_search: true,
           define_field_show_list: true,
@@ -1441,7 +1625,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushM({
           define_field_name: 'id',
           define_field_kor_name: 'id',
-          define_field_type: 'integer',
+          define_field_type: 'NUMBER',
           define_field_is_required: false,
           define_field_show_search: false,
           define_field_show_list: true,
@@ -1465,7 +1649,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushM({
           define_field_name: 'parent_id',
           define_field_kor_name: '부모 id',
-          define_field_type: 'integer',
+          define_field_type: 'NUMBER',
           define_field_is_required: true,
           define_field_show_search: false,
           define_field_show_list: true,
@@ -1489,7 +1673,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushM({
           define_field_name: 'geom',
           define_field_kor_name: 'geom',
-          define_field_type: 'text',
+          define_field_type: 'TEXT',
           define_field_is_required: false,
           define_field_show_search: false,
           define_field_show_list: false,
@@ -1513,7 +1697,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         pushM({
           define_field_name: PARCEL_ADDRESS_COL,
           define_field_kor_name: '물건지주소',
-          define_field_type: 'text',
+          define_field_type: 'TEXT',
           define_field_is_required: false,
           define_field_show_search: true,
           define_field_show_list: true,
