@@ -58,7 +58,10 @@ export function HeaderAuthLinks() {
       <button
         type="button"
         className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-        onClick={() => signOut({ callbackUrl: '/' })}
+        onClick={async () => {
+          await signOut({ redirect: false });
+          window.location.assign('/');
+        }}
       >
         로그아웃
       </button>

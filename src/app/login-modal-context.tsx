@@ -21,6 +21,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { SignUpApplyForm } from '@/app/(pages)/(index)/SignUpApplyForm';
 import { call } from '@/lib/api';
+import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
 
 type LoginModalContextValue = {
   openLogin: () => void;
@@ -146,8 +147,16 @@ function LoginModalDialog({
         setLoading(false);
         return;
       }
+      const here =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : '/';
       const dest =
-        pendingNext && pendingNext.startsWith('/') ? pendingNext : '/';
+        pendingNext && pendingNext.startsWith('/')
+          ? pendingNext
+          : here.startsWith('/')
+            ? here
+            : '/';
       window.location.href = dest;
     } catch {
       setError('로그인에 실패했습니다.');
@@ -250,6 +259,10 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
     if (typeof window !== 'undefined') {
       const n = new URLSearchParams(window.location.search).get('next');
       if (n && n.startsWith('/')) setPendingNext(n);
+      else {
+        const here = `${window.location.pathname}${window.location.search}`;
+        if (here.startsWith('/')) setPendingNext(here);
+      }
     }
     setSignUpOpen(false);
     setLoginOpen(true);
@@ -261,6 +274,12 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const onClearNext = useCallback(() => setPendingNext(''), []);
+
+  useEffect(() => {
+    const onAuthRequired = () => openLogin();
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+  }, [openLogin]);
 
   return (
     <LoginModalContext.Provider value={{ openLogin, openSignUp }}>
