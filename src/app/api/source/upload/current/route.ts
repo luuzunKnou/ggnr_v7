@@ -32,7 +32,6 @@ import {
 import {
   buildSourceUploadFailBody,
   buildSourceUploadSuccessBody,
-  formatBuildCheckSkippedWarning,
   formatDbSchemaMismatchWarning,
 } from '@/lib/sourceUploadHistoryMessage';
 import { recordUploadFlowHistory } from '@/service/sourceUploadHistoryService';
@@ -202,7 +201,6 @@ export async function POST(req: NextRequest) {
     changeNote = typeof body.changeNote === 'string' ? body.changeNote.trim() : '';
     const skipPreflight = body.skipPreflight === true;
     const confirmDbMismatch = body.confirmDbMismatch === true;
-    const buildCheckSkipped = body.buildCheckSkipped === true;
     includeNodeModules = body.includeNodeModules === true;
     progressId =
       typeof body.progressId === 'string' && body.progressId.trim()
@@ -499,9 +497,6 @@ export async function POST(req: NextRequest) {
     const historyWarnings: string[] = [];
     if (schemaMismatch) {
       historyWarnings.push(formatDbSchemaMismatchWarning(dbCompare.diffCount));
-    }
-    if (buildCheckSkipped) {
-      historyWarnings.push(formatBuildCheckSkippedWarning());
     }
     const historyRecorded = await recordUploadFlowHistory({
       includeNodeModules,

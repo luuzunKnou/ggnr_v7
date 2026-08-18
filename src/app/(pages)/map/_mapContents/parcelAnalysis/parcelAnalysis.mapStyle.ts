@@ -31,7 +31,7 @@ export {
 } from '../../_mapComponents/analysisArea';
 
 /** 분석 영역 바깥 반투명 마스크 (기본분석지도·테마 지도 공통) */
-export const PARCEL_ANALYSIS_OUTSIDE_MASK_FILL = 'rgba(0, 0, 0, 0.7)';
+export const PARCEL_ANALYSIS_OUTSIDE_MASK_FILL = 'rgba(0, 0, 0, 0.65)';
 
 /** 분석 영역 노란 외곽선 — 캡처·테마 지도 공통 */
 export const PARCEL_ANALYSIS_BOUNDARY_STROKE = 'rgba(255, 220, 0, 1)';
@@ -282,15 +282,26 @@ export type ThemeMapHomeView = {
 export function applyThemeMapHomeView(
   view: View,
   analysisExtent: Extent,
-  mapSize: [number, number]
+  mapSize: [number, number],
+  options?: {
+    padding?: [number, number, number, number];
+    /** 1보다 작으면 fit 후 확대(선택 영역이 프레임에 더 크게). 기본 1 */
+    zoomInFactor?: number;
+  }
 ): ThemeMapHomeView {
+  const padding = options?.padding ?? PARCEL_ANALYSIS_MAP_FIT_PADDING;
+  const zoomInFactor = options?.zoomInFactor ?? 1;
   view.fit(analysisExtent, {
     size: mapSize,
-    padding: PARCEL_ANALYSIS_MAP_FIT_PADDING,
+    padding,
     maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   });
 
-  const homeResolution = view.getResolution() ?? 1;
+  let homeResolution = view.getResolution() ?? 1;
+  if (zoomInFactor > 0 && zoomInFactor < 1) {
+    homeResolution = homeResolution * zoomInFactor;
+    view.setResolution(homeResolution);
+  }
   const minResolution = homeResolution / PARCEL_THEME_MAP_MIN_AREA_VISIBLE_RATIO;
   const minZoom = view.getZoomForResolution(minResolution);
   view.setMaxZoom(PARCEL_ANALYSIS_MAP_MAX_ZOOM);

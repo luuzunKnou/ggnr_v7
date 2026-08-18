@@ -7,6 +7,7 @@ import { call } from "@/lib/api"
 import { RotateCcw, Wrench } from "lucide-react"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
 import { LayerManagerAutofixHistoryPanel } from "./LayerManagerAutofixHistoryPanel"
+import { requestLayerManagerListRefresh } from "./layerManagerUploadBridge"
 import {
   LAYER_SETUP_ISSUE_LABELS,
   LAYER_SETUP_ISSUE_ORDER,
@@ -133,6 +134,7 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
             : `"${row.tableName}" 자동 수정 완료${logHint}`
         )
         bumpHistory()
+        requestLayerManagerListRefresh()
         await loadIssues()
       } catch (e) {
         setError(e instanceof Error ? e.message : "자동 수정 실패")
@@ -179,6 +181,7 @@ export function LayerManagerAutoSetupTab({ onIssueCountChange }: LayerManagerAut
         `전체 자동 수정 완료 (성공 ${ok}건${fail > 0 ? `, 실패 ${fail}건` : ""})${logHint}`
       )
       bumpHistory()
+      if (ok > 0) requestLayerManagerListRefresh()
       await loadIssues()
     } catch (e) {
       setError(e instanceof Error ? e.message : "전체 자동 수정 실패")

@@ -23,8 +23,8 @@ export const PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS = 8_000;
 export const PARCEL_THEME_OTHER_FILL = 'rgba(217, 255, 0, 0.4)';
 export const PARCEL_THEME_OTHER_STROKE = 'rgba(217, 255, 0, 0.75)';
 
-/** 테마 지도 — 필지 없음(도로·골목 등) 바탕 */
-export const PARCEL_THEME_MAP_NO_PARCEL_FILL = '#E8E8E8';
+/** 테마 지도 — 필지 없음(도로·골목 등) 바탕 (항공영상 위 반투명) */
+export const PARCEL_THEME_MAP_NO_PARCEL_FILL = 'rgba(232, 232, 232, 0.35)';
 export const PARCEL_THEME_MAP_NO_PARCEL_STROKE = '#D0D0D0';
 
 /** 테마 지도 — 전 구분 색칠 상한 필지 수 */
@@ -200,7 +200,7 @@ export function resolveThemeColor(theme: 'owner' | 'jimok', label: string): stri
 }
 
 /** 지도·범례 공통 필지 채움 투명도 */
-export const PARCEL_THEME_MAP_FILL_OPACITY = 0.6;
+export const PARCEL_THEME_MAP_FILL_OPACITY = 0.3;
 
 export function themeFillColor(hex: string, opacity = PARCEL_THEME_MAP_FILL_OPACITY): string {
   const normalized = hex.replace('#', '');

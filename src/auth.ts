@@ -101,6 +101,25 @@ export const authConfig = {
       },
     }),
   ],
+  events: {
+    async signIn({ user }) {
+      const loginUser = String(user?.id ?? '').trim();
+      if (!loginUser) return;
+      try {
+        // Edge(middleware→auth) 번들에 fs/os 안 타게: normalize는 순수 모듈, 로그는 동적 import
+        const { headers } = await import('next/headers');
+        const { normalizeClientIp } = await import('@/lib/normalizeClientIp');
+        const h = await headers();
+        const forwarded = h.get('x-forwarded-for')?.split(',')[0]?.trim();
+        const real = h.get('x-real-ip')?.trim();
+        const loginIp = normalizeClientIp(forwarded || real) ?? null;
+        const { recordLoginLog } = await import('@/service/loginLogRecord');
+        await recordLoginLog({ loginUser, loginIp });
+      } catch (e) {
+        console.warn('[auth.signIn loginLog]', e instanceof Error ? e.message : e);
+      }
+    },
+  },
 } satisfies NextAuthConfig;
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
