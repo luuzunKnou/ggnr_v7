@@ -37,6 +37,10 @@ import {
   excelLayerRowJsonbSql,
 } from '@/lib/syncLogGeom';
 import { broadcastExcelWizardLog } from '@/lib/excelWizardEvents';
+import type { ExcelDefineLayerFieldMeta, ExcelDefineLayerMeta } from '@/lib/excelDefineLayerFieldApply';
+import { pickDefineLayerRowByExcelFileName } from '@/lib/excelDefineLayerFieldApply';
+
+export type { ExcelDefineLayerFieldMeta, ExcelDefineLayerMeta };
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
@@ -360,21 +364,6 @@ export async function writeExcelFieldNameMap(params: { entries: Record<string, s
 
 const EXCEL_LAYER_SYSTEM_COLUMNS = new Set(['id', 'geom', 'parcel_address']);
 
-export type ExcelDefineLayerFieldMeta = {
-  define_field_name: string;
-  define_field_kor_name: string;
-  define_field_show_list?: boolean;
-  define_field_show_search?: boolean;
-  define_field_is_key?: boolean;
-};
-
-export type ExcelDefineLayerMeta = {
-  exists: boolean;
-  tableKorName?: string;
-  tableGroup?: string;
-  fields?: ExcelDefineLayerFieldMeta[];
-};
-
 /** defineLayer tables.json + fields/table_*.json 조회 (엑셀 위저드 자동입력용) */
 async function loadExcelDefineLayerMeta(tableName: string): Promise<ExcelDefineLayerMeta> {
   const empty: ExcelDefineLayerMeta = { exists: false };
@@ -418,6 +407,72 @@ async function loadExcelDefineLayerMeta(tableName: string): Promise<ExcelDefineL
     };
   } catch {
     return empty;
+  }
+}
+
+/**
+ * 엑셀 파일명이 레이어 설정의 테이블명 또는 한글명과 같거나,
+ * 그 이름 뒤에 _업로드용 같은 접미가 붙으면 그룹·영문·한글명을 반환.
+ * 완전 일치(테이블명 > 한글명) 우선, 접두 일치는 더 긴 이름 우선.
+ */
+export async function findExcelDefineLayerByFileName(params: {
+  fileName: string;
+}): Promise<{
+  success: boolean;
+  matched?: boolean;
+  tableName?: string;
+  tableKorName?: string;
+  tableGroup?: string;
+  error?: string;
+}> {
+  try {
+    const defineRes = await getDefineLayerTables();
+    if (!defineRes.success || !Array.isArray(defineRes.tables)) {
+      return { success: true, matched: false };
+    }
+    const row = pickDefineLayerRowByExcelFileName(
+      params.fileName ?? '',
+      defineRes.tables as Array<Record<string, unknown>>
+    );
+    if (!row) return { success: true, matched: false };
+    return {
+      success: true,
+      matched: true,
+      tableName: String(row.define_table_name ?? '').trim() || undefined,
+      tableKorName: String(row.define_table_kor_name ?? '').trim() || undefined,
+      tableGroup: String(row.define_table_group ?? '').trim() || undefined,
+    };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 신규 키로 다시 올릴 때 기존 layer 테이블과 필지·물건지 자식 테이블을 지운다.
+ */
+export async function dropExcelLayerTablesForReload(params: {
+  tableName: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const tableName = safeTableName(params.tableName ?? '');
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+  const quote = (n: string) => `"${n.replace(/"/g, '""')}"`;
+  const names = [
+    safeTableName(`${tableName}_jijuk`),
+    safeTableName(`${tableName}_mulgunji`),
+    tableName,
+  ];
+  try {
+    for (const n of names) {
+      await db.execute(sql.raw(`DROP TABLE IF EXISTS layer.${quote(n)} CASCADE`));
+    }
+    try {
+      await discardExcelIntegrityReview({ tableName });
+    } catch {
+      /* 미결 정합성 없으면 무시 */
+    }
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 

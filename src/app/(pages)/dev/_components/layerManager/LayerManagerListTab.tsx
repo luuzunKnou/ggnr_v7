@@ -3,13 +3,20 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Button } from "@/app/shadcnComponents/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/app/shadcnComponents/ui/dialog"
 import { call } from "@/lib/api"
 import { Check, X, Download, FileSpreadsheet, History, Loader2 } from "lucide-react"
 import type { LayerManagerRow } from "./types"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
 import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
-import { registerLayerManagerListRefresh } from "./layerManagerUploadBridge"
+import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
 import { StylePreviewSwatch } from "./StylePreviewSwatch"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 
@@ -138,6 +145,12 @@ function sourceLabel(value: string): string {
   return TABLE_SOURCE_LABEL[key] ?? (value || "—")
 }
 
+type EditableNameField = "define_table_group" | "define_table_kor_name"
+
+function isEditableNameField(key: keyof LayerManagerRow): key is EditableNameField {
+  return key === "define_table_group" || key === "define_table_kor_name"
+}
+
 function fieldDisplayText(col: TableColumnDef & { kind: "field" }, row: LayerManagerRow): string {
   const raw = String(row[col.fieldKey] ?? "").trim()
   if (!raw) return "—"
@@ -200,6 +213,14 @@ export function LayerManagerListTab() {
   const [historyTarget, setHistoryTarget] = useState<{ tableName: string; korName: string } | null>(
     null
   )
+  const [editTarget, setEditTarget] = useState<{
+    rowKey: string
+    field: EditableNameField
+  } | null>(null)
+  const [editValue, setEditValue] = useState("")
+  const [editSaving, setEditSaving] = useState(false)
+  const [dropTarget, setDropTarget] = useState<LayerManagerRow | null>(null)
+  const [dropping, setDropping] = useState(false)
   const parentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -438,6 +459,88 @@ export function LayerManagerListTab() {
     }
   }, [excelMetaMap])
 
+  const cancelEdit = useCallback(() => {
+    setEditTarget(null)
+    setEditValue("")
+  }, [])
+
+  const startEdit = useCallback((row: LayerManagerRow, field: EditableNameField) => {
+    setEditTarget({ rowKey: row.rowKey, field })
+    setEditValue(String(row[field] ?? ""))
+  }, [])
+
+  const saveEdit = useCallback(async () => {
+    if (!editTarget) return
+    const row = rows.find((r) => r.rowKey === editTarget.rowKey)
+    if (!row) {
+      cancelEdit()
+      return
+    }
+    const next = editValue.trim()
+    const prev = String(row[editTarget.field] ?? "").trim()
+    if (next === prev) {
+      cancelEdit()
+      return
+    }
+    setEditSaving(true)
+    setError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "updateDefineLayerTableMeta",
+        params: {
+          tableName: row.define_table_name,
+          field: editTarget.field,
+          value: next,
+        },
+      })
+      const data = res?.data ?? res
+      if (!data?.success) {
+        setError(data?.error ?? "저장에 실패했습니다.")
+        return
+      }
+      setRows((prevRows) =>
+        prevRows.map((r) =>
+          r.rowKey === editTarget.rowKey ? { ...r, [editTarget.field]: next } : r
+        )
+      )
+      requestLayerManagerDefineRefresh()
+      cancelEdit()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장에 실패했습니다.")
+    } finally {
+      setEditSaving(false)
+    }
+  }, [cancelEdit, editTarget, editValue, rows])
+
+  const confirmDropTable = useCallback(async () => {
+    if (!dropTarget) return
+    const tableName = dropTarget.define_table_name
+    const schema = dropTarget.define_table_schema === "public_layer" ? "public_layer" : "layer"
+    setDropping(true)
+    setError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "dropLayerDbTable",
+        params: { tableName, schema },
+      })
+      const data = res?.data ?? res
+      if (!data?.success) {
+        setError(data?.error ?? "테이블 삭제에 실패했습니다.")
+        return
+      }
+      setDropTarget(null)
+      if (historyTarget?.tableName === tableName) setHistoryTarget(null)
+      await loadData()
+      void loadRowMeta()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "테이블 삭제에 실패했습니다.")
+    } finally {
+      setDropping(false)
+    }
+  }, [dropTarget, historyTarget, loadData, loadRowMeta])
+
   const handleShpDownload = useCallback(async (row: LayerManagerRow) => {
     const tableName = row.define_table_name
     if (!tableName) return
@@ -631,14 +734,17 @@ export function LayerManagerListTab() {
                           : col.infraKey === "layer"
                             ? published
                             : hasCssStyle
+                      const isTableCol = col.infraKey === "table"
                       return (
                         <div
                           key={col.id}
-                          className={`${cellClass} justify-center`}
+                          className={`${cellClass} justify-center ${isTableCol ? "cursor-pointer hover:bg-muted/50" : ""}`}
                           style={cellStyle}
+                          role={isTableCol ? "button" : undefined}
+                          tabIndex={isTableCol ? 0 : undefined}
                           title={
-                            col.infraKey === "table"
-                              ? "테이블"
+                            isTableCol
+                              ? "테이블 삭제"
                               : col.infraKey === "layer"
                                 ? published
                                   ? "레이어 있음"
@@ -647,8 +753,27 @@ export function LayerManagerListTab() {
                                   ? "스타일 있음"
                                   : "스타일 없음"
                           }
+                          onClick={
+                            isTableCol
+                              ? () => {
+                                  cancelEdit()
+                                  setDropTarget(row)
+                                }
+                              : undefined
+                          }
+                          onKeyDown={
+                            isTableCol
+                              ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault()
+                                    cancelEdit()
+                                    setDropTarget(row)
+                                  }
+                                }
+                              : undefined
+                          }
                         >
-                          <OkIcon ok={ok} loading={col.infraKey !== "table" && styleLoading} />
+                          <OkIcon ok={ok} loading={!isTableCol && styleLoading} />
                         </div>
                       )
                     }
@@ -772,6 +897,11 @@ export function LayerManagerListTab() {
                     const text = fieldDisplayText(col, row)
                     const isSchema = col.fieldKey === "define_table_schema"
                     const isSource = col.fieldKey === "define_table_source"
+                    const editable = isEditableNameField(col.fieldKey)
+                    const editing =
+                      editable &&
+                      editTarget?.rowKey === row.rowKey &&
+                      editTarget.field === col.fieldKey
                     return (
                       <div
                         key={col.id}
@@ -782,6 +912,63 @@ export function LayerManagerListTab() {
                           <SchemaBadge value={String(row.define_table_schema ?? "")} />
                         ) : isSource ? (
                           <SourceBadge value={String(row.define_table_source ?? "")} />
+                        ) : editing ? (
+                          <div className="flex items-center gap-0.5 min-w-0 w-full">
+                            <Input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="h-6 rounded-none text-sm min-w-0 py-0 px-1"
+                              autoFocus
+                              disabled={editSaving}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  void saveEdit()
+                                }
+                                if (e.key === "Escape") {
+                                  e.preventDefault()
+                                  cancelEdit()
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 shrink-0"
+                              disabled={editSaving}
+                              title="저장"
+                              onClick={() => void saveEdit()}
+                            >
+                              {editSaving ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 shrink-0"
+                              disabled={editSaving}
+                              title="취소"
+                              onClick={cancelEdit}
+                            >
+                              <X className="w-3.5 h-3.5 text-muted-foreground" />
+                            </Button>
+                          </div>
+                        ) : editable ? (
+                          <button
+                            type="button"
+                            className={`block min-w-0 w-full truncate text-sm py-1 text-left hover:bg-muted/40 rounded-sm px-0.5 ${col.alignCenter ? "text-center" : ""}`}
+                            title={`${text} (클릭하여 수정)`}
+                            onClick={() => {
+                              if (isEditableNameField(col.fieldKey)) startEdit(row, col.fieldKey)
+                            }}
+                          >
+                            {text}
+                          </button>
                         ) : (
                           <span
                             className={`block min-w-0 w-full truncate text-sm py-1 ${col.fieldKey === "define_table_name" ? "font-mono" : ""}`}
@@ -811,6 +998,41 @@ export function LayerManagerListTab() {
         korName={historyTarget?.korName}
         onClose={() => setHistoryTarget(null)}
       />
+
+      <Dialog
+        open={!!dropTarget}
+        onOpenChange={(open) => {
+          if (dropping) return
+          if (!open) setDropTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>테이블 삭제</DialogTitle>
+          </DialogHeader>
+          <p className="py-2 text-sm">해당 테이블을 삭제하시겠습니까?</p>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="text-muted-foreground"
+              disabled={dropping}
+              onClick={() => setDropTarget(null)}
+            >
+              아니오
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="text-destructive/90 hover:bg-destructive/10"
+              disabled={dropping}
+              onClick={() => void confirmDropTable()}
+            >
+              {dropping ? "삭제 중..." : "예"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
