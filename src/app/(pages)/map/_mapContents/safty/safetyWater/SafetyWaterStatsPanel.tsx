@@ -1002,7 +1002,7 @@ function MergedChart({
               총 {rows.length}건
             </span>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto rounded border border-border/60">
+          <div className="min-h-0 flex-1 overflow-auto rounded border border-border/60 scrollbar-thin !mr-0">
             <table className="min-w-full border-separate border-spacing-0 text-[11px]">
               <thead>
                 <tr>

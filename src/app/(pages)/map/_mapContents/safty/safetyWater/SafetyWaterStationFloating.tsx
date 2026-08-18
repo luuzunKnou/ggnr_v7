@@ -142,7 +142,7 @@ export function SafetyWaterStationFloating({
         </div>
       </div>
 
-      <div className="min-h-0 w-full flex-1 overflow-y-auto border-t border-border/80">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto border-t border-border/80 scrollbar-thin">
         <SafetyWaterStationList
           stations={stations}
           selectedId={selectedId}

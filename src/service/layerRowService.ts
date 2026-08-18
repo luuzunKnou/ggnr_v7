@@ -26,6 +26,7 @@ export type DefineFieldMeta = {
   label: string;
   type: string;
   readOnly: boolean;
+  required: boolean;
   showDetail: boolean;
   idx: number;
 };
@@ -147,12 +148,14 @@ export function getEditableFieldDefinitions(params: {
       if (GEOM_COLUMN_NAMES.has(lower) || exclude.has(lower)) return null;
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       const readOnly = isTrueFlag(raw.define_field_read_only);
+      const required = isTrueFlag(raw.define_field_is_required);
       if (!showDetail && !includeHidden) return null;
       const meta: DefineFieldMeta = {
         field,
         label: String(raw.define_field_kor_name ?? field).trim() || field,
         type: String(raw.define_field_type ?? 'text').trim().toLowerCase(),
         readOnly,
+        required,
         showDetail,
         idx: parseInt(String(raw.define_field_idx ?? '999999'), 10) || 999999,
       };
@@ -208,6 +211,51 @@ async function getTableColumns(schema: string, table: string): Promise<string[]>
 function findColumnName(columns: string[], field: string): string | null {
   const lower = field.toLowerCase();
   return columns.find((c) => c.toLowerCase() === lower) ?? null;
+}
+
+/** 자식 FK 컬럼 — 힌트 우선, 없으면 점용/공통 관례 순 */
+function resolveChildParentColumnName(
+  columns: string[],
+  hint?: string | null
+): string | null {
+  const ordered = [
+    String(hint ?? '').trim(),
+    'parent_id',
+    'permit_no',
+    'cons_code',
+    'id',
+  ].filter(Boolean);
+  const seen = new Set<string>();
+  for (const name of ordered) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const found = findColumnName(columns, name);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** 자식 주소 컬럼 — 힌트 우선, occup_place·parcel_address·usage_loc */
+function resolveChildAddressColumnName(
+  columns: string[],
+  hint?: string | null
+): string | null {
+  const ordered = [
+    String(hint ?? '').trim(),
+    'occup_place',
+    'parcel_address',
+    'usage_loc',
+  ].filter(Boolean);
+  const seen = new Set<string>();
+  for (const name of ordered) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const found = findColumnName(columns, name);
+    if (found) return found;
+  }
+  return null;
 }
 
 /** 수정 폼용 원본 행 (geom 제외) */
@@ -1942,15 +1990,14 @@ export async function syncChildParcelsByParentId(params: {
   if (!childTable) return { success: false, error: '자식 테이블을 찾을 수 없습니다.' };
 
   const childCols = await getTableColumns(schema, childTable);
-  const parentField = String(params?.childParentField ?? 'parent_id').trim() || 'parent_id';
-  const parentCol = findColumnName(childCols, parentField);
-  const addressFieldHint = String(params?.childAddressField ?? '').trim();
-  const addressCol =
-    (addressFieldHint ? findColumnName(childCols, addressFieldHint) : null) ??
-    findColumnName(childCols, 'parcel_address') ??
-    findColumnName(childCols, 'usage_loc');
+  const parentCol = resolveChildParentColumnName(childCols, params?.childParentField);
+  const addressCol = resolveChildAddressColumnName(childCols, params?.childAddressField);
   if (!parentCol || !addressCol) {
-    return { success: false, error: '자식 테이블에 부모키·주소(usage_loc/parcel_address) 컬럼이 필요합니다.' };
+    return {
+      success: false,
+      error:
+        '자식 테이블에 부모키·주소(occup_place/parcel_address/usage_loc) 컬럼이 필요합니다.',
+    };
   }
 
   const geomCol = findColumnName(childCols, 'geom');
@@ -2060,7 +2107,7 @@ export async function deleteTableRowByKey(params: {
       const childTable = await resolveLayerPhysicalRelName(schema, childTableGuess);
       if (!childTable) continue;
       const childCols = await getTableColumns(schema, childTable);
-      const parentCol = findColumnName(childCols, parentField);
+      const parentCol = resolveChildParentColumnName(childCols, parentField);
       if (!parentCol) continue;
       await db.execute(
         sql.raw(

@@ -62,7 +62,7 @@ export function useOccupationLedgerParentGeomHighlight(
 
     const key = String(detailId ?? '').trim();
     const table = String(tableName ?? '').trim();
-    const kf = String(keyField ?? '').trim() || 'id';
+    const kf = String(keyField ?? '').trim() || 'permit_no';
     if (!active || isEditing || !key || key === LAYER_ROW_NEW_ID || !table) return;
 
     let cancelled = false;

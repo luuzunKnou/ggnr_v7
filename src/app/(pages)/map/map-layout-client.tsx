@@ -1414,7 +1414,7 @@ function MapLayoutContent({
       <div className="relative w-full h-screen overflow-hidden bg-slate-100">
         {mapContext?.layerRowGeomEdit && (
           <div
-            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-red-500"
+            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-primary/40"
             aria-hidden
           />
         )}
