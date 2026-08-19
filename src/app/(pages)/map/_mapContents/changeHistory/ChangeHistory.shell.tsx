@@ -23,7 +23,6 @@ import type CircleGeom from 'ol/geom/Circle';
 import { fromCircle } from 'ol/geom/Polygon';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
@@ -36,6 +35,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import {
+  ANALYSIS_DRAW_STYLE,
   DrawToolbarActions,
   ParcelAnalysisAreaSummary,
   ParcelAnalysisBoundaryPicker,
@@ -52,16 +52,6 @@ import {
   type ChangeHistoryDrawTool,
   type ChangeHistoryModalStep,
 } from './changeHistory.types';
-
-const DRAW_STYLE = new Style({
-  stroke: new Stroke({ color: 'rgba(37, 99, 235, 1)', width: 2.5 }),
-  fill: new Fill({ color: 'rgba(37, 99, 235, 0.18)' }),
-  image: new CircleStyle({
-    radius: 5,
-    fill: new Fill({ color: 'rgba(37, 99, 235, 1)' }),
-    stroke: new Stroke({ color: '#fff', width: 1.5 }),
-  }),
-});
 
 const DRAW_LAYER_Z = 870;
 
@@ -118,7 +108,7 @@ function useChangeHistoryDraw() {
     if (!map || !drawTool) return;
 
     const source = new VectorSource();
-    const layer = new VectorLayer({ source, style: DRAW_STYLE, zIndex: DRAW_LAYER_Z });
+    const layer = new VectorLayer({ source, style: ANALYSIS_DRAW_STYLE, zIndex: DRAW_LAYER_Z });
     layer.set('changeHistoryDraw', true);
     map.addLayer(layer);
 

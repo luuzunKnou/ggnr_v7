@@ -14,6 +14,13 @@ import { call } from '@/lib/api';
 import { useChunkedUpload } from '../useChunkedUpload';
 import { getCoordFromAddress } from '@/app/(pages)/map/_mapComponents/addressSearch/vworldAddressSearch';
 import { hangjeongRiAddressAlt } from '@/lib/excelUploadAddressNormalize';
+import {
+  excelLayerTableCheckBadge,
+  excelLayerTableCheckHint,
+  excelUploadFileStem,
+  findDefineLayerFieldForExcelHeader,
+  type ExcelDefineLayerMeta,
+} from '@/lib/excelDefineLayerFieldApply';
 import { ChevronRight, ChevronLeft, ChevronDown, Loader2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -44,6 +51,7 @@ import {
   buildExcelCompositeKeyValue,
   isExcelSystemAttrField,
   isExcelSystemKeyColumn,
+  suggestExcelCompositeKey,
 } from './excelWizardKey';
 import { SyncDetailModal } from '../shp/SyncDetailModal';
 import { requestExcelHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
@@ -270,13 +278,15 @@ function pickUnifiedAddressHeader(
 
 /**
  * 엑셀/대장 흔한 표기 정리: "외 N번지·외N번지·외 N필지"는 검색에서 빼고 대표 지번만 남김.
- * 예: "장기 812외2번지" → "장기 812번지"
+ * 예: "812외2번지" → "812번지", "716-29외2번지" → "716-29"
  */
 function normalizeExcelAddressForGeocode(s: string): string {
   let t = String(s ?? '').trim();
   if (!t) return t;
-  // "716-29외2번지" → "716-29번지" (부번 뒤의 외N만; "29"만 잡아 29번지로 바뀌는 오류 방지)
-  t = t.replace(/([0-9]+(?:-[0-9]+)?)\s*외\s*\d+\s*(?:번지|필지)/gi, '$1번지');
+  // 본번-부번 뒤 외N → 하이픈 지번 유지 (번지를 붙이지 않음)
+  t = t.replace(/([0-9]+-[0-9]+)\s*외\s*\d+\s*(?:번지|필지)/gi, '$1');
+  // 본번만 있는 외N → 대표 본번에 번지
+  t = t.replace(/([0-9]+)\s*외\s*\d+\s*(?:번지|필지)/gi, '$1번지');
   t = t.replace(/\s*외\s*\d+\s*(?:번지|필지)\s*/gi, ' ');
   // "번지선", "하천", "하천부지" 같은 지번 뒤 설명어 제거
   t = t.replace(/번지선/gi, '번지');
@@ -556,6 +566,7 @@ export function ExlWizardModal({
   const [layerTableMeta, setLayerTableMeta] = useState<{
     exists: boolean;
     columns: { name: string; comment: string | null }[];
+    define?: ExcelDefineLayerMeta;
   } | null>(null);
   const [tableCheckLoading, setTableCheckLoading] = useState(false);
   const [tableCheckHint, setTableCheckHint] = useState<string | null>(null);
@@ -722,6 +733,25 @@ export function ExlWizardModal({
     async (file: File) => {
       setSelectedFile(file);
       setSelectedFileInfo({ name: file.name, size: file.size });
+      const stem = excelUploadFileStem(file.name);
+      setTableKor(stem);
+      setTableGroup('');
+      setTableEng('');
+      try {
+        const res = await call('', 'POST', {
+          service: 'excelUploadService',
+          action: 'findExcelDefineLayerByFileName',
+          params: { fileName: file.name },
+        });
+        const d = res?.data ?? res;
+        if (d?.success && d.matched) {
+          setTableGroup(String(d.tableGroup ?? '').trim());
+          if (String(d.tableName ?? '').trim()) setTableEng(String(d.tableName).trim());
+          setTableKor(String(d.tableKorName ?? '').trim() || stem);
+        }
+      } catch {
+        /* 조회 실패 시 한글명=파일명 유지 */
+      }
       await runExcelParse(file, titleRowLines);
     },
     [runExcelParse, titleRowLines]
@@ -759,6 +789,15 @@ export function ExlWizardModal({
     !!tableKor.trim() &&
     tableEngOk &&
     layerTableMeta !== null;
+  /** 다음이 막힌 이유가 테이블 미확인일 때 확인 칸을 강조 */
+  const needsLayerTableCheck =
+    step === 1 &&
+    !step1Blocked &&
+    !step1Validating &&
+    !!parseResult &&
+    !!tableKor.trim() &&
+    tableEngOk &&
+    layerTableMeta === null;
   const step2AddressOk =
     !!geometryType &&
     (isAndongRoadUseWorkflow
@@ -782,6 +821,8 @@ export function ExlWizardModal({
     selectedObjectAddressHeader.trim().toLowerCase() === 'geom';
   const canLeaveStep2 =
     !!geometryType && step2AddressOk && step2ObjectAddressOk && !bothGeomConflict;
+  /** 2단계에서 폴리곤/포인트를 아직 고르지 않았을 때 강조 */
+  const needsGeometryTypePick = step === 2 && !geometryType && !isAndongRoadUseWorkflow;
 
   /** 2~3단계: 원본 파싱 결과만 사용 (개발행위 행 확장은 4단계에서 수행) */
   const workflowParseResult = parseResult;
@@ -852,7 +893,16 @@ export function ExlWizardModal({
     () => activeFieldDefs.filter((f) => f.isKey && !isExcelSystemKeyColumn(f.headerEng)),
     [activeFieldDefs]
   );
-  const syntheticKeyAllowed = !layerTableMeta?.exists;
+  const compositeKeySuggestion = useMemo(
+    () =>
+      keyMode === 'composite'
+        ? suggestExcelCompositeKey({
+            rows: workflowParseResult?.rows ?? [],
+            fields: fieldDefs,
+          })
+        : null,
+    [keyMode, workflowParseResult, fieldDefs]
+  );
   const syntheticKeyEngTrim = syntheticKeyEng.trim();
   const compositeKeyEngTrim = compositeKeyEng.trim();
   const compositeKeyEngOk =
@@ -865,7 +915,6 @@ export function ExlWizardModal({
     !isExcelSystemKeyColumn(compositeKeyEngTrim);
   const syntheticKeyEngOk =
     useSyntheticKeyField &&
-    syntheticKeyAllowed &&
     syntheticKeyEngTrim.length > 0 &&
     /^[a-zA-Z0-9_]+$/.test(syntheticKeyEngTrim) &&
     !/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(syntheticKeyEngTrim) &&
@@ -922,8 +971,11 @@ export function ExlWizardModal({
       const map = (d?.map ?? {}) as Record<string, string>;
       setFieldDefs(
         parseResult.headers.map((h, idx) => {
+          const def = findDefineLayerFieldForExcelHeader(h, layerTableMeta?.define?.fields);
           let headerEng = map[h] ?? `value_${String(idx + 1).padStart(3, '0')}`;
-          if (layerTableMeta?.exists) {
+          if (def) {
+            headerEng = def.define_field_name;
+          } else if (layerTableMeta?.exists) {
             const dbCols = layerTableMeta.columns.filter((c) => !EXCEL_LAYER_SYSTEM_COLS.has(c.name));
             const byComment = dbCols.find((c) => (c.comment ?? '').trim() === String(h).trim());
             if (byComment) headerEng = byComment.name;
@@ -932,9 +984,9 @@ export function ExlWizardModal({
             originalHeader: h,
             headerKor: h,
             headerEng,
-            showList: false,
-            showSearch: false,
-            isKey: false,
+            showList: def?.define_field_show_list ?? false,
+            showSearch: def?.define_field_show_search ?? false,
+            isKey: def?.define_field_is_key ?? false,
           };
         })
       );
@@ -968,14 +1020,32 @@ export function ExlWizardModal({
       }
       const exists = !!d.exists;
       const columns = (d.columns ?? []) as { name: string; comment: string | null }[];
-      setLayerTableMeta({ exists, columns });
+      const define = (d.define ?? { exists: false }) as ExcelDefineLayerMeta;
+      setLayerTableMeta({ exists, columns, define });
       setDiffDropColumns(new Set());
       setExcelOnlySkipAdd(new Set());
       const nm = String(d.normalizedTableName ?? safeTableName(te));
+      const fileStem =
+        selectedFile?.name?.replace(/\.(xlsx|xls|csv)$/i, '') ??
+        pathOrResult?.replace(/^.*[/\\]/, '').replace(/\.(xlsx|xls|csv)$/i, '') ??
+        '';
+      if (define.exists && define.tableKorName) {
+        setTableKor((prev) => {
+          const p = prev.trim();
+          if (!p || p === fileStem) return define.tableKorName as string;
+          return prev;
+        });
+      }
+      if (define.exists && define.tableGroup) {
+        setTableGroup((prev) => (prev.trim() ? prev : (define.tableGroup as string)));
+      }
       setTableCheckHint(
-        exists
-          ? `layer.${nm} 테이블이 있습니다. 다음 단계에서 엑셀과 컬럼 DIFF를 확인할 수 있습니다.`
-          : `동일 이름의 layer 테이블이 없습니다. 신규 테이블로 생성합니다.`
+        excelLayerTableCheckHint({
+          dbExists: exists,
+          tableName: nm,
+          defineExists: !!define.exists,
+          fieldCount: Array.isArray(define.fields) ? define.fields.length : 0,
+        })
       );
     } catch (e: unknown) {
       setLayerTableMeta(null);
@@ -983,7 +1053,7 @@ export function ExlWizardModal({
     } finally {
       setTableCheckLoading(false);
     }
-  }, [tableEng, tableEngOk]);
+  }, [tableEng, tableEngOk, selectedFile?.name, pathOrResult]);
 
   useEffect(() => {
     setLayerTableMeta(null);
@@ -992,11 +1062,11 @@ export function ExlWizardModal({
 
   useEffect(() => {
     if (!parseResult?.headers?.length) return;
-    const fileName =
-      selectedFile?.name?.replace(/\.(xlsx|xls|csv)$/i, '') ??
-      pathOrResult?.replace(/^.*[/\\]/, '').replace(/\.(xlsx|xls|csv)$/i, '') ??
+    const stem =
+      excelUploadFileStem(selectedFile?.name ?? '') ||
+      excelUploadFileStem(pathOrResult ?? '') ||
       '';
-    setTableKor((prev) => (prev.trim() ? prev : fileName || parseResult.headers[0] || ''));
+    setTableKor((prev) => (prev.trim() ? prev : stem || parseResult.headers[0] || ''));
   }, [parseResult, selectedFile?.name, pathOrResult]);
 
   const keyField = useMemo(() => {
@@ -1014,12 +1084,6 @@ export function ExlWizardModal({
     compositeKeyEng,
     keyFieldDefs,
   ]);
-
-  useEffect(() => {
-    if (layerTableMeta?.exists && keyMode === 'synthetic') {
-      setKeyMode('single');
-    }
-  }, [layerTableMeta?.exists, keyMode]);
 
   useEffect(() => {
     if (isLedgerWorkflow || isAndongRoadUseWorkflow) {
@@ -1347,9 +1411,12 @@ export function ExlWizardModal({
       operatorId && operatorName
         ? `${operatorId}(${operatorName})`
         : operatorId || operatorName || '미확인';
-    const writeMode = layerTableMeta?.exists
-      ? '전체 교체'
-      : '신규';
+    const recreateByDrop = useSyntheticKeyField && !!layerTableMeta?.exists;
+    const writeMode = recreateByDrop
+      ? '삭제 후 재생성'
+      : layerTableMeta?.exists
+        ? '전체 교체'
+        : '신규';
     const parcelAddressMode =
       parcelSelectMode === 'splitColumns'
         ? '열 구분 조합'
@@ -1716,7 +1783,7 @@ export function ExlWizardModal({
                         규칙:
                         1. 입력에 복수 필지가 섞여 있으면 필지마다 하나의 주소 문자열로 분리한다.
                         2. 결과 각 원소는 가능한 한 동일한 형식(시도 시군구 읍면동 리 지번)으로 맞춘다.
-                        3. "외 N번지", "외N번지", "외 N필지"는 제외하고 대표 지번만 남긴다.
+                        3. "외 N번지", "외N번지", "외 N필지"는 제외하고 대표 지번만 남긴다. 본번만 있으면 "812번지", 본번-부번이면 "716-29"처럼 번지를 붙이지 않는다.
                         4. "경북 영양군 수비면 수하리 781-4, 702-2"처럼 읍면동·리는 공통이고 지번만 콤마로 붙은 경우, 공통 접두를 각 필지에 복제해
                            ["경북 영양군 수비면 수하리 781-4", "경북 영양군 수비면 수하리 702-2"] 형태로 반환한다.
                         5. 응답은 JSON 배열만 출력한다. 설명/코드펜스 금지.
@@ -1802,7 +1869,7 @@ export function ExlWizardModal({
                 define_field_is_key: f.isKey && !isExcelSystemKeyColumn(f.headerEng),
               }));
 
-    if (layerTableMeta?.exists) {
+    if (layerTableMeta?.exists && !recreateByDrop) {
       const dropList = [...diffDropColumns]
         .map((c) => safeColumnName(c))
         .filter((c) => c && !EXCEL_LAYER_SYSTEM_COLS.has(c));
@@ -2050,8 +2117,32 @@ export function ExlWizardModal({
       }
     }
 
+    if (recreateByDrop) {
+      pushLog('신규 키: 기존 테이블을 삭제하고 엑셀 기준으로 다시 만듭니다.');
+      try {
+        const dropRes = await call('', 'POST', {
+          service: 'excelUploadService',
+          action: 'dropExcelLayerTablesForReload',
+          params: { tableName: tableEng.trim() },
+        });
+        const dropData = dropRes?.data ?? dropRes;
+        if (!dropData?.success) {
+          const msg = String(dropData?.error ?? '기존 테이블 삭제에 실패했습니다.');
+          pushLog(`오류: ${msg}`);
+          setProcessingError(msg);
+          return;
+        }
+        pushLog('기존 테이블 삭제 완료');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        pushLog(`오류: ${msg}`);
+        setProcessingError(msg);
+        return;
+      }
+    }
+
     const syncKeyForCapture = safeColumnName(keyField);
-    const integrityMode = !!layerTableMeta?.exists && !!syncKeyForCapture;
+    const integrityMode = !!layerTableMeta?.exists && !recreateByDrop && !!syncKeyForCapture;
     let integrityAppliedWithoutModal = false;
     if (integrityMode) {
       pushLog(`기존 테이블 정합성 모드: 키=${syncKeyForCapture} (전체 덮어쓰기 없이 비교·선택 반영)`);
@@ -3277,7 +3368,14 @@ export function ExlWizardModal({
                 </div>
               </div>
 
-              <div className="rounded-md border border-gray-200 bg-muted/30 p-3 space-y-2">
+              <div
+                className={cn(
+                  'rounded-md p-3 space-y-2',
+                  needsLayerTableCheck
+                    ? 'border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-500'
+                    : 'border border-gray-200 bg-muted/30'
+                )}
+              >
                 <p className="text-sm font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                   동일 테이블 존재 여부
@@ -3285,7 +3383,7 @@ export function ExlWizardModal({
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant={needsLayerTableCheck ? 'default' : 'secondary'}
                     size="sm"
                     disabled={tableCheckLoading || !tableEng.trim()}
                     onClick={() => void runLayerTableCheck()}
@@ -3301,13 +3399,30 @@ export function ExlWizardModal({
                   </Button>
                   {layerTableMeta !== null && (
                     <span
-                      className={`text-sm font-medium ${layerTableMeta.exists ? 'text-amber-800 dark:text-amber-200' : 'text-green-700 dark:text-green-400'}`}
+                      className={`text-sm font-medium ${
+                        excelLayerTableCheckBadge({
+                          dbExists: layerTableMeta.exists,
+                          defineExists: !!layerTableMeta.define?.exists,
+                        }).className
+                      }`}
                     >
-                      {layerTableMeta.exists ? '기존 테이블 있음' : '신규 테이블 (동일 이름 없음)'}
+                      {
+                        excelLayerTableCheckBadge({
+                          dbExists: layerTableMeta.exists,
+                          defineExists: !!layerTableMeta.define?.exists,
+                        }).label
+                      }
                     </span>
                   )}
                 </div>
                 {tableCheckHint ? <p className="text-xs text-muted-foreground">{tableCheckHint}</p> : null}
+                {needsLayerTableCheck ? (
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    {tableCheckLoading
+                      ? '테이블을 확인하는 중입니다. 끝나면 다음으로 갈 수 있습니다.'
+                      : '다음으로 가려면 «layer 테이블 확인»을 눌러 주세요.'}
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-md border border-gray-200 bg-muted/30 p-3 flex flex-col min-h-0 gap-2">
@@ -3406,7 +3521,14 @@ export function ExlWizardModal({
                 </div>
               </div>
 
-              <div className="rounded-md border border-gray-200 bg-muted/30 p-3 space-y-2">
+              <div
+                className={cn(
+                  'rounded-md p-3 space-y-2',
+                  needsGeometryTypePick
+                    ? 'border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-500'
+                    : 'border border-gray-200 bg-muted/30'
+                )}
+              >
                 <p className="text-sm font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                   폴리곤(필지) / 포인트 표현
@@ -3436,6 +3558,11 @@ export function ExlWizardModal({
                     점(포인트)
                   </label>
                 </div>
+                {needsGeometryTypePick ? (
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    다음으로 가려면 필지 모양(폴리곤) 또는 점(포인트)을 선택해 주세요.
+                  </p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
@@ -3918,7 +4045,11 @@ export function ExlWizardModal({
           )}
           {step === 3 && workflowParseResult && (
             <div className="flex min-h-0 flex-1 flex-col gap-5">
-              {layerTableMeta?.exists && schemaDiff ? (
+              {layerTableMeta?.exists && useSyntheticKeyField ? (
+                <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-200">
+                  신규 키를 쓰면 기존 테이블을 삭제하고 엑셀로 다시 만듭니다. 건별 추가·변경·삭제는 비교하지 않습니다.
+                </div>
+              ) : layerTableMeta?.exists && schemaDiff ? (
                 <div className="shrink-0 rounded-md border border-gray-200 bg-muted/30 p-3 space-y-3 text-sm">
                   <button
                     type="button"
@@ -4088,29 +4219,17 @@ export function ExlWizardModal({
                       />
                       기존 열을 복합키로 사용
                     </label>
-                    <label
-                      className={cn(
-                        'flex items-center gap-2',
-                        syntheticKeyAllowed ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                      )}
-                      title={
-                        syntheticKeyAllowed
-                          ? undefined
-                          : '기존 테이블이 있으면 행번호 임시 키를 쓸 수 없습니다. 업무 키(또는 복합키)를 선택하세요.'
-                      }
-                    >
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         name="keyMode"
                         checked={keyMode === 'synthetic'}
-                        disabled={!syntheticKeyAllowed}
                         onChange={() => {
-                          if (!syntheticKeyAllowed) return;
                           setKeyMode('synthetic');
                           setFieldDefs((prev) => prev.map((f) => ({ ...f, isKey: false })));
                         }}
                       />
-                      신규 키 필드 사용 (신규 테이블만, 행마다 고유값 자동 부여)
+                      신규 키 필드 사용 (행마다 고유값 자동 부여)
                     </label>
                   </div>
                   {keyMode === 'composite' && (
@@ -4139,9 +4258,14 @@ export function ExlWizardModal({
                           ? ` 구성: ${keyFieldDefs.map((d) => d.headerKor || d.headerEng).join(' + ')}`
                           : ''}
                       </p>
+                      {compositeKeySuggestion ? (
+                        <p className="text-xs text-teal-700 dark:text-teal-400 max-w-xl pb-1">
+                          {compositeKeySuggestion.message}
+                        </p>
+                      ) : null}
                     </div>
                   )}
-                  {useSyntheticKeyField && syntheticKeyAllowed && (
+                  {useSyntheticKeyField && (
                     <div className="flex flex-wrap items-end gap-4 pl-0.5">
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">한글명</span>
@@ -4162,7 +4286,10 @@ export function ExlWizardModal({
                         />
                       </div>
                       <p className="text-xs text-muted-foreground max-w-md pb-1">
-                        DB에는 k00000001, k00000002 … 형태로 저장됩니다. 재업로드 정합성에는 적합하지 않으므로 신규 테이블에만 사용하세요.
+                        DB에는 k00000001, k00000002 … 형태로 저장됩니다.
+                        {layerTableMeta?.exists
+                          ? ' 기존 테이블은 삭제된 뒤 엑셀 기준으로 다시 만들어집니다.'
+                          : ' 처음 올리는 테이블에 사용합니다.'}
                       </p>
                     </div>
                   )}
@@ -4355,8 +4482,21 @@ export function ExlWizardModal({
           </div>
         </div>
         <DialogFooter className="shrink-0 border-t border-border bg-background pt-3 pb-2 mt-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          {(step === 1 || step === 3) && (keyDuplicateError || engNameKoreanError) && (
+          {(step === 1 || step === 2 || step === 3) &&
+            (keyDuplicateError || engNameKoreanError || needsLayerTableCheck || needsGeometryTypePick) && (
             <div className="w-full sm:flex-1 sm:min-w-0 text-left space-y-1">
+              {step === 1 && needsLayerTableCheck && (
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  {tableCheckLoading
+                    ? '테이블 확인이 끝나면 다음으로 갈 수 있습니다.'
+                    : '다음으로 가려면 «layer 테이블 확인»을 눌러 주세요.'}
+                </p>
+              )}
+              {step === 2 && needsGeometryTypePick && (
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  다음으로 가려면 필지 모양(폴리곤) 또는 점(포인트)을 선택해 주세요.
+                </p>
+              )}
               {step === 3 && keyDuplicateError && (
                 <p className="text-sm text-destructive break-words max-h-24 overflow-y-auto pr-1">{keyDuplicateError}</p>
               )}

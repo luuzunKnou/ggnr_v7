@@ -86,8 +86,9 @@ export function ResourceAccessDeniedDialog({
   const [msg, setMsg] = useState('');
   const [latest, setLatest] = useState<LatestAccessReq | null>(null);
 
-  const sk = (sysKey ?? '').trim();
-  const se = (serEng ?? '').trim();
+  // props 기준 trim — useMemo로 동일 값이면 참조 안정 (deps에 매 렌더 새 문자열 넣는 패턴 방지)
+  const sk = useMemo(() => (sysKey ?? '').trim(), [sysKey]);
+  const se = useMemo(() => (serEng ?? '').trim(), [serEng]);
 
   useEffect(() => {
     if (!open) {
