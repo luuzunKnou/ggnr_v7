@@ -15,6 +15,7 @@ import iconv from 'iconv-lite';
 import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, getTableColumnInfo, createOrUpdateGeoServerLayer, applyDefaultStyleToLayer } from './devTestService';
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 import { matchEpsgFromLooseText } from '@/lib/matchCoordinateSystemText';
+import { safeTableName, shpTableNameFromRelPath } from '@/lib/shpTableName';
 import {
   isLayerExtraFieldName,
   layerExtraDefineViewOff,
@@ -610,18 +611,14 @@ export type ShpStatusRow = {
   layer: boolean;
   style: boolean;
   define: boolean;
+  size?: number;
 };
 
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 
 function getDefineFieldsFilePath(tableKey: string): string {
-  const safe = String(tableKey).replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const safe = safeTableName(tableKey);
   return path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
-}
-
-/** PostGIS 테이블명: 영문/숫자/언더스코어만 (createTableFromShp와 동일 규칙) */
-function safeTableName(basename: string): string {
-  return (basename.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '').toLowerCase()) || 'layer_table';
 }
 
 function equalsTableName(a: string, b: string): boolean {
@@ -821,11 +818,50 @@ function filterColsToTable(
   return out;
 }
 
+type ShpListEntry = { name: string; mtime: Date; size: number };
+
+function shouldSkipShpSubdir(name: string): boolean {
+  const n = name.trim();
+  if (!n || n.startsWith('.')) return true;
+  if (n === '__MACOSX') return true;
+  return false;
+}
+
+/** 선택 폴더 기준 상대경로(.shp). recursive면 하위 폴더 포함. shp_data 루트는 재귀하지 않음. */
+async function collectShpEntries(dir: string, recursive: boolean): Promise<ShpListEntry[]> {
+  const out: ShpListEntry[] = [];
+  const walk = async (currentDir: string, relFromSelected: string) => {
+    let list;
+    try {
+      list = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of list) {
+      if (e.isDirectory()) {
+        if (!recursive || shouldSkipShpSubdir(e.name)) continue;
+        const childRel = relFromSelected ? `${relFromSelected}/${e.name}` : e.name;
+        await walk(path.join(currentDir, e.name), childRel);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      if (path.extname(e.name).toLowerCase() !== '.shp') continue;
+      const name = relFromSelected ? `${relFromSelected}/${e.name}` : e.name;
+      const fullPath = path.join(currentDir, e.name);
+      const st = await fs.stat(fullPath).catch(() => null);
+      out.push({ name, mtime: st?.mtime ?? new Date(0), size: st?.size ?? 0 });
+    }
+  };
+  await walk(dir, '');
+  return out;
+}
+
 /**
  * shp_data 폴더(또는 하위 폴더) 내 .shp 파일 목록과 좌표계/Table/layer/style/Define 상태 반환.
- * @param params.relativePath - 현재 폴더 상대경로 (예: shp_data, shp_data/폴더명). 해당 폴더 안의 .shp만 반환.
+ * @param params.relativePath - 현재 폴더 상대경로 (예: shp_data, shp_data/폴더명).
+ * @param params.recursive - true이면 하위 폴더의 .shp도 포함. shp_data 루트는 재귀하지 않음.
  */
-export async function getShpStatusList(params?: { relativePath?: string }): Promise<{
+export async function getShpStatusList(params?: { relativePath?: string; recursive?: boolean }): Promise<{
   rows: ShpStatusRow[];
   path: string;
 }> {
@@ -838,6 +874,8 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
     return { rows: [], path: baseShp };
   }
   const resultPath = dir;
+  const relNorm = relativePath.replace(/\\/g, '/').replace(/\/$/, '');
+  const recursive = params?.recursive === true && relNorm !== 'shp_data';
 
   try {
     await fs.mkdir(path.join(GGNR_DATA_DIR, 'shp_data'), { recursive: true });
@@ -845,21 +883,13 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
     // ignore
   }
 
-  let entries: { name: string; mtime: Date }[] = [];
+  let entries: ShpListEntry[] = [];
   try {
     const stat = await fs.stat(dir);
     if (!stat.isDirectory()) {
       return { rows: [], path: resultPath };
     }
-    const list = await fs.readdir(dir, { withFileTypes: true });
-    for (const e of list) {
-      if (!e.isFile()) continue;
-      const ext = path.extname(e.name).toLowerCase();
-      if (ext !== '.shp') continue;
-      const fullPath = path.join(dir, e.name);
-      const st = await fs.stat(fullPath).catch(() => null);
-      entries.push({ name: e.name, mtime: st?.mtime ?? new Date(0) });
-    }
+    entries = await collectShpEntries(dir, recursive);
   } catch {
     return { rows: [], path: resultPath };
   }
@@ -944,7 +974,7 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
   }
 
   const rows: ShpStatusRow[] = [];
-  for (const { name, mtime } of entries) {
+  for (const { name, mtime, size } of entries) {
     const basename = path.basename(name, '.shp');
     const pathOrResult = relativePath
       ? `${relativePath.replace(/\\/g, '/')}/${name}`
@@ -952,7 +982,7 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
 
     let epsg: string | null = null;
     try {
-      const prjPath = path.join(dir, `${basename}.prj`);
+      const prjPath = path.join(dir, name.replace(/\.shp$/i, '.prj'));
       const prjContent = await fs.readFile(prjPath, 'utf-8').catch(() => '');
       epsg = parseEpsgFromPrj(prjContent);
     } catch {
@@ -960,7 +990,7 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
     }
     if (epsg == null) epsg = parseEpsgFromBasename(basename);
 
-    const dbTableName = safeTableName(basename);
+    const dbTableName = shpTableNameFromRelPath(pathOrResult);
     const inDefine = defineTableSet.has(dbTableName) || defineTableSet.has(basename);
     const hasDefineFields = (defineHasFields[dbTableName] ?? defineHasFields[basename]) ?? false;
     const targetSchema = defineSchemaByName.get(dbTableName) ?? defineSchemaByName.get(basename.toLowerCase()) ?? 'layer';
@@ -977,6 +1007,7 @@ export async function getShpStatusList(params?: { relativePath?: string }): Prom
       layer: layerNameSet.has(dbTableName) || layerNameSet.has(basename.toLowerCase()),
       style: styleNameSet.has(dbTableName) || styleNameSet.has(basename.toLowerCase()),
       define: inDefine && hasDefineFields,
+      size,
     });
   }
 
@@ -1244,7 +1275,7 @@ export async function createTableFromShp(params: {
     ? override.toLowerCase().startsWith('_rctmp_')
       ? `_rctmp_${safeTableName(override.slice('_rctmp_'.length))}`
       : safeTableName(override)
-    : safeTableName(basename);
+    : shpTableNameFromRelPath(pathOrResult);
 
   try {
     const stat = await fs.stat(absolutePath);
@@ -1620,8 +1651,7 @@ export async function createDefineTableAndFields(params: {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
-  const basename = path.basename(pathOrResult, '.shp');
-  const layerName = safeTableName(basename);
+  const layerName = shpTableNameFromRelPath(pathOrResult);
   const dbSchema =
     params.dbSchema === 'public_layer' || params.dbSchema === 'layer'
       ? params.dbSchema
@@ -1667,8 +1697,7 @@ export async function createGeoServerLayer(params: {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
-  const basename = path.basename(pathOrResult, '.shp');
-  const layerName = safeTableName(basename);
+  const layerName = shpTableNameFromRelPath(pathOrResult);
   const absoluteShp = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
 
   const listRes = await getLayerTableList();
@@ -1707,8 +1736,7 @@ export async function createGeoServerStyleForShp(params: {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
-  const basename = path.basename(pathOrResult, '.shp');
-  const layerName = safeTableName(basename);
+  const layerName = shpTableNameFromRelPath(pathOrResult);
   const absoluteShp = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
 
   try {
@@ -2089,7 +2117,7 @@ export async function runShpPostProcess(params: {
   const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
-  const normalizedName = safeTableName(basename);
+  const normalizedName = shpTableNameFromRelPath(pathOrResult);
 
   try {
     const stat = await fs.stat(absolutePath);
@@ -2357,7 +2385,7 @@ export async function getLayerStatusList(params?: {
 
 /** defineLayer fields에서 key 필드명 조회 */
 function getKeyFieldName(tableName: string): string | null {
-  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const safe = safeTableName(tableName);
   const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
   try {
     if (!fsSync.existsSync(filePath)) return null;
@@ -2376,7 +2404,7 @@ export async function getTitleFieldName(params: { tableName: string }): Promise<
   const tableName = params?.tableName?.trim();
   if (!tableName) return { success: false, titleField: null, error: 'tableName이 필요합니다.' };
   try {
-    const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+    const safe = safeTableName(tableName);
     const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
     if (!fsSync.existsSync(filePath)) return { success: true, titleField: null };
     const fields: Record<string, string>[] = JSON.parse(fsSync.readFileSync(filePath, 'utf-8'));
@@ -2632,7 +2660,7 @@ export async function compareShpSchemaWithTable(params: {
 
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
-  const tableName = safeTableName(basename);
+  const tableName = shpTableNameFromRelPath(pathOrResult);
 
   try {
     await fs.stat(absolutePath);
@@ -2761,19 +2789,19 @@ export async function compareShpFolderSchema(params?: {
   dbSchema?: 'layer' | 'public_layer';
   /** sourceFile(소문자) → 유지 선택 */
   waiversByFile?: Record<string, ShpSchemaWaivers>;
+  recursive?: boolean;
 }): Promise<{ success: boolean; results: ShpSchemaCompareResult[]; error?: string }> {
   const statusRes = await getShpStatusList(params);
   const results: ShpSchemaCompareResult[] = [];
   const waiversByFile = params?.waiversByFile ?? {};
   for (const row of statusRes.rows) {
     const key = row.sourceFile.toLowerCase();
-    results.push(
-      await compareShpSchemaWithTable({
-        pathOrResult: row.pathOrResult,
-        dbSchema: params?.dbSchema,
-        waivers: waiversByFile[key],
-      })
-    );
+    const compared = await compareShpSchemaWithTable({
+      pathOrResult: row.pathOrResult,
+      dbSchema: params?.dbSchema,
+      waivers: waiversByFile[key],
+    });
+    results.push({ ...compared, sourceFile: row.sourceFile });
   }
   const allOk = results.every((r) => r.success && (r.ok || r.isNew));
   return { success: allOk, results };
@@ -3059,7 +3087,7 @@ export async function resolveShpSchemaMismatch(params: {
     return { success: false, error: '신규 레이어는 스키마 해소가 필요하지 않습니다.' };
   }
 
-  const tableName = before.tableName || safeTableName(path.basename(pathOrResult, '.shp'));
+  const tableName = before.tableName || shpTableNameFromRelPath(pathOrResult);
   const log: string[] = [];
 
   if (mode === 'recreate') {
@@ -4141,7 +4169,7 @@ export async function compareShpWithTable(params: {
 
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
-  const tableName = safeTableName(basename);
+  const tableName = shpTableNameFromRelPath(pathOrResult);
   const syncTableName = `_sync_${tableName}`;
   const timing = createCompareTiming(tableName);
 

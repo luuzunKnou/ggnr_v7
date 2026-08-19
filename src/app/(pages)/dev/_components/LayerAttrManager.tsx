@@ -763,17 +763,40 @@ export function LayerAttrManager({
                     const originalRow = originalFieldsRef.current.get(fieldIdx)
                     const isDirty = !originalRow || JSON.stringify(row) !== JSON.stringify(originalRow)
 
+                    const keyIneligibleRow = KEY_INELIGIBLE_FIELD_NAMES.has(
+                      String(row.define_field_name ?? "")
+                    )
+                    const keyChecked = String(row.define_field_is_key ?? "").toLowerCase() === "true"
+
                     return (
                       <div
                         key={fieldIdx}
+                        role={keyFieldOnly && !keyIneligibleRow ? "button" : undefined}
                         className={cn(
                           "grid border-b hover:bg-amber-100/40 dark:hover:bg-amber-600/20 w-full min-w-0",
-                          isDirty && "bg-amber-100/40 dark:bg-amber-600/20"
+                          isDirty && "bg-amber-100/40 dark:bg-amber-600/20",
+                          keyFieldOnly && !keyIneligibleRow && "cursor-pointer",
+                          keyFieldOnly && keyIneligibleRow && "cursor-not-allowed opacity-60"
                         )}
                         style={{
                           gridTemplateColumns: getGridTemplateColumns(visibleFieldKeys),
                           width: "100%",
                         }}
+                        title={
+                          keyFieldOnly && keyIneligibleRow
+                            ? "geom은 정합성 key로 설정할 수 없습니다."
+                            : undefined
+                        }
+                        onClick={
+                          keyFieldOnly && !keyIneligibleRow
+                            ? () =>
+                                updateCell(
+                                  listIndex,
+                                  "define_field_is_key",
+                                  keyChecked ? "false" : "true"
+                                )
+                            : undefined
+                        }
                       >
                         {visibleFieldKeys.map((key) => {
                           const val = String(row[key] ?? "")
@@ -796,7 +819,12 @@ export function LayerAttrManager({
                               }}
                             >
                               {isBool ? (
-                                <label className="flex items-center justify-center gap-1 cursor-pointer w-full min-w-0">
+                                <label
+                                  className={cn(
+                                    "flex items-center justify-center gap-1 w-full min-w-0",
+                                    keyFieldOnly ? "pointer-events-none" : "cursor-pointer"
+                                  )}
+                                >
                                   <input
                                     type="checkbox"
                                     checked={val.toLowerCase() === "true"}

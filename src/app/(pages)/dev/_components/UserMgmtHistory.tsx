@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { formatTimestampWallClock } from '@/lib/formatTimestampWallClock';
-import { RefreshCw, Search, X } from 'lucide-react';
+import { HelpCircle, RefreshCw, Search, X } from 'lucide-react';
 import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
 
 type HistoryRow = {
@@ -31,14 +31,34 @@ const uiStyle = USER_MANAGER_UI_STYLE;
 const tableRowClass =
   'border-t border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
 
-/** 이력 상세 모달 시안 (개발용 · 내용/상세만 · 확정 후 제거) */
-type DetailUiVariant = 0 | 1 | 2 | 3;
-const DETAIL_UI_OPTIONS: { value: DetailUiVariant; label: string }[] = [
-  { value: 0, label: '시안0 · 기존' },
-  { value: 1, label: '시안1 · 여백' },
-  { value: 2, label: '시안2 · 구분선' },
-  { value: 3, label: '시안3 · 박스' },
-];
+/** 한 줄 파싱: "항목: 전 → 후" / "항목: 전 -> 후" / "전 → 후" / "전 -> 후" */
+type DetailLine = { field: string; before: string; after: string } | { raw: string };
+
+function parseDetailLines(text: string): DetailLine[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const arrowMatch = line.match(/→|->/);
+      if (arrowMatch?.index !== undefined) {
+        const ai = arrowMatch.index;
+        const left = line.slice(0, ai).trim();
+        const right = line.slice(ai + arrowMatch[0].length).trim();
+        // "항목: 전" 형태면 분리, 아니면 field 빈 칸
+        const colonIdx = left.lastIndexOf(':');
+        if (colonIdx > 0) {
+          return {
+            field: left.slice(0, colonIdx).trim(),
+            before: left.slice(colonIdx + 1).trim(),
+            after: right,
+          };
+        }
+        return { field: '', before: left, after: right };
+      }
+      return { raw: line };
+    });
+}
 
 function defaultRange() {
   const now = new Date();
@@ -55,78 +75,59 @@ function formatTime(v: string | null | undefined): string {
   return formatTimestampWallClock(v) || '—';
 }
 
-/** 분류가 «수정»일 때만 상세 보기 */
-function isModifyType(ulType: string | null | undefined): boolean {
-  return String(ulType ?? '').trim() === '수정';
+/** 수정 타입이고 상세 내용이 있을 때만 보기 버튼 표시 */
+function hasDetail(ulType: string | null | undefined, ulDetail: string | null | undefined): boolean {
+  return String(ulType ?? '').trim() === '수정' && !!ulDetail?.trim();
 }
 
-/** 시안별 톤만 다름 — 표시 필드는 내용·상세만 */
-function HistoryDetailBody({
-  detail,
-  variant,
-}: {
-  detail: HistoryRow;
-  variant: DetailUiVariant;
-}) {
+/** 이력 상세 본문 — 항목/변경전/변경후 테이블 */
+function HistoryDetailBody({ detail }: { detail: HistoryRow }) {
   const contents = detail.ulContents?.trim() || '—';
-  const detailText = detail.ulDetail?.trim() || '—';
+  const detailText = detail.ulDetail?.trim() || '';
+  const lines = detailText ? parseDetailLines(detailText) : [];
 
-  if (variant === 1) {
-    return (
-      <div className="space-y-4 text-sm">
-        <div>
-          <div className="mb-1 text-[11px] text-muted-foreground">내용</div>
-          <div>{contents}</div>
-        </div>
-        <div>
-          <div className="mb-1 text-[11px] text-muted-foreground">상세</div>
-          <div className="whitespace-pre-wrap break-words text-muted-foreground">{detailText}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (variant === 2) {
-    return (
-      <div className="text-sm">
-        <div className="pb-3">
-          <span className="text-muted-foreground">내용 </span>
-          {contents}
-        </div>
-        <div className="border-t border-border pt-3">
-          <span className="text-muted-foreground">상세 </span>
-          <span className="whitespace-pre-wrap break-words">{detailText}</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (variant === 3) {
-    return (
-      <div className="space-y-2 text-sm">
-        <div className="rounded-sm border border-border bg-muted/20 px-2.5 py-2">
-          <span className="text-muted-foreground">내용 </span>
-          {contents}
-        </div>
-        <div className="rounded-sm border border-border px-2.5 py-2">
-          <span className="text-muted-foreground">상세 </span>
-          <span className="whitespace-pre-wrap break-words">{detailText}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // 시안0 기존
   return (
-    <div className="space-y-2 text-sm">
-      <p>
-        <span className="text-muted-foreground">내용 </span>
-        {contents}
-      </p>
-      <p className="whitespace-pre-wrap break-words">
-        <span className="text-muted-foreground">상세 </span>
-        {detailText}
-      </p>
+    <div className="space-y-3 text-sm">
+      {/* 내용 */}
+      <div className="text-sm font-medium">{contents}</div>
+
+      {/* 변경 상세 테이블 */}
+      {lines.length > 0 && (
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-border bg-muted/40">
+              <th className="w-24 px-2 py-1.5 text-left font-medium text-muted-foreground">항목</th>
+              <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">변경 전</th>
+              <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">변경 후</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, i) =>
+              'raw' in line ? (
+                <tr key={i} className="border-b border-border/50">
+                  <td colSpan={3} className="px-2 py-1.5 text-muted-foreground">
+                    {line.raw}
+                  </td>
+                </tr>
+              ) : (
+                <tr key={i} className="border-b border-border/50">
+                  <td className="px-2 py-1.5 text-muted-foreground">{line.field || '—'}</td>
+                  <td className="px-2 py-1.5">
+                    <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                      {line.before || '—'}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <span className="rounded bg-green-50 px-1.5 py-0.5 text-green-700 dark:bg-green-950/40 dark:text-green-400">
+                      {line.after || '—'}
+                    </span>
+                  </td>
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -143,7 +144,6 @@ export function UserMgmtHistory() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<HistoryRow | null>(null);
-  const [detailUi, setDetailUi] = useState<DetailUiVariant>(0);
 
   const load = useCallback(
     async (pageNum: number, keywordOverride?: string) => {
@@ -253,43 +253,6 @@ export function UserMgmtHistory() {
           검색
         </Button>
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="whitespace-nowrap">이력상세</span>
-            <select
-              className="h-8 rounded-none border border-border bg-background px-1.5 text-xs text-foreground"
-              value={detailUi}
-              onChange={(e) => setDetailUi(Number(e.target.value) as DetailUiVariant)}
-              title="이력 상세 모달 시안"
-            >
-              {DETAIL_UI_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn('h-8 shrink-0 rounded-none text-xs', uiStyle.secondaryButton)}
-            title="시안 미리보기 (샘플 데이터)"
-            onClick={() =>
-              setDetail({
-                ulKey: -1,
-                ulContents: '사용자 정보 수정',
-                ulDetail: '부서: 건설과 → 도시과',
-                ulType: '수정',
-                ulUser: 'hong',
-                ulGroup: '도시과',
-                ulWorkUser: 'admin',
-                ulDate: '2026-08-12 09:00:00',
-                usrName: '홍길동',
-              })
-            }
-          >
-            시안 미리보기
-          </Button>
           <span className="text-xs text-muted-foreground whitespace-nowrap">총 {total}건</span>
           {error ? (
             <span className="max-w-[14rem] truncate text-xs text-destructive" title={error}>
@@ -342,7 +305,7 @@ export function UserMgmtHistory() {
             ) : (
               rows.map((r, idx) => {
                 const seq = (page - 1) * 20 + idx + 1;
-                const showDetail = isModifyType(r.ulType);
+                const showDetail = hasDetail(r.ulType, r.ulDetail);
                 return (
                   <tr key={r.ulKey} className={tableRowClass}>
                     <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>{seq}</td>
@@ -367,16 +330,14 @@ export function UserMgmtHistory() {
                     <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>{r.ulType ?? '—'}</td>
                     <td className={uiStyle.tableCell}>
                       {showDetail ? (
-                        <Button
+                        <button
                           type="button"
-                          size="sm"
-                          variant="outline"
-                          className={cn('h-6 rounded-none px-2 text-[11px]', uiStyle.secondaryButton)}
+                          className="inline-flex text-emerald-600 hover:text-emerald-700"
                           onClick={() => setDetail(r)}
-                          title="상세 보기"
+                          title="상세보기"
                         >
-                          보기
-                        </Button>
+                          <HelpCircle className="h-4 w-4" />
+                        </button>
                       ) : (
                         <span className="text-[11px] text-muted-foreground">—</span>
                       )}
@@ -427,32 +388,18 @@ export function UserMgmtHistory() {
           </DialogHeader>
           <div className={cn('flex shrink-0 items-center justify-between gap-2', uiStyle.dialogHeader)}>
             <span className="text-xs font-medium text-slate-600">이력 상세</span>
-            <div className="flex items-center gap-2">
-              <select
-                className="h-7 max-w-[11rem] rounded-none border border-border bg-background px-1 text-[11px] text-foreground"
-                value={detailUi}
-                onChange={(e) => setDetailUi(Number(e.target.value) as DetailUiVariant)}
-                title="이력 상세 모달 시안"
-              >
-                {DETAIL_UI_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setDetail(null)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                aria-label="닫기"
-                title="닫기"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setDetail(null)}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="닫기"
+              title="닫기"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <div className={cn('overflow-auto p-3', detailUi === 0 && 'pt-2')}>
-            {detail ? <HistoryDetailBody detail={detail} variant={detailUi} /> : null}
+          <div className="overflow-auto p-4">
+            {detail ? <HistoryDetailBody detail={detail} /> : null}
           </div>
         </DialogContent>
       </Dialog>

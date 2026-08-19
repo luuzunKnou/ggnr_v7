@@ -570,17 +570,33 @@ export async function updateUser(params: Record<string, unknown>) {
     if (!updated) return { success: false, error: '대상 사용자를 찾을 수 없습니다.' };
 
     const newUg = nextUgName ?? before.ugName;
-    if (params.ug_name !== undefined && nextUgName && nextUgName !== before.ugName) {
+    const ugChanged = params.ug_name !== undefined && nextUgName && nextUgName !== before.ugName;
+    const utChanged = params.ut_name !== undefined && nextUtName && nextUtName !== before.utName;
+
+    if (ugChanged || utChanged) {
+      const detailParts: string[] = [];
+      if (ugChanged) detailParts.push(`부서: ${before.ugName ?? '—'} -> ${nextUgName}`);
+      if (utChanged) detailParts.push(`팀: ${before.utName ?? '—'} -> ${nextUtName}`);
       void recordUserLog({
         ulCat: UL_CAT_USER,
-        ulContents: '부서 이관',
+        ulContents: ugChanged ? '부서 이관' : '팀 변경',
         ulType: '수정',
         ulUser: usrId,
         ulGroup: newUg,
         ulWorkUser: operator,
-        ulDetail: `${before.ugName ?? '—'} -> ${nextUgName}`,
+        ulDetail: detailParts.join('\n'),
       });
     } else {
+      const infoParts: string[] = [];
+      if (params.usr_name !== undefined && strOrNull(params.usr_name) !== before.usrName)
+        infoParts.push(`이름: ${before.usrName ?? '—'} -> ${strOrNull(params.usr_name) ?? '—'}`);
+      if (params.usr_tel !== undefined && strOrNull(params.usr_tel) !== before.usrTel)
+        infoParts.push(`전화: ${before.usrTel ?? '—'} -> ${strOrNull(params.usr_tel) ?? '—'}`);
+      if (params.usr_mail !== undefined && strOrNull(params.usr_mail) !== before.usrMail)
+        infoParts.push(`메일: ${before.usrMail ?? '—'} -> ${strOrNull(params.usr_mail) ?? '—'}`);
+      if (params.usr_etc !== undefined && strOrNull(params.usr_etc) !== before.usrEtc)
+        infoParts.push(`비고: ${before.usrEtc ?? '—'} -> ${strOrNull(params.usr_etc) ?? '—'}`);
+      if (nextPwd) infoParts.push('비밀번호 변경');
       void recordUserLog({
         ulCat: UL_CAT_USER,
         ulContents: '사용자 정보 수정',
@@ -588,6 +604,7 @@ export async function updateUser(params: Record<string, unknown>) {
         ulUser: usrId,
         ulGroup: newUg,
         ulWorkUser: operator,
+        ulDetail: infoParts.length ? infoParts.join('\n') : undefined,
       });
     }
     return { success: true, data: updated };

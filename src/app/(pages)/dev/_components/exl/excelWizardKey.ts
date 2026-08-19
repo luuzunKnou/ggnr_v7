@@ -31,3 +31,145 @@ export function isExcelSystemAttrField(headerEng: string, originalHeader?: strin
 export function buildExcelCompositeKeyValue(parts: unknown[]): string {
   return parts.map((p) => String(p ?? '').trim()).join(EXCEL_COMPOSITE_KEY_SEP);
 }
+
+export type ExcelCompositeKeyField = {
+  originalHeader: string
+  headerKor: string
+  headerEng: string
+}
+
+export type ExcelCompositeKeySuggestion = {
+  labels: string[]
+  headers: string[]
+  unique: boolean
+  dupGroupCount: number
+  dupRowCount: number
+  singleColumnEnough: boolean
+  message: string
+}
+
+const COMPOSITE_KEY_SUGGEST_MAX_COLS = 4
+const COMPOSITE_KEY_SUGGEST_EMPTY_SKIP = 0.5
+const COMPOSITE_KEY_SUGGEST_WEAK =
+  /면적|금액|사용료|부과|좌표|경도|위도|기타|전화|연락/
+
+function excelKeyCell(row: Record<string, unknown>, header: string): string {
+  return String(row[header] ?? '').trim()
+}
+
+function excelKeyFieldLabel(f: ExcelCompositeKeyField): string {
+  return (f.headerKor || f.headerEng || f.originalHeader).trim()
+}
+
+function excelCompositeDupStats(
+  rows: Record<string, unknown>[],
+  headers: string[]
+): { unique: boolean; dupGroupCount: number; dupRowCount: number } {
+  const counts = new Map<string, number>()
+  for (const row of rows) {
+    const k = buildExcelCompositeKeyValue(headers.map((h) => excelKeyCell(row, h)))
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  let dupGroupCount = 0
+  let dupRowCount = 0
+  for (const n of counts.values()) {
+    if (n > 1) {
+      dupGroupCount += 1
+      dupRowCount += n
+    }
+  }
+  return { unique: dupGroupCount === 0, dupGroupCount, dupRowCount }
+}
+
+function formatExcelCompositeKeySuggestion(opts: {
+  labels: string[]
+  unique: boolean
+  dupGroupCount: number
+  dupRowCount: number
+  singleColumnEnough: boolean
+}): string {
+  const combo = opts.labels.join(' + ')
+  if (opts.singleColumnEnough) {
+    return `추천: ${combo} — 이 열만으로 행마다 유일합니다. 복합키가 없어도 됩니다.`
+  }
+  if (opts.unique) {
+    return `추천: ${combo} — 이 조합이면 행마다 유일합니다.`
+  }
+  return `추천: ${combo} — 거의 유일합니다. 같은 값 ${opts.dupGroupCount}종(${opts.dupRowCount}행)이 남습니다.`
+}
+
+/**
+ * 이미 파싱된 엑셀만 보고, 값이 잘 갈라지는 열을 앞에서부터 고른다.
+ * 빈 값이 많은 열은 빼고, 모든 조합은 찾지 않는다.
+ */
+export function suggestExcelCompositeKey(opts: {
+  rows: Record<string, unknown>[]
+  fields: ExcelCompositeKeyField[]
+}): ExcelCompositeKeySuggestion | null {
+  const rows = opts.rows
+  if (!rows.length || !opts.fields.length) return null
+
+  const scored: { field: ExcelCompositeKeyField; uniq: number; emptyRatio: number }[] = []
+  for (const field of opts.fields) {
+    const header = field.originalHeader?.trim()
+    if (!header) continue
+    if (isExcelSystemKeyColumn(field.headerEng) || isExcelSystemKeyColumn(header)) continue
+    if (COMPOSITE_KEY_SUGGEST_WEAK.test(excelKeyFieldLabel(field))) continue
+    let empty = 0
+    const set = new Set<string>()
+    for (const row of rows) {
+      const v = excelKeyCell(row, header)
+      if (!v) empty += 1
+      set.add(v)
+    }
+    const emptyRatio = empty / rows.length
+    if (emptyRatio > COMPOSITE_KEY_SUGGEST_EMPTY_SKIP) continue
+    scored.push({ field, uniq: set.size, emptyRatio })
+  }
+  if (scored.length === 0) return null
+  scored.sort((a, b) => b.uniq - a.uniq || a.emptyRatio - b.emptyRatio)
+
+  const picked: ExcelCompositeKeyField[] = [scored[0].field]
+  let stats = excelCompositeDupStats(rows, [picked[0].originalHeader])
+  const singleColumnEnough = stats.unique
+
+  if (!stats.unique) {
+    const remaining = scored.slice(1).map((s) => s.field)
+    while (picked.length < COMPOSITE_KEY_SUGGEST_MAX_COLS && remaining.length > 0 && !stats.unique) {
+      let bestIdx = -1
+      let bestStats = stats
+      for (let i = 0; i < remaining.length; i++) {
+        const headers = [...picked.map((f) => f.originalHeader), remaining[i].originalHeader]
+        const next = excelCompositeDupStats(rows, headers)
+        if (
+          bestIdx < 0 ||
+          next.dupGroupCount < bestStats.dupGroupCount ||
+          (next.dupGroupCount === bestStats.dupGroupCount && next.dupRowCount < bestStats.dupRowCount)
+        ) {
+          bestIdx = i
+          bestStats = next
+        }
+      }
+      if (bestIdx < 0 || bestStats.dupGroupCount >= stats.dupGroupCount) break
+      picked.push(remaining.splice(bestIdx, 1)[0]!)
+      stats = bestStats
+    }
+  }
+
+  const labels = picked.map(excelKeyFieldLabel)
+  return {
+    labels,
+    headers: picked.map((f) => f.originalHeader),
+    unique: stats.unique,
+    dupGroupCount: stats.dupGroupCount,
+    dupRowCount: stats.dupRowCount,
+    singleColumnEnough,
+    message: formatExcelCompositeKeySuggestion({
+      labels,
+      unique: stats.unique,
+      dupGroupCount: stats.dupGroupCount,
+      dupRowCount: stats.dupRowCount,
+      singleColumnEnough,
+    }),
+  }
+}
