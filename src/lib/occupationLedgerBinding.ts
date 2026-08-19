@@ -34,11 +34,13 @@ export const OCCUPATION_LEDGER_SER_ENGS = [
 export type OccupationLedgerSerEng = (typeof OCCUPATION_LEDGER_SER_ENGS)[number];
 
 const COMMON_FIELDS: OccupationLedgerFieldMap = {
-  keyField: 'permit_no',
+  /** define_field_is_key · DB PK 와 동일 */
+  keyField: 'ogc_fid',
   nameField: 'work_name',
   placeField: 'occup_place',
   startField: 'perm_start_date',
   endField: 'perm_end_date',
+  /** 필지·물건지 연결 = 본표 허가번호 */
   childParentField: 'permit_no',
   childAddressField: 'occup_place',
 };
@@ -66,7 +68,7 @@ const BINDINGS_BY_SER_ENG: Record<OccupationLedgerSerEng, OccupationLedgerBindin
   waterOccupationLedger: commonBinding(
     'waterOccupationLedger',
     'water',
-    '하천점용1',
+    '하천점용',
     'waterOccupationLedger'
   ),
   roadOccupationLedger: commonBinding(

@@ -20,6 +20,7 @@ import {
   occupationFillRgba,
   occupationStrokeRgba,
 } from "@/lib/occupationLayerStyle";
+import { isOccupationLedgerTableName } from "@/lib/occupationLedgerBinding";
 import { useMapContext } from "../MapContext";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
@@ -40,7 +41,8 @@ const LAYER_ROW_KIND_PARCEL = "parcel";
 const PARCEL_ADDRESS_KEY = "parcelAddress";
 
 /** 수정 모드에서 도형삭제 후 저장 전 — DB geom NULL */
-export const LAYER_ROW_GEOM_CLEAR_SENTINEL = "";
+/** 도형 삭제 시에만 본표 geom을 NULL로 보낸다. 빈 문자열과 구분한다. */
+export const LAYER_ROW_GEOM_CLEAR_SENTINEL = "__CLEAR_GEOM__";
 
 function writeCombinedWkt5181FromParentFeatures(source: VectorSource): string | null {
   const parents = getParentFeatures(source);
@@ -291,14 +293,18 @@ export function LayerRowGeomEditHandler({
   }, []);
 
   const loadParcelsFromParentGeom = useCallback(
-    async (opts?: { silent?: boolean; attempt?: number }) => {
+    async (opts?: { silent?: boolean; attempt?: number; replaceKept?: boolean; commitSnapshot?: boolean }) => {
       const source = geomEditSourceRef.current;
       const wktFromSource = source ? writeCombinedWkt5181FromParentFeatures(source) : null;
       const wkt = wktFromSource ?? wktRef?.current ?? null;
       if (wktFromSource && wktRef) wktRef.current = wktFromSource;
       const apply = mapContext?.layerRowParcelApplyRef?.current;
       if (!wkt || wkt === LAYER_ROW_GEOM_CLEAR_SENTINEL) {
-        apply?.([], { replaceAuto: true });
+        apply?.([], {
+          replaceAuto: true,
+          replaceKept: opts?.replaceKept === true,
+          commitSnapshot: opts?.commitSnapshot === true,
+        });
         return;
       }
       if (!apply) {
@@ -323,7 +329,11 @@ export function LayerRowGeomEditHandler({
           return;
         }
         if (!Array.isArray(data?.parcels) || data.parcels.length === 0) {
-          apply?.([], { replaceAuto: true });
+          apply?.([], {
+            replaceAuto: true,
+            replaceKept: opts?.replaceKept === true,
+            commitSnapshot: opts?.commitSnapshot === true,
+          });
           return;
         }
         const raw = data.parcels;
@@ -363,7 +373,11 @@ export function LayerRowGeomEditHandler({
               geometry3857: Record<string, unknown> | null;
             } => x != null
           );
-        apply(items, { replaceAuto: true });
+        apply(items, {
+          replaceAuto: true,
+          replaceKept: opts?.replaceKept === true,
+          commitSnapshot: opts?.commitSnapshot === true,
+        });
         // 도형 추가 직후 notify는 필지 폴백이 비어 실패할 수 있음 → 필지 반영 후 장소 재채움
         const wktNow = String(wktRef?.current ?? "").trim();
         if (wktNow && wktNow !== LAYER_ROW_GEOM_CLEAR_SENTINEL) {
@@ -396,7 +410,9 @@ export function LayerRowGeomEditHandler({
 
     const source = new VectorSource();
     geomEditSourceRef.current = source;
-    syncParcelFeatures(source, draftParcels);
+    if (!isOccupationLedgerTableName(layerName)) {
+      syncParcelFeatures(source, draftParcels);
+    }
 
     const layer = new VectorLayer({
       source,
@@ -569,7 +585,28 @@ export function LayerRowGeomEditHandler({
           if (attempt < 8) loadParcelsAfterApply(attempt + 1);
           return;
         }
-        void fn({ silent: true });
+        void fn({ silent: true, replaceKept: true, commitSnapshot: true });
+      });
+    };
+
+    let parentWmsHidden = false;
+    const hideParentWms = () => {
+      if (!setVisibleLayerNames || edit.mode !== "modify") return;
+      setVisibleLayerNames((prev) => {
+        const hit = [...prev].find((n) => n.toLowerCase() === layerName);
+        if (!hit) return prev;
+        parentWmsHidden = true;
+        const next = new Set(prev);
+        next.delete(hit);
+        return next;
+      });
+    };
+    const restoreParentWms = () => {
+      if (!setVisibleLayerNames || !parentWmsHidden) return;
+      parentWmsHidden = false;
+      setVisibleLayerNames((prev) => {
+        if ([...prev].some((n) => n.toLowerCase() === layerName)) return prev;
+        return new Set(prev).add(layerName);
       });
     };
 
@@ -618,8 +655,8 @@ export function LayerRowGeomEditHandler({
         replaceParentFeaturesFromWkt5181(source, baseline);
         syncFromSource();
         if (dirtyRef) dirtyRef.current = false;
+        restoreParentWms();
         goManaged();
-        void loadParcelsRef.current?.({ silent: true });
         return;
       }
       wktRef.current =
@@ -642,12 +679,18 @@ export function LayerRowGeomEditHandler({
           rememberBaseline();
           setPending(false);
           goManaged();
-          void loadParcelsRef.current?.({ silent: true });
+          if (!isOccupationLedgerTableName(layerName)) {
+            void loadParcelsRef.current?.({ silent: true });
+          }
           return true;
         }
         baselineWktRef.current = null;
-        goManaged();
-        clearToolbarAnchor();
+        if (edit.allowEmptyGeom) {
+          startDraw({ clearParents: true });
+        } else {
+          goManaged();
+          clearToolbarAnchor();
+        }
         return true;
       }
 
@@ -671,7 +714,7 @@ export function LayerRowGeomEditHandler({
         });
         if (cancelled || seq !== loadSeq) return false;
         const data = res?.data ?? res;
-        if (data?.error) {
+        if (data?.error && !edit.allowEmptyGeom) {
           window.alert(String(data.error));
           setEdit?.(null);
           return false;
@@ -684,8 +727,13 @@ export function LayerRowGeomEditHandler({
             baselineWktRef.current = null;
             setPending(false);
             clearToolbarAnchor();
-            goManaged();
+            startDraw({ clearParents: true });
             return true;
+          }
+          if (data?.error) {
+            window.alert(String(data.error));
+            setEdit?.(null);
+            return false;
           }
           window.alert("DB에서 기존 도형을 찾지 못했습니다.");
           setEdit?.(null);
@@ -713,7 +761,9 @@ export function LayerRowGeomEditHandler({
         rememberBaseline();
         setPending(false);
         goManaged();
-        void loadParcelsRef.current?.({ silent: true });
+        if (!isOccupationLedgerTableName(layerName)) {
+          void loadParcelsRef.current?.({ silent: true });
+        }
         return true;
       } catch {
         if (!cancelled) {
@@ -740,12 +790,17 @@ export function LayerRowGeomEditHandler({
       },
       redrawShape: () => {
         invalidateLoad();
-        mapContext?.layerRowParcelApplyRef?.current?.([], { replaceAuto: true });
+        hideParentWms();
+        mapContext?.layerRowParcelApplyRef?.current?.([], {
+          replaceAuto: true,
+          replaceKept: true,
+        });
         if (dirtyRef) dirtyRef.current = true;
         startDraw({ clearParents: true });
       },
       cancelDraw: async () => {
         await restoreBaselineOrDraw();
+        mapContext?.layerRowParcelApplyRef?.current?.([], { restoreSnapshot: true });
       },
       addGeom: () => {
         if (dirtyRef) dirtyRef.current = true;
@@ -753,7 +808,8 @@ export function LayerRowGeomEditHandler({
       },
       modifyGeom: () => {
         if (getParentFeatures(source).length === 0) {
-          window.alert("수정할 도형이 없습니다. 먼저 도형을 추가해 주세요.");
+          if (dirtyRef) dirtyRef.current = true;
+          startDraw({ clearParents: false });
           return;
         }
         rememberBaseline();
@@ -771,7 +827,12 @@ export function LayerRowGeomEditHandler({
         if (dirtyRef) dirtyRef.current = true;
         baselineWktRef.current =
           edit.mode === "modify" ? LAYER_ROW_GEOM_CLEAR_SENTINEL : null;
-        mapContext?.layerRowParcelApplyRef?.current?.([], { replaceAuto: true });
+        mapContext?.layerRowParcelApplyRef?.current?.([], {
+          replaceAuto: true,
+          replaceKept: true,
+          commitSnapshot: true,
+        });
+        hideParentWms();
         clearToolbarAnchor();
         goManaged();
       },
@@ -801,6 +862,7 @@ export function LayerRowGeomEditHandler({
       clearToolbarAnchor();
       detachDraw();
       detachModify();
+      restoreParentWms();
       map.removeLayer(layer);
       source.clear();
     };
@@ -810,7 +872,11 @@ export function LayerRowGeomEditHandler({
   useEffect(() => {
     const source = geomEditSourceRef.current;
     if (!edit || !source) return;
-    syncParcelFeatures(source, draftParcels);
+    if (isOccupationLedgerTableName(edit.layerName)) {
+      removeFeaturesByKind(source, LAYER_ROW_KIND_PARCEL);
+    } else {
+      syncParcelFeatures(source, draftParcels);
+    }
     if (!isDrawActiveRef.current) {
       attachModifyRef.current?.();
     }

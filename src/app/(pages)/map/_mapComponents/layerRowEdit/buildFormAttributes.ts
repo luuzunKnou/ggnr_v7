@@ -1,5 +1,6 @@
 import { call } from "@/lib/api";
 import type { LayerRowDetailAttr, LayerRowEditPreset } from "./types";
+import { isLayerExtraFieldName } from "@/lib/layerExtraField";
 
 const GEOM_FIELDS = new Set(["geom", "geometry", "the_geom", "shape"]);
 
@@ -47,7 +48,7 @@ export function buildFormAttributesFromDefineFields(
       const field = String(raw.define_field_name ?? "").trim();
       if (!field) return null;
       const lower = field.toLowerCase();
-      if (exclude.has(lower)) return null;
+      if (exclude.has(lower) || isLayerExtraFieldName(lower)) return null;
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       if (!showDetail && !includeHidden) return null;
       if (lower === keyLower) return null;

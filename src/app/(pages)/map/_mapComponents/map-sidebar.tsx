@@ -24,6 +24,8 @@ type ServiceItem = {
   ser_kor: string | null;
   ser_svg: string | null;
   ser_is_private?: boolean | null;
+  /** true면 사이드바에서 제외(관리자 포함) */
+  ser_is_del?: boolean | null;
 };
 
 interface SidebarButtonProps {
@@ -133,12 +135,21 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
         const data = res?.data ?? res;
         const ser = Array.isArray(data?.ser) ? data.ser : [];
         setServiceListConfig(
-          ser.map((s: { ser_eng?: string; ser_kor?: string; ser_svg?: string | null; ser_is_private?: boolean | null }) => ({
-            ser_eng: s.ser_eng ?? null,
-            ser_kor: s.ser_kor ?? null,
-            ser_svg: s.ser_svg ?? null,
-            ser_is_private: s.ser_is_private === true ? true : s.ser_is_private === false ? false : null,
-          }))
+          ser.map(
+            (s: {
+              ser_eng?: string;
+              ser_kor?: string;
+              ser_svg?: string | null;
+              ser_is_private?: boolean | null;
+              ser_is_del?: boolean | null;
+            }) => ({
+              ser_eng: s.ser_eng ?? null,
+              ser_kor: s.ser_kor ?? null,
+              ser_svg: s.ser_svg ?? null,
+              ser_is_private: s.ser_is_private === true ? true : s.ser_is_private === false ? false : null,
+              ser_is_del: s.ser_is_del === true ? true : s.ser_is_del === false ? false : null,
+            })
+          )
         );
       })
       .catch(() => setServiceListConfig([]));
@@ -196,11 +207,14 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     .map((key) => serviceMap.get(key))
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
+      // 삭제여부 Y → 관리자 포함 사이드바에서 숨김
+      if (item.ser_is_del === true) return false;
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
       return true;
     });
 
   const sidebarItems = sidebarItemsRaw.filter((item) => {
+    // 비공개: 권한 없는 사용자만 숨김 (관리자·권한 있으면 보임)
     if (item.ser_is_private !== true) return true;
     if (accessLoading) return false;
     return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
