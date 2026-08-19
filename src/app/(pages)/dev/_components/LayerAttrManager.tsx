@@ -13,6 +13,7 @@ import {
   normalizeDefineFieldType,
   normalizeDefineFieldsTypes,
 } from "@/lib/defineLayerFieldTypeNormalize"
+import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManager/layerManagerListCache"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -241,8 +242,7 @@ export function LayerAttrManager({
   const loadTables = useCallback(async () => {
     setLoadingTables(true)
     try {
-      const res = await fetch("/api/config/defineLayer")
-      const body = await res.json()
+      const body = await fetchDefineLayerTables()
       if (body.success && Array.isArray(body.data)) {
         setTables(body.data)
         setSelectedTableKey((prev) => {
@@ -260,8 +260,7 @@ export function LayerAttrManager({
 
   const loadDbTableKeySet = useCallback(async () => {
     try {
-      const res = await call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      const data = res?.data ?? res
+      const data = await fetchLayerDbTableList()
       if (!data?.success || !Array.isArray(data.tables)) return
       const keys = new Set<string>(
         (data.tables as Array<{ schema: string; table: string }>).map(

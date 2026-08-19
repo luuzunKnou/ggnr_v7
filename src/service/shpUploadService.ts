@@ -16,6 +16,10 @@ import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, ge
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 import { matchEpsgFromLooseText } from '@/lib/matchCoordinateSystemText';
 import {
+  isLayerExtraFieldName,
+  layerExtraDefineViewOff,
+} from '@/lib/layerExtraField';
+import {
   fetchSyncLogGeomAsGeoJson,
   fillPendingSyncLogGeoms,
   shouldStoreFullHistoryGeom,
@@ -1487,15 +1491,16 @@ function mapDataTypeToDefineFieldType(dataType: string): string {
 
 function buildDefaultField(col: { name: string; dataType: string }, idx: number): Record<string, unknown> {
   const fn = String(col.name ?? '').toLowerCase();
+  const extraOff = isLayerExtraFieldName(fn);
   return {
     define_field_name: fn,
-    define_field_kor_name: fn,
-    define_field_type: mapDataTypeToDefineFieldType(col.dataType),
+    define_field_kor_name: extraOff ? '추가속성' : fn,
+    define_field_type: extraOff ? 'TEXT' : mapDataTypeToDefineFieldType(col.dataType),
     define_field_idx: idx,
     define_field_is_required: false,
     define_field_show_search: false,
-    define_field_show_list: true,
-    define_field_show_detail: true,
+    define_field_show_list: extraOff ? false : true,
+    define_field_show_detail: extraOff ? false : true,
     define_field_read_only: false,
     define_field_is_key: false,
     define_field_show_search_detail: false,
@@ -1511,6 +1516,7 @@ function buildDefaultField(col: { name: string; dataType: string }, idx: number)
     define_field_sel_label_field: '',
     define_field_default_value: '',
     define_field_show_title: false,
+    ...(extraOff ? layerExtraDefineViewOff() : {}),
   };
 }
 

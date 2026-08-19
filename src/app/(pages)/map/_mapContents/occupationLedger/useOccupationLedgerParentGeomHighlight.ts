@@ -31,6 +31,7 @@ export function useOccupationLedgerParentGeomHighlight(
   const mapContext = useMapContext();
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const parentExtentRef = useRef<[number, number, number, number] | null>(null);
+  const lastKeyRef = useRef('');
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current;
@@ -58,13 +59,20 @@ export function useOccupationLedgerParentGeomHighlight(
     if (!source) return;
 
     source.clear();
-    parentExtentRef.current = null;
 
     const key = String(detailId ?? '').trim();
     const table = String(tableName ?? '').trim();
-    const kf = String(keyField ?? '').trim() || 'permit_no';
-    if (!active || isEditing || !key || key === LAYER_ROW_NEW_ID || !table) return;
+    const kf = String(keyField ?? '').trim() || 'ogc_fid';
+    if (!key || key === LAYER_ROW_NEW_ID || !table) {
+      parentExtentRef.current = null;
+      return;
+    }
+    if (lastKeyRef.current !== `${table}:${kf}:${key}`) {
+      lastKeyRef.current = `${table}:${kf}:${key}`;
+      parentExtentRef.current = null;
+    }
 
+    const showFeatures = active && !isEditing;
     let cancelled = false;
     void (async () => {
       try {
@@ -89,12 +97,13 @@ export function useOccupationLedgerParentGeomHighlight(
           { dataProjection: 'EPSG:3857', featureProjection: 'EPSG:3857' }
         );
         if (cancelled || features.length === 0) return;
-        source.clear();
-        source.addFeatures(features);
         const ext = features[0]?.getGeometry()?.getExtent();
         if (ext && ext.length === 4 && ext.every((v) => Number.isFinite(v))) {
           parentExtentRef.current = ext as [number, number, number, number];
         }
+        if (!showFeatures) return;
+        source.clear();
+        source.addFeatures(features);
       } catch {
         // ignore
       }
