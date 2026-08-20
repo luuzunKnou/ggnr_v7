@@ -1,6 +1,6 @@
 /**
  * 점사용료 — ser_eng(water|road|publicNglFeeList) · system · rprs_txm_nm
- * → water|road|public_ngl_fee_list (공통 점용대장과 동일 접두 규칙)
+ * → water|road|public_ngl_fee_list (세입과목명 글자 포함: 하천·도로·국유/공유/도유)
  */
 
 export const USE_FEE_SER_ENGS = [
@@ -50,15 +50,6 @@ const BINDINGS_BY_SER_ENG: Record<UseFeeSerEng, UseFeeBinding> = {
     title: '국공유지점사용료',
     serEng: 'publicNglFeeList',
   },
-};
-
-/** ngl_query_table.rprs_txm_nm → 저장 접두 */
-const RPRS_TXM_NM_TO_PREFIX: Record<string, UseFeePrefix> = {
-  하천점사용료: 'water',
-  소하천점사용료: 'water',
-  도로점사용료: 'road',
-  국공유지점사용료: 'public',
-  공유지점사용료: 'public',
 };
 
 export function isUseFeePrefix(v: string): v is UseFeePrefix {
@@ -134,10 +125,18 @@ export function getAllUseFeeWmsLayerIds(): string[] {
   return USE_FEE_SER_ENGS.map((s) => BINDINGS_BY_SER_ENG[s].mainTable);
 }
 
+/**
+ * 세입과목명 글자 포함 → 저장 접두.
+ * 하천 → water, 도로 → road, 국유·공유·도유 → public.
+ * 우선순위: 하천, 도로, 그다음 국유/공유/도유.
+ */
 export function getUseFeePrefixForRprsTxmNm(rprsTxmNm: string | null | undefined): UseFeePrefix | null {
   const nm = String(rprsTxmNm ?? '').trim();
   if (!nm) return null;
-  return RPRS_TXM_NM_TO_PREFIX[nm] ?? null;
+  if (nm.includes('하천')) return 'water';
+  if (nm.includes('도로')) return 'road';
+  if (nm.includes('국유') || nm.includes('공유') || nm.includes('도유')) return 'public';
+  return null;
 }
 
 export function useFeePrefixToSystemKey(prefix: UseFeePrefix): 'river' | 'road' | 'build' {

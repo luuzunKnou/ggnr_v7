@@ -12,6 +12,10 @@ import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
 import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
 import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
 import { getAllUseFeeWmsLayerIds, getUseFeeBinding, USE_FEE_PREFIXES } from '@/lib/useFeeBinding';
+import {
+  hasUseFeeGlAddrJibunLot,
+  updateUseFeeGeomById,
+} from '@/lib/useFeeGlAddrGeom';
 import { labelForUseFeeField } from '@/app/(pages)/map/_mapContents/useFee/useFeeFieldLabels';
 
 const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
@@ -759,27 +763,10 @@ export async function getUseFeeReceiptsByLvyKey(params: {
   };
 }
 
-/**
- * 물건지주소 필지검색용 정규화.
- * «438번지 1호» → «438-1», «951번지» → «951»
- */
-export function normalizeUseFeeGlAddrForParcelSearch(addr: string): string {
-  let s = String(addr ?? '')
-    .trim()
-    .replace(/\s+/g, ' ');
-  if (!s) return '';
-  s = s.replace(/(\d{1,5})\s*번지\s+(\d{1,5})\s*호/gu, '$1-$2');
-  s = s.replace(/(\d{1,5})\s*번지/gu, '$1');
-  return s.replace(/\s+/g, ' ').trim();
-}
-
-/** 지번(본번/부번·번지)이 없으면 필지 검색 생략 — 예: «평해읍 학곡리» */
-export function hasUseFeeGlAddrJibunLot(addr: string): boolean {
-  const s = normalizeUseFeeGlAddrForParcelSearch(addr);
-  if (!s) return false;
-  if (/(?:^|\s)산\s*\d{1,5}(?:\s*-\s*\d{1,5})?(?:\s|$)/u.test(s)) return true;
-  return /(?:^|\s)\d{1,5}(?:\s*-\s*\d{1,5})?(?:\s|$)/u.test(s);
-}
+export {
+  hasUseFeeGlAddrJibunLot,
+  normalizeUseFeeGlAddrForParcelSearch,
+} from '@/lib/useFeeGlAddrGeom';
 
 let nglFeeGeomEnsurePromise: Promise<void> | null = null;
 
@@ -861,8 +848,6 @@ export async function backfillUseFeeGlAddrGeom(params?: {
     };
   }
 
-  const { resolveJijukParcelGeomsByAddresses } = await import('@/service/layerRowService');
-
   const whereGeom = force
     ? sql`true`
     : sql`${nglFeeList.geom} is null`;
@@ -882,42 +867,19 @@ export async function backfillUseFeeGlAddrGeom(params?: {
 
   for (const row of candidates) {
     const addrRaw = String(row.glAddr ?? '').trim();
-    const addr = normalizeUseFeeGlAddrForParcelSearch(addrRaw);
     if (!hasUseFeeGlAddrJibunLot(addrRaw)) {
       skippedNoJibun += 1;
       continue;
     }
 
     try {
-      const resolved = await resolveJijukParcelGeomsByAddresses({
-        items: [{ address: addr }],
+      const ok = await updateUseFeeGeomById({
+        tableName,
+        id: Number(row.id),
+        glAddr: addrRaw,
       });
-      const parcel = resolved.parcels[0];
-      const gj = parcel?.geometry3857;
-      if (!gj || typeof gj !== 'object') {
-        skippedNotFound += 1;
-        continue;
-      }
-      const json = JSON.stringify(gj).replace(/'/g, "''");
-      await db.execute(
-        sql.raw(`
-          UPDATE layer.${tableName}
-          SET geom = ST_Multi(
-                ST_CollectionExtract(
-                  ST_MakeValid(
-                    ST_Transform(
-                      ST_SetSRID(ST_GeomFromGeoJSON('${json}'), 3857),
-                      5181
-                    )
-                  ),
-                  3
-                )
-              ),
-              updated_at = now()
-          WHERE id = ${Number(row.id)}
-        `)
-      );
-      updated += 1;
+      if (ok) updated += 1;
+      else skippedNotFound += 1;
     } catch {
       skippedNotFound += 1;
     }
