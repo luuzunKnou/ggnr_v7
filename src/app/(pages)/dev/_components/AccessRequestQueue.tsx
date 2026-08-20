@@ -96,7 +96,7 @@ const FILTERS: { id: StatusFilter; label: string }[] = [
 
 const uiStyle = USER_MANAGER_UI_STYLE;
 const tableRowClass =
-  'border-t border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
 
 export function AccessRequestQueue() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -237,6 +237,7 @@ export function AccessRequestQueue() {
       </div>
 
       <div className={uiStyle.tableWrap}>
+        <div className={uiStyle.tableScroll}>
         <table className={cn(uiStyle.table, 'min-w-[68rem] table-fixed')}>
           <thead className={cn('sticky top-0', uiStyle.tableHead)}>
             <tr>
@@ -397,6 +398,7 @@ export function AccessRequestQueue() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
