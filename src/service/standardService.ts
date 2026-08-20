@@ -1487,7 +1487,7 @@ const SAFETY_FACILITY_DISPLAY: Record<
     latKeys: ['la', 'ycord'],
   },
   sd_heat_mitigation_facility: {
-    nameKeys: ['fbrc_nm', 'instl_bzenty'],
+    nameKeys: ['jibun_addr', 'fbrc_nm', 'instl_bzenty'],
     addressKeys: ['addr'],
     lonKeys: ['lot'],
     latKeys: ['lat'],
@@ -1616,10 +1616,16 @@ function formatSafetyFacilityRow(
 } {
   const nameFromDefine = joinDefineShownValues(row, fields, 'define_field_show_title', table);
   const listFromDefine = joinDefineShownValues(row, fields, 'define_field_show_list', table);
+  // 폭염저감: 목록 제목은 지번주소 (show_title 법정동·관리번호는 상세 헤더용으로 유지)
   const name =
-    nameFromDefine ||
-    rowPick(row, spec?.nameKeys ?? []) ||
-    rowPick(row, ['vt_acmdfclty_nm', 'nm', 'name', 'fclty_nm', 'title']);
+    table === 'sd_heat_mitigation_facility'
+      ? rowPick(row, ['jibun_addr']) ||
+        rowPick(row, spec?.nameKeys ?? []) ||
+        nameFromDefine ||
+        '(이름 없음)'
+      : nameFromDefine ||
+        rowPick(row, spec?.nameKeys ?? []) ||
+        rowPick(row, ['vt_acmdfclty_nm', 'nm', 'name', 'fclty_nm', 'title']);
   const address =
     listFromDefine ||
     rowPick(row, spec?.addressKeys ?? []) ||
@@ -1789,4 +1795,285 @@ export async function listSafetyFacilities(params: {
   }
 
   return { items };
+}
+
+// ─── 재난시설 관련 건물군 레이어 조회 ───────────────────────────────────────
+
+/** 건물·도로 레이어는 public_layer (tables.json define_table_schema) */
+const SAFETY_FAC_BLDG_SCHEMA = 'public_layer';
+
+export type SafetyFacRelatedBuildingResult = {
+  bldgGroup: number;
+  bldgGroupEntrance: number;
+  building: number;
+  buildingEntrance: number;
+  eqbManSn: string | null;
+  bulManNo: string | null;
+  /** 건물 출입구 CQL용 — 해당 건물군 소속 건물 bul_man_no 목록 */
+  bulManNos: string[];
+};
+
+async function resolveGeomMeta(
+  schema: string,
+  physicalTable: string
+): Promise<{ geomCol: string; srid: number } | null> {
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const gcRes = await db.execute(
+    sql.raw(
+      `SELECT f_geometry_column AS name, srid FROM geometry_columns
+       WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(physicalTable)}'
+       LIMIT 1`
+    )
+  );
+  const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+  if (!gcRow?.name) return null;
+  let srid = Number(gcRow.srid);
+  const geomCol = String(gcRow.name).trim();
+  if (!Number.isFinite(srid) || srid <= 0) {
+    try {
+      const safeGeom = geomCol.replace(/"/g, '""');
+      const safeSch = schema.replace(/"/g, '""');
+      const safeTbl = physicalTable.replace(/"/g, '""');
+      const probe = await db.execute(
+        sql.raw(
+          `SELECT ST_SRID("${safeGeom}")::int AS s
+           FROM "${safeSch}"."${safeTbl}"
+           WHERE "${safeGeom}" IS NOT NULL
+           LIMIT 1`
+        )
+      );
+      const probed = Number((probe.rows?.[0] as { s?: number } | undefined)?.s);
+      srid = Number.isFinite(probed) && probed > 0 ? probed : 5181;
+    } catch {
+      srid = 5181;
+    }
+  }
+  return { geomCol, srid };
+}
+
+/** 재난시설–건물군 매칭: 시설 좌표 기준 허용 거리(m). 경계·약간 이탈 포함 */
+const SAFETY_FAC_BLDG_GROUP_NEAR_M = 5;
+
+/** WGS84 lon/lat → 테이블 SRID 점 SQL (identify와 동일 패턴) */
+function safetyFacPointSql(lon: number, lat: number, tableSrid: number): string {
+  const point4326 = `ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326)`;
+  return tableSrid === 4326 ? point4326 : `ST_Transform(${point4326}, ${tableSrid})`;
+}
+
+/** 시설 점과 geom 간 거리(m) — 테이블 SRID가 미터 단위가 아니면 5181로 변환 */
+function safetyFacWithinMetersSql(
+  geomCol: string,
+  pointSql: string,
+  tableSrid: number,
+  meters: number
+): string {
+  if (tableSrid === 4326) {
+    return `ST_DWithin(${geomCol}::geography, ${pointSql}::geography, ${meters})`;
+  }
+  if (tableSrid === 5181 || tableSrid === 5179 || tableSrid === 5186) {
+    return `ST_DWithin(${geomCol}, ${pointSql}, ${meters})`;
+  }
+  return `ST_DWithin(ST_Transform(${geomCol}, 5181), ST_Transform(${pointSql}, 5181), ${meters})`;
+}
+
+/** eqb_man_sn 이 0이면 bul_man_no FK 사용 */
+function isEqbManSnZero(v: string | null | undefined): boolean {
+  if (v == null || v === '') return false;
+  const s = String(v).trim();
+  if (s === '0') return true;
+  const n = Number(s);
+  return Number.isFinite(n) && n === 0;
+}
+
+/**
+ * 시설 좌표(lon, lat) 기준으로 관련 건물군·출입구·건물·건물출입구 건수를 조회한다.
+ * - 건물군: 시설 좌표 ±5m 이내 (ST_DWithin)
+ * - eqb_man_sn 이 0이면 bul_man_no 를 FK로 사용
+ * - 건물군 출입구·건물: 건물군 eqb_man_sn (또는 0일 때 bul_man_no) FK
+ * - 건물 출입구: 해당 건물들의 bul_man_no FK
+ */
+export async function getSafetyFacRelatedBuildingLayers(params: {
+  lon: number;
+  lat: number;
+  schema?: string;
+}): Promise<SafetyFacRelatedBuildingResult> {
+  const sch =
+    String(params.schema ?? '').trim() === 'layer'
+      ? 'layer'
+      : SAFETY_FAC_BLDG_SCHEMA;
+
+  const empty: SafetyFacRelatedBuildingResult = {
+    bldgGroup: 0,
+    bldgGroupEntrance: 0,
+    building: 0,
+    buildingEntrance: 0,
+    eqbManSn: null,
+    bulManNo: null,
+    bulManNos: [],
+  };
+
+  try {
+    const mstRel = await resolveLayerPhysicalRelName(sch, 'tl_sgco_rnadr_mst');
+    if (!mstRel) return empty;
+    const mstMeta = await resolveGeomMeta(sch, mstRel);
+    if (!mstMeta) return empty;
+
+    const safeSch = sch.replace(/"/g, '""');
+    const safeMst = mstRel.replace(/"/g, '""');
+    const safeGeom = mstMeta.geomCol.replace(/"/g, '""');
+    const pointSql = safetyFacPointSql(params.lon, params.lat, mstMeta.srid);
+    const nearSql = safetyFacWithinMetersSql(
+      `"${safeGeom}"`,
+      pointSql,
+      mstMeta.srid,
+      SAFETY_FAC_BLDG_GROUP_NEAR_M
+    );
+    const distanceOrderSql =
+      mstMeta.srid === 4326
+        ? `ST_Distance("${safeGeom}"::geography, ${pointSql}::geography)`
+        : mstMeta.srid === 5181 || mstMeta.srid === 5179 || mstMeta.srid === 5186
+          ? `ST_Distance("${safeGeom}", ${pointSql})`
+          : `ST_Distance(ST_Transform("${safeGeom}", 5181), ST_Transform(${pointSql}, 5181))`;
+
+    // 1. 시설 좌표 ±5m 이내 건물군 — 복수일 때 가장 가까운 1건 FK 사용
+    const bldgGroupRows = await db.execute(
+      sql.raw(
+        `SELECT COUNT(*) AS cnt
+         FROM "${safeSch}"."${safeMst}"
+         WHERE "${safeGeom}" IS NOT NULL
+           AND ${nearSql}`
+      )
+    );
+    const bldgGroupCnt = parseInt(String((bldgGroupRows.rows?.[0] as { cnt?: string })?.cnt ?? '0'), 10) || 0;
+
+    let bldgGroupRow: { eqb_man_sn?: string | null; bul_man_no?: string | null } | undefined;
+    if (bldgGroupCnt > 0) {
+      const nearestRows = await db.execute(
+        sql.raw(
+          `SELECT "eqb_man_sn"::text AS eqb_man_sn, "bul_man_no"::text AS bul_man_no
+           FROM "${safeSch}"."${safeMst}"
+           WHERE "${safeGeom}" IS NOT NULL
+             AND ${nearSql}
+           ORDER BY ${distanceOrderSql}
+           LIMIT 1`
+        )
+      );
+      bldgGroupRow = nearestRows.rows?.[0] as typeof bldgGroupRow;
+    }
+    const eqbManSn =
+      bldgGroupCnt > 0
+        ? String(bldgGroupRow?.eqb_man_sn ?? '').trim() || null
+        : null;
+    const mstBulManNo =
+      bldgGroupCnt > 0
+        ? String(bldgGroupRow?.bul_man_no ?? '').trim() || null
+        : null;
+
+    const fkByBulManNo = isEqbManSnZero(eqbManSn);
+    const fkValue = fkByBulManNo ? mstBulManNo : eqbManSn;
+
+    if (!fkValue) {
+      return { ...empty, bldgGroup: bldgGroupCnt, eqbManSn, bulManNo: mstBulManNo };
+    }
+
+    const escVal = fkValue.replace(/'/g, "''");
+    const fkColumn = fkByBulManNo ? 'bul_man_no' : 'eqb_man_sn';
+
+    // 2. 건물군 출입구
+    const entrcRel = await resolveLayerPhysicalRelName(sch, 'tl_spbd_entrc');
+    let bldgGroupEntranceCnt = 0;
+    if (entrcRel) {
+      const safeEntrc = entrcRel.replace(/"/g, '""');
+      const entranceRows = await db.execute(
+        sql.raw(
+          `SELECT COUNT(*) AS cnt FROM "${safeSch}"."${safeEntrc}"
+           WHERE "${fkColumn}"::text = '${escVal}'`
+        )
+      );
+      bldgGroupEntranceCnt =
+        parseInt(String((entranceRows.rows?.[0] as { cnt?: string })?.cnt ?? '0'), 10) || 0;
+    }
+
+    // 3. 건물
+    const dongRel = await resolveLayerPhysicalRelName(sch, 'tl_sgco_rnadr_dong');
+    let buildingCnt = 0;
+    let bulManNo: string | null = fkByBulManNo ? mstBulManNo : null;
+    let bulManNos: string[] = fkByBulManNo && mstBulManNo ? [mstBulManNo] : [];
+    if (dongRel) {
+      const safeDong = dongRel.replace(/"/g, '""');
+      const buildingRows = await db.execute(
+        sql.raw(
+          `SELECT COUNT(*) AS cnt,
+                  MIN("bul_man_no"::text) AS bul_man_no,
+                  array_agg(DISTINCT "bul_man_no"::text) FILTER (WHERE "bul_man_no" IS NOT NULL) AS bul_man_nos
+           FROM "${safeSch}"."${safeDong}"
+           WHERE "${fkColumn}"::text = '${escVal}'`
+        )
+      );
+      const bRow = buildingRows.rows?.[0] as {
+        cnt?: string;
+        bul_man_no?: string | null;
+        bul_man_nos?: string[] | string | null;
+      };
+      buildingCnt = parseInt(String(bRow?.cnt ?? '0'), 10) || 0;
+      if (!fkByBulManNo) {
+        bulManNo =
+          buildingCnt > 0 ? String(bRow?.bul_man_no ?? '').trim() || null : null;
+        const rawNos = bRow?.bul_man_nos;
+        if (Array.isArray(rawNos)) {
+          bulManNos = rawNos.map((v) => String(v).trim()).filter(Boolean);
+        } else if (typeof rawNos === 'string') {
+          bulManNos = rawNos
+            .replace(/^\{|\}$/g, '')
+            .split(',')
+            .map((v) => v.trim().replace(/^"|"$/g, ''))
+            .filter(Boolean);
+        }
+      } else if (buildingCnt > 0) {
+        const fromDong = String(bRow?.bul_man_no ?? '').trim();
+        if (fromDong) {
+          bulManNo = fromDong;
+          bulManNos = [fromDong];
+        }
+      }
+    }
+
+    // 4. 건물 출입구 — 해당 건물 bul_man_no
+    let buildingEntranceCnt = 0;
+    if (dongRel && bulManNos.length > 0) {
+      const dongEntrcRel = await resolveLayerPhysicalRelName(sch, 'tl_spbd_entrc_dong');
+      if (dongEntrcRel) {
+        const safeDong = dongRel.replace(/"/g, '""');
+        const safeDongEntrc = dongEntrcRel.replace(/"/g, '""');
+        const bldgEntrcWhere = fkByBulManNo
+          ? `e."bul_man_no"::text = '${escVal}'`
+          : `e."bul_man_no"::text IN (
+               SELECT d."bul_man_no"::text FROM "${safeSch}"."${safeDong}" d
+               WHERE d."eqb_man_sn"::text = '${escVal}'
+                 AND d."bul_man_no" IS NOT NULL
+             )`;
+        const bldgEntrcRows = await db.execute(
+          sql.raw(
+            `SELECT COUNT(*) AS cnt FROM "${safeSch}"."${safeDongEntrc}" e
+             WHERE ${bldgEntrcWhere}`
+          )
+        );
+        buildingEntranceCnt =
+          parseInt(String((bldgEntrcRows.rows?.[0] as { cnt?: string })?.cnt ?? '0'), 10) || 0;
+      }
+    }
+
+    return {
+      bldgGroup: bldgGroupCnt,
+      bldgGroupEntrance: bldgGroupEntranceCnt,
+      building: buildingCnt,
+      buildingEntrance: buildingEntranceCnt,
+      eqbManSn,
+      bulManNo,
+      bulManNos,
+    };
+  } catch (e) {
+    console.error('[getSafetyFacRelatedBuildingLayers]', e);
+    return empty;
+  }
 }

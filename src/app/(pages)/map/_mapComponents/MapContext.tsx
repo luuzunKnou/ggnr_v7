@@ -383,6 +383,17 @@ export type MapContextValue = {
   /** URL 기준 재난대응시설 패널 열림 — 일반 식별 비활성화용 */
   safetyFacPanelOpen: boolean;
   setSafetyFacPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
+  safetyFacBuildingRoadLayerState: {
+    visibleTableNames: Set<string>;
+    cqlByTable: Record<string, string>;
+  } | null;
+  setSafetyFacBuildingRoadLayerState: Dispatch<
+    SetStateAction<{
+      visibleTableNames: Set<string>;
+      cqlByTable: Record<string, string>;
+    } | null>
+  >;
   /** CCTV 패널: 통행 타일 vs 도로대장 총괄 레이어(배타, 기본 통행) */
   roadCctvUnderlayMode: RoadCctvUnderlayMode;
   setRoadCctvUnderlayMode: Dispatch<SetStateAction<RoadCctvUnderlayMode>>;
@@ -627,6 +638,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
   const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
+  const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
+    visibleTableNames: Set<string>;
+    cqlByTable: Record<string, string>;
+  } | null>(null);
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
@@ -808,6 +823,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadCctvPanelOpen,
         safetyFacPanelOpen,
         setSafetyFacPanelOpen,
+        safetyFacBuildingRoadLayerState,
+        setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,
         setRoadCctvUnderlayMode,
         roadCctvExtentWgs84,

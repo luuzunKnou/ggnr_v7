@@ -309,9 +309,26 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
     (f: SafetyFacFacilityRow) => {
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
-      animateSafetyFacToFacility(map, f, mapContext?.applyMapViewPaddingRef?.current);
+      // 상세 패널 오픈 후 padding이 반영된 apply를 실행 시점에 읽는다
+      animateSafetyFacToFacility(map, f, () => {
+        mapContext?.applyMapViewPaddingRef?.current?.();
+      });
     },
     [mapContext]
+  );
+
+  /** 목록 선택 후 상세 패널 padding 반영 뒤에 지도 이동 (최초 선택 누락 방지) */
+  const selectFacilityAndFly = useCallback(
+    (f: SafetyFacFacilityRow, canMap: boolean) => {
+      onSelectFacility(f);
+      if (!canMap) return;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          flyToFacility(f);
+        });
+      });
+    },
+    [onSelectFacility, flyToFacility]
   );
 
   const clearSpatial = useCallback(() => {
@@ -801,13 +818,17 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                 </colgroup>
                 <tbody>
                   {facilities.map((f) => {
-                    const canMap = f.lon != null && f.lat != null && mapContext?.mapInstanceRef?.current;
+                    const canMap =
+                      (f.lon != null && f.lat != null) || f.geomJson != null;
                     const key = facilityKey(f);
                     const isSelected = selectedKey === key;
                     const typeLabel = getSafetyFacSubtypeLabel(f.subtype);
                     const chipName = SAFETY_FAC_LIST_CHIP_LABEL[f.subtype];
                     const listAddress = formatSafetyFacListAddress(f.address);
                     const hasName = Boolean(f.name.trim());
+                    const selectRow = () => {
+                      selectFacilityAndFly(f, canMap);
+                    };
                     return (
                       <tr
                         key={key}
@@ -819,15 +840,11 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                         tabIndex={0}
                         title={`${typeLabel} · ${f.name}`}
                         aria-label={`${f.name}, 상세 보기`}
-                        onClick={() => {
-                          if (canMap) flyToFacility(f);
-                          onSelectFacility(f);
-                        }}
+                        onClick={selectRow}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            if (canMap) flyToFacility(f);
-                            onSelectFacility(f);
+                            selectRow();
                           }
                         }}
                         className={cn(

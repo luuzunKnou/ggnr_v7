@@ -136,14 +136,35 @@ const SAFETY_FAC_CLICK_ZOOM = 16;
 const SAFETY_FAC_FLY_MS = 600;
 
 function lonLatFromFacility(f: SafetyFacFacilityRow): { lon: number; lat: number } | null {
-  if (typeof f.lon === 'number' && typeof f.lat === 'number') return { lon: f.lon, lat: f.lat };
-  const g = f.geomJson;
-  if (!g || typeof g !== 'object') return null;
-  const rec = g as { type?: unknown; coordinates?: unknown };
-  if (rec.type === 'Point' && Array.isArray(rec.coordinates) && rec.coordinates.length >= 2) {
-    const lon = Number(rec.coordinates[0]);
-    const lat = Number(rec.coordinates[1]);
-    if (Number.isFinite(lon) && Number.isFinite(lat)) return { lon, lat };
+  const asNum = (v: unknown): number | undefined => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (v == null) return undefined;
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const lon = asNum(f.lon);
+  const lat = asNum(f.lat);
+  if (lon != null && lat != null) return { lon, lat };
+
+  const tryPoint = (g: unknown): { lon: number; lat: number } | null => {
+    if (!g || typeof g !== 'object') return null;
+    const rec = g as { type?: unknown; coordinates?: unknown };
+    if (rec.type === 'Point' && Array.isArray(rec.coordinates) && rec.coordinates.length >= 2) {
+      const x = asNum(rec.coordinates[0]);
+      const y = asNum(rec.coordinates[1]);
+      if (x != null && y != null) return { lon: x, lat: y };
+    }
+    return null;
+  };
+
+  const fromGeom = tryPoint(f.geomJson);
+  if (fromGeom) return fromGeom;
+  if (f.geomJson && typeof f.geomJson === 'string') {
+    try {
+      return tryPoint(JSON.parse(f.geomJson) as unknown);
+    } catch {
+      /* ignore */
+    }
   }
   return null;
 }
@@ -155,6 +176,7 @@ export function animateSafetyFacToCenter3857(
   applyMapViewPadding?: (() => void) | null
 ) {
   const run = () => {
+    // 호출 시점의 apply가 아니라 실행 시점 콜백을 존중 (상세 패널 padding 반영)
     prepareMapForPanelAwareNavigation(map, applyMapViewPadding);
     const view = map.getView();
     view.cancelAnimations();
@@ -250,7 +272,9 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
 
         const flyFromClick = (fallback: SafetyFacFacilityRow) => {
           const coord = evt.coordinate as [number, number];
-          const pad = mapContext?.applyMapViewPaddingRef?.current;
+          const pad = () => {
+            mapContext?.applyMapViewPaddingRef?.current?.();
+          };
           if (Number.isFinite(coord[0]) && Number.isFinite(coord[1])) {
             animateSafetyFacToCenter3857(evt.map, coord, pad);
           } else {

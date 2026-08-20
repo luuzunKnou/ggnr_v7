@@ -6,5 +6,9 @@
   {
     "define_code_name": "-1",
     "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_name": "1",
+    "define_code_kor_name": "고정형 그늘막"
   }
 ]

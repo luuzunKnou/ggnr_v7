@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "arcd",
-    "define_field_kor_name": "지역코드",
+    "define_field_kor_name": "행정동",
     "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "colr_hold_elefn",
-    "define_field_kor_name": "냉방기보유선풍기",
+    "define_field_kor_name": "선풍기",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "colr_hold_arcndtn",
-    "define_field_kor_name": "냉방기보유에어컨",
+    "define_field_kor_name": "에어컨",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "chck_matter_night_opn_at",
-    "define_field_kor_name": "점검사항야간개방여부",
+    "define_field_kor_name": "야간개방여부",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -401,7 +401,7 @@
   },
   {
     "define_field_name": "chck_matter_wkend_hday_opn_at",
-    "define_field_kor_name": "점검사항주말휴일개방여부",
+    "define_field_kor_name": "주말휴일 개방여부",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -451,7 +451,7 @@
   },
   {
     "define_field_name": "chck_matter_stayng_psbl_at",
-    "define_field_kor_name": "점검사항숙박가능여부",
+    "define_field_kor_name": "숙박가능여부",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -601,7 +601,7 @@
   },
   {
     "define_field_name": "wkday_oper_begin_time",
-    "define_field_kor_name": "평일운영시작시간",
+    "define_field_kor_name": "평일 운영 시작시간",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -626,7 +626,7 @@
   },
   {
     "define_field_name": "wkday_oper_end_time",
-    "define_field_kor_name": "평일운영종료시간",
+    "define_field_kor_name": "평일 운영 종료시간",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -651,7 +651,7 @@
   },
   {
     "define_field_name": "wkend_hday_oper_begin_time",
-    "define_field_kor_name": "주말휴일운영시작시간",
+    "define_field_kor_name": "주말휴일 운영 시작시간",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -676,7 +676,7 @@
   },
   {
     "define_field_name": "wkend_hday_oper_end_time",
-    "define_field_kor_name": "주말휴일운영종료시간",
+    "define_field_kor_name": "주말휴일 운영 종료시간",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,

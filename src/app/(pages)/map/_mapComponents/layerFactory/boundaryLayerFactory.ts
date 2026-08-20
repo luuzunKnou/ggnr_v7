@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
+import type { Map } from 'ol';
 import ImageLayer from 'ol/layer/Image';
 import ImageWMS from 'ol/source/ImageWMS';
-import type { Map } from 'ol';
 import tables from '@/config/defineLayer/tables.json';
 import { WORKSPACE } from './serviceLayerFactory';
 import { BUILDING_ROAD_LAYER_DEFS } from './buildingRoadLayerConfig';
@@ -175,7 +175,6 @@ export function useCadastralLayerSync(
 
 /**
  * activeControls + visibleTableNames 기준으로 건물·도로 레이어 표시.
- * availableTableNames null = 카탈로그 미조회(전부 끔). Set이면 그 안의 레이어만 가능.
  */
 export function useBuildingRoadLayerSync(
   map: Map | null,
@@ -189,14 +188,24 @@ export function useBuildingRoadLayerSync(
     const groupOn = activeControls.includes('building-road');
     const catalogReady = availableTableNames != null;
     const showAll = visibleTableNames == null;
+
     map.getLayers().getArray().forEach((l) => {
       if (!l.get('buildingRoadLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
+      if (!tableName) return;
+
       const inCatalog =
-        catalogReady && tableName != null && availableTableNames.has(tableName);
+        catalogReady && availableTableNames!.has(tableName);
       const selected =
-        showAll || (tableName != null && (visibleTableNames?.has(tableName) ?? false));
+        showAll || (visibleTableNames?.has(tableName) ?? false);
+
       l.setVisible(groupOn && inCatalog && selected);
     });
-  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames]);
+  }, [
+    map,
+    mapReady,
+    activeControls,
+    visibleTableNames,
+    availableTableNames,
+  ]);
 }
