@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 function buildUrl(kind: string): string | null {
   if (kind === 'ledger') return 'https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo';
+  if (kind === 'recap') return 'https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo';
+  if (kind === 'floor') return 'https://apis.data.go.kr/1613000/BldRgstHubService/getBrFlrOulnInfo';
   if (kind === 'arch') return 'https://apis.data.go.kr/1613000/ArchPmsHubService/getApBasisOulnInfo';
   if (kind === 'housing') return 'https://apis.data.go.kr/1613000/HsPmsHubService/getHpBasisOulnInfo';
   return null;
@@ -11,7 +13,7 @@ export async function GET(req: NextRequest) {
   const kind = req.nextUrl.searchParams.get('kind') ?? '';
   const upstreamBase = buildUrl(kind);
   if (!upstreamBase) {
-    return NextResponse.json({ error: 'kind must be ledger|arch|housing' }, { status: 400 });
+    return NextResponse.json({ error: 'kind must be ledger|recap|floor|arch|housing' }, { status: 400 });
   }
 
   const serviceKey = req.nextUrl.searchParams.get('serviceKey') ?? '';
