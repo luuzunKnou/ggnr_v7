@@ -7,6 +7,7 @@ import {
   type NglFeeListTable,
 } from '@/database/schema/ngl_fee_list';
 import { buildTaxnNoKey } from '@/lib/nextGenLinkage/mapper';
+import { applyUseFeeGeomFromGlAddr } from '@/lib/useFeeGlAddrGeom';
 
 const nowSql = sql`now()`;
 
@@ -238,7 +239,8 @@ function receiptOnlyMergeSet(row: NewNglFeeList) {
 
 export async function upsertArrearsRow(
   row: NewNglFeeList,
-  table: NglFeeListTable = waterNglFeeList
+  table: NglFeeListTable = waterNglFeeList,
+  tableName?: string
 ): Promise<void> {
   const key = String(row.lvyKey ?? '').trim();
   if (!key) return;
@@ -256,6 +258,14 @@ export async function upsertArrearsRow(
       target: [table.lvyKey, table.rcvmtSn],
       set: arrearsUpdateSet(values),
     });
+  if (tableName) {
+    await applyUseFeeGeomFromGlAddr({
+      tableName,
+      lvyKey: key,
+      rcvmtSn: '',
+      glAddr: values.glAddr,
+    });
+  }
 }
 
 /**
@@ -265,7 +275,8 @@ export async function upsertArrearsRow(
  */
 export async function upsertReceiptRow(
   row: NewNglFeeList,
-  table: NglFeeListTable = waterNglFeeList
+  table: NglFeeListTable = waterNglFeeList,
+  tableName?: string
 ): Promise<void> {
   const key = String(row.lvyKey ?? '').trim();
   const sn = String(row.rcvmtSn ?? '').trim();
@@ -309,6 +320,14 @@ export async function upsertReceiptRow(
             .update(table)
             .set(receiptOnlyMergeSet({ ...values, rcvmtSn: sn, taxnNo }))
             .where(eq(table.id, matchedRow.id));
+          if (tableName) {
+            await applyUseFeeGeomFromGlAddr({
+              tableName,
+              lvyKey: targetKey,
+              rcvmtSn: sn,
+              glAddr: values.glAddr,
+            });
+          }
           return;
         }
       }
@@ -323,6 +342,14 @@ export async function upsertReceiptRow(
       target: [table.lvyKey, table.rcvmtSn],
       set: receiptUpdateSet({ ...values, lvyKey: key }),
     });
+  if (tableName) {
+    await applyUseFeeGeomFromGlAddr({
+      tableName,
+      lvyKey: key,
+      rcvmtSn: sn,
+      glAddr: values.glAddr,
+    });
+  }
 }
 
 export async function insertNextGenErrorLog(params: {

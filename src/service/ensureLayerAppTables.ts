@@ -1,9 +1,10 @@
 /**
- * 서버 기동 시 앱 필수 layer 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
+ * 서버 기동 시 앱 필수 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
  * - 추가속성 정의: public.layer_extra_def
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
+ * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
  */
@@ -53,6 +54,10 @@ async function ensureSchemaLayer(): Promise<void> {
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS layer`));
 }
 
+async function ensureSchemaNextGenLinkage(): Promise<void> {
+  await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
+}
+
 async function execSqlStatements(raw: string): Promise<void> {
   const parts = raw
     .split(';')
@@ -92,6 +97,32 @@ async function ensureBaseTable(params: {
       return;
     }
 
+    await execSqlStatements(createSql);
+    result.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/** layer가 아닌 스키마 — 없으면 생성만 (public에서 이동하지 않음) */
+async function ensureNamedSchemaTable(params: {
+  schema: string;
+  table: string;
+  createSql: string;
+  result: EnsureResult;
+}): Promise<void> {
+  const { schema, table, createSql, result } = params;
+  const fq = `${schema}.${table}`;
+  try {
+    const existing = await tableExists(schema, table);
+    if (existing === 'BASE TABLE') {
+      result.existed.push(fq);
+      return;
+    }
+    if (existing === 'VIEW') {
+      await db.execute(sql.raw(`DROP VIEW IF EXISTS ${schema}."${table}" CASCADE`));
+    }
     await execSqlStatements(createSql);
     result.created.push(fq);
   } catch (e: unknown) {
@@ -465,6 +496,61 @@ export async function ensureNglFeeListTables(result?: EnsureResult): Promise<Ens
   return out;
 }
 
+const NGL_ERROR_LOG_SQL = `
+CREATE TABLE IF NOT EXISTS next_gen_linkage.ngl_error_log (
+  id serial4 NOT NULL,
+  lvy_no varchar(6) NULL,
+  itm_sn varchar(2) NULL,
+  interface_id varchar(100) NULL,
+  rprs_txm_cd varchar(6) NULL,
+  rprs_txm_nm varchar(100) NULL,
+  error_code varchar(20) NULL,
+  error_message varchar NULL,
+  created_at timestamp DEFAULT now() NULL,
+  CONSTRAINT ngl_error_log_pkey PRIMARY KEY (id)
+)
+`;
+
+const NGL_QUERY_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS next_gen_linkage.ngl_query_table (
+  ngl_key serial4 NOT NULL,
+  interface_id varchar(10) NOT NULL,
+  interface_nm varchar(200) NULL,
+  rprs_txm_cd varchar(6) NOT NULL,
+  rprs_txm_nm varchar(100) NULL,
+  spac_biz_cd varchar(4) NULL,
+  act_se_cd varchar(2) NOT NULL,
+  is_active varchar(1) DEFAULT 'Y'::character varying NULL,
+  if_id varchar(50) NULL,
+  dpt_cd varchar(7) NULL,
+  CONSTRAINT ngl_query_table_pkey PRIMARY KEY (ngl_key)
+)
+`;
+
+/** 차세대 연계 next_gen_linkage.ngl_error_log · ngl_query_table */
+export async function ensureNextGenLinkageTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  try {
+    await ensureSchemaNextGenLinkage();
+    await ensureNamedSchemaTable({
+      schema: 'next_gen_linkage',
+      table: 'ngl_error_log',
+      createSql: NGL_ERROR_LOG_SQL,
+      result: out,
+    });
+    await ensureNamedSchemaTable({
+      schema: 'next_gen_linkage',
+      table: 'ngl_query_table',
+      createSql: NGL_QUERY_TABLE_SQL,
+      result: out,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`next_gen_linkage: ${msg}`);
+  }
+  return out;
+}
+
 export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -525,6 +611,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureRoadUseLedgerTables(result);
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
+    await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
   } catch (e: unknown) {

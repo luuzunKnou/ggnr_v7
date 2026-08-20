@@ -97,6 +97,7 @@ async function fetchAndSave(params: {
   runStamp: string;
   config: NonNullable<ReturnType<typeof getNextGenLinkageConfig>>;
   feeTable: NglFeeListTable;
+  tableName: string;
 }): Promise<boolean> {
   const { config } = params;
   const reqVo: Record<string, string> = {
@@ -177,7 +178,7 @@ async function fetchAndSave(params: {
   if (!resVo1?.length) return false;
 
   if (params.interfaceId === 'B-2') {
-    for (const item of resVo1) await upsertReceiptRow(mapReceiptItem(item), params.feeTable);
+    for (const item of resVo1) await upsertReceiptRow(mapReceiptItem(item), params.feeTable, params.tableName);
   } else {
     // 조회에 쓰는 특별회계사업코드를 미납 행에도 저장 → 이후 과세번호 매칭 키에 포함
     for (const item of resVo1) {
@@ -187,7 +188,8 @@ async function fetchAndSave(params: {
           ...mapped,
           spacBizCd: mapped.spacBizCd || params.spacBizCd || null,
         },
-        params.feeTable
+        params.feeTable,
+        params.tableName
       );
     }
   }
@@ -282,6 +284,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
           continue;
         }
         const feeTable = getNglFeeListTableByPrefix(prefix);
+        const tableName = `${prefix}_ngl_fee_list`;
 
         let nextLvyNo = 1;
         let emptyCount = 0;
@@ -305,6 +308,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
               runStamp,
               config,
               feeTable,
+              tableName,
             });
             if (hasData) {
               success++;
@@ -335,7 +339,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
         totalSuccess += success;
         totalFail += fail;
         console.info(
-          `${LOG} done fyr=${fyr} rprsTxmNm=${rprsTxmNm} table=${prefix}_ngl_fee_list interface=${interfaceId} success=${success} fail=${fail}`
+          `${LOG} done fyr=${fyr} rprsTxmNm=${rprsTxmNm} table=${tableName} interface=${interfaceId} success=${success} fail=${fail}`
         );
       }
     }
