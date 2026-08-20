@@ -73,7 +73,7 @@ export function ShapeEditorShell({ projectName, defaultCenter }: ShapeEditorShel
   }, [persistKey]);
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-100">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-muted/40">
       <ShapeEditorTopBar overlayControls={overlayControls} />
 
       <div className="flex min-h-0 flex-1">

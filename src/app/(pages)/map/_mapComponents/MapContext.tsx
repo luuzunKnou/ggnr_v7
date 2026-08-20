@@ -380,6 +380,9 @@ export type MapContextValue = {
   /** URL 기준 CCTV 패널 열림 — 지도 레이어 식별 비활성화용 */
   roadCctvPanelOpen: boolean;
   setRoadCctvPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 재난대응시설 패널 열림 — 일반 식별 비활성화용 */
+  safetyFacPanelOpen: boolean;
+  setSafetyFacPanelOpen: Dispatch<SetStateAction<boolean>>;
   /** CCTV 패널: 통행 타일 vs 도로대장 총괄 레이어(배타, 기본 통행) */
   roadCctvUnderlayMode: RoadCctvUnderlayMode;
   setRoadCctvUnderlayMode: Dispatch<SetStateAction<RoadCctvUnderlayMode>>;
@@ -623,6 +626,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     useState<string | null>(null);
   const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
+  const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
@@ -802,6 +806,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadCctvOverlay,
         roadCctvPanelOpen,
         setRoadCctvPanelOpen,
+        safetyFacPanelOpen,
+        setSafetyFacPanelOpen,
         roadCctvUnderlayMode,
         setRoadCctvUnderlayMode,
         roadCctvExtentWgs84,

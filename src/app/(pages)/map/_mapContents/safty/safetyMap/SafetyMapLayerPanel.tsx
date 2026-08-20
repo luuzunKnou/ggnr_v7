@@ -24,6 +24,8 @@ import { DEVICE_PIXEL_RATIO } from 'ol/has';
 /** 서버/URL 길이 부담 완화용 요청 해상도 상한(긴 변 px) */
 const SAFEMAP_MAX_IMAGE_EDGE_PX = 2048;
 const SAFEMAP_VIEWPORT_REFRESH_MS = 220;
+/** safemap WMS 연결·응답 대기. 이 시간 안에 끝나지 않으면 호출실패(ERROR) */
+const SAFEMAP_WMS_TIMEOUT_MS = 5000;
 
 const SAFEMAP_FLOOD_LOCAL_WMS_URL = 'https://safemap.go.kr/openapi2/IF_0100_WMS';
 const SAFEMAP_FLOOD_NATIONAL_WMS_URL = 'https://safemap.go.kr/openapi2/IF_0089_WMS';
@@ -183,7 +185,7 @@ function buildSafemapWmsImageUrl(
   return u.toString();
 }
 
-/** ImageStatic용: 500/CORS 시 투명 이미지로 대체. 실패는 onFailed로 알리고 재요청은 호출측에서 중단 */
+/** ImageStatic용: 500/CORS·5초 타임아웃 시 투명 이미지로 대체. 실패는 onFailed로 알리고 재요청은 호출측에서 중단 */
 function safemapStaticImageLoadFunction(
   image: ImageWrapper,
   src: string,
@@ -204,13 +206,21 @@ function safemapStaticImageLoadFunction(
       return;
     }
     el.crossOrigin = 'anonymous';
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const cleanup = () => {
       el.onload = null;
       el.onerror = null;
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
     };
-    el.onload = cleanup;
-    el.onerror = () => {
+    const settle = (failed: boolean) => {
+      if (settled) return;
+      settled = true;
       cleanup();
+      if (!failed) return;
       failOnce();
       try {
         el.removeAttribute('crossorigin');
@@ -219,6 +229,9 @@ function safemapStaticImageLoadFunction(
         /* ignore */
       }
     };
+    el.onload = () => settle(false);
+    el.onerror = () => settle(true);
+    timer = setTimeout(() => settle(true), SAFEMAP_WMS_TIMEOUT_MS);
     el.src = src;
   } catch {
     failOnce();
@@ -311,10 +324,12 @@ function useSafemapFloodWmsSync(
     let debounceId: ReturnType<typeof setTimeout> | null = null;
     let imageLayer: ImageLayer<ImageStatic> | null = null;
     let loadGeneration = 0;
+    let failGuard: { stale: boolean } | null = null;
 
     const haltAfterFail = () => {
       if (cancelled || halted) return;
       halted = true;
+      if (failGuard) failGuard.stale = true;
       loadGeneration += 1;
       onImageLoadingChange?.(false);
       if (debounceId != null) {
@@ -331,6 +346,16 @@ function useSafemapFloodWmsSync(
       } catch {
         /* 지도·서버는 유지 */
       }
+    };
+
+    const nextFailHandler = () => {
+      if (failGuard) failGuard.stale = true;
+      const guard = { stale: false };
+      failGuard = guard;
+      return () => {
+        if (guard.stale || cancelled || halted) return;
+        haltAfterFail();
+      };
     };
 
     const applyViewport = () => {
@@ -351,7 +376,7 @@ function useSafemapFloodWmsSync(
         projection: 'EPSG:3857',
         crossOrigin: 'anonymous',
         interpolate: true,
-        imageLoadFunction: bindSafemapImageLoadFunction(haltAfterFail),
+        imageLoadFunction: bindSafemapImageLoadFunction(nextFailHandler()),
       });
       const finish = () => {
         if (cancelled || halted || gen !== loadGeneration) return;
@@ -412,7 +437,7 @@ function useSafemapFloodWmsSync(
           layerOpacity,
           emdWgs84,
           wmsExtra,
-          haltAfterFail
+          nextFailHandler()
         );
         map.addLayer(layer);
         imageLayer = layer;
@@ -430,6 +455,7 @@ function useSafemapFloodWmsSync(
       return () => {
         cancelled = true;
         halted = true;
+        if (failGuard) failGuard.stale = true;
         loadGeneration += 1;
         onImageLoadingChange?.(false);
         cleanupListeners();
@@ -449,6 +475,7 @@ function useSafemapFloodWmsSync(
     return () => {
       cancelled = true;
       halted = true;
+      if (failGuard) failGuard.stale = true;
       loadGeneration += 1;
       onImageLoadingChange?.(false);
       if (intervalId != null) clearInterval(intervalId);
@@ -707,10 +734,10 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-hidden opacity-[0.98]">
-      <div className="shrink-0 border-b border-slate-200 bg-gradient-to-b from-[#f0f9fc] to-white px-4 py-3">
+      <div className="relative shrink-0 border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 pt-0.5">
-            <h2 className="text-[15px] font-semibold leading-tight text-slate-800">재난안전지도</h2>
+            <h2 className="text-[15px] font-semibold leading-tight text-foreground">재난안전지도</h2>
             <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
               홍수·산사태·침수 등 참조 레이어를 켜고 끕니다.
             </p>
@@ -718,7 +745,7 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
               표시 중 {activeCount} / {LAYERS.length}
             </p>
             {safemapWmsOnNoKey && (
-              <p className="mt-1.5 text-[11px] text-amber-700">
+              <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-200">
                 하천범람·산사태·침수흔적·물놀이관리지역 등 safemap WMS 표시를 위해 runtime.env의 SAFEMAP_API_KEY를 설정하세요.
               </p>
             )}
@@ -726,7 +753,7 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -734,9 +761,9 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
           </button>
         </div>
 
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-200/80 pt-3">
-          <Layers2 className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.75} />
-          <span className="text-[11px] text-slate-500">레이어</span>
+        <div className="mt-3 flex items-center gap-2 border-t border-border/80 pt-3">
+          <Layers2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+          <span className="text-[11px] text-muted-foreground">레이어</span>
           <span className="flex-1" />
           <button
             type="button"
@@ -746,21 +773,21 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
           >
             모두 켜기
           </button>
-          <span className="text-slate-300" aria-hidden>
+          <span className="text-muted-foreground/40" aria-hidden>
             |
           </span>
           <button
             type="button"
             title="모두 끄기"
             onClick={() => setAll(false)}
-            className="cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+            className="cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50"
           >
             모두 끄기
           </button>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-slate-50/90">
+      <div className="flex min-h-0 flex-1 flex-col bg-muted/30">
         <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="list">
           {LAYERS.map((layer) => {
             const isOn = visible[layer.id] === true;
@@ -784,10 +811,10 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
                   className={cn(
                     'relative flex w-full cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-[5px] border px-3 py-2.5 text-left shadow-sm transition-all',
                     isFailed
-                      ? 'border-destructive bg-white ring-1 ring-destructive/30'
+                      ? 'border-destructive bg-card ring-1 ring-destructive/30'
                       : isOn
-                        ? 'border-primary/35 bg-white ring-1 ring-primary/15'
-                        : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                        ? 'border-primary/35 bg-card ring-1 ring-primary/15'
+                        : 'border-border/90 bg-card hover:border-border hover:bg-muted/50'
                   )}
                 >
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -797,8 +824,8 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
                         isFailed
                           ? 'font-medium text-destructive'
                           : isOn
-                            ? 'font-medium text-slate-900'
-                            : 'text-slate-700'
+                            ? 'font-medium text-foreground'
+                            : 'text-foreground/90'
                       )}
                     >
                       {layer.label}
@@ -814,14 +841,14 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
                         ? 'bg-destructive/15 text-destructive'
                         : isOn
                           ? 'bg-primary/15 text-primary'
-                          : 'bg-slate-100 text-slate-500'
+                          : 'bg-muted text-muted-foreground'
                     )}
                   >
-                    {isOn ? '표시' : '숨김'}
+                    {isFailed ? 'ERROR' : isOn ? '표시' : '숨김'}
                   </span>
                   {showWmsProgress && (
                     <div
-                      className="pointer-events-none absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden bg-slate-200/90"
+                      className="pointer-events-none absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden bg-muted"
                       role="progressbar"
                       aria-valuetext="WMS 이미지 불러오는 중"
                     >
@@ -836,19 +863,19 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
 
         {showFloodDepthLegend ? (
           <div
-            className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5"
+            className="shrink-0 border-t border-border bg-background px-3 py-2.5"
             aria-label="하천범람 침수심 범례"
           >
-            <p className="mb-2 text-[11px] font-semibold text-slate-700">침수심 범례</p>
+            <p className="mb-2 text-[11px] font-semibold text-foreground">침수심 범례</p>
             <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               {FLOOD_DEPTH_LEGEND.map((row) => (
                 <li key={row.label} className="flex min-w-0 items-center gap-2.5">
                   <span
-                    className="h-4 w-5 shrink-0 rounded-[3px] border border-slate-300/80 shadow-sm"
+                    className="h-4 w-5 shrink-0 rounded-[3px] border border-border/80 shadow-sm"
                     style={{ backgroundColor: row.color }}
                     aria-hidden
                   />
-                  <span className="min-w-0 text-[11px] leading-snug text-slate-600">{row.label}</span>
+                  <span className="min-w-0 text-[11px] leading-snug text-muted-foreground">{row.label}</span>
                 </li>
               ))}
             </ul>
@@ -857,19 +884,19 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
 
         {showLandslideLegend ? (
           <div
-            className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5"
+            className="shrink-0 border-t border-border bg-background px-3 py-2.5"
             aria-label="산사태위험지도 범례"
           >
-            <p className="mb-2 text-[11px] font-semibold text-slate-700">산사태위험지도 범례</p>
+            <p className="mb-2 text-[11px] font-semibold text-foreground">산사태위험지도 범례</p>
             <ul className="grid grid-cols-3 gap-x-2.5 gap-y-1.5">
               {LANDSLIDE_RISK_LEGEND.map((row) => (
                 <li key={row.label} className="flex min-w-0 items-center gap-2.5">
                   <span
-                    className="h-4 w-5 shrink-0 rounded-[3px] border border-slate-300/80 shadow-sm"
+                    className="h-4 w-5 shrink-0 rounded-[3px] border border-border/80 shadow-sm"
                     style={{ backgroundColor: row.color }}
                     aria-hidden
                   />
-                  <span className="min-w-0 text-[11px] leading-snug text-slate-600">{row.label}</span>
+                  <span className="min-w-0 text-[11px] leading-snug text-muted-foreground">{row.label}</span>
                 </li>
               ))}
             </ul>
@@ -878,19 +905,19 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
 
         {showFloodTraceLegend ? (
           <div
-            className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5"
+            className="shrink-0 border-t border-border bg-background px-3 py-2.5"
             aria-label="침수흔적도 침수심 범례"
           >
-            <p className="mb-2 text-[11px] font-semibold text-slate-700">침수흔적도 범례 (침수심)</p>
+            <p className="mb-2 text-[11px] font-semibold text-foreground">침수흔적도 범례 (침수심)</p>
             <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               {FLOOD_TRACE_DEPTH_LEGEND.map((row) => (
                 <li key={row.label} className="flex min-w-0 items-center gap-2.5">
                   <span
-                    className="h-4 w-5 shrink-0 rounded-[3px] border border-slate-300/80 shadow-sm"
+                    className="h-4 w-5 shrink-0 rounded-[3px] border border-border/80 shadow-sm"
                     style={{ backgroundColor: row.color }}
                     aria-hidden
                   />
-                  <span className="min-w-0 text-[11px] leading-snug text-slate-600">{row.label}</span>
+                  <span className="min-w-0 text-[11px] leading-snug text-muted-foreground">{row.label}</span>
                 </li>
               ))}
             </ul>

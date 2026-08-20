@@ -433,12 +433,12 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-[600px] p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col" showCloseButton={false}>
           <DialogTitle className="sr-only">민원 추가</DialogTitle>
-          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 shrink-0 bg-slate-50/40">
-            <span className="text-xs font-medium text-slate-600">민원 추가</span>
+          <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/30">
+            <span className="text-xs font-medium text-muted-foreground">민원 추가</span>
             <button
               type="button"
               onClick={() => setAddDialogOpen(false)}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               aria-label="닫기"
             >
               <X className="h-3.5 w-3.5" />

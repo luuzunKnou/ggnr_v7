@@ -188,8 +188,8 @@ function LocaSituationBadge({ raw }: { raw: unknown }) {
       className={cn(
         'inline-flex max-w-[8rem] shrink-0 items-center justify-center truncate rounded-full border px-2 py-0.5 text-[11px] font-medium',
         ongoing === true && 'border-emerald-200/90 bg-emerald-50 text-emerald-800',
-        ongoing === false && 'border-slate-200 bg-slate-100/90 text-slate-700',
-        ongoing === null && 'border-slate-200/80 bg-white text-slate-500'
+        ongoing === false && 'border-border bg-muted/40 text-foreground',
+        ongoing === null && 'border-border/80 bg-background text-muted-foreground'
       )}
       title={mapped ? undefined : formatFieldValue(raw).trim() || undefined}
     >
@@ -201,14 +201,14 @@ function LocaSituationBadge({ raw }: { raw: unknown }) {
 function Sd1066FeedRow({ row }: { row: Record<string, unknown> }) {
   const { name, dateStr, locaRaw } = getSd1066RowParts(row);
   return (
-    <div className="flex items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-[11px] leading-snug text-slate-800">
+    <div className="flex items-center justify-between gap-2 rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] leading-snug text-foreground">
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
-        <span className="shrink-0 tabular-nums text-slate-600">{dateStr}</span>
-        <span className="shrink-0 text-slate-300" aria-hidden>
+        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="shrink-0 tabular-nums text-muted-foreground">{dateStr}</span>
+        <span className="shrink-0 text-muted-foreground/40" aria-hidden>
           ·
         </span>
-        <span className="min-w-0 truncate font-medium text-slate-900" title={name !== '—' ? name : undefined}>
+        <span className="min-w-0 truncate font-medium text-foreground" title={name !== '—' ? name : undefined}>
           {name}
         </span>
       </div>
@@ -235,22 +235,22 @@ function getSd751RowParts(row: Record<string, unknown>): {
 function Sd751FeedRow({ row }: { row: Record<string, unknown> }) {
   const { damageDt, cause, writtenAt, body } = getSd751RowParts(row);
   return (
-    <div className="rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-[11px] leading-relaxed text-slate-800">
+    <div className="rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] leading-relaxed text-foreground">
       <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-0.5">
-        <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
-        <span className="shrink-0 tabular-nums text-slate-600">{damageDt}</span>
-        <span className="shrink-0 text-slate-300" aria-hidden>
+        <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="shrink-0 tabular-nums text-muted-foreground">{damageDt}</span>
+        <span className="shrink-0 text-muted-foreground/40" aria-hidden>
           ·
         </span>
-        <span className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere] text-slate-900">{cause}</span>
+        <span className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere] text-foreground">{cause}</span>
       </div>
-      <div className="mt-1.5 space-y-1 border-t border-slate-200 pt-1.5">
+      <div className="mt-1.5 space-y-1 border-t border-border pt-1.5">
         <div className="break-words [overflow-wrap:anywhere]">
-          <span className="font-medium text-slate-600">작성일</span>
-          <span className="mx-1 text-slate-400">·</span>
-          <span className="tabular-nums text-slate-800">{writtenAt}</span>
+          <span className="font-medium text-muted-foreground">작성일</span>
+          <span className="mx-1 text-muted-foreground">·</span>
+          <span className="tabular-nums text-foreground">{writtenAt}</span>
         </div>
-        <div className="break-words text-slate-800 [overflow-wrap:anywhere]">{body}</div>
+        <div className="break-words text-foreground [overflow-wrap:anywhere]">{body}</div>
       </div>
     </div>
   );
@@ -273,20 +273,20 @@ function getSd228RowParts(row: Record<string, unknown>): {
 function Sd228FeedRow({ row }: { row: Record<string, unknown> }) {
   const { crtDt, step, dst, msg } = getSd228RowParts(row);
   return (
-    <div className="rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-[11px] leading-relaxed text-slate-800">
+    <div className="rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] leading-relaxed text-foreground">
       <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
-        <span className="shrink-0 tabular-nums text-slate-600">{crtDt}</span>
-        <span className="shrink-0 text-slate-300" aria-hidden>
+        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="shrink-0 tabular-nums text-muted-foreground">{crtDt}</span>
+        <span className="shrink-0 text-muted-foreground/40" aria-hidden>
           ·
         </span>
-        <span className="min-w-0 font-medium [overflow-wrap:anywhere] text-slate-900">{step}</span>
-        <span className="shrink-0 text-slate-300" aria-hidden>
+        <span className="min-w-0 font-medium [overflow-wrap:anywhere] text-foreground">{step}</span>
+        <span className="shrink-0 text-muted-foreground/40" aria-hidden>
           ·
         </span>
-        <span className="min-w-0 [overflow-wrap:anywhere] text-slate-800">{dst}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere] text-foreground">{dst}</span>
       </div>
-      <div className="mt-1.5 border-t border-slate-200 pt-1.5 break-words text-slate-800 [overflow-wrap:anywhere]">
+      <div className="mt-1.5 border-t border-border pt-1.5 break-words text-foreground [overflow-wrap:anywhere]">
         {msg}
       </div>
     </div>
@@ -325,10 +325,10 @@ function getSd46RowParts(row: Record<string, unknown>): { title: string; body: s
 function Sd46FeedRow({ row }: { row: Record<string, unknown> }) {
   const { title, body, dateTime } = getSd46RowParts(row);
   return (
-    <div className="rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-[11px] text-slate-800">
-      <p className="font-medium leading-snug [overflow-wrap:anywhere] text-slate-900">{title}</p>
-      <p className="mt-0.5 text-left tabular-nums leading-normal text-slate-600">{dateTime}</p>
-      {body ? <p className="mt-1 leading-relaxed [overflow-wrap:anywhere] text-slate-800">{body}</p> : null}
+    <div className="rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] text-foreground">
+      <p className="font-medium leading-snug [overflow-wrap:anywhere] text-foreground">{title}</p>
+      <p className="mt-0.5 text-left tabular-nums leading-normal text-muted-foreground">{dateTime}</p>
+      {body ? <p className="mt-1 leading-relaxed [overflow-wrap:anywhere] text-foreground">{body}</p> : null}
     </div>
   );
 }
@@ -577,40 +577,40 @@ function SafetyInfoDatasetArticle({
   return (
     <article
       className={cn(
-        'rounded-[5px] border border-slate-200/90 bg-white px-3 py-2.5 shadow-sm',
+        'rounded-[5px] border border-border/90 bg-background px-3 py-2.5 shadow-sm',
         fillColumnHeight && 'flex min-h-0 flex-1 basis-0 flex-col'
       )}
       aria-label={item.title}
     >
       <p className="flex shrink-0 items-start gap-2 text-[12px] leading-snug">
         {TitleIcon ? (
-          <TitleIcon className="mt-0.5 h-[14px] w-[14px] shrink-0 text-slate-500" strokeWidth={2} aria-hidden />
+          <TitleIcon className="mt-0.5 h-[14px] w-[14px] shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden />
         ) : null}
         <span className="min-w-0">
-          <span className="font-medium text-slate-900">{item.title}</span>
-          <span className="text-slate-400"> · </span>
+          <span className="font-medium text-foreground">{item.title}</span>
+          <span className="text-muted-foreground"> · </span>
           <span className="text-[11px] font-normal text-muted-foreground">{item.subtitle}</span>
         </span>
       </p>
       <div
         className={cn(
-          'mt-2 border-t border-slate-200 pt-2',
+          'mt-2 border-t border-border pt-2',
           fillColumnHeight && 'flex min-h-0 flex-1 flex-col'
         )}
       >
         {st?.loading ? (
-          <p className="text-[11px] text-slate-500">불러오는 중…</p>
+          <p className="text-[11px] text-muted-foreground">불러오는 중…</p>
         ) : st?.error ? (
           <p className="text-[11px] leading-snug text-destructive">{st.error}</p>
         ) : st && st.items.length === 0 ? (
-          <p className="text-[11px] text-slate-500">표시할 데이터가 없습니다.</p>
+          <p className="text-[11px] text-muted-foreground">표시할 데이터가 없습니다.</p>
         ) : prepared ? (
           <>
             {prepared.summary ? (
-              <p className={cn('mb-2 text-[11px] text-slate-600', fillColumnHeight && 'shrink-0')}>{prepared.summary}</p>
+              <p className={cn('mb-2 text-[11px] text-muted-foreground', fillColumnHeight && 'shrink-0')}>{prepared.summary}</p>
             ) : null}
             {prepared.rows.length === 0 ? (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-muted-foreground">
                 {item.datasetId === 'sd-1066' && !expanded
                   ? '진행중인 재난이 없습니다.'
                   : '표시할 데이터가 없습니다.'}
@@ -634,16 +634,16 @@ function SafetyInfoDatasetArticle({
                   ) : (
                     <div
                       key={idx}
-                      className="rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-[11px] leading-relaxed text-slate-800"
+                      className="rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] leading-relaxed text-foreground"
                     >
                       {buildDisplayLines(item.datasetId, row as Record<string, unknown>).map((line, i) => (
                         <div
                           key={`${line.label}-${i}`}
-                          className="break-words border-b border-slate-200 py-0.5 last:border-b-0"
+                          className="break-words border-b border-border py-0.5 last:border-b-0"
                         >
-                          <span className="font-medium text-slate-600">{line.label}</span>
-                          <span className="mx-1 text-slate-400">·</span>
-                          <span className="text-slate-800 [overflow-wrap:anywhere]">{line.value || '—'}</span>
+                          <span className="font-medium text-muted-foreground">{line.label}</span>
+                          <span className="mx-1 text-muted-foreground">·</span>
+                          <span className="text-foreground [overflow-wrap:anywhere]">{line.value || '—'}</span>
                         </div>
                       ))}
                     </div>
@@ -661,7 +661,7 @@ function SafetyInfoDatasetArticle({
                   }))
                 }
                 className={cn(
-                  'mt-2 w-full rounded border border-slate-200 bg-white py-1.5 text-[11px] font-medium text-primary hover:bg-slate-50',
+                  'mt-2 w-full rounded border border-border bg-background py-1.5 text-[11px] font-medium text-primary hover:bg-muted/50',
                   fillColumnHeight && 'shrink-0'
                 )}
               >
@@ -764,10 +764,10 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
       className="flex flex-1 min-h-0 flex-col overflow-hidden opacity-[0.98]"
       aria-label="실시간 재난정보 목록"
     >
-      <div className="shrink-0 border-b border-slate-200 bg-gradient-to-b from-[#f0f9fc] to-white px-4 py-3">
+      <div className="shrink-0 border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 pt-0.5">
-            <h2 className="text-[11px] font-semibold leading-tight text-slate-800">실시간 재난정보</h2>
+            <h2 className="text-[11px] font-semibold leading-tight text-foreground">실시간 재난정보</h2>
             <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
               좌: 재난기본·연합뉴스 · 우: 긴급재난문자·재난구호상황
             </p>
@@ -775,7 +775,7 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -783,10 +783,10 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
           </button>
         </div>
 
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-200/80 pt-3">
-          <Activity className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.75} />
-          <span className="text-[11px] text-slate-500">마지막 갱신</span>
-          <span className="text-[11px] font-medium tabular-nums text-slate-700">
+        <div className="mt-3 flex items-center gap-2 border-t border-border/80 pt-3">
+          <Activity className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+          <span className="text-[11px] text-muted-foreground">마지막 갱신</span>
+          <span className="text-[11px] font-medium tabular-nums text-foreground">
             {lastRefresh ? formatTime(lastRefresh) : '—'}
           </span>
           <span className="flex-1" />
@@ -797,7 +797,7 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
             className={cn(
               'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
               refreshing
-                ? 'cursor-wait text-slate-400'
+                ? 'cursor-wait text-muted-foreground'
                 : 'text-primary hover:bg-primary/10'
             )}
             aria-label="목록 새로고침"
@@ -808,7 +808,7 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden bg-slate-50/90 p-3">
+      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden bg-muted/30 p-3">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             {SAFETY_INFO_LEFT_ITEMS.map((item) => (
@@ -823,7 +823,7 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
             ))}
           </div>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 border-l border-slate-200/80 pl-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 border-l border-border/80 pl-3">
           {SAFETY_INFO_RIGHT_ITEMS.map((item) => (
             <SafetyInfoDatasetArticle
               key={item.datasetId}

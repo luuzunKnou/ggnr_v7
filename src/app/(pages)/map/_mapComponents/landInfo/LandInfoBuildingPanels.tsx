@@ -118,12 +118,12 @@ function ThTd({
 }) {
   return (
     <>
-      <th className="bg-slate-50 px-2 py-1.5 text-left text-[11px] font-medium text-slate-600 border border-slate-200 align-top break-keep">
+      <th className="bg-muted/30 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top break-keep">
         {label}
       </th>
       <td
         colSpan={colSpan}
-        className="px-2 py-1.5 text-[11px] text-slate-800 border border-slate-200 align-top break-words"
+        className="px-2 py-1.5 text-[11px] text-foreground border border-border align-top break-words"
       >
         {value}
       </td>
@@ -133,7 +133,7 @@ function ThTd({
 
 function DetailTable({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded border border-slate-200 overflow-hidden">
+    <div className="rounded border border-border overflow-hidden">
       <table className="w-full table-fixed border-collapse text-[11px]">
         <colgroup>
           <col className="w-[20%]" />
@@ -159,7 +159,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
           colSpan={viol ? 1 : 3}
         />
         {viol ? (
-          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 border border-slate-200">
+          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 border border-border">
             위반건축물
           </td>
         ) : null}
@@ -185,12 +185,12 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
               {i === 0 ? (
                 <th
                   rowSpan={jijigus.length}
-                  className="w-[28%] bg-slate-50 px-2 py-1.5 text-left text-[11px] font-medium text-slate-600 border border-slate-200 align-top"
+                  className="w-[28%] bg-muted/30 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
                 >
                   지역지구구역
                 </th>
               ) : null}
-              <td colSpan={3} className="px-2 py-1.5 text-[11px] text-slate-800 border border-slate-200">
+              <td colSpan={3} className="px-2 py-1.5 text-[11px] text-foreground border border-border">
                 {v}
               </td>
             </tr>
@@ -239,7 +239,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
           colSpan={viol ? 1 : 3}
         />
         {viol ? (
-          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 border border-slate-200">
+          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 border border-border">
             위반건축물
           </td>
         ) : null}
@@ -271,12 +271,12 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
               {i === 0 ? (
                 <th
                   rowSpan={jijigus.length}
-                  className="w-[28%] bg-slate-50 px-2 py-1.5 text-left text-[11px] font-medium text-slate-600 border border-slate-200 align-top"
+                  className="w-[28%] bg-muted/30 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
                 >
                   지역지구구역
                 </th>
               ) : null}
-              <td colSpan={3} className="px-2 py-1.5 text-[11px] text-slate-800 border border-slate-200">
+              <td colSpan={3} className="px-2 py-1.5 text-[11px] text-foreground border border-border">
                 {v}
               </td>
             </tr>
@@ -327,25 +327,25 @@ function ChildListTable({
 }) {
   const isRecap = mode === 'recap';
   return (
-    <div className="overflow-auto max-h-[190px] rounded border border-slate-200">
+    <div className="overflow-auto max-h-[190px] rounded border border-border">
       <table className="w-full border-collapse text-[11px]">
         <thead>
-          <tr className="bg-slate-50 text-slate-600">
+          <tr className="bg-muted/30 text-muted-foreground">
             {isRecap ? (
               <>
-                <th className="px-2 py-1.5 border border-slate-200 w-10">구분</th>
-                <th className="px-2 py-1.5 border border-slate-200 text-left">건물명</th>
-                <th className="px-2 py-1.5 border border-slate-200 w-[7.5rem]">용도</th>
-                <th className="px-2 py-1.5 border border-slate-200 text-left">주구조</th>
-                <th className="px-2 py-1.5 border border-slate-200 w-14">면적(㎡)</th>
-                <th className="px-2 py-1.5 border border-slate-200 w-12">조회</th>
+                <th className="px-2 py-1.5 border border-border w-10">구분</th>
+                <th className="px-2 py-1.5 border border-border text-left">건물명</th>
+                <th className="px-2 py-1.5 border border-border w-[7.5rem]">용도</th>
+                <th className="px-2 py-1.5 border border-border text-left">주구조</th>
+                <th className="px-2 py-1.5 border border-border w-14">면적(㎡)</th>
+                <th className="px-2 py-1.5 border border-border w-12">조회</th>
               </>
             ) : (
               <>
-                <th className="px-2 py-1.5 border border-slate-200 w-12">층별</th>
-                <th className="px-2 py-1.5 border border-slate-200 text-left">구조</th>
-                <th className="px-2 py-1.5 border border-slate-200 text-left">용도</th>
-                <th className="px-2 py-1.5 border border-slate-200 w-14">면적(㎡)</th>
+                <th className="px-2 py-1.5 border border-border w-12">층별</th>
+                <th className="px-2 py-1.5 border border-border text-left">구조</th>
+                <th className="px-2 py-1.5 border border-border text-left">용도</th>
+                <th className="px-2 py-1.5 border border-border w-14">면적(㎡)</th>
               </>
             )}
           </tr>
@@ -355,7 +355,7 @@ function ChildListTable({
             <tr>
               <td
                 colSpan={isRecap ? 6 : 4}
-                className="px-2 py-3 text-center text-slate-500 border border-slate-200"
+                className="px-2 py-3 text-center text-muted-foreground border border-border"
               >
                 하위 정보가 없습니다.
               </td>
@@ -364,18 +364,18 @@ function ChildListTable({
             childRows.map((row, i) =>
               isRecap ? (
                 <tr key={i}>
-                  <td className="px-2 py-1 border border-slate-200 text-center">{fmt(row.type)}</td>
-                  <td className="px-2 py-1 border border-slate-200">{fmt(field(row, 'bld_nm', 'bldNm'))}</td>
-                  <td className="px-2 py-1 border border-slate-200">{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
-                  <td className="px-2 py-1 border border-slate-200">
+                  <td className="px-2 py-1 border border-border text-center">{fmt(row.type)}</td>
+                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'bld_nm', 'bldNm'))}</td>
+                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
+                  <td className="px-2 py-1 border border-border">
                     {fmt(field(row, 'main_strct_cd_nm', 'mainStrctCdNm', 'strct_cd_nm', 'strctCdNm'))}
                   </td>
-                  <td className="px-2 py-1 border border-slate-200 text-center">{fmt(field(row, 'totarea', 'totArea'))}</td>
-                  <td className="px-2 py-1 border border-slate-200 text-center">
+                  <td className="px-2 py-1 border border-border text-center">{fmt(field(row, 'totarea', 'totArea'))}</td>
+                  <td className="px-2 py-1 border border-border text-center">
                     {field(row, 'type') !== '동' && onDongLookup ? (
                       <button
                         type="button"
-                        className="rounded border border-slate-300 px-1.5 py-0.5 text-[10px] hover:bg-slate-50"
+                        className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted/50"
                         onClick={() => onDongLookup(field(row, 'bld_nm', 'bldNm'))}
                       >
                         조회
@@ -387,10 +387,10 @@ function ChildListTable({
                 </tr>
               ) : (
                 <tr key={i}>
-                  <td className="px-2 py-1 border border-slate-200 text-center">{fmt(field(row, 'flrno_nm', 'flrNoNm'))}</td>
-                  <td className="px-2 py-1 border border-slate-200">{fmt(field(row, 'strct_cd_nm', 'strctCdNm'))}</td>
-                  <td className="px-2 py-1 border border-slate-200">{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
-                  <td className="px-2 py-1 border border-slate-200 text-center">{fmt(field(row, 'area', 'area'))}</td>
+                  <td className="px-2 py-1 border border-border text-center">{fmt(field(row, 'flrno_nm', 'flrNoNm'))}</td>
+                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'strct_cd_nm', 'strctCdNm'))}</td>
+                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
+                  <td className="px-2 py-1 border border-border text-center">{fmt(field(row, 'area', 'area'))}</td>
                 </tr>
               )
             )
@@ -480,7 +480,7 @@ export function BuildingRegisterPanel({
     onResetRoot?.();
   };
 
-  if (fetching) return <p className="text-xs text-slate-500">건축물대장 조회 중...</p>;
+  if (fetching) return <p className="text-xs text-muted-foreground">건축물대장 조회 중...</p>;
   if (!localBuildings.length) {
     return (
       <div className="space-y-2">
@@ -489,7 +489,7 @@ export function BuildingRegisterPanel({
             {notice}
           </p>
         ) : (
-          <p className="text-xs text-slate-500">조회 결과가 없습니다.</p>
+          <p className="text-xs text-muted-foreground">조회 결과가 없습니다.</p>
         )}
       </div>
     );
@@ -511,18 +511,18 @@ export function BuildingRegisterPanel({
       ) : null}
 
       <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-xs font-semibold text-slate-700">건축물대장 {typeLabel}</p>
+        <p className="text-xs font-semibold text-foreground">건축물대장 {typeLabel}</p>
         {showBack ? (
           <button
             type="button"
-            className="rounded border border-slate-300 px-2 py-0.5 text-[10px] hover:bg-slate-50"
+            className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-muted/50"
             onClick={handleBack}
           >
             ← 총괄으로
           </button>
         ) : localBuildings.length > 0 ? (
           <select
-            className="max-w-full rounded border border-slate-300 px-1.5 py-0.5 text-[11px]"
+            className="max-w-full rounded border border-border px-1.5 py-0.5 text-[11px]"
             value={selectedSeq}
             onChange={(e) => void handleSelectChange(e.target.value)}
           >
@@ -541,7 +541,7 @@ export function BuildingRegisterPanel({
             })}
           </select>
         ) : null}
-        {busy ? <span className="text-[10px] text-slate-500">불러오는 중…</span> : null}
+        {busy ? <span className="text-[10px] text-muted-foreground">불러오는 중…</span> : null}
       </div>
 
       {selected ? (
@@ -554,7 +554,7 @@ export function BuildingRegisterPanel({
 
       {selected ? (
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-slate-700">
+          <p className="text-xs font-semibold text-foreground">
             {field(selected, 'type') === '총괄표제부' ? '개별 건축물현황' : '층별 건축물현황'}
           </p>
           <ChildListTable
@@ -626,10 +626,10 @@ export function BuildingPermitPanel({
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-xs font-semibold text-slate-700">건축허가대장</p>
+        <p className="text-xs font-semibold text-foreground">건축허가대장</p>
         {rows.length > 0 ? (
           <select
-            className="max-w-full rounded border border-slate-300 px-1.5 py-0.5 text-[11px]"
+            className="max-w-full rounded border border-border px-1.5 py-0.5 text-[11px]"
             value={selectedKey}
             onChange={(e) => setSelectedKey(e.target.value)}
           >

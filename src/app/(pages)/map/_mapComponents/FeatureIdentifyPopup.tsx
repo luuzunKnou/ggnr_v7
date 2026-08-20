@@ -16,12 +16,12 @@ export function FeatureIdentifyPopup({ state, portalTarget, onClose, onSelect }:
 
   const content = (
     <div
-      className="bg-white rounded-lg shadow-xl border border-gray-200 font-size-[12px]w-72 max-h-80 flex flex-col select-none"
+      className="bg-background rounded-lg shadow-xl border border-gray-200 font-size-[12px]w-72 max-h-80 flex flex-col select-none"
       style={{ pointerEvents: 'auto' }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-[7px] border-b border-gray-200 bg-gray-50 rounded-t-lg shrink-0">
-        <span className="font-medium text-[#666] text-[13px]">
+        <span className="font-medium text-muted-foreground text-[13px]">
           데이터 목록 ({totalCount})
         </span>
         <button
