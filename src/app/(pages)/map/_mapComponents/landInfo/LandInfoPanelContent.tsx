@@ -211,14 +211,14 @@ function DataTable({
   const plainSet = new Set(plainColumnIndexes ?? []);
   const dataColCount = linkageCol ? headers.length - 1 : headers.length;
   return (
-    <div className="overflow-auto border border-slate-200 rounded">
+    <div className="overflow-auto border border-border rounded">
       <table className="w-full table-auto text-[12px]">
-        <thead className="bg-slate-50 sticky top-0 z-10">
+        <thead className="bg-muted/30 sticky top-0 z-10">
           <tr>
             {headers.map((h) => (
               <th
                 key={h}
-                className="px-2 py-1 text-left border-b border-r last:border-r-0 border-slate-200 text-slate-700 whitespace-normal break-words align-top"
+                className="px-2 py-1 text-left border-b border-r last:border-r-0 border-border text-foreground whitespace-normal break-words align-top"
               >
                 {h}
               </th>
@@ -230,11 +230,11 @@ function DataTable({
             const rowSource = linkageSources?.[idx] ?? linkageSource;
             const dataCells = linkageCol ? row.slice(0, dataColCount) : row;
             return (
-              <tr key={`${idx}-${row.join('|')}`} className="odd:bg-white even:bg-slate-50/50">
+              <tr key={`${idx}-${row.join('|')}`} className="odd:bg-background even:bg-muted/50">
                 {dataCells.map((cell, cidx) => (
                   <td
                     key={`${idx}-${cidx}`}
-                    className="px-2 py-1 border-b border-r last:border-r-0 border-slate-100 text-slate-700 whitespace-normal break-words align-top"
+                    className="px-2 py-1 border-b border-r last:border-r-0 border-border text-foreground whitespace-normal break-words align-top"
                   >
                     <ParcelLinkageValueText
                       value={cell}
@@ -243,7 +243,7 @@ function DataTable({
                   </td>
                 ))}
                 {linkageCol ? (
-                  <td className="px-2 py-1 border-b border-slate-100 text-slate-700 whitespace-normal break-words align-top">
+                  <td className="px-2 py-1 border-b border-border text-foreground whitespace-normal break-words align-top">
                     <ParcelLandLinkageSourceText source={rowSource} prefix={false} />
                   </td>
                 ) : null}
@@ -566,7 +566,7 @@ export function LandInfoPanelContent({
       const parcelLoading = loading || parcelFetching;
       if (parcelLoading) {
         return (
-          <div className="h-full flex items-center justify-center text-slate-500 text-xs gap-2">
+          <div className="h-full flex items-center justify-center text-muted-foreground text-xs gap-2">
             <Loader2 className="w-4 h-4 animate-spin" /> 불러오는 중...
           </div>
         );
@@ -579,12 +579,12 @@ export function LandInfoPanelContent({
       return (
         <div className="space-y-2">
           {!parcelData.source && hasNoLinkageRows ? (
-            <p className="text-[11px] text-slate-500">연계 데이터 없음</p>
+            <p className="text-[11px] text-muted-foreground">연계 데이터 없음</p>
           ) : null}
           {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
           <LandLinkageLegendText source={parcelData.source} />
-          <section className="border border-slate-200 rounded">
-            <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지기본정보</h4>
+          <section className="border border-border rounded">
+            <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-border">토지기본정보</h4>
             <div className="grid grid-cols-[85px_1fr_85px_1fr] text-[12px]">
               <LinkageCell k="지목" v={getField(latestChar, ['lndcgrCodeNm', 'jimok'])} source={parcelData.source} />
               <LinkageCell k="면적" v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`} source={parcelData.source} />
@@ -601,8 +601,8 @@ export function LandInfoPanelContent({
             </div>
           </section>
 
-          <section className="border border-slate-200 rounded">
-            <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지소유내역</h4>
+          <section className="border border-border rounded">
+            <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-border">토지소유내역</h4>
             <div className="grid grid-cols-[85px_1fr_85px_1fr] text-[12px]">
               <LinkageCell k="소유구분" v={getField(latestPossession, ['posesnSeCodeNm'])} source={parcelData.source} />
               <LinkageCell k="공유인수" v={getField(latestPossession, ['cnrsPsnCo', 'shareCnt'])} source={parcelData.source} />
@@ -613,8 +613,8 @@ export function LandInfoPanelContent({
             </div>
           </section>
 
-          <section className="border border-slate-200 rounded">
-            <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지이용계획</h4>
+          <section className="border border-border rounded">
+            <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-border">토지이용계획</h4>
             <DataTable
               headers={['용도지역지구', '저촉여부', '비고']}
               linkageSource={parcelData.source}
@@ -674,8 +674,8 @@ export function LandInfoPanelContent({
 
   return (
     <div className="flex flex-col min-h-0 text-sm">
-      <section className="px-3 py-2 border-b border-slate-100">
-        <div className="space-y-2 text-[12px] text-slate-700">
+      <section className="px-3 py-2 border-b border-border">
+        <div className="space-y-2 text-[12px] text-foreground">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800">
               지번
@@ -694,7 +694,7 @@ export function LandInfoPanelContent({
           <select
             value={selectedCrs}
             onChange={(e) => setSelectedCrs(e.target.value)}
-            className="text-[11px] border border-slate-200 rounded px-1 py-0.5 max-w-[130px]"
+            className="text-[11px] border border-border rounded px-1 py-0.5 max-w-[130px]"
           >
             {COORDINATE_SYSTEM_OPTIONS.map((opt) => (
               <option key={opt.code} value={opt.code}>
@@ -702,19 +702,19 @@ export function LandInfoPanelContent({
               </option>
             ))}
           </select>
-          <span className="text-[11px] text-slate-600 font-mono truncate">
+          <span className="text-[11px] text-muted-foreground font-mono truncate">
             {xy ? `${xy.x.toFixed(4)}, ${xy.y.toFixed(4)}` : '-'}
           </span>
         </div>
       </section>
 
-      <section className="px-3 py-2 border-b border-slate-100">
+      <section className="px-3 py-2 border-b border-border">
         <div className="flex w-full gap-1">
           <button
             type="button"
             onClick={() => openExternalMapByAddress('naver', externalMapSearchQuery)}
             disabled={!externalMapSearchQuery}
-            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
+            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-muted disabled:opacity-50"
             aria-label="네이버 지도"
           >
             <img src="/image/addressInfoIcon/naverMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
@@ -723,7 +723,7 @@ export function LandInfoPanelContent({
             type="button"
             onClick={() => openExternalMapByAddress('kakao', externalMapSearchQuery)}
             disabled={!externalMapSearchQuery}
-            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
+            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-muted disabled:opacity-50"
             aria-label="카카오 지도"
           >
             <img src="/image/addressInfoIcon/kakaoMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
@@ -732,7 +732,7 @@ export function LandInfoPanelContent({
             type="button"
             onClick={() => openExternalMapByAddress('google', externalMapSearchQuery)}
             disabled={!externalMapSearchQuery}
-            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
+            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-muted disabled:opacity-50"
             aria-label="구글 지도"
           >
             <img src="/image/addressInfoIcon/googleMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
@@ -741,7 +741,7 @@ export function LandInfoPanelContent({
             type="button"
             onClick={() => effectivePnu && openLandEum(effectivePnu)}
             disabled={!effectivePnu || !/^\d{19}$/.test(effectivePnu)}
-            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-slate-200 disabled:opacity-50"
+            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-muted disabled:opacity-50"
             aria-label="토지이음"
           >
             <img src="/image/addressInfoIcon/toji-e-um.png" alt="" className="w-5 h-5 object-contain" />
@@ -750,14 +750,14 @@ export function LandInfoPanelContent({
       </section>
 
       <section className="flex-1 min-h-0 flex flex-col">
-        <div className="flex border-b border-slate-200 shrink-0">
+        <div className="flex border-b border-border shrink-0">
           {TAB_LABELS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 min-w-0 px-1.5 py-2 text-xs border-b-2 -mb-px ${
-                activeTab === tab.id ? 'border-sky-600 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                activeTab === tab.id ? 'border-sky-600 text-sky-600' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               {tab.label}
@@ -769,11 +769,11 @@ export function LandInfoPanelContent({
 
       <Dialog open={modalKind === 'price'} onOpenChange={(open) => !open && setModalKind(null)}>
         <DialogContent className="w-[860px] max-w-[92vw] max-h-[86vh] p-0 gap-0 overflow-hidden flex flex-col">
-          <DialogHeader className="px-4 py-3 border-b border-slate-200 shrink-0">
+          <DialogHeader className="px-4 py-3 border-b border-border shrink-0">
             <DialogTitle className="text-sm">공시지가 조회</DialogTitle>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
-            <p className="text-xs text-slate-500 mb-2 shrink-0">총 {modalRows.length}건</p>
+            <p className="text-xs text-muted-foreground mb-2 shrink-0">총 {modalRows.length}건</p>
             <DataTable headers={[...PRICE_MODAL_HEADERS]} rows={modalRows} linkageSource={parcelData.source} />
           </div>
         </DialogContent>
@@ -786,8 +786,8 @@ export function LandInfoPanelContent({
 function LinkageCell({ k, v, source }: { k: string; v: string; source?: ParcelLandRowSource }) {
   return (
     <>
-      <div className="px-2 py-1 bg-slate-50 border-b border-r border-slate-200 font-medium">{k}</div>
-      <div className="px-2 py-1 border-b border-slate-200">
+      <div className="px-2 py-1 bg-muted/30 border-b border-r border-border font-medium">{k}</div>
+      <div className="px-2 py-1 border-b border-border">
         <ParcelLinkageValueText value={v} source={source} />
       </div>
     </>
@@ -809,10 +809,10 @@ function LinkageCellButton({
 }) {
   return (
     <>
-      <div className="px-2 py-1 bg-slate-50 border-b border-r border-slate-200 font-medium">{k}</div>
-      <div className="px-2 py-1 border-b border-slate-200 flex items-start justify-between gap-2">
+      <div className="px-2 py-1 bg-muted/30 border-b border-r border-border font-medium">{k}</div>
+      <div className="px-2 py-1 border-b border-border flex items-start justify-between gap-2">
         <ParcelLinkageValueText value={v} source={source} className="whitespace-normal break-words" />
-        <button type="button" className="shrink-0 text-[11px] px-2 py-0.5 border rounded border-slate-300 hover:bg-slate-50" onClick={onClick}>
+        <button type="button" className="shrink-0 text-[11px] px-2 py-0.5 border rounded border-border hover:bg-muted/50" onClick={onClick}>
           {button}
         </button>
       </div>

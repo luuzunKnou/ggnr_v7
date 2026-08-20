@@ -88,8 +88,17 @@ async function setupDb(): Promise<void> {
     return;
   }
 
+  console.log(`[run] DB ${host}:${port}/${database} user=${user}`);
+
   const { default: pg } = await import('pg');
-  const client = new pg.Client({ host, port, database, user, password });
+  const client = new pg.Client({
+    host,
+    port,
+    database,
+    user,
+    password,
+    connectionTimeoutMillis: 10_000,
+  });
 
   try {
     await client.connect();
@@ -279,9 +288,18 @@ async function setupDbOnRelaunch(logPrefix: string): Promise<void> {
     return;
   }
 
+  console.log(`${logPrefix} DB ${host}:${port}/${database} user=${user}`);
+
   try {
     const { default: pg } = await import('pg');
-    const client = new pg.Client({ host, port, database, user, password });
+    const client = new pg.Client({
+      host,
+      port,
+      database,
+      user,
+      password,
+      connectionTimeoutMillis: 10_000,
+    });
     try {
       await client.connect();
       await client.query('CREATE EXTENSION IF NOT EXISTS postgis;');

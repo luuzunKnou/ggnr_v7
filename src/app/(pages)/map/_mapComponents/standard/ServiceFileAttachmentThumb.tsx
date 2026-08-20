@@ -48,7 +48,7 @@ export function ServiceFileAttachmentThumb({
   return (
     <div
       className={cn(
-        'relative shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-100',
+        'relative shrink-0 overflow-hidden rounded border border-border bg-muted/40',
         box[size],
         className
       )}

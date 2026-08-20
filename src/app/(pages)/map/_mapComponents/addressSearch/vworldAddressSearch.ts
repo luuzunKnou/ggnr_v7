@@ -168,6 +168,50 @@ export async function searchPlace(
   return searchPlaceOne(trimmed, options ?? {}, apiKey);
 }
 
+function coordKey(item: VWorldAddressItem): string {
+  return `${item.point.x.toFixed(6)},${item.point.y.toFixed(6)}`;
+}
+
+/**
+ * 주소(도로명·지번)와 장소(POI)를 함께 검색한 뒤 좌표 기준으로 합친다.
+ * 같은 좌표면 주소 항목을 남기고, 장소 제목만 보강한다.
+ */
+export async function searchAddressAndPlace(
+  query: string,
+  options?: SearchAddressOptions
+): Promise<VWorldAddressItem[]> {
+  const trimmed = query?.trim();
+  if (!trimmed) return [];
+
+  const maxResults = options?.maxResults ?? 5;
+  const [addressItems, placeItems] = await Promise.all([
+    searchAddress(trimmed, { ...options, type: 'address' }),
+    searchPlace(trimmed, {
+      apiKey: options?.apiKey,
+      crs: options?.crs,
+      maxResults,
+    }),
+  ]);
+
+  const byCoord = new Map<string, VWorldAddressItem>();
+  const merged: VWorldAddressItem[] = [];
+  for (const item of addressItems) {
+    byCoord.set(coordKey(item), item);
+    merged.push(item);
+  }
+  for (const item of placeItems) {
+    const key = coordKey(item);
+    const existing = byCoord.get(key);
+    if (existing) {
+      if (!existing.title && item.title) existing.title = item.title;
+      continue;
+    }
+    byCoord.set(key, item);
+    merged.push(item);
+  }
+  return merged;
+}
+
 function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VWorldAddressItem[] {
   const status = data?.response?.status;
   if (status !== 'OK') return [];

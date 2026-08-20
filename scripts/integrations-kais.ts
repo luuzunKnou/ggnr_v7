@@ -1,6 +1,7 @@
 import { loadProjectEnv } from './load-project-env';
 import { closePool } from '@/database/db';
 import { defaultDailyWindow, runKais } from '@/integrations/kais';
+import { reloadProjectRuntimeEnv } from '@/lib/projectEnvReload';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -30,7 +31,10 @@ function parseArgs(argv: string[]): Args {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  if (args.project && args.env) loadProjectEnv(args.project, args.env);
+  if (args.project && args.env) {
+    loadProjectEnv(args.project, args.env);
+    reloadProjectRuntimeEnv(args.project, args.env);
+  }
 
   const appKey = (process.env.KAIS_APP_KEY ?? '').trim() || HARDCODED_KAIS_APP_KEY;
 

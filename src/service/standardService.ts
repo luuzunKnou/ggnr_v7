@@ -183,6 +183,7 @@ export async function getTableData(params: {
 }
 
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+const CODES_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'codes');
 
 /** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
 export function getDefineTableKeyFieldName(tableName: string): string | null {
@@ -191,11 +192,133 @@ export function getDefineTableKeyFieldName(tableName: string): string | null {
   try {
     if (!fs.existsSync(filePath)) return null;
     const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const keyField = Array.isArray(fields) ? fields.find((f) => String(f?.define_field_is_key ?? '').toLowerCase() === 'true') : null;
+    const keyField = Array.isArray(fields)
+      ? fields.find((f) => defineFlagTrue(f?.define_field_is_key))
+      : null;
     return keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
   } catch {
     return null;
   }
+}
+
+function loadDefineFieldRows(tableName: string): Record<string, unknown>[] {
+  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function defineFlagTrue(v: unknown): boolean {
+  if (v === true) return true;
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1';
+}
+
+function defineFieldIdxNum(f: Record<string, unknown>): number {
+  const n = parseInt(String(f.define_field_idx ?? '999999'), 10);
+  return Number.isFinite(n) ? n : 999999;
+}
+
+function normalizeCodeKey(raw: string): string {
+  const s = raw.trim().toLowerCase();
+  if (/^-?\d+\.0+$/.test(s)) return s.replace(/\.0+$/, '');
+  return s;
+}
+
+function loadDefineCodeLabelMap(tableName: string, fieldName: string): Map<string, string> {
+  const tableField = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
+  const labels = new Map<string, string>();
+  const filePath = path.join(CODES_DIR, `field_${tableField}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (Array.isArray(parsed)) {
+        for (const row of parsed as { define_code_name?: string; define_code_kor_name?: string }[]) {
+          const name = String(row?.define_code_name ?? '').trim();
+          if (!name) continue;
+          const kor = String(row?.define_code_kor_name ?? '').trim();
+          const label = kor || name;
+          const key = normalizeCodeKey(name);
+          labels.set(key, label);
+        }
+      }
+    }
+  } catch {
+    /* 코드 파일 없음·파싱 실패는 원본 값 유지 */
+  }
+  return labels;
+}
+
+function lookupDefineCodeLabel(tableName: string, fieldName: string, raw: string): string | undefined {
+  const map = loadDefineCodeLabelMap(tableName, fieldName);
+  return map.get(normalizeCodeKey(raw));
+}
+
+function joinDefineShownValues(
+  row: Record<string, unknown>,
+  fields: Record<string, unknown>[],
+  flag: 'define_field_show_title' | 'define_field_show_list',
+  tableName: string
+): string {
+  const cols = fields
+    .filter((f) => defineFlagTrue(f[flag]))
+    .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+  const parts: string[] = [];
+  for (const f of cols) {
+    const name = String(f.define_field_name ?? '').trim();
+    if (!name) continue;
+    if (GEOM_COLUMN_NAMES.has(name.toLowerCase())) continue;
+    const raw = rowVal(row, name);
+    if (raw != null && typeof raw === 'object') continue;
+    let v = rowPick(row, [name]);
+    if (!v) continue;
+    if (String(f.define_field_type ?? '').trim().toUpperCase() === 'CODE') {
+      const mapped = lookupDefineCodeLabel(tableName, name, v);
+      if (mapped) v = mapped;
+    }
+    parts.push(v);
+  }
+  const sep =
+    tableName === 'sd_heat_mitigation_facility' && flag === 'define_field_show_title' ? ' - ' : ' ';
+  return parts.join(sep);
+}
+
+function safetyFacOrderBySql(fields: Record<string, unknown>[], columns: string[]): string {
+  const colByLower = new Map(columns.map((c) => [c.toLowerCase(), c]));
+  const sorts = fields
+    .map((f) => {
+      const name = String(f.define_field_name ?? '').trim();
+      const idxRaw = String(f.define_field_sort_idx ?? '').trim();
+      if (!name || !idxRaw) return null;
+      const idx = parseInt(idxRaw, 10);
+      if (!Number.isFinite(idx)) return null;
+      const phys = colByLower.get(name.toLowerCase());
+      if (!phys) return null;
+      const dir =
+        String(f.define_field_sort_type ?? 'ASC').trim().toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+      const type = String(f.define_field_type ?? '').trim().toUpperCase();
+      return { phys, idx, dir, type };
+    })
+    .filter((x): x is { phys: string; idx: number; dir: string; type: string } => x != null)
+    .sort((a, b) => a.idx - b.idx);
+  if (sorts.length === 0) return '';
+  return (
+    ' ORDER BY ' +
+    sorts
+      .map((s) => {
+        const q = `"${s.phys.replace(/"/g, '""')}"`;
+        if (s.type === 'NUMBER') {
+          return `CASE WHEN btrim(${q}::text) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(${q}::text)::numeric END ${s.dir} NULLS LAST`;
+        }
+        return `${q} ${s.dir}`;
+      })
+      .join(', ')
+  );
 }
 
 /**
@@ -1457,12 +1580,29 @@ function pickLonLat(
   return { lon, lat };
 }
 
+function pickGeomJsonFromRow(row: Record<string, unknown>): unknown {
+  for (const [k, v] of Object.entries(row)) {
+    if (!GEOM_COLUMN_NAMES.has(k.toLowerCase())) continue;
+    if (v == null) continue;
+    if (typeof v === 'string') {
+      try {
+        return JSON.parse(v) as unknown;
+      } catch {
+        return v;
+      }
+    }
+    return v;
+  }
+  return undefined;
+}
+
 function formatSafetyFacilityRow(
   subtype: string,
   table: string,
   row: Record<string, unknown>,
   rowIndex: number,
-  spec: (typeof SAFETY_FACILITY_DISPLAY)[string] | undefined
+  spec: (typeof SAFETY_FACILITY_DISPLAY)[string] | undefined,
+  fields: Record<string, unknown>[]
 ): {
   subtype: string;
   table: string;
@@ -1472,20 +1612,28 @@ function formatSafetyFacilityRow(
   phone?: string;
   lon?: number;
   lat?: number;
+  geomJson?: unknown;
 } {
+  const nameFromDefine = joinDefineShownValues(row, fields, 'define_field_show_title', table);
+  const listFromDefine = joinDefineShownValues(row, fields, 'define_field_show_list', table);
   const name =
+    nameFromDefine ||
     rowPick(row, spec?.nameKeys ?? []) ||
     rowPick(row, ['vt_acmdfclty_nm', 'nm', 'name', 'fclty_nm', 'title']);
   const address =
+    listFromDefine ||
     rowPick(row, spec?.addressKeys ?? []) ||
     rowPick(row, ['addr', 'adres', 'address', 'dtl_adres']);
   const phone = rowPick(row, spec?.phoneKeys ?? ['telno', 'tel', 'phone', 'mng_inst_telno']);
+  const keyName = getDefineTableKeyFieldName(table);
+  const keyVal = keyName ? rowPick(row, [keyName]) : '';
   const ogc = rowVal(row, 'ogc_fid');
   const id =
-    ogc != null && String(ogc).trim() !== ''
-      ? String(ogc).trim()
-      : `${table}-${rowIndex}`;
+    keyVal ||
+    (ogc != null && String(ogc).trim() !== '' ? String(ogc).trim() : '') ||
+    `${table}-${rowIndex}`;
   const { lon, lat } = pickLonLat(row, spec);
+  const geomJson = pickGeomJsonFromRow(row);
   return {
     subtype,
     table,
@@ -1494,6 +1642,7 @@ function formatSafetyFacilityRow(
     address: address || '—',
     ...(phone ? { phone } : {}),
     ...(lon != null && lat != null ? { lon, lat } : {}),
+    ...(geomJson != null ? { geomJson } : {}),
   };
 }
 
@@ -1501,9 +1650,11 @@ async function fetchSafetyFacRows(opts: {
   schema: string;
   table: string;
   searchRaw: string;
+  wkt5181?: string;
   limit: number;
 }): Promise<Record<string, unknown>[]> {
   const { schema, table, searchRaw, limit } = opts;
+  const wkt5181 = String(opts.wkt5181 ?? '').trim();
   const esc = (s: string) => s.replace(/'/g, "''");
   const safeSchema = schema.replace(/"/g, '""');
   const resolvedRel = await resolveLayerPhysicalRelName(schema, table);
@@ -1540,19 +1691,37 @@ async function fetchSafetyFacRows(opts: {
   const dataCols = columns.filter((c) => !geomCol || c !== geomCol);
   const textCols = [...dataCols];
   const selectList = dataCols.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ');
+  const safeGeom = geomCol ? geomCol.replace(/"/g, '""') : '';
+  const geomSelect = geomCol
+    ? `${selectList ? ', ' : ''}ST_AsGeoJSON(ST_Transform("${safeGeom}", 4326))::json AS "${safeGeom}"`
+    : '';
+  const fullSelect = `${selectList}${geomSelect}`;
+  const fromSql = sql.raw(`"${safeSchema}"."${safeTable}"`);
+  const orderSql = safetyFacOrderBySql(loadDefineFieldRows(table), dataCols);
 
-  let dataRes;
+  const whereParts: ReturnType<typeof sql>[] = [];
   if (searchRaw && textCols.length > 0) {
     const conds = textCols.map((c) =>
       sql`strpos(lower(${sql.raw(`"${c.replace(/"/g, '""')}"`)}::text), lower(${searchRaw})) > 0`
     );
-    const whereSql = sql.join(conds, sql` OR `);
+    whereParts.push(sql`(${sql.join(conds, sql` OR `)})`);
+  }
+  if (wkt5181 && geomCol) {
+    const g = sql.raw(`"${geomCol.replace(/"/g, '""')}"`);
+    whereParts.push(
+      sql`${g} IS NOT NULL AND ST_Intersects(ST_Transform(${g}, 5181), ST_SetSRID(ST_GeomFromText(${wkt5181}), 5181))`
+    );
+  }
+
+  let dataRes;
+  if (whereParts.length > 0) {
+    const whereSql = sql.join(whereParts, sql` AND `);
     dataRes = await db.execute(
-      sql`SELECT ${sql.raw(selectList)} FROM ${sql.raw(`"${safeSchema}"."${safeTable}"`)} WHERE ${whereSql} LIMIT ${limit}`
+      sql`SELECT ${sql.raw(fullSelect)} FROM ${fromSql} WHERE ${whereSql}${sql.raw(orderSql)} LIMIT ${limit}`
     );
   } else {
     dataRes = await db.execute(
-      sql`SELECT ${sql.raw(selectList)} FROM ${sql.raw(`"${safeSchema}"."${safeTable}"`)} LIMIT ${limit}`
+      sql`SELECT ${sql.raw(fullSelect)} FROM ${fromSql}${sql.raw(orderSql)} LIMIT ${limit}`
     );
   }
 
@@ -1570,6 +1739,8 @@ export type SafetyFacilityListItem = {
   lat?: number;
   /** geom 제외 원본 컬럼 — 상세 패널 표시용 */
   detailAttrs: Record<string, unknown>;
+  /** WGS84 GeoJSON — 지도 붉은 강조용 */
+  geomJson?: unknown;
 };
 
 /**
@@ -1578,6 +1749,7 @@ export type SafetyFacilityListItem = {
 export async function listSafetyFacilities(params: {
   requests: { subtype: string; table: string }[];
   search?: string;
+  wkt5181?: string;
   limitPerTable?: number;
   schema?: string;
 }): Promise<{ items: SafetyFacilityListItem[]; error?: string }> {
@@ -1586,6 +1758,7 @@ export async function listSafetyFacilities(params: {
   if (!Number.isFinite(limitPerTable) || limitPerTable < 1) limitPerTable = 150;
   limitPerTable = Math.min(300, Math.floor(limitPerTable));
   const searchRaw = String(params?.search ?? '').trim();
+  const wkt5181 = String(params?.wkt5181 ?? '').trim();
   const items: SafetyFacilityListItem[] = [];
   const requests = Array.isArray(params?.requests) ? params.requests : [];
 
@@ -1594,11 +1767,19 @@ export async function listSafetyFacilities(params: {
     const table = String(req?.table ?? '').trim().toLowerCase();
     if (!subtype || !table) continue;
     try {
-      const rows = await fetchSafetyFacRows({ schema, table, searchRaw, limit: limitPerTable });
+      const rows = await fetchSafetyFacRows({
+        schema,
+        table,
+        searchRaw,
+        ...(wkt5181 ? { wkt5181 } : {}),
+        limit: limitPerTable,
+      });
       const spec = SAFETY_FACILITY_DISPLAY[table];
+      const fields = loadDefineFieldRows(table);
       rows.forEach((row, idx) => {
+        const formatted = formatSafetyFacilityRow(subtype, table, row, idx, spec, fields);
         items.push({
-          ...formatSafetyFacilityRow(subtype, table, row, idx, spec),
+          ...formatted,
           detailAttrs: stripGeomRow(row),
         });
       });
