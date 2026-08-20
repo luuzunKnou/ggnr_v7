@@ -100,19 +100,8 @@ export function ForcedPasswordChangeModal() {
   if (status !== 'authenticated' || !usrId || usrId === 'su') return null;
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setOpen(true);
-      }}
-    >
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>비밀번호 변경</DialogTitle>
           <DialogDescription>
