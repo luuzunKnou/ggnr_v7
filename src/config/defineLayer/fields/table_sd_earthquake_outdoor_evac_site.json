@@ -77,7 +77,7 @@
   {
     "define_field_name": "arcd",
     "define_field_kor_name": "지역코드",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -102,7 +102,7 @@
   {
     "define_field_name": "bdong_cd",
     "define_field_kor_name": "법정동코드",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -227,7 +227,7 @@
   {
     "define_field_name": "hdong_cd",
     "define_field_kor_name": "행정동코드",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -352,7 +352,7 @@
   {
     "define_field_name": "use_se_cd",
     "define_field_kor_name": "사용구분코드",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
     "define_field_show_search": false,

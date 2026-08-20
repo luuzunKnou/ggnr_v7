@@ -7,6 +7,7 @@ import { getTransform } from 'ol/proj';
 import '../config/projections'; // 좌표계 등록
 import { DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT, DEFAULT_ZOOM_2D, RESOLUTIONS_3857 } from '../config/mapDefaults';
 import { createCadastralLayers, createBuildingRoadLayers } from '../layerFactory/boundaryLayerFactory';
+import { createSafetyFacBuildingRoadLayers } from '../layerFactory/safetyFacBuildingRoadLayerFactory';
 import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '../layerFactory/jimokLayerFactory';
 import { createOwnershipLayers } from '../layerFactory/ownershipLayerFactory';
@@ -58,6 +59,7 @@ export function useMapInstance(
         }),
         ...createCadastralLayers(),
         ...createBuildingRoadLayers(),
+        ...createSafetyFacBuildingRoadLayers(),
         ...createBasicSectionLayers(),
         ...createJimokLayers(),
         ...createOwnershipLayers(),

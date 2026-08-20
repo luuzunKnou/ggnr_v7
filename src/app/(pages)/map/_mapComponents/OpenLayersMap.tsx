@@ -45,6 +45,7 @@ import {
   CADASTRAL_LAYERS,
   BUILDING_ROAD_LAYERS,
 } from './layerFactory/boundaryLayerFactory';
+import { useSafetyFacBuildingRoadLayerSync } from './layerFactory/safetyFacBuildingRoadLayerFactory';
 import { useBasicSectionLayerSync } from './layerFactory/basicSectionLayerFactory';
 import { useJimokLayerSync } from './layerFactory/jimokLayerFactory';
 import {
@@ -957,7 +958,12 @@ export default function OpenLayersMap({
     mapReady,
     activeControls,
     visibleBuildingRoadLayerNames,
-    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames
+    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames,
+  );
+  useSafetyFacBuildingRoadLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    mapContext?.safetyFacBuildingRoadLayerState ?? null,
   );
   // 기초구간 레이어 동기화 (activeControls → basic-section 레이어 visibility)
   useBasicSectionLayerSync(mapInstanceRef.current, mapReady, activeControls);
