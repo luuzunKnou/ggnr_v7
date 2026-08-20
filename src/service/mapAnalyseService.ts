@@ -5,7 +5,14 @@
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { applyEnrichmentToLandRows, type AnalyzeLandRow } from '@/lib/parcelLandNormalize';
-import { fetchBuildingLedgersByPnus, type BuildingLedgerDisplayRow, type BuildingLedgerFetchDebug } from '@/lib/buildingLedgerFetch';
+import {
+  fetchBuildingLedgersByPnus,
+  fetchPortalBuildingFloorList,
+  fetchPortalBuildingRegisterByDong,
+  fetchPortalBuildingRegisterForLandInfo,
+  type BuildingLedgerDisplayRow,
+  type BuildingLedgerFetchDebug,
+} from '@/lib/buildingLedgerFetch';
 import {
   buildParcelAnalysisFacilityCatalogFromDbTables,
   resolveParcelAnalysisLayers,
@@ -105,6 +112,7 @@ export type AnalyzeLandRowResult = {
   publicPrice?: number | null;
   source?: string;
   linkageFailed?: boolean;
+  linkageFailReason?: string;
 };
 
 export type AnalyzeParcelsResult = {
@@ -160,6 +168,7 @@ function mapLandRowResults(
     publicPrice?: number | null;
     source?: string;
     linkageFailed?: boolean;
+    linkageFailReason?: string;
   }>
 ): AnalyzeLandRowResult[] {
   return rows.map((r) => ({
@@ -172,6 +181,7 @@ function mapLandRowResults(
     publicPrice: r.publicPrice ?? null,
     source: r.source,
     linkageFailed: r.linkageFailed,
+    linkageFailReason: r.linkageFailReason,
   }));
 }
 
@@ -615,6 +625,12 @@ export async function fetchBuildingLedgersForParcels(params: {
 }): Promise<BuildingLedgerResult> {
   return fetchBuildingLedgersByPnus(params);
 }
+
+export {
+  fetchPortalBuildingFloorList,
+  fetchPortalBuildingRegisterByDong,
+  fetchPortalBuildingRegisterForLandInfo,
+};
 
 function parseGeoJsonGeometry(value: unknown): GeoJSON.Geometry | null {
   if (!value) return null;

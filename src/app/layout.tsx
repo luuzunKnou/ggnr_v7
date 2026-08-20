@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/app/(pages)/(index)/theme-provider";
 import { AuthSessionProvider } from "@/app/providers";
 import { LoginModalProvider } from "@/app/login-modal-context";
 import { ActiveNoticeModal } from "@/app/(pages)/_components/notice/ActiveNoticeModal";
+import { ForcedPasswordChangeModal } from "@/app/(pages)/_components/ForcedPasswordChangeModal";
 
 export default function RootLayout({
   children,
@@ -18,6 +19,7 @@ export default function RootLayout({
             <LoginModalProvider>
               {children}
               <ActiveNoticeModal />
+              <ForcedPasswordChangeModal />
             </LoginModalProvider>
           </ThemeProvider>
         </AuthSessionProvider>
