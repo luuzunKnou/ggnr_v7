@@ -19,6 +19,8 @@ type DevFloatingPanelProps = {
   minHeight?: string;
   maxHeight?: string;
   defaultPosition?: PanelPosition;
+  /** Dialog처럼 뒤 화면을 어둡게 — 붕 뜨는 느낌 완화 */
+  dimBackdrop?: boolean;
   className?: string;
 };
 
@@ -31,6 +33,7 @@ export function DevFloatingPanel({
   minHeight = '500px',
   maxHeight = '90vh',
   defaultPosition = DEFAULT_POSITION,
+  dimBackdrop = false,
   className,
 }: DevFloatingPanelProps) {
   const useLeft = defaultPosition.left != null;
@@ -108,9 +111,16 @@ export function DevFloatingPanel({
 
   return (
     <div className="fixed inset-0 z-50 pointer-events-none">
+      {dimBackdrop ? (
+        <div
+          className="pointer-events-auto fixed inset-0 bg-black/50"
+          aria-hidden
+          onClick={onClose}
+        />
+      ) : null}
       <div
         className={cn(
-          'pointer-events-auto flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-md dark:border-slate-700 dark:bg-slate-950/95',
+          'pointer-events-auto flex flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-lg dark:shadow-none dark:ring-1 dark:ring-border',
           className
         )}
         style={{
@@ -127,7 +137,7 @@ export function DevFloatingPanel({
           role="button"
           tabIndex={0}
           onPointerDown={handlePointerDown}
-          className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-slate-100 bg-slate-50/40 px-4 py-3 active:cursor-grabbing hover:bg-slate-50/60 dark:border-slate-800"
+          className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-border bg-card px-4 py-3 text-foreground active:cursor-grabbing hover:bg-muted/30"
           onKeyDown={(e) => {
             if (e.key === ' ' || e.key === 'Enter') e.preventDefault();
           }}
@@ -136,7 +146,7 @@ export function DevFloatingPanel({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="닫기"
             title="닫기"
           >

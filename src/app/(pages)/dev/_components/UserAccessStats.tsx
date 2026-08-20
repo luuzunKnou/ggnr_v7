@@ -32,7 +32,7 @@ type PivotRow = {
 
 const uiStyle = USER_MANAGER_UI_STYLE;
 const tableRowClass =
-  'border-t border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
 /** 집계 표 — 가로줄만 (세로 테두리 없음), 셀 위아래 여백 축소 */
 const pivotRowClass = 'border-t border-border hover:bg-muted/50 transition-colors';
 const pivotCellClass = cn(uiStyle.tableCell, 'border-r-0 !py-1');
@@ -565,6 +565,7 @@ export function UserAccessStats() {
       <h3 className="shrink-0 text-sm font-medium text-foreground">접속 상세 목록</h3>
 
       <div className={uiStyle.tableWrap}>
+        <div className={uiStyle.tableScroll}>
         <table className={cn(uiStyle.table, 'min-w-[48rem] table-fixed')}>
           <thead className={cn('sticky top-0', uiStyle.tableHead)}>
             <tr>
@@ -627,6 +628,7 @@ export function UserAccessStats() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
