@@ -19,6 +19,9 @@ type JsonObject = Record<string, unknown>;
 export type LandInfoMapConfig = {
   vworldKey: string;
   dataPortalKey: string;
+  /** true면 행망(KRAS·KOREPS) 우선. 묶음 전체가 실패할 때만 브이월드 */
+  useKras: boolean;
+  useSeum: boolean;
 };
 
 const DEFAULT_DATA_PORTAL_KEY =
@@ -56,9 +59,14 @@ export async function fetchLandInfoConfig(): Promise<LandInfoMapConfig> {
       'PUBLIC_DATA_KEY',
       'DATA_GO_KR_KEY',
     ]);
-    return { vworldKey, dataPortalKey: candidatePortalKey || DEFAULT_DATA_PORTAL_KEY };
+    return {
+      vworldKey,
+      dataPortalKey: candidatePortalKey || DEFAULT_DATA_PORTAL_KEY,
+      useKras: data?.USE_KRAS === true,
+      useSeum: data?.USE_SEUM !== false,
+    };
   } catch {
-    return { vworldKey: '', dataPortalKey: DEFAULT_DATA_PORTAL_KEY };
+    return { vworldKey: '', dataPortalKey: DEFAULT_DATA_PORTAL_KEY, useKras: false, useSeum: true };
   }
 }
 

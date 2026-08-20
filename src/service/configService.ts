@@ -334,6 +334,15 @@ export function getBootProject(_params?: unknown): { project: string } {
   return { project: (process.env.GGNR_PROJECT ?? "build_yy").trim() || "build_yy" }
 }
 
+function readGgnrEnv(): string {
+  return (typeof process !== "undefined" ? process.env.GGNR_ENV : "")?.trim().toLowerCase() ?? ""
+}
+
+/** 운영(prod)만 행망. 개발·시연·테스트는 외부망(브이월드·공공데이터포털). */
+function useHangmangKras(): boolean {
+  return readGgnrEnv() === "prod"
+}
+
 export function getMapConfig(_params?: unknown): {
   VWORLD_API_KEY: string
   /** 브이월드 키 발급 시 등록한 서비스 URL. 2D데이터 API에서만 필요(없으면 파라미터 생략) */
@@ -344,6 +353,8 @@ export function getMapConfig(_params?: unknown): {
   DATA_PORTAL_KEY: string
   dataPotalKey: string
   KAKAO_MAP_API_KEY: string
+  USE_KRAS: boolean
+  USE_SEUM: boolean
 } {
   const vars = getRuntimeEnvVars()
   const dataPortalKey =
@@ -362,6 +373,9 @@ export function getMapConfig(_params?: unknown): {
     DATA_PORTAL_KEY: dataPortalKey,
     dataPotalKey: dataPortalKey,
     KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+    /** 행망(KRAS·KOREPS) — 운영만. 묶음 전체가 실패할 때만 브이월드 */
+    USE_KRAS: useHangmangKras(),
+    USE_SEUM: true,
   }
 }
 
@@ -383,10 +397,8 @@ export function getLandLinkageConfig(_params?: unknown): {
 } {
   const vars = getRuntimeEnvVars()
   const map = getMapConfig()
-  /** 행망 호출: GGNR_ENV가 dev가 아닐 때만(demo·prod) */
-  const ggnrEnv = (typeof process !== "undefined" ? process.env.GGNR_ENV : "")?.trim().toLowerCase() ?? ""
   return {
-    useKras: ggnrEnv !== "dev",
+    useKras: useHangmangKras(),
     krasKey: vars.KRAS_KEY?.trim() ?? vars.KRAS_API_KEY?.trim() ?? "",
     krasIp: vars.KRAS_IP?.trim() ?? "",
     krasPort: vars.KRAS_PORT?.trim() ?? "",
@@ -398,7 +410,7 @@ export function getLandLinkageConfig(_params?: unknown): {
     sggCode: vars.SGG_CODE?.trim() ?? "",
     vworldKey: map.VWORLD_API_KEY,
     dataPortalKey: map.DATA_PORTAL_KEY,
-    /** 세움터 DB 우선. 실패·타임아웃 시 포털 */
+    /** 세움터 있으면 세움터, 없는 필지는 공공데이터포털 */
     useSeum: true,
   }
 }

@@ -22,8 +22,10 @@ import {
   parcelLandLinkageSourceTitle,
 } from '@/lib/parcelLandNormalize';
 import {
+  BuildingDataSourceLine,
   BuildingLinkageLegend as SharedBuildingLinkageLegend,
   LandLinkageLegend as SharedLandLinkageLegend,
+  ParcelLandLinkageFailReasonHidden,
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 import { ParcelAnalysisMapCapture } from './ParcelAnalysis.mapCapture';
 import {
@@ -466,6 +468,7 @@ function LandLinkageValueCell({
   linkageSource,
   showSourceText = false,
   title: titleOverride,
+  failReason,
 }: {
   value?: string | null;
   linkageSource?: string;
@@ -473,6 +476,8 @@ function LandLinkageValueCell({
   showSourceText?: boolean;
   /** 지정 시 연계 출처 title 대신 사용 (PNU 등) */
   title?: string | null;
+  /** 연계실패 상세원인 — 화면 숨김 */
+  failReason?: string | null;
 }) {
   const text = value?.trim() ? value : '-';
   const isFail = text === PARCEL_LAND_LINKAGE_FAIL_LABEL;
@@ -491,6 +496,9 @@ function LandLinkageValueCell({
       title={tip}
     >
       <span className={cn(hasValue && srcClass)}>{text}</span>
+      {isFail ? (
+        <ParcelLandLinkageFailReasonHidden reason={failReason || PARCEL_LAND_LINKAGE_FAIL_TITLE} />
+      ) : null}
       {showSourceText && hasValue && srcLabel ? (
         <div className={cn('mt-0.5 text-[10px] leading-tight font-medium', srcClass)}>{srcLabel}</div>
       ) : null}
@@ -868,9 +876,23 @@ export function ParcelAnalysisResultModal({
                 className="px-3 pt-3 pb-6 last:pb-3 sm:px-4"
               >
                 <div className="mb-2 snap-start border-b border-border pb-1.5">
-                  <h3 className="text-sm font-bold text-foreground">
-                    {resolveSectionHeading(s, landSectionTitle)}
-                  </h3>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-bold text-foreground">
+                      {resolveSectionHeading(s, landSectionTitle)}
+                    </h3>
+                    {s.kind === 'building' ? (
+                      <BuildingDataSourceLine
+                        className="shrink-0"
+                        sources={result.buildingRows.map((r) => r.linkageSource)}
+                      />
+                    ) : null}
+                    {s.kind === 'land' ? (
+                      <BuildingDataSourceLine
+                        className="shrink-0"
+                        sources={result.landRows.map((r) => r.linkageSource)}
+                      />
+                    ) : null}
+                  </div>
                   {s.kind === 'basicMap' && s.basicMapLayerIds?.length ? (
                     <p className="mt-1 text-xs text-muted-foreground">
                       {basicMapCompositeTitle(s.basicMapLayerIds)}
@@ -1424,13 +1446,25 @@ function renderSectionBody(
                   <DataCell value={row.jimok} />
                   <td className={TD_CELL}>{row.area}</td>
                   {showOwnerType ? (
-                    <LandLinkageValueCell value={row.ownerType} linkageSource={row.linkageSource} />
+                    <LandLinkageValueCell
+                      value={row.ownerType}
+                      linkageSource={row.linkageSource}
+                      failReason={row.linkageFailReason}
+                    />
                   ) : null}
                   {showOwner ? (
-                    <LandLinkageValueCell value={row.ownerName} linkageSource={row.linkageSource} />
+                    <LandLinkageValueCell
+                      value={row.ownerName}
+                      linkageSource={row.linkageSource}
+                      failReason={row.linkageFailReason}
+                    />
                   ) : null}
                   {showPrice ? (
-                    <LandLinkageValueCell value={row.publicPrice} linkageSource={row.linkageSource} />
+                    <LandLinkageValueCell
+                      value={row.publicPrice}
+                      linkageSource={row.linkageSource}
+                      failReason={row.linkageFailReason}
+                    />
                   ) : null}
                 </tr>
               ))}

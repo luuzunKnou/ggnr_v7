@@ -264,25 +264,28 @@ function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): P
   };
 }
 
-/** 행망(KRAS)은 서버, 브이월드는 브라우저 JSONP(공용 클라이언트) */
+/** 행망이면 KRAS 우선, 없거나 실패하면 브이월드 */
 export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
 
-  try {
-    const res = await call('', 'POST', {
-      service: 'landLinkageService',
-      action: 'fetchParcelLandInfoTab',
-      params: { pnu },
-    });
-    // 2026-07-21 이수빈: 빌드 오류로 임시 처리
-    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
-    if (payload?.ok !== false) {
-      const tab = normalizeParcelTabPayload(payload);
-      if (hasParcelLandInfoTabData(tab)) return tab;
+  const cfg = await fetchLandInfoConfig();
+
+  if (cfg.useKras) {
+    try {
+      const res = await call('', 'POST', {
+        service: 'landLinkageService',
+        action: 'fetchParcelLandInfoTab',
+        params: { pnu },
+      });
+      const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
+      if (payload?.ok !== false) {
+        const tab = normalizeParcelTabPayload(payload);
+        if (hasParcelLandInfoTabData(tab)) return tab;
+      }
+    } catch {
+      /* 행망 실패 → 브이월드 */
     }
-  } catch {
-    /* KRAS 실패 시 브라우저 브이월드 */
   }
 
   if (!toStr(args.vworldKey)) return emptyParcelTabData();
@@ -297,13 +300,12 @@ export async function fetchLatestOfficialLandPriceForPnu(args: {
   return fetchVworldLatestOfficialLandPrice(args);
 }
 
-/** 세움 1차 → 없으면 공공데이터포털 2차 (이중화) */
+/** 세움만 또는 포털만 — 한 필지에 섞지 않음 */
 export async function fetchBuildingRegisterDetail(args: {
   pnu: string;
   jibun?: string;
 }): Promise<BuildingRegisterDetailResult> {
   const pnu = toStr(args.pnu);
-  const jibun = toStr(args.jibun);
   if (!pnu) return { source: null, mode: null, buildings: [], children: [] };
 
   try {
@@ -332,7 +334,7 @@ export async function fetchBuildingRegisterDetail(args: {
     }
   } catch (e: unknown) {
     if (typeof console !== 'undefined') {
-      console.warn('[필지정보·건축물대장] 세움 1차 실패 → 포털 2차', {
+      console.warn('[필지정보·건축물대장] 세움 없음 → 포털만', {
         pnu,
         error: e instanceof Error ? e.message : String(e),
       });
@@ -342,52 +344,33 @@ export async function fetchBuildingRegisterDetail(args: {
   try {
     const res = await call('', 'POST', {
       service: 'mapAnalyseService',
-      action: 'fetchBuildingLedgersForParcels',
-      params: { parcels: [{ pnu, jibun: jibun || undefined }] },
+      action: 'fetchPortalBuildingRegisterForLandInfo',
+      params: { pnu },
     });
     const payload = (res?.data ?? res) as {
       ok?: boolean;
-      rows?: BuildingLedgerLandInfoRow[];
+      mode?: 'recap' | 'title' | null;
+      buildings?: BuildingRegisterRow[];
+      children?: BuildingRegisterRow[];
       notice?: string;
-      error?: string;
     };
     if (payload?.ok === false) {
-      return {
-        source: null,
-        mode: null,
-        buildings: [],
-        children: [],
-        notice: payload.notice ?? payload.error,
-      };
+      return { source: null, mode: null, buildings: [], children: [], notice: payload.notice };
     }
-    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-    if (!rows.length) {
+    const buildings = Array.isArray(payload?.buildings) ? payload.buildings : [];
+    if (!buildings.length) {
       return { source: null, mode: null, buildings: [], children: [], notice: payload?.notice };
     }
     return {
-      source: rows[0]?.source === 'seum' ? 'seum' : 'portal',
-      mode: 'title',
-      buildings: rows.map((row) => ({
-        type: '표제부',
-        ...(row.raw ?? {}),
-        bldrgst_seqno: row.pnu,
-        bld_nm: row.bldNm && row.bldNm !== '-' ? row.bldNm : '',
-        plat_area: row.platArea || '',
-        totarea: row.totArea || '',
-        bcrat: row.bcRat || '',
-        vlrat: row.vlRat || '',
-        plat_loc: row.platLoc || '',
-        jibun: row.jibun || '',
-        road_addr: row.roadAddr || '',
-        comm_bld_esnc_no: row.mgmBldrgstPk || '',
-        source: row.source || 'portal',
-      })),
-      children: [],
-      notice: payload?.notice,
+      source: 'portal',
+      mode: payload.mode === 'recap' ? 'recap' : 'title',
+      buildings,
+      children: Array.isArray(payload.children) ? payload.children : [],
+      notice: payload.notice,
     };
   } catch (e: unknown) {
     if (typeof console !== 'undefined') {
-      console.error('[필지정보·건축물대장] 포털 2차 실패', {
+      console.error('[필지정보·건축물대장] 포털 조회 실패', {
         pnu,
         error: e instanceof Error ? e.message : String(e),
       });
@@ -447,13 +430,17 @@ function formatSeumRoad(b: BuildingRegisterRow): string {
 export async function fetchBuildingRegisterByDong(args: {
   pnu: string;
   bldNm: string;
+  source?: 'seum' | 'portal' | null;
 }): Promise<{ buildings: BuildingRegisterRow[]; children: BuildingRegisterRow[] }> {
   const pnu = toStr(args.pnu);
   if (!pnu) return { buildings: [], children: [] };
+  const service = args.source === 'portal' ? 'mapAnalyseService' : 'seumService';
+  const action =
+    args.source === 'portal' ? 'fetchPortalBuildingRegisterByDong' : 'fetchSeumBuildingRegisterByDong';
   try {
     const res = await call('', 'POST', {
-      service: 'seumService',
-      action: 'fetchSeumBuildingRegisterByDong',
+      service,
+      action,
       params: { pnu, bldNm: toStr(args.bldNm) },
     });
     const payload = (res?.data ?? res) as {
@@ -473,10 +460,28 @@ export async function fetchBuildingRegisterByDong(args: {
 export async function fetchBuildingFloorList(args: {
   type: string;
   seqNo: string;
+  pnu?: string;
+  source?: 'seum' | 'portal' | null;
 }): Promise<BuildingRegisterRow[]> {
   const type = toStr(args.type);
   const seqNo = toStr(args.seqNo);
-  if (!type || !seqNo) return [];
+  if (!seqNo) return [];
+  if (args.source === 'portal') {
+    const pnu = toStr(args.pnu);
+    if (!pnu) return [];
+    try {
+      const res = await call('', 'POST', {
+        service: 'mapAnalyseService',
+        action: 'fetchPortalBuildingFloorList',
+        params: { pnu, seqNo },
+      });
+      const payload = (res?.data ?? res) as { ok?: boolean; children?: BuildingRegisterRow[] };
+      return Array.isArray(payload?.children) ? payload.children : [];
+    } catch {
+      return [];
+    }
+  }
+  if (!type) return [];
   try {
     const res = await call('', 'POST', {
       service: 'seumService',
