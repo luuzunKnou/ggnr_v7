@@ -5,7 +5,7 @@ import { ug } from '@/database/schema/ug';
 import { ut } from '@/database/schema/ut';
 import { perm } from '@/database/schema/perm';
 import { upMap } from '@/database/schema/up_map';
-import { hashPassword } from '@/lib/auth/password';
+import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
 
@@ -21,6 +21,13 @@ function parsePermKeys(v: unknown): number[] {
     .map((x) => Number(x))
     .filter((x) => Number.isInteger(x) && x > 0);
   return Array.from(new Set(keys));
+}
+
+function permKeysEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort((x, y) => x - y);
+  const sb = [...b].sort((x, y) => x - y);
+  return sa.every((v, i) => v === sb[i]);
 }
 
 function nowTs(): string {
@@ -75,6 +82,7 @@ export async function getMyProfile(_params?: unknown) {
         dept: '시스템',
         phone: '',
         email: '',
+        mustChangePassword: false,
       },
     };
   }
@@ -88,12 +96,15 @@ export async function getMyProfile(_params?: unknown) {
         utName: usr.utName,
         usrTel: usr.usrTel,
         usrMail: usr.usrMail,
+        usrPwd: usr.usrPwd,
       })
       .from(usr)
       .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
       .limit(1);
 
     if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
+
+    const mustChangePassword = await verifyPassword(row.usrPwd ?? null, row.usrId);
 
     return {
       success: true,
@@ -103,10 +114,53 @@ export async function getMyProfile(_params?: unknown) {
         dept: formatUserDeptLabel(row.ugName, row.utName),
         phone: String(row.usrTel ?? '').trim(),
         email: String(row.usrMail ?? '').trim(),
+        mustChangePassword,
       },
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '내 정보 조회 실패';
+    return { success: false, error: message };
+  }
+}
+
+/** 로그인 본인 비밀번호 변경. 아이디(성명)와 같은 값은 불가. */
+export async function changeOwnPassword(params: Record<string, unknown>) {
+  const usrId = await requireLoggedIn();
+  if (usrId === 'su') return { success: false, error: '슈퍼관리자는 이 화면에서 바꿀 수 없습니다.' };
+
+  const nextPwd = String(params.new_pwd ?? '').trim();
+  const nextConfirm = String(params.new_pwd_confirm ?? '').trim();
+  if (!nextPwd) return { success: false, error: '새 비밀번호는 필수입니다.' };
+  if (nextPwd.length < 4) return { success: false, error: '비밀번호는 4자 이상이어야 합니다.' };
+  if (nextPwd !== nextConfirm) return { success: false, error: '비밀번호 확인이 일치하지 않습니다.' };
+  if (nextPwd === usrId) return { success: false, error: '아이디와 다른 비밀번호를 사용하세요.' };
+
+  try {
+    const [row] = await db
+      .select({ usrPwd: usr.usrPwd, ugName: usr.ugName })
+      .from(usr)
+      .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
+      .limit(1);
+    if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
+
+    const stillTemp = await verifyPassword(row.usrPwd ?? null, usrId);
+    if (stillTemp && nextPwd === usrId) {
+      return { success: false, error: '아이디와 다른 비밀번호를 사용하세요.' };
+    }
+
+    const hashed = await hashPassword(nextPwd);
+    await db.update(usr).set({ usrPwd: hashed }).where(eq(usr.usrId, usrId));
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '비밀번호 변경',
+      ulType: '수정',
+      ulUser: usrId,
+      ulGroup: row.ugName,
+      ulWorkUser: usrId,
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '비밀번호 변경 실패';
     return { success: false, error: message };
   }
 }
@@ -541,6 +595,14 @@ export async function updateUser(params: Record<string, unknown>) {
       .limit(1);
     if (!before) return { success: false, error: '대상 사용자를 찾을 수 없습니다.' };
 
+    const beforePermRows = await db
+      .select({ permKey: upMap.permKey })
+      .from(upMap)
+      .where(eq(upMap.usrId, usrId));
+    const beforePermKeys = beforePermRows
+      .map((r) => (r.permKey == null ? null : Number(r.permKey)))
+      .filter((v): v is number => v != null && Number.isInteger(v) && v > 0);
+
     const nextUgName = params.ug_name !== undefined ? strOrNull(params.ug_name) : null;
     const nextUtName = params.ut_name !== undefined ? strOrNull(params.ut_name) : null;
     if (nextUgName && nextUtName) {
@@ -572,6 +634,7 @@ export async function updateUser(params: Record<string, unknown>) {
     const newUg = nextUgName ?? before.ugName;
     const ugChanged = params.ug_name !== undefined && nextUgName && nextUgName !== before.ugName;
     const utChanged = params.ut_name !== undefined && nextUtName && nextUtName !== before.utName;
+    const permChanged = !permKeysEqual(beforePermKeys, permKeys);
 
     if (ugChanged || utChanged) {
       const detailParts: string[] = [];
@@ -597,14 +660,27 @@ export async function updateUser(params: Record<string, unknown>) {
       if (params.usr_etc !== undefined && strOrNull(params.usr_etc) !== before.usrEtc)
         infoParts.push(`비고: ${before.usrEtc ?? '—'} -> ${strOrNull(params.usr_etc) ?? '—'}`);
       if (nextPwd) infoParts.push('비밀번호 변경');
+      if (infoParts.length > 0) {
+        void recordUserLog({
+          ulCat: UL_CAT_USER,
+          ulContents: '사용자 정보 수정',
+          ulType: '수정',
+          ulUser: usrId,
+          ulGroup: newUg,
+          ulWorkUser: operator,
+          ulDetail: infoParts.join('\n'),
+        });
+      }
+    }
+
+    if (permChanged) {
       void recordUserLog({
         ulCat: UL_CAT_USER,
-        ulContents: '사용자 정보 수정',
+        ulContents: '권한 수정',
         ulType: '수정',
         ulUser: usrId,
         ulGroup: newUg,
         ulWorkUser: operator,
-        ulDetail: infoParts.length ? infoParts.join('\n') : undefined,
       });
     }
     return { success: true, data: updated };

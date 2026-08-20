@@ -7,6 +7,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { SuggestNameInput } from '@/app/_components/SuggestNameInput';
 
 type UgRow = { ugName: string };
 type UtRow = { utName: string; ugName: string };
@@ -86,10 +87,7 @@ export function SignUpApplyForm({
   const setField = (key: keyof FormState, value: string) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-      if (key === 'ug_name' && prev.ut_name) {
-        const stillOk = utList.some((t) => t.ugName === value && t.utName === prev.ut_name);
-        if (!stillOk) next.ut_name = '';
-      }
+      if (key === 'ug_name') next.ut_name = '';
       return next;
     });
   };
@@ -259,59 +257,27 @@ export function SignUpApplyForm({
           <span className="font-medium">
             부서 <span className="text-destructive">*</span>
           </span>
-          {ugList.length > 0 ? (
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          <SuggestNameInput
               value={form.ug_name}
-              onChange={(e) => setField('ug_name', e.target.value)}
-              required
-              disabled={saving}
-            >
-              <option value="">선택</option>
-              {ugList.map((g) => (
-                <option key={g.ugName} value={g.ugName}>
-                  {g.ugName}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              value={form.ug_name}
-              onChange={(e) => setField('ug_name', e.target.value)}
-              placeholder="부서명 입력"
-              required
-              disabled={saving}
+              onChange={(v) => setField('ug_name', v)}
+              options={ugList.map((g) => g.ugName)}
+              placeholder="직접 입력 또는 선택"
+              disabled={saving || loadingMeta}
+              title="부서"
             />
-          )}
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">
             팀 <span className="text-destructive">*</span>
           </span>
-          {utForUg.length > 0 ? (
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          <SuggestNameInput
               value={form.ut_name}
-              onChange={(e) => setField('ut_name', e.target.value)}
-              required
-              disabled={saving || !form.ug_name}
-            >
-              <option value="">선택</option>
-              {utForUg.map((t) => (
-                <option key={`${t.ugName}:${t.utName}`} value={t.utName}>
-                  {t.utName}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              value={form.ut_name}
-              onChange={(e) => setField('ut_name', e.target.value)}
-              placeholder="팀명 입력"
-              required
-              disabled={saving}
+              onChange={(v) => setField('ut_name', v)}
+              options={utForUg.map((t) => t.utName)}
+              placeholder="직접 입력 또는 선택"
+              disabled={saving || loadingMeta}
+              title="팀"
             />
-          )}
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">전화번호</span>
