@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "year",
-    "define_field_kor_name": "년도",
+    "define_field_kor_name": "연도",
     "define_field_type": "TEXT",
     "define_field_idx": "",
     "define_field_is_required": false,
