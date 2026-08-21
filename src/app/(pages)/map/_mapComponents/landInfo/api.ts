@@ -232,6 +232,8 @@ export type ParcelTabData = {
   prices: JsonObject[];
   possessions: JsonObject[];
   source?: 'kras' | 'koreps' | 'vworld' | 'mixed';
+  /** 행망을 안 썼거나 실패한 이유 — 브이월드 폴백 원인 확인용 */
+  krasSkipReason?: string;
 };
 
 function emptyParcelTabData(): ParcelTabData {
@@ -244,7 +246,10 @@ function emptyParcelTabData(): ParcelTabData {
   };
 }
 
-function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): ParcelTabData {
+function normalizeParcelTabPayload(
+  payload: ParcelTabData & { ok?: boolean; krasSkipReason?: string }
+): ParcelTabData {
+  const skip = String(payload.krasSkipReason ?? '').trim();
   return {
     characteristics: sortCharacteristicsLatestFirst(
       Array.isArray(payload.characteristics) ? payload.characteristics : []
@@ -261,6 +266,7 @@ function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): P
       payload.source === 'mixed'
         ? payload.source
         : undefined,
+    krasSkipReason: skip || undefined,
   };
 }
 
@@ -269,24 +275,30 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
 
+  let krasSkipReason: string | undefined;
   try {
     const res = await call('', 'POST', {
       service: 'landLinkageService',
       action: 'fetchParcelLandInfoTab',
       params: { pnu },
     });
-    // 2026-07-21 이수빈: 빌드 오류로 임시 처리
-    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
+    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
+    krasSkipReason = String(payload?.krasSkipReason ?? payload?.error ?? '').trim() || undefined;
     if (payload?.ok !== false) {
       const tab = normalizeParcelTabPayload(payload);
       if (hasParcelLandInfoTabData(tab)) return tab;
     }
-  } catch {
-    /* KRAS 실패 시 브라우저 브이월드 */
+    if (!krasSkipReason) krasSkipReason = '행망 응답을 필지정보에 쓸 수 없어 브이월드로 표시';
+  } catch (e) {
+    krasSkipReason =
+      krasSkipReason || (e instanceof Error ? e.message : '행망 조회 실패');
   }
 
-  if (!toStr(args.vworldKey)) return emptyParcelTabData();
-  return fetchVworldParcelTabData(args);
+  if (!toStr(args.vworldKey)) {
+    return { ...emptyParcelTabData(), source: undefined, krasSkipReason };
+  }
+  const vworld = await fetchVworldParcelTabData(args);
+  return { ...vworld, krasSkipReason };
 }
 
 /** 필지 PNU 기준 최신 공시지가 1건 — 공용 브이월드 클라이언트 */

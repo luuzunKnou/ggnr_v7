@@ -141,6 +141,7 @@ export function SystemIntegrationManager() {
   const [safetyDatasets, setSafetyDatasets] = useState<SafetydataDatasetRow[]>([])
   const [safetyDatasetsLoading, setSafetyDatasetsLoading] = useState(false)
   const [safetyDatasetId, setSafetyDatasetId] = useState<string>("__ALL__")
+  const [krasTarget, setKrasTarget] = useState<string>("all")
   const [safetyDetailRows, setSafetyDetailRows] = useState<SafetydataDetailLogRow[]>([])
 
   const latestJob = rows[0]
@@ -149,7 +150,6 @@ export function SystemIntegrationManager() {
 
   const fetchLogs = async (system: SystemKey) => {
     setLogsLoading(true)
-    setError("")
     try {
       const res = await call("", "POST", {
         service: "integrationService",
@@ -197,6 +197,7 @@ export function SystemIntegrationManager() {
   }
 
   useEffect(() => {
+    setError("")
     fetchLogs(active)
     if (active === "SAFETYDATA") {
       fetchSafetydataDatasets()
@@ -232,6 +233,9 @@ export function SystemIntegrationManager() {
         } else {
           params.datasetId = safetyDatasetId
         }
+      }
+      if (active === "KRAS") {
+        params.target = krasTarget
       }
       const runPromise = call("", "POST", {
         service: "integrationService",
@@ -275,6 +279,28 @@ export function SystemIntegrationManager() {
         ))}
       </div>
 
+      {active === "KRAS" ? (
+        <div className="flex flex-col gap-2 shrink-0">
+          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+            <span>대상</span>
+            <select
+              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+              value={krasTarget}
+              onChange={(e) => setKrasTarget(e.target.value)}
+              disabled={loading}
+            >
+              <option value="all">전체 (목록·지적·읍면동·주제도·토지기본·소유현황)</option>
+              <option value="catalog">레이어 목록</option>
+              <option value="parcel">지적</option>
+              <option value="boundary">읍면동</option>
+              <option value="thematic">주제도</option>
+              <option value="landinfo">토지기본정보</option>
+              <option value="landown">소유현황</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
+
       {active === "SAFETYDATA" ? (
         <div className="flex flex-col gap-2 shrink-0">
           <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
@@ -317,7 +343,7 @@ export function SystemIntegrationManager() {
         </CardHeader>
         {error ? (
           <CardContent className="pt-0">
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-red-600 whitespace-pre-wrap break-all">{error}</p>
           </CardContent>
         ) : null}
       </Card>
@@ -352,7 +378,7 @@ export function SystemIntegrationManager() {
                       <TableCell>{r.ijl_status}</TableCell>
                       <TableCell>{formatDt(r.ijl_started_at)}</TableCell>
                       <TableCell>{formatDt(r.ijl_finished_at)}</TableCell>
-                      <TableCell className="whitespace-normal break-all">{r.ijl_message ?? ""}</TableCell>
+                      <TableCell className="whitespace-pre-wrap break-all">{r.ijl_message ?? ""}</TableCell>
                     </TableRow>
                   ))
                 )}

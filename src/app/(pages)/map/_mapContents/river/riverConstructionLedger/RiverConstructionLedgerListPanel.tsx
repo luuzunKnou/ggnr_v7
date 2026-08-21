@@ -24,7 +24,7 @@ import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { CONS_DATA_AS_WMS_LAYER_IDS } from "./consDataAsLayerId";
 import {
-  createEmptyRiverConstructionLedgerRow,
+  CONS_DATA_AS_NEW_ID,
   formatRiverNamesLabel,
   formatRiverNamesShort,
   isNewRiverConstructionLedgerRow,
@@ -161,7 +161,6 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       const raw = Array.isArray(data?.rows) ? (data.rows as ConsDataAsApiRow[]) : [];
       const mapped = raw.map(mapConsDataAsApiToLedgerRow);
       setRows?.((prev) => {
-        const drafts = prev.filter(isNewRiverConstructionLedgerRow);
         const byId = new Map(mapped.map((r) => [r.id, r]));
         for (const p of prev) {
           if (isNewRiverConstructionLedgerRow(p)) continue;
@@ -175,7 +174,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             });
           }
         }
-        return [...drafts, ...byId.values()];
+        return [...byId.values()];
       });
     } catch (e: unknown) {
       setListError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
@@ -408,6 +407,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   const items = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     return spatialFiltered.filter((row) => {
+      if (isNewRiverConstructionLedgerRow(row)) return false;
       if (!q) return true;
       const hay = [
         row.name,
@@ -426,9 +426,9 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   }, [items, setOverlayRows]);
 
   const handleAdd = () => {
-    const created = createEmptyRiverConstructionLedgerRow();
-    setRows?.((prev) => [created, ...prev]);
-    setSelectedId?.(created.id);
+    // 목록·DB에 행을 만들지 않고 등록 패널만 연다
+    setRows?.((prev) => prev.filter((r) => !isNewRiverConstructionLedgerRow(r)));
+    setSelectedId?.(CONS_DATA_AS_NEW_ID);
     setRiverFocus?.(null);
   };
 
@@ -443,7 +443,10 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-sm font-semibold text-slate-800">공사대장</span>
         <div className="flex items-center gap-1">
-          <LayerRowAddButton onClick={handleAdd} />
+          <LayerRowAddButton
+            onClick={handleAdd}
+            disabled={selectedId === CONS_DATA_AS_NEW_ID}
+          />
           <button
             type="button"
             onClick={() => {

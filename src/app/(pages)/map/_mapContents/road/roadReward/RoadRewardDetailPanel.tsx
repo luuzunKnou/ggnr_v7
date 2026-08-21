@@ -50,6 +50,8 @@ import {
   createEmptyRoadRewardCase,
   getRoadRewardParcelFields,
   computeRoadRewardDerived,
+  sumRoadRewardCompensation,
+  withRoadRewardCompensationTotal,
   parseParcelJibunAddress,
   mergeJijukIntoRoadRewardParcels,
   type RoadRewardCase,
@@ -59,6 +61,7 @@ import {
   fetchJijukParcelsByGeometry3857,
   geometry3857ToWkt5181,
   olGeomToGeometry3857,
+  unionGeometry3857,
 } from "./roadRewardGeom";
 import {
   ROAD_REWARD_NEW_ID,
@@ -94,11 +97,15 @@ type ParcelModalState = { mode: "new" | "edit" | "view"; draft: RoadRewardParcel
 
 function toParcelItem(p: RoadRewardParcel): LayerRowParcelItem {
   const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
+  const hasMapGeom = Boolean(p.geometry3857) || Boolean(p.extent3857);
   return {
     address: addr || "필지",
     extent3857: p.extent3857 ?? null,
     geometry3857: p.geometry3857 ?? null,
-    point4326: { x: p.mockLonLat.lon, y: p.mockLonLat.lat },
+    point4326:
+      hasMapGeom && p.mockLonLat
+        ? { x: p.mockLonLat.lon, y: p.mockLonLat.lat }
+        : undefined,
   };
 }
 
@@ -240,6 +247,8 @@ export function RoadRewardDetailPanel({
   /** 건 편입 범위 도형 편집 — draw | modify */
   const [caseGeomEditMode, setCaseGeomEditMode] = useState<"draw" | "modify" | null>(null);
   const [caseGeomModifyResetToken, setCaseGeomModifyResetToken] = useState(0);
+  const [caseGeomDrawNonce, setCaseGeomDrawNonce] = useState(0);
+  const [canRestoreGeom, setCanRestoreGeom] = useState(false);
   const caseGeomSnapshotRef = useRef<{
     geometry3857: Record<string, unknown>;
     extent3857: [number, number, number, number] | null;
@@ -324,6 +333,7 @@ export function RoadRewardDetailPanel({
     setParcelModal(null);
     setCaseGeomEditMode(null);
     caseGeomSnapshotRef.current = null;
+    setCanRestoreGeom(false);
     setLoadingParcels(false);
     setSaving(false);
 
@@ -373,36 +383,60 @@ export function RoadRewardDetailPanel({
   const finishCaseGeomEdit = () => {
     setCaseGeomEditMode(null);
     caseGeomSnapshotRef.current = null;
+    setCanRestoreGeom(false);
   };
 
   /**
    * 도형 반영 + 교차 필지 조회.
-   * 하천점용과 동일 — 그리기 완료·정점 드래그 놓을 때(modifyend)만 호출. silent면 빈 결과 alert 생략.
+   * 그리기 완료(알림)는 필지가 있을 때만 도형을 남긴다.
+   * commitGeom이면 도형을 먼저 반영한다(삭제·초기화·정점 수정).
    */
   const applyGeometryAndLoadParcels = async (
     geometry3857: Record<string, unknown> | null,
     extent3857: [number, number, number, number] | null,
-    opts?: { silent?: boolean }
-  ) => {
-    setDraftGeom({ geometry3857, extent3857 });
+    opts?: { silent?: boolean; commitGeom?: boolean }
+  ): Promise<boolean> => {
     if (!geometry3857) {
+      setDraftGeom({ geometry3857: null, extent3857: null });
       draftParcelsRef.current = [];
       setDraftParcels([]);
-      return;
+      return true;
+    }
+    if (opts?.commitGeom) {
+      setDraftGeom({ geometry3857, extent3857 });
     }
     setLoadingParcels(true);
     try {
       const { parcels, error } = await fetchJijukParcelsByGeometry3857(geometry3857);
       if (error) {
         if (!opts?.silent) window.alert(error);
-        return;
+        return false;
       }
       const merged = mergeJijukIntoRoadRewardParcels(parcels, draftParcelsRef.current);
+      if (!opts?.silent && merged.length === 0) {
+        window.alert("겹치는 필지가 없습니다. 지적 위에서 범위를 그려 주세요.");
+        return false;
+      }
+      setDraftGeom({ geometry3857, extent3857 });
       draftParcelsRef.current = merged;
       setDraftParcels(merged);
+      return true;
     } finally {
       setLoadingParcels(false);
     }
+  };
+
+  const remountModifyLayer = () => {
+    setCaseGeomEditMode("modify");
+    setCaseGeomModifyResetToken((t) => t + 1);
+  };
+
+  const enterDrawMode = () => {
+    if (caseGeomEditMode === "draw") {
+      setCaseGeomDrawNonce((n) => n + 1);
+      return;
+    }
+    setCaseGeomEditMode("draw");
   };
 
   /** 하천점용 «도형추가» — 그리기 모드로 전환 */
@@ -411,22 +445,27 @@ export function RoadRewardDetailPanel({
     setCaseGeomEditMode("draw");
   };
 
-  /** 하천점용 «초기화» — 수정 진입 시점 도형으로 되돌린 뒤 필지 재조회 */
+  /** 초기화 — 수정 진입 시점 범위로 되돌림. 원본이 없으면 비우고 그리기 모드 */
   const handleResetCaseGeom = () => {
     const snap = caseGeomSnapshotRef.current;
-    if (!snap) return;
-    void applyGeometryAndLoadParcels(snap.geometry3857, snap.extent3857, { silent: true }).then(
-      () => {
-        setCaseGeomEditMode("modify");
-        setCaseGeomModifyResetToken((t) => t + 1);
-      }
-    );
+    if (!snap?.geometry3857) {
+      handleDeleteCaseGeom();
+      return;
+    }
+    setDraftGeom({ geometry3857: snap.geometry3857, extent3857: snap.extent3857 });
+    remountModifyLayer();
+    void applyGeometryAndLoadParcels(snap.geometry3857, snap.extent3857, {
+      silent: true,
+      commitGeom: true,
+    });
   };
 
-  /** 하천점용 «도형삭제» — 도형·필지목록 비우고 수정 모드 유지 */
+  /** 도형삭제 — 범위·필지목록을 비우고 바로 그리기 모드 */
   const handleDeleteCaseGeom = () => {
-    void applyGeometryAndLoadParcels(null, null, { silent: true });
-    setCaseGeomEditMode("modify");
+    setDraftGeom({ geometry3857: null, extent3857: null });
+    draftParcelsRef.current = [];
+    setDraftParcels([]);
+    enterDrawMode();
   };
 
   /** 편입 범위 그리기 — 끝나면 필지 조회 후 정점 수정 모드로 (하천점용과 동일) */
@@ -456,28 +495,38 @@ export function RoadRewardDetailPanel({
     map.addLayer(layer);
     map.addInteraction(draw);
 
+    const discardDrawnFeature = (feature: Feature) => {
+      window.setTimeout(() => {
+        if (source.hasFeature(feature)) source.removeFeature(feature);
+      }, 0);
+    };
     const onEnd = (evt: { feature: Feature }) => {
       const geom = evt.feature.getGeometry();
       const coords = geom?.getType() === "Polygon" ? (geom as Polygon).getCoordinates()[0] : null;
       if (!geom || !coords || coords.length < 4) {
         window.alert("다각형은 세 점 이상이어야 합니다.");
+        discardDrawnFeature(evt.feature);
         return;
       }
       const converted = olGeomToGeometry3857(geom);
       if (!converted) {
         window.alert("도형을 저장하지 못했습니다.");
+        discardDrawnFeature(evt.feature);
         return;
       }
-      if (!caseGeomSnapshotRef.current) {
-        caseGeomSnapshotRef.current = {
-          geometry3857: converted.geometry3857,
-          extent3857: converted.extent3857,
-        };
-      }
-      void applyGeometryAndLoadParcels(converted.geometry3857, converted.extent3857, {
-        silent: true,
-      }).then(() => {
-        setCaseGeomEditMode("modify");
+      const hadExisting = Boolean(draftGeomRef.current.geometry3857);
+      const existing = draftGeomRef.current.geometry3857;
+      const next =
+        existing != null
+          ? unionGeometry3857(existing, converted.geometry3857) ?? converted
+          : converted;
+      void applyGeometryAndLoadParcels(next.geometry3857, next.extent3857).then((ok) => {
+        if (ok) {
+          setCaseGeomEditMode("modify");
+          return;
+        }
+        discardDrawnFeature(evt.feature);
+        if (hadExisting) setCaseGeomEditMode("modify");
       });
     };
     draw.on("drawend", onEnd as never);
@@ -489,7 +538,7 @@ export function RoadRewardDetailPanel({
       source.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseGeomEditMode, isEditing]);
+  }, [caseGeomEditMode, isEditing, caseGeomDrawNonce]);
 
   /** 편입 범위 정점 수정 — 드래그 놓을 때(modifyend)만 필지 조회 (하천점용과 동일) */
   useEffect(() => {
@@ -546,6 +595,7 @@ export function RoadRewardDetailPanel({
       if (!converted) return;
       void applyGeometryAndLoadParcels(converted.geometry3857, converted.extent3857, {
         silent: true,
+        commitGeom: true,
       });
     };
     modify.on("modifyend", onModifyEnd);
@@ -597,7 +647,7 @@ export function RoadRewardDetailPanel({
               >
                 도형추가
               </button>
-              {(caseGeomEditMode === "modify" || hasCaseGeom) && (
+              {(canRestoreGeom || hasCaseGeom) && (
                 <button
                   type="button"
                   className={layerRowPanelButtonClass(
@@ -648,9 +698,11 @@ export function RoadRewardDetailPanel({
     setIsEditing(true);
     if (geometry3857) {
       caseGeomSnapshotRef.current = { geometry3857, extent3857 };
+      setCanRestoreGeom(true);
       setCaseGeomEditMode("modify");
     } else {
       caseGeomSnapshotRef.current = null;
+      setCanRestoreGeom(false);
       setCaseGeomEditMode("draw");
     }
   };
@@ -721,8 +773,12 @@ export function RoadRewardDetailPanel({
             appraisal2Value: p.appraisal2Value,
             appliedUnitPrice: p.appliedUnitPrice,
             compensationAmount: p.compensationAmount,
+            farmingCompensationAmount: p.farmingCompensationAmount,
+            obstacleCompensationAmount: p.obstacleCompensationAmount,
             ownerAddress: p.ownerAddress,
             ownerName: p.ownerName,
+            actualOwner: p.actualOwner,
+            actualCultivator: p.actualCultivator,
             note: p.note,
             geomWkt5181: p.geometry3857 ? geometry3857ToWkt5181(p.geometry3857) : null,
           })),
@@ -820,7 +876,7 @@ export function RoadRewardDetailPanel({
     }
   };
 
-  /** 조회: 행 클릭 → 읽기 전용 상세. 수정 모드: 행 클릭 → 지도만 이동 */
+  /** 조회: 행 클릭 시 읽기 전용 상세. 수정 모드: 행 클릭 시 지도만 이동 */
   const handleParcelRowClick = (parcel: RoadRewardParcel) => {
     focusParcelOnMap(parcel);
     if (!isEditing) {
@@ -889,7 +945,7 @@ export function RoadRewardDetailPanel({
         next.appliedUnitPrice = appliedUnitPrice;
         next.compensationAmount = compensationAmount;
       }
-      return { ...m, draft: next };
+      return { ...m, draft: withRoadRewardCompensationTotal(next) };
     });
   };
 
@@ -1068,7 +1124,7 @@ export function RoadRewardDetailPanel({
                   편입면적(㎡)
                 </div>
                 <div className="min-w-0 pl-1 pr-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
-                  보상금액(원)
+                  합계(원)
                 </div>
                 {isEditing ? <div aria-hidden /> : null}
               </div>
@@ -1076,7 +1132,7 @@ export function RoadRewardDetailPanel({
                 const isSelected = p.id === selectedParcelId;
                 const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
                 const areaLabel = `${formatCell(p.areaIncluded, true)}㎡`;
-                const amountLabel = `${formatCell(p.compensationAmount, true)}원`;
+                const amountLabel = `${formatCell(sumRoadRewardCompensation(p), true)}원`;
                 return (
                   <div
                     key={p.id}
@@ -1127,13 +1183,13 @@ export function RoadRewardDetailPanel({
                       {amountLabel}
                     </div>
                     {isEditing ? (
-                      <div className="flex w-full shrink-0 items-center justify-center gap-0">
+                      <div
+                        className="flex w-full shrink-0 items-center justify-center gap-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenEditParcel(p);
-                          }}
+                          onClick={() => handleOpenEditParcel(p)}
                           className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
                           aria-label="필지 수정"
                           title="수정"
@@ -1142,10 +1198,7 @@ export function RoadRewardDetailPanel({
                         </button>
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteParcelFromList(p.id);
-                          }}
+                          onClick={() => handleDeleteParcelFromList(p.id)}
                           className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
                           aria-label="필지 삭제"
                           title="삭제"

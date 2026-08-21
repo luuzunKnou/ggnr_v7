@@ -3,6 +3,9 @@ import { runKais, defaultDailyWindow } from '@/integrations/kais';
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
 import { getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
+import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
+import type { KrasIntegrationTarget } from '@/integrations/krasLayerSync.config';
+import { runKrasFileStep, runKrasFullSync, runKorepsPriceFileSync } from '@/integrations/krasLandFileSync';
 
 type Params = Record<string, unknown>;
 
@@ -73,7 +76,7 @@ function compactErrorMessage(e: unknown): string {
     .split(/\r?\n/)
     .map((s) => s.trim())
     .find((s) => s.length > 0) ?? 'unknown error';
-  return first.length > 320 ? `${first.slice(0, 320)}...` : first;
+  return first.length > 500 ? `${first.slice(0, 500)}...` : first;
 }
 
 async function updateIntegrationJobProgress(ijlKey: number | undefined, message: string): Promise<void> {
@@ -224,6 +227,42 @@ export async function runIntegration(p: Params) {
           ijlKey,
           `완료 1/1 | ${cfg.id} | ${r.schema}.${r.tableNameEn} | fetched=${r.rowsFetched}, inserted=${r.rowsInserted}, filteredOut=${r.rowsFilteredOut}`
         );
+      }
+    } else if (system === 'KRAS') {
+      const rawScope = String(p.target ?? p.scope ?? 'all').trim().toLowerCase();
+      const fileStep: 'catalog' | 'landinfo' | 'landown' | null =
+        rawScope === 'catalog' || rawScope === 'landinfo' || rawScope === 'landown' ? rawScope : null;
+      const shapeScope: KrasLayerSyncScope | null =
+        rawScope === 'parcel' || rawScope === 'boundary' || rawScope === 'thematic' ? rawScope : null;
+      const target: KrasIntegrationTarget = fileStep ?? shapeScope ?? 'all';
+      await updateIntegrationJobProgress(ijlKey, `진행중 | KRAS | ${target}`);
+      const r =
+        target === 'all'
+          ? await runKrasFullSync({
+              includeShape: true,
+              includePriceFile: false,
+              onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+            })
+          : fileStep
+            ? await runKrasFileStep(fileStep, {
+                onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+              })
+            : await runKrasLayerSync({
+                scope: shapeScope ?? 'all',
+                onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+              });
+      await updateIntegrationJobProgress(ijlKey, r.message);
+      if (r.failed > 0 && r.success === 0) {
+        throw new Error(r.message);
+      }
+    } else if (system === 'KORPES') {
+      await updateIntegrationJobProgress(ijlKey, '진행중 | 공시지가 파일');
+      const r = await runKorepsPriceFileSync({
+        onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+      });
+      await updateIntegrationJobProgress(ijlKey, r.message);
+      if (r.failed > 0 && r.success === 0) {
+        throw new Error(r.message);
       }
     } else {
       throw new Error('Not implemented yet');

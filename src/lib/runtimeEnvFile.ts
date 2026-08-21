@@ -37,6 +37,7 @@ export const SCHEDULER_CODES = {
   useFeeSync: 'useFeeSync',
   safetydata: 'safetydata',
   kais: 'kais',
+  krasLayer: 'krasLayer',
   nssmLogBackup: 'nssmLogBackup',
 } as const;
 

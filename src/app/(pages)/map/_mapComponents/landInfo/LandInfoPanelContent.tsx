@@ -582,6 +582,9 @@ export function LandInfoPanelContent({
             <p className="text-[11px] text-slate-500">연계 데이터 없음</p>
           ) : null}
           {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
+          {parcelData.krasSkipReason ? (
+            <p className="text-[11px] leading-relaxed text-amber-800">행망 미사용: {parcelData.krasSkipReason}</p>
+          ) : null}
           <LandLinkageLegendText source={parcelData.source} />
           <section className="border border-slate-200 rounded">
             <h4 className="bg-sky-50 text-sky-700 text-[12px] font-semibold px-2 py-1 border-b border-slate-200">토지기본정보</h4>

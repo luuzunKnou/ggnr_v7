@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/app/shadcnComponents/ui/dialog";
+import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 import { useMapContext, type MapContextValue } from "../../../_mapComponents/MapContext";
 import {
   formatRoadLedgerAttrValue,
@@ -247,7 +248,7 @@ function RoadLedgerDocActionGrid({
             onClick={() => onDocClick(label)}
             disabled={isReportOnly ? false : !setVisibleLayerNames}
             className={cn(
-              "h-auto min-h-[28px] text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-1 px-1 py-1.5 leading-tight",
+              "h-7 text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-0.5 px-1 leading-none whitespace-nowrap",
               !isReportOnly && !setVisibleLayerNames && "pointer-events-none opacity-50",
               isReportOnly
                 ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -259,7 +260,7 @@ function RoadLedgerDocActionGrid({
             )}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="text-center whitespace-normal break-words [word-break:keep-all]">{displayLabel}</span>
+            <span className="min-w-0 truncate [word-break:keep-all]">{displayLabel}</span>
           </button>
         );
       })}
@@ -396,7 +397,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     }));
 
   return (
-    <div className="flex w-full min-w-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold leading-snug text-slate-800">
@@ -415,9 +416,9 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col">
-        <div className="shrink-0 border-slate-200 px-3 py-2 pb-0 bg-white">
-          <div className="space-y-3">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+        <div className="shrink-0 border-slate-200 bg-white px-3 py-2 pb-0">
+          <div className="space-y-1.5">
             <RoadLedgerDocActionGrid
               items={DOC_ACTION_BUTTONS_PRIMARY}
               gridClassName="grid-cols-5"
@@ -443,7 +444,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
           </div>
         </div>
 
-        <div className="border-slate-200 p-3 pt-0">
+        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto border-slate-200 p-3 pt-0">
           <div className="mt-3 border-t border-slate-200">
             <div className="flex items-center justify-between gap-2 mt-1">
               <button
@@ -508,7 +509,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
             visibleLayerNames={visibleLayerNames}
             getLayersForGroup={getEffectiveDocLayers}
           />
-        </div>
+        </MapSideDetailScroll>
       </div>
     </div>
   );

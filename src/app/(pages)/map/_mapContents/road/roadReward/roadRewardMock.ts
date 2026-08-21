@@ -25,20 +25,30 @@ export type RoadRewardParcel = {
   appraisal2Value: number;
   /** 적용단가(원/㎡) — 감정평가1·2 평균으로 자동 계산 */
   appliedUnitPrice: number;
-  /** 보상금액(원) — 적용단가 × 편입면적으로 자동 계산 */
+  /** 토지보상금액(원) — 적용단가 × 편입면적으로 자동 계산 */
   compensationAmount: number;
+  /** 영농보상금액(원) */
+  farmingCompensationAmount: number;
+  /** 지장물보상금액(원) */
+  obstacleCompensationAmount: number;
+  /** 합계(원) — 토지+영농+지장물, 저장하지 않음 */
+  compensationTotal: number;
   /** 토지소유자 주소 (주소 검색 API로 입력) */
   ownerAddress: string;
   /** 토지소유자 성명 */
   ownerName: string;
+  /** 실소유자 */
+  actualOwner: string;
+  /** 실경작자 */
+  actualCultivator: string;
   /** 비고 */
   note: string;
   /** 지적 필지 도형(조회 결과, EPSG:3857) — 건 편입 범위와 별개, 지도 하이라이트용 */
   geometry3857?: Record<string, unknown> | null;
   /** geometry3857의 바운딩 박스(EPSG:3857) */
   extent3857?: [number, number, number, number] | null;
-  /** UI 목업·폴백 좌표(EPSG:4326) */
-  mockLonLat: { lon: number; lat: number };
+  /** 실제 도형 중심(EPSG:4326). 도형이 없으면 지도에 쓰지 않음 */
+  mockLonLat?: { lon: number; lat: number };
 };
 
 export type RoadRewardCase = {
@@ -101,7 +111,10 @@ export const ROAD_REWARD_CASE_FIELDS: RoadRewardCaseField[] = [
 ];
 
 export type RoadRewardParcelField = {
-  field: keyof Omit<RoadRewardParcel, "id" | "pnu" | "mockLonLat" | "geometry3857" | "extent3857">;
+  field: keyof Omit<
+    RoadRewardParcel,
+    "id" | "pnu" | "mockLonLat" | "geometry3857" | "extent3857"
+  >;
   label: string;
   numeric?: boolean;
   /** 입력폼에서 제외 — 자동 계산되어 표시만 함 */
@@ -124,14 +137,19 @@ export function getRoadRewardParcelFields(
     { field: "appraisal1Value", label: `${name1}(원/㎡)`, numeric: true },
     { field: "appraisal2Value", label: `${name2}(원/㎡)`, numeric: true },
     { field: "appliedUnitPrice", label: "적용단가(원/㎡)", numeric: true, computed: true },
-    { field: "compensationAmount", label: "보상금액(원)", numeric: true, computed: true },
+    { field: "compensationAmount", label: "토지보상금액(원)", numeric: true, computed: true },
+    { field: "farmingCompensationAmount", label: "영농보상금액(원)", numeric: true },
+    { field: "obstacleCompensationAmount", label: "지장물보상금액(원)", numeric: true },
+    { field: "compensationTotal", label: "합계(원)", numeric: true, computed: true },
     { field: "ownerAddress", label: "토지소유자 주소" },
     { field: "ownerName", label: "토지소유자 성명" },
+    { field: "actualOwner", label: "실소유자" },
+    { field: "actualCultivator", label: "실경작자" },
     { field: "note", label: "비고" },
   ];
 }
 
-/** 적용단가 = 감정평가1·2 평균, 보상금액 = 적용단가 × 편입면적 (자동 계산, 수동 입력 아님) */
+/** 적용단가 = 감정평가1·2 평균, 토지보상금액 = 적용단가 × 편입면적 (자동 계산, 수동 입력 아님) */
 export function computeRoadRewardDerived(
   appraisal1Value: number,
   appraisal2Value: number,
@@ -143,6 +161,31 @@ export function computeRoadRewardDerived(
   const appliedUnitPrice = Math.round((a1 + a2) / 2);
   const compensationAmount = Math.round(appliedUnitPrice * area);
   return { appliedUnitPrice, compensationAmount };
+}
+
+/** 합계 = 토지 + 영농 + 지장물 (저장하지 않고 표시만) */
+export function sumRoadRewardCompensation(parcel: {
+  compensationAmount?: number;
+  farmingCompensationAmount?: number;
+  obstacleCompensationAmount?: number;
+}): number {
+  const land = Number(parcel.compensationAmount);
+  const farming = Number(parcel.farmingCompensationAmount);
+  const obstacle = Number(parcel.obstacleCompensationAmount);
+  return (
+    (Number.isFinite(land) ? land : 0) +
+    (Number.isFinite(farming) ? farming : 0) +
+    (Number.isFinite(obstacle) ? obstacle : 0)
+  );
+}
+
+export function withRoadRewardCompensationTotal<T extends {
+  compensationAmount: number;
+  farmingCompensationAmount: number;
+  obstacleCompensationAmount: number;
+  compensationTotal: number;
+}>(parcel: T): T {
+  return { ...parcel, compensationTotal: sumRoadRewardCompensation(parcel) };
 }
 
 /**
@@ -302,8 +345,13 @@ export function createEmptyRoadRewardParcel(): RoadRewardParcel {
     appraisal2Value: 0,
     appliedUnitPrice: 0,
     compensationAmount: 0,
+    farmingCompensationAmount: 0,
+    obstacleCompensationAmount: 0,
+    compensationTotal: 0,
     ownerAddress: "",
     ownerName: "",
+    actualOwner: "",
+    actualCultivator: "",
     note: "",
     geometry3857: null,
     extent3857: null,
@@ -338,9 +386,20 @@ function makeParcel(
     | "mockLonLat"
     | "appliedUnitPrice"
     | "compensationAmount"
+    | "compensationTotal"
+    | "farmingCompensationAmount"
+    | "obstacleCompensationAmount"
+    | "actualOwner"
+    | "actualCultivator"
     | "geometry3857"
     | "extent3857"
-  > & { pnu?: string }
+  > & {
+    pnu?: string;
+    farmingCompensationAmount?: number;
+    obstacleCompensationAmount?: number;
+    actualOwner?: string;
+    actualCultivator?: string;
+  }
 ): RoadRewardParcel {
   const { appliedUnitPrice, compensationAmount } = computeRoadRewardDerived(
     data.appraisal1Value,
@@ -349,7 +408,7 @@ function makeParcel(
   );
   const ll = mockLonLat(seed);
   const { geometry3857, extent3857 } = mockPolygonGeom(ll.lon, ll.lat, seed);
-  return {
+  return withRoadRewardCompensationTotal({
     id: createRoadRewardId("parcel"),
     pnu: data.pnu,
     eupmyeonDong: data.eupmyeonDong,
@@ -362,13 +421,18 @@ function makeParcel(
     appraisal2Value: data.appraisal2Value,
     appliedUnitPrice,
     compensationAmount,
+    farmingCompensationAmount: data.farmingCompensationAmount ?? 0,
+    obstacleCompensationAmount: data.obstacleCompensationAmount ?? 0,
+    compensationTotal: 0,
     ownerAddress: data.ownerAddress,
     ownerName: data.ownerName,
+    actualOwner: data.actualOwner ?? "",
+    actualCultivator: data.actualCultivator ?? "",
     note: data.note,
     geometry3857,
     extent3857,
     mockLonLat: ll,
-  };
+  });
 }
 
 function withCaseGeom(casePartial: Omit<RoadRewardCase, "geometry3857" | "extent3857">): RoadRewardCase {
@@ -383,13 +447,14 @@ function withCaseGeom(casePartial: Omit<RoadRewardCase, "geometry3857" | "extent
   };
 }
 
-/** 지적 교차 조회 결과 → 필지. 기존 필지(감정·소유자 등)는 pnu/주소로 보존. 지목·당초면적은 지적에서 채움 */
+/** 지적 교차 조회 결과 → 필지. 기존 필지(감정·소유자 등)는 pnu/주소로 보존. 당초면적·지목은 지적, 편입면적·도형은 겹친 부분 */
 export function mergeJijukIntoRoadRewardParcels(
   jijukItems: Array<{
     address: string;
     pnu?: string;
     jimok?: string;
     areaSqm?: number;
+    intersectAreaSqm?: number;
     extent3857?: [number, number, number, number] | null;
     geometry3857?: Record<string, unknown> | null;
   }>,
@@ -430,6 +495,9 @@ export function mergeJijukIntoRoadRewardParcels(
     const jijukJimok = String(item.jimok ?? "").trim();
     const jijukArea = Number(item.areaSqm);
     const areaFromGeom = Number.isFinite(jijukArea) && jijukArea > 0 ? jijukArea : 0;
+    const intersectArea = Number(item.intersectAreaSqm);
+    const includedFromClip =
+      Number.isFinite(intersectArea) && intersectArea > 0 ? intersectArea : 0;
 
     const next: RoadRewardParcel = {
       ...base,
@@ -438,16 +506,20 @@ export function mergeJijukIntoRoadRewardParcels(
       eupmyeonDong: eupmyeonDong || prev?.eupmyeonDong || "",
       jibunOriginal: jibun || prev?.jibunOriginal || "",
       jibunIncluded: prev?.jibunIncluded || jibun || "",
-      // 도형 갱신 시 지적 도형 면적·지목을 우선 반영
       areaOriginal: areaFromGeom || prev?.areaOriginal || 0,
-      areaIncluded: prev?.areaIncluded ?? 0,
+      areaIncluded: includedFromClip || prev?.areaIncluded || 0,
       jimok: jijukJimok || prev?.jimok || "",
       appraisal1Value: prev?.appraisal1Value ?? 0,
       appraisal2Value: prev?.appraisal2Value ?? 0,
       appliedUnitPrice: prev?.appliedUnitPrice ?? 0,
       compensationAmount: prev?.compensationAmount ?? 0,
+      farmingCompensationAmount: prev?.farmingCompensationAmount ?? 0,
+      obstacleCompensationAmount: prev?.obstacleCompensationAmount ?? 0,
+      compensationTotal: 0,
       ownerAddress: prev?.ownerAddress ?? "",
       ownerName: prev?.ownerName ?? "",
+      actualOwner: prev?.actualOwner ?? "",
+      actualCultivator: prev?.actualCultivator ?? "",
       note: prev?.note ?? "",
       geometry3857: item.geometry3857 ?? null,
       extent3857: item.extent3857 ?? null,
@@ -460,6 +532,7 @@ export function mergeJijukIntoRoadRewardParcels(
     );
     next.appliedUnitPrice = appliedUnitPrice;
     next.compensationAmount = compensationAmount;
+    next.compensationTotal = sumRoadRewardCompensation(next);
     return next;
   });
 }
@@ -488,8 +561,12 @@ export function createInitialRoadRewardCases(): RoadRewardCase[] {
           jimok: "전",
           appraisal1Value: 185000,
           appraisal2Value: 179000,
+          farmingCompensationAmount: 2400000,
+          obstacleCompensationAmount: 850000,
           ownerAddress: "경상북도 울진군 울진읍 연지리 45",
           ownerName: "김OO",
+          actualOwner: "김OO",
+          actualCultivator: "이OO",
           note: "",
         }),
         makeParcel(2, {

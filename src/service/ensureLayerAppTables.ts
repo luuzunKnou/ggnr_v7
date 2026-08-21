@@ -5,6 +5,8 @@
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
+ * - 보상편입: road_reward, road_reward_parcel
+ * - 공사대장: cons_data_as, cons_data_solo_as
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -172,6 +174,117 @@ CREATE TABLE IF NOT EXISTS layer.file_unit (
 CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key);
 CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom);
 COMMENT ON TABLE layer.file_unit IS '영상작업단위파일';
+`;
+
+/** scripts/sql/road_reward.sql 과 동일 컬럼 */
+const ROAD_REWARD_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_reward (
+  ogc_fid SERIAL PRIMARY KEY,
+  geom geometry(Geometry, 5181),
+  name text,
+  org text,
+  policy text,
+  unit text,
+  detail text,
+  budget_item text,
+  stat_item text,
+  appraisal1_name text,
+  appraisal2_name text
+);
+CREATE INDEX IF NOT EXISTS road_reward_geom_idx
+  ON layer.road_reward USING GIST (geom);
+COMMENT ON TABLE layer.road_reward IS '보상편입용지';
+`;
+
+const ROAD_REWARD_PARCEL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_reward_parcel (
+  ogc_fid SERIAL PRIMARY KEY,
+  geom geometry(Geometry, 5181),
+  reward_key integer NOT NULL,
+  pnu text,
+  eupmyeon_dong text,
+  jibun_original text,
+  jibun_included text,
+  area_original double precision,
+  area_included double precision,
+  jimok text,
+  appraisal1_value double precision,
+  appraisal2_value double precision,
+  applied_unit_price double precision,
+  compensation_amount double precision,
+  farming_compensation_amount double precision,
+  obstacle_compensation_amount double precision,
+  owner_address text,
+  owner_name text,
+  actual_owner text,
+  actual_cultivator text,
+  note text,
+  CONSTRAINT road_reward_parcel_reward_ogc_fid_fkey
+    FOREIGN KEY (reward_key) REFERENCES layer.road_reward (ogc_fid)
+    ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS road_reward_parcel_reward_ogc_fid_idx
+  ON layer.road_reward_parcel (reward_key);
+CREATE INDEX IF NOT EXISTS road_reward_parcel_pnu_idx
+  ON layer.road_reward_parcel (pnu);
+CREATE INDEX IF NOT EXISTS road_reward_parcel_geom_idx
+  ON layer.road_reward_parcel USING GIST (geom);
+COMMENT ON TABLE layer.road_reward_parcel IS '보상편입용지 필지목록';
+COMMENT ON COLUMN layer.road_reward_parcel.compensation_amount IS '토지보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.farming_compensation_amount IS '영농보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.obstacle_compensation_amount IS '지장물보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.actual_owner IS '실소유자';
+COMMENT ON COLUMN layer.road_reward_parcel.actual_cultivator IS '실경작자';
+`;
+
+const CONS_DATA_AS_SQL = `
+CREATE TABLE IF NOT EXISTS layer.cons_data_as (
+  ogc_fid serial PRIMARY KEY,
+  geom geometry(MultiPolygon, 5181),
+  gkey_code text,
+  cons_code text,
+  river_type text,
+  river_code text,
+  river_name text,
+  cons_name text,
+  cons_locat text,
+  cons_volum text,
+  amount_pre text,
+  amount_var text,
+  amount_cha text,
+  amount_aft text,
+  cont_date text,
+  start_date text,
+  done_date text,
+  sdone_date text,
+  busin_name text,
+  ceo_name text,
+  busin_addr text,
+  busin_phon text,
+  direct_pos text,
+  direct_nam text,
+  reason text,
+  descript text
+);
+CREATE INDEX IF NOT EXISTS cons_data_as_geom_gix ON layer.cons_data_as USING GIST (geom);
+CREATE INDEX IF NOT EXISTS cons_data_as_cons_code_idx ON layer.cons_data_as (cons_code);
+COMMENT ON TABLE layer.cons_data_as IS '공사대장';
+`;
+
+const CONS_DATA_SOLO_AS_SQL = `
+CREATE TABLE IF NOT EXISTS layer.cons_data_solo_as (
+  ogc_fid serial PRIMARY KEY,
+  geom geometry(MultiPolygon, 5181),
+  cons_code text,
+  river_type text,
+  river_code text,
+  river_name text,
+  solo_code text,
+  remark text
+);
+CREATE INDEX IF NOT EXISTS cons_data_solo_as_geom_gix ON layer.cons_data_solo_as USING GIST (geom);
+CREATE INDEX IF NOT EXISTS cons_data_solo_as_cons_code_idx ON layer.cons_data_solo_as (cons_code);
+COMMENT ON TABLE layer.cons_data_solo_as IS '공사대장_개별';
 `;
 
 function memoCreateSql(tableName: string): string {
@@ -494,6 +607,74 @@ export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise
   return out;
 }
 
+/** 기존 필지 테이블에 토지 외 금액·실소유자·실경작자 컬럼 보강 */
+async function ensureRoadRewardParcelColumns(result: EnsureResult): Promise<void> {
+  const table = 'road_reward_parcel';
+  const fq = `layer.${table}`;
+  try {
+    if ((await tableExists('layer', table)) !== 'BASE TABLE') return;
+
+    if (await columnExists('layer', table, 'compensation_amount')) {
+      await db.execute(
+        sql.raw(`COMMENT ON COLUMN layer.road_reward_parcel.compensation_amount IS '토지보상금액(원)'`)
+      );
+    }
+
+    const extras: { name: string; ddl: string; comment: string }[] = [
+      { name: 'farming_compensation_amount', ddl: 'double precision', comment: '영농보상금액(원)' },
+      { name: 'obstacle_compensation_amount', ddl: 'double precision', comment: '지장물보상금액(원)' },
+      { name: 'actual_owner', ddl: 'text', comment: '실소유자' },
+      { name: 'actual_cultivator', ddl: 'text', comment: '실경작자' },
+    ];
+    for (const col of extras) {
+      if (await columnExists('layer', table, col.name)) continue;
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} ADD COLUMN ${col.name} ${col.ddl}`));
+      await db.execute(
+        sql.raw(`COMMENT ON COLUMN layer.${table}.${col.name} IS '${col.comment.replace(/'/g, "''")}'`)
+      );
+      result.created.push(`${fq}.${col.name}`);
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.columns: ${msg}`);
+  }
+}
+
+/** 보상편입용지 · 필지목록 */
+export async function ensureRoadRewardTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'road_reward',
+    createSql: ROAD_REWARD_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'road_reward_parcel',
+    createSql: ROAD_REWARD_PARCEL_SQL,
+    result: out,
+  });
+  await ensureRoadRewardParcelColumns(out);
+  return out;
+}
+
+/** 공사대장 · 개별(필지) */
+export async function ensureConsDataAsTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'cons_data_as',
+    createSql: CONS_DATA_AS_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'cons_data_solo_as',
+    createSql: CONS_DATA_SOLO_AS_SQL,
+    result: out,
+  });
+  return out;
+}
+
 /** instrumentation / 수동 호출용 */
 export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
@@ -504,6 +685,8 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureNglFeeListTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
+    await ensureRoadRewardTables(result);
+    await ensureConsDataAsTables(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

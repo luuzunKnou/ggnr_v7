@@ -1120,6 +1120,7 @@ type JijukParcelGeomRow = {
   ri_name?: unknown;
   jimok?: unknown;
   area_sqm?: unknown;
+  intersect_area_sqm?: unknown;
   geometry?: unknown;
   xmin?: unknown;
   ymin?: unknown;
@@ -1134,6 +1135,8 @@ export type JijukParcelGeomDto = {
   jimok?: string;
   /** 당초면적(㎡) — 필지 도형 ST_Area(5181) */
   areaSqm?: number;
+  /** 검색 도형과 겹친 면적(㎡). clipToSearchGeom 일 때만 */
+  intersectAreaSqm?: number;
   extent3857: [number, number, number, number] | null;
   geometry3857: Record<string, unknown> | null;
 };
@@ -1690,20 +1693,29 @@ async function enrichJijukRowsWithAdminNames(rows: JijukParcelGeomRow[]): Promis
   }
 }
 
-const jijukParcelSelectSql = (geomCol: string, fromQualified: string) => `
+const jijukParcelSelectSql = (geomCol: string, fromQualified: string, clip5181?: string) => {
+  const full5181 = jijukGeom5181Sql(geomCol);
+  const display5181 = clip5181 ?? full5181;
+  const display3857 = clip5181 ? `ST_Transform(${clip5181}, 3857)` : jijukGeom3857Sql(geomCol);
+  const intersectCol = clip5181
+    ? `ROUND(ST_Area(${clip5181})::numeric, 2)::float8 AS intersect_area_sqm,`
+    : `NULL::float8 AS intersect_area_sqm,`;
+  return `
   SELECT
     j.pnu::text AS pnu,
     j.jibun::text AS jibun,
     -- jibun = 지번+지목(예: 240답, 산7임, 1-1 답). 지목은 끝 한글
     NULLIF(TRIM(SUBSTRING(j.jibun::text FROM '(?:산?[0-9]+(?:-[0-9]+)?)[[:space:]]*([가-힣]+)$')), '') AS jimok,
-    ROUND(ST_Area(${jijukGeom5181Sql(geomCol)})::numeric, 2)::float8 AS area_sqm,
-    ST_AsGeoJSON(${jijukGeom3857Sql(geomCol)})::json AS geometry,
-    ST_XMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmin,
-    ST_YMin(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymin,
-    ST_XMax(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS xmax,
-    ST_YMax(ST_Envelope(${jijukGeom3857Sql(geomCol)}))::float8 AS ymax
+    ROUND(ST_Area(${full5181})::numeric, 2)::float8 AS area_sqm,
+    ${intersectCol}
+    ST_AsGeoJSON(${display3857})::json AS geometry,
+    ST_XMin(ST_Envelope(${display3857}))::float8 AS xmin,
+    ST_YMin(ST_Envelope(${display3857}))::float8 AS ymin,
+    ST_XMax(ST_Envelope(${display3857}))::float8 AS xmax,
+    ST_YMax(ST_Envelope(${display3857}))::float8 AS ymax
   FROM ${fromQualified} j
   WHERE j.geom IS NOT NULL`;
+};
 
 function buildJijukPnuMatchWhereSql(pnuDigits: string): string | null {
   const digits = pnuDigitsOnly(pnuDigits);
@@ -1744,11 +1756,15 @@ function mapJijukRowToParcelGeom(row: JijukParcelGeomRow): JijukParcelGeomDto | 
     String(row.jimok ?? '').trim() || extractJimokFromJijukJibun(row.jibun);
   const areaSqmRaw = Number(row.area_sqm);
   const areaSqm = Number.isFinite(areaSqmRaw) && areaSqmRaw > 0 ? areaSqmRaw : undefined;
+  const intersectRaw = Number(row.intersect_area_sqm);
+  const intersectAreaSqm =
+    Number.isFinite(intersectRaw) && intersectRaw > 0 ? intersectRaw : undefined;
   return {
     address: address || pnu,
     pnu,
     ...(jimok ? { jimok } : {}),
     ...(areaSqm != null ? { areaSqm } : {}),
+    ...(intersectAreaSqm != null ? { intersectAreaSqm } : {}),
     extent3857,
     geometry3857,
   };
@@ -1876,6 +1892,8 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
 export async function listJijukParcelsByGeomWkt5181(params: {
   wkt5181: string;
   limit?: number;
+  /** true면 반환 도형·intersectAreaSqm 은 검색 도형과 필지의 교집합 */
+  clipToSearchGeom?: boolean;
 }): Promise<{
   parcels: JijukParcelGeomDto[];
   error?: string;
@@ -1889,15 +1907,18 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   const limit = Math.min(Math.max(Math.floor(params?.limit ?? 500), 1), 1000);
   const searchGeom = `ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), ${JIJUK_GEOM_SRID})`;
   const jijukGeom = jijukGeom5181Sql('j.geom');
-
-  const intersectGeom = `ST_Intersection(${jijukGeom}, ${searchGeom})`;
+  /** 그린 도형·지적 모두 고친 뒤 교집합 — 깨진 폴리곤에서 Intersection 예외로 조회 전체가 실패하지 않게 */
+  const searchValid = `ST_MakeValid(ST_Force2D(${searchGeom}))`;
+  const jijukValid = `ST_MakeValid(ST_Force2D(${jijukGeom}))`;
+  const clipPoly = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${jijukValid}, ${searchValid})), 3)`;
+  const clipToSearch = params.clipToSearchGeom === true;
 
   const queryStr = `
-    ${jijukParcelSelectSql('j.geom', jijukRef.qualified)}
-      AND ${jijukGeom} && ${searchGeom}
-      AND ST_Intersects(${jijukGeom}, ${searchGeom})
-      AND ST_Dimension(${intersectGeom}) = 2
-      AND ST_Area(${intersectGeom}) > 0.01
+    ${jijukParcelSelectSql('j.geom', jijukRef.qualified, clipToSearch ? clipPoly : undefined)}
+      AND ${jijukGeom} && ${searchValid}
+      AND ST_Intersects(${jijukValid}, ${searchValid})
+      AND NOT ST_IsEmpty(${clipPoly})
+      AND ST_Area(${clipPoly}) > 0.01
     ORDER BY j.${quoteIdent(jijukRef.orderCol)}
     LIMIT ${limit}`;
 

@@ -77,6 +77,10 @@ import {
 } from "./_mapContents/shootingRequest/shootTypeToAerialKind"
 import { RiverConstructionLedgerListPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerListPanel"
 import { RiverConstructionLedgerDetailPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerDetailPanel"
+import {
+  createEmptyRiverConstructionLedgerRow,
+  isNewRiverConstructionLedgerRow,
+} from "./_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock"
 import { UsageDataAsListPanel } from "./_mapContents/river/usageDataAs/UsageDataAsListPanel"
 import { UsageDataAsDetailPanel } from "./_mapContents/river/usageDataAs/UsageDataAsDetailPanel"
 import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usageDataAsMapSync"
@@ -481,10 +485,14 @@ function MapLayoutContent({
     Boolean(shootingRequestDetailId) &&
     shootingRequestDetailId !== SHOOTING_REQUEST_NEW_ID
   const riverConstructionLedgerOpen = openedWindows.includes(RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
+  const riverConstructionLedgerSelectedId = mapContext?.riverConstructionLedgerSelectedId ?? null
+  const riverConstructionLedgerIsCreate =
+    Boolean(riverConstructionLedgerSelectedId) &&
+    isNewRiverConstructionLedgerRow({ id: riverConstructionLedgerSelectedId ?? "" })
   const riverConstructionLedgerSelectedRow =
     mapContext?.riverConstructionLedgerRows?.find(
-      (r) => r.id === mapContext?.riverConstructionLedgerSelectedId
-    ) ?? null
+      (r) => r.id === riverConstructionLedgerSelectedId
+    ) ?? (riverConstructionLedgerIsCreate ? createEmptyRiverConstructionLedgerRow() : null)
   const riverConstructionLedgerDetailOpen =
     riverConstructionLedgerOpen && Boolean(riverConstructionLedgerSelectedRow)
   const usageDataAsOpen = openedWindows.includes(USAGE_DATA_AS_OPENED_KEY)
@@ -1182,12 +1190,11 @@ function MapLayoutContent({
   }, [riverUseLedgerOpen])
 
   useEffect(() => {
+    const selectedId = mapContext?.riverConstructionLedgerSelectedId
+    if (!riverConstructionLedgerOpen || !selectedId) return
+    if (isNewRiverConstructionLedgerRow({ id: selectedId })) return
     if (
-      riverConstructionLedgerOpen &&
-      mapContext?.riverConstructionLedgerSelectedId &&
-      !(mapContext.riverConstructionLedgerRows ?? []).some(
-        (r) => r.id === mapContext.riverConstructionLedgerSelectedId
-      )
+      !(mapContext.riverConstructionLedgerRows ?? []).some((r) => r.id === selectedId)
     ) {
       setRiverConstructionLedgerSelectedId?.(null)
     }
@@ -1598,7 +1605,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadLedgerDetailLeftPx}
                 onWidthChange={setRoadLedgerDetailWidth}
-                contentClassName="overflow-auto scrollbar-thin"
+                contentClassName="overflow-hidden"
               >
                 <RoadLedgerDetailPanel
                   row={mapContext.roadLedgerIdentifyRow}
@@ -1879,6 +1886,7 @@ function MapLayoutContent({
                 contentClassName="overflow-hidden"
               >
                 <RiverConstructionLedgerDetailPanel
+                  key={riverConstructionLedgerSelectedRow.id}
                   row={riverConstructionLedgerSelectedRow}
                   onClose={() => {
                     setRiverConstructionLedgerRiverFocus?.(null)
