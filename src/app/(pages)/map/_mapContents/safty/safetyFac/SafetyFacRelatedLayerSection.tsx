@@ -110,10 +110,10 @@ export function SafetyFacRelatedLayerSection({ lon, lat }: Props) {
             className={cn(
               'inline-flex h-auto min-h-[24px] min-w-0 items-center justify-center rounded border px-0.5 py-1 text-[9px] leading-tight',
               !hasData || !setLayerState
-                ? 'pointer-events-none border-slate-200 bg-slate-50/80 text-slate-500 opacity-60'
+                ? 'pointer-events-none border-border bg-muted/50 text-muted-foreground opacity-60'
                 : active
-                  ? 'border-primary/45 bg-primary/[0.08] text-slate-800 ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]'
-                  : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  ? 'border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]'
+                  : 'border-border bg-muted/40 text-foreground hover:bg-muted'
             )}
           >
             <span className="whitespace-nowrap text-center">
