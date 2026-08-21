@@ -398,6 +398,7 @@ function MapLayoutContent({
     mapContext?.setRiverConstructionLedgerGeomEditingId
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
+  const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
   const setRoadCctvExtentWgs84 = mapContext?.setRoadCctvExtentWgs84
@@ -960,6 +961,10 @@ function MapLayoutContent({
   useEffect(() => {
     setSafetyFacPanelOpen?.(safetyFacOpen)
   }, [setSafetyFacPanelOpen, safetyFacOpen])
+
+  useEffect(() => {
+    setComplaintPanelOpen?.(complaintManagementOpen)
+  }, [setComplaintPanelOpen, complaintManagementOpen])
 
   useEffect(() => {
     if (!roadCctvOpen) {

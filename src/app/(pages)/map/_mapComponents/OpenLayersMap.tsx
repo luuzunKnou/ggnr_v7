@@ -1069,6 +1069,7 @@ export default function OpenLayersMap({
     visibleLayerNames,
     roadCctvPanelOpen ||
       (mapContext?.safetyFacPanelOpen ?? false) ||
+      (mapContext?.complaintPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||

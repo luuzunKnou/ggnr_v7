@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-3070</id>
+  <id>FeatureTypeInfoImpl-64e85031:1a01dd80ac3:-5f25</id>
   <name>comp</name>
   <nativeName>comp</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>358579.84048799437</minx>
-    <maxx>414184.87549321156</maxx>
-    <miny>258767.2611108807</miny>
-    <maxy>391368.8710359827</maxy>
+    <minx>388856.877020207</minx>
+    <maxx>388858.877020207</maxx>
+    <miny>354104.3918135819</miny>
+    <maxy>354106.3918135819</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.75458908159274</minx>
-    <maxx>129.405959580001</maxx>
-    <miny>35.802905592486056</miny>
-    <maxy>37.00785331945317</maxy>
+    <minx>129.11238571191927</minx>
+    <maxx>129.1124085608015</maxx>
+    <miny>36.66669742501394</miny>
+    <maxy>36.666715832094965</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

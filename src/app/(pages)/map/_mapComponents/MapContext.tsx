@@ -73,6 +73,10 @@ export type ComplaintDetail = {
     compdContents: string | null;
     compdExtra: Record<string, unknown> | null;
   }[];
+  /** 지도 이동용 (EPSG:3857) */
+  extent3857?: [number, number, number, number] | null;
+  /** 선택 하이라이트용 (EPSG:4326 GeoJSON) */
+  geomGeoJson4326?: Record<string, unknown> | null;
 } | null;
 
 export type MapContextValue = {
@@ -383,6 +387,9 @@ export type MapContextValue = {
   /** URL 기준 재난대응시설 패널 열림 — 일반 식별 비활성화용 */
   safetyFacPanelOpen: boolean;
   setSafetyFacPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 민원관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
+  complaintPanelOpen: boolean;
+  setComplaintPanelOpen: Dispatch<SetStateAction<boolean>>;
   /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
   safetyFacBuildingRoadLayerState: {
     visibleTableNames: Set<string>;
@@ -646,6 +653,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
   const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
+  const [complaintPanelOpen, setComplaintPanelOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
     cqlByTable: Record<string, string>;
@@ -839,6 +847,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadCctvPanelOpen,
         safetyFacPanelOpen,
         setSafetyFacPanelOpen,
+        complaintPanelOpen,
+        setComplaintPanelOpen,
         safetyFacBuildingRoadLayerState,
         setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,

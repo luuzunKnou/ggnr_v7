@@ -8,7 +8,10 @@ import { ComplaintDetailPanel } from './complaint-detail-panel';
 import type { CompUI, CompdUI } from './types';
 import type { ComplaintFormValues } from './complaint-info';
 import { call } from '@/lib/api';
-import { fitMapToComplaintExtent3857 } from './fitComplaintMap';
+import {
+  animateComplaintToCenter3857,
+  center3857FromExtent,
+} from './useComplaintMapClick';
 
 type Props = {
   onListRefresh?: () => void;
@@ -153,11 +156,13 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
           };
           setComplaintDetail(data);
           bumpList();
-          fitMapToComplaintExtent3857(
-            mapContext?.mapInstanceRef?.current,
-            data.extent3857,
-            () => mapContext?.applyMapViewPaddingRef?.current?.()
-          );
+          const map = mapContext?.mapInstanceRef?.current;
+          const center = center3857FromExtent(data.extent3857);
+          if (map && center) {
+            animateComplaintToCenter3857(map, center, () =>
+              mapContext?.applyMapViewPaddingRef?.current?.()
+            );
+          }
         }
       } finally {
         setSaving(false);
