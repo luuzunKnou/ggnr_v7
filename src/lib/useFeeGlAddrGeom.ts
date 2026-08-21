@@ -94,14 +94,14 @@ export async function applyUseFeeGeomFromGlAddr(params: {
   lvyKey: string;
   rcvmtSn?: string | null;
   glAddr?: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const lvyKey = String(params.lvyKey ?? '').trim();
   const glAddr = String(params.glAddr ?? '').trim();
-  if (!lvyKey || !glAddr) return;
+  if (!lvyKey || !glAddr) return false;
   try {
     const tableName = assertFeeTableName(params.tableName);
     const gj = await resolveGeomGeoJson3857(glAddr);
-    if (!gj) return;
+    if (!gj) return false;
     const sn = escapeSqlLiteral(String(params.rcvmtSn ?? '').trim());
     const key = escapeSqlLiteral(lvyKey);
     await db.execute(
@@ -113,7 +113,12 @@ export async function applyUseFeeGeomFromGlAddr(params: {
           AND coalesce(rcvmt_sn, '') = '${sn}'
       `)
     );
-  } catch {
-    /* 속성 저장은 유지 */
+    return true;
+  } catch (e) {
+    console.warn(
+      `[nextGenLinkage] 도형 첨부 실패 key=${lvyKey} addr=${glAddr}:`,
+      e instanceof Error ? e.message : e
+    );
+    return false;
   }
 }
