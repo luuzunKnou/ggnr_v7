@@ -1048,14 +1048,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden opacity-[0.95]">
       {/* 공간검색 */}
-      <div className="border-b border-slate-200 px-4 py-3 shrink-0">
-        <div className="mb-2 flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
+      <div className="border-b border-border px-4 py-3 shrink-0">
+        <div className="mb-2 flex rounded-md border border-border bg-muted/30 p-0.5">
           <button
             type="button"
             onClick={() => setSearchTab('keyword')}
             className={cn(
               'flex-1 rounded py-1.5 text-[11px] font-medium transition-colors',
-              searchTab === 'keyword' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              searchTab === 'keyword' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             통합검색
@@ -1068,7 +1068,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             }}
             className={cn(
               'flex-1 rounded py-1.5 text-[11px] font-medium transition-colors',
-              searchTab === 'shape' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              searchTab === 'shape' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             도형검색
@@ -1081,7 +1081,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             }}
             className={cn(
               'flex-1 rounded px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors',
-              searchTab === 'boundary' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              searchTab === 'boundary' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             행정경계 검색
@@ -1097,7 +1097,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                 if (e.key === 'Enter') runKeywordSearch();
               }}
               placeholder="레이어 속성 검색"
-              className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25"
             />
             <button
               type="button"
@@ -1136,10 +1136,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                     }}
                     disabled={geometrySearchLoading}
                     className={cn(
-                      'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-white py-2 transition-colors disabled:opacity-50',
+                      'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-background py-2 transition-colors disabled:opacity-50',
                       isActive
                         ? 'border-primary text-primary'
-                        : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                        : 'border-border text-muted-foreground hover:border-border hover:text-foreground'
                     )}
                     title={
                       tool.id === 'rectangle' || tool.id === 'polygon' || tool.id === 'circle'
@@ -1155,10 +1155,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                 type="button"
                 onClick={() => clearSpatialFilter()}
                 className={cn(
-                  'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-white py-2 transition-colors',
+                  'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded border bg-background py-2 transition-colors',
                   spatialFilterWkt || dataSelectTable
                     ? 'border-amber-300 text-amber-600 hover:border-amber-400'
-                    : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-primary'
+                    : 'border-border text-muted-foreground hover:border-border hover:text-primary'
                 )}
                 title="초기화"
               >
@@ -1172,7 +1172,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                     value={dataSelectTable}
                     onChange={(e) => setDataSelectTable(e.target.value)}
                     disabled={geometrySearchLoading}
-                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                    className="h-9 w-full rounded-md border border-border bg-background px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
                   >
                     <option value="">테이블 선택</option>
                     {dataSelectTableOptions.map((name) => (
@@ -1187,7 +1187,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                     value={dataSelectField}
                     onChange={(e) => setDataSelectField(e.target.value)}
                     disabled={!dataSelectTable || geometrySearchLoading}
-                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-9 w-full rounded-md border border-border bg-background px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">필드 선택</option>
                     {dataSelectFieldOptions.map((name) => (
@@ -1202,7 +1202,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                     value={dataSelectValue}
                     onChange={(e) => setDataSelectValue(e.target.value)}
                     disabled={!dataSelectField || geometrySearchLoading}
-                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-9 w-full rounded-md border border-border bg-background px-0 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">값 선택</option>
                     {dataSelectValueOptions.map((val) => (
@@ -1227,7 +1227,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                     setRiSelected('');
                   }}
                   disabled={geometrySearchLoading}
-                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
                 >
                   <option value="">읍면동 선택</option>
                   {emdOptions.map((opt) => (
@@ -1242,7 +1242,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                   value={riSelected}
                   onChange={(e) => setRiSelected(e.target.value)}
                   disabled={!emdSelected || geometrySearchLoading}
-                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">리 선택</option>
                   {riOptions.map((opt) => (
@@ -1267,7 +1267,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                 {boundaryBadges.map((b) => (
                   <span
                     key={b.key}
-                    className="flex min-h-[1.375rem] min-w-0 w-full max-w-full items-center justify-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1 pr-0.5 text-[11px] leading-none text-slate-800"
+                    className="flex min-h-[1.375rem] min-w-0 w-full max-w-full items-center justify-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1 pr-0.5 text-[11px] leading-none text-foreground"
                   >
                     <span className="min-w-0 max-w-[3em] flex-1 truncate text-center" title={b.label}>
                       {b.label}
@@ -1276,7 +1276,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                       type="button"
                       title="목록에서 제거"
                       onClick={() => setBoundaryBadges((prev) => prev.filter((x) => x.key !== b.key))}
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-primary/15 hover:text-primary"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary"
                     >
                       <X className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
                     </button>
@@ -1298,7 +1298,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                 title="선택·목록·지도 필터 초기화"
                 onClick={clearBoundaryTab}
                 disabled={geometrySearchLoading}
-                className="min-h-9 flex-1 rounded-md border border-slate-200 bg-white py-2 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:text-primary disabled:opacity-50"
+                className="min-h-9 flex-1 rounded-md border border-border bg-background py-2 text-sm text-muted-foreground transition-colors hover:border-border hover:text-primary disabled:opacity-50"
               >
                 초기화
               </button>
@@ -1306,7 +1306,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           </div>
         )}
         {geometrySearchLoading && (
-          <div className="mt-2 shrink-0 border-t border-slate-100 bg-slate-50/80 px-1 py-1.5 text-center text-[11px] text-slate-500">
+          <div className="mt-2 shrink-0 border-t border-border bg-muted/30 px-1 py-1.5 text-center text-[11px] text-muted-foreground">
             검색 중…
           </div>
         )}
@@ -1315,7 +1315,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
       {/* Layer groups (scrollable). 공간 필터 시 도형 내에 데이터 있는 레이어만 표시 */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {(layerGroups.length === 0 || layerGroups.every((g) => g.layers.length === 0)) && (
-          <div className="px-4 py-6 text-center text-sm text-slate-500">
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
             등록된 레이어가 없습니다.
           </div>
         )}
@@ -1339,13 +1339,13 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             <div
               key={group.id}
               className={cn(
-                'border-b border-slate-200 border-l-4',
-                hasActiveLayer ? 'border-l-primary' : 'border-l-slate-200'
+                'border-b border-border border-l-4',
+                hasActiveLayer ? 'border-l-primary' : 'border-l-border'
               )}
             >
               <div
                 className={cn(
-                  'flex w-full items-center gap-2 px-2 py-[0.35rem] transition-colors hover:bg-slate-100',
+                  'flex w-full items-center gap-2 px-2 py-[0.35rem] transition-colors hover:bg-muted/50',
                   hasActiveLayer && 'bg-primary/8'
                 )}
               >
@@ -1355,14 +1355,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                   className="flex items-center gap-1 min-w-0 flex-1 text-left"
                 >
                   {isGroupOpen ? (
-                    <ChevronDown className={cn('h-3.5 w-3.5 shrink-0', hasActiveLayer ? 'text-primary' : 'text-slate-500')} />
+                    <ChevronDown className={cn('h-3.5 w-3.5 shrink-0', hasActiveLayer ? 'text-primary' : 'text-muted-foreground')} />
                   ) : (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   )}
-                  <span className={cn('text-[12px] font-normal', hasActiveLayer ? 'text-primary' : 'text-slate-800')}>
+                  <span className={cn('text-[12px] font-normal', hasActiveLayer ? 'text-primary' : 'text-foreground')}>
                     {group.name}
                   </span>
-                  <span className={cn('text-[11px]', hasActiveLayer ? 'text-primary/70' : 'text-slate-400')}>
+                  <span className={cn('text-[11px]', hasActiveLayer ? 'text-primary/70' : 'text-muted-foreground')}>
                     ({groupCount}개)
                   </span>
                 </button>
@@ -1380,13 +1380,13 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                     });
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/30 shrink-0 cursor-pointer"
+                  className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary/30 shrink-0 cursor-pointer"
                   title="그룹 전체 켜기/끄기"
                 />
               </div>
 
               {isGroupOpen && (
-                <div className={cn(hasActiveLayer ? 'bg-primary/[0.03]' : 'bg-slate-50/80')}>
+                <div className={cn(hasActiveLayer ? 'bg-primary/[0.03]' : 'bg-muted/30')}>
                   {filteredLayers.map((layer) => {
                     const isActive = activeTableName === layer.tableName;
                     const isVisible = visibleLayerNames.has(layer.tableName);
@@ -1405,35 +1405,35 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                           }
                         }}
                         className={cn(
-                          'flex w-full items-center gap-1 py-1 pl-4 pr-2 transition-colors hover:bg-slate-100 cursor-pointer',
+                          'flex w-full items-center gap-1 py-1 pl-4 pr-2 transition-colors hover:bg-muted/50 cursor-pointer',
                           isActive && 'bg-primary/5'
                         )}
                       >
                         {failedLegendLayers.has(layer.tableName) ? (
                           <span
-                            className="shrink-0 w-5 h-5 rounded border border-slate-300 bg-slate-200"
+                            className="shrink-0 w-5 h-5 rounded border border-border bg-muted"
                             aria-hidden
                           />
                         ) : (
                           <img
                             src={getLegendGraphicUrl(layer.tableName, layer.tableName)}
                             alt=""
-                            className="shrink-0 w-5 h-5 object-contain border border-slate-200 rounded"
+                            className="shrink-0 w-5 h-5 object-contain border border-border rounded"
                             onError={() => onLegendError(layer.tableName)}
                           />
                         )}
                         <div className="flex items-center gap-1 min-w-0 flex-1 text-left min-h-[1.0rem]">
-                          <span className={cn('text-[11px] truncate', isActive ? 'font-normal text-primary' : 'font-normal text-slate-700')}>
+                          <span className={cn('text-[11px] truncate', isActive ? 'font-normal text-primary' : 'font-normal text-foreground')}>
                             {layer.name}
                           </span>
-                          <span className={cn('text-[11px] shrink-0', isActive ? 'text-primary/60' : 'text-slate-400')}>
+                          <span className={cn('text-[11px] shrink-0', isActive ? 'text-primary/60' : 'text-muted-foreground')}>
                             ({totalCount != null ? `${totalCount.toLocaleString()}건` : '...'})
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
-                            className="p-0.5 rounded text-slate-400 hover:text-primary hover:bg-slate-200/60 transition-colors"
+                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
                             title="필터 추가"
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -1441,7 +1441,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                           </button>
                           <button
                             type="button"
-                            className="p-0.5 rounded text-slate-400 hover:text-primary hover:bg-slate-200/60 transition-colors"
+                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
                             title="스타일 설정"
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -1462,7 +1462,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                               });
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/30 shrink-0 cursor-pointer"
+                            className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary/30 shrink-0 cursor-pointer"
                             title="레이어 켜기/끄기"
                           />
                         </div>

@@ -65,13 +65,13 @@ type Props = {
   hideHeaderClose?: boolean;
 };
 
-const cellBorder = 'border border-slate-300';
+const cellBorder = 'border border-border';
 const labelCell =
-  'bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 align-middle whitespace-nowrap';
-const valueCell = 'bg-white px-1.5 py-0.5 align-middle';
+  'bg-muted/30 px-2 py-1 text-[10px] font-medium text-foreground align-middle whitespace-nowrap';
+const valueCell = 'bg-background px-1.5 py-0.5 align-middle';
 const field =
   'h-7 border-0 bg-transparent px-1 text-[11px] shadow-none focus-visible:ring-0';
-const sectionTitle = 'mb-1 text-[11px] font-semibold text-slate-800';
+const sectionTitle = 'mb-1 text-[11px] font-semibold text-foreground';
 
 export function ShootingRequestForm({
   initial,
@@ -221,20 +221,20 @@ export function ShootingRequestForm({
   }));
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="min-w-0">
-          <p className="text-[10px] text-slate-400">[별지 제3호서식]</p>
-          <h2 className="text-[13px] font-semibold leading-snug text-slate-900">
+          <p className="text-[10px] text-muted-foreground">[별지 제3호서식]</p>
+          <h2 className="text-[13px] font-semibold leading-snug text-foreground">
             무인비행장치 촬영신청서
           </h2>
-          <p className="mt-0.5 text-[10px] text-slate-400">(제14조 제1항 관련)</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">(제14조 제1항 관련)</p>
         </div>
         {hideHeaderClose ? null : (
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             title={closeLabel}
             aria-label={closeLabel}
           >
@@ -323,17 +323,17 @@ export function ShootingRequestForm({
                 <th className={cn(labelCell, cellBorder)}>
                   촬영지역
                   <br />
-                  <span className="font-normal text-slate-400">(위치도)</span>
+                  <span className="font-normal text-muted-foreground">(위치도)</span>
                 </th>
                 <td className={cn(valueCell, cellBorder)}>
                   <div className="space-y-1.5 py-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-[10px] text-slate-500">- 지번</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">- 지번</span>
                       <Input
                         value={form.address}
                         onChange={(e) => setField('address', e.target.value)}
                         disabled={readOnly}
-                        className="h-7 flex-1 border-slate-200 text-[11px]"
+                        className="h-7 flex-1 border-border text-[11px]"
                         placeholder="예: 방어동"
                       />
                     </div>
@@ -342,8 +342,8 @@ export function ShootingRequestForm({
                       className={cn(
                         'relative overflow-hidden rounded-md border border-dashed',
                         form.hasScope && form.scopeWkt
-                          ? 'border-sky-400 bg-slate-100'
-                          : 'border-slate-300 bg-slate-50'
+                          ? 'border-sky-400 bg-muted/40'
+                          : 'border-border bg-muted/30'
                       )}
                     >
                       {form.hasScope && form.scopeWkt ? (
@@ -353,15 +353,15 @@ export function ShootingRequestForm({
                             wkt5181={form.scopeWkt}
                             className="absolute inset-0"
                           />
-                          <div className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 shadow-sm ring-1 ring-sky-200/80">
+                          <div className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 shadow-sm ring-1 ring-sky-200/80">
                             {form.scopeLabel || '범위 지정됨'}
                           </div>
                         </div>
                       ) : (
                         <div className="flex aspect-[16/9] flex-col items-center justify-center gap-2 p-3 text-center">
-                          <MapPinned className="h-7 w-7 text-slate-300" />
-                          <p className="text-[11px] text-slate-500">촬영 범위를 지도에 그려 주세요</p>
-                          <p className="text-[10px] text-slate-400">위치도 · 범위 미지정</p>
+                          <MapPinned className="h-7 w-7 text-muted-foreground/40" />
+                          <p className="text-[11px] text-muted-foreground">촬영 범위를 지도에 그려 주세요</p>
+                          <p className="text-[10px] text-muted-foreground">위치도 · 범위 미지정</p>
                         </div>
                       )}
                     </div>
@@ -370,14 +370,14 @@ export function ShootingRequestForm({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
-                          className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50"
+                          className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
                           onClick={startDraw}
                         >
                           {form.hasScope ? '범위 다시 그리기' : '범위 그리기'}
                         </button>
                         <button
                           type="button"
-                          className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:opacity-50"
+                          className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
                           onClick={clearScope}
                           disabled={!form.hasScope}
                         >
@@ -446,7 +446,7 @@ export function ShootingRequestForm({
                     onChange={(e) => setField('detailRequest', e.target.value)}
                     disabled={readOnly}
                     rows={2}
-                    className="w-full resize-none border-0 bg-transparent px-1 py-1 text-[11px] outline-none placeholder:text-slate-400 disabled:opacity-70"
+                    className="w-full resize-none border-0 bg-transparent px-1 py-1 text-[11px] outline-none placeholder:text-muted-foreground disabled:opacity-70"
                     placeholder="추가 요청 사항"
                   />
                 </td>
@@ -455,9 +455,9 @@ export function ShootingRequestForm({
           </table>
         </section>
 
-        <section className="rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2">
+        <section className="rounded-md border border-border bg-muted/30 px-2.5 py-2">
           <h3 className={sectionTitle}>촬영영상 안내</h3>
-          <ol className="list-decimal space-y-0.5 pl-4 text-[10px] leading-snug text-slate-600">
+          <ol className="list-decimal space-y-0.5 pl-4 text-[10px] leading-snug text-muted-foreground">
             <li>
               항공사진 보안 규정에 의거 별도의 승인이 없이는 행정내부용 자료로만 활용 가능
             </li>
@@ -481,10 +481,10 @@ export function ShootingRequestForm({
       </div>
 
       {!hideFooterActions ? (
-        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-slate-200 bg-slate-50/80 px-3 py-1.5">
+        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-border bg-muted/30 px-3 py-1.5">
           <button
             type="button"
-            className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:opacity-50"
+            className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
             disabled={downloading}
             onClick={() => void handleDownload()}
           >
@@ -493,7 +493,7 @@ export function ShootingRequestForm({
           {!readOnly ? (
             <button
               type="button"
-              className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:opacity-50"
+              className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
               disabled={submitting}
               onClick={() => void handleSubmit()}
             >

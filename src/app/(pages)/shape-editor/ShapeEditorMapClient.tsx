@@ -13,7 +13,7 @@ export default function ShapeEditorMapClient({
 }) {
   return (
     <ShapeEditorProvider>
-      <Suspense fallback={<div className="h-screen w-full bg-slate-100" aria-busy="true" />}>
+      <Suspense fallback={<div className="h-screen w-full bg-muted/40" aria-busy="true" />}>
         <ShapeEditorShell projectName={projectName} defaultCenter={defaultCenter} />
       </Suspense>
     </ShapeEditorProvider>

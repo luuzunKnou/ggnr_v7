@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type Map from "ol/Map";
+import type OlMap from "ol/Map";
 import Draw from "ol/interaction/Draw";
 import DoubleClickZoom from "ol/interaction/DoubleClickZoom";
 import Modify from "ol/interaction/Modify";
@@ -240,13 +240,20 @@ export function LayerRowGeomEditHandler({
   const layerRowParcelRemoveRef = mapContext?.layerRowParcelRemoveRef;
   const draftParcels = mapContext?.layerRowDraftParcels ?? [];
   const map = mapContext?.mapInstanceRef?.current ?? null;
-  const mapRef = (mapContext?.mapInstanceRef ?? { current: null }) as RefObject<Map | null>;
+  const mapRef = (mapContext?.mapInstanceRef ?? { current: null }) as RefObject<OlMap | null>;
   const { inputBottomPx } = useSearchBarOffset();
   const hintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
   const mapOpsRef = useRef<GeomMapOps | null>(null);
   const geomEditSourceRef = useRef<VectorSource | null>(null);
   const attachModifyRef = useRef<(() => void) | null>(null);
-  const loadParcelsRef = useRef<((opts?: { silent?: boolean }) => Promise<void>) | null>(null);
+  const loadParcelsRef = useRef<
+    ((opts?: {
+      silent?: boolean;
+      attempt?: number;
+      replaceKept?: boolean;
+      commitSnapshot?: boolean;
+    }) => Promise<void>) | null
+  >(null);
   const isDrawActiveRef = useRef(false);
   /** 적용 전 — 필지목록·점용장소는 «적용»에서만 반영 */
   const pendingApplyRef = useRef(true);

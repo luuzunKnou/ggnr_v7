@@ -113,7 +113,7 @@ export function ServiceFilePdfThumb({
 
   const frameClass = unboxed
     ? 'relative h-full w-full min-h-0 min-w-0 overflow-hidden'
-    : cn('relative shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-100', box[size]);
+    : cn('relative shrink-0 overflow-hidden rounded border border-border bg-muted/40', box[size]);
 
   if (phase === 'error') {
     return (
@@ -142,13 +142,13 @@ export function ServiceFilePdfThumb({
   return (
     <div
       className={cn(
-        'flex items-center justify-center bg-slate-50',
-        unboxed ? 'h-full w-full rounded-none' : cn('shrink-0 rounded border border-slate-200', box[size]),
+        'flex items-center justify-center bg-muted/30',
+        unboxed ? 'h-full w-full rounded-none' : cn('shrink-0 rounded border border-border', box[size]),
         className
       )}
       aria-hidden
     >
-      <Loader2 className={cn('animate-spin text-slate-400', unboxed ? 'h-8 w-8' : iconSz[size])} />
+      <Loader2 className={cn('animate-spin text-muted-foreground', unboxed ? 'h-8 w-8' : iconSz[size])} />
     </div>
   );
 }
