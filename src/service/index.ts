@@ -60,6 +60,7 @@ import * as flightLogbookService from './flightLogbookService';
 import * as aerialUploadService from './aerialUploadService';
 import * as aerialOrthoService from './aerialOrthoService';
 import * as useFeeService from './useFeeService';
+import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
@@ -124,6 +125,7 @@ export {
   aerialUploadService,
   aerialOrthoService,
   useFeeService,
+  fmsLinkageService,
   groundwaterPermitService,
   bizNotifService,
 };

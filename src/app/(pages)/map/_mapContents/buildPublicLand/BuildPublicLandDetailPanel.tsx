@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   LAYER_ROW_EDIT_PRESETS,
   LAYER_ROW_NEW_ID,
@@ -105,6 +106,19 @@ export function BuildPublicLandDetailPanel({
   useEffect(() => {
     void loadDetail();
   }, [loadDetail, reloadToken]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode) return;
+    const id = String(detailId ?? "").trim();
+    if (!id) return;
+    recordDataViewLog({
+      tableName: preset.tableName,
+      keyField: preset.keyField,
+      keyValue: id,
+      serviceName: "국공유지",
+    });
+  }, [detailId, isCreateMode, preset.tableName, preset.keyField]);
 
   const handleReload = useCallback(async () => {
     if (!isCreateMode) setReloadToken((t) => t + 1);

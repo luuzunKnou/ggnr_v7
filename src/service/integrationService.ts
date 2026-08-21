@@ -6,7 +6,7 @@ import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest'
 
 type Params = Record<string, unknown>;
 
-export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA';
+export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -61,7 +61,8 @@ function normalizeSystem(v: unknown): IntegrationSystem {
     s === 'KORPES' ||
     s === 'SEUMTEO' ||
     s === 'SAEOL' ||
-    s === 'SAFETYDATA'
+    s === 'SAFETYDATA' ||
+    s === 'FMS'
   )
     return s;
   throw new Error(`Unknown integration system: ${s}`);
@@ -122,16 +123,37 @@ export async function runIntegration(p: Params) {
 
   await ensureIntegrationTables();
 
+  const trigger = String(p.trigger ?? '').trim().toLowerCase();
+  const schedulerLabel =
+    trigger === 'scheduler'
+      ? `FMS 연계 스케줄러 실행 - ${new Date().toLocaleString('ko-KR', {
+          timeZone: 'Asia/Seoul',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })}`
+      : null;
+  const startMessage =
+    schedulerLabel ?? (mode === 'initial' ? 'initial run' : 'daily run');
+  const withSchedulerPrefix = (detail: string) =>
+    schedulerLabel ? `${schedulerLabel}\n${detail}` : detail;
+
   const started = await pool.query<{ ijl_key: number }>(
     `insert into integration_job_log (ijl_system, ijl_status, ijl_message)
      values ($1,'STARTED',$2)
      returning ijl_key`,
-    [system, mode === 'initial' ? 'initial run' : 'daily run']
+    [system, startMessage]
   );
   const ijlKey = started.rows[0]?.ijl_key;
 
   try {
-    console.error(`[INTEGRATION] START system=${system} mode=${mode} ijlKey=${ijlKey ?? '-'}`);
+    console.error(
+      `[INTEGRATION] START system=${system} mode=${mode} trigger=${trigger || 'manual'} ijlKey=${ijlKey ?? '-'}`
+    );
     if (system === 'KAIS') {
       const appKey = (process.env.KAIS_APP_KEY ?? '').trim() || HARDCODED_KAIS_APP_KEY;
       const sggCode = await resolveKaisSggCode();
@@ -225,6 +247,37 @@ export async function runIntegration(p: Params) {
           `완료 1/1 | ${cfg.id} | ${r.schema}.${r.tableNameEn} | fetched=${r.rowsFetched}, inserted=${r.rowsInserted}, filteredOut=${r.rowsFilteredOut}`
         );
       }
+    } else if (system === 'FMS') {
+      await updateIntegrationJobProgress(
+        ijlKey,
+        withSchedulerPrefix('FMS 연계 실행 중...')
+      );
+      const { runFmsSync } = await import('@/lib/fmsLinkage/syncRunner');
+      const r = await runFmsSync();
+      if (r.skipped === 'already_running' || r.skipped === 'no_config' || r.skipped === 'no_query') {
+        throw new Error(r.message);
+      }
+      if (r.jobStatus === 'FAILED') {
+        throw new Error(r.message);
+      }
+      if (r.jobStatus === 'NOT_PROD' || r.jobStatus === 'NO_DATA') {
+        await pool.query(
+          `update integration_job_log
+           set ijl_status=$2, ijl_finished_at=now(), ijl_message=$3
+           where ijl_key=$1`,
+          [ijlKey, r.jobStatus, withSchedulerPrefix(r.message)]
+        );
+        console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
+        return { ijlKey, system, ok: false };
+      }
+      await pool.query(
+        `update integration_job_log
+         set ijl_status=$2, ijl_finished_at=now(), ijl_message=$3
+         where ijl_key=$1`,
+        [ijlKey, r.jobStatus, withSchedulerPrefix(r.message)]
+      );
+      console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
+      return { ijlKey, system, ok: r.jobStatus === 'SUCCESS' };
     } else {
       throw new Error('Not implemented yet');
     }
@@ -244,7 +297,7 @@ export async function runIntegration(p: Params) {
       `update integration_job_log
        set ijl_status='FAILED', ijl_finished_at=now(), ijl_message=$2
        where ijl_key=$1`,
-      [ijlKey, msg]
+      [ijlKey, withSchedulerPrefix(msg)]
     );
     throw e;
   }

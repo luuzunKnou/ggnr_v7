@@ -90,6 +90,7 @@ import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
 import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
 import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstructionLedgerMapHighlight';
 import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
+import { useFmsFacilityOverlayLayer } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
 import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
 import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
 import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler';
@@ -1007,6 +1008,7 @@ export default function OpenLayersMap({
   useRoadNetworkOverlayLayer(mapReady);
   useRiverConstructionLedgerMapHighlight(mapReady);
   useRiverConstructionLedgerOverlayLayer(mapReady);
+  useFmsFacilityOverlayLayer(mapReady);
 
   const roadCctvOverlay = mapContext?.roadCctvOverlay ?? null;
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay;

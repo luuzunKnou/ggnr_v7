@@ -15,6 +15,7 @@ import {
   X,
   Upload,
 } from 'lucide-react';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
 import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
@@ -48,6 +49,7 @@ import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
+import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import {
   formatRoadLedgerFacilityCellValue,
@@ -395,12 +397,36 @@ export function LayerDataPanel({
   /** 기본정보 수정에 쓰는 행 키 — 위 첨부·이력용과 동일 계산 */
   const currentRowKey = selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
 
+  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만 */
+  const dataQueryReadOnly = useMemo(
+    () =>
+      isFmsFacilityLayerTable(
+        activeLayer?.physicalTableName ?? activeLayer?.tableName ?? null
+      ),
+    [activeLayer?.physicalTableName, activeLayer?.tableName]
+  );
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (currentRowKey == null || !keyFieldName) return;
+    const tableName = String(
+      activeLayer?.physicalTableName ?? activeLayer?.tableName ?? ''
+    ).trim();
+    if (!tableName) return;
+    recordDataViewLog({
+      tableName,
+      keyField: keyFieldName,
+      keyValue: currentRowKey,
+      serviceName: '데이터조회',
+    });
+  }, [currentRowKey, keyFieldName, activeLayer?.physicalTableName, activeLayer?.tableName]);
+
   /** 선택된 행이 바뀌거나 탭을 벗어나면 기본정보 수정 모드 자동 해제 */
   useEffect(() => {
     setEditingBasic(false);
     setBasicDraft({});
     setBasicError(null);
-  }, [selectedRowData, activeTab]);
+  }, [selectedRowData, activeTab, dataQueryReadOnly]);
 
   useEffect(() => {
     if (activeTab !== 'history') return;
@@ -1029,7 +1055,7 @@ export function LayerDataPanel({
 
   /** 기본정보 인풋 초기값용 — 화면 표시 포맷이 아닌 원본 값 문자열 */
   const handleBeginBasicEdit = () => {
-    if (!selectedRow) return;
+    if (dataQueryReadOnly || !selectedRow) return;
     const draft: Record<string, string> = {};
     for (const f of basicInfoFields) {
       if (f.readOnly) continue;
@@ -1048,7 +1074,15 @@ export function LayerDataPanel({
   };
 
   const handleSaveBasicEdit = async () => {
-    if (!activeLayer || keyFieldName == null || currentRowKey == null || selectedRow == null) return;
+    if (
+      dataQueryReadOnly ||
+      !activeLayer ||
+      keyFieldName == null ||
+      currentRowKey == null ||
+      selectedRow == null
+    ) {
+      return;
+    }
     setBasicSaving(true);
     setBasicError(null);
     try {
@@ -1418,13 +1452,8 @@ export function LayerDataPanel({
                       const config = HISTORY_TYPE_CONFIG[event.type];
                       if (!config) return null;
                       const EventIcon = config.icon;
-                      return (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onClick={() => openHistoryEdit(event)}
-                          className="relative flex w-full gap-2.5 pb-4 text-left transition-colors hover:bg-muted/50 rounded-sm -mx-1 px-1"
-                        >
+                      const body = (
+                          <>
                           {index < historyEvents.length - 1 && (
                             <div className="absolute left-[17px] top-7 h-[calc(100%-14px)] w-px bg-muted" aria-hidden />
                           )}
@@ -1444,6 +1473,23 @@ export function LayerDataPanel({
                               <p className="mt-0.5 text-[10px] text-muted-foreground">담당: {event.author}</p>
                             ) : null}
                           </div>
+                          </>
+                      );
+                      if (dataQueryReadOnly) {
+                        return (
+                          <div key={event.id} className="relative flex w-full gap-2.5 pb-4 -mx-1 px-1">
+                            {body}
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => openHistoryEdit(event)}
+                          className="relative flex w-full gap-2.5 pb-4 text-left transition-colors hover:bg-muted/50 rounded-sm -mx-1 px-1"
+                        >
+                          {body}
                         </button>
                       );
                     })}
@@ -1609,6 +1655,7 @@ export function LayerDataPanel({
                               <Download className="h-3 w-3" />
                               <span className="sr-only">다운로드</span>
                             </button>
+                            {!dataQueryReadOnly && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1636,6 +1683,7 @@ export function LayerDataPanel({
                               <X className="h-3 w-3" />
                               <span className="sr-only">삭제</span>
                             </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -1675,6 +1723,7 @@ export function LayerDataPanel({
                     </>
                   ) : (
                     <>
+                      {!dataQueryReadOnly && (
                       <button
                         type="button"
                         disabled={keyFieldName == null || currentRowKey == null}
@@ -1683,6 +1732,7 @@ export function LayerDataPanel({
                       >
                         수정
                       </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleShowSelectedOnMap}
@@ -1703,6 +1753,7 @@ export function LayerDataPanel({
                   {keyFieldName != null && rowKeyForHistory != null ? `${historyEvents.length}건` : '—'}
                 </span>
                 <div className="flex gap-1.5">
+                  {!dataQueryReadOnly && (
                   <button
                     type="button"
                     disabled={keyFieldName == null || rowKeyForHistory == null}
@@ -1711,6 +1762,7 @@ export function LayerDataPanel({
                   >
                     이력 추가
                   </button>
+                  )}
                   <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                 </div>
               </div>
@@ -1722,6 +1774,7 @@ export function LayerDataPanel({
                   {keyFieldName != null && rowKeyForAttachments != null ? `${attachmentQuery.files.length}건` : '—'}
                 </span>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {!dataQueryReadOnly && (
                   <button
                     type="button"
                     disabled={
@@ -1737,6 +1790,7 @@ export function LayerDataPanel({
                   >
                     파일 추가
                   </button>
+                  )}
                   {keyFieldName != null &&
                   rowKeyForAttachments != null &&
                   activeLayer != null &&

@@ -50,8 +50,31 @@ export type ExcelCompositeKeySuggestion = {
 
 const COMPOSITE_KEY_SUGGEST_MAX_COLS = 4
 const COMPOSITE_KEY_SUGGEST_EMPTY_SKIP = 0.5
-const COMPOSITE_KEY_SUGGEST_WEAK =
-  /면적|금액|사용료|부과|좌표|경도|위도|기타|전화|연락/
+/** 면적·금액·비고·내용 등 — 식별자로 쓰기 약한 열 (추천 제외·단일키 경고) */
+const EXCEL_WEAK_KEY_LABEL =
+  /면적|금액|사용료|부과|좌표|경도|위도|기타|전화|연락|비고|내용|설명|메모|특이|적요|remark|note|desc|comment|contents/i
+
+export function isExcelWeakKeyColumn(label: string): boolean {
+  return EXCEL_WEAK_KEY_LABEL.test(String(label ?? '').trim())
+}
+
+/** 단일키로 고른 열이 설명 성격이면 경고 문구, 아니면 null */
+export function excelWeakSingleKeyWarning(opts: {
+  headerKor?: string
+  headerEng?: string
+  originalHeader?: string
+}): string | null {
+  const label = (opts.headerKor || opts.headerEng || opts.originalHeader || '').trim()
+  if (!label) return null
+  if (
+    !isExcelWeakKeyColumn(label) &&
+    !isExcelWeakKeyColumn(opts.headerEng ?? '') &&
+    !isExcelWeakKeyColumn(opts.originalHeader ?? '')
+  ) {
+    return null
+  }
+  return `「${label}」는 설명 성격 열이라 단일 Key로 쓰기엔 적합하지 않습니다. 번호·코드 열을 쓰거나 복합키를 권장합니다.`
+}
 
 function excelKeyCell(row: Record<string, unknown>, header: string): string {
   return String(row[header] ?? '').trim()
@@ -114,7 +137,7 @@ export function suggestExcelCompositeKey(opts: {
     const header = field.originalHeader?.trim()
     if (!header) continue
     if (isExcelSystemKeyColumn(field.headerEng) || isExcelSystemKeyColumn(header)) continue
-    if (COMPOSITE_KEY_SUGGEST_WEAK.test(excelKeyFieldLabel(field))) continue
+    if (isExcelWeakKeyColumn(excelKeyFieldLabel(field))) continue
     let empty = 0
     const set = new Set<string>()
     for (const row of rows) {

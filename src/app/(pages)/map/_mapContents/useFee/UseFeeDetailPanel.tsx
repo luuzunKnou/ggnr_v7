@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { call } from '@/lib/api'
+import { recordDataViewLog } from '@/lib/recordDataViewLog'
 import { cn } from '@/lib/utils'
 import { LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
 import { MapHitOverlapSelect } from '../../_mapComponents/MapHitOverlapSelect'
 import { useMapContext } from '../../_mapComponents/MapContext'
+import { getUseFeeBinding } from '@/lib/useFeeBinding'
 import { USE_FEE_DETAIL_PRIMARY_COUNT } from './useFeeFieldLabels'
 import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 
@@ -80,6 +82,19 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
       cancelled = true
     }
   }, [detailId, system, serEng])
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    const id = String(detailId ?? '').trim()
+    if (!id) return
+    const binding = getUseFeeBinding({ serEng, system })
+    recordDataViewLog({
+      tableName: binding.mainTable,
+      keyField: 'id',
+      keyValue: id,
+      serviceName: '점사용료',
+    })
+  }, [detailId, serEng, system])
 
   const visibleAttributes = expanded
     ? attributes

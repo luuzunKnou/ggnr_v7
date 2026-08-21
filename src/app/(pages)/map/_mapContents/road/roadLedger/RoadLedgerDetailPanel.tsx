@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -278,6 +279,24 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    const rdid = String(pickRoadLedgerField(row, "rdid") ?? "").trim();
+    const ogcFid = String(
+      pickRoadLedgerField(row, "ogc_fid") ??
+        pickRoadLedgerField(row, "roadLedgerOgcFid") ??
+        ""
+    ).trim();
+    const keyValue = rdid || ogcFid;
+    if (!keyValue) return;
+    recordDataViewLog({
+      tableName: "a0020000",
+      keyField: rdid ? "rdid" : "ogc_fid",
+      keyValue,
+      serviceName: "도로대장",
+    });
+  }, [row]);
 
   const getEffectiveDocLayers = useCallback(
     (key: RoadLedgerDocButtonKey) => {
