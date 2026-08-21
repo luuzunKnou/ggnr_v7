@@ -7,9 +7,9 @@ import { BIZ_NOTIF_WITHIN_DAYS } from '../bizNotif/bizNotifClient'
 import type { ProtoNotifItem } from '../bizNotif/bizNotifStore'
 
 const NOTIF_ROW =
-  'flex items-center gap-2 border-b border-slate-100/80 py-2 pl-4 pr-3 last:border-b-0 hover:bg-slate-50/50'
+  'flex items-center gap-2 border-b border-border/80 py-2 pl-4 pr-3 last:border-b-0 hover:bg-muted/50'
 const BTN_CLEAR =
-  'shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] leading-none text-slate-400 hover:text-black'
+  'shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground hover:text-black'
 
 function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: string } {
   if (item.listKey) {
@@ -66,7 +66,7 @@ export function UserAccountProtoNotifTab({
 
   if (totalCount === 0) {
     return (
-      <div className="flex min-h-[120px] flex-col items-center justify-center px-3 py-10 text-center text-xs text-slate-500">
+      <div className="flex min-h-[120px] flex-col items-center justify-center px-3 py-10 text-center text-xs text-muted-foreground">
         받은 알림이 없습니다.
       </div>
     )
@@ -74,9 +74,9 @@ export function UserAccountProtoNotifTab({
 
   return (
     <>
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 px-3 py-2">
-        <span className="text-[11px] text-slate-500">
-          총 <span className="font-medium tabular-nums text-slate-700">{totalCount}</span>건
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/50 px-3 py-2">
+        <span className="text-[11px] text-muted-foreground">
+          총 <span className="font-medium tabular-nums text-foreground">{totalCount}</span>건
           {unreadCount > 0 ? (
             <>
               {' '}
@@ -90,7 +90,7 @@ export function UserAccountProtoNotifTab({
         </button>
       </div>
 
-      <div className="scrollbar-thin min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overflow-x-hidden bg-white">
+      <div className="scrollbar-thin min-h-0 flex-1 divide-y divide-border overflow-y-auto overflow-x-hidden bg-background">
         {expiryList.length > 0 ? (
           <NotifGroup
             summary={`점용종료일이 ${BIZ_NOTIF_WITHIN_DAYS}일 이내인 건이 ${expiryList.length}건입니다`}
@@ -141,24 +141,24 @@ function NotifGroup({
   children: React.ReactNode
 }) {
   return (
-    <section className="border-b border-slate-100 last:border-b-0">
+    <section className="border-b border-border last:border-b-0">
       <button
         type="button"
-        className="flex w-full items-center gap-2 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50/50"
+        className="flex w-full items-center gap-2 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/50"
         onClick={onToggle}
         aria-expanded={expanded}
       >
-        <span className="min-w-0 flex-1 text-left text-xs font-medium leading-snug text-slate-800">
+        <span className="min-w-0 flex-1 text-left text-xs font-medium leading-snug text-foreground">
           {summary}
         </span>
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
       </button>
       {expanded ? (
-        <ul className="border-t border-slate-100/80 bg-white pb-1">{children}</ul>
+        <ul className="border-t border-border/80 bg-background pb-1">{children}</ul>
       ) : null}
     </section>
   )
@@ -176,11 +176,11 @@ function NotifListRow({
   const { useName, key } = parseNotifListFields(item)
 
   return (
-    <li className={cn(NOTIF_ROW, item.read ? 'bg-sky-50/30' : 'bg-white')}>
+    <li className={cn(NOTIF_ROW, item.read ? 'bg-sky-50/30' : 'bg-background')}>
       <span
         className={cn(
           'shrink-0 select-none text-base leading-none',
-          item.read ? 'text-slate-300/70' : 'text-slate-400'
+          item.read ? 'text-muted-foreground/40/70' : 'text-muted-foreground'
         )}
         aria-hidden
       >
@@ -195,18 +195,18 @@ function NotifListRow({
         <span
           className={cn(
             'truncate text-[11px] font-medium leading-snug tracking-tight',
-            item.read ? 'text-slate-500/80' : 'text-slate-600'
+            item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
           )}
         >
           {useName}
         </span>
-        <span className="shrink-0 text-slate-300" aria-hidden>
+        <span className="shrink-0 text-muted-foreground/40" aria-hidden>
           |
         </span>
         <span
           className={cn(
             'shrink-0 truncate text-[11px] tabular-nums leading-snug',
-            item.read ? 'text-slate-400/80' : 'text-slate-500'
+            item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
           )}
         >
           {key}
@@ -215,7 +215,7 @@ function NotifListRow({
       <span className="min-w-2 flex-1" aria-hidden />
       <button
         type="button"
-        className="shrink-0 rounded-sm p-1 text-slate-400 hover:text-black"
+        className="shrink-0 rounded-sm p-1 text-muted-foreground hover:text-black"
         onClick={onDelete}
         aria-label="삭제"
       >

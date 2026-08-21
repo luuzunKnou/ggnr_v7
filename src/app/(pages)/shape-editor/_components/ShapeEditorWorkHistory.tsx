@@ -13,7 +13,7 @@ export function ShapeEditorWorkHistory() {
 
   if (visibleEntries.length === 0) {
     return (
-      <p className="text-[10px] text-slate-400">
+      <p className="text-[10px] text-muted-foreground">
         도형을 그리거나 꼭짓점을 이동하면 편집 이력이 자동으로 쌓입니다.
       </p>
     );
@@ -23,7 +23,7 @@ export function ShapeEditorWorkHistory() {
 
   return (
     <div className="space-y-2">
-      <span className="text-[10px] text-slate-500">
+      <span className="text-[10px] text-muted-foreground">
         {visibleEntries.length}건
         {currentVisiblePos >= 0
           ? ` · 현재 ${currentVisiblePos + 1}번째`
@@ -43,8 +43,8 @@ export function ShapeEditorWorkHistory() {
                 isCurrent
                   ? 'border-blue-300 bg-blue-50/80 ring-1 ring-blue-200'
                   : isFuture
-                    ? 'border-slate-100 bg-slate-50/80 opacity-50'
-                    : 'border-slate-200 bg-white'
+                    ? 'border-border bg-muted/30 opacity-50'
+                    : 'border-border bg-background'
               )}
             >
               <div className="flex items-center gap-1.5">
@@ -52,13 +52,13 @@ export function ShapeEditorWorkHistory() {
                 <span
                   className={cn(
                     'min-w-0 flex-1 truncate text-[11px]',
-                    isCurrent ? 'font-semibold text-blue-900' : 'font-medium text-slate-700'
+                    isCurrent ? 'font-semibold text-blue-900' : 'font-medium text-foreground'
                   )}
                   title={item.label}
                 >
                   {item.label}
                 </span>
-                <span className="shrink-0 text-[9px] tabular-nums text-slate-400">
+                <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
                   {visibleIdx + 1}
                 </span>
               </div>

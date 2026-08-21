@@ -141,6 +141,10 @@ export type SafetydataDatasetConfig = {
   ingestPrerequisiteDatasetIds?: string[];
   /** true면 `startSafetydataScheduler` 주기 적재에서 제외(수동·임시 버튼 등) */
   excludeFromAutoScheduler?: boolean;
+  /** API 응답 외 적재 테이블에 추가할 컬럼 (예: jibun_addr) */
+  derivedColumns?: Array<{ name: string; pgType?: string }>;
+  /** COMMIT 후 geom centroid 역지오코딩으로 jibun_addr 채움 */
+  fillGeomAddr?: boolean;
 };
 
 function apiUrl(path: string): string {
@@ -388,6 +392,8 @@ export const SAFETYDATA_DATASETS: SafetydataDatasetConfig[] = [
     tableNameEn: 'sd_heat_mitigation_facility',
     refreshSchedule: WEEKLY_DEFAULT,
     spatial: { mode: 'xy', geomColumn: 'geom', xField: 'lot', yField: 'lat', sourceSrid: 4326, publishGeoserver: true },
+    derivedColumns: [{ name: 'jibun_addr', pgType: 'text' }],
+    fillGeomAddr: true,
   },
   {
     id: 'sd-1339',

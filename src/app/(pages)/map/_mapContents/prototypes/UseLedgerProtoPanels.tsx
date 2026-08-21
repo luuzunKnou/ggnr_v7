@@ -240,9 +240,9 @@ export function UseLedgerProtoListPanel({
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col bg-white">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-          <span className="text-sm font-semibold text-slate-800">{listTitle}</span>
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+          <span className="text-sm font-semibold text-foreground">{listTitle}</span>
           <div className="flex items-center gap-1">
             <LayerRowAddButton
               onClick={() => {
@@ -264,7 +264,7 @@ export function UseLedgerProtoListPanel({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
               title="닫기"
               aria-label="닫기"
             >
@@ -273,15 +273,15 @@ export function UseLedgerProtoListPanel({
           </div>
         </div>
 
-        <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+        <div className="shrink-0 border-b border-border px-3 py-2">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="검색 (점용명, 장소, 시작일, 종료일)"
-              className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+              className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-border"
             />
           </div>
         </div>
@@ -295,18 +295,18 @@ export function UseLedgerProtoListPanel({
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>
-              <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+              <thead className="sticky top-0 z-[1] bg-muted/30 shadow-[0_1px_0_0_rgb(226_232_240)]">
                 <tr>
-                  <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                  <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground">
                     점용명
                   </th>
-                  <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                  <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground">
                     점용장소
                   </th>
-                  <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                  <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground">
                     점용시작일
                   </th>
-                  <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                  <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground">
                     점용종료일
                   </th>
                 </tr>
@@ -328,29 +328,29 @@ export function UseLedgerProtoListPanel({
                         }
                       }}
                       className={cn(
-                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50/80',
+                        'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
                         isSelected && 'bg-primary/10'
                       )}
                     >
                       <td
-                        className="truncate whitespace-nowrap px-2 py-1.5 text-slate-800"
+                        className="truncate whitespace-nowrap px-2 py-1.5 text-foreground"
                         title={row.name}
                       >
                         {row.name}
                         {isMoving && (
-                          <span className="ml-1 text-[11px] text-slate-500">이동 중…</span>
+                          <span className="ml-1 text-[11px] text-muted-foreground">이동 중…</span>
                         )}
                       </td>
                       <td
-                        className="truncate whitespace-nowrap px-2 py-1.5 text-slate-700"
+                        className="truncate whitespace-nowrap px-2 py-1.5 text-foreground"
                         title={row.place}
                       >
                         {formatProtoLedgerListPlace(row.place)}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-700">
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-foreground">
                         {row.startDate}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-700">
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-foreground">
                         {row.endDate}
                       </td>
                     </tr>
@@ -359,7 +359,7 @@ export function UseLedgerProtoListPanel({
               </tbody>
             </table>
           </div>
-          <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+          <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
             {rows.length.toLocaleString()}건 · 더미데이터
           </div>
         </div>
@@ -866,7 +866,7 @@ export function UseLedgerProtoDetailPanel({
 
   if (!isCreateMode && !row) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="flex h-full min-h-0 flex-col bg-background">
         <LayerRowEditHeader
           title={detailTitle}
           isEditing={false}
@@ -877,13 +877,13 @@ export function UseLedgerProtoDetailPanel({
           onClose={onClose}
           editable={false}
         />
-        <div className="px-3 py-6 text-center text-xs text-slate-500">선택한 대장을 찾을 수 없습니다.</div>
+        <div className="px-3 py-6 text-center text-xs text-muted-foreground">선택한 대장을 찾을 수 없습니다.</div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <LayerRowEditHeader
         title={detailTitle}
         actionsPlacement="footer"
@@ -931,28 +931,28 @@ export function UseLedgerProtoDetailPanel({
 
         {!isCreateMode && !isEditing && (
           <>
-            <div className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               점사용료 이력
             </div>
             {row && !row.mapped ? (
-              <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-6 text-center text-slate-500">
+              <div className="rounded border border-dashed border-border bg-muted/30 px-2 py-6 text-center text-muted-foreground">
                 연계된 점사용료 이력이 없습니다.
                 <br />
                 (과거 데이터는 매핑 불가)
               </div>
             ) : fees.length === 0 ? (
-              <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-6 text-center text-slate-500">
+              <div className="rounded border border-dashed border-border bg-muted/30 px-2 py-6 text-center text-muted-foreground">
                 연계된 점사용료 이력이 없습니다.
               </div>
             ) : (
-              <div className="overflow-auto rounded border border-slate-200">
+              <div className="overflow-auto rounded border border-border">
                 <table className="w-full border-collapse text-left text-xs">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-muted/30">
                     <tr>
-                      <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">상태</th>
-                      <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">부과번호</th>
-                      <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">금액</th>
-                      <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">납기일</th>
+                      <th className="border-b border-border px-2 py-2 font-semibold text-foreground">상태</th>
+                      <th className="border-b border-border px-2 py-2 font-semibold text-foreground">부과번호</th>
+                      <th className="border-b border-border px-2 py-2 font-semibold text-foreground">금액</th>
+                      <th className="border-b border-border px-2 py-2 font-semibold text-foreground">납기일</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -963,7 +963,7 @@ export function UseLedgerProtoDetailPanel({
                         tabIndex={0}
                         onClick={() => onSelectFee?.(f)}
                         className={cn(
-                          'cursor-pointer border-b border-slate-100 hover:bg-slate-50/80',
+                          'cursor-pointer border-b border-border hover:bg-muted/50',
                           selectedFeeId === f.id && 'bg-primary/10'
                         )}
                       >
@@ -979,9 +979,9 @@ export function UseLedgerProtoDetailPanel({
                             {f.status}
                           </span>
                         </td>
-                        <td className="px-2 py-1.5 text-slate-800">{f.chargeNo}</td>
-                        <td className="px-2 py-1.5 tabular-nums text-slate-700">{f.amount}</td>
-                        <td className="px-2 py-1.5 tabular-nums text-slate-700">{f.dueDate}</td>
+                        <td className="px-2 py-1.5 text-foreground">{f.chargeNo}</td>
+                        <td className="px-2 py-1.5 tabular-nums text-foreground">{f.amount}</td>
+                        <td className="px-2 py-1.5 tabular-nums text-foreground">{f.dueDate}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1039,7 +1039,7 @@ function ProtoAddressList({
   return (
     <>
       <div className="mb-1 mt-4 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
         {isEditing && (
           <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={onAdd}>
             <Plus className="h-3 w-3 shrink-0" aria-hidden />
@@ -1048,39 +1048,39 @@ function ProtoAddressList({
         )}
       </div>
       {isEditing && (
-        <div className="mb-2 rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-2 text-[11px] leading-relaxed text-slate-600">
+        <div className="mb-2 rounded border border-dashed border-border bg-muted/30 px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
           {emptyHintEdit}
         </div>
       )}
       {items.length === 0 ? (
         !isEditing ? (
-          <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+          <div className="rounded border border-dashed border-border bg-muted/30 px-2 py-3 text-muted-foreground">
             {emptyLabel}
           </div>
         ) : null
       ) : (
-        <ul className="list-none space-y-0 rounded border border-slate-200 bg-white">
+        <ul className="list-none space-y-0 rounded border border-border bg-background">
           {items.map((item, i) => (
             <li
               key={`${title}-${i}-${item.address}`}
-              className="flex items-start gap-1 border-b border-slate-100 px-2 py-2 text-slate-800 last:border-b-0"
+              className="flex items-start gap-1 border-b border-border px-2 py-2 text-foreground last:border-b-0"
             >
               <button
                 type="button"
-                className="min-w-0 flex-1 break-words text-left text-xs text-slate-800 hover:text-primary"
+                className="min-w-0 flex-1 break-words text-left text-xs text-foreground hover:text-primary"
                 onClick={() => onClick(item, i)}
                 title="클릭 시 위치 이동"
               >
-                <span className="mr-2 tabular-nums text-slate-400">{i + 1}.</span>
+                <span className="mr-2 tabular-nums text-muted-foreground">{i + 1}.</span>
                 {item.address}
                 {movingIdx === i && (
-                  <span className="ml-2 text-[11px] text-slate-500">이동 중…</span>
+                  <span className="ml-2 text-[11px] text-muted-foreground">이동 중…</span>
                 )}
               </button>
               {isEditing && (
                 <button
                   type="button"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600"
                   onClick={() => onRemove(i)}
                   aria-label="삭제"
                 >
@@ -1121,7 +1121,7 @@ export function UseLedgerProtoLinkedPanel({ ledger, onClose }: LinkedLedgerProps
   }, [ledger])
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <LayerRowEditHeader
         title={`${ledgerTypeLabel(ledger.type)} 상세`}
         isEditing={false}

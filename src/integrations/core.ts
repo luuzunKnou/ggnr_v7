@@ -133,12 +133,33 @@ export async function runCommand(
 }
 
 /**
+ * ogr2ogr/ogrinfo를 conda env에서 직접 호출할 때 필요한 환경변수.
+ * shpUploadService와 동일 — `conda run`은 hang·지연이 있어 실행 파일 직접 호출.
+ */
+export function buildGdalEnv(envDir: string): NodeJS.ProcessEnv {
+  const isWin = process.platform === 'win32';
+  const shareDir = isWin ? path.join(envDir, 'Library', 'share') : path.join(envDir, 'share');
+  const binDir = isWin ? path.join(envDir, 'Library', 'bin') : path.join(envDir, 'bin');
+  const pluginDir = isWin ? path.join(envDir, 'Library', 'lib', 'gdalplugins') : path.join(envDir, 'lib', 'gdalplugins');
+  const pathKey = isWin ? 'Path' : 'PATH';
+  const existingPath = process.env[pathKey] ?? process.env.PATH ?? '';
+  return {
+    ...process.env,
+    GDAL_DATA: path.join(shareDir, 'gdal'),
+    GDAL_DRIVER_PATH: pluginDir,
+    PROJ_DATA: path.join(shareDir, 'proj'),
+    PROJ_LIB: path.join(shareDir, 'proj'),
+    [pathKey]: `${binDir}${path.delimiter}${existingPath}`,
+  };
+}
+
+/**
  * ogr2ogr 실행 방식(기존 SHP 업로드 로직과 동일):
  * - GGNR_GDAL_OGR2OGR: ogr2ogr(.exe) 직접 경로
- * - GGNR_PIPELINE_PYTHON: conda env 내 GDAL 사용 (conda run)
+ * - GGNR_PIPELINE_PYTHON: 프로젝트 python/env 내 ogr2ogr 직접 호출 + buildGdalEnv
  * - 그 외: PATH의 ogr2ogr
  */
-export function resolveOgr2ogrRun(): { cmd: string; args: string[] } {
+export function resolveOgr2ogrRun(): { cmd: string; args: string[]; env?: NodeJS.ProcessEnv } {
   const fsSync = require('node:fs') as typeof import('node:fs');
   const root = process.cwd();
   if (process.env.GGNR_GDAL_OGR2OGR) {
@@ -152,7 +173,7 @@ export function resolveOgr2ogrRun(): { cmd: string; args: string[] } {
     const isWin = process.platform === 'win32';
     const candidate = isWin ? path.join(envDir, 'Library', 'bin', 'ogr2ogr.exe') : path.join(envDir, 'bin', 'ogr2ogr');
     if (fsSync.existsSync(candidate)) {
-      return { cmd: 'conda', args: ['run', '--no-capture-output', '--prefix', envDir, 'ogr2ogr'] };
+      return { cmd: candidate, args: [], env: buildGdalEnv(envDir) };
     }
   }
   return { cmd: 'ogr2ogr', args: [] };

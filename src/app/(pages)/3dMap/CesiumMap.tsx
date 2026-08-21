@@ -287,7 +287,8 @@ const CesiumMap = forwardRef<CesiumMapRef, CesiumMapProps>(function CesiumMap(
       if (cancelled) return;
 
       if (typeof window !== 'undefined' && !(window as any).CESIUM_BASE_URL) {
-        (window as any).CESIUM_BASE_URL = '/cesiumStatic';
+        const base = (process.env.BASE_PATH ?? '').replace(/\/$/, '');
+        (window as any).CESIUM_BASE_URL = `${base}/cesiumStatic`;
       }
 
       const ionToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;

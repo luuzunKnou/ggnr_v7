@@ -38,7 +38,7 @@ function StatusBadge({ status }: { status: RequestStatus }) {
     status === 'approved' || status === 'registering'
       ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
       : status === 'registered'
-        ? 'bg-slate-100 text-slate-700 ring-slate-300'
+        ? 'bg-muted/40 text-foreground ring-border'
         : status === 'rejected'
           ? 'bg-rose-50 text-rose-700 ring-rose-200'
           : 'bg-amber-50 text-amber-800 ring-amber-200';
@@ -149,11 +149,11 @@ export function ShootingRequestPanel({
         : `대기 ${pendingCount} · 승인 ${approvedCount} · 반려 ${rejectedCount}`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-2.5">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[13px] font-semibold text-slate-800">{title}</h2>
-          <p className="mt-0.5 text-[10px] text-slate-400">{subtitle}</p>
+          <h2 className="text-[13px] font-semibold text-foreground">{title}</h2>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">{subtitle}</p>
         </div>
         {listMode === 'mine' ? (
           <Button type="button" size="sm" className="h-8 gap-1 px-2.5 text-[11px]" onClick={handleAdd}>
@@ -164,7 +164,7 @@ export function ShootingRequestPanel({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -173,7 +173,7 @@ export function ShootingRequestPanel({
       </div>
 
       {!hideModeTabs ? (
-      <div className="flex shrink-0 gap-1 border-b border-slate-100 bg-slate-50/80 px-2.5 py-2">
+      <div className="flex shrink-0 gap-1 border-b border-border bg-muted/30 px-2.5 py-2">
         {(
           [
             { id: 'mine' as const, label: '내 신청' },
@@ -189,8 +189,8 @@ export function ShootingRequestPanel({
               className={cn(
                 'flex-1 rounded-md px-2 py-1.5 text-[11px] transition-colors',
                 active
-                  ? 'bg-white font-semibold text-sky-800 shadow-sm ring-1 ring-sky-200'
-                  : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+                  ? 'bg-background font-semibold text-sky-800 shadow-sm ring-1 ring-sky-200'
+                  : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
               )}
             >
               {t.label}
@@ -200,14 +200,14 @@ export function ShootingRequestPanel({
       </div>
       ) : null}
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2.5">
+      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2.5">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="목적·지번·부서·상태 검색"
-            className="h-9 border-slate-200 bg-slate-50/80 pl-8 text-xs focus-visible:bg-white"
+            className="h-9 border-border bg-muted/30 pl-8 text-xs focus-visible:bg-background"
           />
         </div>
 
@@ -231,7 +231,7 @@ export function ShootingRequestPanel({
                     'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
                     active
                       ? 'bg-sky-600 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : 'bg-muted/40 text-muted-foreground hover:bg-muted'
                   )}
                 >
                   {f.label}
@@ -257,7 +257,7 @@ export function ShootingRequestPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-3 py-12 text-center">
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {loading
                 ? '목록을 불러오는 중…'
                 : myRequests.length === 0
@@ -284,18 +284,18 @@ export function ShootingRequestPanel({
                       'w-full rounded-lg border px-3 py-2 text-left transition-colors',
                       active
                         ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-200/80'
-                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                        : 'border-border bg-background hover:border-border hover:bg-muted/50'
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-600">
+                      <span className="rounded bg-muted/40 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
                         {row.submittedAt}
                       </span>
                       <StatusBadge status={row.status} />
                     </div>
-                    <p className="mt-1 truncate text-[12px] font-medium text-slate-800">
+                    <p className="mt-1 truncate text-[12px] font-medium text-foreground">
                       {row.purpose || '(목적 없음)'}
-                      <span className="font-normal text-slate-400">
+                      <span className="font-normal text-muted-foreground">
                         {' · '}
                         {row.applicantRankName || row.department || '신청자 미입력'}
                       </span>

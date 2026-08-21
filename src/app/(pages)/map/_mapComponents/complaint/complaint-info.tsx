@@ -161,13 +161,15 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
           <div className="min-w-0 flex-1">
             <AddressSearchPanel
               layout="field"
+              includePlace
               vworldApiKey={vworldApiKey}
               initialQuery={form.compAdr}
-              placeholder="주소/지번 검색"
+              placeholder="주소/지번/장소 검색"
               onSelect={(item) => {
                 const adr =
                   (item.roadAddress ?? '').trim() ||
                   (item.jibunAddress ?? '').trim() ||
+                  (item.title ?? '').trim() ||
                   (item.address ?? '').trim();
                 const lon = Number(item.point?.x);
                 const lat = Number(item.point?.y);
@@ -232,7 +234,7 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
             variant="outline"
             title="닫기"
             onClick={onClose}
-            className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground"
           >
             <X className="h-3 w-3" />
             닫기

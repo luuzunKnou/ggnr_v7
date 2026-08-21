@@ -42,7 +42,7 @@ type DxfPayload = {
 
 function toolbarBtnClass(disabled?: boolean): string {
   return [
-    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/10",
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10",
     disabled ? "pointer-events-none opacity-35" : "",
   ].join(" ");
 }
@@ -286,7 +286,7 @@ export function ServiceFileDxfPreview({ url, fileName, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/10"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10"
             aria-label="닫기"
           >
             <X className="h-5 w-5" />
