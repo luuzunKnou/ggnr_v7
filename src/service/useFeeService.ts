@@ -9,7 +9,11 @@ import {
 } from '@/database/schema/ngl_fee_list';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
-import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
+import { requireMapAdminToolsAccess } from '@/lib/auth/guard';
+import {
+  getNextGenFeeSyncBlockReason,
+  runNextGenFeeSync,
+} from '@/lib/nextGenLinkage/syncRunner';
 import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
 import { getAllUseFeeWmsLayerIds, getUseFeeBinding, USE_FEE_PREFIXES } from '@/lib/useFeeBinding';
 import {
@@ -721,9 +725,23 @@ export async function getUseFeeExtent3857ById(params: {
   }
 }
 
-/** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도 */
+/** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도. 완료를 기다리지 않고 시작만 알림 */
 export async function runNextGenSync(params?: { fyr?: string }) {
-  return runNextGenFeeSync({ fyr: params?.fyr });
+  await requireMapAdminToolsAccess();
+  const block = getNextGenFeeSyncBlockReason();
+  if (block) {
+    return { ok: false, skipped: true, success: 0, fail: 0, message: block };
+  }
+  void runNextGenFeeSync({ fyr: params?.fyr }).then((r) => {
+    console.info('[useFeeService] manual next-gen sync:', r.message);
+  });
+  return {
+    ok: true,
+    started: true,
+    success: 0,
+    fail: 0,
+    message: '점사용료 연계를 시작했습니다. 완료는 서버 로그를 확인하세요.',
+  };
 }
 
 /** 동일 부과키의 수납 행 목록 (선택 행 맥락용) */
