@@ -19,6 +19,8 @@ export interface VWorldAddressItem {
   buildingName?: string;
   /** 제목/장소명 (place 검색 시) */
   title?: string;
+  /** address=도로명·지번, place=명칭(장소) */
+  kind?: 'address' | 'place';
   /** 좌표 (EPSG:4326 경도, 위도) */
   point: { x: number; y: number };
 }
@@ -116,6 +118,10 @@ export async function searchAddress(
   const type = options?.type ?? 'address';
   const category = options?.category ?? 'both';
 
+  if (type === 'place') {
+    return searchAddressOne(trimmed, { ...options, type: 'place' }, apiKey);
+  }
+
   if (type === 'address' && category === 'both') {
     const perCategory = Math.min(Math.ceil(maxResults / 2), 10);
     const opts: SearchAddressOptions = { ...options, maxResults: perCategory };
@@ -140,7 +146,36 @@ export async function searchAddress(
   return searchAddressOne(trimmed, { ...options, category: singleCategory }, apiKey);
 }
 
-function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VWorldAddressItem[] {
+/** 주소(도로명·지번)와 명칭(장소)을 병렬 조회해 합친다. */
+export async function searchAddressAndPlace(
+  query: string,
+  options?: Omit<SearchAddressOptions, 'type' | 'category'>
+): Promise<VWorldAddressItem[]> {
+  const trimmed = query?.trim();
+  if (!trimmed) return [];
+  const maxResults = options?.maxResults ?? 5;
+  const [addressItems, placeItems] = await Promise.all([
+    searchAddress(trimmed, { ...options, maxResults, type: 'address' }),
+    searchAddress(trimmed, { ...options, maxResults, type: 'place' }),
+  ]);
+  const seen = new Set<string>();
+  const merged: VWorldAddressItem[] = [];
+  for (const item of [...addressItems, ...placeItems]) {
+    const key =
+      item.id ??
+      `${item.kind ?? ''}:${item.title ?? ''}:${item.address}:${item.point.x.toFixed(6)},${item.point.y.toFixed(6)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function parseSearchResponse(
+  data: VWorldSearchResponse,
+  maxResults: number,
+  kind: 'address' | 'place' = 'address'
+): VWorldAddressItem[] {
   const status = data?.response?.status;
   if (status !== 'OK') return [];
   const items = data?.response?.result?.items ?? [];
@@ -167,6 +202,7 @@ function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VW
       jibunAddress: parcel || undefined,
       buildingName: bldnm || undefined,
       title: title || undefined,
+      kind,
       point: { x, y },
     });
   }
@@ -175,7 +211,7 @@ function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VW
 
 function buildSearchParams(
   trimmed: string,
-  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  options: SearchAddressOptions,
   apiKey?: string
 ): URLSearchParams {
   const { crs = 'EPSG:4326', maxResults = 5, type = 'address', category } = options;
@@ -188,24 +224,27 @@ function buildSearchParams(
     page: '1',
     query: trimmed,
     type,
-    category,
     format: 'json',
     errorformat: 'json',
   });
+  if (type === 'address' && category && category !== 'both') {
+    params.set('category', category);
+  }
   if (apiKey) params.set('key', apiKey);
   return params;
 }
 
 async function searchAddressViaProxy(
   params: URLSearchParams,
-  maxResults: number
+  maxResults: number,
+  kind: 'address' | 'place'
 ): Promise<VWorldAddressItem[] | 'upstream_failed' | null> {
   if (typeof window === 'undefined') return null;
   try {
     const res = await fetch(`/api/vworld/search?${params.toString()}`, { cache: 'no-store' });
     if (!res.ok) return 'upstream_failed';
     const data = (await res.json()) as VWorldSearchResponse;
-    return parseSearchResponse(data, maxResults);
+    return parseSearchResponse(data, maxResults, kind);
   } catch {
     return null;
   }
@@ -213,12 +252,13 @@ async function searchAddressViaProxy(
 
 function searchAddressOne(
   trimmed: string,
-  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  options: SearchAddressOptions,
   apiKey: string
 ): Promise<VWorldAddressItem[]> {
   const maxResults = options.maxResults ?? 5;
+  const kind = options.type === 'place' ? 'place' : 'address';
   const proxyParams = buildSearchParams(trimmed, options);
-  return searchAddressViaProxy(proxyParams, maxResults).then((viaProxy) => {
+  return searchAddressViaProxy(proxyParams, maxResults, kind).then((viaProxy) => {
     if (Array.isArray(viaProxy)) return viaProxy;
     if (viaProxy === 'upstream_failed') return [];
     if (!apiKey) {
@@ -231,10 +271,11 @@ function searchAddressOne(
 
 function searchAddressOneJsonp(
   trimmed: string,
-  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  options: SearchAddressOptions,
   apiKey: string
 ): Promise<VWorldAddressItem[]> {
   const { maxResults = 5 } = options;
+  const kind = options.type === 'place' ? 'place' : 'address';
   const params = buildSearchParams(trimmed, options, apiKey);
 
   return new Promise<VWorldAddressItem[]>((resolve) => {
@@ -250,7 +291,7 @@ function searchAddressOneJsonp(
     (window as unknown as Record<string, (data: VWorldSearchResponse) => void>)[callbackName] = (data: VWorldSearchResponse) => {
       cleanup();
       try {
-        resolve(parseSearchResponse(data, maxResults));
+        resolve(parseSearchResponse(data, maxResults, kind));
       } catch {
         resolve([]);
       }

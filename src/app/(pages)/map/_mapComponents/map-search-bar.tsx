@@ -14,7 +14,7 @@ import {
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MapLayergroupBar } from './map-layergroup-bar';
-import { getAddressFromCoord, searchAddress, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
+import { getAddressFromCoord, searchAddressAndPlace, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
 import { useMapContext } from './MapContext';
 import { transform } from 'ol/proj';
 import { canAccessPrivateSystem } from '@/lib/accessClient';
@@ -170,7 +170,7 @@ export function MapSearchBar({
   const [addressSearchLoading, setAddressSearchLoading] = useState(false);
   const [addressPanelOpen, setAddressPanelOpen] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
-  const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번 검색');
+  const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번/명칭 검색');
   const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
   const centerPlaceholderReqIdRef = useRef(0);
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
@@ -231,7 +231,7 @@ export function MapSearchBar({
     const t = setTimeout(() => {
       setAddressSearchLoading(true);
       const trimmed = query.trim();
-      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+      searchAddressAndPlace(trimmed, { maxResults: ADDRESS_RESULT_MAX, apiKey: vworldApiKey })
         .then((items) => {
           setAddressResults(items);
           setAddressPanelOpen(true);
@@ -269,10 +269,10 @@ export function MapSearchBar({
       if (reqId !== centerPlaceholderReqIdRef.current) return;
       const jibun = String(addr?.jibun ?? '').trim();
       const road = String(addr?.road ?? '').trim();
-      setCenterPlaceholder(jibun || road || '주소/지번 검색');
+      setCenterPlaceholder(jibun || road || '주소/지번/명칭 검색');
     } catch {
       if (reqId !== centerPlaceholderReqIdRef.current) return;
-      setCenterPlaceholder('주소/지번 검색');
+      setCenterPlaceholder('주소/지번/명칭 검색');
     }
   }, [mapContext, vworldApiKey]);
 
@@ -360,13 +360,13 @@ export function MapSearchBar({
     router.push(`/map?${params.toString()}`);
   };
 
-  /** 검색 버튼 클릭 시 VWorld 주소 검색 실행 */
+  /** 검색 버튼 클릭 시 VWorld 주소·명칭 검색 실행 */
   const runAddressSearch = useCallback(() => {
     const trimmed = query.trim();
     if (!trimmed || !vworldApiKey) return;
     setAddressSearchLoading(true);
     setAddressPanelOpen(true);
-    searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+    searchAddressAndPlace(trimmed, { maxResults: ADDRESS_RESULT_MAX, apiKey: vworldApiKey })
       .then((items) => setAddressResults(items))
       .finally(() => setAddressSearchLoading(false));
   }, [query, vworldApiKey]);
@@ -460,7 +460,7 @@ export function MapSearchBar({
                     <li key={`${item.address}-${idx}`}>
                       <button
                         type="button"
-                        title={item.address}
+                        title={item.kind === 'place' ? (item.title || item.address) : item.address}
                         onClick={() => handleSelectAddress(item)}
                         className={cn(
                           'w-full cursor-pointer text-left px-4 py-1.5 transition-colors min-h-[44px] flex flex-col justify-center gap-0.5',
@@ -468,6 +468,16 @@ export function MapSearchBar({
                           'dark:border-white/10 dark:hover:bg-white/10'
                         )}
                       >
+                        {item.kind === 'place' && (
+                          <div className="flex items-center gap-2 min-h-[1.25rem]">
+                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-500/25 dark:text-emerald-200">
+                              명칭
+                            </span>
+                            <span className="text-[12px] text-slate-800 dark:text-white/90 truncate flex-1 min-w-0">
+                              {item.title || item.buildingName || item.address}
+                            </span>
+                          </div>
+                        )}
                         {item.roadAddress && (
                           <div className="flex items-center gap-2 min-h-[1.25rem]">
                             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-500/25 dark:text-blue-300">
@@ -475,7 +485,7 @@ export function MapSearchBar({
                             </span>
                             <span className="text-[12px] text-slate-800 dark:text-white/90 truncate flex-1 min-w-0">
                               {item.roadAddress}
-                              {item.buildingName ? ` (${item.buildingName})` : ''}
+                              {item.kind !== 'place' && item.buildingName ? ` (${item.buildingName})` : ''}
                             </span>
                           </div>
                         )}
@@ -489,7 +499,7 @@ export function MapSearchBar({
                             </span>
                           </div>
                         )}
-                        {!item.roadAddress && !item.jibunAddress && (
+                        {item.kind !== 'place' && !item.roadAddress && !item.jibunAddress && (
                           <span className="text-[12px] text-slate-800 dark:text-white/90 line-clamp-2">
                             {item.address}
                           </span>
@@ -504,7 +514,7 @@ export function MapSearchBar({
                 </div>
               ) : recentQueries.length === 0 ? (
                 <div className="py-6 text-center text-[12px] text-slate-400">
-                  주소 또는 지번을 입력하세요
+                  주소, 지번 또는 명칭을 입력하세요
                 </div>
               ) : null}
 
@@ -528,7 +538,7 @@ export function MapSearchBar({
                               setQuery(q);
                               if (!vworldApiKey) return;
                               setAddressSearchLoading(true);
-                              searchAddress(q, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
+                              searchAddressAndPlace(q, { maxResults: ADDRESS_RESULT_MAX, apiKey: vworldApiKey })
                                 .then((items) => setAddressResults(items))
                                 .finally(() => setAddressSearchLoading(false));
                             }}
