@@ -100,23 +100,24 @@ export function MapPrintCoordPanel({ onClose, onApplyCoords }: Props) {
 
   return (
     <div className="map-print-coord-panel map-print-ignore">
-      <div className="mb-2 font-medium text-slate-800">좌표 입력 (EPSG:5181)</div>
-      <p className="mb-2 text-[11px] text-slate-500">
+      <div className="mb-2 font-medium text-foreground">좌표 입력 (EPSG:5181)</div>
+      <p className="mb-2 text-[11px] text-muted-foreground">
         X Y 한 쌍이면 점, 여러 쌍이면 점으로 찍고 선으로 연결합니다. 입력 시 자동 적용됩니다.
       </p>
       <textarea
-        className="mb-2 h-28 w-full resize-y rounded border border-slate-300 px-2 py-1.5 font-mono text-sm outline-none focus:border-blue-400"
+        className="mb-2 h-28 w-full resize-y rounded border border-border bg-background px-2 py-1.5 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={'예:\n418091.2282 372519.5629\n420100.0 373200.0'}
         spellCheck={false}
       />
-      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
-      {!error && appliedHint && <p className="mb-2 text-xs text-emerald-700">{appliedHint}</p>}
+      {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
+      {!error && appliedHint && <p className="mb-2 text-xs text-primary">{appliedHint}</p>}
       <div className="flex justify-end">
         <button
           type="button"
-          className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+          title="닫기"
+          className="cursor-pointer rounded border border-border px-3 py-1 text-sm text-foreground hover:bg-muted"
           onClick={onClose}
         >
           닫기

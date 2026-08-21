@@ -1,4 +1,4 @@
-/* 인쇄 모달 — 화면용 */
+/* 인쇄 모달 — 화면용 (다크모드: globals.css 시멘틱 토큰) */
 .map-print-root {
   position: fixed;
   inset: 0;
@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.55);
+  background: color-mix(in oklab, var(--foreground) 55%, transparent);
 }
 
 .map-print-paper {
@@ -14,17 +14,19 @@
   flex-direction: column;
   width: min(98vw, 1680px);
   height: min(94vh, 900px);
-  background: #fff;
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 20px 50px color-mix(in oklab, var(--foreground) 35%, transparent);
 }
 
 .map-print-map-host {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #e8eef5;
+  background: var(--muted);
 }
 
 .map-print-map-host > .ol-viewport {
@@ -38,10 +40,10 @@
   justify-content: space-between;
   gap: 4px 8px;
   padding: 4px 8px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
   font-size: 11px;
-  color: #334155;
+  color: var(--foreground);
 }
 
 .map-print-toolbar-left,
@@ -67,7 +69,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: none;
+  border: 1px solid var(--border);
   box-shadow: none;
   flex-shrink: 0;
   overflow: hidden;
@@ -93,6 +95,7 @@
   border-radius: 4px;
   border: 1px solid transparent;
   background: transparent;
+  color: inherit;
   cursor: pointer;
   white-space: nowrap;
   line-height: 1.15;
@@ -136,26 +139,26 @@
 
 .map-print-close-btn {
   margin-left: 4px;
-  border: 1px solid #cbd5e1 !important;
+  border: 1px solid var(--border) !important;
   border-radius: 4px;
   padding: 3px 8px;
 }
 
 .map-print-tool-btn:hover {
-  background: #f1f5f9;
+  background: var(--muted);
 }
 
 .map-print-tool-btn.is-active {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+  color: var(--primary);
 }
 
 .map-print-vsep {
   width: 1px;
   height: 18px;
   margin: 0 2px;
-  background: #e2e8f0;
+  background: var(--border);
   flex-shrink: 0;
 }
 
@@ -169,9 +172,9 @@
   padding: 7px 12px;
   font-size: 12px;
   line-height: 1.4;
-  color: #334155;
-  background-color: rgba(217, 217, 217, 0.8);
-  border: 1px solid #c6c6c6;
+  color: var(--foreground);
+  background-color: color-mix(in oklab, var(--muted) 85%, transparent);
+  border: 1px solid var(--border);
   border-bottom: none;
   border-left: none;
   border-top-right-radius: 15px;
@@ -185,11 +188,11 @@
   padding: 7px 12px;
   font-size: 12px;
   line-height: 1.45;
-  color: #334155;
+  color: var(--foreground);
   text-align: right;
   white-space: nowrap;
-  background-color: rgba(217, 217, 217, 0.8);
-  border: 1px solid #c6c6c6;
+  background-color: color-mix(in oklab, var(--muted) 85%, transparent);
+  border: 1px solid var(--border);
   border-bottom: none;
   border-right: none;
   border-top-left-radius: 15px;
@@ -238,9 +241,11 @@
 .map-print-coord-panel {
   width: 280px;
   padding: 12px;
-  background: #fff;
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
   font-size: 13px;
 }
 
@@ -249,10 +254,10 @@
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  background: #fff;
-  border: 1px solid #94a3b8;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 15%, transparent);
 }
 
 /* 글자 입력 상자 */
@@ -260,11 +265,12 @@
   position: relative;
   padding: 6px 8px;
   padding-right: 10px;
-  background: #fff;
-  border: 1px solid #c8c8c8;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 10px color-mix(in oklab, var(--foreground) 12%, transparent);
   min-width: 220px;
+  color: var(--card-foreground);
 }
 
 .map-print-comment-row {
@@ -277,24 +283,26 @@
   height: 28px;
   min-width: 44px;
   padding: 0 4px;
-  border: 1px solid #c8c8c8;
+  border: 1px solid var(--border);
   border-radius: 3px;
   font-size: 12px;
-  background: #fff;
+  background: var(--background);
+  color: var(--foreground);
   cursor: pointer;
 }
 
 .map-print-comment-size:focus {
   outline: none;
-  border-color: #6485a6;
+  border-color: var(--primary);
 }
 
 .map-print-comment-bold {
   width: 28px;
   height: 28px;
-  border: 1px solid #c8c8c8;
+  border: 1px solid var(--border);
   border-radius: 3px;
-  background: #fff;
+  background: var(--background);
+  color: var(--foreground);
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
@@ -302,9 +310,9 @@
 }
 
 .map-print-comment-bold.is-active {
-  background: #6485a6;
-  border-color: #6485a6;
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .map-print-comment-text {
@@ -312,14 +320,16 @@
   min-width: 120px;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid #c8c8c8;
+  border: 1px solid var(--border);
   border-radius: 3px;
   font-size: 13px;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 .map-print-comment-text:focus {
   outline: none;
-  border-color: #6485a6;
+  border-color: var(--primary);
 }
 
 .map-print-comment-save {
@@ -328,17 +338,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #6485a6;
+  border: 1px solid var(--primary);
   border-radius: 3px;
-  background: #6485a6;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-foreground);
   cursor: pointer;
   padding: 0;
 }
 
 .map-print-comment-save:hover {
-  background: #043c6b;
-  border-color: #043c6b;
+  background: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+  border-color: color-mix(in oklab, var(--primary) 85%, var(--foreground));
 }
 
 .map-print-comment-cancel {
@@ -349,12 +359,12 @@
   height: 20px;
   border: none;
   border-radius: 50%;
-  background: #ef4444;
-  color: #fff;
+  background: var(--destructive);
+  color: var(--primary-foreground);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--foreground) 25%, transparent);
 }
 
 .map-print-comment-done {
@@ -362,19 +372,20 @@
   align-items: center;
   gap: 4px;
   padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  color: var(--card-foreground);
   border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 4px color-mix(in oklab, var(--foreground) 20%, transparent);
   cursor: default;
 }
 
 .map-print-symbol-pin {
   display: inline-flex;
   align-items: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 2px color-mix(in oklab, var(--foreground) 35%, transparent));
 }
 
-/* 브라우저 인쇄 */
+/* 브라우저 인쇄 — 용지는 항상 밝은 배경 유지 */
 @media print {
   body.map-print-printing * {
     visibility: hidden !important;
@@ -393,6 +404,9 @@
     margin: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    border: none !important;
   }
 
   body.map-print-printing .map-print-ignore {

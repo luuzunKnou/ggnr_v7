@@ -83,11 +83,11 @@ type Props = {
 };
 
 const fieldClass =
-  "box-border h-[22px] w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "box-border h-[22px] w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 const btnPrimary =
-  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const btnSecondary =
-  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-foreground/90 hover:bg-muted/50 disabled:opacity-50";
 
 type AttrDraft = {
   name: string;
@@ -301,7 +301,7 @@ function AttrValue({ value }: { value: ReactNode }) {
   if (typeof value === "string") {
     return (
       <span
-        className="block truncate text-[11px] leading-snug text-slate-700"
+        className="block truncate text-[11px] leading-snug text-foreground/90"
         title={value && value !== "—" ? value : undefined}
       >
         {value || "—"}
@@ -326,14 +326,14 @@ function AttrLabelCell({
     <div
       className={cn(
         // 조회·수정 공통 행 높이 — 조회 기준(h-7), 수정 입력은 이 안에 맞춤
-        "flex h-7 items-center bg-slate-100 px-2",
-        borderBottom && "border-b border-slate-200",
-        borderRight && "border-r border-slate-200",
+        "flex h-7 items-center bg-muted px-2",
+        borderBottom && "border-b border-border",
+        borderRight && "border-r border-border",
         roundedCorner === "tl" && "rounded-tl-[5px]",
         roundedCorner === "bl" && "rounded-bl-[5px]"
       )}
     >
-      <span className="whitespace-nowrap text-[11px] font-medium leading-snug text-slate-600">
+      <span className="whitespace-nowrap text-[11px] font-medium leading-snug text-muted-foreground">
         {label}
       </span>
     </div>
@@ -355,8 +355,8 @@ function AttrValueCell({
     <div
       className={cn(
         "flex h-7 min-w-0 items-center px-2",
-        borderBottom && "border-b border-slate-200",
-        borderRight && "border-r border-slate-200"
+        borderBottom && "border-b border-border",
+        borderRight && "border-r border-border"
       )}
       style={gridColumn ? { gridColumn } : undefined}
     >
@@ -394,7 +394,7 @@ function AttrTable({ entries }: { entries: AttrEntry[] }) {
 
   return (
     <div
-      className="grid overflow-visible rounded-[5px] border border-slate-200"
+      className="grid overflow-visible rounded-[5px] border border-border"
       style={{ gridTemplateColumns: "max-content minmax(0,1fr) max-content minmax(0,1fr)" }}
     >
       {rows.map((pair, rowIdx) => {
@@ -467,7 +467,7 @@ function AttachmentThumb({
       <button
         type="button"
         onClick={onPreview}
-        className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
+        className="block aspect-square w-full overflow-hidden rounded border border-border bg-muted/50"
         title={`${att.name} 미리보기`}
       >
         {thumbSrc ? (
@@ -480,7 +480,7 @@ function AttachmentThumb({
             onError={() => setThumbFailed(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
             {isImage ? (
               <ImageIcon className="h-5 w-5" />
             ) : (
@@ -499,7 +499,7 @@ function AttachmentThumb({
             e.stopPropagation();
             onDownload();
           }}
-          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-slate-700 shadow-md ring-1 ring-slate-200/80 hover:bg-slate-50 hover:text-primary"
+          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-background text-foreground/90 shadow-md ring-1 ring-border/80 hover:bg-muted/50 hover:text-primary"
           title="다운로드"
         >
           <Download className="h-4 w-4" />
@@ -510,13 +510,13 @@ function AttachmentThumb({
             e.stopPropagation();
             onDelete();
           }}
-          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-red-600 shadow-md ring-1 ring-slate-200/80 hover:bg-red-50"
+          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-background text-destructive shadow-md ring-1 ring-border/80 hover:bg-destructive/10"
           title="삭제"
         >
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
-      <p className="mt-0.5 truncate text-[10px] text-slate-500" title={att.name}>
+      <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={att.name}>
         {att.name}
       </p>
     </div>
@@ -609,7 +609,7 @@ function AttachmentThumbGrid({
   if (items.length === 0) {
     return (
       <div className="flex h-full min-h-[6rem] items-center justify-center">
-        <p className="text-center text-[11px] text-slate-400">{emptyLabel}</p>
+        <p className="text-center text-[11px] text-muted-foreground">{emptyLabel}</p>
       </div>
     );
   }
@@ -1388,11 +1388,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       placeholder="하천명 검색/선택"
     />
   ) : riverNames.length === 0 ? (
-    <span className="text-[11px] leading-snug text-[#666]">—</span>
+    <span className="text-[11px] leading-snug text-muted-foreground">—</span>
   ) : (
-    <p className="truncate text-[11px] leading-snug text-[#666]" title={riverNames.join(", ")}>
+    <p className="truncate text-[11px] leading-snug text-muted-foreground" title={riverNames.join(", ")}>
       {riverPreview.join(", ")}
-      {riverMoreCount > 0 ? <span className="text-slate-400"> 외 {riverMoreCount}</span> : null}
+      {riverMoreCount > 0 ? <span className="text-muted-foreground"> 외 {riverMoreCount}</span> : null}
     </p>
   );
 
@@ -1525,7 +1525,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     geomBannerHost && parcelGeomEditIdx != null
       ? createPortal(
           <div
-            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-emerald-300 bg-emerald-50/95 px-3 py-1.5 text-[11px] font-medium text-emerald-700 shadow-sm"
+            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-medium text-primary shadow-sm"
             style={
               geomCenterPixel
                 ? { left: geomCenterPixel.x, top: geomHintTopPx }
@@ -1543,7 +1543,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                   type="button"
                   className={layerRowPanelButtonClass(
                     "default",
-                    "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
                   )}
                   onClick={finishParcelGeomEdit}
                 >
@@ -1555,7 +1555,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     type="button"
                     className={layerRowPanelButtonClass(
                       "default",
-                      "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
                     )}
                     onClick={finishParcelGeomEdit}
                   >
@@ -1565,7 +1565,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     type="button"
                     className={layerRowPanelButtonClass(
                       "default",
-                      "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
                     )}
                     onClick={resetParcelGeomToSnapshot}
                   >
@@ -1589,10 +1589,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const titleText = row.name.trim() || "공사대장 상세";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
-      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
         <span
-          className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-slate-800"
+          className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-foreground"
           title={titleText}
         >
           {titleText}
@@ -1600,7 +1600,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -1610,11 +1610,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
       {/* 본문 전체가 하나로 스크롤 — 상세 속성 · 필지 · 첨부파일 순서로 자연스럽게 이어짐 */}
       <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-xs">
-        <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-white py-0.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-background py-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             상세 속성
             {detailLoading ? (
-              <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">
+              <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground">
                 불러오는 중…
               </span>
             ) : null}
@@ -1636,10 +1636,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               필지목록
               {(editing ? draftParcels : parcels).length > 0 ? (
-                <span className="ml-1 font-normal normal-case text-slate-400">
+                <span className="ml-1 font-normal normal-case text-muted-foreground">
                   ({(editing ? draftParcels : parcels).length})
                 </span>
               ) : null}
@@ -1653,18 +1653,18 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           </div>
 
           {(editing ? draftParcels : parcels).length === 0 ? (
-            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-2 text-slate-500">
+            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-2 text-muted-foreground">
               {editing
                 ? "「추가」로 하천명·비고를 입력하고, 필요하면 도형도 그릴 수 있습니다."
                 : "등록된 필지가 없습니다."}
             </div>
           ) : editing ? (
-            <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white p-1.5 scrollbar-hide">
+            <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-border bg-background p-1.5 scrollbar-hide">
               {draftParcels.map((item, i) => (
-                <li key={i} className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50/60 p-1">
+                <li key={i} className="flex items-center gap-1 rounded border border-border bg-muted/40 p-1">
                   <button
                     type="button"
-                    className="w-4 shrink-0 text-center text-[10px] tabular-nums text-slate-400 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                    className="w-4 shrink-0 text-center text-[10px] tabular-nums text-muted-foreground hover:text-primary disabled:cursor-default disabled:opacity-70"
                     onClick={() => handleParcelClick(item, i)}
                     title="클릭 시 위치 이동"
                   >
@@ -1683,17 +1683,17 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     onChange={(e) => handleUpdateParcelField(i, "remark", e.target.value)}
                   />
                   {movingParcelIdx === i && (
-                    <span className="shrink-0 text-[10px] text-slate-500">이동중</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">이동중</span>
                   )}
                   <button
                     type="button"
                     className={cn(
                       "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded",
                       parcelGeomEditIdx === i
-                        ? "bg-emerald-100 text-emerald-700"
+                        ? "bg-primary/15 text-primary"
                         : item.geometry3857
-                          ? "text-emerald-600 hover:bg-emerald-50"
-                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                          ? "text-primary hover:bg-primary/10"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                     onClick={() => toggleParcelGeomEdit(i)}
                     aria-label={item.geometry3857 ? "필지 도형 수정" : "필지 도형추가"}
@@ -1709,7 +1709,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => handleRemoveParcel(i)}
                     aria-label="필지 삭제"
                     title="삭제"
@@ -1720,11 +1720,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               ))}
             </ul>
           ) : (
-            <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide">
+            <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-border bg-background scrollbar-hide">
               {parcels.map((item, i) => (
                 <li
                   key={i}
-                  className="flex items-start gap-1 border-b border-slate-100 px-2 py-1.5 text-slate-800 last:border-b-0"
+                  className="flex items-start gap-1 border-b border-border px-2 py-1.5 text-foreground last:border-b-0"
                 >
                   <button
                     type="button"
@@ -1732,7 +1732,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     onClick={() => handleParcelClick(item, i)}
                     title="클릭 시 위치 이동"
                   >
-                    <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className="mr-1 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
                     <span className="min-w-0 flex-1 break-words">
                       {item.displayText?.trim() ||
                         [item.riverName, item.remark].filter(Boolean).join(" · ") ||
@@ -1740,7 +1740,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                         "—"}
                     </span>
                     {movingParcelIdx === i && (
-                      <span className="ml-1 shrink-0 text-[11px] text-slate-500">이동 중…</span>
+                      <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">이동 중…</span>
                     )}
                   </button>
                 </li>
@@ -1752,7 +1752,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         {/* 첨부파일 — 남는 세로 공간을 채우되, 속성·필지목록이 길어도 최소 높이 밑으로는 안 줄어듦(그 이상은 패널 전체 스크롤) */}
         <div className="mt-4 flex min-h-[12rem] flex-1 flex-col">
           <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <Paperclip className="h-3.5 w-3.5" />
               첨부파일
             </div>
@@ -1806,7 +1806,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
           {fileKey ? (
             <>
-              <div className="mb-2 flex shrink-0 flex-wrap gap-0.5 rounded border border-slate-200 bg-slate-50 p-0.5">
+              <div className="mb-2 flex shrink-0 flex-wrap gap-0.5 rounded border border-border bg-muted/50 p-0.5">
                 {(attachmentFolders.length > 0 ? attachmentFolders : [CONS_ATTACH_ROOT_FOLDER]).map(
                   (folder) => (
                     <button
@@ -1815,8 +1815,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                       className={cn(
                         "min-w-0 flex-1 rounded px-1 py-1 text-[10px] font-medium transition-colors",
                         attachmentTab === folder
-                          ? "bg-white text-slate-800 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                       onClick={() => {
                         setAttachmentTab(folder);
@@ -1835,7 +1835,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
               >
                 {!attachmentsReady || filesLoading ? (
-                  <p className="py-3 text-center text-[11px] text-slate-400">첨부 목록 불러오는 중…</p>
+                  <p className="py-3 text-center text-[11px] text-muted-foreground">첨부 목록 불러오는 중…</p>
                 ) : (
                   <AttachmentThumbGrid
                     key={attachmentTab}
@@ -1850,7 +1850,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               </div>
             </>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 text-center text-[11px] text-slate-500">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-dashed border-border bg-muted/50 px-2 text-center text-[11px] text-muted-foreground">
               저장한 뒤 폴더별 첨부파일을 등록할 수 있습니다.
             </div>
           )}

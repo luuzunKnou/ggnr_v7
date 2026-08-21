@@ -439,9 +439,9 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   ];
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">공사대장</span>
+    <div className="flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">공사대장</span>
         <div className="flex items-center gap-1">
           <LayerRowAddButton onClick={handleAdd} />
           <button
@@ -453,7 +453,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
               setRiverFocus?.(null);
               onClose();
             }}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -462,8 +462,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-200 px-2.5 py-2">
-        <div className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
+      <div className="shrink-0 space-y-2 border-b border-border px-2.5 py-2">
+        <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={() => {
@@ -474,8 +474,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             className={cn(
               "flex-1 rounded py-1.5 text-[11px] font-medium transition-colors",
               mapSearchTab === "keyword"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             통합검색
@@ -486,8 +486,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             className={cn(
               "flex-1 rounded py-1.5 text-[11px] font-medium transition-colors",
               mapSearchTab === "shape"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             도형검색
@@ -502,8 +502,8 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             className={cn(
               "flex-1 rounded px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors",
               mapSearchTab === "boundary"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             행정경계 검색
@@ -512,12 +512,12 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
         {mapSearchTab === "keyword" ? (
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="공사명·하천·업체명·착수일자"
-              className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+              className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
         ) : null}
@@ -539,7 +539,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                     "flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 text-[10px] transition-colors",
                     active
                       ? "border-primary bg-primary/5 text-primary"
-                      : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                      : "border-border bg-background text-muted-foreground hover:border-border hover:text-foreground"
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -551,13 +551,13 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
               type="button"
               title="검색 초기화"
               onClick={clearSpatial}
-              className="flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border border-slate-200 bg-white py-1.5 text-slate-400 transition-colors hover:border-slate-300 hover:text-primary"
+              className="flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border border-border bg-background py-1.5 text-muted-foreground transition-colors hover:border-border hover:text-primary"
             >
               <RefreshCw className="h-4 w-4 shrink-0" strokeWidth={2} />
               <span className="text-[10px]">초기화</span>
             </button>
             {spatialDrawRequest ? (
-              <p className="w-full text-[10px] text-slate-500">지도에 도형을 그려 주세요.</p>
+              <p className="w-full text-[10px] text-muted-foreground">지도에 도형을 그려 주세요.</p>
             ) : null}
           </div>
         ) : null}
@@ -573,7 +573,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                     setRiSelected("");
                   }}
                   disabled={boundaryLoading}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
                 >
                   <option value="">읍면동 선택</option>
                   {emdOptions.map((opt) => (
@@ -588,7 +588,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                   value={riSelected}
                   onChange={(e) => setRiSelected(e.target.value)}
                   disabled={!emdSelected || boundaryLoading}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">리 선택</option>
                   {riOptions.map((opt) => (
@@ -603,7 +603,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                 title="선택 항목을 목록에 추가"
                 onClick={addBoundaryBadgeFromDraft}
                 disabled={boundaryLoading}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
               </button>
@@ -613,7 +613,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                 {boundaryBadges.map((b) => (
                   <span
                     key={b.key}
-                    className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1.5 pr-0.5 text-[10px] text-slate-800"
+                    className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1.5 pr-0.5 text-[10px] text-foreground"
                   >
                     <Landmark className="h-2.5 w-2.5 shrink-0 text-primary/70" />
                     <span className="max-w-[4.5rem] truncate" title={b.label}>
@@ -623,7 +623,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                       type="button"
                       title="목록에서 제거"
                       onClick={() => setBoundaryBadges((prev) => prev.filter((x) => x.key !== b.key))}
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-primary/15 hover:text-primary"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-primary/15 hover:text-primary"
                     >
                       <X className="h-2.5 w-2.5" strokeWidth={2} />
                     </button>
@@ -636,7 +636,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                 type="button"
                 onClick={() => void runBoundarySearch()}
                 disabled={boundaryLoading || boundaryBadges.length === 0}
-                className="min-h-8 flex-1 rounded-md border border-primary bg-primary py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="min-h-8 flex-1 rounded-md border border-primary bg-primary py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {boundaryLoading ? "검색 중…" : "검색"}
               </button>
@@ -648,7 +648,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                   clearSpatial();
                 }}
                 disabled={boundaryLoading}
-                className="min-h-8 flex-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] text-slate-600 transition-colors hover:border-slate-300 hover:text-primary disabled:opacity-50"
+                className="min-h-8 flex-1 rounded-md border border-border bg-background py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:text-primary disabled:opacity-50"
               >
                 초기화
               </button>
@@ -656,19 +656,19 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <span>목록 {items.length}건</span>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {listError ? (
-          <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
+          <p className="px-3 py-2.5 text-xs text-destructive">{listError}</p>
         ) : null}
         {loading && items.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중…</p>
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">불러오는 중…</p>
         ) : items.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
         ) : (
           <table className="w-full table-fixed border-collapse text-left text-xs">
             <colgroup>
@@ -677,16 +677,16 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
               <col className="w-[4.75rem]" />
               <col className="w-[5.25rem]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50 shadow-[0_1px_0_0_var(--border)]">
               <tr>
-                <th className="px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">공사명</th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="px-2 py-2 font-semibold text-foreground/90 border-b border-border">공사명</th>
+                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   하천
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   업체명
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   착수일자
                 </th>
               </tr>
@@ -709,29 +709,29 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                       }
                     }}
                     className={cn(
-                      "border-b border-slate-100 cursor-pointer hover:bg-slate-50/80 transition-colors",
+                      "border-b border-border cursor-pointer hover:bg-muted/50 transition-colors",
                       isSelected && "bg-primary/10"
                     )}
                   >
                     <td
-                      className="min-w-0 truncate px-2 py-1.5 text-slate-800"
+                      className="min-w-0 truncate px-2 py-1.5 text-foreground"
                       title={row.name}
                     >
                       {row.name || "—"}
                     </td>
                     <td
-                      className="min-w-0 truncate px-2 py-1.5 text-slate-700"
+                      className="min-w-0 truncate px-2 py-1.5 text-foreground/90"
                       title={formatRiverNamesLabel(row.riverNames)}
                     >
                       {formatRiverNamesShort(row.riverNames)}
                     </td>
                     <td
-                      className="min-w-0 truncate px-2 py-1.5 text-slate-700"
+                      className="min-w-0 truncate px-2 py-1.5 text-foreground/90"
                       title={row.companyName}
                     >
                       {row.companyName || "—"}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-slate-700">
+                    <td className="whitespace-nowrap px-2 py-1.5 text-foreground/90">
                       {row.startDate || "—"}
                     </td>
                   </tr>

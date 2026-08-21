@@ -80,7 +80,7 @@ type IndexListItem = {
 };
 
 /** 색인도 썸네일 프레임 비율 (가로 3 : 세로 2) */
-const INDEX_THUMB_FRAME = "relative w-full aspect-[3/2] overflow-hidden bg-slate-200";
+const INDEX_THUMB_FRAME = "relative w-full aspect-[3/2] overflow-hidden bg-muted";
 
 type RiverType = "river" | "smallRiver";
 
@@ -711,11 +711,11 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   const indexSectionHeader = (
     <div className="flex items-center justify-between gap-2 mb-2">
-      <p className="text-[11px] font-medium text-slate-600">색인도</p>
+      <p className="text-[11px] font-medium text-muted-foreground">색인도</p>
       <button
         type="button"
         onClick={exitIndexAttributeView}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         title="색인도 목록으로"
         aria-label="색인도 목록으로"
       >
@@ -807,17 +807,17 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   return (
     <>
-    <div className="flex flex-col min-h-0 h-full bg-white border-l border-slate-200">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 bg-white">
+    <div className="flex flex-col min-h-0 h-full bg-background border-l border-border">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5 bg-background">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800">{riverName || "기본계획 상세"}</p>
-          <p className="text-xs text-slate-500 mt-0.5">연도별 기본계획 및 속성정보</p>
+          <p className="text-sm font-semibold text-foreground">{riverName || "기본계획 상세"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">연도별 기본계획 및 속성정보</p>
         </div>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -826,15 +826,15 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         )}
       </div>
 
-      <div className="shrink-0 border-b border-slate-200 px-3 py-2 bg-slate-50/70">
+      <div className="shrink-0 border-b border-border px-3 py-2 bg-muted/50">
         {loadingPlan ? (
-          <p className="text-xs text-slate-500">연도 목록 불러오는 중...</p>
+          <p className="text-xs text-muted-foreground">연도 목록 불러오는 중...</p>
         ) : plans.length === 0 ? (
-          <p className="text-xs text-slate-500">연도별 기본계획이 없습니다.</p>
+          <p className="text-xs text-muted-foreground">연도별 기본계획이 없습니다.</p>
         ) : (
-          <div className="overflow-hidden rounded border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded border border-border bg-background">
             <table className="w-full text-xs">
-              <thead className="bg-slate-100 text-slate-600">
+              <thead className="bg-muted text-muted-foreground">
                 <tr>
                   <th className="px-2.5 py-1.5 text-left font-medium w-[90px]">연도</th>
                   <th className="px-2.5 py-1.5 text-left font-medium">기본계획</th>
@@ -856,13 +856,13 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       }}
                       className={
                         active
-                          ? "bg-blue-50 text-blue-700 cursor-pointer"
-                          : "hover:bg-slate-50 text-slate-700 cursor-pointer"
+                          ? "bg-primary/10 text-primary cursor-pointer"
+                          : "hover:bg-muted/50 text-foreground/90 cursor-pointer"
                       }
                     >
-                      <td className="px-2.5 py-1.5 border-t border-slate-200">{p.planYear || "-"}</td>
-                      <td className="px-2.5 py-1.5 border-t border-slate-200">{p.planName || "-"}</td>
-                      <td className="px-2.5 py-1.5 border-t border-slate-200">
+                      <td className="px-2.5 py-1.5 border-t border-border">{p.planYear || "-"}</td>
+                      <td className="px-2.5 py-1.5 border-t border-border">{p.planName || "-"}</td>
+                      <td className="px-2.5 py-1.5 border-t border-border">
                         {p.planLen ? `${formatDetailScalarValue(p.planLen)} km` : "-"}
                       </td>
                     </tr>
@@ -874,7 +874,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         )}
       </div>
 
-      <div className="shrink-0 border-b border-slate-200 px-3 py-2 bg-white">
+      <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
         <div className="flex gap-1.5">
           {actionButtons.map(({ label, icon: Icon }) => {
             const layerName = layerByLabel[label];
@@ -909,9 +909,9 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                   "h-7 text-[11px] rounded border flex-1 min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1",
                   layerName
                     ? layerOn
-                      ? "border-blue-400 bg-blue-50 text-blue-800 hover:bg-blue-100"
-                      : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                    : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 opacity-80",
+                      ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
+                      : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted opacity-80",
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -928,24 +928,24 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             {indexError ? (
               <div className="p-3">
                 {indexSectionHeader}
-                <p className="text-sm text-red-600 py-1">{indexError}</p>
+                <p className="text-sm text-destructive py-1">{indexError}</p>
               </div>
             ) : indexLoading ? (
               <div className="p-3">
                 {indexSectionHeader}
-                <p className="text-sm text-slate-500 py-1">색인도 정보 불러오는 중...</p>
+                <p className="text-sm text-muted-foreground py-1">색인도 정보 불러오는 중...</p>
               </div>
             ) : !indexBundle?.index ? (
               <div className="p-3">
                 {indexSectionHeader}
-                <p className="text-sm text-slate-500 py-1">
+                <p className="text-sm text-muted-foreground py-1">
                   선택한 기본계획과 교차하는 색인도가 없습니다.
                 </p>
               </div>
             ) : (
               <div className="p-3 space-y-4">
                 {indexSectionHeader}
-                <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-100">
+                <div className="rounded-lg border border-border overflow-hidden bg-muted">
                   <div
                     className={INDEX_THUMB_FRAME}
                     title={
@@ -960,11 +960,11 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                   >
                     {indexTableKeyFieldName == null || indexRowKeyForFiles == null ? (
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <FileImage className="h-16 w-16 text-slate-400 opacity-50" aria-hidden />
+                        <FileImage className="h-16 w-16 text-muted-foreground opacity-50" aria-hidden />
                       </div>
                     ) : indexFileQuery.loading ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
-                        <Loader2 className="h-10 w-10 animate-spin text-slate-400" aria-hidden />
+                      <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" aria-hidden />
                       </div>
                     ) : indexFileQuery.error ? (
                       <div className="absolute inset-0 flex items-center justify-center bg-rose-50">
@@ -972,7 +972,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       </div>
                     ) : indexFileQuery.files.length === 0 ? (
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <FileImage className="h-16 w-16 text-slate-400 opacity-50" aria-hidden />
+                        <FileImage className="h-16 w-16 text-muted-foreground opacity-50" aria-hidden />
                       </div>
                     ) : indexFilePreview == null ? null : indexFilePreview.kind === "image" ? (
                       <button
@@ -996,7 +996,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                     ) : indexFilePreview.kind === "pdf" ? (
                       <button
                         type="button"
-                        className="absolute inset-0 block cursor-zoom-in border-0 bg-slate-900 p-0"
+                        className="absolute inset-0 block cursor-zoom-in border-0 bg-foreground p-0"
                         onClick={() => openIndexFullScreenPreview(indexFilePreview.file.name)}
                         aria-label="PDF 전체화면 보기"
                       >
@@ -1024,21 +1024,21 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                             indexFilePreview.file.name
                           )
                         }
-                        className="absolute inset-0 flex items-center justify-center bg-slate-100 transition-colors hover:bg-slate-200"
+                        className="absolute inset-0 flex items-center justify-center bg-muted transition-colors hover:bg-muted"
                         title={indexFilePreview.file.name}
                       >
-                        <FileText className="h-16 w-16 text-slate-400" aria-hidden />
+                        <FileText className="h-16 w-16 text-muted-foreground" aria-hidden />
                       </button>
                     )}
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-[11px] font-medium text-slate-600 mb-2">상세목록</p>
+                  <p className="text-[11px] font-medium text-muted-foreground mb-2">상세목록</p>
                   {indexBundle.related.length === 0 ? (
-                    <p className="text-xs text-slate-500 py-2">연결된 구조물·종단·횡단 항목이 없습니다.</p>
+                    <p className="text-xs text-muted-foreground py-2">연결된 구조물·종단·횡단 항목이 없습니다.</p>
                   ) : (
-                    <ul className="rounded border border-slate-200 divide-y divide-slate-200 bg-white">
+                    <ul className="rounded border border-border divide-y divide-border bg-background">
                       {indexBundle.related.map((r) => {
                         const rowKey = `${r.fileLayer}\0${r.fileKey}`;
                         const drawingBusy = relatedDrawingLoadingKey === rowKey;
@@ -1047,7 +1047,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                             <div className="flex items-stretch min-h-[30px]">
                               <button
                                 type="button"
-                                className="flex-1 min-w-0 text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                                className="flex-1 min-w-0 text-left px-3 py-2 text-xs hover:bg-muted/50 flex items-center gap-2"
                                 onClick={() => {
                                   closeRiverBasicPlanDrawingOverlays();
                                   ensureRelatedItemLayerVisible(r);
@@ -1072,16 +1072,16 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                                 }}
                               >
                                 <span
-                                  className="inline-flex h-5 w-12 shrink-0 items-center justify-center truncate rounded bg-slate-100 px-0.5 text-center text-[10px] font-medium leading-none text-slate-600"
+                                  className="inline-flex h-5 w-12 shrink-0 items-center justify-center truncate rounded bg-muted px-0.5 text-center text-[10px] font-medium leading-none text-muted-foreground"
                                   title={r.badge}
                                 >
                                   {r.badge}
                                 </span>
-                                <span className="text-slate-800 min-w-0 truncate">{r.label}</span>
+                                <span className="text-foreground min-w-0 truncate">{r.label}</span>
                               </button>
                               <button
                                 type="button"
-                                className="shrink-0 w-8 flex items-center justify-center border-slate-100 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40"
+                                className="shrink-0 w-8 flex items-center justify-center border-border text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
                                 title="도면보기"
                                 aria-label="도면보기"
                                 disabled={drawingBusy || !r.fileLayer?.trim() || !r.fileKey?.trim()}
@@ -1106,27 +1106,27 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         ) : (
           <div className="p-3 space-y-4">
             <div>
-              <p className="text-[11px] font-medium text-slate-600 mb-2">하천기본계획</p>
+              <p className="text-[11px] font-medium text-muted-foreground mb-2">하천기본계획</p>
               {error ? (
-                <p className="text-sm text-red-600 py-1">{error}</p>
+                <p className="text-sm text-destructive py-1">{error}</p>
               ) : loadingDetail ? (
-                <p className="text-sm text-slate-500 py-1">속성정보 불러오는 중...</p>
+                <p className="text-sm text-muted-foreground py-1">속성정보 불러오는 중...</p>
               ) : !detail || detailEntries.length === 0 ? (
-                <p className="text-sm text-slate-500 py-1">속성정보가 없습니다.</p>
+                <p className="text-sm text-muted-foreground py-1">속성정보가 없습니다.</p>
               ) : (
-                <div className="overflow-hidden rounded border border-slate-200 grid grid-cols-[max-content_minmax(0,1fr)]">
+                <div className="overflow-hidden rounded border border-border grid grid-cols-[max-content_minmax(0,1fr)]">
                   {detailEntries.map((entry, idx) => (
                     <div key={entry.key} className="contents">
                       <div
-                        className={`bg-slate-100 px-2.5 py-1.5 text-[11px] text-[#666] whitespace-nowrap ${
-                          idx !== detailEntries.length - 1 ? "border-b border-slate-200" : ""
+                        className={`bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground whitespace-nowrap ${
+                          idx !== detailEntries.length - 1 ? "border-b border-border" : ""
                         }`}
                       >
                         {entry.label}
                       </div>
                       <div
-                        className={`min-w-0 px-2.5 py-1.5 text-[11px] text-[#666] break-all ${
-                          idx !== detailEntries.length - 1 ? "border-b border-slate-200" : ""
+                        className={`min-w-0 px-2.5 py-1.5 text-[11px] text-muted-foreground break-all ${
+                          idx !== detailEntries.length - 1 ? "border-b border-border" : ""
                         }`}
                       >
                         {formatRiverBasicPlanAttrValue(
@@ -1141,20 +1141,20 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             </div>
 
             <div>
-              <p className="text-[11px] font-medium text-slate-600 mb-2">색인도</p>
+              <p className="text-[11px] font-medium text-muted-foreground mb-2">색인도</p>
               {indexListError ? (
-                <p className="text-sm text-red-600 py-1">{indexListError}</p>
+                <p className="text-sm text-destructive py-1">{indexListError}</p>
               ) : indexListLoading ? (
-                <p className="text-sm text-slate-500 py-1">색인도 목록 불러오는 중...</p>
+                <p className="text-sm text-muted-foreground py-1">색인도 목록 불러오는 중...</p>
               ) : indexList.length === 0 ? (
-                <p className="text-sm text-slate-500 py-1">표시할 색인도 목록이 없습니다.</p>
+                <p className="text-sm text-muted-foreground py-1">표시할 색인도 목록이 없습니다.</p>
               ) : (
                 <div className="grid grid-cols-2 gap-1.5">
                   {indexList.map((it) => (
                     <button
                       key={`index-list-${it.ogcFid}`}
                       type="button"
-                      className="flex min-h-[40px] w-full items-center justify-start gap-1.5 rounded border border-slate-200 bg-white px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight text-slate-800 hover:bg-slate-50"
+                      className="flex min-h-[40px] w-full items-center justify-start gap-1.5 rounded border border-border bg-background px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight text-foreground hover:bg-muted/50"
                       title={it.badge}
                       onClick={() => {
                         setIndexViewMode(true);
@@ -1165,7 +1165,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       }}
                     >
                       <MapPin
-                        className="h-3.5 w-3.5 shrink-0 text-slate-500"
+                        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                         strokeWidth={1.5}
                         aria-hidden
                       />

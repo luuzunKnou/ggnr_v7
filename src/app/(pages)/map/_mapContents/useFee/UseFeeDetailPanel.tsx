@@ -88,7 +88,7 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
   const showMoreButton = attributes.length > USE_FEE_DETAIL_PRIMARY_COUNT
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <LayerRowEditHeader
         title={headerStatus ? `점사용료 상세 · ${headerStatus}` : '점사용료 상세'}
         isEditing={false}
@@ -111,26 +111,26 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
 
       <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {loading && attributes.length === 0 ? (
-          <div className="px-1 py-6 text-center text-slate-500">불러오는 중…</div>
+          <div className="px-1 py-6 text-center text-muted-foreground">불러오는 중…</div>
         ) : error && attributes.length === 0 ? (
-          <div className="px-1 py-6 text-center text-red-600">{error}</div>
+          <div className="px-1 py-6 text-center text-destructive">{error}</div>
         ) : (
           <>
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               상세 속성
             </div>
-            <div className="divide-y divide-slate-100 rounded border border-slate-200 bg-slate-50/50">
+            <div className="divide-y divide-border rounded border border-border bg-muted/40">
               {visibleAttributes.map((row) => (
                 <div
                   key={row.field}
                   className="grid grid-cols-[6.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-2 py-1.5"
                 >
-                  <dt className="w-[6.25rem] shrink-0 overflow-hidden whitespace-nowrap font-medium text-slate-600">
+                  <dt className="w-[6.25rem] shrink-0 overflow-hidden whitespace-nowrap font-medium text-muted-foreground">
                     {row.label}
                   </dt>
                   <dd
                     className={cn(
-                      'min-w-0 break-words text-slate-800',
+                      'min-w-0 break-words text-foreground',
                       row.field.startsWith('vrActno') && 'break-all tabular-nums'
                     )}
                   >
@@ -143,7 +143,7 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
-                className="mt-2 w-full rounded border border-slate-200 bg-white py-1.5 text-[11px] font-medium text-primary hover:bg-slate-50"
+                className="mt-2 w-full rounded border border-border bg-background py-1.5 text-[11px] font-medium text-primary hover:bg-muted/50"
               >
                 {expanded ? '접기' : `더보기 (${hiddenCount}건)`}
               </button>
@@ -152,10 +152,10 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
         )}
 
         <div className="mt-4">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             점용대장
           </div>
-          <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-4 text-center text-slate-500">
+          <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
             연계된 점용대장이 없습니다.
           </div>
         </div>
