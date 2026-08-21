@@ -107,12 +107,12 @@ export function HistoryAddDialog({ open, onOpenChange, compKey, onConfirm, onDel
       <DialogContent className="sm:max-w-[500px] p-0 gap-0" showCloseButton={false}>
         <DialogTitle className="sr-only">{isEdit ? '이력 수정' : '이력 추가'}</DialogTitle>
         {/* 헤더: 민원상세보기와 동일 (접수번호 대신 설명) */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 shrink-0 bg-slate-50/40">
-          <span className="text-xs font-medium text-slate-600">처리내역</span>
+        <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/30">
+          <span className="text-xs font-medium text-muted-foreground">처리내역</span>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             aria-label="닫기"
           >
             <X className="h-3.5 w-3.5" />
@@ -257,7 +257,7 @@ export function HistoryAddDialog({ open, onOpenChange, compKey, onConfirm, onDel
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground"
             >
               <X className="h-3 w-3" />
               닫기

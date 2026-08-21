@@ -390,6 +390,20 @@ export type MapContextValue = {
   /** URL 기준 CCTV 패널 열림 — 지도 레이어 식별 비활성화용 */
   roadCctvPanelOpen: boolean;
   setRoadCctvPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 재난대응시설 패널 열림 — 일반 식별 비활성화용 */
+  safetyFacPanelOpen: boolean;
+  setSafetyFacPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
+  safetyFacBuildingRoadLayerState: {
+    visibleTableNames: Set<string>;
+    cqlByTable: Record<string, string>;
+  } | null;
+  setSafetyFacBuildingRoadLayerState: Dispatch<
+    SetStateAction<{
+      visibleTableNames: Set<string>;
+      cqlByTable: Record<string, string>;
+    } | null>
+  >;
   /** CCTV 패널: 통행 타일 vs 도로대장 총괄 레이어(배타, 기본 통행) */
   roadCctvUnderlayMode: RoadCctvUnderlayMode;
   setRoadCctvUnderlayMode: Dispatch<SetStateAction<RoadCctvUnderlayMode>>;
@@ -423,7 +437,15 @@ export type MapContextValue = {
           pnu?: string;
           point4326?: { x: number; y: number };
         }[],
-        options?: { replaceAuto?: boolean }
+        options?: {
+          replaceAuto?: boolean;
+          /** true면 저장분(keepOnReplace)도 비우고, 주소검색 추가만 남김 */
+          replaceKept?: boolean;
+          /** 다시 그리기 취소 — 필지목록 스냅샷 복원 */
+          restoreSnapshot?: boolean;
+          /** 적용 후 스냅샷 폐기 */
+          commitSnapshot?: boolean;
+        }
       ) => void)
     | null
   >;
@@ -636,6 +658,11 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [fmsLinkageSelectedId, setFmsLinkageSelectedId] = useState<string | null>(null);
   const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
+  const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
+  const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
+    visibleTableNames: Set<string>;
+    cqlByTable: Record<string, string>;
+  } | null>(null);
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
@@ -655,7 +682,15 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
           pnu?: string;
           point4326?: { x: number; y: number };
         }[],
-        options?: { replaceAuto?: boolean }
+        options?: {
+          replaceAuto?: boolean;
+          /** true면 저장분(keepOnReplace)도 비우고, 주소검색 추가만 남김 */
+          replaceKept?: boolean;
+          /** 다시 그리기 취소 — 필지목록 스냅샷 복원 */
+          restoreSnapshot?: boolean;
+          /** 적용 후 스냅샷 폐기 */
+          commitSnapshot?: boolean;
+        }
       ) => void)
     | null
   >(null);
@@ -821,6 +856,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadCctvOverlay,
         roadCctvPanelOpen,
         setRoadCctvPanelOpen,
+        safetyFacPanelOpen,
+        setSafetyFacPanelOpen,
+        safetyFacBuildingRoadLayerState,
+        setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,
         setRoadCctvUnderlayMode,
         roadCctvExtentWgs84,

@@ -7,6 +7,7 @@ import { Save, RotateCcw, Search, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
+import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManager/layerManagerListCache"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -76,8 +77,7 @@ export function LayerCodeManager({
   useEffect(() => {
     let cancelled = false
     setLoadingTables(true)
-    fetch("/api/config/defineLayer")
-      .then((res) => res.json())
+    fetchDefineLayerTables()
       .then((body) => {
         if (cancelled) return
         if (body.success && Array.isArray(body.data)) {
@@ -92,10 +92,9 @@ export function LayerCodeManager({
   /** "사용중" 필터용 — 현재 접속된 DB(layer/public_layer 스키마)에 실제로 존재하는 테이블 목록 */
   useEffect(() => {
     let cancelled = false
-    call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      .then((res) => {
+    fetchLayerDbTableList()
+      .then((data) => {
         if (cancelled) return
-        const data = res?.data ?? res
         if (!data?.success || !Array.isArray(data.tables)) return
         const keys = new Set<string>(
           (data.tables as Array<{ schema: string; table: string }>).map(

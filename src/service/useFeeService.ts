@@ -9,9 +9,17 @@ import {
 } from '@/database/schema/ngl_fee_list';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { formatToYmdOrText, tryFormatToYmd } from '@/lib/formatDateYmd';
-import { runNextGenFeeSync } from '@/lib/nextGenLinkage/syncRunner';
+import { requireMapAdminToolsAccess } from '@/lib/auth/guard';
+import {
+  getNextGenFeeSyncBlockReason,
+  runNextGenFeeSync,
+} from '@/lib/nextGenLinkage/syncRunner';
 import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
 import { getAllUseFeeWmsLayerIds, getUseFeeBinding, USE_FEE_PREFIXES } from '@/lib/useFeeBinding';
+import {
+  hasUseFeeGlAddrJibunLot,
+  updateUseFeeGeomById,
+} from '@/lib/useFeeGlAddrGeom';
 import { labelForUseFeeField } from '@/app/(pages)/map/_mapContents/useFee/useFeeFieldLabels';
 
 const UNPAID_DUE_NOTIF_DEFAULT_WITHIN_DAYS = 15;
@@ -717,9 +725,23 @@ export async function getUseFeeExtent3857ById(params: {
   }
 }
 
-/** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도 */
+/** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도. 완료를 기다리지 않고 시작만 알림 */
 export async function runNextGenSync(params?: { fyr?: string }) {
-  return runNextGenFeeSync({ fyr: params?.fyr });
+  await requireMapAdminToolsAccess();
+  const block = getNextGenFeeSyncBlockReason();
+  if (block) {
+    return { ok: false, skipped: true, success: 0, fail: 0, message: block };
+  }
+  void runNextGenFeeSync({ fyr: params?.fyr }).then((r) => {
+    console.info('[useFeeService] manual next-gen sync:', r.message);
+  });
+  return {
+    ok: true,
+    started: true,
+    success: 0,
+    fail: 0,
+    message: '점사용료 연계를 시작했습니다. 완료는 서버 로그를 확인하세요.',
+  };
 }
 
 /** 동일 부과키의 수납 행 목록 (선택 행 맥락용) */
@@ -759,27 +781,10 @@ export async function getUseFeeReceiptsByLvyKey(params: {
   };
 }
 
-/**
- * 물건지주소 필지검색용 정규화.
- * «438번지 1호» → «438-1», «951번지» → «951»
- */
-export function normalizeUseFeeGlAddrForParcelSearch(addr: string): string {
-  let s = String(addr ?? '')
-    .trim()
-    .replace(/\s+/g, ' ');
-  if (!s) return '';
-  s = s.replace(/(\d{1,5})\s*번지\s+(\d{1,5})\s*호/gu, '$1-$2');
-  s = s.replace(/(\d{1,5})\s*번지/gu, '$1');
-  return s.replace(/\s+/g, ' ').trim();
-}
-
-/** 지번(본번/부번·번지)이 없으면 필지 검색 생략 — 예: «평해읍 학곡리» */
-export function hasUseFeeGlAddrJibunLot(addr: string): boolean {
-  const s = normalizeUseFeeGlAddrForParcelSearch(addr);
-  if (!s) return false;
-  if (/(?:^|\s)산\s*\d{1,5}(?:\s*-\s*\d{1,5})?(?:\s|$)/u.test(s)) return true;
-  return /(?:^|\s)\d{1,5}(?:\s*-\s*\d{1,5})?(?:\s|$)/u.test(s);
-}
+export {
+  hasUseFeeGlAddrJibunLot,
+  normalizeUseFeeGlAddrForParcelSearch,
+} from '@/lib/useFeeGlAddrGeom';
 
 let nglFeeGeomEnsurePromise: Promise<void> | null = null;
 
@@ -861,8 +866,6 @@ export async function backfillUseFeeGlAddrGeom(params?: {
     };
   }
 
-  const { resolveJijukParcelGeomsByAddresses } = await import('@/service/layerRowService');
-
   const whereGeom = force
     ? sql`true`
     : sql`${nglFeeList.geom} is null`;
@@ -882,42 +885,19 @@ export async function backfillUseFeeGlAddrGeom(params?: {
 
   for (const row of candidates) {
     const addrRaw = String(row.glAddr ?? '').trim();
-    const addr = normalizeUseFeeGlAddrForParcelSearch(addrRaw);
     if (!hasUseFeeGlAddrJibunLot(addrRaw)) {
       skippedNoJibun += 1;
       continue;
     }
 
     try {
-      const resolved = await resolveJijukParcelGeomsByAddresses({
-        items: [{ address: addr }],
+      const ok = await updateUseFeeGeomById({
+        tableName,
+        id: Number(row.id),
+        glAddr: addrRaw,
       });
-      const parcel = resolved.parcels[0];
-      const gj = parcel?.geometry3857;
-      if (!gj || typeof gj !== 'object') {
-        skippedNotFound += 1;
-        continue;
-      }
-      const json = JSON.stringify(gj).replace(/'/g, "''");
-      await db.execute(
-        sql.raw(`
-          UPDATE layer.${tableName}
-          SET geom = ST_Multi(
-                ST_CollectionExtract(
-                  ST_MakeValid(
-                    ST_Transform(
-                      ST_SetSRID(ST_GeomFromGeoJSON('${json}'), 3857),
-                      5181
-                    )
-                  ),
-                  3
-                )
-              ),
-              updated_at = now()
-          WHERE id = ${Number(row.id)}
-        `)
-      );
-      updated += 1;
+      if (ok) updated += 1;
+      else skippedNotFound += 1;
     } catch {
       skippedNotFound += 1;
     }

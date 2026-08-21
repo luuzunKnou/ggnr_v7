@@ -153,37 +153,37 @@ export function LayerManagementPanel({
         onClick={onClose}
         aria-hidden
       />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[960px] h-[85vh] flex flex-col bg-slate-100 rounded-[10px] shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[960px] h-[85vh] flex flex-col bg-muted/40 rounded-[10px] shadow-2xl border border-border overflow-hidden">
         {/* Header */}
-        <div className="shrink-0 px-4 py-2.5 bg-[#F1F9FB] border-b border-slate-200">
+        <div className="shrink-0 px-4 py-2.5 bg-[#F1F9FB] border-b border-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-[10px] bg-[#0ea5e9]/15 flex items-center justify-center shrink-0">
                 <Settings className="w-5 h-5 text-[#0ea5e9]" strokeWidth={1.5} />
               </div>
               <div>
-                <h2 className="text-[14px] font-semibold text-slate-800">레이어 설정</h2>
-                <p className="text-[12px] text-slate-500 -mt-0.5">지도에 보여줄 레이어를 설정합니다</p>
+                <h2 className="text-[14px] font-semibold text-foreground">레이어 설정</h2>
+                <p className="text-[12px] text-muted-foreground -mt-0.5">지도에 보여줄 레이어를 설정합니다</p>
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
               title="닫기"
               aria-label="닫기"
             >
               <X className="h-4 w-4" strokeWidth={1.5} />
             </button>
           </div>
-          <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-2.5 py-1.5">
-            <Search className="w-4 h-4 text-slate-400 shrink-0" strokeWidth={1.5} />
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-background/80 px-2.5 py-1.5">
+            <Search className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="레이어 검색"
-              className="min-w-0 flex-1 bg-transparent text-[12px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
           </div>
         </div>
@@ -208,21 +208,21 @@ export function LayerManagementPanel({
               return (
                 <div
                   key={category}
-                  className="break-inside-avoid mb-3.5 rounded-lg border border-slate-200 bg-white overflow-hidden animate-layer-result-in"
+                  className="break-inside-avoid mb-3.5 rounded-lg border border-border bg-background overflow-hidden animate-layer-result-in"
                 >
                   {/* Category header */}
-                  <div className="w-full px-3.5 py-2.5 flex items-center gap-2 hover:bg-slate-50">
+                  <div className="w-full px-3.5 py-2.5 flex items-center gap-2 hover:bg-muted/50">
                     <button
                       type="button"
                       onClick={() => toggleCollapse(category)}
                       className="flex items-center gap-2 text-left min-w-0 hover:bg-transparent py-0 shrink-0"
                     >
                       {isCollapsed ? (
-                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                       ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                        <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                       )}
-                      <span className="text-[12px] font-medium text-slate-800 truncate">
+                      <span className="text-[12px] font-medium text-foreground truncate">
                         {category}
                       </span>
                     </button>
@@ -231,10 +231,10 @@ export function LayerManagementPanel({
                         type="button"
                         onClick={() => onFavoriteToggle(category)}
                         className={cn(
-                          'p-0 rounded hover:bg-slate-200 transition-colors shrink-0',
+                          'p-0 rounded hover:bg-muted transition-colors shrink-0',
                           favoriteGroupKeys.includes(category)
                             ? 'text-amber-500 fill-amber-500'
-                            : 'text-slate-400 hover:text-amber-500'
+                            : 'text-muted-foreground hover:text-amber-500'
                         )}
                         title={favoriteGroupKeys.includes(category) ? '즐겨찾기 해제' : '상단 버튼에 표시'}
                         aria-label={favoriteGroupKeys.includes(category) ? '즐겨찾기 해제' : '즐겨찾기 추가'}
@@ -245,14 +245,14 @@ export function LayerManagementPanel({
                         />
                       </button>
                     )}
-                    <span className="flex items-center gap-1.5 shrink-0 text-[12px] text-slate-500 ml-auto">
+                    <span className="flex items-center gap-1.5 shrink-0 text-[12px] text-muted-foreground ml-auto">
                       {selectedCount}/{layers.length}
                       <input
                         type="checkbox"
                         checked={layers.length > 0 && selectedCount === layers.length}
                         onChange={(e) => handleToggleCategory(category, e.target.checked)}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-4 h-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
+                        className="w-4 h-4 rounded border-border text-[#0ea5e9] focus:ring-[#0ea5e9]"
                         title="전체 레이어 켜기/끄기"
                       />
                     </span>
@@ -260,7 +260,7 @@ export function LayerManagementPanel({
 
                   {/* Layer list */}
                   {!isCollapsed && (
-                    <div className="border-t border-slate-100 pl-[9px] pr-3.5 py-[5px]">
+                    <div className="border-t border-border pl-[9px] pr-3.5 py-[5px]">
                       {layers.map((row) => {
                         const defineTableName = String(row.define_table_name ?? '').trim();
                         const name =
@@ -274,7 +274,7 @@ export function LayerManagementPanel({
                           <React.Fragment key={defineTableName}>
                             <div
                               className={cn(
-                                'flex items-center gap-1.5 py-[3px] pl-1 pr-0 hover:bg-slate-50',
+                                'flex items-center gap-1.5 py-[3px] pl-1 pr-0 hover:bg-muted/50',
                                 checked && 'bg-[#0ea5e9]/10'
                               )}
                             >
@@ -295,7 +295,7 @@ export function LayerManagementPanel({
                                 <span
                                   className={cn(
                                     'text-[12px] truncate flex-1',
-                                    checked ? 'font-medium text-slate-800' : 'text-slate-600'
+                                    checked ? 'font-medium text-foreground' : 'text-muted-foreground'
                                   )}
                                 >
                                   {name}
@@ -311,7 +311,7 @@ export function LayerManagementPanel({
                                   }}
                                   className={cn(
                                     'relative rounded shrink-0',
-                                    hasFilters ? 'text-[#0ea5e9]' : 'text-slate-400 hover:text-slate-600'
+                                    hasFilters ? 'text-[#0ea5e9]' : 'text-muted-foreground hover:text-foreground'
                                   )}
                                   title="필터 추가"
                                 >
@@ -321,7 +321,7 @@ export function LayerManagementPanel({
                                   )}
                                 </button>
                               )}
-                              <Palette className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.5} />
+                              <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" strokeWidth={1.5} />
                               <input
                                 id={`layer-cb-${defineTableName}`}
                                 type="checkbox"
@@ -329,14 +329,14 @@ export function LayerManagementPanel({
                                 onChange={(e) =>
                                   handleToggle(defineTableName, e.target.checked)
                                 }
-                                className="w-4 h-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9] shrink-0"
+                                className="w-4 h-4 rounded border-border text-[#0ea5e9] focus:ring-[#0ea5e9] shrink-0"
                               />
                             </div>
                             {filterRows.length > 0 && onLayerFilterRowsChange && (
                               <div className="ml-2 mt-0.5 mb-1.5 space-y-1 text-left">
                                 {filterRows.map((filterRow, idx) => (
                                   <div key={idx} className="flex items-center gap-2">
-                                    <span className="w-2 h-px bg-slate-400 shrink-0 self-center" aria-hidden />
+                                    <span className="w-2 h-px bg-muted-foreground/40 shrink-0 self-center" aria-hidden />
                                     <select
                                         value={filterRow.field}
                                         onChange={(e) => {
@@ -344,7 +344,7 @@ export function LayerManagementPanel({
                                           next[idx] = { ...next[idx], field: e.target.value };
                                           onLayerFilterRowsChange(defineTableName, next);
                                         }}
-                                        className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-0.5 text-[12px]"
+                                        className="flex-1 min-w-0 rounded border border-border px-2 py-0.5 text-[12px]"
                                       >
                                         <option value="">필드 선택</option>
                                         {fields.map((f) => (
@@ -362,7 +362,7 @@ export function LayerManagementPanel({
                                           onLayerFilterRowsChange(defineTableName, next);
                                         }}
                                         placeholder="값 입력"
-                                        className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-0.5 text-[12px]"
+                                        className="flex-1 min-w-0 rounded border border-border px-2 py-0.5 text-[12px]"
                                       />
                                       <button
                                         type="button"
@@ -370,7 +370,7 @@ export function LayerManagementPanel({
                                           const next = filterRows.filter((_, i) => i !== idx);
                                           onLayerFilterRowsChange(defineTableName, next);
                                         }}
-                                        className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0"
+                                        className="p-1 rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground shrink-0"
                                         title="삭제"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
@@ -391,14 +391,14 @@ export function LayerManagementPanel({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 px-4 py-2 border-t border-slate-200 flex items-center justify-between bg-slate-50">
-          <span className="text-[12px] text-slate-600">
+        <div className="shrink-0 px-4 py-2 border-t border-border flex items-center justify-between bg-muted/30">
+          <span className="text-[12px] text-muted-foreground">
             {activeCount}개 레이어 활성화
           </span>
           <button
             type="button"
             onClick={handleDeselectAll}
-            className="px-3 py-1.5 text-xs font-medium rounded-md bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors"
           >
             전체 해제
           </button>

@@ -1,0 +1,21 @@
+# 저장·작업 트리 모두 LF. Windows autocrlf가 줄바꿈만 다른 파일로 표시하지 않게 함.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.wasm binary
+*.exe binary
+*.dll binary
+*.zip binary
+*.7z binary
+*.gz binary
+*.br binary

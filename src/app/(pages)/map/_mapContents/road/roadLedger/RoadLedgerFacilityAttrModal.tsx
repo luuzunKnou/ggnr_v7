@@ -102,10 +102,10 @@ export function RoadLedgerFacilityAttrModal({
       onClick={close}
     >
       <div
-        className="relative w-full max-h-[calc(100dvh-5rem)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-[5px] border border-slate-200 bg-white shadow-2xl"
+        className="relative w-full max-h-[calc(100dvh-5rem)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-[5px] border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 pr-10">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-2 border-b border-border bg-background px-4 py-3 pr-10">
           <div className="flex min-w-0 flex-1 items-start gap-2 text-left">
             {pick?.defineTableName ? (
               <img
@@ -122,15 +122,15 @@ export function RoadLedgerFacilityAttrModal({
             ) : null}
             <h2
               id={titleId}
-              className="min-w-0 break-words text-base font-semibold leading-snug text-slate-800"
+              className="min-w-0 break-words text-base font-semibold leading-snug text-foreground"
             >
               {pick?.defineTableTitle}
-              <span className="font-semibold text-slate-600"> ({pick?.defineTableName})</span>
+              <span className="font-semibold text-muted-foreground"> ({pick?.defineTableName})</span>
             </h2>
           </div>
           <button
             type="button"
-            className="absolute right-3 top-3 rounded-sm p-1 text-slate-400 opacity-90 ring-offset-white transition-opacity hover:bg-slate-100 hover:text-slate-600 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            className="absolute right-3 top-3 rounded-sm p-1 text-muted-foreground opacity-90 ring-offset-white transition-opacity hover:bg-muted/50 hover:text-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
             aria-label="닫기"
             onClick={close}
           >
@@ -139,7 +139,7 @@ export function RoadLedgerFacilityAttrModal({
         </div>
         <div className="px-4 py-3">
           {entries.length === 0 ? (
-            <p className="text-[11px] text-slate-500">표시할 속성이 없습니다.</p>
+            <p className="text-[11px] text-muted-foreground">표시할 속성이 없습니다.</p>
           ) : (
             <DetailInfoTable entries={entries} />
           )}

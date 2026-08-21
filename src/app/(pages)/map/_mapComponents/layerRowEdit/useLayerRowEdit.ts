@@ -8,7 +8,11 @@ import { useMapContext } from "../MapContext";
 import { refreshServiceWmsLayer } from "../layerFactory/serviceLayerFactory";
 import { LAYER_ROW_GEOM_CLEAR_SENTINEL } from "./LayerRowGeomEditHandler";
 import { fetchReadOnlyFieldSet } from "./buildFormAttributes";
-import { parcelAddressesFromItems, fitMapToLayerRowParcel } from "./layerRowParcelUtils";
+import {
+  parcelAddressesFromItems,
+  fitMapToLayerRowParcel,
+  sameParcelAddressList,
+} from "./layerRowParcelUtils";
 import { resolveParcelGeoms } from "./resolveParcelGeoms";
 import {
   validateDefineRequiredFields,
@@ -45,6 +49,18 @@ function draftValueEqual(a: string, b: string): boolean {
   return String(a ?? "").trim() === String(b ?? "").trim();
 }
 
+const GEOM_ATTR_FIELDS = new Set(["geom", "geometry", "the_geom", "shape"]);
+const PERMIT_ATTR_FIELDS = new Set(["permit_no", "perm_num"]);
+
+function looksLikeGeomWkt(raw: string | null | undefined): boolean {
+  const s = String(raw ?? "").trim().toUpperCase();
+  return (
+    s.startsWith("POLYGON") ||
+    s.startsWith("MULTIPOLYGON") ||
+    s.startsWith("GEOMETRYCOLLECTION")
+  );
+}
+
 type UseLayerRowEditArgs = {
   preset: LayerRowEditPreset;
   rowKey: string;
@@ -57,6 +73,13 @@ type UseLayerRowEditArgs = {
   onCancelCreate?: () => void;
   /** 추가 필지 지도 이동 시 WMS 레이어 표시용 */
   wmsLayerId?: string;
+  /** false면 필지 도형(지적)을 지도에 올리지 않음. 목록만 유지 */
+  drawChildGeomOnMap?: boolean;
+  /** INSERT/UPDATE·필지동기화 성공 직후(onCreated·onReload 전). 실패 시 저장 중단 */
+  afterPersist?: (ctx: {
+    keyValue: string;
+    isCreate: boolean;
+  }) => Promise<{ ok: boolean; error?: string } | void>;
 };
 
 export function useLayerRowEdit({
@@ -70,6 +93,8 @@ export function useLayerRowEdit({
   onDeleted,
   onCancelCreate,
   wmsLayerId,
+  afterPersist,
+  drawChildGeomOnMap = true,
 }: UseLayerRowEditArgs) {
   const { data: session } = useSession();
   const logUser = useMemo(() => {
@@ -96,6 +121,7 @@ export function useLayerRowEdit({
   const [draftParcels, setDraftParcels] = useState<LayerRowParcelItem[]>([]);
   const prevEditingRef = useRef(false);
   const baselineDraftRef = useRef<Record<string, string>>({});
+  const parcelsBeforeRedrawRef = useRef<LayerRowParcelItem[] | null>(null);
 
   const dateFields = useMemo(
     () => new Set((preset.dateFields ?? []).map((f) => f.toLowerCase())),
@@ -158,10 +184,10 @@ export function useLayerRowEdit({
 
   useEffect(() => {
     if (isEditing && !prevEditingRef.current) {
-      // DB 필지는 자동목록 — 수동(추가)만 showMapGeom:true. 그래야 도형수정 replaceAuto가 갱신됨
+      // 저장·주소검색 추가는 keepOnReplace — 수정 진입 시 도형교차로 목록에서 빠지지 않음
       const base = isCreateMode
         ? []
-        : initialParcels.map((p) => ({ ...p, showMapGeom: false as const }));
+        : initialParcels.map((p) => ({ ...p, showMapGeom: false as const, keepOnReplace: true as const }));
       setDraftParcels(base);
       if (base.length > 0) {
         void resolveParcelGeoms(base).then((resolved) => {
@@ -179,6 +205,7 @@ export function useLayerRowEdit({
                 pnu: r.pnu ?? p.pnu,
                 extent3857: r.extent3857 ?? p.extent3857,
                 geometry3857: r.geometry3857 ?? p.geometry3857,
+                keepOnReplace: p.keepOnReplace === true,
               };
             });
           });
@@ -188,6 +215,7 @@ export function useLayerRowEdit({
     // 빈 배열을 매번 setState 하면 참조가 바뀌어 Maximum update depth 유발
     if (!isEditing) {
       setDraftParcels((prev) => (prev.length === 0 ? prev : []));
+      parcelsBeforeRedrawRef.current = null;
     }
     prevEditingRef.current = isEditing;
   }, [initialParcels, isCreateMode, isEditing]);
@@ -205,9 +233,29 @@ export function useLayerRowEdit({
     if (!isEditing || !layerRowParcelApplyRef) return;
     layerRowParcelApplyRef.current = (items, options) => {
       setDraftParcels((prev) => {
-        const autoItems = items.map((item) => ({ ...item, showMapGeom: false as const }));
+        if (options?.restoreSnapshot) {
+          const snap = parcelsBeforeRedrawRef.current;
+          parcelsBeforeRedrawRef.current = null;
+          return snap ?? prev;
+        }
+        if (options?.replaceKept && parcelsBeforeRedrawRef.current == null) {
+          parcelsBeforeRedrawRef.current = prev.map((p) => ({ ...p }));
+        }
+        if (options?.commitSnapshot) {
+          parcelsBeforeRedrawRef.current = null;
+        }
+        const autoItems = items.map((item) => ({
+          ...item,
+          showMapGeom: false as const,
+          keepOnReplace: false as const,
+          manualAdd: false as const,
+        }));
         if (options?.replaceAuto) {
-          const manual = prev.filter((p) => p.showMapGeom === true);
+          const manual = prev.filter((p) =>
+            options?.replaceKept
+              ? p.showMapGeom === true || p.manualAdd === true
+              : p.showMapGeom === true || p.keepOnReplace === true
+          );
           const seen = new Set(manual.map((p) => p.address.toLowerCase()));
           const merged = [...manual];
           for (const item of autoItems) {
@@ -335,7 +383,10 @@ export function useLayerRowEdit({
     const baseline = baselineDraftRef.current;
     for (const attr of attributes) {
       const field = attr.field;
-      if (readOnlyFields.has(field.toLowerCase())) continue;
+      const fl = field.toLowerCase();
+      if (readOnlyFields.has(fl)) continue;
+      if (GEOM_ATTR_FIELDS.has(fl)) continue;
+      if (!isCreateMode && PERMIT_ATTR_FIELDS.has(fl)) continue;
       if (!(field in draft)) continue;
       const next = draft[field] ?? "";
       const prev = baseline[field] ?? "";
@@ -343,26 +394,35 @@ export function useLayerRowEdit({
       changes[field] = next;
     }
     return changes;
-  }, [attributes, draft, readOnlyFields]);
+  }, [attributes, draft, isCreateMode, readOnlyFields]);
 
   const addDraftParcel = useCallback((item: LayerRowParcelItem) => {
     const key = item.address.toLowerCase();
-    const nextItem: LayerRowParcelItem = { ...item, showMapGeom: true };
+    const nextItem: LayerRowParcelItem = {
+      ...item,
+      showMapGeom: drawChildGeomOnMap,
+      keepOnReplace: true,
+      manualAdd: true,
+    };
     setDraftParcels((prev) => {
       if (prev.some((p) => p.address.toLowerCase() === key)) return prev;
       return [...prev, nextItem];
     });
     void resolveParcelGeoms([nextItem]).then(([resolved]) => {
-      if (!resolved?.geometry3857) return;
+      if (!resolved?.geometry3857 && !resolved?.pnu) return;
       const merged: LayerRowParcelItem = {
         ...nextItem,
+        pnu: resolved.pnu ?? nextItem.pnu,
         extent3857: resolved.extent3857 ?? nextItem.extent3857,
-        geometry3857: resolved.geometry3857,
-        showMapGeom: true,
+        geometry3857: resolved.geometry3857 ?? nextItem.geometry3857,
+        showMapGeom: drawChildGeomOnMap,
+        keepOnReplace: true,
+        manualAdd: true,
       };
       setDraftParcels((prev) =>
         prev.map((p) => (p.address.toLowerCase() === key ? merged : p))
       );
+      if (!drawChildGeomOnMap) return;
       const map = mapContext?.mapInstanceRef?.current;
       if (map) {
         fitMapToLayerRowParcel(map, merged, {
@@ -372,7 +432,13 @@ export function useLayerRowEdit({
         });
       }
     });
-  }, [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef, mapContext?.setVisibleLayerNames, wmsLayerId]);
+  }, [
+    drawChildGeomOnMap,
+    mapContext?.applyMapViewPaddingRef,
+    mapContext?.mapInstanceRef,
+    mapContext?.setVisibleLayerNames,
+    wmsLayerId,
+  ]);
 
   const removeDraftParcel = useCallback(
     (index: number) => {
@@ -401,11 +467,29 @@ export function useLayerRowEdit({
     async (parentId: string) => {
       const childTableName = String(preset.childTableName ?? "").trim();
       if (!childTableName) return { ok: true as const };
+      if (!isCreateMode && sameParcelAddressList(draftParcels, initialParcels)) {
+        return { ok: true as const };
+      }
       const addresses = parcelAddressesFromItems(draftParcels);
       const parcels = draftParcels.map((p) => ({
         address: String(p.address ?? "").trim(),
         pnu: String(p.pnu ?? "").trim() || undefined,
+        lon: p.point4326?.x,
+        lat: p.point4326?.y,
       }));
+      const extraValues: Record<string, string> = {};
+      const permitKey = Object.keys(draft).find((k) => k.toLowerCase() === "permit_no");
+      const permitVal = permitKey ? String(draft[permitKey] ?? "").trim() : "";
+      if (permitVal) extraValues.permit_no = permitVal;
+      const tbl = String(preset.tableName ?? "").toLowerCase();
+      const isOccLedger =
+        tbl === "water_occupationledger" ||
+        tbl === "road_occupationledger" ||
+        tbl === "public_occupationledger";
+      if (isOccLedger && !permitVal) {
+        return { ok: false as const, error: "허가번호가 없어 필지를 저장할 수 없습니다." };
+      }
+      const childParentId = isOccLedger ? permitVal : parentId;
       const res = await call("", "POST", {
         service: "layerRowService",
         action: "syncChildParcelsByParentId",
@@ -414,9 +498,10 @@ export function useLayerRowEdit({
           childTableName,
           childParentField: preset.childParentField,
           childAddressField: preset.childAddressField,
-          parentId,
+          parentId: childParentId,
           parcels,
           addresses,
+          extraValues,
         },
       });
       const data = res?.data ?? res;
@@ -425,7 +510,17 @@ export function useLayerRowEdit({
       }
       return { ok: true as const };
     },
-    [draftParcels, preset.childAddressField, preset.childParentField, preset.childTableName, preset.schema]
+    [
+      draft,
+      draftParcels,
+      initialParcels,
+      isCreateMode,
+      preset.childAddressField,
+      preset.childParentField,
+      preset.childTableName,
+      preset.schema,
+      preset.tableName,
+    ]
   );
 
   const handleSave = useCallback(async () => {
@@ -433,13 +528,24 @@ export function useLayerRowEdit({
     setEditError(null);
     try {
       const changes = collectChanges();
+      if (isCreateMode) {
+        const tbl = String(preset.tableName ?? "").toLowerCase();
+        const isOccLedger =
+          tbl === "water_occupationledger" ||
+          tbl === "road_occupationledger" ||
+          tbl === "public_occupationledger";
+        if (isOccLedger) {
+          const permitKey =
+            Object.keys(draft).find((k) => k.toLowerCase() === "permit_no") ?? "permit_no";
+          const permitVal = String(draft[permitKey] ?? "").trim();
+          if (permitVal) changes[permitKey] = permitVal;
+        }
+      }
       const wktRaw = layerRowGeomEditWktRef?.current;
       const geomDirty = layerRowGeomEditDirtyRef?.current === true;
       const geomClear = geomDirty && wktRaw === LAYER_ROW_GEOM_CLEAR_SENTINEL;
       const geomWkt5181 =
-        geomDirty && wktRaw != null && wktRaw !== LAYER_ROW_GEOM_CLEAR_SENTINEL
-          ? wktRaw
-          : null;
+        geomDirty && !geomClear && looksLikeGeomWkt(wktRaw) ? String(wktRaw).trim() : null;
 
       const defineRequiredMsg = validateDefineRequiredFields(attributes, draft);
       if (defineRequiredMsg) {
@@ -483,6 +589,13 @@ export function useLayerRowEdit({
           setEditError(parcelSync.error ?? "필지목록 저장에 실패했습니다.");
           return;
         }
+        if (afterPersist) {
+          const extraRes = await afterPersist({ keyValue: newKey, isCreate: true });
+          if (extraRes && extraRes.ok === false) {
+            setEditError(extraRes.error ?? "추가속성 저장에 실패했습니다.");
+            return;
+          }
+        }
         onCreated?.(newKey);
         stopGeomEdit();
         await onReload(newKey);
@@ -498,6 +611,13 @@ export function useLayerRowEdit({
         if (!parcelSync.ok) {
           setEditError(parcelSync.error ?? "필지목록 저장에 실패했습니다.");
           return;
+        }
+        if (afterPersist) {
+          const extraRes = await afterPersist({ keyValue: id, isCreate: false });
+          if (extraRes && extraRes.ok === false) {
+            setEditError(extraRes.error ?? "추가속성 저장에 실패했습니다.");
+            return;
+          }
         }
         setIsEditing(false);
         setDraft({});
@@ -533,6 +653,13 @@ export function useLayerRowEdit({
         setEditError(parcelSync.error ?? "필지목록 저장에 실패했습니다.");
         return;
       }
+      if (afterPersist) {
+        const extraRes = await afterPersist({ keyValue: id, isCreate: false });
+        if (extraRes && extraRes.ok === false) {
+          setEditError(extraRes.error ?? "추가속성 저장에 실패했습니다.");
+          return;
+        }
+      }
       setIsEditing(false);
       setDraft({});
       baselineDraftRef.current = {};
@@ -553,6 +680,7 @@ export function useLayerRowEdit({
     logUser,
     onCreated,
     onReload,
+    afterPersist,
     preset,
     rowKey,
     stopGeomEdit,

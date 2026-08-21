@@ -13,6 +13,7 @@ import { getPnuFromAddress } from './excelUploadService';
 import { getDefineTableKeyFieldName } from './standardService';
 import { recordDataLog, type DataLogType } from './dataLogService';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 
 const DEFAULT_SCHEMA = 'layer';
 const FMS_FACILITY_READ_ONLY_ERROR = '안전점검 시설물은 조회만 가능합니다.';
@@ -24,6 +25,15 @@ let jijukSchemaCache: string | null = null;
 let jijukOrderColCache: string | null = null;
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
+
+function looksLikeGeomWkt(raw: string): boolean {
+  const s = String(raw ?? '').trim().toUpperCase();
+  return (
+    s.startsWith('POLYGON') ||
+    s.startsWith('MULTIPOLYGON') ||
+    s.startsWith('GEOMETRYCOLLECTION')
+  );
+}
 
 export type DefineFieldMeta = {
   field: string;
@@ -81,6 +91,31 @@ function esc(value: string): string {
 
 function quoteIdent(name: string): string {
   return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+/**
+ * 필지·물건지 소속 WHERE.
+ * 연결 컬럼이 허가번호면 그 값만 본다.
+ * 그 외에는 부모키 일치, 허가번호가 있으면 허가번호가 다른 행은 제외.
+ */
+export function buildChildOfParentWhereSql(opts: {
+  parentCol: string;
+  parentId: string;
+  permitCol?: string | null;
+  permitValue?: string | null;
+  alias?: string;
+}): string {
+  const prefix = opts.alias ? `${opts.alias}.` : '';
+  const parentCol = `${prefix}${quoteIdent(opts.parentCol)}`;
+  const idSql = `${parentCol}::text = '${esc(opts.parentId)}'`;
+  if (String(opts.parentCol).trim().toLowerCase() === 'permit_no') return idSql;
+  const permitColName = String(opts.permitCol ?? '').trim();
+  const permit = String(opts.permitValue ?? '').trim();
+  if (!permitColName || !permit) return idSql;
+  const permitCol = `${prefix}${quoteIdent(permitColName)}`;
+  const permitSql = `${permitCol}::text = '${esc(permit)}'`;
+  const idSamePermit = `(${idSql} AND (${permitCol} IS NULL OR BTRIM(${permitCol}::text) = '' OR ${permitSql}))`;
+  return `(${permitSql} OR ${idSamePermit})`;
 }
 
 async function resolveLayerPhysicalRelName(schema: string, tableGuess: string): Promise<string | null> {
@@ -149,7 +184,7 @@ export function getEditableFieldDefinitions(params: {
       const field = String(raw.define_field_name ?? '').trim();
       if (!field) return null;
       const lower = field.toLowerCase();
-      if (GEOM_COLUMN_NAMES.has(lower) || exclude.has(lower)) return null;
+      if (GEOM_COLUMN_NAMES.has(lower) || exclude.has(lower) || isLayerExtraFieldName(lower)) return null;
       const showDetail = isTrueFlag(raw.define_field_show_detail);
       const readOnly = isTrueFlag(raw.define_field_read_only);
       const required = isTrueFlag(raw.define_field_is_required);
@@ -232,8 +267,8 @@ function resolveChildParentColumnName(
   const ordered = [
     String(hint ?? '').trim(),
     'parent_id',
-    'permit_no',
     'cons_code',
+    'permit_no',
     'id',
   ].filter(Boolean);
   const seen = new Set<string>();
@@ -405,6 +440,68 @@ function jijukGeom5181Sql(geomCol = 'geom'): string {
   return `ST_SetSRID(${geomColRef(geomCol)}, ${JIJUK_GEOM_SRID})`;
 }
 
+/** 지적 geom(SRID 0·Polygon 흔함) → 자식 테이블 geom 제약(MultiPolygon, 5181 등) */
+function jijukGeomCoercedToChildSql(geomCol: string, childGeomType: string): string {
+  const src5181 = jijukGeom5181Sql(geomCol);
+  const poly = `ST_CollectionExtract(${src5181}, 3)`;
+  const t = childGeomType.toUpperCase();
+  if (t === 'POLYGON') return `ST_GeometryN(ST_Multi(${poly}), 1)`;
+  return `ST_Multi(${poly})`;
+}
+
+async function resolveGeometryColumnType(schema: string, table: string): Promise<string> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT type
+         FROM geometry_columns
+         WHERE f_table_schema='${esc(schema)}' AND f_table_name='${esc(table)}'
+         LIMIT 1`
+      )
+    );
+    return String((res.rows?.[0] as { type?: string } | undefined)?.type ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function formatDbExecuteError(e: unknown): string {
+  const bits: string[] = [];
+  let cur: unknown = e;
+  for (let i = 0; i < 6 && cur instanceof Error; i++) {
+    const err = cur as Error & { detail?: string; hint?: string };
+    const msg = (err.message ?? '').trim();
+    if (msg && !/^Failed query:/i.test(msg)) bits.push(msg);
+    if (typeof err.detail === 'string' && err.detail.trim()) bits.push(err.detail.trim());
+    if (typeof err.hint === 'string' && err.hint.trim()) bits.push(err.hint.trim());
+    cur = (cur as Error & { cause?: unknown }).cause;
+  }
+  if (bits.length > 0) return bits.join(' — ');
+  const top = e instanceof Error ? e.message.trim() : String(e);
+  if (/^Failed query:/i.test(top)) {
+    return '필지 목록 저장에 실패했습니다. 지적 도형 형식(면·좌표계)을 확인하세요.';
+  }
+  return top || '필지 목록 저장에 실패했습니다.';
+}
+
+/** serial/identity 가 MAX보다 뒤처지면 INSERT PK 중복이 남. 현재 최댓값으로 맞춤 */
+async function bumpIntegerSerialToMax(schema: string, table: string, col: string): Promise<void> {
+  const qualified = `${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const seq = `pg_get_serial_sequence('${esc(schema)}.${esc(table)}', '${esc(col)}')`;
+  await db.execute(
+    sql.raw(
+      `SELECT CASE
+         WHEN ${seq} IS NULL THEN 0
+         ELSE setval(
+           ${seq},
+           (SELECT COALESCE(MAX(${quoteIdent(col)}), 1) FROM ${qualified}),
+           true
+         )
+       END`
+    )
+  );
+}
+
 function jijukGeom3857Sql(geomCol = 'geom'): string {
   return `ST_Transform(${jijukGeom5181Sql(geomCol)}, 3857)`;
 }
@@ -485,7 +582,7 @@ export async function getTableRowGeomGeoJson3857(params: {
     const raw = res.rows?.[0] as { geometry?: unknown } | undefined;
     const geometry = raw?.geometry;
     if (geometry == null || typeof geometry !== 'object') {
-      return { geometry: null, error: '저장된 도형이 없습니다.' };
+      return { geometry: null };
     }
     return { geometry: geometry as Record<string, unknown> };
   } catch (e: unknown) {
@@ -799,7 +896,8 @@ export async function updateTableRowByKey(params: {
 
   const changes = params?.changes ?? {};
   const entries = Object.entries(changes).filter(([k]) => String(k).trim());
-  const geomWkt = String(params.geomWkt5181 ?? '').trim();
+  const geomWktRaw = String(params.geomWkt5181 ?? '').trim();
+  const geomWkt = looksLikeGeomWkt(geomWktRaw) ? geomWktRaw : '';
   const geomClear = params.geomClear === true;
   if (entries.length === 0 && !geomWkt && !geomClear) {
     return { success: false, error: '변경할 항목이 없습니다.' };
@@ -1081,15 +1179,31 @@ export async function insertTableRow(params: {
     }
   }
 
-  /** 공통 점용대장 — 업무키(id)를 ogc_fid 순번과 동일하게 맞춤 */
-  const syncOccupationLedgerIdToOgcFid =
+  /** 공통 점용대장 — 허가번호는 define 읽기전용이어도 INSERT에 포함. 반환 키는 ogc_fid */
+  const isOccupationLedgerInsert =
     tableGuess === 'water_occupationledger' ||
     tableGuess === 'road_occupationledger' ||
     tableGuess === 'public_occupationledger';
   const ogcFidCol = findColumnName(columnMeta.map((c) => c.name), 'ogc_fid');
+  const permitNoCol = findColumnName(columnMeta.map((c) => c.name), 'permit_no');
   const resolvedKeyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
 
-  const geomWkt = String(params.geomWkt5181 ?? '').trim();
+  /** 허가번호(YYYY-NN)는 define 읽기전용이어도 INSERT values에 있으면 포함 */
+  if (isOccupationLedgerInsert && permitNoCol && !insertedColSet.has('permit_no')) {
+    const permitRaw =
+      values.permit_no ??
+      values.permitNo ??
+      Object.entries(values).find(([k]) => k.toLowerCase() === 'permit_no')?.[1];
+    const permitVal = normalizeChangeValue(permitRaw);
+    if (permitVal != null && String(permitVal).trim()) {
+      insertCols.push(quoteIdent(permitNoCol));
+      insertVals.push(`'${esc(String(permitVal).trim())}'`);
+      insertedColSet.add('permit_no');
+    }
+  }
+
+  const geomWktRaw = String(params.geomWkt5181 ?? '').trim();
+  const geomWkt = looksLikeGeomWkt(geomWktRaw) ? geomWktRaw : '';
   if (geomWkt) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
@@ -1124,10 +1238,6 @@ export async function insertTableRow(params: {
     }
   }
 
-  const q = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} (${insertCols.join(', ')})
-             VALUES (${insertVals.join(', ')})
-             RETURNING ${quoteIdent(findColumnName(columnMeta.map((c) => c.name), keyField)!)}::text AS new_key`;
-
   const insertBase =
     insertCols.length === 0
       ? `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} DEFAULT VALUES`
@@ -1135,8 +1245,7 @@ export async function insertTableRow(params: {
          VALUES (${insertVals.join(', ')})`;
 
   try {
-    if (syncOccupationLedgerIdToOgcFid && ogcFidCol && resolvedKeyCol) {
-      // id 미입력 INSERT → ogc_fid 확보 → id = 순번(문자열)
+    if (isOccupationLedgerInsert && ogcFidCol) {
       const res = await db.execute(sql.raw(`${insertBase} RETURNING ${quoteIdent(ogcFidCol)} AS fid`));
       const fid = String((res.rows?.[0] as { fid?: string } | undefined)?.fid ?? '').trim();
       if (!fid || !Number.isFinite(Number(fid))) {
@@ -1786,16 +1895,94 @@ const jijukParcelSelectSql = (geomCol: string, fromQualified: string) => `
   FROM ${fromQualified} j
   WHERE j.geom IS NOT NULL`;
 
+/** 지적 PNU 매칭 — 19자리 정확값 + 대장구분(대지/산) 무시 */
 function buildJijukPnuMatchWhereSql(pnuDigits: string): string | null {
   const digits = pnuDigitsOnly(pnuDigits);
   if (digits.length < 18) return null;
   const pnuExpr = `REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g')`;
+  const admin = digits.slice(0, 10);
+  const lot = digits.length >= 19 ? digits.slice(11, 19) : digits.slice(10, 18);
+  const parts = [
+    `(SUBSTRING(${pnuExpr}, 1, 10) = '${esc(admin)}' AND SUBSTRING(${pnuExpr}, 12, 8) = '${esc(lot)}')`,
+  ];
   if (digits.length >= 19) {
-    return `${pnuExpr} = '${esc(digits.slice(0, 19))}'`;
+    const exact = digits.slice(0, 19);
+    const swapped = `${exact.slice(0, 10)}${exact[10] === '1' ? '2' : '1'}${exact.slice(11)}`;
+    parts.unshift(`${pnuExpr} = '${esc(exact)}'`, `${pnuExpr} = '${esc(swapped)}'`);
   }
-  const admin = esc(digits.slice(0, 10));
-  const lot = esc(digits.slice(10, 18));
-  return `(SUBSTRING(${pnuExpr}, 1, 10) = '${admin}' AND SUBSTRING(${pnuExpr}, 12, 8) = '${lot}')`;
+  return `(${parts.join(' OR ')})`;
+}
+
+function childAddressMatchKey(address: string): string {
+  return String(address ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/** 화면은 시군구를 뺀 주소, DB는 전체 주소인 경우에도 같은 필지로 본다. */
+function childAddressesEquivalent(a: string, b: string): boolean {
+  const ka = childAddressMatchKey(a);
+  const kb = childAddressMatchKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  const [shorter, longer] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+  if (!longer.endsWith(shorter)) return false;
+  const prev = longer[longer.length - shorter.length - 1];
+  return prev == null || prev === ' ';
+}
+
+function lotLabelFromParcelAddress(address: string): string {
+  const t = String(address ?? '').trim();
+  const m = t.match(/(산?\d+(?:-\d+)?)\s*$/u);
+  return m?.[1] ?? '';
+}
+
+/** 같은 리 안에서 지번 문자열로 본번·부번 매칭 (893과 893-1 구분) */
+function buildJijukJibunLotWhereSql(pnuDigits: string | null, lotLabel: string): string | null {
+  const digits = pnuDigitsOnly(pnuDigits);
+  if (digits.length < 10) return null;
+  const m = String(lotLabel ?? '')
+    .trim()
+    .match(/^(산)?(\d+)(?:-(\d+))?$/u);
+  if (!m?.[2]) return null;
+  const bon = m[2];
+  const bub = m[3];
+  const lotRe = bub
+    ? `^산? *${bon}-${bub}([^0-9]|$)`
+    : `^산? *${bon}([^0-9-]|$)`;
+  const pnuExpr = `REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g')`;
+  return `(SUBSTRING(${pnuExpr}, 1, 10) = '${esc(digits.slice(0, 10))}' AND TRIM(j.jibun::text) ~ '${esc(lotRe)}')`;
+}
+
+function finiteLonLat(lon?: number, lat?: number): { lon: number; lat: number } | null {
+  if (typeof lon !== 'number' || typeof lat !== 'number') return null;
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  return { lon, lat };
+}
+
+function buildChildJijukGeomInsertSql(opts: {
+  jijukRef: JijukTableRef;
+  childGeomType: string;
+  pnuWhere: string | null;
+  jibunWhere: string | null;
+  lon?: number;
+  lat?: number;
+}): string | null {
+  const coerced = jijukGeomCoercedToChildSql('j.geom', opts.childGeomType);
+  const orderSql = `ORDER BY j.${quoteIdent(opts.jijukRef.orderCol)} LIMIT 1`;
+  const pick = (whereSql: string) =>
+    `(SELECT ${coerced} FROM ${opts.jijukRef.qualified} j WHERE j.geom IS NOT NULL AND ${whereSql} ${orderSql})`;
+  const parts: string[] = [];
+  if (opts.pnuWhere) parts.push(pick(opts.pnuWhere));
+  if (opts.jibunWhere) parts.push(pick(opts.jibunWhere));
+  const pt = finiteLonLat(opts.lon, opts.lat);
+  if (pt) {
+    const point5181 = `ST_Transform(ST_SetSRID(ST_MakePoint(${pt.lon}, ${pt.lat}), 4326), ${JIJUK_GEOM_SRID})`;
+    parts.push(pick(`ST_Intersects(${jijukGeom5181Sql('j.geom')}, ${point5181})`));
+  }
+  if (parts.length === 0) return null;
+  return parts.length === 1 ? parts[0]! : `COALESCE(${parts.join(', ')})`;
 }
 
 async function resolvePnuDigitsFromInput(address: string, explicitPnu?: string): Promise<string | null> {
@@ -1938,6 +2125,13 @@ export async function resolveJijukParcelGeomsByAddresses(params: {
         if (pnuWhere) {
           mapped = await runQuery(pnuWhere);
         }
+        if (!mapped?.geometry3857) {
+          const jibunWhere = buildJijukJibunLotWhereSql(
+            pnuDigits,
+            lotLabelFromParcelAddress(address)
+          );
+          if (jibunWhere) mapped = await runQuery(jibunWhere);
+        }
       }
 
       parcels.push(
@@ -2048,7 +2242,7 @@ export async function subtractParcelFromParentWkt5181(params: {
   }
 }
 
-/** 자식 jijuk 테이블 필지목록 전체 교체 (parent_id 기준) */
+/** 자식 필지목록 동기화 — 주소가 같은 기존 행(도형 포함)은 유지하고, 추가·삭제된 주소만 반영 */
 export async function syncChildParcelsByParentId(params: {
   schema?: string;
   childTableName: string;
@@ -2058,7 +2252,9 @@ export async function syncChildParcelsByParentId(params: {
   parentId: string;
   /** @deprecated addresses 대신 parcels 사용 */
   addresses?: string[];
-  parcels?: Array<{ address: string; pnu?: string }>;
+  parcels?: Array<{ address: string; pnu?: string; lon?: number; lat?: number }>;
+  /** 부모 연결 컬럼 외에 같이 넣을 값 (예: permit_no) */
+  extraValues?: Record<string, string>;
 }): Promise<{ success: boolean; error?: string }> {
   const childTableGuess = String(params?.childTableName ?? '').trim().toLowerCase();
   const parentId = String(params?.parentId ?? '').trim();
@@ -2082,40 +2278,155 @@ export async function syncChildParcelsByParentId(params: {
   }
 
   const geomCol = findColumnName(childCols, 'geom');
+  const serialCol = findColumnName(childCols, 'ogc_fid') ?? findColumnName(childCols, 'gid');
+  const extraEntries = Object.entries(params.extraValues ?? {})
+    .map(([k, v]) => ({
+      col: findColumnName(childCols, k),
+      value: String(v ?? '').trim(),
+    }))
+    .filter(
+      (x): x is { col: string; value: string } =>
+        Boolean(x.col) &&
+        x.value.length > 0 &&
+        x.col!.toLowerCase() !== parentCol.toLowerCase() &&
+        x.col!.toLowerCase() !== addressCol.toLowerCase()
+    );
+
   const parcelRows = Array.isArray(params.parcels)
     ? params.parcels
         .map((p) => ({
           address: String(p?.address ?? '').trim(),
           pnu: String(p?.pnu ?? '').trim(),
+          lon: typeof p?.lon === 'number' ? p.lon : undefined,
+          lat: typeof p?.lat === 'number' ? p.lat : undefined,
         }))
         .filter((p) => p.address)
     : Array.isArray(params.addresses)
-      ? params.addresses.map((a) => ({ address: String(a ?? '').trim(), pnu: '' })).filter((p) => p.address)
+      ? params.addresses
+          .map((a) => ({ address: String(a ?? '').trim(), pnu: '', lon: undefined, lat: undefined }))
+          .filter((p) => p.address)
       : [];
 
   try {
-    await db.execute(
+    const permitExtra = extraEntries.find((e) => e.col.toLowerCase() === 'permit_no');
+    const childOfParentSql = buildChildOfParentWhereSql({
+      parentCol,
+      parentId,
+      permitCol: permitExtra?.col,
+      permitValue: permitExtra?.value,
+    });
+
+    const existingRes = await db.execute(
       sql.raw(
-        `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
-         WHERE ${quoteIdent(parentCol)}::text = '${esc(parentId)}'`
+        `SELECT ${quoteIdent(addressCol)}::text AS addr
+         FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
+         WHERE ${childOfParentSql}`
       )
     );
+    const existingKeys = new Set<string>();
+    for (const row of existingRes.rows ?? []) {
+      const key = childAddressMatchKey(String((row as { addr?: string }).addr ?? ''));
+      if (key) existingKeys.add(key);
+    }
+
+    const wantedKeys = new Set<string>();
+    const wantedRows: typeof parcelRows = [];
+    for (const row of parcelRows) {
+      const key = childAddressMatchKey(row.address);
+      if (!key || wantedKeys.has(key)) continue;
+      wantedKeys.add(key);
+      wantedRows.push(row);
+    }
+
+    const existingList = [...existingKeys];
+    const usedExisting = new Set<string>();
+    const matchedWanted = new Set<string>();
+    for (const wanted of wantedKeys) {
+      const exact = existingList.find((e) => !usedExisting.has(e) && e === wanted);
+      const fuzzy = existingList.find(
+        (e) => !usedExisting.has(e) && childAddressesEquivalent(e, wanted)
+      );
+      const hit = exact ?? fuzzy;
+      if (!hit) continue;
+      usedExisting.add(hit);
+      matchedWanted.add(wanted);
+    }
+
+    const insertRows = wantedRows.filter((row) => {
+      const key = childAddressMatchKey(row.address);
+      return key.length > 0 && !matchedWanted.has(key);
+    });
+    const deleteKeys = existingList.filter((key) => !usedExisting.has(key));
+    if (wantedKeys.size === 0) {
+      await db.execute(
+        sql.raw(
+          `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
+           WHERE ${childOfParentSql}`
+        )
+      );
+    } else if (deleteKeys.length > 0) {
+      const inList = deleteKeys.map((key) => `'${esc(key)}'`).join(', ');
+      await db.execute(
+        sql.raw(
+          `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
+           WHERE (${childOfParentSql})
+             AND lower(regexp_replace(btrim(${quoteIdent(addressCol)}::text), '[[:space:]]+', ' ', 'g')) IN (${inList})`
+        )
+      );
+    }
+
+    if (permitExtra) {
+      const setParts = [
+        `${quoteIdent(parentCol)} = '${esc(parentId)}'`,
+        `${quoteIdent(permitExtra.col)} = '${esc(permitExtra.value)}'`,
+      ];
+      await db.execute(
+        sql.raw(
+          `UPDATE ${quoteIdent(schema)}.${quoteIdent(childTable)}
+           SET ${setParts.join(', ')}
+           WHERE ${childOfParentSql}`
+        )
+      );
+    }
+
+    if (insertRows.length === 0) return { success: true };
+
+    if (serialCol) {
+      try {
+        await bumpIntegerSerialToMax(schema, childTable, serialCol);
+      } catch {
+        // 시퀀스가 없으면 INSERT 기본값에 맡김
+      }
+    }
 
     const jijukRef = geomCol ? await resolveJijukTableRef() : null;
+    const childGeomType = geomCol ? await resolveGeometryColumnType(schema, childTable) : '';
 
-    for (const row of parcelRows) {
+    for (const row of insertRows) {
       const addr = row.address;
       const pnuDigits = await resolvePnuDigitsFromInput(addr, row.pnu);
       const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
+      const jibunWhere = buildJijukJibunLotWhereSql(pnuDigits, lotLabelFromParcelAddress(addr));
       const geomInsert =
-        geomCol && pnuWhere && jijukRef
-          ? `(SELECT j.geom FROM ${jijukRef.qualified} j
-              WHERE j.geom IS NOT NULL AND ${pnuWhere}
-              ORDER BY j.${quoteIdent(jijukRef.orderCol)}
-              LIMIT 1)`
+        geomCol && jijukRef
+          ? buildChildJijukGeomInsertSql({
+              jijukRef,
+              childGeomType,
+              pnuWhere,
+              jibunWhere,
+              lon: row.lon,
+              lat: row.lat,
+            })
           : null;
       const cols = [quoteIdent(parentCol), quoteIdent(addressCol)];
       const vals = [`'${esc(parentId)}'`, `'${esc(addr)}'`];
+      const used = new Set([parentCol.toLowerCase(), addressCol.toLowerCase()]);
+      for (const extra of extraEntries) {
+        if (used.has(extra.col.toLowerCase())) continue;
+        cols.push(quoteIdent(extra.col));
+        vals.push(`'${esc(extra.value)}'`);
+        used.add(extra.col.toLowerCase());
+      }
       if (geomCol && geomInsert) {
         cols.push(quoteIdent(geomCol));
         vals.push(geomInsert);
@@ -2130,8 +2441,7 @@ export async function syncChildParcelsByParentId(params: {
 
     return { success: true };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { success: false, error: msg };
+    return { success: false, error: formatDbExecuteError(e) };
   }
 }
 
@@ -2194,10 +2504,22 @@ export async function deleteTableRowByKey(params: {
       const childCols = await getTableColumns(schema, childTable);
       const parentCol = resolveChildParentColumnName(childCols, parentField);
       if (!parentCol) continue;
+      const oldPermit = String(
+        (oldData as Record<string, unknown> | null)?.permit_no ?? ''
+      ).trim();
+      const childPermitCol = findColumnName(childCols, 'permit_no');
+      const joinId =
+        parentCol.toLowerCase() === 'permit_no' && oldPermit ? oldPermit : keyValue;
+      const deleteWhere = buildChildOfParentWhereSql({
+        parentCol,
+        parentId: joinId,
+        permitCol: childPermitCol,
+        permitValue: oldPermit,
+      });
       await db.execute(
         sql.raw(
           `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(childTable)}
-           WHERE ${quoteIdent(parentCol)}::text = '${esc(keyValue)}'`
+           WHERE ${deleteWhere}`
         )
       );
     }

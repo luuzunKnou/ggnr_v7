@@ -41,6 +41,7 @@ import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
+import * as layerExtraService from './layerExtraService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
 import * as floodRiskService from './floodRiskService';
@@ -107,6 +108,7 @@ export {
   pdfToJpgService,
   ocrMigrationService,
   layerRowService,
+  layerExtraService,
   mapAnalyseService,
   elevationService,
   floodRiskService,

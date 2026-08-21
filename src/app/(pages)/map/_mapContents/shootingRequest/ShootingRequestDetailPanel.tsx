@@ -42,9 +42,9 @@ import { recordDataViewLog } from '@/lib/recordDataViewLog';
 
 /** 작업단위 상세 하단과 동일 — 색 강조·아이콘 버튼 쓰지 않음 */
 const footerBtnClass =
-  'rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50';
+  'rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50';
 const footerBarClass =
-  'shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2';
+  'shrink-0 border-t border-border bg-muted/30 px-3 py-2';
 
 type Props = {
   detailId: string;
@@ -163,8 +163,8 @@ export function ShootingRequestDetailPanel({
 
   if (!isNew && !existing) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-white px-4 text-center">
-        <p className="text-xs text-slate-400">
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-background px-4 text-center">
+        <p className="text-xs text-muted-foreground">
           {detailLoading ? '불러오는 중…' : '신청을 찾을 수 없습니다.'}
         </p>
         <button type="button" className="text-[11px] text-sky-700 underline" onClick={onClose}>
@@ -235,19 +235,19 @@ export function ShootingRequestDetailPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       {isAdmin && existing && !isNew ? (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-slate-800">신청 상세</p>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+            <p className="truncate text-[13px] font-semibold text-foreground">신청 상세</p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
               <span
                 className={cn(
                   'rounded-full px-2 py-0.5 font-medium ring-1 ring-inset',
                   existing.status === 'approved' || existing.status === 'registering'
                     ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
                     : existing.status === 'registered'
-                      ? 'bg-slate-100 text-slate-700 ring-slate-300'
+                      ? 'bg-muted/40 text-foreground ring-border'
                       : existing.status === 'rejected'
                         ? 'bg-rose-50 text-rose-700 ring-rose-200'
                         : 'bg-amber-50 text-amber-800 ring-amber-200'
@@ -261,7 +261,7 @@ export function ShootingRequestDetailPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -318,12 +318,12 @@ export function ShootingRequestDetailPanel({
         <div className={cn(footerBarClass, 'space-y-2')}>
           {rejectOpen ? (
             <div className="space-y-2">
-              <label className="block text-[10px] font-medium text-slate-600">반려 사유</label>
+              <label className="block text-[10px] font-medium text-muted-foreground">반려 사유</label>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] outline-none focus:border-sky-400"
+                className="w-full rounded-md border border-border px-2.5 py-1.5 text-[11px] outline-none focus:border-sky-400"
                 placeholder="반려 사유를 입력하세요"
               />
               <div className="flex items-center justify-end gap-1.5">
@@ -406,7 +406,7 @@ export function ShootingRequestDetailPanel({
       ) : null}
 
       {isAdmin && existing && existing.status === 'registered' && notice ? (
-        <div className="shrink-0 border-t border-slate-100 px-3 py-2">
+        <div className="shrink-0 border-t border-border px-3 py-2">
           <p className="rounded-md border border-sky-100 bg-sky-50 px-2.5 py-1.5 text-[10px] text-sky-900">
             {notice}
           </p>
@@ -418,22 +418,22 @@ export function ShootingRequestDetailPanel({
           showCloseButton={false}
           className="w-[min(100vw-2rem,22rem)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
         >
-          <DialogHeader className="space-y-0 border-b border-slate-200 px-4 py-3 text-left">
-            <DialogTitle className="text-[13px] font-semibold text-slate-800">
+          <DialogHeader className="space-y-0 border-b border-border px-4 py-3 text-left">
+            <DialogTitle className="text-[13px] font-semibold text-foreground">
               승인 취소
             </DialogTitle>
           </DialogHeader>
           <div className="px-4 py-4">
-            <p className="text-[12px] leading-relaxed text-slate-600">
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
               승인 취소하시겠습니까?
               <br />
-              <span className="text-[11px] text-slate-400">취소하면 상태가 대기로 돌아갑니다.</span>
+              <span className="text-[11px] text-muted-foreground">취소하면 상태가 대기로 돌아갑니다.</span>
             </p>
           </div>
-          <div className="flex items-center justify-end gap-1.5 border-t border-slate-200 bg-slate-50/80 px-4 py-2.5">
+          <div className="flex items-center justify-end gap-1.5 border-t border-border bg-muted/30 px-4 py-2.5">
             <button
               type="button"
-              className={cn(footerBtnClass, 'border-slate-300')}
+              className={cn(footerBtnClass, 'border-border')}
               disabled={busy}
               onClick={() => void handleCancelApproval()}
             >

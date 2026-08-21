@@ -2,7 +2,7 @@
   {
     "define_field_name": "MCO",
     "define_field_kor_name": "관리기관",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -27,7 +27,7 @@
   {
     "define_field_name": "ROAD_RANK",
     "define_field_kor_name": "도로의종류",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -52,7 +52,7 @@
   {
     "define_field_name": "ogc_fid",
     "define_field_kor_name": "ogc_fid",
-    "define_field_type": "integer",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1000000,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -76,8 +76,8 @@
   },
   {
     "define_field_name": "rdid",
-    "define_field_kor_name": "관리번호",
-    "define_field_type": "text",
+    "define_field_kor_name": "도로대장 공간정보ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000001,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -101,8 +101,8 @@
   },
   {
     "define_field_name": "ufid",
-    "define_field_kor_name": "일련번호",
-    "define_field_type": "text",
+    "define_field_kor_name": "공간유일참조아이디",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000002,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -127,7 +127,7 @@
   {
     "define_field_name": "road_name",
     "define_field_kor_name": "노선명",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000003,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -152,7 +152,7 @@
   {
     "define_field_name": "road_no",
     "define_field_kor_name": "노선번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000004,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -177,7 +177,7 @@
   {
     "define_field_name": "sect",
     "define_field_kor_name": "구간",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000005,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -202,7 +202,7 @@
   {
     "define_field_name": "sect_st",
     "define_field_kor_name": "위치시점",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1000006,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -227,7 +227,7 @@
   {
     "define_field_name": "sect_ed",
     "define_field_kor_name": "위치종점",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1000007,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -252,7 +252,7 @@
   {
     "define_field_name": "slope",
     "define_field_kor_name": "경사",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1000008,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -277,7 +277,7 @@
   {
     "define_field_name": "st_hit",
     "define_field_kor_name": "시점지반",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1000009,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -302,7 +302,7 @@
   {
     "define_field_name": "slp_len",
     "define_field_kor_name": "경사연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1000010,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -327,7 +327,7 @@
   {
     "define_field_name": "remark",
     "define_field_kor_name": "비고",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000011,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -351,8 +351,8 @@
   },
   {
     "define_field_name": "gsid",
-    "define_field_kor_name": "gsid",
-    "define_field_type": "text",
+    "define_field_kor_name": "시설물관리ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000012,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -376,8 +376,8 @@
   },
   {
     "define_field_name": "hcode",
-    "define_field_kor_name": "hcode",
-    "define_field_type": "text",
+    "define_field_kor_name": "이력관리번호",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000013,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -401,8 +401,8 @@
   },
   {
     "define_field_name": "n_name",
-    "define_field_kor_name": "n_name",
-    "define_field_type": "text",
+    "define_field_kor_name": "면단위구분 노선명칭",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000014,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -426,8 +426,8 @@
   },
   {
     "define_field_name": "n_code",
-    "define_field_kor_name": "n_code",
-    "define_field_type": "text",
+    "define_field_kor_name": "면단위구분 노선명칭 영문약어",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000015,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -451,8 +451,8 @@
   },
   {
     "define_field_name": "jhline_id",
-    "define_field_kor_name": "jhline_id",
-    "define_field_type": "text",
+    "define_field_kor_name": "내부작업용ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000016,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -477,7 +477,7 @@
   {
     "define_field_name": "geom",
     "define_field_kor_name": "geom",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000017,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -502,7 +502,7 @@
   {
     "define_field_name": "sern",
     "define_field_kor_name": "시스템관리ID",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000018,
     "define_field_is_required": false,
     "define_field_show_search": false,

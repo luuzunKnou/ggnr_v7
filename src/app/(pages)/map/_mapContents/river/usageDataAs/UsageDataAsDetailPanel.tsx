@@ -377,8 +377,8 @@ export function UsageDataAsDetailPanel({
   );
 
   useAutoOccupationPermitNo({
-    enabled: isEditing,
-    sessionKey: `${detailId}:${isEditing ? "edit" : "view"}`,
+    enabled: isCreateMode,
+    sessionKey: `${detailId}:${isCreateMode ? "create" : "view"}`,
     startDateRaw: usagePeriodStart,
     permitValue,
     permitFieldKey,
@@ -399,6 +399,7 @@ export function UsageDataAsDetailPanel({
     placeFieldKey,
     onSetPlace: handleDraftChange,
     parcelAddresses: draftParcels.map((p) => p.address),
+    refillOnParcelList: isCreateMode,
   });
 
   const handleAutoCalcArea = useCallback(
@@ -434,17 +435,25 @@ export function UsageDataAsDetailPanel({
   const focusParentGeomOnMap = useCallback(() => {
     setShowParentGeom(true);
     setHighlightParcel(null);
-    if (isEditing) return;
 
     const map = mapContext?.mapInstanceRef?.current;
-    const ext = parentExtentRef.current;
-    if (!map || !ext) return;
-    ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
-    scheduleFitMapToExtent3857(map, ext, {
-      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    const cached = parentExtentRef.current;
+    if (map && cached) {
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      scheduleFitMapToExtent3857(map, cached, {
+        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
+      return;
+    }
+
+    void refreshUsageDataAsMapView({
+      map,
+      detailId,
+      setVisibleLayerNames: mapContext?.setVisibleLayerNames,
+      applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current ?? null,
     });
-  }, [isEditing, mapContext, parentExtentRef]);
+  }, [detailId, mapContext, parentExtentRef]);
 
   useEffect(() => {
     if (isEditing) {

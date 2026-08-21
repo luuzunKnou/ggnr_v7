@@ -199,13 +199,13 @@ export function RoadCctvPanel({ onClose }: Props) {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Video className="h-4 w-4 shrink-0 text-slate-600" />
+          <Video className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-800">교통정보</h2>
-            <p className="truncate text-[11px] text-slate-500">
+            <h2 className="text-sm font-semibold text-foreground">교통정보</h2>
+            <p className="truncate text-[11px] text-muted-foreground">
               국가교통정보센터 CCTV 화상자료 및 교통소통정보
             </p>
           </div>
@@ -213,7 +213,7 @@ export function RoadCctvPanel({ onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -221,13 +221,13 @@ export function RoadCctvPanel({ onClose }: Props) {
         </button>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
         {emdExtentError && (
           <p className="text-[10px] text-amber-800">{emdExtentError}</p>
         )}
 
-        <fieldset className="space-y-1.5 rounded border border-slate-100 bg-slate-50/80 px-2 py-2 text-[11px] text-slate-600">
-          <legend className="px-0.5 text-[10px] font-medium text-slate-700">지도 부가 표시 (택 1)</legend>
+        <fieldset className="space-y-1.5 rounded border border-border bg-muted/30 px-2 py-2 text-[11px] text-muted-foreground">
+          <legend className="px-0.5 text-[10px] font-medium text-foreground">지도 부가 표시 (택 1)</legend>
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="radio"
@@ -237,8 +237,8 @@ export function RoadCctvPanel({ onClose }: Props) {
               onChange={() => setUnderlayMode?.('traffic')}
             />
             <span>
-              <span className="font-medium text-slate-800">실시간 통행속도(5분)</span>
-              <span className="ml-1 text-[10px] text-slate-500">
+              <span className="font-medium text-foreground">실시간 통행속도(5분)</span>
+              <span className="ml-1 text-[10px] text-muted-foreground">
                 국가교통정보센터 교통소통정보
               </span>
             </span>
@@ -252,13 +252,13 @@ export function RoadCctvPanel({ onClose }: Props) {
               onChange={() => setUnderlayMode?.('roadLedgerSummary')}
             />
             <span>
-              <span className="font-medium text-slate-800">도로대장 노선도</span>
-              <span className="ml-1 text-[10px] text-slate-500">도로대장총괄 노선도 정보</span>
+              <span className="font-medium text-foreground">도로대장 노선도</span>
+              <span className="ml-1 text-[10px] text-muted-foreground">도로대장총괄 노선도 정보</span>
             </span>
           </label>
         </fieldset>
 
-        <div className="overflow-hidden rounded-md border border-slate-200 bg-black">
+        <div className="overflow-hidden rounded-md border border-border bg-black">
           {selected ? (
             <RoadCctvHlsPlayer
               key={selected.cctvurl}
@@ -266,18 +266,18 @@ export function RoadCctvPanel({ onClose }: Props) {
               className="aspect-video max-h-[200px] w-full object-contain"
             />
           ) : (
-            <div className="flex aspect-video max-h-[160px] items-center justify-center bg-slate-900/90 px-2 text-center text-[11px] text-slate-300">
+            <div className="flex aspect-video max-h-[160px] items-center justify-center bg-slate-900/90 px-2 text-center text-[11px] text-muted-foreground/40">
               목록에서 CCTV를 선택하면 영상이 표시됩니다.
             </div>
           )}
         </div>
         {selected && (
-          <p className="line-clamp-2 text-[11px] font-medium text-slate-700">{selected.cctvname}</p>
+          <p className="line-clamp-2 text-[11px] font-medium text-foreground">{selected.cctvname}</p>
         )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
           <span>목록 {items.length}건</span>
           {loading && (
             <span className="inline-flex items-center gap-1">
@@ -295,17 +295,17 @@ export function RoadCctvPanel({ onClose }: Props) {
           {items.map((it) => {
             const active = it.key === selectedKey;
             return (
-              <li key={it.key} className="border-b border-slate-100">
+              <li key={it.key} className="border-b border-border">
                 <button
                   type="button"
                   onClick={() => onSelectItem(it)}
                   className={cn(
-                    'flex w-full flex-col gap-0.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-slate-50',
+                    'flex w-full flex-col gap-0.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-muted/50',
                     active && 'bg-primary/5 text-primary'
                   )}
                 >
                   <span className="line-clamp-2 font-medium">{it.cctvname}</span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-muted-foreground">
                     {it.coordx.toFixed(5)}, {it.coordy.toFixed(5)} · {it.cctvformat || it.cctvtype || '—'}
                   </span>
                 </button>
