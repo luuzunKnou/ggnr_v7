@@ -650,7 +650,7 @@ export function LayerDataPanel({
     [mapContext, rows]
   );
 
-  /** 지도에서 선택된 항목 리스트 클릭 시: 해당 도형 강조만 (지도 이동/확대 없음) */
+  /** 지도 식별 항목 선택 시: 도형 강조 + 패널 padding 반영해 지도 이동·확대 (목록 행 선택과 동일) */
   const showIdentifyFeatureOnMap = useCallback(
     (record: Record<string, unknown>) => {
       const mapInstance = mapContext?.mapInstanceRef?.current;
@@ -669,6 +669,13 @@ export function LayerDataPanel({
       const geomType = features[0].getGeometry()?.getType();
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
+      const ext = source.getExtent();
+      if (ext.every((v) => isFinite(v))) {
+        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
+      }
       setRadarActive(true);
     },
     [mapContext]
@@ -855,7 +862,7 @@ export function LayerDataPanel({
       });
   }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
 
-  // 팝업에서 항목 클릭 후 패널 열렸을 때 해당 행 선택 및 상세 표시 + 지도에서 도형 강조만 (확대/이동 없음)
+  // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
     const idx = identifyFlat.findIndex((item) => item.feature.data === identifySelectedRow);
