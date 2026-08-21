@@ -25,6 +25,8 @@ import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfo
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
 import type { SafetyWaterStationKind } from "./_mapContents/safty/safetyWater/safetyWaterTypes"
 import { SafetyFacPanel } from "./_mapContents/safty/safetyFac/SafetyFacPanel"
+import { SafetyFacDetailPanel } from "./_mapContents/safty/safetyFac/SafetyFacDetailPanel"
+import type { SafetyFacFacilityRow } from "./_mapContents/safty/safetyFac/safetyFacSymbols"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
@@ -202,6 +204,9 @@ const SAFETY_WATER_STATS_MAX_WIDTH = 900
 const SAFETY_FAC_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_FAC_PANEL_MIN_WIDTH = 280
 const SAFETY_FAC_PANEL_MAX_WIDTH = 600
+const SAFETY_FAC_DETAIL_DEFAULT_WIDTH = 400
+const SAFETY_FAC_DETAIL_MIN_WIDTH = 320
+const SAFETY_FAC_DETAIL_MAX_WIDTH = 640
 
 const SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH = 420
 const SAFETY_HOSPITAL_BED_PANEL_MIN_WIDTH = 320
@@ -396,6 +401,7 @@ function MapLayoutContent({
   const setRiverConstructionLedgerGeomEditingId =
     mapContext?.setRiverConstructionLedgerGeomEditingId
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
+  const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
   const setRoadCctvExtentWgs84 = mapContext?.setRoadCctvExtentWgs84
@@ -598,6 +604,9 @@ function MapLayoutContent({
   const [safetyWaterStatsKinds, setSafetyWaterStatsKinds] = useState<SafetyWaterStationKind[]>([])
   const safetyWaterStatsOpen = safetyWaterStatsKinds.length > 0
   const [safetyFacPanelWidth, setSafetyFacPanelWidth] = useState(SAFETY_FAC_PANEL_DEFAULT_WIDTH)
+  const [safetyFacDetail, setSafetyFacDetail] = useState<SafetyFacFacilityRow | null>(null)
+  const [safetyFacDetailWidth, setSafetyFacDetailWidth] = useState(SAFETY_FAC_DETAIL_DEFAULT_WIDTH)
+  const safetyFacDetailOpen = safetyFacOpen && safetyFacDetail != null
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
   )
@@ -691,6 +700,7 @@ function MapLayoutContent({
     (safetyWaterOpen ? safetyWaterPanelWidth : 0) +
     (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
+    (safetyFacDetailOpen ? safetyFacDetailWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
@@ -780,8 +790,10 @@ function MapLayoutContent({
   const safetyWaterStatsLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
   const safetyFacPanelLeftPx =
     safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
-  const safetyHospitalBedPanelLeftPx =
+  const safetyFacDetailLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
+  const safetyHospitalBedPanelLeftPx =
+    safetyFacDetailLeftPx + (safetyFacDetailOpen ? safetyFacDetailWidth : 0)
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
@@ -952,6 +964,10 @@ function MapLayoutContent({
   useEffect(() => {
     setRoadCctvPanelOpen?.(roadCctvOpen)
   }, [setRoadCctvPanelOpen, roadCctvOpen])
+
+  useEffect(() => {
+    setSafetyFacPanelOpen?.(safetyFacOpen)
+  }, [setSafetyFacPanelOpen, safetyFacOpen])
 
   useEffect(() => {
     if (!roadCctvOpen) {
@@ -1349,9 +1365,14 @@ function MapLayoutContent({
   }, [safetyWaterOpen])
 
   const handleCloseSafetyFac = () => {
+    setSafetyFacDetail(null)
     const next = openedWindows.filter((w) => w !== SAFETY_FAC_OPENED_KEY)
     setOpened(next)
   }
+
+  useEffect(() => {
+    if (!safetyFacOpen) setSafetyFacDetail(null)
+  }, [safetyFacOpen])
 
   const handleCloseSafetyHospitalBed = () => {
     const next = openedWindows.filter((w) => w !== SAFETY_HOSPITAL_BED_OPENED_KEY)
@@ -1503,12 +1524,12 @@ function MapLayoutContent({
                 onWidthChange={setStandardListPanelWidth}
               >
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0 bg-white">
-                    <span className="text-sm font-semibold text-slate-800">레이어 목록</span>
+                  <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
+                    <span className="text-sm font-semibold text-foreground">레이어 목록</span>
                     <button
                       type="button"
                       onClick={handleHideLayerList}
-                      className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                       title="닫기"
                       aria-label="닫기"
                     >
@@ -2191,7 +2212,28 @@ function MapLayoutContent({
                 leftOffsetPx={safetyFacPanelLeftPx}
                 onWidthChange={setSafetyFacPanelWidth}
               >
-                <SafetyFacPanel onClose={handleCloseSafetyFac} />
+                <SafetyFacPanel
+                  onClose={handleCloseSafetyFac}
+                  selectedFacility={safetyFacDetail}
+                  onSelectFacility={setSafetyFacDetail}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {safetyFacOpen && safetyFacDetail && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={safetyFacDetailWidth}
+                minWidth={SAFETY_FAC_DETAIL_MIN_WIDTH}
+                maxWidth={SAFETY_FAC_DETAIL_MAX_WIDTH}
+                leftOffsetPx={safetyFacDetailLeftPx}
+                onWidthChange={setSafetyFacDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <SafetyFacDetailPanel
+                  facility={safetyFacDetail}
+                  onClose={() => setSafetyFacDetail(null)}
+                />
               </MapSideListPanel>
             </div>
           )}

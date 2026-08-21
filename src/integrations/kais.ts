@@ -80,6 +80,55 @@ select exists(
   return Boolean(r.rows[0]?.x);
 }
 
+/**
+ * KAIS 시군구 필터: runtime.env SGG_CODE 우선, 없으면 public_layer.sgg.adm_sect_c.
+ * 둘 다 없으면 undefined (필터 생략).
+ */
+export async function resolveKaisSggCode(): Promise<string | undefined> {
+  const fromEnv = (process.env.SGG_CODE ?? '').trim();
+  if (fromEnv) return fromEnv;
+
+  const schema = 'public_layer';
+  const table = 'sgg';
+  try {
+    const exists = await tableExists(schema, table);
+    if (!exists) return undefined;
+
+    const col = await pool.query<{ x: boolean }>(
+      `
+select exists(
+  select 1 from information_schema.columns
+  where table_schema = $1 and table_name = $2 and column_name = $3
+) as x
+`,
+      [schema, table, 'adm_sect_c']
+    );
+    if (!col.rows[0]?.x) return undefined;
+
+    const r = await pool.query<{ adm_sect_c: string }>(
+      `
+select distinct trim(adm_sect_c::text) as adm_sect_c
+from ${quoteIdent(schema)}.${quoteIdent(table)}
+where adm_sect_c is not null and trim(adm_sect_c::text) <> ''
+order by 1
+limit 2
+`
+    );
+    const first = (r.rows[0]?.adm_sect_c ?? '').trim();
+    if (!first) return undefined;
+    if (r.rows.length > 1) {
+      console.warn(`[kais] public_layer.sgg adm_sect_c 고유값이 여러 개입니다. 첫 값 사용: ${first}`);
+    }
+    return first;
+  } catch (e) {
+    console.warn(
+      '[kais] public_layer.sgg adm_sect_c 조회 실패:',
+      e instanceof Error ? e.message : e
+    );
+    return undefined;
+  }
+}
+
 /** Staging 테이블명(스키마 제외). 본 테이블 `tl_*`와 충돌 없음. */
 function stagingRelFor(shpName: string): string {
   return `_kais_stg_${tiToTl(shpName)}`;
@@ -237,12 +286,12 @@ async function importShpToPostgis(
   shpPath: string,
   table: string,
   srs: string | undefined,
-  opts?: { overwrite?: boolean }
+  opts?: { overwrite?: boolean; sggCode?: string }
 ): Promise<void> {
   // Minimal wrapper: rely on ogr2ogr existing in PATH (already used elsewhere in repo).
   // Use -nln to target schema.table.
   await ensureTargetSchema();
-  const { cmd: ogr2ogrCmd, args: prefix } = resolveOgr2ogrRun();
+  const { cmd: ogr2ogrCmd, args: prefix, env: gdalEnv } = resolveOgr2ogrRun();
   // KAIS 원본 SHP는 .prj가 없는 경우가 있어 좌표계 강제 지정 필요
   // 사용자 요구사항: UTM-K 고정(EPSG:5179)
   const sourceSrs = 'EPSG:5179';
@@ -264,10 +313,13 @@ async function importShpToPostgis(
   if (srs) {
     args.push('-t_srs', srs);
   }
+  if (opts?.sggCode) {
+    args.push('-where', `sig_cd='${opts.sggCode.replace(/'/g, "''")}'`);
+  }
   args.push('-lco', 'GEOMETRY_NAME=geom');
   const execArgs = prefix.length > 0 ? [...prefix, ...args] : args;
   try {
-    await runCommand(ogr2ogrCmd, execArgs, { logPrefix: 'ogr2ogr' });
+    await runCommand(ogr2ogrCmd, execArgs, { logPrefix: 'ogr2ogr', env: gdalEnv });
   } catch (e) {
     const anyErr = e as { code?: unknown; message?: unknown };
     const code = anyErr?.code != null ? String(anyErr.code) : '';
@@ -287,11 +339,35 @@ async function importShpToPostgis(
 }
 
 /**
+ * 스테이징에 전국 SHP가 올라온 뒤 본 테이블 merge 전, SGG만 남긴다.
+ * merge 후 sig_cd 필터만 쓰면 전국 키로 영양 행이 삭제·대체된 뒤 전부 지워져 테이블이 비는 문제가 있다.
+ */
+async function filterTableBySggCode(schema: string, relname: string, sggCode: string): Promise<void> {
+  const q = `${quoteIdent(schema)}.${quoteIdent(relname)}`;
+  const r = await pool.query<{ x: boolean }>(
+    `
+select exists(
+  select 1 from information_schema.columns
+  where table_schema = $1 and table_name = $2 and lower(column_name) = 'sig_cd'
+) as x
+`,
+    [schema, relname.toLowerCase()]
+  );
+  if (!r.rows[0]?.x) return;
+  await pool.query(`delete from ${q} where sig_cd is distinct from $1`, [sggCode]);
+}
+
+/**
  * Java KaisScheduler와 동일: 변동 SHP만으로 본 테이블 전체를 덮어쓰지 않음.
  * - 본 테이블 없음: ogr2ogr -overwrite 로 최초 생성
- * - 있음: 스테이징에 SHP 적재 → 키 일치 행 DELETE(USING) → INSERT SELECT → 스테이징 DROP
+ * - 있음: 스테이징에 SHP 적재 → (SGG 필터) → 키 일치 행 DELETE(USING) → INSERT SELECT → 스테이징 DROP
  */
-async function importShpDeltaLikeJava(shpPath: string, shpName: string, targetSrs: string): Promise<void> {
+async function importShpDeltaLikeJava(
+  shpPath: string,
+  shpName: string,
+  targetSrs: string,
+  sggCode?: string
+): Promise<void> {
   await ensureTargetSchema();
   const schema = targetSchema();
   const tlRel = tiToTl(shpName);
@@ -304,12 +380,15 @@ async function importShpDeltaLikeJava(shpPath: string, shpName: string, targetSr
 
   const exists = await tableExists(schema, tlRel);
   if (!exists) {
-    await importShpToPostgis(shpPath, `${schema}.${tlRel}`, targetSrs, { overwrite: true });
+    await importShpToPostgis(shpPath, `${schema}.${tlRel}`, targetSrs, { overwrite: true, sggCode });
     return;
   }
 
   try {
-    await importShpToPostgis(shpPath, `${schema}.${stgRel}`, targetSrs, { overwrite: true });
+    await importShpToPostgis(shpPath, `${schema}.${stgRel}`, targetSrs, { overwrite: true, sggCode });
+    if (sggCode) {
+      await filterTableBySggCode(schema, stgRel, sggCode);
+    }
     const keyMatch = keyCols.map((k) => `m.${quoteIdent(k)}::text = s.${quoteIdent(k)}::text`).join(' and ');
     await pool.query(`delete from ${mainQ} m using ${stgQ} s where ${keyMatch}`);
     const cols = await getInsertColumns(schema, stgRel, tlRel);
@@ -426,10 +505,10 @@ async function processZipRecord(params: KaisParams, rec: ReceiveRecord): Promise
     const table = tableNameFor(shpName);
 
     // 원본 EPSG:5179(UTM-K) → DB EPSG:5181. 일변동은 키 선삭제 후 INSERT(Java deleteFromSHP + uploadSHP).
-    await importShpDeltaLikeJava(p, shpName, 'EPSG:5181');
+    await importShpDeltaLikeJava(p, shpName, 'EPSG:5181', params.sggCode);
 
     if (params.sggCode) {
-      await pool.query(`delete from ${table} where sig_cd != $1`, [params.sggCode]).catch(() => {});
+      await filterTableBySggCode(targetSchema(), tiToTl(shpName), params.sggCode);
     }
 
     if (process.env.KAIS_GEOSERVER_PUBLISH === '1') {

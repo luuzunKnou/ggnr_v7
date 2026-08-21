@@ -367,7 +367,7 @@ export async function setupGeoServerDb(params: {
   ] as const;
 
   try {
-    // 앱 필수 layer 테이블(도로점용·공통점용 9·점사용료 3·메모·영상 등) 선확보
+    // 앱 필수 테이블(도로점용·공통점용 9·점사용료 3·차세대 연계·메모·영상 등) 선확보
     let layerAppTables:
       | { created: string[]; moved: string[]; existed: string[]; errors: string[] }
       | undefined;

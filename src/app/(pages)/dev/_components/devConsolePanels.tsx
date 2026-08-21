@@ -208,7 +208,11 @@ export function renderDevMenuContent(menuId: string): ReactNode {
         </div>
       )
     case "userManager":
-      return <UserManager />
+      return (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <UserManager />
+        </div>
+      )
     case "permissionFeature":
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">

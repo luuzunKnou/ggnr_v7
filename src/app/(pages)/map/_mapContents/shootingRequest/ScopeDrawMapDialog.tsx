@@ -224,9 +224,9 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
         showCloseButton={false}
         className="flex h-[min(96vh,1080px)] w-[min(100vw-1rem,96rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
       >
-        <DialogHeader className="shrink-0 space-y-0 border-b border-slate-200 px-4 py-2.5 text-left">
+        <DialogHeader className="shrink-0 space-y-0 border-b border-border px-4 py-2.5 text-left">
           <div className="flex items-center justify-between gap-2">
-            <DialogTitle className="text-[13px] font-semibold text-slate-800">
+            <DialogTitle className="text-[13px] font-semibold text-foreground">
               촬영 범위 그리기
             </DialogTitle>
             <div className="flex items-center gap-1.5">
@@ -237,7 +237,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
                   'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-[11px]',
                   tool === 'rect'
                     ? 'border-sky-300 bg-sky-50 text-sky-800'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    : 'border-border text-muted-foreground hover:bg-muted/50'
                 )}
               >
                 <Square className="h-3 w-3" />
@@ -250,7 +250,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
                   'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-[11px]',
                   tool === 'polygon'
                     ? 'border-sky-300 bg-sky-50 text-sky-800'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    : 'border-border text-muted-foreground hover:bg-muted/50'
                 )}
               >
                 <Pentagon className="h-3 w-3" />
@@ -260,7 +260,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-8 gap-1 px-2 text-[11px] text-slate-500"
+                className="h-8 gap-1 px-2 text-[11px] text-muted-foreground"
                 onClick={handleClear}
                 disabled={!hasDrawn}
               >
@@ -269,7 +269,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
               </Button>
             </div>
           </div>
-          <p className="mt-1 text-[10px] text-slate-400">
+          <p className="mt-1 text-[10px] text-muted-foreground">
             {tool === 'rect'
               ? '지도에서 드래그해 사각형을 그립니다.'
               : '지도를 클릭해 꼭짓점을 찍고 더블클릭으로 다각형을 완성합니다.'}
@@ -280,7 +280,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
           <div ref={mapDivRef} className="absolute inset-0" />
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-slate-200 bg-white px-4 py-2.5">
+        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-border bg-background px-4 py-2.5">
           <Button
             type="button"
             variant="outline"

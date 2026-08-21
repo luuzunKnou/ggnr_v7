@@ -183,6 +183,7 @@ export async function getTableData(params: {
 }
 
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+const CODES_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'codes');
 
 /** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
 export function getDefineTableKeyFieldName(tableName: string): string | null {
@@ -191,11 +192,133 @@ export function getDefineTableKeyFieldName(tableName: string): string | null {
   try {
     if (!fs.existsSync(filePath)) return null;
     const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const keyField = Array.isArray(fields) ? fields.find((f) => String(f?.define_field_is_key ?? '').toLowerCase() === 'true') : null;
+    const keyField = Array.isArray(fields)
+      ? fields.find((f) => defineFlagTrue(f?.define_field_is_key))
+      : null;
     return keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
   } catch {
     return null;
   }
+}
+
+function loadDefineFieldRows(tableName: string): Record<string, unknown>[] {
+  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function defineFlagTrue(v: unknown): boolean {
+  if (v === true) return true;
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1';
+}
+
+function defineFieldIdxNum(f: Record<string, unknown>): number {
+  const n = parseInt(String(f.define_field_idx ?? '999999'), 10);
+  return Number.isFinite(n) ? n : 999999;
+}
+
+function normalizeCodeKey(raw: string): string {
+  const s = raw.trim().toLowerCase();
+  if (/^-?\d+\.0+$/.test(s)) return s.replace(/\.0+$/, '');
+  return s;
+}
+
+function loadDefineCodeLabelMap(tableName: string, fieldName: string): Map<string, string> {
+  const tableField = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
+  const labels = new Map<string, string>();
+  const filePath = path.join(CODES_DIR, `field_${tableField}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (Array.isArray(parsed)) {
+        for (const row of parsed as { define_code_name?: string; define_code_kor_name?: string }[]) {
+          const name = String(row?.define_code_name ?? '').trim();
+          if (!name) continue;
+          const kor = String(row?.define_code_kor_name ?? '').trim();
+          const label = kor || name;
+          const key = normalizeCodeKey(name);
+          labels.set(key, label);
+        }
+      }
+    }
+  } catch {
+    /* 코드 파일 없음·파싱 실패는 원본 값 유지 */
+  }
+  return labels;
+}
+
+function lookupDefineCodeLabel(tableName: string, fieldName: string, raw: string): string | undefined {
+  const map = loadDefineCodeLabelMap(tableName, fieldName);
+  return map.get(normalizeCodeKey(raw));
+}
+
+function joinDefineShownValues(
+  row: Record<string, unknown>,
+  fields: Record<string, unknown>[],
+  flag: 'define_field_show_title' | 'define_field_show_list',
+  tableName: string
+): string {
+  const cols = fields
+    .filter((f) => defineFlagTrue(f[flag]))
+    .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+  const parts: string[] = [];
+  for (const f of cols) {
+    const name = String(f.define_field_name ?? '').trim();
+    if (!name) continue;
+    if (GEOM_COLUMN_NAMES.has(name.toLowerCase())) continue;
+    const raw = rowVal(row, name);
+    if (raw != null && typeof raw === 'object') continue;
+    let v = rowPick(row, [name]);
+    if (!v) continue;
+    if (String(f.define_field_type ?? '').trim().toUpperCase() === 'CODE') {
+      const mapped = lookupDefineCodeLabel(tableName, name, v);
+      if (mapped) v = mapped;
+    }
+    parts.push(v);
+  }
+  const sep =
+    tableName === 'sd_heat_mitigation_facility' && flag === 'define_field_show_title' ? ' - ' : ' ';
+  return parts.join(sep);
+}
+
+function safetyFacOrderBySql(fields: Record<string, unknown>[], columns: string[]): string {
+  const colByLower = new Map(columns.map((c) => [c.toLowerCase(), c]));
+  const sorts = fields
+    .map((f) => {
+      const name = String(f.define_field_name ?? '').trim();
+      const idxRaw = String(f.define_field_sort_idx ?? '').trim();
+      if (!name || !idxRaw) return null;
+      const idx = parseInt(idxRaw, 10);
+      if (!Number.isFinite(idx)) return null;
+      const phys = colByLower.get(name.toLowerCase());
+      if (!phys) return null;
+      const dir =
+        String(f.define_field_sort_type ?? 'ASC').trim().toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+      const type = String(f.define_field_type ?? '').trim().toUpperCase();
+      return { phys, idx, dir, type };
+    })
+    .filter((x): x is { phys: string; idx: number; dir: string; type: string } => x != null)
+    .sort((a, b) => a.idx - b.idx);
+  if (sorts.length === 0) return '';
+  return (
+    ' ORDER BY ' +
+    sorts
+      .map((s) => {
+        const q = `"${s.phys.replace(/"/g, '""')}"`;
+        if (s.type === 'NUMBER') {
+          return `CASE WHEN btrim(${q}::text) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(${q}::text)::numeric END ${s.dir} NULLS LAST`;
+        }
+        return `${q} ${s.dir}`;
+      })
+      .join(', ')
+  );
 }
 
 /**
@@ -1364,7 +1487,7 @@ const SAFETY_FACILITY_DISPLAY: Record<
     latKeys: ['la', 'ycord'],
   },
   sd_heat_mitigation_facility: {
-    nameKeys: ['fbrc_nm', 'instl_bzenty'],
+    nameKeys: ['jibun_addr', 'fbrc_nm', 'instl_bzenty'],
     addressKeys: ['addr'],
     lonKeys: ['lot'],
     latKeys: ['lat'],
@@ -1457,12 +1580,29 @@ function pickLonLat(
   return { lon, lat };
 }
 
+function pickGeomJsonFromRow(row: Record<string, unknown>): unknown {
+  for (const [k, v] of Object.entries(row)) {
+    if (!GEOM_COLUMN_NAMES.has(k.toLowerCase())) continue;
+    if (v == null) continue;
+    if (typeof v === 'string') {
+      try {
+        return JSON.parse(v) as unknown;
+      } catch {
+        return v;
+      }
+    }
+    return v;
+  }
+  return undefined;
+}
+
 function formatSafetyFacilityRow(
   subtype: string,
   table: string,
   row: Record<string, unknown>,
   rowIndex: number,
-  spec: (typeof SAFETY_FACILITY_DISPLAY)[string] | undefined
+  spec: (typeof SAFETY_FACILITY_DISPLAY)[string] | undefined,
+  fields: Record<string, unknown>[]
 ): {
   subtype: string;
   table: string;
@@ -1472,20 +1612,34 @@ function formatSafetyFacilityRow(
   phone?: string;
   lon?: number;
   lat?: number;
+  geomJson?: unknown;
 } {
+  const nameFromDefine = joinDefineShownValues(row, fields, 'define_field_show_title', table);
+  const listFromDefine = joinDefineShownValues(row, fields, 'define_field_show_list', table);
+  // 폭염저감: 목록 제목은 지번주소 (show_title 법정동·관리번호는 상세 헤더용으로 유지)
   const name =
-    rowPick(row, spec?.nameKeys ?? []) ||
-    rowPick(row, ['vt_acmdfclty_nm', 'nm', 'name', 'fclty_nm', 'title']);
+    table === 'sd_heat_mitigation_facility'
+      ? rowPick(row, ['jibun_addr']) ||
+        rowPick(row, spec?.nameKeys ?? []) ||
+        nameFromDefine ||
+        '(이름 없음)'
+      : nameFromDefine ||
+        rowPick(row, spec?.nameKeys ?? []) ||
+        rowPick(row, ['vt_acmdfclty_nm', 'nm', 'name', 'fclty_nm', 'title']);
   const address =
+    listFromDefine ||
     rowPick(row, spec?.addressKeys ?? []) ||
     rowPick(row, ['addr', 'adres', 'address', 'dtl_adres']);
   const phone = rowPick(row, spec?.phoneKeys ?? ['telno', 'tel', 'phone', 'mng_inst_telno']);
+  const keyName = getDefineTableKeyFieldName(table);
+  const keyVal = keyName ? rowPick(row, [keyName]) : '';
   const ogc = rowVal(row, 'ogc_fid');
   const id =
-    ogc != null && String(ogc).trim() !== ''
-      ? String(ogc).trim()
-      : `${table}-${rowIndex}`;
+    keyVal ||
+    (ogc != null && String(ogc).trim() !== '' ? String(ogc).trim() : '') ||
+    `${table}-${rowIndex}`;
   const { lon, lat } = pickLonLat(row, spec);
+  const geomJson = pickGeomJsonFromRow(row);
   return {
     subtype,
     table,
@@ -1494,6 +1648,7 @@ function formatSafetyFacilityRow(
     address: address || '—',
     ...(phone ? { phone } : {}),
     ...(lon != null && lat != null ? { lon, lat } : {}),
+    ...(geomJson != null ? { geomJson } : {}),
   };
 }
 
@@ -1501,9 +1656,11 @@ async function fetchSafetyFacRows(opts: {
   schema: string;
   table: string;
   searchRaw: string;
+  wkt5181?: string;
   limit: number;
 }): Promise<Record<string, unknown>[]> {
   const { schema, table, searchRaw, limit } = opts;
+  const wkt5181 = String(opts.wkt5181 ?? '').trim();
   const esc = (s: string) => s.replace(/'/g, "''");
   const safeSchema = schema.replace(/"/g, '""');
   const resolvedRel = await resolveLayerPhysicalRelName(schema, table);
@@ -1540,19 +1697,37 @@ async function fetchSafetyFacRows(opts: {
   const dataCols = columns.filter((c) => !geomCol || c !== geomCol);
   const textCols = [...dataCols];
   const selectList = dataCols.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ');
+  const safeGeom = geomCol ? geomCol.replace(/"/g, '""') : '';
+  const geomSelect = geomCol
+    ? `${selectList ? ', ' : ''}ST_AsGeoJSON(ST_Transform("${safeGeom}", 4326))::json AS "${safeGeom}"`
+    : '';
+  const fullSelect = `${selectList}${geomSelect}`;
+  const fromSql = sql.raw(`"${safeSchema}"."${safeTable}"`);
+  const orderSql = safetyFacOrderBySql(loadDefineFieldRows(table), dataCols);
 
-  let dataRes;
+  const whereParts: ReturnType<typeof sql>[] = [];
   if (searchRaw && textCols.length > 0) {
     const conds = textCols.map((c) =>
       sql`strpos(lower(${sql.raw(`"${c.replace(/"/g, '""')}"`)}::text), lower(${searchRaw})) > 0`
     );
-    const whereSql = sql.join(conds, sql` OR `);
+    whereParts.push(sql`(${sql.join(conds, sql` OR `)})`);
+  }
+  if (wkt5181 && geomCol) {
+    const g = sql.raw(`"${geomCol.replace(/"/g, '""')}"`);
+    whereParts.push(
+      sql`${g} IS NOT NULL AND ST_Intersects(ST_Transform(${g}, 5181), ST_SetSRID(ST_GeomFromText(${wkt5181}), 5181))`
+    );
+  }
+
+  let dataRes;
+  if (whereParts.length > 0) {
+    const whereSql = sql.join(whereParts, sql` AND `);
     dataRes = await db.execute(
-      sql`SELECT ${sql.raw(selectList)} FROM ${sql.raw(`"${safeSchema}"."${safeTable}"`)} WHERE ${whereSql} LIMIT ${limit}`
+      sql`SELECT ${sql.raw(fullSelect)} FROM ${fromSql} WHERE ${whereSql}${sql.raw(orderSql)} LIMIT ${limit}`
     );
   } else {
     dataRes = await db.execute(
-      sql`SELECT ${sql.raw(selectList)} FROM ${sql.raw(`"${safeSchema}"."${safeTable}"`)} LIMIT ${limit}`
+      sql`SELECT ${sql.raw(fullSelect)} FROM ${fromSql}${sql.raw(orderSql)} LIMIT ${limit}`
     );
   }
 
@@ -1570,6 +1745,8 @@ export type SafetyFacilityListItem = {
   lat?: number;
   /** geom 제외 원본 컬럼 — 상세 패널 표시용 */
   detailAttrs: Record<string, unknown>;
+  /** WGS84 GeoJSON — 지도 붉은 강조용 */
+  geomJson?: unknown;
 };
 
 /**
@@ -1578,6 +1755,7 @@ export type SafetyFacilityListItem = {
 export async function listSafetyFacilities(params: {
   requests: { subtype: string; table: string }[];
   search?: string;
+  wkt5181?: string;
   limitPerTable?: number;
   schema?: string;
 }): Promise<{ items: SafetyFacilityListItem[]; error?: string }> {
@@ -1586,6 +1764,7 @@ export async function listSafetyFacilities(params: {
   if (!Number.isFinite(limitPerTable) || limitPerTable < 1) limitPerTable = 150;
   limitPerTable = Math.min(300, Math.floor(limitPerTable));
   const searchRaw = String(params?.search ?? '').trim();
+  const wkt5181 = String(params?.wkt5181 ?? '').trim();
   const items: SafetyFacilityListItem[] = [];
   const requests = Array.isArray(params?.requests) ? params.requests : [];
 
@@ -1594,11 +1773,19 @@ export async function listSafetyFacilities(params: {
     const table = String(req?.table ?? '').trim().toLowerCase();
     if (!subtype || !table) continue;
     try {
-      const rows = await fetchSafetyFacRows({ schema, table, searchRaw, limit: limitPerTable });
+      const rows = await fetchSafetyFacRows({
+        schema,
+        table,
+        searchRaw,
+        ...(wkt5181 ? { wkt5181 } : {}),
+        limit: limitPerTable,
+      });
       const spec = SAFETY_FACILITY_DISPLAY[table];
+      const fields = loadDefineFieldRows(table);
       rows.forEach((row, idx) => {
+        const formatted = formatSafetyFacilityRow(subtype, table, row, idx, spec, fields);
         items.push({
-          ...formatSafetyFacilityRow(subtype, table, row, idx, spec),
+          ...formatted,
           detailAttrs: stripGeomRow(row),
         });
       });
@@ -1608,4 +1795,285 @@ export async function listSafetyFacilities(params: {
   }
 
   return { items };
+}
+
+// ─── 재난시설 관련 건물군 레이어 조회 ───────────────────────────────────────
+
+/** 건물·도로 레이어는 public_layer (tables.json define_table_schema) */
+const SAFETY_FAC_BLDG_SCHEMA = 'public_layer';
+
+export type SafetyFacRelatedBuildingResult = {
+  bldgGroup: number;
+  bldgGroupEntrance: number;
+  building: number;
+  buildingEntrance: number;
+  eqbManSn: string | null;
+  bulManNo: string | null;
+  /** 건물 출입구 CQL용 — 해당 건물군 소속 건물 bul_man_no 목록 */
+  bulManNos: string[];
+};
+
+async function resolveGeomMeta(
+  schema: string,
+  physicalTable: string
+): Promise<{ geomCol: string; srid: number } | null> {
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const gcRes = await db.execute(
+    sql.raw(
+      `SELECT f_geometry_column AS name, srid FROM geometry_columns
+       WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(physicalTable)}'
+       LIMIT 1`
+    )
+  );
+  const gcRow = gcRes.rows?.[0] as { name?: string; srid?: number } | undefined;
+  if (!gcRow?.name) return null;
+  let srid = Number(gcRow.srid);
+  const geomCol = String(gcRow.name).trim();
+  if (!Number.isFinite(srid) || srid <= 0) {
+    try {
+      const safeGeom = geomCol.replace(/"/g, '""');
+      const safeSch = schema.replace(/"/g, '""');
+      const safeTbl = physicalTable.replace(/"/g, '""');
+      const probe = await db.execute(
+        sql.raw(
+          `SELECT ST_SRID("${safeGeom}")::int AS s
+           FROM "${safeSch}"."${safeTbl}"
+           WHERE "${safeGeom}" IS NOT NULL
+           LIMIT 1`
+        )
+      );
+      const probed = Number((probe.rows?.[0] as { s?: number } | undefined)?.s);
+      srid = Number.isFinite(probed) && probed > 0 ? probed : 5181;
+    } catch {
+      srid = 5181;
+    }
+  }
+  return { geomCol, srid };
+}
+
+/** 재난시설–건물군 매칭: 시설 좌표 기준 허용 거리(m). 경계·약간 이탈 포함 */
+const SAFETY_FAC_BLDG_GROUP_NEAR_M = 5;
+
+/** WGS84 lon/lat → 테이블 SRID 점 SQL (identify와 동일 패턴) */
+function safetyFacPointSql(lon: number, lat: number, tableSrid: number): string {
+  const point4326 = `ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326)`;
+  return tableSrid === 4326 ? point4326 : `ST_Transform(${point4326}, ${tableSrid})`;
+}
+
+/** 시설 점과 geom 간 거리(m) — 테이블 SRID가 미터 단위가 아니면 5181로 변환 */
+function safetyFacWithinMetersSql(
+  geomCol: string,
+  pointSql: string,
+  tableSrid: number,
+  meters: number
+): string {
+  if (tableSrid === 4326) {
+    return `ST_DWithin(${geomCol}::geography, ${pointSql}::geography, ${meters})`;
+  }
+  if (tableSrid === 5181 || tableSrid === 5179 || tableSrid === 5186) {
+    return `ST_DWithin(${geomCol}, ${pointSql}, ${meters})`;
+  }
+  return `ST_DWithin(ST_Transform(${geomCol}, 5181), ST_Transform(${pointSql}, 5181), ${meters})`;
+}
+
+/** eqb_man_sn 이 0이면 bul_man_no FK 사용 */
+function isEqbManSnZero(v: string | null | undefined): boolean {
+  if (v == null || v === '') return false;
+  const s = String(v).trim();
+  if (s === '0') return true;
+  const n = Number(s);
+  return Number.isFinite(n) && n === 0;
+}
+
+/**
+ * 시설 좌표(lon, lat) 기준으로 관련 건물군·출입구·건물·건물출입구 건수를 조회한다.
+ * - 건물군: 시설 좌표 ±5m 이내 (ST_DWithin)
+ * - eqb_man_sn 이 0이면 bul_man_no 를 FK로 사용
+ * - 건물군 출입구·건물: 건물군 eqb_man_sn (또는 0일 때 bul_man_no) FK
+ * - 건물 출입구: 해당 건물들의 bul_man_no FK
+ */
+export async function getSafetyFacRelatedBuildingLayers(params: {
+  lon: number;
+  lat: number;
+  schema?: string;
+}): Promise<SafetyFacRelatedBuildingResult> {
+  const sch =
+    String(params.schema ?? '').trim() === 'layer'
+      ? 'layer'
+      : SAFETY_FAC_BLDG_SCHEMA;
+
+  const empty: SafetyFacRelatedBuildingResult = {
+    bldgGroup: 0,
+    bldgGroupEntrance: 0,
+    building: 0,
+    buildingEntrance: 0,
+    eqbManSn: null,
+    bulManNo: null,
+    bulManNos: [],
+  };
+
+  try {
+    const mstRel = await resolveLayerPhysicalRelName(sch, 'tl_sgco_rnadr_mst');
+    if (!mstRel) return empty;
+    const mstMeta = await resolveGeomMeta(sch, mstRel);
+    if (!mstMeta) return empty;
+
+    const safeSch = sch.replace(/"/g, '""');
+    const safeMst = mstRel.replace(/"/g, '""');
+    const safeGeom = mstMeta.geomCol.replace(/"/g, '""');
+    const pointSql = safetyFacPointSql(params.lon, params.lat, mstMeta.srid);
+    const nearSql = safetyFacWithinMetersSql(
+      `"${safeGeom}"`,
+      pointSql,
+      mstMeta.srid,
+      SAFETY_FAC_BLDG_GROUP_NEAR_M
+    );
+    const distanceOrderSql =
+      mstMeta.srid === 4326
+        ? `ST_Distance("${safeGeom}"::geography, ${pointSql}::geography)`
+        : mstMeta.srid === 5181 || mstMeta.srid === 5179 || mstMeta.srid === 5186
+          ? `ST_Distance("${safeGeom}", ${pointSql})`
+          : `ST_Distance(ST_Transform("${safeGeom}", 5181), ST_Transform(${pointSql}, 5181))`;
+
+    // 1. 시설 좌표 ±5m 이내 건물군 — 복수일 때 가장 가까운 1건 FK 사용
+    const bldgGroupRows = await db.execute(
+      sql.raw(
+        `SELECT COUNT(*) AS cnt
+         FROM "${safeSch}"."${safeMst}"
+         WHERE "${safeGeom}" IS NOT NULL
+           AND ${nearSql}`
+      )
+    );
+    const bldgGroupCnt = parseInt(String((bldgGroupRows.rows?.[0] as { cnt?: string })?.cnt ?? '0'), 10) || 0;
+
+    let bldgGroupRow: { eqb_man_sn?: string | null; bul_man_no?: string | null } | undefined;
+    if (bldgGroupCnt > 0) {
+      const nearestRows = await db.execute(
+        sql.raw(
+          `SELECT "eqb_man_sn"::text AS eqb_man_sn, "bul_man_no"::text AS bul_man_no
+           FROM "${safeSch}"."${safeMst}"
+           WHERE "${safeGeom}" IS NOT NULL
+             AND ${nearSql}
+           ORDER BY ${distanceOrderSql}
+           LIMIT 1`
+        )
+      );
+      bldgGroupRow = nearestRows.rows?.[0] as typeof bldgGroupRow;
+    }
+    const eqbManSn =
+      bldgGroupCnt > 0
+        ? String(bldgGroupRow?.eqb_man_sn ?? '').trim() || null
+        : null;
+    const mstBulManNo =
+      bldgGroupCnt > 0
+        ? String(bldgGroupRow?.bul_man_no ?? '').trim() || null
+        : null;
+
+    const fkByBulManNo = isEqbManSnZero(eqbManSn);
+    const fkValue = fkByBulManNo ? mstBulManNo : eqbManSn;
+
+    if (!fkValue) {
+      return { ...empty, bldgGroup: bldgGroupCnt, eqbManSn, bulManNo: mstBulManNo };
+    }
+
+    const escVal = fkValue.replace(/'/g, "''");
+    const fkColumn = fkByBulManNo ? 'bul_man_no' : 'eqb_man_sn';
+
+    // 2. 건물군 출입구
+    const entrcRel = await resolveLayerPhysicalRelName(sch, 'tl_spbd_entrc');
+    let bldgGroupEntranceCnt = 0;
+    if (entrcRel) {
+      const safeEntrc = entrcRel.replace(/"/g, '""');
+      const entranceRows = await db.execute(
+        sql.raw(
+          `SELECT COUNT(*) AS cnt FROM "${safeSch}"."${safeEntrc}"
+           WHERE "${fkColumn}"::text = '${escVal}'`
+        )
+      );
+      bldgGroupEntranceCnt =
+        parseInt(String((entranceRows.rows?.[0] as { cnt?: string })?.cnt ?? '0'), 10) || 0;
+    }
+
+    // 3. 건물
+    const dongRel = await resolveLayerPhysicalRelName(sch, 'tl_sgco_rnadr_dong');
+    let buildingCnt = 0;
+    let bulManNo: string | null = fkByBulManNo ? mstBulManNo : null;
+    let bulManNos: string[] = fkByBulManNo && mstBulManNo ? [mstBulManNo] : [];
+    if (dongRel) {
+      const safeDong = dongRel.replace(/"/g, '""');
+      const buildingRows = await db.execute(
+        sql.raw(
+          `SELECT COUNT(*) AS cnt,
+                  MIN("bul_man_no"::text) AS bul_man_no,
+                  array_agg(DISTINCT "bul_man_no"::text) FILTER (WHERE "bul_man_no" IS NOT NULL) AS bul_man_nos
+           FROM "${safeSch}"."${safeDong}"
+           WHERE "${fkColumn}"::text = '${escVal}'`
+        )
+      );
+      const bRow = buildingRows.rows?.[0] as {
+        cnt?: string;
+        bul_man_no?: string | null;
+        bul_man_nos?: string[] | string | null;
+      };
+      buildingCnt = parseInt(String(bRow?.cnt ?? '0'), 10) || 0;
+      if (!fkByBulManNo) {
+        bulManNo =
+          buildingCnt > 0 ? String(bRow?.bul_man_no ?? '').trim() || null : null;
+        const rawNos = bRow?.bul_man_nos;
+        if (Array.isArray(rawNos)) {
+          bulManNos = rawNos.map((v) => String(v).trim()).filter(Boolean);
+        } else if (typeof rawNos === 'string') {
+          bulManNos = rawNos
+            .replace(/^\{|\}$/g, '')
+            .split(',')
+            .map((v) => v.trim().replace(/^"|"$/g, ''))
+            .filter(Boolean);
+        }
+      } else if (buildingCnt > 0) {
+        const fromDong = String(bRow?.bul_man_no ?? '').trim();
+        if (fromDong) {
+          bulManNo = fromDong;
+          bulManNos = [fromDong];
+        }
+      }
+    }
+
+    // 4. 건물 출입구 — 해당 건물 bul_man_no
+    let buildingEntranceCnt = 0;
+    if (dongRel && bulManNos.length > 0) {
+      const dongEntrcRel = await resolveLayerPhysicalRelName(sch, 'tl_spbd_entrc_dong');
+      if (dongEntrcRel) {
+        const safeDong = dongRel.replace(/"/g, '""');
+        const safeDongEntrc = dongEntrcRel.replace(/"/g, '""');
+        const bldgEntrcWhere = fkByBulManNo
+          ? `e."bul_man_no"::text = '${escVal}'`
+          : `e."bul_man_no"::text IN (
+               SELECT d."bul_man_no"::text FROM "${safeSch}"."${safeDong}" d
+               WHERE d."eqb_man_sn"::text = '${escVal}'
+                 AND d."bul_man_no" IS NOT NULL
+             )`;
+        const bldgEntrcRows = await db.execute(
+          sql.raw(
+            `SELECT COUNT(*) AS cnt FROM "${safeSch}"."${safeDongEntrc}" e
+             WHERE ${bldgEntrcWhere}`
+          )
+        );
+        buildingEntranceCnt =
+          parseInt(String((bldgEntrcRows.rows?.[0] as { cnt?: string })?.cnt ?? '0'), 10) || 0;
+      }
+    }
+
+    return {
+      bldgGroup: bldgGroupCnt,
+      bldgGroupEntrance: bldgGroupEntranceCnt,
+      building: buildingCnt,
+      buildingEntrance: buildingEntranceCnt,
+      eqbManSn,
+      bulManNo,
+      bulManNos,
+    };
+  } catch (e) {
+    console.error('[getSafetyFacRelatedBuildingLayers]', e);
+    return empty;
+  }
 }

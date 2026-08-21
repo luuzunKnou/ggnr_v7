@@ -1,0 +1,42 @@
+[
+  {
+    "define_code_name": "1",
+    "define_code_kor_name": "그늘막"
+  },
+  {
+    "define_code_name": "001",
+    "define_code_kor_name": "그늘막"
+  },
+  {
+    "define_code_name": "002",
+    "define_code_kor_name": "도로차열포장(쿨페이브먼트)"
+  },
+  {
+    "define_code_name": "2",
+    "define_code_kor_name": "도로차열포장(쿨페이브먼트)"
+  },
+  {
+    "define_code_name": "003",
+    "define_code_kor_name": "옥상차열도장(쿨루프)"
+  },
+  {
+    "define_code_name": "3",
+    "define_code_kor_name": "옥상차열도장(쿨루프)"
+  },
+  {
+    "define_code_name": "4",
+    "define_code_kor_name": "도로살수장치(쿨링로드)"
+  },
+  {
+    "define_code_name": "004",
+    "define_code_kor_name": "도로살수장치(쿨링로드)"
+  },
+  {
+    "define_code_name": "5",
+    "define_code_kor_name": "물안개분사장치(쿨링포그)"
+  },
+  {
+    "define_code_name": "005",
+    "define_code_kor_name": "물안개분사장치(쿨링포그)"
+  }
+]

@@ -56,38 +56,41 @@ export function JimokLandownLayerSelector({
   return (
     <div
       className={cn(
-        'flex w-56 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        'flex w-56 flex-col overflow-hidden rounded-[5px] border border-border bg-card/95 shadow-lg backdrop-blur-sm',
         MAP_LAYER_PANEL_MAX_H_CLASS,
         className
       )}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
-        <span className="text-[13px] font-medium">{title}</span>
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
+        <span className="text-[13px] font-medium text-foreground">{title}</span>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="text-xs text-slate-500 hover:text-slate-700"
+            className="text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground rounded px-1"
             aria-label="닫기"
+            title="닫기"
           >
             닫기
           </button>
         )}
       </div>
       {showBulkActions ? (
-        <div className="flex shrink-0 gap-1 border-b border-slate-100 px-2 py-1">
+        <div className="flex shrink-0 gap-1 border-b border-border px-2 py-1">
           <button
             type="button"
             onClick={selectAll}
-            className="text-[11px] text-blue-600 hover:underline"
+            className="text-[11px] text-primary hover:underline"
+            title="전체 선택"
           >
             전체 선택
           </button>
-          <span className="text-slate-300">|</span>
+          <span className="text-border">|</span>
           <button
             type="button"
             onClick={selectNone}
-            className="text-[11px] text-slate-500 hover:underline"
+            className="text-[11px] text-muted-foreground hover:underline"
+            title="전체 해제"
           >
             전체 해제
           </button>
@@ -95,7 +98,7 @@ export function JimokLandownLayerSelector({
       ) : null}
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
         {layers.length === 0 ? (
-          <div className="px-3 py-3 text-[11px] leading-snug text-slate-500">
+          <div className="px-3 py-3 text-[11px] leading-snug text-muted-foreground">
             표시할 레이어가 없습니다.
           </div>
         ) : (
@@ -107,14 +110,14 @@ export function JimokLandownLayerSelector({
               <label
                 key={opt.tableName}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4 transition-colors hover:bg-slate-50',
-                  checked && 'bg-blue-50'
+                  'flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4 transition-colors hover:bg-muted/50',
+                  checked && 'bg-primary/10'
                 )}
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2">
                   {useFallback ? (
                     <span
-                      className="h-5 w-5 shrink-0 rounded border border-slate-300"
+                      className="h-5 w-5 shrink-0 rounded border border-border"
                       style={{ backgroundColor: opt.legendColor ?? FALLBACK_COLOR }}
                       aria-hidden
                     />
@@ -122,14 +125,14 @@ export function JimokLandownLayerSelector({
                     <img
                       src={legendUrl}
                       alt=""
-                      className="h-5 w-5 shrink-0 rounded border border-slate-200 object-contain"
+                      className="h-5 w-5 shrink-0 rounded border border-border object-contain"
                       onError={() => onLegendError(opt.tableName)}
                     />
                   )}
                   <span
                     className={cn(
                       'truncate text-xs',
-                      checked ? 'font-medium text-blue-600' : 'text-slate-700'
+                      checked ? 'font-medium text-primary' : 'text-foreground'
                     )}
                   >
                     {opt.layerName}
@@ -139,7 +142,7 @@ export function JimokLandownLayerSelector({
                   type="checkbox"
                   checked={checked}
                   onChange={(e) => toggle(opt.tableName, e.target.checked)}
-                  className="h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus:ring-primary"
                 />
               </label>
             );

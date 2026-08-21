@@ -67,6 +67,7 @@ import {
   type SafetydataDatasetConfig,
 } from '@/integrations/safetydata.config';
 import { buildSafetydataFetchUrl, getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
+import { fetchNormalizedJibunFromAddressSearch } from '@/lib/vworldAddressServer';
 
 const TARGET_SRID = 5181;
 const EMD_SCHEMA = (process.env.SAFETYDATA_EMD_SCHEMA ?? 'public_layer').trim() || 'public_layer';
@@ -497,6 +498,20 @@ function isValidCoordForSrid(srid: number, x: number, y: number): boolean {
   return true;
 }
 
+function mergeDerivedColumns(cfg: SafetydataDatasetConfig, defs: ColumnDef[]): ColumnDef[] {
+  const extra = cfg.derivedColumns ?? [];
+  for (const col of extra) {
+    const sqlName = safetydataJsonKeyToColumn(col.name);
+    if (defs.some((d) => d.sqlName === sqlName)) continue;
+    defs.push({
+      sqlName,
+      pgType: (col.pgType ?? 'text').trim() || 'text',
+      sourceKeys: [],
+    });
+  }
+  return defs;
+}
+
 /** responseFields 우선, 없으면 첫 페이지 행으로 컬럼 추론 */
 function buildColumnDefs(
   cfg: SafetydataDatasetConfig,
@@ -515,7 +530,7 @@ function buildColumnDefs(
         base.push({ sqlName: geomCol, pgType: `geometry(Geometry,${TARGET_SRID})`, sourceKeys: [] });
       }
     }
-    return base;
+    return mergeDerivedColumns(cfg, base);
   }
   const keySet = new Map<string, Set<string>>();
   for (const row of sampleRows) {
@@ -547,7 +562,7 @@ function buildColumnDefs(
     }
   }
 
-  return defs;
+  return mergeDerivedColumns(cfg, defs);
 }
 
 function pickValue(row: Record<string, unknown>, sourceKeys: string[]): unknown {
@@ -777,6 +792,86 @@ async function insertRows(
   return insertedTotal;
 }
 
+function addrCacheKey(addr: string): string {
+  return addr.trim().replace(/\s+/g, ' ');
+}
+
+export type FillGeomAddrResult = {
+  attempted: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+};
+
+/** addr → VWorld search 지번 주소 → jibun_addr UPDATE */
+export async function fillGeomAddrColumn(
+  schema: string,
+  table: string,
+  exec: PgQueryExec = pool
+): Promise<FillGeomAddrResult> {
+  const safeSchema = assertSafeSchema(schema);
+  const safeTable = assertSafeRelationName(table);
+
+  const res = await exec.query<{ ogc_fid: number | string; addr: string | null }>(
+    `SELECT ogc_fid, addr
+     FROM ${qi(safeSchema)}.${qi(safeTable)}
+     WHERE trim(coalesce(addr, '')) <> ''`
+  );
+
+  const rows = res.rows ?? [];
+  const cache = new Map<string, string | null>();
+  let updated = 0;
+  let skipped = 0;
+  let failed = 0;
+  const concurrency = Math.max(1, Math.min(8, Number(process.env.SAFETYDATA_GEOCODE_CONCURRENCY ?? '5') || 5));
+
+  for (let i = 0; i < rows.length; i += concurrency) {
+    const batch = rows.slice(i, i + concurrency);
+    await Promise.all(
+      batch.map(async (row) => {
+        const ogcFid = Number(row.ogc_fid);
+        const sourceAddr = String(row.addr ?? '').trim();
+        if (!Number.isFinite(ogcFid) || !sourceAddr) {
+          skipped += 1;
+          return;
+        }
+
+        const key = addrCacheKey(sourceAddr);
+        if (!cache.has(key)) {
+          cache.set(key, await fetchNormalizedJibunFromAddressSearch(sourceAddr));
+        }
+        const jibunAddr = cache.get(key);
+        if (!jibunAddr) {
+          skipped += 1;
+          return;
+        }
+
+        try {
+          const upd = await exec.query(
+            `UPDATE ${qi(safeSchema)}.${qi(safeTable)} SET ${qi('jibun_addr')} = $1 WHERE ogc_fid = $2`,
+            [jibunAddr, ogcFid]
+          );
+          if ((upd.rowCount ?? 0) > 0) updated += 1;
+          else skipped += 1;
+        } catch {
+          failed += 1;
+        }
+      })
+    );
+  }
+
+  const result: FillGeomAddrResult = {
+    attempted: rows.length,
+    updated,
+    skipped,
+    failed,
+  };
+  console.log(
+    `[SAFETYDATA GEOADDR] table=${safeSchema}.${safeTable} attempted=${result.attempted} updated=${result.updated} skipped=${result.skipped} failed=${result.failed}`
+  );
+  return result;
+}
+
 function coerceTextOrNum(v: unknown): string | number | null {
   if (v == null) return null;
   // geometry 외 컬럼은 전부 text로 저장
@@ -957,6 +1052,11 @@ export async function ingestSafetydataDatasetToLayer(
       );
 
       await client.query('COMMIT');
+
+      if (cfg.fillGeomAddr) {
+        await fillGeomAddrColumn(schema, table);
+      }
+
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

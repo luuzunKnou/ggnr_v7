@@ -6,6 +6,7 @@ import {
   applyEnrichmentToLandRows,
   formatParcelLandJimokValue,
   formatParcelLandLinkageField,
+  PARCEL_LAND_LINKAGE_FAIL_REASON,
   PARCEL_LAND_UNKNOWN_LABEL,
   recomputeJimokStats,
   recomputeOwnerStats,
@@ -32,6 +33,8 @@ export type ParcelAnalysisLandRow = {
   /** 연계 출처 — 행망·코렙스·브이월드 등 (색상 범례) */
   linkageSource?: string;
   linkageFailed?: boolean;
+  /** 연계실패 상세원인 — 화면 숨김, DOM에서 확인 */
+  linkageFailReason?: string;
 };
 
 export type ParcelAnalysisOwnerStat = { label: string; count: number; area: string; ratio: string };
@@ -183,6 +186,7 @@ export type AnalyzeParcelsResponse = {
     publicPrice?: number | null;
     source?: string;
     linkageFailed?: boolean;
+    linkageFailReason?: string;
   }>;
   error?: string;
 };
@@ -295,6 +299,7 @@ export function buildParcelAnalysisResult(
       ),
       linkageSource: String(r.source ?? '').trim() || undefined,
       linkageFailed,
+      linkageFailReason: r.linkageFailReason,
     };
   });
 
@@ -543,6 +548,86 @@ export {
 
 type LandRow = NonNullable<AnalyzeExtendedResponse['landRows']>[number];
 
+function isLandPnu(pnu: unknown): boolean {
+  return /^\d{19}$/.test(String(pnu ?? ''));
+}
+
+function landRowFailReason(args: {
+  failed?: boolean;
+  pnu?: unknown;
+  useKras: boolean;
+  switchedToVworld: boolean;
+  vworldKey: string;
+  serverError?: string;
+}): string | undefined {
+  if (!args.failed) return undefined;
+  if (!isLandPnu(args.pnu)) return PARCEL_LAND_LINKAGE_FAIL_REASON.invalidPnu;
+  if (!args.switchedToVworld) return PARCEL_LAND_LINKAGE_FAIL_REASON.krasEmpty;
+  if (!args.vworldKey) return PARCEL_LAND_LINKAGE_FAIL_REASON.vworldNoKey;
+  if (args.useKras) {
+    return args.serverError
+      ? `${PARCEL_LAND_LINKAGE_FAIL_REASON.krasBatchThenVworld} (${args.serverError})`
+      : PARCEL_LAND_LINKAGE_FAIL_REASON.krasBatchThenVworld;
+  }
+  return PARCEL_LAND_LINKAGE_FAIL_REASON.vworldFailed;
+}
+
+function toEnrichBaseRows(rows: LandRow[]): AnalyzeLandRow[] {
+  return rows.map((r) => ({
+    pnu: String(r.pnu ?? '').trim(),
+    jibun: String(r.jibun ?? '').trim(),
+    jimok: String(r.jimok ?? '미상'),
+    areaSqm: Number(r.areaSqm ?? 0) || 0,
+    ownerType: String(r.ownerType ?? '').trim(),
+    ownerName: r.ownerName,
+    publicPrice: r.publicPrice ?? null,
+    source: r.source as AnalyzeLandRow['source'],
+  }));
+}
+
+function fromEnrichedLandRows(
+  rows: Array<{
+    pnu?: string;
+    jibun?: string;
+    jimok?: string;
+    areaSqm?: number;
+    ownerName?: string;
+    ownerType?: string;
+    publicPrice?: number | null;
+    source?: string;
+    linkageFailed?: boolean;
+  }>,
+  reasonOpts: {
+    useKras: boolean;
+    switchedToVworld: boolean;
+    vworldKey: string;
+    serverError?: string;
+  }
+): LandRow[] {
+  return rows.map((r) => {
+    const pnu = String(r.pnu ?? '').trim();
+    const jibun = String(r.jibun ?? '').trim();
+    const jimok = String(r.jimok ?? '미상');
+    const areaSqm = Number(r.areaSqm ?? 0) || 0;
+    return {
+      pnu,
+      jibun,
+      jimok,
+      areaSqm,
+      ownerName: r.ownerName,
+      ownerType: r.ownerType,
+      publicPrice: r.publicPrice ?? null,
+      source: r.source,
+      linkageFailed: r.linkageFailed,
+      linkageFailReason: landRowFailReason({
+        failed: r.linkageFailed,
+        pnu,
+        ...reasonOpts,
+      }),
+    };
+  });
+}
+
 type ProgressiveLoadParams = {
   runId: number;
   isCancelled: () => boolean;
@@ -577,55 +662,45 @@ async function listLandRows(
 
 async function enrichRows(rows: LandRow[]): Promise<LandRow[]> {
   if (!rows.length) return rows;
+  const { vworldKey, useKras } = await fetchLandInfoConfig();
+
   const res = await call('', 'POST', {
     service: 'mapAnalyseService',
     action: 'enrichParcelLandRows',
     params: { landRows: rows },
   });
-  const data = (res?.data ?? res) as { ok?: boolean; landRows?: LandRow[] };
-  let enriched: LandRow[] = data?.ok && data.landRows ? data.landRows : rows;
-
-  const needsClientVworld = enriched.some((r) => r.linkageFailed);
-  if (!needsClientVworld || typeof document === 'undefined') return enriched;
-
-  const { vworldKey } = await fetchLandInfoConfig();
-  if (!vworldKey) return enriched;
-
-  const failedPnus = enriched
-    .filter((r) => r.linkageFailed && /^\d{19}$/.test(String(r.pnu ?? '')))
-    .map((r) => String(r.pnu));
-  if (!failedPnus.length) return enriched;
-
-  const vworldMap = await fetchVworldParcelLandEnrichmentBatch(
-    failedPnus,
+  const data = (res?.data ?? res) as { ok?: boolean; landRows?: LandRow[]; error?: string };
+  const serverOk = data?.ok !== false;
+  const serverRows = data?.landRows?.length ? data.landRows : rows;
+  const anyPrimarySuccess = serverOk && serverRows.some((r) => r.linkageFailed === false);
+  // 행망: 1건이라도 성공하면 빈 칸을 브이월드로 메우지 않음. 예외·성공 0건만 브이월드 전체.
+  const switchToVworld = !useKras || !serverOk || !anyPrimarySuccess;
+  const reasonOpts = {
+    useKras,
+    switchedToVworld: switchToVworld,
     vworldKey,
-    PARCEL_ANALYSIS_LINKAGE_CONCURRENCY
-  );
-  if (!Object.keys(vworldMap).length) return enriched;
+    serverError: data?.error,
+  };
 
-  const baseRows = enriched.map((r) => ({
-    pnu: String(r.pnu ?? '').trim(),
-    jibun: String(r.jibun ?? '').trim(),
-    jimok: String(r.jimok ?? '미상'),
-    areaSqm: Number(r.areaSqm ?? 0) || 0,
-    ownerType: String(r.ownerType ?? '').trim(),
-    ownerName: r.ownerName,
-    publicPrice: r.publicPrice ?? null,
-    source: r.source as 'db' | 'kras' | 'koreps' | 'vworld' | 'mixed' | undefined,
-  }));
+  if (!switchToVworld) {
+    return fromEnrichedLandRows(serverRows, reasonOpts);
+  }
 
-  const merged = applyEnrichmentToLandRows(baseRows, vworldMap);
-  return merged.map((r) => ({
-    pnu: r.pnu,
-    jibun: r.jibun,
-    jimok: r.jimok,
-    areaSqm: r.areaSqm,
-    ownerName: r.ownerName,
-    ownerType: r.ownerType,
-    publicPrice: r.publicPrice ?? null,
-    source: r.source,
-    linkageFailed: r.linkageFailed,
-  }));
+  if (typeof document === 'undefined' || !vworldKey) {
+    const failed = serverRows.map((r) => ({ ...r, linkageFailed: true }));
+    return fromEnrichedLandRows(failed, reasonOpts);
+  }
+
+  const allPnus = serverRows.map((r) => String(r.pnu ?? '')).filter(isLandPnu);
+  const vworldMap = allPnus.length
+    ? await fetchVworldParcelLandEnrichmentBatch(
+        allPnus,
+        vworldKey,
+        PARCEL_ANALYSIS_LINKAGE_CONCURRENCY
+      )
+    : {};
+  const merged = applyEnrichmentToLandRows(toEnrichBaseRows(serverRows), vworldMap);
+  return fromEnrichedLandRows(merged, reasonOpts);
 }
 
 async function fetchBuildingChunk(
@@ -661,26 +736,19 @@ async function fetchBuildingChunk(
 
 async function fetchLandUseZones(pnus: string[]): Promise<Record<string, string[]>> {
   if (!pnus.length) return {};
+  const { vworldKey, useKras } = await fetchLandInfoConfig();
   const res = await call('', 'POST', {
     service: 'mapAnalyseService',
     action: 'fetchLandUseZonesByPnus',
     params: { pnus },
   });
   const data = (res?.data ?? res) as { ok?: boolean; zonesByPnu?: Record<string, string[]> };
-  let zonesByPnu = data?.ok ? (data.zonesByPnu ?? {}) : {};
+  const zonesByPnu = data?.ok ? (data.zonesByPnu ?? {}) : {};
+  const anyPrimarySuccess = Object.values(zonesByPnu).some((z) => (z?.length ?? 0) > 0);
+  const switchToVworld = !useKras || data?.ok === false || !anyPrimarySuccess;
+  if (!switchToVworld || typeof document === 'undefined' || !vworldKey) return zonesByPnu;
 
-  const missing = pnus.filter((p) => !(zonesByPnu[p]?.length > 0));
-  if (!missing.length || typeof document === 'undefined') return zonesByPnu;
-
-  const { vworldKey } = await fetchLandInfoConfig();
-  if (!vworldKey) return zonesByPnu;
-
-  const clientZones = await fetchVworldLandUseZonesBatch(
-    missing,
-    vworldKey,
-    PARCEL_ANALYSIS_LINKAGE_CONCURRENCY
-  );
-  return { ...zonesByPnu, ...clientZones };
+  return fetchVworldLandUseZonesBatch(pnus, vworldKey, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY);
 }
 
 async function loadFacilityStats(
@@ -780,6 +848,7 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
       publicPrice: r.publicPrice ?? null,
       source: r.source as AnalyzeLandRow['source'],
       linkageFailed: r.linkageFailed,
+      linkageFailReason: r.linkageFailReason,
     }));
 
     onPatch({

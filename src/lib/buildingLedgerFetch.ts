@@ -148,13 +148,19 @@ function parseXmlRows(xmlText: string): BuildingLedgerRawRow[] {
   return rows;
 }
 
+const PORTAL_BLD_HUB = 'https://apis.data.go.kr/1613000/BldRgstHubService';
+
+type PortalLedgerOp = 'getBrTitleInfo' | 'getBrRecapTitleInfo' | 'getBrFlrOulnInfo';
+
 async function fetchLedgerUpstreamOnce(
   pnu: string,
-  serviceKey: string
+  serviceKey: string,
+  op: PortalLedgerOp = 'getBrTitleInfo'
 ): Promise<LedgerUpstreamResult> {
   const qs = buildPnuQueryParams(pnu);
   qs.set('serviceKey', serviceKey);
-  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?${qs.toString()}`;
+  qs.set('numOfRows', '100');
+  const url = `${PORTAL_BLD_HUB}/${op}?${qs.toString()}`;
   const timeoutMs = PARCEL_ANALYSIS_BUILDING_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -195,12 +201,13 @@ async function fetchLedgerUpstreamOnce(
 /** 타임아웃·네트워크만 재시도 (한도·정상 empty는 즉시 반환) */
 async function fetchLedgerUpstream(
   pnu: string,
-  serviceKey: string
+  serviceKey: string,
+  op: PortalLedgerOp = 'getBrTitleInfo'
 ): Promise<LedgerUpstreamResult> {
   let last: LedgerUpstreamResult | null = null;
   for (let attempt = 0; attempt <= PORTAL_RETRY_MAX; attempt++) {
     if (attempt > 0) await sleep(PORTAL_RETRY_DELAY_MS * attempt);
-    last = await fetchLedgerUpstreamOnce(pnu, serviceKey);
+    last = await fetchLedgerUpstreamOnce(pnu, serviceKey, op);
     if (last.kind !== 'error') return last;
     if (last.reason !== 'timeout' && last.reason !== 'network') return last;
   }
@@ -379,12 +386,6 @@ function splitPlatLocAndLot(raw: string): { loc: string; lot: string } {
   return { loc, lot };
 }
 
-function shortenBuildingPlatLoc(raw: string): string {
-  const t = String(raw ?? '').trim();
-  if (!t || t === '-') return t || '-';
-  return splitPlatLocAndLot(t).loc;
-}
-
 function shortenBuildingRoadAddr(raw: string): string {
   const t = String(raw ?? '').trim();
   if (!t || t === '-') return t || '-';
@@ -477,28 +478,174 @@ function isMissingAddressPart(value: string | undefined): boolean {
   return !v || v === '-';
 }
 
-function fillBuildingLedgerAddressFromParts(
-  row: BuildingLedgerDisplayRow,
-  parts?: { platLoc?: string; lot?: string } | null
-): BuildingLedgerDisplayRow {
-  if (!parts) return row;
-  const platLoc = isMissingAddressPart(row.platLoc)
-    ? shortenBuildingPlatLoc(parts.platLoc ?? '')
-    : row.platLoc;
-  const jibun = isMissingAddressPart(row.jibun)
-    ? withBeonjiSuffix(String(parts.lot ?? '').trim()) || row.jibun
-    : row.jibun;
-  return {
-    ...row,
-    platLoc: isMissingAddressPart(platLoc) ? row.platLoc : platLoc,
-    jibun: isMissingAddressPart(jibun) ? row.jibun : jibun,
-  };
-}
-
 function hasLedgerDisplayData(row: BuildingLedgerDisplayRow): boolean {
   return [row.bldNm, row.totArea, row.platArea, row.platLoc, row.jibun].some(
     (v) => v && v !== '-'
   );
+}
+
+export type PortalBuildingRegisterMode = 'recap' | 'title' | null;
+
+export type PortalBuildingRegisterResult = {
+  ok: boolean;
+  mode: PortalBuildingRegisterMode;
+  buildings: Record<string, unknown>[];
+  children: Record<string, unknown>[];
+  notice?: string;
+};
+
+function portalRegisterType(row: BuildingLedgerRawRow): string {
+  const kind = getField(
+    row,
+    'regstrKindCdNm',
+    'regstr_kind_cd_nm',
+    'regstrGbCdNm',
+    'regstr_gb_cd_nm'
+  );
+  if (kind.includes('총괄')) return '총괄표제부';
+  if (kind.includes('일반')) return '일반건축물';
+  if (kind.includes('표제')) return '표제부';
+  return '표제부';
+}
+
+function portalPk(row: BuildingLedgerRawRow): string {
+  return getField(row, 'mgmBldrgstPk', 'mgm_bldrgst_pk', 'comm_bld_esnc_no');
+}
+
+function toPortalRegisterRow(row: BuildingLedgerRawRow, type: string): Record<string, unknown> {
+  const pk = portalPk(row);
+  return {
+    ...row,
+    type,
+    source: 'portal',
+    bldrgst_seqno: pk,
+    comm_bld_esnc_no: getField(row, 'comm_bld_esnc_no') || pk,
+    bld_nm: getField(row, 'bldNm', 'bld_nm'),
+    dong_nm: getField(row, 'dongNm', 'dong_nm'),
+    main_prpos_cd_nm: getField(row, 'mainPurpsCdNm', 'main_prpos_cd_nm'),
+    main_strct_cd_nm: getField(row, 'mainStrctCdNm', 'strctCdNm', 'strct_cd_nm', 'main_strct_cd_nm'),
+    strct_cd_nm: getField(row, 'strctCdNm', 'strct_cd_nm', 'mainStrctCdNm'),
+    totarea: getField(row, 'totArea', 'totarea'),
+    plat_area: getField(row, 'platArea', 'plat_area'),
+    arch_area: getField(row, 'archArea', 'arch_area'),
+    bcrat: getField(row, 'bcRat', 'bcrat'),
+    vlrat: getField(row, 'vlRat', 'vlrat'),
+    vlrat_calc_totarea: getField(row, 'vlRatEstmTotArea', 'vlrat_calc_totarea'),
+    ugrnd_flrcnt: getField(row, 'ugrndFlrCnt', 'ugrnd_flrcnt'),
+    grnd_flrcnt: getField(row, 'grndFlrCnt', 'grnd_flrcnt'),
+    heit: getField(row, 'heit'),
+    roof_cd_nm: getField(row, 'roofCdNm', 'roof_cd_nm'),
+    ho_cnt: getField(row, 'hoCnt', 'ho_cnt'),
+    fmly_cnt: getField(row, 'fmlyCnt', 'fmly_cnt'),
+    hhldcnt: getField(row, 'hhldCnt', 'hhldcnt'),
+    atch_bild_cnt: getField(row, 'atchBldCnt', 'atch_bild_cnt'),
+    atch_bild_area: getField(row, 'atchBldArea', 'atch_bild_area'),
+    tot_pkng_cnt: getField(row, 'totPkngCnt', 'tot_pkng_cnt'),
+    main_bild_cnt: getField(row, 'mainBldCnt', 'main_bild_cnt', 'mainBildCnt'),
+    plat_plc: getField(row, 'platPlc', 'plat_plc'),
+    new_plat_plc: getField(row, 'newPlatPlc', 'new_plat_plc'),
+    sigungu_cd_nm: getField(row, 'sigunguCdNm', 'sigungu_cd_nm'),
+    bjdong_cd_nm: getField(row, 'bjdongCdNm', 'bjdong_cd_nm'),
+    mnnm: getField(row, 'mnnm'),
+    slno: getField(row, 'slno'),
+    violbld_yn: getField(row, 'violBldYn', 'violbld_yn'),
+    spcmt_cntt: getField(row, 'spcmtCntt', 'spcmt_cntt'),
+    flrno_nm: getField(row, 'flrNoNm', 'flrno_nm'),
+    area: getField(row, 'area'),
+  };
+}
+
+function matchPortalDong(row: BuildingLedgerRawRow, bldNm: string): boolean {
+  const want = bldNm.trim();
+  if (!want) return true;
+  const names = [getField(row, 'dongNm', 'dong_nm'), getField(row, 'bldNm', 'bld_nm')];
+  return names.some((n) => n && (n === want || n.includes(want) || want.includes(n)));
+}
+
+async function portalOpRows(
+  pnu: string,
+  serviceKey: string,
+  op: PortalLedgerOp
+): Promise<{ rows: BuildingLedgerRawRow[]; notice?: string }> {
+  const up = await fetchLedgerUpstream(pnu, serviceKey, op);
+  if (up.kind === 'data') return { rows: up.rows };
+  if (up.kind === 'error' && up.reason === 'quota') {
+    return { rows: [], notice: BUILDING_LEDGER_PORTAL_QUOTA_NOTICE };
+  }
+  if (up.kind === 'error' && (up.reason === 'timeout' || up.reason === 'network')) {
+    return { rows: [], notice: BUILDING_LEDGER_PORTAL_TIMEOUT_NOTICE };
+  }
+  return { rows: [] };
+}
+
+export async function fetchPortalBuildingFloorList(params: {
+  pnu?: string;
+  seqNo?: string;
+}): Promise<{ ok: boolean; children: Record<string, unknown>[] }> {
+  const pnu = String(params.pnu ?? '').trim();
+  const seqNo = String(params.seqNo ?? '').trim();
+  const key = getLandLinkageConfig().dataPortalKey;
+  if (!/^\d{19}$/.test(pnu) || !key) return { ok: true, children: [] };
+  const floors = await portalOpRows(pnu, key, 'getBrFlrOulnInfo');
+  let rows = floors.rows;
+  if (seqNo) {
+    const filtered = rows.filter((r) => portalPk(r) === seqNo);
+    if (filtered.length) rows = filtered;
+  }
+  return { ok: true, children: rows.map((r) => toPortalRegisterRow(r, '층')) };
+}
+
+export async function fetchPortalBuildingRegisterForLandInfo(params: {
+  pnu?: string;
+}): Promise<PortalBuildingRegisterResult> {
+  const pnu = String(params.pnu ?? '').trim();
+  const key = getLandLinkageConfig().dataPortalKey;
+  if (!/^\d{19}$/.test(pnu) || !key) return { ok: true, mode: null, buildings: [], children: [] };
+
+  const recap = await portalOpRows(pnu, key, 'getBrRecapTitleInfo');
+  const titles = await portalOpRows(pnu, key, 'getBrTitleInfo');
+  const notice = recap.notice || titles.notice;
+
+  if (recap.rows.length) {
+    return {
+      ok: true,
+      mode: 'recap',
+      buildings: recap.rows.map((r) => toPortalRegisterRow(r, '총괄표제부')),
+      children: titles.rows.map((r) => toPortalRegisterRow(r, portalRegisterType(r))),
+      notice,
+    };
+  }
+
+  if (titles.rows.length) {
+    const buildings = titles.rows.map((r) => toPortalRegisterRow(r, portalRegisterType(r)));
+    const floors = await fetchPortalBuildingFloorList({
+      pnu,
+      seqNo: String(buildings[0]?.bldrgst_seqno ?? ''),
+    });
+    return { ok: true, mode: 'title', buildings, children: floors.children, notice };
+  }
+
+  return { ok: true, mode: null, buildings: [], children: [], notice };
+}
+
+export async function fetchPortalBuildingRegisterByDong(params: {
+  pnu?: string;
+  bldNm?: string;
+}): Promise<{ ok: boolean; buildings: Record<string, unknown>[]; children: Record<string, unknown>[] }> {
+  const pnu = String(params.pnu ?? '').trim();
+  const bldNm = String(params.bldNm ?? '').trim();
+  const key = getLandLinkageConfig().dataPortalKey;
+  if (!/^\d{19}$/.test(pnu) || !key) return { ok: true, buildings: [], children: [] };
+  const titles = await portalOpRows(pnu, key, 'getBrTitleInfo');
+  const matched = titles.rows.filter((r) => matchPortalDong(r, bldNm));
+  const pick = matched.length ? matched : [];
+  if (!pick.length) return { ok: true, buildings: [], children: [] };
+  const buildings = pick.map((r) => toPortalRegisterRow(r, portalRegisterType(r)));
+  const floors = await fetchPortalBuildingFloorList({
+    pnu,
+    seqNo: String(buildings[0]?.bldrgst_seqno ?? ''),
+  });
+  return { ok: true, buildings, children: floors.children };
 }
 
 const BUILDING_PNU_CAP = 100;
@@ -704,7 +851,7 @@ function groupPortalByReason(apiResults: BuildingLedgerApiParcel[]) {
   return [...map.values()].sort((a, b) => b.count - a.count);
 }
 
-/** PNU 목록 건축물대장 — 세움터 → 공공데이터포털 (`jijuk_building_ledger` 캐시 미사용) */
+/** PNU 목록 건축물대장 — 세움터 묶음이 통째로 실패(예외·성공 0건)할 때만 공공데이터포털 전체 */
 export async function fetchBuildingLedgersByPnus(params: {
   parcels?: Array<{ pnu?: string; jibun?: string }>;
   concurrency?: number;
@@ -768,13 +915,15 @@ export async function fetchBuildingLedgersByPnus(params: {
     if (cfg.useSeum) {
       try {
         const { fetchSeumBuildingLedgersByPnus } = await import('@/service/seumService');
-        const seumMap = await fetchSeumBuildingLedgersByPnus(remaining);
+        const seumMap = await fetchSeumBuildingLedgersByPnus(unique);
         for (const [pnu, row] of seumMap) {
           fetchedRows.push({ ...row, source: 'seum' });
         }
-        remaining = remaining.filter((p) => !seumMap.has(p.pnu));
+        // 1건이라도 성공하면 세움만. 빈 필지를 포털로 메우지 않음.
+        remaining = seumMap.size > 0 ? [] : unique;
       } catch (e: unknown) {
         seumError = e instanceof Error ? e.message : String(e);
+        remaining = unique;
       }
     }
 
@@ -864,27 +1013,6 @@ export async function fetchBuildingLedgersByPnus(params: {
 
     if (!fetchedRows.length) {
       return { ok: true, rows: [], notice, portalQuotaExceeded, debug };
-    }
-
-    try {
-      const { resolvePlatLocAndLotByPnus } = await import('@/service/layerRowService');
-      const needAddr = fetchedRows.filter(
-        (r) => isMissingAddressPart(r.platLoc) || isMissingAddressPart(r.jibun)
-      );
-      if (needAddr.length) {
-        const addrByPnu = await resolvePlatLocAndLotByPnus(needAddr.map((r) => r.pnu));
-        return {
-          ok: true,
-          rows: fetchedRows.map((row) =>
-            fillBuildingLedgerAddressFromParts(row, addrByPnu.get(row.pnu))
-          ),
-          notice,
-          portalQuotaExceeded,
-          debug,
-        };
-      }
-    } catch {
-      /* 주소 보강 실패해도 건축물 행은 유지 */
     }
 
     return { ok: true, rows: fetchedRows, notice, portalQuotaExceeded, debug };

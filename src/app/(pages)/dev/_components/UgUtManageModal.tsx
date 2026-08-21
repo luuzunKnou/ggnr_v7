@@ -328,7 +328,8 @@ export function UgUtManageModal({ open, onOpenChange, onChanged }: Props) {
       minHeight="520px"
       maxHeight="520px"
       defaultPosition={{ top: 80, right: 80 }}
-      className="rounded-none border-border shadow-xl"
+      dimBackdrop
+      className="rounded-none border-border shadow-none dark:ring-border"
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className={cn("flex shrink-0", ui.orgTabs)}>
@@ -352,8 +353,8 @@ export function UgUtManageModal({ open, onOpenChange, onChanged }: Props) {
       </div>
 
       <div className={ui.orgBody}>
-        {error ? <p className="shrink-0 text-xs text-red-600">{error}</p> : null}
-        {message ? <p className="shrink-0 text-xs text-emerald-600">{message}</p> : null}
+        {error ? <p className="shrink-0 text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+        {message ? <p className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400">{message}</p> : null}
 
         {tab === "ug" ? (
           <>

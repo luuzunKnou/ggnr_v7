@@ -19,6 +19,7 @@ import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
 import { StylePreviewSwatch } from "./StylePreviewSwatch"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
 
 const GEOSERVER_DEFAULT_URL =
   typeof window !== "undefined"
@@ -232,9 +233,9 @@ export function LayerManagerListTab() {
     setLoading(true)
     setError(null)
     try {
-      const [dbRes, defineRes, geomLayerRes, geomPublicRes] = await Promise.all([
-        call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} }),
-        fetch("/api/config/defineLayer").then((r) => r.json()),
+      const [dbData, defineRes, geomLayerRes, geomPublicRes] = await Promise.all([
+        fetchLayerDbTableList(),
+        fetchDefineLayerTables(),
         call("", "POST", {
           service: "devTestService",
           action: "getLayerTableGeometryTypes",
@@ -246,8 +247,6 @@ export function LayerManagerListTab() {
           params: { schema: "public_layer" },
         }),
       ])
-
-      const dbData = dbRes?.data ?? dbRes
       if (!dbData?.success) {
         setError(dbData?.error ?? "DB 테이블 목록을 불러올 수 없습니다.")
         setRows([])
@@ -556,9 +555,16 @@ export function LayerManagerListTab() {
   }, [])
 
   useEffect(() => {
-    void loadData()
-    void loadStyleInfo()
-    void loadRowMeta()
+    let cancelled = false
+    void (async () => {
+      await loadData()
+      if (cancelled) return
+      void loadStyleInfo()
+      void loadRowMeta()
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [loadData, loadStyleInfo, loadRowMeta])
 
   useEffect(() => {

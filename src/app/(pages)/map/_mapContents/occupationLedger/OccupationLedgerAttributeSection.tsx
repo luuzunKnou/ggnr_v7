@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { LayerRowDetailAttr } from '../../_mapComponents/layerRowEdit';
 import {
   formatAreaDisplay,
@@ -53,31 +53,12 @@ export function OccupationLedgerAttributeSection({
   resetKey,
   onAutoCalcArea,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [areaHint, setAreaHint] = useState<string | null>(null);
 
-  useEffect(() => {
-    setExpanded(false);
-  }, [resetKey]);
-
-  useEffect(() => {
-    if (isEditing) setExpanded(true);
-  }, [isEditing]);
-
-  const { primaryAttributes, hiddenAttributes } = useMemo(() => {
-    const primary: LayerRowDetailAttr[] = [];
-    const hidden: LayerRowDetailAttr[] = [];
-    for (const row of attributes) {
-      if (row.showDetail === false) hidden.push(row);
-      else primary.push(row);
-    }
-    return { primaryAttributes: primary, hiddenAttributes: hidden };
-  }, [attributes]);
-
-  const visibleAttributes = expanded
-    ? [...primaryAttributes, ...hiddenAttributes]
-    : primaryAttributes;
-  const hiddenCount = hiddenAttributes.length;
+  const visibleAttributes = useMemo(
+    () => attributes.filter((row) => row.showDetail !== false),
+    [attributes]
+  );
 
   const resolveDraftValue = (field: string): string => {
     if (field in draft) return draft[field] ?? '';
@@ -214,15 +195,6 @@ export function OccupationLedgerAttributeSection({
           })
         )}
       </dl>
-      {hiddenCount > 0 ? (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-2 w-full rounded border border-slate-200 bg-white py-1.5 text-[11px] font-medium text-primary hover:bg-slate-50"
-        >
-          {expanded ? '접기' : `더보기 (${hiddenCount}건)`}
-        </button>
-      ) : null}
     </>
   );
 }

@@ -45,6 +45,7 @@ import {
   CADASTRAL_LAYERS,
   BUILDING_ROAD_LAYERS,
 } from './layerFactory/boundaryLayerFactory';
+import { useSafetyFacBuildingRoadLayerSync } from './layerFactory/safetyFacBuildingRoadLayerFactory';
 import { useBasicSectionLayerSync } from './layerFactory/basicSectionLayerFactory';
 import { useJimokLayerSync } from './layerFactory/jimokLayerFactory';
 import {
@@ -957,7 +958,12 @@ export default function OpenLayersMap({
     mapReady,
     activeControls,
     visibleBuildingRoadLayerNames,
-    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames
+    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames,
+  );
+  useSafetyFacBuildingRoadLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    mapContext?.safetyFacBuildingRoadLayerState ?? null,
   );
   // 기초구간 레이어 동기화 (activeControls → basic-section 레이어 visibility)
   useBasicSectionLayerSync(mapInstanceRef.current, mapReady, activeControls);
@@ -1062,6 +1068,7 @@ export default function OpenLayersMap({
     mapReady,
     visibleLayerNames,
     roadCctvPanelOpen ||
+      (mapContext?.safetyFacPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||
@@ -1512,15 +1519,30 @@ export default function OpenLayersMap({
             .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
           if (ranked.length > 0) {
             const keyField = binding.fields.keyField;
+            const childParentField = binding.fields.childParentField;
+            const mainId = binding.mainTable.toLowerCase();
+            const parentRanked = ranked.filter((x) => {
+              const tn = String(x.layer.tableName ?? '')
+                .trim()
+                .toLowerCase();
+              return tn === mainId;
+            });
+            const scan = parentRanked.length > 0 ? parentRanked : ranked;
             const overlapOptions: {
               value: string;
               label: string;
               extent3857?: [number, number, number, number] | null;
             }[] = [];
             const seen = new Set<string>();
-            for (const { layer } of ranked) {
+            for (const { layer } of scan) {
+              const tn = String(layer.tableName ?? '')
+                .trim()
+                .toLowerCase();
+              const pickField = tn === mainId ? keyField : childParentField;
               for (const feat of layer.features) {
-                const rowKey = pickIdentifyField(feat?.data, keyField);
+                const rowKey =
+                  pickIdentifyField(feat?.data, pickField) ||
+                  (tn !== mainId ? pickIdentifyField(feat?.data, 'permit_no') : '');
                 if (!rowKey || seen.has(rowKey)) continue;
                 seen.add(rowKey);
                 const permit =
