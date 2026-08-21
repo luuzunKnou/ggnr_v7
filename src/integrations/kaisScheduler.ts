@@ -1,4 +1,4 @@
-import { defaultDailyWindow, runKais } from '@/integrations/kais';
+import { defaultDailyWindow, resolveKaisSggCode, runKais } from '@/integrations/kais';
 import { KAIS_CNTC_CODES, KAIS_REFRESH_SCHEDULE } from '@/integrations/kais.config';
 import { calendarSlotKey, intervalSlotKey } from '@/integrations/integrationSchedule';
 import { describeSafetydataSchedule } from '@/integrations/safetydata';
@@ -9,7 +9,7 @@ const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
 async function runKaisDailyJob(label: string): Promise<void> {
   const appKey = (process.env.KAIS_APP_KEY ?? '').trim() || HARDCODED_KAIS_APP_KEY;
-  const sggCode = process.env.SGG_CODE;
+  const sggCode = await resolveKaisSggCode();
   const window = defaultDailyWindow();
   try {
     for (const cntcCd of KAIS_CNTC_CODES) {
