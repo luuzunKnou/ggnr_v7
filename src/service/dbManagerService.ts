@@ -56,6 +56,13 @@ import {
   getSchemaPrimaryKeyColumnNames,
   type SchemaDefinedColumn,
 } from '@/database/schemaSyncRegistry';
+import {
+  getDefineLayerColumnComment,
+  getDefineLayerDefinedColumns,
+  getDefineLayerTableComment,
+  listDefineLayerTablesForSync,
+  resolveDefinedColumns,
+} from '@/lib/defineLayerDbColumnSync';
 
 export type DbConnectionParams = {
   host: string;
@@ -94,6 +101,14 @@ function toWritableColumnType(type: string): string {
   const generatedIdx = t.toUpperCase().indexOf(' GENERATED ');
   if (generatedIdx > 0) return t.slice(0, generatedIdx).trim();
   return t;
+}
+
+function resolveColumnCommentForSync(schema: string, table: string, field: string): string | null {
+  return getSchemaColumnComment(schema, table, field) ?? getDefineLayerColumnComment(schema, table, field);
+}
+
+function resolveTableCommentForSync(schema: string, table: string): string | null {
+  return getSchemaTableComment(schema, table) ?? getDefineLayerTableComment(schema, table);
 }
 
 function createClient(params: DbConnectionParams): Client {
@@ -1193,7 +1208,7 @@ async function getTableColumnComparisonWithClient(
   schema: string,
   table: string
 ): Promise<SchemaSyncColumnComparison | null> {
-  const definedCols = getSchemaDefinedColumns(schema, table);
+  const definedCols = resolveDefinedColumns(schema, table, getSchemaDefinedColumns(schema, table));
   if (!definedCols?.length) return null;
 
   const actualCols = await getTableColumns(client, schema, table);
@@ -1359,7 +1374,7 @@ export async function applySchemaSync(
           const addColSql = `ALTER TABLE ${fq(t.schema, t.table)} ADD COLUMN IF NOT EXISTS ${quoteIdent(c.name)} ${colType}${c.notNull ? ' NOT NULL' : ''}`;
           executedSql.push(addColSql);
           await client.query(addColSql);
-          const colComment = getSchemaColumnComment(t.schema, t.table, c.name);
+          const colComment = resolveColumnCommentForSync(t.schema, t.table, c.name);
           if (colComment) {
             const escaped = colComment.replace(/'/g, "''");
             const commentColSql = `COMMENT ON COLUMN ${fq(t.schema, t.table)}.${quoteIdent(c.name)} IS '${escaped}'`;
@@ -1553,9 +1568,32 @@ export async function getSchemaSyncPlanForField(
   }
   if (onlyInDb) {
     if (schema === 'public' && table === 'spatial_ref_sys') return { schema, table, field, action: null };
+    const defineLayerCols = getDefineLayerDefinedColumns(schema, table);
+    if (defineLayerCols?.length) {
+      const colDiff = await getTableColumnComparison({ ...connectionParams, schema, table });
+      if (!colDiff) return { schema, table, field, action: null };
+      if (colDiff.toAdd.some((c) => c.name === field)) {
+        return { schema, table, field, action: 'addColumn' };
+      }
+      if (colDiff.toRemove.some((c) => c.name === field)) {
+        return { schema, table, field, action: 'dropColumn' };
+      }
+      const needComment = await withClient(connectionParams, async (client) => {
+        const cols = await getTableColumnsWithComments(client, schema, table);
+        const col = cols.find((c) => c.name === field);
+        if (!col) return false;
+        const dbComment = (col.comment ?? '').trim();
+        const schemaComment = resolveColumnCommentForSync(schema, table, field) ?? '';
+        return !dbComment && !!schemaComment;
+      });
+      if (needComment) return { schema, table, field, action: 'addComment' };
+      return { schema, table, field, action: null };
+    }
     return { schema, table, field, action: 'dropTable' };
   }
-  if (!inBoth) return { schema, table, field, action: null };
+  if (!inBoth) {
+    return { schema, table, field, action: null };
+  }
 
   const colDiff = await getTableColumnComparison({ ...connectionParams, schema, table });
   if (colDiff?.toAdd?.some((c) => c.name === field)) return { schema, table, field, action: 'addColumn' };
@@ -1566,7 +1604,7 @@ export async function getSchemaSyncPlanForField(
     const col = cols.find((c) => c.name === field);
     if (!col) return false;
     const dbComment = (col.comment ?? '').trim();
-    const schemaComment = getSchemaColumnComment(schema, table, field) ?? '';
+    const schemaComment = resolveColumnCommentForSync(schema, table, field) ?? '';
     return !dbComment && !!schemaComment;
   });
   if (needComment) return { schema, table, field, action: 'addComment' };
@@ -1609,7 +1647,7 @@ export async function applySchemaSyncForField(
 
   await withClient(connectionParams, async (client) => {
     if (plan.action === 'createTable') {
-      const definedCols = getSchemaDefinedColumns(schema, table);
+      const definedCols = resolveDefinedColumns(schema, table, getSchemaDefinedColumns(schema, table));
       if (!definedCols?.length) {
         results.push({ schema, table, action: 'skipped', detail: '정의된 컬럼 없음' });
         return;
@@ -1626,13 +1664,13 @@ export async function applySchemaSyncForField(
       const createTableSql = `CREATE TABLE IF NOT EXISTS ${fq(schema, table)} (\n  ${colSql}\n)`;
       executedSql.push(createTableSql);
       await client.query(createTableSql);
-      const tableComment = getSchemaTableComment(schema, table);
+      const tableComment = resolveTableCommentForSync(schema, table);
       if (tableComment) {
         const escaped = tableComment.replace(/'/g, "''");
         await client.query(`COMMENT ON TABLE ${fq(schema, table)} IS '${escaped}'`);
       }
       for (const c of definedCols) {
-        const colComment = getSchemaColumnComment(schema, table, c.name);
+        const colComment = resolveColumnCommentForSync(schema, table, c.name);
         if (colComment) {
           const escaped = colComment.replace(/'/g, "''");
           await client.query(`COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(c.name)} IS '${escaped}'`);
@@ -1651,7 +1689,7 @@ export async function applySchemaSyncForField(
     }
 
     if (plan.action === 'addColumn') {
-      const definedCols = getSchemaDefinedColumns(schema, table) ?? [];
+      const definedCols = resolveDefinedColumns(schema, table, getSchemaDefinedColumns(schema, table)) ?? [];
       const col = definedCols.find((c) => c.name === field);
       if (!col) {
         results.push({ schema, table, action: 'failed', error: `스키마에 컬럼 ${field} 없음` });
@@ -1661,7 +1699,7 @@ export async function applySchemaSyncForField(
       const addColSql = `ALTER TABLE ${fq(schema, table)} ADD COLUMN IF NOT EXISTS ${quoteIdent(field)} ${colType}${col.notNull ? ' NOT NULL' : ''}`;
       executedSql.push(addColSql);
       await client.query(addColSql);
-      const colComment = getSchemaColumnComment(schema, table, field);
+      const colComment = resolveColumnCommentForSync(schema, table, field);
       if (colComment) {
         const escaped = colComment.replace(/'/g, "''");
         await client.query(`COMMENT ON COLUMN ${fq(schema, table)}.${quoteIdent(field)} IS '${escaped}'`);
@@ -1735,7 +1773,32 @@ export async function getSchemaSyncPlanForTable(
   const inBoth = comparison.inBoth.some((t) => t.schema === schema && t.table === table);
   const onlyInDb = comparison.onlyInDb.some((t) => t.schema === schema && t.table === table);
 
-  if (onlyInDb) return empty;
+  if (onlyInDb) {
+    const defineLayerCols = getDefineLayerDefinedColumns(schema, table);
+    if (!defineLayerCols?.length) return empty;
+    const colDiff = await getTableColumnComparison({ ...connectionParams, schema, table });
+    const columnsToAdd = colDiff?.toAdd?.map((c) => c.name) ?? [];
+    const columnsToRemove = colDiff?.toRemove?.map((c) => c.name) ?? [];
+    let commentUpdatesCount = 0;
+    await withClient(connectionParams, async (client) => {
+      const dbTableComment = await getTableComment(client, schema, table);
+      const schemaTableComment = resolveTableCommentForSync(schema, table) ?? '';
+      if (!(dbTableComment ?? '').trim() && schemaTableComment) commentUpdatesCount += 1;
+      const cols = await getTableColumnsWithComments(client, schema, table);
+      for (const col of cols) {
+        const dbComment = (col.comment ?? '').trim();
+        const schemaComment = resolveColumnCommentForSync(schema, table, col.name) ?? '';
+        if (!dbComment && schemaComment) commentUpdatesCount += 1;
+      }
+    });
+    return {
+      tableKey,
+      createTable: false,
+      columnsToAdd,
+      columnsToRemove,
+      commentUpdatesCount,
+    };
+  }
 
   if (inOnlyInSchema) {
     const definedCols = getSchemaDefinedColumns(schema, table) ?? [];
@@ -2001,18 +2064,22 @@ export type TableColumnRow = {
 export function getSchemaTableColumnList(_params?: unknown): { rows: TableColumnRow[]; tablePkColumns: Record<string, string[]> } {
   const rows: TableColumnRow[] = [];
   const tablePkColumns: Record<string, string[]> = {};
-  const tables = getSchemaDefinedTables();
-  for (const { schema, table } of tables) {
+  const emitted = new Set<string>();
+
+  const appendTableColumns = (schema: string, table: string) => {
     const tableKey = `${schema}.${table}`;
+    if (emitted.has(tableKey)) return;
+    emitted.add(tableKey);
     tablePkColumns[tableKey] = getSchemaPrimaryKeyColumnNames(schema, table);
-    const tableComment = getSchemaTableComment(schema, table) ?? '';
-    const cols = getSchemaDefinedColumns(schema, table);
+    const tableComment = resolveTableCommentForSync(schema, table) ?? '';
+    const cols = resolveDefinedColumns(schema, table, getSchemaDefinedColumns(schema, table));
     if (!cols || cols.length === 0) {
       rows.push({ schema, tableComment, tableName: table, columnComment: '', columnName: '', columnType: '', columnTypeNormalized: '' });
-      continue;
+      return;
     }
     for (const col of cols) {
-      const columnComment = col.comment ?? getSchemaColumnComment(schema, table, col.name) ?? '';
+      const columnComment =
+        col.comment ?? resolveColumnCommentForSync(schema, table, col.name) ?? '';
       const columnType = col.type ?? '';
       rows.push({
         schema,
@@ -2024,6 +2091,13 @@ export function getSchemaTableColumnList(_params?: unknown): { rows: TableColumn
         columnTypeNormalized: normalizeColumnTypeForCompare(columnType),
       });
     }
+  };
+
+  for (const { schema, table } of getSchemaDefinedTables()) {
+    appendTableColumns(schema, table);
+  }
+  for (const { schema, table } of listDefineLayerTablesForSync()) {
+    appendTableColumns(schema, table);
   }
   return { rows, tablePkColumns };
 }
