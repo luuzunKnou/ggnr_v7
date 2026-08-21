@@ -244,10 +244,11 @@ export function LayerAttrManager({
     try {
       const body = await fetchDefineLayerTables()
       if (body.success && Array.isArray(body.data)) {
-        setTables(body.data)
+        const tableRows = body.data
+        setTables(tableRows)
         setSelectedTableKey((prev) => {
           if (prev || fixedTableKey) return prev
-          const first = String((body.data[0] as Record<string, unknown>)?.define_table_name ?? "")
+          const first = String((tableRows[0] as Record<string, unknown>)?.define_table_name ?? "")
           return first || prev
         })
       }

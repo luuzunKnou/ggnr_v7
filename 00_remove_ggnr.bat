@@ -3,14 +3,15 @@ chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
-:: GGNR_V7 서비스 제거 + GeoServer(80) 포트 점유 종료 (관리자 권한으로 실행)
+:: GGNR_V7 서비스 제거 + 80·3000 포트 점유 종료 (관리자 권한으로 실행)
 :: - nssm 위치: root\nssm\win64\nssm.exe (nssm_install_ggnr.bat 과 동일)
-:: - 순서: 1) nssm stop/remove GGNR_V7  2) 80 포트 Listen 프로세스 종료
+:: - 순서: 1) nssm stop/remove GGNR_V7  2) 80·3000 포트 Listen 프로세스 종료
 :: - 종료 시 항상 pause — 로그 확인 후 수동으로 창 닫기
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
 set "GEO_PORT=80"
+set "APP_PORT=3000"
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "EXIT_EC=0"
@@ -19,6 +20,7 @@ echo.
 echo [remove-ggnr] root    = %ROOT%
 echo [remove-ggnr] service = %SERVICE_NAME%
 echo [remove-ggnr] geo port= %GEO_PORT%
+echo [remove-ggnr] app port= %APP_PORT%
 echo.
 
 :: 관리자 여부
@@ -79,19 +81,46 @@ if errorlevel 1 (
 echo.
 
 :: ---------------------------------------------------------------------------
-:: 2) GeoServer 80 포트 Listen 프로세스 종료
-::    (findstr :80 단독은 8000·8080 등도 잡히므로 LISTENING + :80 경계를 맞춤)
+:: 2) 80·3000 포트 Listen 프로세스 종료
+::    (findstr :80 단독은 8000·8080 등도 잡히므로 LISTENING + :포트 경계를 맞춤)
 :: ---------------------------------------------------------------------------
-echo [2/2] 포트 %GEO_PORT% Listen 프로세스 검색·종료...
+echo [2/2] 포트 %GEO_PORT%, %APP_PORT% Listen 프로세스 검색·종료...
+call :kill_listen_port %GEO_PORT%
+echo.
+call :kill_listen_port %APP_PORT%
+
+echo.
+if "!EXIT_EC!"=="0" (
+  echo [완료] remove_ggnr 작업이 끝났습니다.
+  echo   1^) nssm remove %SERVICE_NAME%
+  echo   2^) 포트 %GEO_PORT%, %APP_PORT% 정리
+) else (
+  echo [종료] 오류로 중단되었습니다 ^(exit=!EXIT_EC!^). 위 메시지를 확인하세요.
+)
+
+:end_pause
+echo.
+echo -----------------------------------------------------------
+echo  로그를 확인한 뒤, 아무 키나 누르면 창이 닫힙니다.
+echo -----------------------------------------------------------
+pause
+exit /b !EXIT_EC!
+
+:: ---------------------------------------------------------------------------
+:: %1 = Listen 포트. 해당 포트 PID 종료 후 재확인.
+:: ---------------------------------------------------------------------------
+:kill_listen_port
+set "KP=%~1"
+echo ----- 포트 %KP% -----
 echo       netstat 참고 ^(현재 LISTENING^):
-netstat -ano | findstr /R /C:":%GEO_PORT% .*LISTENING"
+netstat -ano | findstr /R /C:":%KP% .*LISTENING"
 if errorlevel 1 (
-  echo [안내] 포트 %GEO_PORT% Listen 없음.
-  goto :after_port
+  echo [안내] 포트 %KP% Listen 없음.
+  goto :eof
 )
 
 set "KILLED=0"
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%GEO_PORT% .*LISTENING"') do (
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') do (
   if not "%%P"=="0" (
     echo [remove-ggnr] taskkill /f /pid %%P
     taskkill /F /PID %%P >nul 2>&1
@@ -106,36 +135,18 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%GEO_PORT% .*LISTENIN
 
 if "!KILLED!"=="0" (
   echo [안내] 종료한 PID 없음 ^(파싱 실패 시 수동^):
-  echo         netstat -ano ^| findstr :%GEO_PORT%
+  echo         netstat -ano ^| findstr :%KP%
   echo         taskkill /f /pid [PID]
 ) else (
-  echo [완료] 포트 %GEO_PORT% 관련 프로세스 !KILLED!건 종료 시도함.
+  echo [완료] 포트 %KP% 관련 프로세스 !KILLED!건 종료 시도함.
 )
 
-:: 재확인
 timeout /t 1 /nobreak >nul
-netstat -ano | findstr /R /C:":%GEO_PORT% .*LISTENING" >nul 2>&1
+netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [확인] 포트 %GEO_PORT% Listen 없음.
+  echo [확인] 포트 %KP% Listen 없음.
 ) else (
-  echo [경고] 포트 %GEO_PORT% 가 아직 Listen 중입니다. 수동 확인하세요.
-  netstat -ano | findstr /R /C:":%GEO_PORT% .*LISTENING"
+  echo [경고] 포트 %KP% 가 아직 Listen 중입니다. 수동 확인하세요.
+  netstat -ano | findstr /R /C:":%KP% .*LISTENING"
 )
-
-:after_port
-echo.
-if "!EXIT_EC!"=="0" (
-  echo [완료] remove_ggnr 작업이 끝났습니다.
-  echo   1^) nssm remove %SERVICE_NAME%
-  echo   2^) 포트 %GEO_PORT% 정리
-) else (
-  echo [종료] 오류로 중단되었습니다 ^(exit=!EXIT_EC!^). 위 메시지를 확인하세요.
-)
-
-:end_pause
-echo.
-echo -----------------------------------------------------------
-echo  로그를 확인한 뒤, 아무 키나 누르면 창이 닫힙니다.
-echo -----------------------------------------------------------
-pause
-exit /b !EXIT_EC!
+goto :eof

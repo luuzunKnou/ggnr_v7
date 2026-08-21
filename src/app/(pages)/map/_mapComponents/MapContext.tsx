@@ -8,6 +8,7 @@ import type { MapDrawInteractionKind } from './mapDrawInteraction';
 import type { ItsCctvItem } from '../_mapContents/road/roadCCTV/itsCctvTypes';
 import type { RoadNetworkRow } from '../_mapContents/road/roadNetwork/roadNetworkMock';
 import type { RiverConstructionLedgerRow } from '../_mapContents/river/riverConstructionLedger/riverConstructionLedgerMock';
+import type { FmsLinkageOverlayRow } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
 import type { MapHitOverlapOption } from './MapHitOverlapSelect';
 
 export type RoadCctvOverlayState = {
@@ -374,12 +375,35 @@ export type MapContextValue = {
   /** 상세에서 도형 그리기·수정 중인 공사 id — 오버레이·강조에서 제외(중복 표시 방지) */
   riverConstructionLedgerGeomEditingId: string | null;
   setRiverConstructionLedgerGeomEditingId: Dispatch<SetStateAction<string | null>>;
+  /** 안전점검 패널 열림 — 시설 geom 오버레이 */
+  fmsLinkagePanelOpen: boolean;
+  setFmsLinkagePanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 안전점검 목록 필터 결과(지도 오버레이용) */
+  fmsLinkageOverlayRows: FmsLinkageOverlayRow[];
+  setFmsLinkageOverlayRows: Dispatch<SetStateAction<FmsLinkageOverlayRow[]>>;
+  /** 안전점검 선택 시설물번호 — 상세·지도 강조 */
+  fmsLinkageSelectedId: string | null;
+  setFmsLinkageSelectedId: Dispatch<SetStateAction<string | null>>;
   /** ITS CCTV 패널 — 지도 벡터 레이어·목록 동기화 */
   roadCctvOverlay: RoadCctvOverlayState | null;
   setRoadCctvOverlay: Dispatch<SetStateAction<RoadCctvOverlayState | null>>;
   /** URL 기준 CCTV 패널 열림 — 지도 레이어 식별 비활성화용 */
   roadCctvPanelOpen: boolean;
   setRoadCctvPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 재난대응시설 패널 열림 — 일반 식별 비활성화용 */
+  safetyFacPanelOpen: boolean;
+  setSafetyFacPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
+  safetyFacBuildingRoadLayerState: {
+    visibleTableNames: Set<string>;
+    cqlByTable: Record<string, string>;
+  } | null;
+  setSafetyFacBuildingRoadLayerState: Dispatch<
+    SetStateAction<{
+      visibleTableNames: Set<string>;
+      cqlByTable: Record<string, string>;
+    } | null>
+  >;
   /** CCTV 패널: 통행 타일 vs 도로대장 총괄 레이어(배타, 기본 통행) */
   roadCctvUnderlayMode: RoadCctvUnderlayMode;
   setRoadCctvUnderlayMode: Dispatch<SetStateAction<RoadCctvUnderlayMode>>;
@@ -629,8 +653,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   } | null>(null);
   const [riverConstructionLedgerGeomEditingId, setRiverConstructionLedgerGeomEditingId] =
     useState<string | null>(null);
+  const [fmsLinkagePanelOpen, setFmsLinkagePanelOpen] = useState(false);
+  const [fmsLinkageOverlayRows, setFmsLinkageOverlayRows] = useState<FmsLinkageOverlayRow[]>([]);
+  const [fmsLinkageSelectedId, setFmsLinkageSelectedId] = useState<string | null>(null);
   const [roadCctvOverlay, setRoadCctvOverlay] = useState<RoadCctvOverlayState | null>(null);
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
+  const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
+  const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
+    visibleTableNames: Set<string>;
+    cqlByTable: Record<string, string>;
+  } | null>(null);
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
@@ -814,10 +846,20 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRiverConstructionLedgerRiverFocus,
         riverConstructionLedgerGeomEditingId,
         setRiverConstructionLedgerGeomEditingId,
+        fmsLinkagePanelOpen,
+        setFmsLinkagePanelOpen,
+        fmsLinkageOverlayRows,
+        setFmsLinkageOverlayRows,
+        fmsLinkageSelectedId,
+        setFmsLinkageSelectedId,
         roadCctvOverlay,
         setRoadCctvOverlay,
         roadCctvPanelOpen,
         setRoadCctvPanelOpen,
+        safetyFacPanelOpen,
+        setSafetyFacPanelOpen,
+        safetyFacBuildingRoadLayerState,
+        setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,
         setRoadCctvUnderlayMode,
         roadCctvExtentWgs84,

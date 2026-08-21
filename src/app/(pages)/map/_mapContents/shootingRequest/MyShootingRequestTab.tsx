@@ -19,7 +19,7 @@ function StatusBadge({ status }: { status: RequestStatus }) {
     status === 'approved' || status === 'registering'
       ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
       : status === 'registered'
-        ? 'bg-slate-100 text-slate-700 ring-slate-300'
+        ? 'bg-muted/40 text-foreground ring-border'
         : status === 'rejected'
           ? 'bg-rose-50 text-rose-700 ring-rose-200'
           : 'bg-amber-50 text-amber-800 ring-amber-200';
@@ -56,7 +56,7 @@ export function MyShootingRequestTab({ open, onSelectRequest }: Props) {
   if (sorted.length === 0) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-6">
-        <p className="text-center text-[11px] text-slate-400">신청 내역이 없습니다.</p>
+        <p className="text-center text-[11px] text-muted-foreground">신청 내역이 없습니다.</p>
       </div>
     );
   }
@@ -69,17 +69,17 @@ export function MyShootingRequestTab({ open, onSelectRequest }: Props) {
             <button
               type="button"
               onClick={() => onSelectRequest(row.id)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
+              className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-left transition-colors hover:border-border hover:bg-muted/50"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-600">
+                <span className="rounded bg-muted/40 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
                   {row.submittedAt}
                 </span>
                 <StatusBadge status={row.status} />
               </div>
-              <p className="mt-1 truncate text-[11px] font-medium text-slate-800">
+              <p className="mt-1 truncate text-[11px] font-medium text-foreground">
                 {row.purpose || '(목적 없음)'}
-                <span className="font-normal text-slate-400">
+                <span className="font-normal text-muted-foreground">
                   {' · '}
                   {row.applicantRankName || row.department || '신청자 미입력'}
                 </span>

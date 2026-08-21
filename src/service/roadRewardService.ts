@@ -6,7 +6,11 @@ import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { getJijukGeomByPnu } from './excelUploadService';
-import { deleteTableRowByKey } from './layerRowService';
+import {
+  deleteTableRowByKey,
+  insertTableRow,
+  updateTableRowByKey,
+} from './layerRowService';
 
 const MAIN_TABLE = 'road_reward';
 const PARCEL_TABLE = 'road_reward_parcel';
@@ -1204,10 +1208,7 @@ function sqlNum(raw: unknown): string {
   return String(num(raw));
 }
 
-/**
- * defineLayer 없이 부모 테이블에 직접 INSERT/UPDATE.
- * (layerRowService.insert/update 는 defineLayer 필드만 허용해 road_reward 가 비어 있으면 DEFAULT VALUES 빈 행이 생김)
- */
+/** 보상 건 본문 — 공통 행 저장(실제 컬럼 허용)으로 이력도 남김 */
 async function upsertMainCase(params: {
   ogcFid?: number;
   isNew: boolean;
@@ -1218,71 +1219,54 @@ async function upsertMainCase(params: {
   const meta = await resolveTableWithSchema(MAIN_TABLE);
   if (!meta) return { success: false, error: `${MAIN_TABLE} 테이블이 없습니다.` };
   const cols = await getTableColumns(meta.schema, meta.tableName);
-  const geomCol = findColumn(cols, 'geom');
-  const safe = meta.tableName.replace(/"/g, '""');
-  const safeSchema = meta.schema.replace(/"/g, '""');
 
-  const attrCols: string[] = [];
-  const attrVals: string[] = [];
+  const values: Record<string, unknown> = {};
   for (const field of CASE_ATTR_FIELDS) {
     const col = findColumn(cols, field);
     if (!col) continue;
-    attrCols.push(quoteIdent(col));
-    attrVals.push(sqlTextOrNull(params.dbValues[field]));
+    values[col] = params.dbValues[field] || null;
   }
-  if (attrCols.length === 0) {
+  if (Object.keys(values).length === 0) {
     return { success: false, error: '저장할 속성 컬럼이 없습니다.' };
   }
 
-  try {
-    if (params.isNew) {
-      const insertCols = [...attrCols];
-      const insertVals = [...attrVals];
-      if (geomCol && params.geomWkt5181) {
-        insertCols.push(quoteIdent(geomCol));
-        insertVals.push(
-          `ST_SetSRID(ST_GeomFromText('${esc(params.geomWkt5181)}'), 5181)`
-        );
-      }
-      const res = await db.execute(
-        sql.raw(
-          `INSERT INTO "${safeSchema}"."${safe}" (${insertCols.join(', ')})
-           VALUES (${insertVals.join(', ')})
-           RETURNING ogc_fid::int AS new_fid`
-        )
-      );
-      const newFid = Number((res.rows?.[0] as { new_fid?: number } | undefined)?.new_fid);
-      if (!Number.isFinite(newFid)) {
-        return { success: false, error: '신규 ogc_fid를 확인하지 못했습니다.' };
-      }
-      return { success: true, ogcFid: newFid };
+  if (params.isNew) {
+    const inserted = await insertTableRow({
+      table: MAIN_TABLE,
+      schema: meta.schema,
+      keyField: 'ogc_fid',
+      values,
+      allowPhysicalColumns: true,
+      geomWkt5181: params.geomWkt5181,
+    });
+    if (!inserted.success) {
+      return { success: false, error: inserted.error ?? '등록에 실패했습니다.' };
     }
-
-    const fid = Math.floor(Number(params.ogcFid));
-    if (!Number.isFinite(fid) || fid <= 0) {
-      return { success: false, error: 'ogc_fid가 필요합니다.' };
+    const newFid = Number(inserted.keyValue);
+    if (!Number.isFinite(newFid)) {
+      return { success: false, error: '신규 ogc_fid를 확인하지 못했습니다.' };
     }
-    const sets = attrCols.map((col, i) => `${col} = ${attrVals[i]}`);
-    if (geomCol) {
-      if (params.geomClear) {
-        sets.push(`${quoteIdent(geomCol)} = NULL`);
-      } else if (params.geomWkt5181) {
-        sets.push(
-          `${quoteIdent(geomCol)} = ST_SetSRID(ST_GeomFromText('${esc(params.geomWkt5181)}'), 5181)`
-        );
-      }
-    }
-    await db.execute(
-      sql.raw(
-        `UPDATE "${safeSchema}"."${safe}"
-         SET ${sets.join(', ')}
-         WHERE ogc_fid = ${fid}`
-      )
-    );
-    return { success: true, ogcFid: fid };
-  } catch (e: unknown) {
-    return { success: false, error: e instanceof Error ? e.message : String(e) };
+    return { success: true, ogcFid: newFid };
   }
+
+  const fid = Math.floor(Number(params.ogcFid));
+  if (!Number.isFinite(fid) || fid <= 0) {
+    return { success: false, error: 'ogc_fid가 필요합니다.' };
+  }
+  const updated = await updateTableRowByKey({
+    table: MAIN_TABLE,
+    schema: meta.schema,
+    keyField: 'ogc_fid',
+    keyValue: fid,
+    changes: values,
+    allowPhysicalColumns: true,
+    geomWkt5181: params.geomClear ? null : params.geomWkt5181,
+    geomClear: params.geomClear,
+  });
+  if (!updated.success) {
+    return { success: false, error: updated.error ?? '수정에 실패했습니다.' };
+  }
+  return { success: true, ogcFid: fid };
 }
 
 /** 건 저장(신규·수정) + 선택적 필지 동기화 */

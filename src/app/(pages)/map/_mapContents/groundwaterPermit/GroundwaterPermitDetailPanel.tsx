@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import { call } from '@/lib/api'
+import { recordDataViewLog } from '@/lib/recordDataViewLog'
 import { cn } from '@/lib/utils'
 import {
   groundwaterPermitStatusClass,
@@ -96,6 +97,18 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
     return () => {
       cancelled = true
     }
+  }, [detailId])
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    const id = String(detailId ?? '').trim()
+    if (!id) return
+    recordDataViewLog({
+      tableName: 'SOINN00001',
+      keyField: 'soinn_key',
+      keyValue: id,
+      serviceName: '지하수개발허가',
+    })
   }, [detailId])
 
   const toggleSection = (sectionId: string) => {

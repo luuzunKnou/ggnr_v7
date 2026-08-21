@@ -176,6 +176,14 @@ export function getSystemKorName(): string {
   return name || "공간정보 통합관리 플랫폼"
 }
 
+/**
+ * common.runtime.env / 프로젝트 runtime.env 의 GNMS_URL.
+ * 예: `192.168.126.1:3000` 또는 `http://192.168.126.1:3000` (없으면 빈 문자열)
+ */
+export function getGnmsUrl(): string {
+  return getRuntimeEnvVars().GNMS_URL?.trim() ?? ""
+}
+
 const DEFAULT_FOOTER_ADDR =
   "안동시 토지정보과 | 054-840-6371 | 36691 경상북도 안동시 퇴계로 115 (명륜동)"
 const DEFAULT_FOOTER_RSS = "Copyright (c) 2024. ALL RIGHTS RESERVED"
@@ -356,26 +364,48 @@ export function getMapConfig(_params?: unknown): {
   USE_KRAS: boolean
   USE_SEUM: boolean
 } {
-  const vars = getRuntimeEnvVars()
-  const dataPortalKey =
-    vars.DATA_PORTAL_KEY?.trim() ??
-    vars.dataPotalKey?.trim() ??
-    vars.DATA_POTAL_KEY?.trim() ??
-    vars.PUBLIC_DATA_KEY?.trim() ??
-    vars.DATA_GO_KR_KEY?.trim() ??
-    ""
-  return {
-    VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
-    VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
-    OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
-    SAFEMAP_API_KEY: vars.SAFEMAP_API_KEY?.trim() ?? '',
-    SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
-    DATA_PORTAL_KEY: dataPortalKey,
-    dataPotalKey: dataPortalKey,
-    KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
-    /** 행망(KRAS·KOREPS) — 운영만. 묶음 전체가 실패할 때만 브이월드 */
-    USE_KRAS: useHangmangKras(),
+  const empty = {
+    VWORLD_API_KEY: '',
+    VWORLD_DOMAIN: '',
+    OPENAI_API_KEY: '',
+    SAFEMAP_API_KEY: '',
+    SAFETYDATA_API_KEY: '',
+    DATA_PORTAL_KEY: '',
+    dataPotalKey: '',
+    KAKAO_MAP_API_KEY: '',
+    USE_KRAS: false,
     USE_SEUM: true,
+  }
+  try {
+    const vars = getRuntimeEnvVars()
+    const dataPortalKey =
+      vars.DATA_PORTAL_KEY?.trim() ??
+      vars.dataPotalKey?.trim() ??
+      vars.DATA_POTAL_KEY?.trim() ??
+      vars.PUBLIC_DATA_KEY?.trim() ??
+      vars.DATA_GO_KR_KEY?.trim() ??
+      ""
+    let safemapKey = ''
+    try {
+      safemapKey = vars.SAFEMAP_API_KEY?.trim() ?? ''
+    } catch {
+      safemapKey = ''
+    }
+    return {
+      VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
+      VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
+      OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
+      SAFEMAP_API_KEY: safemapKey,
+      SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
+      DATA_PORTAL_KEY: dataPortalKey,
+      dataPotalKey: dataPortalKey,
+      KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+      /** 행망(KRAS·KOREPS) — 운영만. 묶음 전체가 실패할 때만 브이월드 */
+      USE_KRAS: useHangmangKras(),
+      USE_SEUM: true,
+    }
+  } catch {
+    return empty
   }
 }
 

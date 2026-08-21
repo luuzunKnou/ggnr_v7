@@ -61,7 +61,7 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
   const statusMessage = bulkSaveMessage ?? draft.saveMessage;
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2">
+    <header className="flex h-11 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-background px-2">
       <ToolbarButton
         title="선택·수정"
         active={toolMode === 'select'}
@@ -89,7 +89,7 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
         삭제
       </ToolbarButton>
 
-      <div className="mx-1 h-5 w-px bg-slate-200" />
+      <div className="mx-1 h-5 w-px bg-muted" />
 
       <ToolbarButton title="실행 취소" disabled={!canUndo || bulkSaving} onClick={() => undo()}>
         <RotateCcw className="h-3.5 w-3.5" />
@@ -100,7 +100,7 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
         Redo
       </ToolbarButton>
 
-      <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
+      <div className="mx-1 h-5 w-px shrink-0 bg-muted" />
 
       {SHAPE_EDITOR_OVERLAY_CONTROLS.map(({ id, label }) => (
         <ToolbarButton
@@ -114,7 +114,7 @@ export function ShapeEditorTopBar({ overlayControls }: ShapeEditorTopBarProps) {
       ))}
 
       {statusMessage ? (
-        <span className="ml-2 min-w-0 flex-1 truncate text-xs text-slate-500">{statusMessage}</span>
+        <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{statusMessage}</span>
       ) : (
         <span className="min-w-0 flex-1" />
       )}
@@ -158,8 +158,8 @@ function ToolbarButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-xs text-slate-700 transition-colors',
-        'hover:bg-slate-100 disabled:opacity-40',
+        'inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-xs text-foreground transition-colors',
+        'hover:bg-muted/50 disabled:opacity-40',
         active && 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
       )}
     >

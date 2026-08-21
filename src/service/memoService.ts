@@ -6,6 +6,11 @@ import { sql } from 'drizzle-orm';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { MEMO_KEY_FIELD, MEMO_SCHEMA, MEMO_TABLES } from '@/lib/memoConfig';
+import {
+  deleteTableRowByKey,
+  insertTableRow,
+  updateTableRowByKey,
+} from './layerRowService';
 
 const GEOM_COLUMNS = new Set(['geom', 'geometry', 'the_geom', 'shape']);
 
@@ -402,8 +407,18 @@ async function resolveUserKeys(usrId: string | null): Promise<{ userKey: string 
   }
 }
 
-function geomExprFrom3857Point(x: number, y: number): string {
-  return `ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857), 5181)`;
+async function wkt5181FromPoint3857(x: number, y: number): Promise<string | null> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857), 5181)) AS wkt`
+      )
+    );
+    const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+    return wkt || null;
+  } catch {
+    return null;
+  }
 }
 
 export async function createMemo(params?: {
@@ -427,64 +442,46 @@ export async function createMemo(params?: {
   const usrId = await getSessionUsrId();
   const { userKey, groupKey } = await resolveUserKeys(usrId);
 
-  const insertCols: string[] = [];
-  const insertVals: string[] = [];
-
-  const setText = (field: string, value: string | null | undefined) => {
+  const values: Record<string, unknown> = {};
+  const put = (field: string, value: unknown) => {
     const col = findColumn(columns, field);
     if (!col) return;
-    const v = value == null ? '' : String(value).trim();
-    insertCols.push(quoteIdent(col));
-    insertVals.push(v ? `'${esc(v)}'` : 'NULL');
+    values[col] = value;
   };
 
-  // serial/default 있으면 DB 채번, 없으면 MAX+1
   const keyHasDefault = await keyColumnHasDefault(resolved.schema, resolved.table, keyCol);
-  let fallbackKey: number | null = null;
   if (!keyHasDefault) {
-    fallbackKey = await allocateMemoKey(resolved.schema, resolved.table, keyCol);
-    insertCols.push(quoteIdent(keyCol));
-    insertVals.push(String(fallbackKey));
+    values[keyCol] = await allocateMemoKey(resolved.schema, resolved.table, keyCol);
   }
 
-  setText('memo_title', params?.title);
-  setText('memo_contents', params?.contents);
-  setText('memo_create_date', params?.createDate || formatToYmdOrText(new Date()));
-  if (userKey) setText('memo_create_user', userKey);
-  if (groupKey) setText('memo_create_group', groupKey);
-
-  const delCol = findColumn(columns, 'memo_is_del');
-  if (delCol) {
-    insertCols.push(quoteIdent(delCol));
-    insertVals.push('false');
-  }
+  put('memo_title', params?.title ?? '');
+  put('memo_contents', params?.contents ?? '');
+  put('memo_create_date', params?.createDate || formatToYmdOrText(new Date()));
+  if (userKey) put('memo_create_user', userKey);
+  if (groupKey) put('memo_create_group', groupKey);
+  put('memo_is_del', false);
 
   const x = Number(params?.pointX3857);
   const y = Number(params?.pointY3857);
-  const geomCol = await resolveGeomColumn(resolved.schema, resolved.table, columns);
-  if (geomCol && Number.isFinite(x) && Number.isFinite(y)) {
-    insertCols.push(quoteIdent(geomCol));
-    insertVals.push(geomExprFrom3857Point(x, y));
+  let geomWkt5181: string | null = null;
+  if (Number.isFinite(x) && Number.isFinite(y)) {
+    geomWkt5181 = await wkt5181FromPoint3857(x, y);
   }
 
-  if (insertCols.length === 0) return { success: false, error: '저장할 값이 없습니다.' };
-
-  const q = `INSERT INTO ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)} (${insertCols.join(', ')})
-             VALUES (${insertVals.join(', ')})
-             RETURNING ${quoteIdent(keyCol)}::text AS new_key`;
-
-  try {
-    const res = await db.execute(sql.raw(q));
-    const row0 = res.rows?.[0] as Record<string, unknown> | undefined;
-    const newKey = String(row0?.new_key ?? row0?.newKey ?? fallbackKey ?? '').trim();
-    if (!newKey || newKey === 'null') {
-      return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
-    }
-    return { success: true, memoKey: newKey };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { success: false, error: msg };
+  const inserted = await insertTableRow({
+    table: tableName,
+    schema: MEMO_SCHEMA,
+    keyField: MEMO_KEY_FIELD,
+    values,
+    allowPhysicalColumns: true,
+    geomWkt5181,
+  });
+  if (!inserted.success) {
+    return { success: false, error: inserted.error ?? '등록에 실패했습니다.' };
   }
+  const memoKey = String(inserted.keyValue ?? '').trim();
+  if (!memoKey) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+  return { success: true, memoKey };
 }
 
 export async function updateMemo(params?: {
@@ -505,51 +502,48 @@ export async function updateMemo(params?: {
   if (!resolved) return { success: false, error: '테이블을 찾을 수 없습니다.' };
 
   const columns = await getTableColumns(resolved.schema, resolved.table);
-  const keyCol = findColumn(columns, MEMO_KEY_FIELD);
-  if (!keyCol) return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
-
-  const sets: string[] = [];
-  const setText = (field: string, value: string | undefined) => {
-    const col = findColumn(columns, field);
-    if (!col || value === undefined) return;
-    sets.push(`${quoteIdent(col)} = '${esc(String(value))}'`);
-  };
-
-  if (params?.title !== undefined) setText('memo_title', params.title);
-  if (params?.contents !== undefined) setText('memo_contents', params.contents);
-  if (params?.createDate !== undefined) {
-    const dateCol = findColumn(columns, 'memo_create_date');
-    if (dateCol) {
-      const d = String(params.createDate ?? '').trim();
-      // date 컬럼에 '' 넣으면 Postgres 오류 — 빈 값은 NULL
-      sets.push(d ? `${quoteIdent(dateCol)} = '${esc(d)}'` : `${quoteIdent(dateCol)} = NULL`);
-    }
+  if (!findColumn(columns, MEMO_KEY_FIELD)) {
+    return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
-  const geomCol = await resolveGeomColumn(resolved.schema, resolved.table, columns);
-  if (geomCol && params?.clearGeom) {
-    sets.push(`${quoteIdent(geomCol)} = NULL`);
-  } else if (geomCol && params?.pointX3857 != null && params?.pointY3857 != null) {
+  const changes: Record<string, unknown> = {};
+  const put = (field: string, value: unknown) => {
+    const col = findColumn(columns, field);
+    if (!col) return;
+    changes[col] = value;
+  };
+
+  if (params?.title !== undefined) put('memo_title', params.title);
+  if (params?.contents !== undefined) put('memo_contents', params.contents);
+  if (params?.createDate !== undefined) {
+    const d = String(params.createDate ?? '').trim();
+    put('memo_create_date', d || null);
+  }
+
+  let geomWkt5181: string | null = null;
+  const geomClear = params?.clearGeom === true;
+  if (!geomClear && params?.pointX3857 != null && params?.pointY3857 != null) {
     const x = Number(params.pointX3857);
     const y = Number(params.pointY3857);
     if (Number.isFinite(x) && Number.isFinite(y)) {
-      sets.push(`${quoteIdent(geomCol)} = ${geomExprFrom3857Point(x, y)}`);
+      geomWkt5181 = await wkt5181FromPoint3857(x, y);
     }
   }
 
-  if (!sets.length) return { success: false, error: '변경할 항목이 없습니다.' };
-
-  const q = `UPDATE ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)}
-             SET ${sets.join(', ')}
-             WHERE ${quoteIdent(keyCol)}::text = '${esc(memoKey)}'`;
-
-  try {
-    await db.execute(sql.raw(q));
-    return { success: true };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { success: false, error: msg };
+  const updated = await updateTableRowByKey({
+    table: tableName,
+    schema: MEMO_SCHEMA,
+    keyField: MEMO_KEY_FIELD,
+    keyValue: memoKey,
+    changes,
+    allowPhysicalColumns: true,
+    geomWkt5181,
+    geomClear,
+  });
+  if (!updated.success) {
+    return { success: false, error: updated.error ?? '수정에 실패했습니다.' };
   }
+  return { success: true };
 }
 
 export async function deleteMemo(params?: {
@@ -568,20 +562,28 @@ export async function deleteMemo(params?: {
   const delCol = findColumn(columns, 'memo_is_del');
   if (!keyCol) return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
 
-  const q = delCol
-    ? `UPDATE ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)}
-       SET ${quoteIdent(delCol)} = true
-       WHERE ${quoteIdent(keyCol)}::text = '${esc(memoKey)}'`
-    : `DELETE FROM ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)}
-       WHERE ${quoteIdent(keyCol)}::text = '${esc(memoKey)}'`;
-
-  try {
-    await db.execute(sql.raw(q));
+  if (delCol) {
+    const updated = await updateTableRowByKey({
+      table: tableName,
+      schema: MEMO_SCHEMA,
+      keyField: MEMO_KEY_FIELD,
+      keyValue: memoKey,
+      changes: { [delCol]: true },
+      allowPhysicalColumns: true,
+      logType: '삭제',
+    });
+    if (!updated.success) {
+      return { success: false, error: updated.error ?? '삭제에 실패했습니다.' };
+    }
     return { success: true };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { success: false, error: msg };
   }
+
+  return deleteTableRowByKey({
+    table: tableName,
+    schema: MEMO_SCHEMA,
+    keyField: MEMO_KEY_FIELD,
+    keyValue: memoKey,
+  });
 }
 
 export async function listAvailableMemoTables(): Promise<{ tables: { tableName: string; label: string }[] }> {

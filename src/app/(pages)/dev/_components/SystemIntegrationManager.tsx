@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
 
-type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA"
+type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS"
 
 type LogRow = {
   ijl_key: number
@@ -128,6 +128,7 @@ export function SystemIntegrationManager() {
         { key: "SEUMTEO", label: "세움터" },
         { key: "SAEOL", label: "새올" },
         { key: "SAFETYDATA", label: "재난안전데이터" },
+        { key: "FMS", label: "FMS" },
       ] as const,
     []
   )
@@ -147,9 +148,9 @@ export function SystemIntegrationManager() {
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
   const parsedDetails = safetyDetailRows.map((r) => ({ row: r, parsed: parseDetail(r.log_safetydata_response_msg) }))
 
-  const fetchLogs = async (system: SystemKey) => {
-    setLogsLoading(true)
-    setError("")
+  const fetchLogs = async (system: SystemKey, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLogsLoading(true)
+    if (!opts?.silent) setError("")
     try {
       const res = await call("", "POST", {
         service: "integrationService",
@@ -160,7 +161,7 @@ export function SystemIntegrationManager() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLogsLoading(false)
+      if (!opts?.silent) setLogsLoading(false)
     }
   }
 
@@ -180,8 +181,8 @@ export function SystemIntegrationManager() {
     }
   }
 
-  const fetchSafetydataDetailLogs = async () => {
-    setDetailLogsLoading(true)
+  const fetchSafetydataDetailLogs = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setDetailLogsLoading(true)
     try {
       const res = await call("", "POST", {
         service: "integrationService",
@@ -192,7 +193,7 @@ export function SystemIntegrationManager() {
     } catch {
       setSafetyDetailRows([])
     } finally {
-      setDetailLogsLoading(false)
+      if (!opts?.silent) setDetailLogsLoading(false)
     }
   }
 
@@ -209,9 +210,9 @@ export function SystemIntegrationManager() {
   useEffect(() => {
     if (!loading) return
     const id = window.setInterval(() => {
-      void fetchLogs(active)
+      void fetchLogs(active, { silent: true })
       if (active === "SAFETYDATA") {
-        void fetchSafetydataDetailLogs()
+        void fetchSafetydataDetailLogs({ silent: true })
       }
     }, INTEGRATION_POLL_MS)
     return () => {
@@ -298,16 +299,17 @@ export function SystemIntegrationManager() {
       ) : null}
 
       <Card className="shrink-0">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-base">시스템 연계 - {active}</CardTitle>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button type="button" size="sm" onClick={run} disabled={loading}>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 flex-nowrap">
+          <CardTitle className="text-base min-w-0 truncate">시스템 연계 - {active}</CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button type="button" size="sm" className="min-w-[5.5rem]" onClick={run} disabled={loading}>
               {loading ? "연계 중…" : "연계 시작"}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="min-w-[5.5rem]"
               onClick={() => (active === "SAFETYDATA" ? refreshSafetydataOnly() : fetchLogs(active))}
               disabled={logsLoading || (active === "SAFETYDATA" && detailLogsLoading)}
             >
@@ -327,7 +329,7 @@ export function SystemIntegrationManager() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">실행 로그</CardTitle>
           </CardHeader>
-          <CardContent className="min-h-0 overflow-auto">
+          <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -352,7 +354,7 @@ export function SystemIntegrationManager() {
                       <TableCell>{r.ijl_status}</TableCell>
                       <TableCell>{formatDt(r.ijl_started_at)}</TableCell>
                       <TableCell>{formatDt(r.ijl_finished_at)}</TableCell>
-                      <TableCell className="whitespace-normal break-all">{r.ijl_message ?? ""}</TableCell>
+                      <TableCell className="whitespace-pre-wrap break-all">{r.ijl_message ?? ""}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -396,7 +398,7 @@ export function SystemIntegrationManager() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">실행 로그 (integration_job_log)</CardTitle>
             </CardHeader>
-            <CardContent className="min-h-0 overflow-auto">
+            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -439,7 +441,7 @@ export function SystemIntegrationManager() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">데이터셋 결과 (log_safetydata)</CardTitle>
             </CardHeader>
-            <CardContent className="min-h-0 overflow-auto">
+            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>

@@ -45,6 +45,7 @@ import {
   CADASTRAL_LAYERS,
   BUILDING_ROAD_LAYERS,
 } from './layerFactory/boundaryLayerFactory';
+import { useSafetyFacBuildingRoadLayerSync } from './layerFactory/safetyFacBuildingRoadLayerFactory';
 import { useBasicSectionLayerSync } from './layerFactory/basicSectionLayerFactory';
 import { useJimokLayerSync } from './layerFactory/jimokLayerFactory';
 import {
@@ -89,6 +90,7 @@ import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
 import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
 import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstructionLedgerMapHighlight';
 import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
+import { useFmsFacilityOverlayLayer } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
 import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
 import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
 import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler';
@@ -957,7 +959,12 @@ export default function OpenLayersMap({
     mapReady,
     activeControls,
     visibleBuildingRoadLayerNames,
-    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames
+    buildingRoadCatalogLoading ? null : buildingRoadAvailableTableNames,
+  );
+  useSafetyFacBuildingRoadLayerSync(
+    mapInstanceRef.current,
+    mapReady,
+    mapContext?.safetyFacBuildingRoadLayerState ?? null,
   );
   // 기초구간 레이어 동기화 (activeControls → basic-section 레이어 visibility)
   useBasicSectionLayerSync(mapInstanceRef.current, mapReady, activeControls);
@@ -1001,6 +1008,7 @@ export default function OpenLayersMap({
   useRoadNetworkOverlayLayer(mapReady);
   useRiverConstructionLedgerMapHighlight(mapReady);
   useRiverConstructionLedgerOverlayLayer(mapReady);
+  useFmsFacilityOverlayLayer(mapReady);
 
   const roadCctvOverlay = mapContext?.roadCctvOverlay ?? null;
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay;
@@ -1062,6 +1070,7 @@ export default function OpenLayersMap({
     mapReady,
     visibleLayerNames,
     roadCctvPanelOpen ||
+      (mapContext?.safetyFacPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||

@@ -180,7 +180,7 @@ export function UserAccountProtoPanel({
       />
       <div
         className={cn(
-          'fixed bottom-3 left-[72px] z-[90] flex max-h-[min(520px,calc(100vh-80px))] w-[340px] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl',
+          'fixed bottom-3 left-[72px] z-[90] flex max-h-[min(520px,calc(100vh-80px))] w-[340px] flex-col overflow-hidden border border-border bg-background shadow-2xl',
           PANEL_SHELL_ROUND
         )}
         role="dialog"
@@ -229,14 +229,14 @@ function PanelHeader({ onClose }: { onClose: () => void }) {
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/80',
+        'flex shrink-0 items-center justify-between border-b border-border bg-muted/30',
         PANEL_PAD
       )}
     >
-      <span className="text-xs font-medium text-slate-600">내 정보</span>
+      <span className="text-xs font-medium text-muted-foreground">내 정보</span>
       <button
         type="button"
-        className={cn('rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600', PANEL_ROUND)}
+        className={cn('rounded-sm p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground', PANEL_ROUND)}
         onClick={onClose}
         aria-label="닫기"
       >
@@ -260,20 +260,20 @@ function ProfileSection({
   const email = profile.email || '—'
 
   return (
-    <div className="shrink-0 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50/80 px-3 py-3">
+    <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/5 via-background to-muted/30 px-3 py-3">
       <div className="flex items-start gap-3">
         <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-semibold tracking-tight text-white shadow-sm"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold tracking-tight text-primary-foreground shadow-sm"
           aria-hidden
         >
           {userInitials}
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
-          <p className="truncate text-sm font-semibold text-slate-900">
+          <p className="truncate text-sm font-semibold text-foreground">
             {loading ? '불러오는 중…' : profile.name}
           </p>
           {profile.dept ? (
-            <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200">
+            <span className="mt-1 inline-flex rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
               {profile.dept}
             </span>
           ) : null}
@@ -282,7 +282,7 @@ function ProfileSection({
           type="button"
           onClick={onLogout}
           className={cn(
-            'inline-flex shrink-0 items-center gap-1 rounded-sm border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+            'inline-flex shrink-0 items-center gap-1 rounded-sm border border-border bg-background px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             PANEL_ROUND
           )}
         >
@@ -290,13 +290,13 @@ function ProfileSection({
           로그아웃
         </button>
       </div>
-      <div className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-2.5">
-        <p className="flex items-center gap-2 text-[11px] text-slate-600">
-          <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+      <div className="mt-3 space-y-1.5 border-t border-border/70 pt-2.5">
+        <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Phone className="h-3 w-3 shrink-0 text-muted-foreground" />
           <span className="tabular-nums">{loading ? '…' : phone}</span>
         </p>
-        <p className="flex items-center gap-2 text-[11px] text-slate-600">
-          <Mail className="h-3 w-3 shrink-0 text-slate-400" />
+        <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Mail className="h-3 w-3 shrink-0 text-muted-foreground" />
           <span className="truncate">{loading ? '…' : email}</span>
         </p>
       </div>
@@ -318,7 +318,7 @@ function PanelTabBar({
   onToggleTab: (tabId: ProtoPanelTabId) => void
 }) {
   return (
-    <div className="flex shrink-0 items-end gap-0 border-b border-slate-200 bg-white px-3">
+    <div className="flex shrink-0 items-end gap-0 border-b border-border bg-background px-3">
       {tabs.map((tab) => {
         const active = activeTab === tab.id
         const count =
@@ -333,8 +333,8 @@ function PanelTabBar({
             className={cn(
               'relative -mb-px inline-flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-xs font-medium transition-colors',
               active
-                ? 'border-slate-800 text-slate-800'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
           >
             {tab.label}
@@ -344,7 +344,7 @@ function PanelTabBar({
                   'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums ring-1',
                   tab.id === 'notif'
                     ? 'bg-red-50 text-red-600 ring-red-100'
-                    : 'bg-slate-100 text-slate-600 ring-slate-200'
+                    : 'bg-muted/40 text-muted-foreground ring-border'
                 )}
               >
                 {count}

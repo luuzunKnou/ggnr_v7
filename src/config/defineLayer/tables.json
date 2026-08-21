@@ -5967,7 +5967,7 @@
   {
     "define_table_name": "sd_cold_wave_shelter",
     "define_table_kor_name": "한파쉼터",
-    "define_table_shp_type": "POLYGON",
+    "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "재난안전지도",
@@ -5979,7 +5979,7 @@
   {
     "define_table_name": "sd_earthquake_outdoor_evac_site",
     "define_table_kor_name": "지진옥외대피장소",
-    "define_table_shp_type": "POLYGON",
+    "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "재난안전지도",
@@ -6003,7 +6003,7 @@
   {
     "define_table_name": "sd_heat_wave_shelter",
     "define_table_kor_name": "무더위쉼터",
-    "define_table_shp_type": "POLYGON",
+    "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "재난안전지도",
@@ -9522,7 +9522,7 @@
   },
   {
     "define_table_name": "tl_sgco_rnadr_mst",
-    "define_table_kor_name": "tl_sgco_rnadr_mst",
+    "define_table_kor_name": "건물군",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   LAYER_ROW_EDIT_PRESETS,
   LAYER_ROW_NEW_ID,
@@ -194,6 +195,19 @@ export function RiverUseLedgerDetailPanel({
     if (!modeReady) return;
     void loadDetail();
   }, [loadDetail, reloadToken, modeReady]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (!modeReady || isCreateMode) return;
+    const id = String(detailId ?? "").trim();
+    if (!id) return;
+    recordDataViewLog({
+      tableName: preset.tableName,
+      keyField: preset.keyField,
+      keyValue: id,
+      serviceName: "하천점용",
+    });
+  }, [detailId, isCreateMode, modeReady, preset.tableName, preset.keyField]);
 
   const handleReload = useCallback(async () => {
     const id = String(detailId ?? "").trim();

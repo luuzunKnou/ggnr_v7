@@ -93,6 +93,7 @@ const DATA_SOURCE_LABEL: Record<string, string> = {
 const DATA_SOURCE_ORDER = ['세움터', '공공데이터포털', '행망', '코렙스', '브이월드'];
 
 export function dataSourceLabel(source?: string | null): string | undefined {
+  if (source == null || source === '') return undefined;
   const key = normalizeParcelLandSource(source);
   if (!key) return undefined;
   if (key === 'mixed') return undefined;
@@ -100,6 +101,7 @@ export function dataSourceLabel(source?: string | null): string | undefined {
 }
 
 function dataSourceLabels(source?: string | null): string[] {
+  if (source == null || source === '') return [];
   const key = normalizeParcelLandSource(source);
   if (key === 'mixed') return ['행망', '코렙스'];
   const one = dataSourceLabel(source);

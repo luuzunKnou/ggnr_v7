@@ -29,13 +29,13 @@ export function MapHitOverlapSelect({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-1.5',
+        'flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5',
         className
       )}
     >
-      <span className="shrink-0 text-[11px] font-medium text-slate-600">{fieldLabel}</span>
+      <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{fieldLabel}</span>
       <select
-        className="h-7 min-w-0 flex-1 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-800 outline-none focus:border-primary"
+        className="h-7 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs text-foreground outline-none focus:border-primary"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={`${fieldLabel} 선택`}
@@ -46,7 +46,7 @@ export function MapHitOverlapSelect({
           </option>
         ))}
       </select>
-      <span className="shrink-0 pr-2 text-[10px] text-slate-400">{options.length}건</span>
+      <span className="shrink-0 pr-2 text-[10px] text-muted-foreground">{options.length}건</span>
     </div>
   )
 }

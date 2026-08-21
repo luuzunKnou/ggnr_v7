@@ -4,6 +4,7 @@
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
+ * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
@@ -405,6 +406,99 @@ COMMENT ON TABLE layer.${t} IS '점사용료 미납·수납 통합';
 `;
 }
 
+function fmsFacilitySql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_facil_no_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  facil_no text,
+  facil_nm text,
+  mng_no text,
+  mng_main_cd text,
+  permit_org_cd text,
+  facil_owner text,
+  route_class text,
+  route_detail text,
+  facil_class text,
+  facil_gbn text,
+  facil_kind text,
+  facil_desc_cd text,
+  addr_sido text,
+  addr_gugun text,
+  addr_dong text,
+  addr_detail text,
+  cpl_ymd text,
+  temp_ymd text,
+  rsp_to_ymd text,
+  design_ymd_from text,
+  design_ymd_to text,
+  designer_nm text,
+  const_ymd_from text,
+  const_ymd_to text,
+  constractor_cd text,
+  constractor_nm text,
+  const_amt text,
+  spv_ymd_from text,
+  spv_ymd_to text,
+  supervisor_nm text,
+  const_order_cd text,
+  const_order_nm text,
+  const_nm text,
+  const_spvsr_nm text,
+  dsn_book_st_yn text,
+  eq_dsn_app_yn text,
+  gam_reason_cd text,
+  whl_pht_file_ct text,
+  etc_pht_file_ct text,
+  upper_no text,
+  lnk_facil_no text,
+  etc_remark text,
+  addr_full text,
+  geom geometry(MultiPolygon, 5181),
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (facil_no)
+);
+CREATE INDEX IF NOT EXISTS ${t}_facil_no_idx ON layer.${t} (facil_no);
+CREATE INDEX IF NOT EXISTS ${t}_facil_nm_idx ON layer.${t} (facil_nm);
+CREATE INDEX IF NOT EXISTS ${t}_geom_gix ON layer.${t} USING GIST (geom);
+COMMENT ON TABLE layer.${t} IS 'FMS 시설물관리대장';
+`;
+}
+
+function fmsInspectionSql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_facil_dign_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  facil_no text,
+  dign_seq text,
+  start_ymd text,
+  end_ymd text,
+  dign_gbn text,
+  regular_gbn text,
+  rep_engineer_nm text,
+  dign_amt text,
+  state_grade text,
+  dign_content text,
+  amend_content text,
+  wrt_ymd text,
+  wrt_person_nm text,
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (facil_no, dign_seq)
+);
+CREATE INDEX IF NOT EXISTS ${t}_facil_no_idx ON layer.${t} (facil_no);
+COMMENT ON TABLE layer.${t} IS 'FMS 점검진단실적';
+`;
+}
+
 /** public→layer 이동 후 geom 컬럼·인덱스·좌표 백필 */
 async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
   const fq = 'layer.file_unit';
@@ -475,6 +569,43 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
     await ensureBaseTable({
       table: `${base}_mgj`,
       createSql: occupationLedgerChildSql(`${base}_mgj`, '공통 점용대장 물건지'),
+      result: out,
+    });
+  }
+  return out;
+}
+
+/** FMS water|road|public × facility·inspection (6개) */
+export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const facility = `${prefix}_fms_facility`;
+    const inspection = `${prefix}_fms_inspection`;
+    await ensureBaseTable({
+      table: facility,
+      createSql: fmsFacilitySql(facility),
+      result: out,
+    });
+    try {
+      if (!(await columnExists('layer', facility, 'geom'))) {
+        await db.execute(
+          sql.raw(`
+            ALTER TABLE layer.${facility}
+              ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+            CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
+              ON layer.${facility} USING GIST (geom);
+          `)
+        );
+      }
+    } catch (e) {
+      out.errors.push(
+        `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+    await ensureBaseTable({
+      table: inspection,
+      createSql: fmsInspectionSql(inspection),
       result: out,
     });
   }
@@ -611,6 +742,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureRoadUseLedgerTables(result);
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
+    await ensureFmsTables(result);
     await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
