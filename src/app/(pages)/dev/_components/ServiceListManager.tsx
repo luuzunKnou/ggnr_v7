@@ -99,7 +99,6 @@ export function ServiceListManager() {
           item.ser_data_query,
           item.ser_idx != null ? String(item.ser_idx) : "",
           item.ser_is_private === true ? "비공개" : item.ser_is_private === false ? "공개" : "",
-          item.ser_is_del === true ? "삭제" : "",
           item.ser_has_file === true ? "첨부 y" : item.ser_has_file === false ? "첨부 n" : "",
         ]
         return searchable.some((v) => (v ?? "").toLowerCase().includes(q))
@@ -392,9 +391,6 @@ export function ServiceListManager() {
                 비공개
               </TableHead>
               <TableHead className="w-14 min-w-[3.25rem] px-1 text-center font-medium sticky top-0 z-10 bg-muted/95">
-                삭제
-              </TableHead>
-              <TableHead className="w-14 min-w-[3.25rem] px-1 text-center font-medium sticky top-0 z-10 bg-muted/95">
                 첨부
               </TableHead>
             </TableRow>
@@ -402,13 +398,13 @@ export function ServiceListManager() {
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground py-2">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-2">
                   등록된 기능이 없습니다. 공통 추가 또는 커스텀 추가로 등록하세요.
                 </TableCell>
               </TableRow>
             ) : filteredRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground py-2">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-2">
                   검색 결과가 없습니다.
                 </TableCell>
               </TableRow>
@@ -438,9 +434,6 @@ export function ServiceListManager() {
                   <TableCell className="font-mono text-xs">{s.ser_idx ?? "-"}</TableCell>
                   <TableCell className="text-center text-xs px-1">
                     {formatBoolFlag(s.ser_is_private, "Y", "N")}
-                  </TableCell>
-                  <TableCell className="text-center text-xs px-1">
-                    {formatBoolFlag(s.ser_is_del, "Y", "N")}
                   </TableCell>
                   <TableCell className="text-center text-xs px-1">
                     {formatBoolFlag(s.ser_has_file, "Y", "N")}
@@ -598,19 +591,6 @@ export function ServiceListManager() {
                 onChange={(e) => setForm((f) => ({ ...f, ser_url: e.target.value || null }))}
                 placeholder="URL"
               />
-            </div>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <label className="text-sm font-medium">삭제여부</label>
-              <div className="col-span-2 h-9 flex items-center gap-2 px-0 py-[10px] box-border">
-                <input
-                  type="checkbox"
-                  id="form-ser_is_del"
-                  checked={form.ser_is_del === true}
-                  onChange={(e) => setForm((f) => ({ ...f, ser_is_del: e.target.checked }))}
-                  className="h-4 w-4 rounded border border-input accent-primary shrink-0"
-                />
-                <label htmlFor="form-ser_is_del" className="text-sm text-muted-foreground cursor-pointer">삭제여부</label>
-              </div>
             </div>
           </div>
           <DialogFooter className="flex-row justify-between sm:justify-between">
