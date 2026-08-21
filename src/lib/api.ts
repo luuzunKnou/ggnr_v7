@@ -1,6 +1,7 @@
 import { notifyAuthRequired } from '@/lib/authRequiredEvent';
+import { withBasePath } from '@/lib/basePath';
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = withBasePath('/api');
 
 /**
  * 인증 토큰 가져오기 (나중에 구현)

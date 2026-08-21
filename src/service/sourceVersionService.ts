@@ -3,7 +3,8 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
+import { buildGnmsVersionApiBase, resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
+import { getGnmsUrl } from '@/service/configService';
 import { resolveAppStartCommand, pickBootForSignalMerge, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
 import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
 import { stopGeoServerAndVerify } from '@/service/geoserverProcessService';
@@ -1064,7 +1065,10 @@ export type GnmsClientConfig = {
 
 /** 로컬 서버가 GNMS API를 호출할 때 쓸 URL·토큰 */
 export function getGnmsClientConfig(): GnmsClientConfig {
+  /** 최신소스 적용·설치파일(GNMS) 공통 — common.runtime.env GNMS_URL 우선 */
+  const fromRuntime = buildGnmsVersionApiBase(getGnmsUrl());
   const gnmsBaseUrl =
+    fromRuntime ||
     process.env.NEXT_PUBLIC_GNMS_SOURCE_BASE_URL?.trim() ||
     process.env.GNMS_SOURCE_BASE_URL?.trim() ||
     'http://192.168.126.1:3000/api/source/version';
