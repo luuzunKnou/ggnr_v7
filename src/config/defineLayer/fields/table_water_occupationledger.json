@@ -2,20 +2,20 @@
   {
     "define_field_name": "ogc_fid",
     "define_field_kor_name": "ogc_fid",
-    "define_field_type": "integer",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1,
-    "define_field_is_required": false,
+    "define_field_is_required": "true",
     "define_field_show_search": false,
     "define_field_show_list": "false",
     "define_field_show_detail": false,
     "define_field_read_only": "true",
-    "define_field_is_key": false,
+    "define_field_is_key": "false",
     "define_field_show_title": false
   },
   {
     "define_field_name": "geom",
     "define_field_kor_name": "geom",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 2,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -28,7 +28,7 @@
   {
     "define_field_name": "permit_no",
     "define_field_kor_name": "허가번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": "2",
     "define_field_is_required": "true",
     "define_field_show_search": "true",
@@ -41,20 +41,20 @@
   {
     "define_field_name": "id",
     "define_field_kor_name": "키",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 3,
-    "define_field_is_required": "true",
+    "define_field_is_required": "false",
     "define_field_show_search": "false",
     "define_field_show_list": "false",
     "define_field_show_detail": "false",
-    "define_field_read_only": "true",
+    "define_field_read_only": "false",
     "define_field_is_key": "false",
     "define_field_show_title": false
   },
   {
     "define_field_name": "state",
     "define_field_kor_name": "상태",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 4,
     "define_field_is_required": false,
     "define_field_show_search": true,
@@ -67,9 +67,9 @@
   {
     "define_field_name": "work_name",
     "define_field_kor_name": "점용명",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 5,
-    "define_field_is_required": "true",
+    "define_field_is_required": "false",
     "define_field_show_search": true,
     "define_field_show_list": true,
     "define_field_show_detail": true,
@@ -80,7 +80,7 @@
   {
     "define_field_name": "occup_place",
     "define_field_kor_name": "점용장소",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 6,
     "define_field_is_required": "true",
     "define_field_show_search": true,
@@ -93,7 +93,7 @@
   {
     "define_field_name": "occup_purpose",
     "define_field_kor_name": "점용목적",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 7,
     "define_field_is_required": false,
     "define_field_show_search": true,
@@ -106,7 +106,7 @@
   {
     "define_field_name": "perm_start_date",
     "define_field_kor_name": "점용 시작일",
-    "define_field_type": "date",
+    "define_field_type": "DATE",
     "define_field_idx": 8,
     "define_field_is_required": "true",
     "define_field_show_search": true,
@@ -119,7 +119,7 @@
   {
     "define_field_name": "perm_end_date",
     "define_field_kor_name": "점용 종료일",
-    "define_field_type": "date",
+    "define_field_type": "DATE",
     "define_field_idx": 9,
     "define_field_is_required": "true",
     "define_field_show_search": true,
@@ -132,7 +132,7 @@
   {
     "define_field_name": "perm_area",
     "define_field_kor_name": "점용면적",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 10,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -145,7 +145,7 @@
   {
     "define_field_name": "permit_date",
     "define_field_kor_name": "허가일자",
-    "define_field_type": "date",
+    "define_field_type": "DATE",
     "define_field_idx": 12,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -158,7 +158,7 @@
   {
     "define_field_name": "occup_name",
     "define_field_kor_name": "신청자명(점용자명)",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 13,
     "define_field_is_required": false,
     "define_field_show_search": true,
@@ -171,7 +171,7 @@
   {
     "define_field_name": "occup_phone",
     "define_field_kor_name": "신청자 전화번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 14,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -184,7 +184,7 @@
   {
     "define_field_name": "applicant_addr",
     "define_field_kor_name": "신청자 주소",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 15,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -197,7 +197,7 @@
   {
     "define_field_name": "manage_name",
     "define_field_kor_name": "담당자명",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 16,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -210,7 +210,7 @@
   {
     "define_field_name": "remark",
     "define_field_kor_name": "비고",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 17,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -218,6 +218,31 @@
     "define_field_show_detail": true,
     "define_field_read_only": false,
     "define_field_is_key": false,
+    "define_field_show_title": false
+  },
+  {
+    "define_field_name": "extra",
+    "define_field_kor_name": "extra",
+    "define_field_type": "TEXT",
+    "define_field_idx": 18,
+    "define_field_is_required": false,
+    "define_field_show_search": false,
+    "define_field_show_list": "false",
+    "define_field_show_detail": "false",
+    "define_field_read_only": false,
+    "define_field_is_key": false,
+    "define_field_show_search_detail": false,
+    "define_field_max_length": "",
+    "define_field_sort_idx": "",
+    "define_field_sort_type": "",
+    "define_field_sel_list": "",
+    "define_field_sel_table": "",
+    "define_field_sel_query": "",
+    "define_field_sel_url": "",
+    "define_field_show_detail_list": false,
+    "define_field_sel_key_field": "",
+    "define_field_sel_label_field": "",
+    "define_field_default_value": "",
     "define_field_show_title": false
   }
 ]

@@ -17,6 +17,11 @@ import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } fro
 import { StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { call } from "@/lib/api"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import {
+  fetchDefineLayerTables,
+  fetchLayerDbTableList,
+  invalidateLayerManagerListCache,
+} from "./layerManager/layerManagerListCache"
 
 const GEOSERVER_DEFAULT_URL =
   typeof window !== "undefined"
@@ -231,14 +236,7 @@ export function LayerInfoManager({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/config/defineLayer")
-      const contentType = res.headers.get("content-type") ?? ""
-      if (!contentType.includes("application/json")) {
-        const text = await res.text()
-        setError(res.ok ? "응답이 JSON이 아닙니다." : `요청 실패 (${res.status}): ${text.slice(0, 100)}`)
-        return
-      }
-      const body = await res.json()
+      const body = await fetchDefineLayerTables()
       if (body.success && body.data) {
         setConfig({ tables: body.data })
         originalTablesRef.current = new Map(
@@ -262,8 +260,7 @@ export function LayerInfoManager({
 
   const loadDbTableKeySet = useCallback(async () => {
     try {
-      const res = await call("", "POST", { service: "devTestService", action: "getLayerTableList", params: {} })
-      const data = res?.data ?? res
+      const data = await fetchLayerDbTableList()
       if (!data?.success || !Array.isArray(data.tables)) return
       const keys = new Set<string>(
         (data.tables as Array<{ schema: string; table: string }>).map(
@@ -458,8 +455,7 @@ export function LayerInfoManager({
     setSuccessMsg(null)
     setError(null)
     try {
-      const fullRes = await fetch("/api/config/defineLayer")
-      const fullBody = await fullRes.json()
+      const fullBody = await fetchDefineLayerTables()
       let fullTables: DefineLayerTable[] =
         fullBody.success && Array.isArray(fullBody.data) ? fullBody.data : []
       const byKey = new Map<string, DefineLayerTable>()
@@ -492,6 +488,7 @@ export function LayerInfoManager({
       })
       const body = await res.json()
       if (body.success) {
+        invalidateLayerManagerListCache()
         setSuccessMsg("저장되었습니다.")
         originalTablesRef.current = new Map(
           config.tables.map((t) => [String((t as Record<string, unknown>).define_table_name ?? ""), t as Record<string, unknown>])
@@ -697,6 +694,7 @@ export function LayerInfoManager({
         setError(saveBody?.error ?? "레이어 설정 삭제 실패")
         return
       }
+      invalidateLayerManagerListCache()
 
       setConfig({ ...config, tables: nextTables })
       setTotal(nextTables.length)

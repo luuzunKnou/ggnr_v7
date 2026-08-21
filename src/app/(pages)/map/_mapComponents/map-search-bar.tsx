@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff, ScrollText } from 'lucide-react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -30,6 +30,7 @@ import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequ
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
+import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -642,13 +643,10 @@ export function MapSearchBar({
       <div className="pointer-events-none fixed top-4 right-4 z-40">
         <div className="pointer-events-auto shrink-0 flex items-center gap-2">
           {canToggleGeoserverLog && (
-            <MapSearchBarIconButton
-              title={showDebugUi ? 'GeoServer 로그 끄기' : 'GeoServer 로그 켜기'}
-              active={showDebugUi}
-              onClick={() => mapContext?.setShowDebugUi(!showDebugUi)}
-            >
-              <ScrollText className="w-5 h-5" strokeWidth={2} />
-            </MapSearchBarIconButton>
+            <MapAdminToolsMenu
+              logOn={showDebugUi}
+              onToggleLog={() => mapContext?.setShowDebugUi(!showDebugUi)}
+            />
           )}
           <div className={mapSearchBarIconShell}>
             <ThemeToggle variant="mapIcon" iconBtnClassName={mapSearchBarIconBtnInner} />

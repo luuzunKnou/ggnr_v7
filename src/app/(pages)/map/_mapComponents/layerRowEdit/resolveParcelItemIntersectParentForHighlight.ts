@@ -3,8 +3,8 @@ import { resolveParcelItemForHighlight } from "./resolveParcelItemForHighlight";
 import type { LayerRowParcelItem } from "./types";
 
 /**
- * 필지 하이라이트용 — 점용(부모) ∩ 필지 교집합만 반환.
- * 교집합 실패 시 전체 필지로 폴백하지 않음 (geometry3857/extent3857 비움).
+ * 필지 하이라이트용 — 점용(부모) ∩ 필지 교집합.
+ * 겹치는 면이 없으면 목록 필지 도형 그대로.
  */
 export async function resolveParcelItemIntersectParentForHighlight(
   item: LayerRowParcelItem,
@@ -21,13 +21,9 @@ export async function resolveParcelItemIntersectParentForHighlight(
   const parentKeyValue = String(opts.parentKeyValue ?? "").trim();
   const childKey = item.wmsRowKey;
 
-  const emptyHighlight: LayerRowParcelItem = {
-    ...item,
-    geometry3857: null,
-    extent3857: null,
-  };
+  const fullParcel = () => resolveParcelItemForHighlight(item, childTable);
 
-  if (!parentTable || !parentKeyValue) return emptyHighlight;
+  if (!parentTable || !parentKeyValue) return fullParcel();
 
   // 1) DB 행 키로 원본 SRID에서 교집합 (가장 확실)
   if (childTable && childKey?.keyField && childKey?.keyValue) {
@@ -61,7 +57,7 @@ export async function resolveParcelItemIntersectParentForHighlight(
 
   // 2) 이미 조회된 GeoJSON끼리 교집합
   const base = await resolveParcelItemForHighlight(item, childTable);
-  if (!base.geometry3857) return emptyHighlight;
+  if (!base.geometry3857) return base;
 
   try {
     const parentRes = await call("", "POST", {
@@ -96,8 +92,8 @@ export async function resolveParcelItemIntersectParentForHighlight(
       }
     }
   } catch {
-    // 전체 필지 폴백 없음
+    // 겹치지 않으면 목록 필지 그대로
   }
 
-  return emptyHighlight;
+  return base;
 }

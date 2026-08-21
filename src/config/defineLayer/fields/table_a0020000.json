@@ -2,7 +2,7 @@
   {
     "define_field_name": "ogc_fid",
     "define_field_kor_name": "ogc_fid",
-    "define_field_type": "integer",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -27,7 +27,7 @@
   {
     "define_field_name": "rdid",
     "define_field_kor_name": "관리번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 2,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -52,7 +52,7 @@
   {
     "define_field_name": "ufid",
     "define_field_kor_name": "일련번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 3,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -77,7 +77,7 @@
   {
     "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 4,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -102,7 +102,7 @@
   {
     "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 5,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -127,7 +127,7 @@
   {
     "define_field_name": "road_name",
     "define_field_kor_name": "노선명",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 6,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -152,7 +152,7 @@
   {
     "define_field_name": "road_no",
     "define_field_kor_name": "노선번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 7,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -177,7 +177,7 @@
   {
     "define_field_name": "sect",
     "define_field_kor_name": "구간",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 8,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -202,7 +202,7 @@
   {
     "define_field_name": "dsgdate",
     "define_field_kor_name": "노선지정(인정)일",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 9,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -227,7 +227,7 @@
   {
     "define_field_name": "j_date",
     "define_field_kor_name": "도로구역결정(변경)일",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 10,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -252,7 +252,7 @@
   {
     "define_field_name": "d_date",
     "define_field_kor_name": "접도구역지정일",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 11,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -277,7 +277,7 @@
   {
     "define_field_name": "jj_date",
     "define_field_kor_name": "지적고시일",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 12,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -302,7 +302,7 @@
   {
     "define_field_name": "s_point",
     "define_field_kor_name": "위치시점",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 13,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -327,7 +327,7 @@
   {
     "define_field_name": "e_point",
     "define_field_kor_name": "위치종점",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 14,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -352,7 +352,7 @@
   {
     "define_field_name": "impopass",
     "define_field_kor_name": "주요 통과지",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 15,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -377,7 +377,7 @@
   {
     "define_field_name": "lenth",
     "define_field_kor_name": "노선연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 16,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -402,7 +402,7 @@
   {
     "define_field_name": "perslenth",
     "define_field_kor_name": "전용연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 17,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -427,7 +427,7 @@
   {
     "define_field_name": "mixlenth",
     "define_field_kor_name": "중용연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 18,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -452,7 +452,7 @@
   {
     "define_field_name": "ntrflenth",
     "define_field_kor_name": "통행불능연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 19,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -477,7 +477,7 @@
   {
     "define_field_name": "p_ent_len",
     "define_field_kor_name": "포장도로 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 20,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -502,7 +502,7 @@
   {
     "define_field_name": "p_road_len",
     "define_field_kor_name": "포장도로 도로",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 21,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -527,7 +527,7 @@
   {
     "define_field_name": "p_tun_ea2",
     "define_field_kor_name": "포장도로 타날 2치로 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 22,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -552,7 +552,7 @@
   {
     "define_field_name": "p_tun_ea3",
     "define_field_kor_name": "포장도로 터널 3차로 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 23,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -577,7 +577,7 @@
   {
     "define_field_name": "p_tun_ea4",
     "define_field_kor_name": "포장도로 터널 4차로 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 24,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -602,7 +602,7 @@
   {
     "define_field_name": "p_tun_ea5",
     "define_field_kor_name": "포장도로 터널 5차로이상 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 25,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -627,7 +627,7 @@
   {
     "define_field_name": "p_tuneaall",
     "define_field_kor_name": "포장도로 터널 개소 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 26,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -652,7 +652,7 @@
   {
     "define_field_name": "p_tun_len2",
     "define_field_kor_name": "포장도로 터널 2차로 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 27,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -677,7 +677,7 @@
   {
     "define_field_name": "p_tun_len3",
     "define_field_kor_name": "포장도로 터널 3차로 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 28,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -702,7 +702,7 @@
   {
     "define_field_name": "p_tun_len4",
     "define_field_kor_name": "포장도로 터널 4차로 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 29,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -727,7 +727,7 @@
   {
     "define_field_name": "p_tun_len5",
     "define_field_kor_name": "포장도로 터널 5차로이상 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 30,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -752,7 +752,7 @@
   {
     "define_field_name": "p_tunlenal",
     "define_field_kor_name": "포장도로 터널 연장 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 31,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -777,7 +777,7 @@
   {
     "define_field_name": "kanga",
     "define_field_kor_name": "포장도로 교량 강교 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 32,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -802,7 +802,7 @@
   {
     "define_field_name": "chula",
     "define_field_kor_name": "포장도로 교량 철근콘크리트교 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 33,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -827,7 +827,7 @@
   {
     "define_field_name": "haba",
     "define_field_kor_name": "포장도로 교량 합성교 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 34,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -852,7 +852,7 @@
   {
     "define_field_name": "etca",
     "define_field_kor_name": "포장도로 교량 그밖의교량 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 35,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -877,7 +877,7 @@
   {
     "define_field_name": "alla",
     "define_field_kor_name": "포장도로 교량 개소 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 36,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -902,7 +902,7 @@
   {
     "define_field_name": "kangb",
     "define_field_kor_name": "포장도로 교량 강교 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 37,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -927,7 +927,7 @@
   {
     "define_field_name": "chulb",
     "define_field_kor_name": "포장도로 교량 철근콘크리트교 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 38,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -952,7 +952,7 @@
   {
     "define_field_name": "habb",
     "define_field_kor_name": "포장도로 교량 합성교 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 39,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -977,7 +977,7 @@
   {
     "define_field_name": "etcb",
     "define_field_kor_name": "포장도로 교량 그밖의교량 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 40,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1002,7 +1002,7 @@
   {
     "define_field_name": "allb",
     "define_field_kor_name": "포장도로 교량 연장 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 41,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1027,7 +1027,7 @@
   {
     "define_field_name": "np_roadlen",
     "define_field_kor_name": "비포장도로",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 42,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1052,7 +1052,7 @@
   {
     "define_field_name": "nt_roadlen",
     "define_field_kor_name": "미개통도로",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 43,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1077,7 +1077,7 @@
   {
     "define_field_name": "wid_all",
     "define_field_kor_name": "폭원 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 44,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1102,7 +1102,7 @@
   {
     "define_field_name": "wid_road",
     "define_field_kor_name": "폭원 차도",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 45,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1127,7 +1127,7 @@
   {
     "define_field_name": "wid_cen",
     "define_field_kor_name": "폭원 중앙분리대",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 46,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1152,7 +1152,7 @@
   {
     "define_field_name": "wid_gil",
     "define_field_kor_name": "폭원 길어걔(보도)",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 47,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1177,7 +1177,7 @@
   {
     "define_field_name": "p_thc_all",
     "define_field_kor_name": "포장두께 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 48,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1202,7 +1202,7 @@
   {
     "define_field_name": "p_thc_pg",
     "define_field_kor_name": "포장두께 표층기층,포장슬래브",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 49,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1227,7 +1227,7 @@
   {
     "define_field_name": "p_thc_sub",
     "define_field_kor_name": "포장두께 보조기층",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 50,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1252,7 +1252,7 @@
   {
     "define_field_name": "road_len_2",
     "define_field_kor_name": "차로수 2차로 미만",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 51,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1277,7 +1277,7 @@
   {
     "define_field_name": "road_len_4",
     "define_field_kor_name": "차로수 2차로 이상~4차로 미만",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 52,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1302,7 +1302,7 @@
   {
     "define_field_name": "road_len_6",
     "define_field_kor_name": "차로수 4차로 이상~6차로 미만",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 53,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1327,7 +1327,7 @@
   {
     "define_field_name": "road_len_7",
     "define_field_kor_name": "차로수 6차로 이상",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 54,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1352,7 +1352,7 @@
   {
     "define_field_name": "roadlenau",
     "define_field_kor_name": "차도 계 상행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 55,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1377,7 +1377,7 @@
   {
     "define_field_name": "roadlenad",
     "define_field_kor_name": "차도 계 하행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 56,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1402,7 +1402,7 @@
   {
     "define_field_name": "as_len_au",
     "define_field_kor_name": "차도 아스팔트 상행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 57,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1427,7 +1427,7 @@
   {
     "define_field_name": "as_len_ad",
     "define_field_kor_name": "차도 아스팔트 하행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 58,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1452,7 +1452,7 @@
   {
     "define_field_name": "con_lenau",
     "define_field_kor_name": "차도 콘크리트 상행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 59,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1477,7 +1477,7 @@
   {
     "define_field_name": "con_lenad",
     "define_field_kor_name": "차도 콘크리트 하행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 60,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1502,7 +1502,7 @@
   {
     "define_field_name": "np_len_au",
     "define_field_kor_name": "차도 비포장 상행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 61,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1527,7 +1527,7 @@
   {
     "define_field_name": "np_len_ad",
     "define_field_kor_name": "차도 비포장 하행",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 62,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1552,7 +1552,7 @@
   {
     "define_field_name": "p_m_l",
     "define_field_kor_name": "길어께(보도) 포장 좌",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 63,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1577,7 +1577,7 @@
   {
     "define_field_name": "p_m_r",
     "define_field_kor_name": "길어께(보도) 포장 우",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 64,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1602,7 +1602,7 @@
   {
     "define_field_name": "np_m_l",
     "define_field_kor_name": "길어께(보도) 비포장 좌",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 65,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1627,7 +1627,7 @@
   {
     "define_field_name": "np_m_r",
     "define_field_kor_name": "길어께(보도) 비포장 우",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 66,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1652,7 +1652,7 @@
   {
     "define_field_name": "by_l",
     "define_field_kor_name": "자전거도로 좌",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 67,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1677,7 +1677,7 @@
   {
     "define_field_name": "by_r",
     "define_field_kor_name": "자전거도로 우",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 68,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1702,7 +1702,7 @@
   {
     "define_field_name": "allarea",
     "define_field_kor_name": "도로부지면적 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 69,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1727,7 +1727,7 @@
   {
     "define_field_name": "nationarea",
     "define_field_kor_name": "도로부지면적 국유지",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 70,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1752,7 +1752,7 @@
   {
     "define_field_name": "locatarea",
     "define_field_kor_name": "도로부지면적 공유지",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 71,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1777,7 +1777,7 @@
   {
     "define_field_name": "priv_area",
     "define_field_kor_name": "도로부지면적 사유지",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 72,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1802,7 +1802,7 @@
   {
     "define_field_name": "micrv100",
     "define_field_kor_name": "곡선반경100m미만",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 73,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1827,7 +1827,7 @@
   {
     "define_field_name": "micrv200",
     "define_field_kor_name": "곡선반경100m이상~200m미만개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 74,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1852,7 +1852,7 @@
   {
     "define_field_name": "micrv300",
     "define_field_kor_name": "곡선반경200m이상~300m미만개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 75,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1877,7 +1877,7 @@
   {
     "define_field_name": "micrv460",
     "define_field_kor_name": "곡선반경300m이상~460m미만개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 76,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1902,7 +1902,7 @@
   {
     "define_field_name": "micrv700",
     "define_field_kor_name": "곡선반경460m이상~700m미만개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 77,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1927,7 +1927,7 @@
   {
     "define_field_name": "micrv701",
     "define_field_kor_name": "곡선반경700m이상개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 78,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1952,7 +1952,7 @@
   {
     "define_field_name": "crs_obrdg",
     "define_field_kor_name": "교차 육교 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 79,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -1977,7 +1977,7 @@
   {
     "define_field_name": "crs_sub",
     "define_field_kor_name": "교차 지하도 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 80,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2002,7 +2002,7 @@
   {
     "define_field_name": "crs_railgu",
     "define_field_kor_name": "교차 철도 과선 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 81,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2027,7 +2027,7 @@
   {
     "define_field_name": "crs_railga",
     "define_field_kor_name": "교차 철도 가도 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 82,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2052,7 +2052,7 @@
   {
     "define_field_name": "crs_road2d",
     "define_field_kor_name": "교차 도로 평면 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 83,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2077,7 +2077,7 @@
   {
     "define_field_name": "crs_road3d",
     "define_field_kor_name": "교차 도로 입체 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 84,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2102,7 +2102,7 @@
   {
     "define_field_name": "ver_s_3ea",
     "define_field_kor_name": "종단경사 3% 미만 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 85,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2127,7 +2127,7 @@
   {
     "define_field_name": "ver_s_3len",
     "define_field_kor_name": "종단경사 3% 미만 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 86,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2152,7 +2152,7 @@
   {
     "define_field_name": "ver_s_5ea",
     "define_field_kor_name": "종단경사 3% 이상 5% 미만 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 87,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2177,7 +2177,7 @@
   {
     "define_field_name": "ver_s_5len",
     "define_field_kor_name": "종단경사 3% 이상 5% 미만 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 88,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2202,7 +2202,7 @@
   {
     "define_field_name": "ver_s_10ea",
     "define_field_kor_name": "종단경사 5% 이상 10% 미만 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 89,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2227,7 +2227,7 @@
   {
     "define_field_name": "ver_s10len",
     "define_field_kor_name": "종단경사 5% 이상 10% 미만 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 90,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2252,7 +2252,7 @@
   {
     "define_field_name": "ver_s_11ea",
     "define_field_kor_name": "종단경사 10% 이상 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 91,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2277,7 +2277,7 @@
   {
     "define_field_name": "ver_s11len",
     "define_field_kor_name": "종단경사 10% 이상 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 92,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2302,7 +2302,7 @@
   {
     "define_field_name": "paywho",
     "define_field_kor_name": "유료도로 관리자",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 93,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2327,7 +2327,7 @@
   {
     "define_field_name": "pay_period",
     "define_field_kor_name": "유료도로 요금징수시간(시작일시~종료일시)",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 94,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2352,7 +2352,7 @@
   {
     "define_field_name": "pay_ea",
     "define_field_kor_name": "유료도로 요금징수시설수",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 95,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2377,7 +2377,7 @@
   {
     "define_field_name": "payrec",
     "define_field_kor_name": "유료도로 요금징수근거",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 96,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2402,7 +2402,7 @@
   {
     "define_field_name": "pay_alllen",
     "define_field_kor_name": "유료도로 연장내역 계",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 97,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2427,7 +2427,7 @@
   {
     "define_field_name": "payroad",
     "define_field_kor_name": "유료도로 연장내역 도로",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 98,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2452,7 +2452,7 @@
   {
     "define_field_name": "pay_tun_ea",
     "define_field_kor_name": "유료도로 연장내역 터널 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 99,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2477,7 +2477,7 @@
   {
     "define_field_name": "paytunnel",
     "define_field_kor_name": "유료도로 연장내역 터널 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 100,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2502,7 +2502,7 @@
   {
     "define_field_name": "pay_brdgea",
     "define_field_kor_name": "유료도로 연장내역 교량 개소",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 101,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2527,7 +2527,7 @@
   {
     "define_field_name": "paybrdg",
     "define_field_kor_name": "유료도로 연장내역 교량 연장",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 102,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2552,7 +2552,7 @@
   {
     "define_field_name": "remark",
     "define_field_kor_name": "비고",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 103,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2576,8 +2576,8 @@
   },
   {
     "define_field_name": "sid",
-    "define_field_kor_name": "sid",
-    "define_field_type": "text",
+    "define_field_kor_name": "시스템관리ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 104,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2601,8 +2601,8 @@
   },
   {
     "define_field_name": "hcode",
-    "define_field_kor_name": "hcode",
-    "define_field_type": "text",
+    "define_field_kor_name": "이력관리번호",
+    "define_field_type": "TEXT",
     "define_field_idx": 105,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2626,8 +2626,8 @@
   },
   {
     "define_field_name": "n_name",
-    "define_field_kor_name": "n_name",
-    "define_field_type": "text",
+    "define_field_kor_name": "면단위구분 노선명칭",
+    "define_field_type": "TEXT",
     "define_field_idx": 106,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2651,8 +2651,8 @@
   },
   {
     "define_field_name": "n_code",
-    "define_field_kor_name": "n_code",
-    "define_field_type": "text",
+    "define_field_kor_name": "면단위구분 노선명칭 영문약어",
+    "define_field_type": "TEXT",
     "define_field_idx": 107,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2676,8 +2676,8 @@
   },
   {
     "define_field_name": "jhline_id",
-    "define_field_kor_name": "jhline_id",
-    "define_field_type": "text",
+    "define_field_kor_name": "내부작업용ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 108,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2701,8 +2701,8 @@
   },
   {
     "define_field_name": "label",
-    "define_field_kor_name": "label",
-    "define_field_type": "text",
+    "define_field_kor_name": "라벨",
+    "define_field_type": "TEXT",
     "define_field_idx": 109,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2727,7 +2727,7 @@
   {
     "define_field_name": "geom",
     "define_field_kor_name": "geom",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 110,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -2752,7 +2752,7 @@
   {
     "define_field_name": "sern",
     "define_field_kor_name": "시스템관리ID",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 111,
     "define_field_is_required": false,
     "define_field_show_search": false,

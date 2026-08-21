@@ -8,18 +8,54 @@ import { MAP_AUTO_NAV_MAX_ZOOM } from "../config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../config/mapAutoNavigation";
 import type { LayerRowParcelItem } from "./types";
 
+export function parcelAddressMatchKey(address: string): string {
+  return String(address ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 export function parcelAddressesFromItems(items: LayerRowParcelItem[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of items) {
     const addr = String(item.address ?? "").trim();
     if (!addr) continue;
-    const key = addr.toLowerCase();
+    const key = parcelAddressMatchKey(addr);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(addr);
   }
   return out;
+}
+
+/** 같은 필지인지 — 시군구 유무만 달라도 같다고 본다. */
+export function parcelAddressesEquivalent(a: string, b: string): boolean {
+  const ka = parcelAddressMatchKey(a);
+  const kb = parcelAddressMatchKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  const [shorter, longer] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+  if (!longer.endsWith(shorter)) return false;
+  const prev = longer[longer.length - shorter.length - 1];
+  return prev == null || prev === " ";
+}
+
+/** 주소 목록이 같은지 (순서 무시, 시군구 표기 차이 허용). 같으면 자식 행을 다시 쓰지 않는다. */
+export function sameParcelAddressList(
+  a: Array<{ address?: string }>,
+  b: Array<{ address?: string }>
+): boolean {
+  const keysA = a.map((p) => parcelAddressMatchKey(String(p.address ?? ""))).filter(Boolean);
+  const keysB = b.map((p) => parcelAddressMatchKey(String(p.address ?? ""))).filter(Boolean);
+  if (keysA.length !== keysB.length) return false;
+  const used = new Set<number>();
+  for (const ka of keysA) {
+    const idx = keysB.findIndex((kb, i) => !used.has(i) && parcelAddressesEquivalent(ka, kb));
+    if (idx < 0) return false;
+    used.add(idx);
+  }
+  return true;
 }
 
 /** 지도 이동용 extent — extent3857 → geometry3857 → point4326 순 */

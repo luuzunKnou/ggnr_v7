@@ -18,16 +18,16 @@ type Options = {
   onSetPermit: (fieldKey: string, value: string) => void;
   fetchNext: (year: number) => Promise<string | null>;
   /**
-   * true(신규): 시작일 없어도 현재 연도로 즉시 채번.
-   * false(수정): 시작일이 있을 때만 채번·연도 갱신.
+   * true(신규)일 때만 채번. 수정은 저장된 허가번호를 유지한다.
    */
   useCurrentYearWhenEmpty?: boolean;
 };
 
 /**
  * 시작일 연도 기준 허가번호(YYYY-NN) 자동채번.
- * - 신규: 추가 직후 현재 연도 일련(예: 2026-01) 즉시 채움
- * - 시작일 연도가 바뀌면 새 연도 일련으로 갱신
+ * 신규 등록에만 쓴다. 수정에서는 저장된 번호를 건드리지 않는다.
+ * - 추가 직후 현재 연도 일련(예: 2026-01) 즉시 채움
+ * - 시작일 연도가 바뀌면 그 연도 일련으로 갱신
  * - 사용자가 자동형식이 아닌 값을 넣으면 잠금
  */
 export function useAutoOccupationPermitNo({
@@ -65,12 +65,11 @@ export function useAutoOccupationPermitNo({
 
   useEffect(() => {
     if (!enabled || !permitFieldKey) return;
+    if (!useCurrentYearWhenEmpty) return;
     if (manualRef.current) return;
 
     const fromStart = yearFromStartDateYmd(startDateRaw);
-    const year =
-      fromStart ?? (useCurrentYearWhenEmpty ? currentPermitYear() : null);
-    if (year == null) return;
+    const year = fromStart ?? currentPermitYear();
 
     const current = String(permitValue ?? "").trim();
 

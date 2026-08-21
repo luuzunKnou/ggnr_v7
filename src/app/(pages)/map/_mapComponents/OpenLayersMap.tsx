@@ -1519,15 +1519,30 @@ export default function OpenLayersMap({
             .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
           if (ranked.length > 0) {
             const keyField = binding.fields.keyField;
+            const childParentField = binding.fields.childParentField;
+            const mainId = binding.mainTable.toLowerCase();
+            const parentRanked = ranked.filter((x) => {
+              const tn = String(x.layer.tableName ?? '')
+                .trim()
+                .toLowerCase();
+              return tn === mainId;
+            });
+            const scan = parentRanked.length > 0 ? parentRanked : ranked;
             const overlapOptions: {
               value: string;
               label: string;
               extent3857?: [number, number, number, number] | null;
             }[] = [];
             const seen = new Set<string>();
-            for (const { layer } of ranked) {
+            for (const { layer } of scan) {
+              const tn = String(layer.tableName ?? '')
+                .trim()
+                .toLowerCase();
+              const pickField = tn === mainId ? keyField : childParentField;
               for (const feat of layer.features) {
-                const rowKey = pickIdentifyField(feat?.data, keyField);
+                const rowKey =
+                  pickIdentifyField(feat?.data, pickField) ||
+                  (tn !== mainId ? pickIdentifyField(feat?.data, 'permit_no') : '');
                 if (!rowKey || seen.has(rowKey)) continue;
                 seen.add(rowKey);
                 const permit =
