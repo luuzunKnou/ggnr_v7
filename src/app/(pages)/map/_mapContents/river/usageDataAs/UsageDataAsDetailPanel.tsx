@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   LAYER_ROW_EDIT_PRESETS,
   LAYER_ROW_NEW_ID,
@@ -190,6 +191,19 @@ export function UsageDataAsDetailPanel({
   useEffect(() => {
     void loadDetail();
   }, [loadDetail, reloadToken]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode) return;
+    const key = String(detailId ?? "").trim();
+    if (!key) return;
+    recordDataViewLog({
+      tableName: LAYER_ROW_EDIT_PRESETS.usageDataAs.tableName,
+      keyField: LAYER_ROW_EDIT_PRESETS.usageDataAs.keyField,
+      keyValue: key,
+      serviceName: "하천사용",
+    });
+  }, [detailId, isCreateMode]);
 
   useEffect(() => {
     setHighlightParcel(null);

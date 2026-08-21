@@ -1236,7 +1236,10 @@ function readDbfNumericFields(dir: string, basename: string): DbfNumericField[] 
 function isBrokenDbfNumericMeta(width: number, scale: number): boolean {
   const w = width > 0 ? width : 18;
   const sc = scale < 0 ? 0 : scale;
-  return sc >= w || sc > 15;
+  if (sc >= w || sc > 15) return true;
+  // 정수부(w - sc)가 9자리 미만이면 실제 값이 넘칠 수 있으므로 NUMERIC(무제한)으로 올림
+  if (sc > 0 && (w - sc) < 10) return true;
+  return false;
 }
 
 /** ogr2ogr `-lco COLUMN_TYPES=…` — 비정상 수치 필드만 `NUMERIC`(자릿수 제한 없음). 없으면 null */

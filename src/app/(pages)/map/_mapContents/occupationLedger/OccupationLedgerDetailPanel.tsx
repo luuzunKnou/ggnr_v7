@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { call } from '@/lib/api';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { getOccupationLedgerBinding } from './occupationLedgerBinding';
 import {
   LAYER_ROW_EDIT_PRESETS,
@@ -239,6 +240,19 @@ export function OccupationLedgerDetailPanel({
   useEffect(() => {
     void loadDetail();
   }, [loadDetail, reloadToken]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode) return;
+    const key = String(detailId ?? '').trim();
+    if (!key) return;
+    recordDataViewLog({
+      tableName: mainTable,
+      keyField,
+      keyValue: key,
+      serviceName: '점용대장',
+    });
+  }, [detailId, isCreateMode, mainTable, keyField]);
 
   useEffect(() => {
     setHighlightParcel(null);

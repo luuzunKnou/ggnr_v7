@@ -12,8 +12,12 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
 import { useChunkedUpload } from '../useChunkedUpload';
-import { getCoordFromAddress } from '@/app/(pages)/map/_mapComponents/addressSearch/vworldAddressSearch';
-import { hangjeongRiAddressAlt } from '@/lib/excelUploadAddressNormalize';
+import { createExcelGeocodeCache } from '@/lib/excelUploadGeocode';
+import {
+  excelAddressLooksLikeJibunThenFollowing,
+  polishExcelGeocodeAddress,
+  splitExcelJibunThenFollowingAddress,
+} from '@/lib/excelUploadAddressNormalize';
 import {
   excelLayerTableCheckBadge,
   excelLayerTableCheckHint,
@@ -45,6 +49,7 @@ import {
   EXCEL_LAYER_SYSTEM_COLS,
   type ExcelWizardKeyMode,
   buildExcelCompositeKeyValue,
+  excelWeakSingleKeyWarning,
   isExcelSystemAttrField,
   isExcelSystemKeyColumn,
   suggestExcelCompositeKey,
@@ -275,6 +280,7 @@ function pickUnifiedAddressHeader(
 /**
  * 엑셀/대장 흔한 표기 정리: "외 N번지·외N번지·외 N필지"는 검색에서 빼고 대표 지번만 남김.
  * 예: "812외2번지" → "812번지", "716-29외2번지" → "716-29"
+ * GPT 키가 없거나 호출 실패 시에만 사용. GPT 입력에는 원문을 넘긴다.
  */
 function normalizeExcelAddressForGeocode(s: string): string {
   let t = String(s ?? '').trim();
@@ -288,37 +294,27 @@ function normalizeExcelAddressForGeocode(s: string): string {
   t = t.replace(/번지선/gi, '번지');
   t = t.replace(/\s*하천부지\s*/gi, ' ');
   t = t.replace(/\s*하천\s*/gi, ' ');
+  // "1039번지 20호" — 호는 건물번호. 부번(1039-20)으로 붙이지 않음
+  t = t.replace(/(\d+)\s*번지\s*\d+\s*호/gi, '$1번지');
   // 5자리 이상 숫자는 본번·부번이 아니므로 제거 (주민번호·관리번호 등 오염 방지)
   t = t.replace(/\b\d{5,}\b/g, '');
   return t.replace(/\s{2,}/g, ' ').trim();
 }
 
-/** 원주소 실패 시 행정리→법정리 주소로 VWorld GetCoord 재시도 */
-async function getCoordFromAddressWithHangjeongRiFallback(
-  addr: string,
-  apiKey: string
-): Promise<{
-  ok: boolean;
-  lon?: number;
-  lat?: number;
-  message?: string;
-  hangjeongFix: string | null;
-}> {
-  let coord = await getCoordFromAddress(addr, { apiKey, type: 'ROAD' });
-  if (!coord.ok) {
-    coord = await getCoordFromAddress(addr, { apiKey, type: 'PARCEL' });
-  }
-  if (coord.ok) return { ...coord, hangjeongFix: null };
-  const alt = hangjeongRiAddressAlt(addr);
-  if (!alt) return { ...coord, hangjeongFix: null };
-  let retry = await getCoordFromAddress(alt, { apiKey, type: 'ROAD' });
-  if (!retry.ok) {
-    retry = await getCoordFromAddress(alt, { apiKey, type: 'PARCEL' });
-  }
-  if (retry.ok) {
-    return { ...retry, hangjeongFix: `${addr} → ${alt}` };
-  }
-  return { ...coord, hangjeongFix: null };
+function localFallbackAddressList(raw: string): string[] {
+  return finalizeExcelAddressList(raw, []);
+}
+
+function finalizeExcelAddressList(raw: string, gptList?: string[]): string[] {
+  const polished = (gptList ?? []).map((a) => polishExcelGeocodeAddress(a)).filter(Boolean);
+  if (polished.length > 1) return polished;
+  const split =
+    splitExcelJibunThenFollowingAddress(polished[0] ?? '') ??
+    splitExcelJibunThenFollowingAddress(raw);
+  if (split && split.length > 1) return split;
+  if (polished.length > 0) return polished;
+  const t = normalizeExcelAddressForGeocode(raw);
+  return t ? [t] : [];
 }
 
 type SplitParcelCfg = {
@@ -354,6 +350,8 @@ function isLikelyMultiParcelAddress(raw: string): boolean {
   if (/\d+(?:\s+[가-힣A-Za-z]+)+\s+\d+/.test(t)) return true;
   // "번지" 뒤에 읍/면/동/리가 또 나오면 새 필지 주소가 시작됨 (예: "236번지 입암면 금학리 1203")
   if (/번지\s+[가-힣]+(?:읍|면|동|리)/.test(t)) return true;
+  // 지번 뒤에 시·도(경북 등) 또는 도로명이 이어짐 (예: "81번지 경북 … 새골길13")
+  if (excelAddressLooksLikeJibunThenFollowing(raw) || excelAddressLooksLikeJibunThenFollowing(t)) return true;
   // 시·도 행정구역 단위(도/광역시/특별시 등)가 2번 이상 → 전체 주소가 반복됨 (예: "...도곡리 630 경상북도 영양군...")
   if (countRegexMatches(t, /[가-힣]+(?:도|광역시|특별시|특별자치시|특별자치도)/g) >= 2) return true;
   return false;
@@ -443,7 +441,7 @@ ${lines}`;
   for (let ord = 0; ord < n; ord++) {
     const p = chunk[ord]!;
     const strings = byOrder.get(ord);
-    byRow.set(p.i, strings && strings.length > 0 ? strings : [p.text]);
+    byRow.set(p.i, strings && strings.length > 0 ? strings : []);
   }
   return byRow;
 }
@@ -637,6 +635,12 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
   const isLedgerWorkflow =
     excelUploadWorkflowId === 'dev_behavior_ledger' || excelUploadWorkflowId === 'occupancy_ledger';
   const isAndongRoadUseWorkflow = excelUploadWorkflowId === 'andong_road_use_ledger';
+  const isStandardWorkflow = excelUploadWorkflowId === 'standard';
+  const mulgunjiTableEnabled = isAndongRoadUseWorkflow
+    ? true
+    : isStandardWorkflow
+      ? false
+      : createSeparateMulgunjiTable;
 
   useEffect(() => {
     processingLogScrollRef.current?.scrollTo({ top: processingLogScrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -771,12 +775,13 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       ? !!selectedGeocodingHeader
       : !!(splitEmdColumn && splitJibunColumn));
   const step2ObjectAddressOk =
-    isAndongRoadUseWorkflow
+    !mulgunjiTableEnabled || isAndongRoadUseWorkflow
       ? true
       : objectAddressSelectMode === 'singleColumn'
       ? !!selectedObjectAddressHeader
       : !!(objSplitEmdColumn && objSplitJibunColumn);
   const bothGeomConflict =
+    mulgunjiTableEnabled &&
     !isAndongRoadUseWorkflow &&
     parcelSelectMode === 'singleColumn' &&
     objectAddressSelectMode === 'singleColumn' &&
@@ -812,8 +817,10 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         setObjSplitSidoFixed('경상북도');
         setObjSplitSigunguFixed('안동시');
       }
+    } else if (isStandardWorkflow) {
+      setCreateSeparateMulgunjiTable(false);
     }
-  }, [isLedgerWorkflow, isAndongRoadUseWorkflow]);
+  }, [isLedgerWorkflow, isAndongRoadUseWorkflow, isStandardWorkflow]);
 
   useEffect(() => {
     if (!isAndongRoadUseWorkflow || !selectedFile) return;
@@ -867,6 +874,10 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         : null,
     [keyMode, workflowParseResult, fieldDefs]
   );
+  const weakSingleKeyHint =
+    keyMode === 'single' && keyFieldDefs.length === 1
+      ? excelWeakSingleKeyWarning(keyFieldDefs[0])
+      : null;
   const syntheticKeyEngTrim = syntheticKeyEng.trim();
   const compositeKeyEngTrim = compositeKeyEng.trim();
   const compositeKeyEngOk =
@@ -944,9 +955,12 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
             const byComment = dbCols.find((c) => (c.comment ?? '').trim() === String(h).trim());
             if (byComment) headerEng = byComment.name;
           }
+          const matchedCol = layerTableMeta?.exists
+            ? layerTableMeta.columns.find((c) => c.name === headerEng)
+            : undefined;
           return {
             originalHeader: h,
-            headerKor: h,
+            headerKor: (def?.define_field_kor_name ?? matchedCol?.comment?.trim()) || String(h),
             headerEng,
             showList: def?.define_field_show_list ?? false,
             showSearch: def?.define_field_show_search ?? false,
@@ -1333,7 +1347,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
 
   /** 물건지 열 구분: 비어 있을 때만 정규식 추천으로 시도·시군구·읍면동·리·지번 열 채움 */
   useEffect(() => {
-    if (step !== 2 || objectAddressSelectMode !== 'splitColumns') return;
+    if (step !== 2 || !mulgunjiTableEnabled || objectAddressSelectMode !== 'splitColumns') return;
     const headers = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
     const samples = workflowParseResult?.samples;
     if (!headers?.length || !samples) return;
@@ -1343,11 +1357,11 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     setObjSplitSigunguColumn((c) => c ?? picks.sigungu);
     setObjSplitSidoColumn((c) => c ?? picks.sido);
     setObjSplitRiColumn((c) => c ?? picks.ri);
-  }, [step, objectAddressSelectMode, workflowParseResult?.headers, workflowParseResult?.samples]);
+  }, [step, mulgunjiTableEnabled, objectAddressSelectMode, workflowParseResult?.headers, workflowParseResult?.samples]);
 
   /** 물건지 한 열 주소: 선택 없을 때만 추천 열을 기본 선택 (필지가 geom이면 물건지는 geom 비우선) */
   useEffect(() => {
-    if (step !== 2 || objectAddressSelectMode !== 'singleColumn') return;
+    if (step !== 2 || !mulgunjiTableEnabled || objectAddressSelectMode !== 'singleColumn') return;
     const headers = workflowParseResult?.headers?.filter((h) => h !== LEDGER_ROW_KEY_HEADER);
     const samples = workflowParseResult?.samples;
     if (!headers?.length || !samples) return;
@@ -1374,6 +1388,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     });
   }, [
     step,
+    mulgunjiTableEnabled,
     objectAddressSelectMode,
     parcelSelectMode,
     selectedGeocodingHeader,
@@ -1389,6 +1404,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         if (!selectedGeocodingHeader) return;
       } else if (!splitEmdColumn || !splitJibunColumn) return;
       if (
+        mulgunjiTableEnabled &&
         parcelSelectMode === 'singleColumn' &&
         objectAddressSelectMode === 'singleColumn' &&
         selectedGeocodingHeader?.trim().toLowerCase() === 'geom' &&
@@ -1448,8 +1464,9 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       parcelSelectMode === 'splitColumns'
         ? '열 구분 조합'
         : `한 열(${selectedGeocodingHeader ?? '-'})`;
-    const objectAddressMode =
-      objectAddressSelectMode === 'splitColumns'
+    const objectAddressMode = !mulgunjiTableEnabled
+      ? '미사용'
+      : objectAddressSelectMode === 'splitColumns'
         ? '열 구분 조합'
         : selectedObjectAddressHeader
           ? `한 열(${selectedObjectAddressHeader})`
@@ -1501,7 +1518,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       pushLog('물건지: geom 열 선택 — WKT를 도형으로 그대로 반영합니다. (GPT·지오코딩 생략)');
     }
     const separateJijukTable = isLedgerWorkflow || createSeparateJijukTable;
-    const separateMulgunjiTable = createSeparateMulgunjiTable;
+    const separateMulgunjiTable = mulgunjiTableEnabled;
     if (separateJijukTable) {
       pushLog(`별도 지적 테이블 사용: layer.${tableEng.trim()}_jijuk 에 필지별 행 저장, 부모 geom 은 자식 합집합`);
     }
@@ -1809,15 +1826,18 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     const GPT_PROMPT = `다음 주소 문자열을 "필지 단위 주소 배열"로 정규화해 JSON 배열로 답해줘.
                         규칙:
                         1. 입력에 복수 필지가 섞여 있으면 필지마다 하나의 주소 문자열로 분리한다.
-                        2. 결과 각 원소는 가능한 한 동일한 형식(시도 시군구 읍면동 리 지번)으로 맞춘다.
+                        2. 결과 각 원소는 시도·시군구를 갖춘다. 지번은 지번 형식, 도로명(로/길/대로)은 도로명 형식을 유지한다. 도로명을 지번으로 바꾸지 않는다.
                         3. "외 N번지", "외N번지", "외 N필지"는 제외하고 대표 지번만 남긴다. 본번만 있으면 "812번지", 본번-부번이면 "716-29"처럼 번지를 붙이지 않는다.
                         4. "경북 영양군 수비면 수하리 781-4, 702-2"처럼 읍면동·리는 공통이고 지번만 콤마로 붙은 경우, 공통 접두를 각 필지에 복제해
-                           ["경북 영양군 수비면 수하리 781-4", "경북 영양군 수비면 수하리 702-2"] 형태로 반환한다.
+                           ["경상북도 영양군 수비면 수하리 781-4", "경상북도 영양군 수비면 수하리 702-2"] 형태로 반환한다.
                         5. 응답은 JSON 배열만 출력한다. 설명/코드펜스 금지.
                         6. 주소가 있으면 빈 배열을 반환하지 않는다. 단일 필지면 길이 1 배열로 반환한다.
                         7. "652번지 5호"처럼 "번지" 뒤에 오는 "N호"는 호수/건물번호이므로 부번(-N)으로 보지 말고 제외한다. "652번지"로만 반환하고 절대 "652-5"로 만들지 않는다.
                         8. "번지" 뒤에 읍/면/동/리가 다시 나오면 새 필지의 시작으로 보고 분리한다. (예: "입암면 금학리 236번지 입암면 금학리 1203" → ["...입암면 금학리 236번지", "...입암면 금학리 1203번지"])
-                        9. "하천", "하천부지", "번지선" 등 지번이 아닌 설명어는 제거한다.`;
+                        9. "하천", "하천부지", "번지선" 등 지번이 아닌 설명어는 제거한다.
+                        10. "번지" 뒤에 시·도(경상북도, 경북, 경기 등)가 다시 나오면 그 앞에서 분리한다. 앞은 지번, 뒤는 이어진 지번 또는 도로명이다.
+                            예: "입암면 신사리 81번지 경북 영양군 입암면 새골길13" → ["경상북도 영양군 입암면 신사리 81번지", "경상북도 영양군 입암면 새골길 13"]
+                        11. 시·도 약칭은 정식 명칭으로 맞춘다(경북→경상북도). 시·군·구가 한쪽에만 있으면 다른 쪽에도 붙인다. "새골길13"은 "새골길 13"처럼 도로명과 번호 사이에 공백을 둔다.`;
 
     const splitCfg =
       parcelSelectMode === 'splitColumns'
@@ -1985,6 +2005,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
       !!selectedGeocodingHeader &&
       selectedGeocodingHeader.trim().toLowerCase() === 'geom';
     const useGeomAsMulgunji =
+      separateMulgunjiTable &&
       objectAddressSelectMode === 'singleColumn' &&
       !!selectedObjectAddressHeader &&
       selectedObjectAddressHeader.trim().toLowerCase() === 'geom';
@@ -2000,35 +2021,38 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     for (let i = 0; i < workRows.length; i++) {
       const row = workRows[i];
 
-      if (useGeomAsMulgunji && selectedObjectAddressHeader) {
-        const mgWkt = String(row[selectedObjectAddressHeader] ?? '').trim();
-        if (mgWkt) mulgunjiGeomByRow.set(i, mgWkt);
+      if (separateMulgunjiTable) {
+        if (useGeomAsMulgunji && selectedObjectAddressHeader) {
+          const mgWkt = String(row[selectedObjectAddressHeader] ?? '').trim();
+          if (mgWkt) mulgunjiGeomByRow.set(i, mgWkt);
+          objectUnifiedAddressByRow.set(i, '');
+          mulgunjiByRow.set(i, []);
+        } else {
+          const objectUnifiedRaw =
+            objectAddressSelectMode === 'splitColumns'
+              ? buildUnifiedAddressFromSplit(row, {
+                  sidoCol: objSplitSidoColumn,
+                  sidoFixed: objSplitSidoFixed,
+                  sigunguCol: objSplitSigunguColumn,
+                  sigunguFixed: objSplitSigunguFixed,
+                  emdCol: objSplitEmdColumn,
+                  riCol: objSplitRiColumn,
+                  jibunCol: objSplitJibunColumn,
+                })
+              : objectAddressSelectMode === 'singleColumn' && selectedObjectAddressHeader
+                ? String(row[selectedObjectAddressHeader] ?? '').trim()
+                : '';
+          objectUnifiedAddressByRow.set(i, objectUnifiedRaw);
+          const objectUnified = objectUnifiedRaw.trim();
+          if (!objectUnified) {
+            mulgunjiByRow.set(i, []);
+          } else {
+            pendingMultiMulgunjiRows.push({ i, text: objectUnified });
+          }
+        }
+      } else {
         objectUnifiedAddressByRow.set(i, '');
         mulgunjiByRow.set(i, []);
-      } else {
-        const objectUnifiedRaw =
-          objectAddressSelectMode === 'splitColumns'
-            ? buildUnifiedAddressFromSplit(row, {
-                sidoCol: objSplitSidoColumn,
-                sidoFixed: objSplitSidoFixed,
-                sigunguCol: objSplitSigunguColumn,
-                sigunguFixed: objSplitSigunguFixed,
-                emdCol: objSplitEmdColumn,
-                riCol: objSplitRiColumn,
-                jibunCol: objSplitJibunColumn,
-              })
-            : objectAddressSelectMode === 'singleColumn' && selectedObjectAddressHeader
-              ? String(row[selectedObjectAddressHeader] ?? '').trim()
-              : '';
-        objectUnifiedAddressByRow.set(i, normalizeExcelAddressForGeocode(objectUnifiedRaw));
-        const objectUnified = normalizeExcelAddressForGeocode(objectUnifiedRaw);
-        if (!objectUnified) {
-          mulgunjiByRow.set(i, []);
-        } else if (isLikelyMultiParcelAddress(objectUnified)) {
-          pendingMultiMulgunjiRows.push({ i, text: objectUnified });
-        } else {
-          mulgunjiByRow.set(i, [objectUnified]);
-        }
       }
 
       if (useGeomAsParcel && selectedGeocodingHeader) {
@@ -2045,76 +2069,91 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
           : parcelSelectMode === 'singleColumn' && selectedGeocodingHeader
             ? String(row[selectedGeocodingHeader] ?? '').trim()
             : '';
-      const unified = normalizeExcelAddressForGeocode(unifiedRaw);
+      const unified = unifiedRaw.trim();
       unifiedAddressByRow.set(i, unified);
       if (!unified) {
         addressesByRow.set(i, []);
         continue;
       }
-      if (isLikelyMultiParcelAddress(unified)) {
-        pendingMultiRows.push({ i, text: unified });
-      } else {
-        addressesByRow.set(i, [unified]);
-      }
+      pendingMultiRows.push({ i, text: unified });
     }
 
     if (pendingMultiRows.length > 0) {
       if (!openaiKey?.trim()) {
-        const msg = 'OPENAI_API_KEY가 설정되지 않았습니다. 복수 필지 정규화에 필요합니다.';
-        setProcessingError(msg);
-        pushLog(msg);
-        await flushLogToFile(effectivePath);
-        return;
-      }
-      const batchCount = Math.ceil(pendingMultiRows.length / SINGLE_COLUMN_GPT_BATCH_MAX);
-      for (let b = 0; b < pendingMultiRows.length; b += SINGLE_COLUMN_GPT_BATCH_MAX) {
-        const chunk = pendingMultiRows.slice(b, b + SINGLE_COLUMN_GPT_BATCH_MAX);
-        try {
-          const batchMap = await fetchGptSingleColumnAddressBatch(openaiKey, chunk, GPT_PROMPT);
-          for (const p of chunk) {
-            const arr = batchMap.get(p.i);
-            addressesByRow.set(p.i, arr && arr.length > 0 ? arr : [p.text]);
-          }
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          pushLog(`복수 필지 GPT 배치 실패 (${chunk.length}행): ${msg} — 원문 1건으로 진행합니다.`);
-          for (const p of chunk) {
-            addressesByRow.set(p.i, [p.text]);
+        const unresolved = pendingMultiRows.filter(
+          (p) => isLikelyMultiParcelAddress(p.text) && finalizeExcelAddressList(p.text, []).length < 2
+        );
+        if (unresolved.length > 0) {
+          const msg = 'OPENAI_API_KEY가 설정되지 않았습니다. 복수 필지 정규화에 필요합니다.';
+          setProcessingError(msg);
+          pushLog(msg);
+          await flushLogToFile(effectivePath);
+          return;
+        }
+        for (const p of pendingMultiRows) {
+          addressesByRow.set(p.i, localFallbackAddressList(p.text));
+        }
+        pushLog('OPENAI 키 없음 — 단건 필지 주소는 규칙 정리만 적용');
+      } else {
+        const batchCount = Math.ceil(pendingMultiRows.length / SINGLE_COLUMN_GPT_BATCH_MAX);
+        for (let b = 0; b < pendingMultiRows.length; b += SINGLE_COLUMN_GPT_BATCH_MAX) {
+          const chunk = pendingMultiRows.slice(b, b + SINGLE_COLUMN_GPT_BATCH_MAX);
+          try {
+            const batchMap = await fetchGptSingleColumnAddressBatch(openaiKey, chunk, GPT_PROMPT);
+            for (const p of chunk) {
+              addressesByRow.set(p.i, finalizeExcelAddressList(p.text, batchMap.get(p.i) ?? []));
+            }
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            pushLog(`필지 주소 GPT 배치 실패 (${chunk.length}행): ${msg} — 규칙 정리 1건으로 진행합니다.`);
+            for (const p of chunk) {
+              addressesByRow.set(p.i, localFallbackAddressList(p.text));
+            }
           }
         }
+        pushLog(`필지 주소 ${pendingMultiRows.length}행을 GPT로 정규화 (${batchCount}회 호출)`);
       }
-      pushLog(`복수 필지 판정 ${pendingMultiRows.length}행을 GPT로 정규화 (${batchCount}회 호출)`);
     }
     if (pendingMultiMulgunjiRows.length > 0) {
       if (!openaiKey?.trim()) {
-        const msg = 'OPENAI_API_KEY가 설정되지 않았습니다. 물건지 복수 주소 정규화에 필요합니다.';
-        setProcessingError(msg);
-        pushLog(msg);
-        await flushLogToFile(effectivePath);
-        return;
-      }
-      const batchCount = Math.ceil(pendingMultiMulgunjiRows.length / SINGLE_COLUMN_GPT_BATCH_MAX);
-      for (let b = 0; b < pendingMultiMulgunjiRows.length; b += SINGLE_COLUMN_GPT_BATCH_MAX) {
-        const chunk = pendingMultiMulgunjiRows.slice(b, b + SINGLE_COLUMN_GPT_BATCH_MAX);
-        try {
-          const batchMap = await fetchGptSingleColumnAddressBatch(openaiKey, chunk, GPT_PROMPT);
-          for (const p of chunk) {
-            const arr = batchMap.get(p.i);
-            mulgunjiByRow.set(p.i, arr && arr.length > 0 ? arr : [p.text]);
-          }
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          pushLog(`물건지 GPT 배치 실패 (${chunk.length}행): ${msg} — 원문 1건으로 진행합니다.`);
-          for (const p of chunk) {
-            mulgunjiByRow.set(p.i, [p.text]);
+        const unresolved = pendingMultiMulgunjiRows.filter(
+          (p) => isLikelyMultiParcelAddress(p.text) && finalizeExcelAddressList(p.text, []).length < 2
+        );
+        if (unresolved.length > 0) {
+          const msg = 'OPENAI_API_KEY가 설정되지 않았습니다. 물건지 복수 주소 정규화에 필요합니다.';
+          setProcessingError(msg);
+          pushLog(msg);
+          await flushLogToFile(effectivePath);
+          return;
+        }
+        for (const p of pendingMultiMulgunjiRows) {
+          mulgunjiByRow.set(p.i, localFallbackAddressList(p.text));
+        }
+        pushLog('OPENAI 키 없음 — 단건 물건지 주소는 규칙 정리만 적용');
+      } else {
+        const batchCount = Math.ceil(pendingMultiMulgunjiRows.length / SINGLE_COLUMN_GPT_BATCH_MAX);
+        for (let b = 0; b < pendingMultiMulgunjiRows.length; b += SINGLE_COLUMN_GPT_BATCH_MAX) {
+          const chunk = pendingMultiMulgunjiRows.slice(b, b + SINGLE_COLUMN_GPT_BATCH_MAX);
+          try {
+            const batchMap = await fetchGptSingleColumnAddressBatch(openaiKey, chunk, GPT_PROMPT);
+            for (const p of chunk) {
+              mulgunjiByRow.set(p.i, finalizeExcelAddressList(p.text, batchMap.get(p.i) ?? []));
+            }
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            pushLog(`물건지 GPT 배치 실패 (${chunk.length}행): ${msg} — 규칙 정리 1건으로 진행합니다.`);
+            for (const p of chunk) {
+              mulgunjiByRow.set(p.i, localFallbackAddressList(p.text));
+            }
           }
         }
+        pushLog(`물건지 주소 ${pendingMultiMulgunjiRows.length}행을 GPT로 정규화 (${batchCount}회 호출)`);
       }
-      pushLog(`물건지 복수 주소 판정 ${pendingMultiMulgunjiRows.length}행을 GPT로 정규화 (${batchCount}회 호출)`);
     }
 
     let geocodeFailCount = 0;
     const geocodeFailReasons: { row: number; key: string; rawCell: string; address: string; reason: string }[] = [];
+    const getCoordFromAddressWithHangjeongRiFallback = createExcelGeocodeCache();
     const totalRows = workRows.length;
     let totalInsertCount = 0;
     let totalPolygonMatched = 0;
@@ -2346,7 +2385,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         );
       }
 
-      const addresses = (addressesByRow.get(i) ?? []).map((a) => normalizeExcelAddressForGeocode(a)).filter(Boolean);
+      const addresses = (addressesByRow.get(i) ?? []).map((a) => String(a ?? '').trim()).filter(Boolean);
       rawText = unifiedAddressByRow.get(i) ?? '';
       const objectRawText = objectUnifiedAddressByRow.get(i) ?? '';
       const rowKeyVal = String(
@@ -2363,8 +2402,20 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
         });
       };
       const mulgunjiAddrs = (mulgunjiByRow.get(i) ?? [])
-        .map((a) => normalizeExcelAddressForGeocode(a))
+        .map((a) => String(a ?? '').trim())
         .filter(Boolean);
+      if (!useGeomAsParcel && selectedGeocodingHeader && addresses.length > 0) {
+        const def = activeFieldDefs.find((f) => f.originalHeader === selectedGeocodingHeader);
+        if (def && !isExcelSystemAttrField(def.headerEng, def.originalHeader)) {
+          attrs[safeColumnName(def.headerEng)] = addresses.join('\n');
+        }
+      }
+      if (!useGeomAsMulgunji && selectedObjectAddressHeader && mulgunjiAddrs.length > 0) {
+        const def = activeFieldDefs.find((f) => f.originalHeader === selectedObjectAddressHeader);
+        if (def && !isExcelSystemAttrField(def.headerEng, def.originalHeader)) {
+          attrs[safeColumnName(def.headerEng)] = mulgunjiAddrs.join('\n');
+        }
+      }
       const mulgunjis: { address: string; x?: number; y?: number; geom?: string }[] = [];
       if (useGeomAsMulgunji) {
         const mgWkt = mulgunjiGeomByRow.get(i) ?? '';
@@ -2911,6 +2962,8 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     compositeKeyKor,
     createSeparateJijukTable,
     createSeparateMulgunjiTable,
+    mulgunjiTableEnabled,
+    isStandardWorkflow,
     session?.user?.id,
     session?.user?.name,
   ]);
@@ -3172,7 +3225,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
     setObjectAddressSelectMode('singleColumn');
     setSelectedObjectAddressHeader(null);
     setCreateSeparateJijukTable(false);
-    setCreateSeparateMulgunjiTable(true);
+    setCreateSeparateMulgunjiTable(false);
     setExcelUploadWorkflowId(EXCEL_UPLOAD_WORKFLOW_OPTIONS[0]?.id ?? 'standard');
     setSplitSidoColumn(null);
     setSplitSidoFixed('');
@@ -3467,10 +3520,10 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
               <div className="rounded-md border border-gray-200 bg-muted/30 p-3 space-y-2">
                 <p className="text-sm font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-                  타이틀 행 선택
+                  필드명 행 선택
                 </p>
                 {isAndongRoadUseWorkflow ? (
-                  <p className="text-xs text-muted-foreground">안동 도로점용대장은 타이틀 1행으로 고정됩니다.</p>
+                  <p className="text-xs text-muted-foreground">안동 도로점용대장은 필드명 1행으로 고정됩니다.</p>
                 ) : null}
                 <div className="flex flex-wrap gap-6 text-sm">
                   <label className={cn('flex items-center gap-2 cursor-pointer', isAndongRoadUseWorkflow && 'cursor-default opacity-80')}>
@@ -3481,7 +3534,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       disabled={isAndongRoadUseWorkflow}
                       onChange={() => onTitleRowLinesChange(1)}
                     />
-                    타이틀 1행 (헤더 한 줄)
+                    필드명 1행 (한 줄)
                   </label>
                   <label className={cn('flex items-center gap-2 cursor-pointer', isAndongRoadUseWorkflow && 'cursor-default opacity-80')}>
                     <input
@@ -3491,7 +3544,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       disabled={isAndongRoadUseWorkflow}
                       onChange={() => onTitleRowLinesChange(2)}
                     />
-                    타이틀 2행 (헤더 두 줄)
+                    필드명 2행 (두 줄 합침)
                   </label>
                   <label className={cn('flex items-center gap-2 cursor-pointer', isAndongRoadUseWorkflow && 'cursor-default opacity-80')}>
                     <input
@@ -3501,7 +3554,7 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       disabled={isAndongRoadUseWorkflow}
                       onChange={() => onTitleRowLinesChange(3)}
                     />
-                    타이틀 3행 (헤더 세 줄)
+                    필드명 3행 (세 줄 합침)
                   </label>
                 </div>
               </div>
@@ -3687,7 +3740,9 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       지적 데이터 입력
                     </p>
                     <p className="min-w-0 flex-1 text-xs text-muted-foreground leading-snug">
-                      한 셀에 여러 필지가 입력된 경우 별도의 지적테이블을 생성합니다.
+                      한 건에 여러 필지·물건지가 있으면 자식 테이블로 나눠 저장합니다.
+                      <br />
+                      상세 화면의 필지목록·물건지목록에 해당합니다.
                     </p>
                   </div>
                   <label
@@ -3705,22 +3760,28 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       }
                       onChange={(e) => setCreateSeparateJijukTable(e.target.checked)}
                     />
-                    별도 지적 테이블 생성
+                    필지목록 테이블 생성
                     {isLedgerWorkflow || isAndongRoadUseWorkflow ? (
                       <span className="text-xs text-muted-foreground">(대장 업로드는 항상 사용)</span>
                     ) : null}
                   </label>
-                  <label className={cn('flex cursor-pointer items-center gap-2 text-sm', isAndongRoadUseWorkflow && 'cursor-default opacity-80')}>
+                  <label className={cn('flex cursor-pointer items-center gap-2 text-sm', (isStandardWorkflow || isAndongRoadUseWorkflow) && 'cursor-default opacity-80')}>
                     <input
                       type="checkbox"
                       className="h-4 w-4 shrink-0 rounded border-input"
-                      disabled={isAndongRoadUseWorkflow}
-                      checked={isAndongRoadUseWorkflow ? true : createSeparateMulgunjiTable}
+                      disabled={isStandardWorkflow || isAndongRoadUseWorkflow}
+                      checked={
+                        isAndongRoadUseWorkflow ? true : isStandardWorkflow ? false : createSeparateMulgunjiTable
+                      }
                       onChange={(e) => setCreateSeparateMulgunjiTable(e.target.checked)}
                     />
-                    별도 물건지 테이블 생성
+                    물건지목록 테이블 생성
                     <span className="text-xs text-muted-foreground">
-                      {isAndongRoadUseWorkflow ? '(안동 도로점용대장은 항상 사용)' : '(점용대장만 기본 사용)'}
+                      {isAndongRoadUseWorkflow
+                        ? '(안동 도로점용대장은 항상 사용)'
+                        : isStandardWorkflow
+                          ? '(일반 업로드에서는 사용하지 않음)'
+                          : '(점용대장만 기본 사용)'}
                     </span>
                   </label>
                 </div>
@@ -3829,6 +3890,8 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                 ) : null}
               </div>
 
+              {mulgunjiTableEnabled ? (
+              <>
               <div className="rounded-md border border-gray-200 bg-muted/30 p-3 space-y-2">
                 <p className="text-sm font-medium flex items-center gap-2 text-black dark:text-zinc-100">
                   <Check className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
@@ -4026,6 +4089,8 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                   필지와 물건지에 동시에 geom 열을 지정할 수 없습니다. 한쪽만 geom을 선택해 주세요.
                 </div>
               ) : null}
+              </>
+              ) : null}
             </div>
           )}
           {step === 3 && workflowParseResult && (
@@ -4217,6 +4282,9 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
                       신규 키 필드 사용 (행마다 고유값 자동 부여)
                     </label>
                   </div>
+                  {weakSingleKeyHint ? (
+                    <p className="text-xs text-amber-800 dark:text-amber-200">{weakSingleKeyHint}</p>
+                  ) : null}
                   {keyMode === 'composite' && (
                     <div className="flex flex-wrap items-end gap-4 pl-0.5">
                       <div className="flex flex-col gap-1">

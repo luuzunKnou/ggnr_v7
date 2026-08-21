@@ -33,6 +33,7 @@ import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import { isEmpty as isEmptyExtent } from "ol/extent";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import {
   ServiceFileImagePreview,
@@ -646,6 +647,20 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const attachInputRef = useRef<HTMLInputElement>(null);
   const attachScrollRef = useRef<HTMLDivElement>(null);
   const isNewRow = isNewRiverConstructionLedgerRow(row);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isNewRow) return;
+    const consCode = String(row.id ?? "").trim();
+    if (!consCode) return;
+    recordDataViewLog({
+      tableName: "cons_data_as",
+      keyField: "cons_code",
+      keyValue: consCode,
+      serviceName: "공사대장",
+    });
+  }, [row.id, isNewRow]);
+
   const [editing, setEditing] = useState(isNewRow || !row.name.trim());
   const [draft, setDraft] = useState<AttrDraft>(() => toDraft(row));
   /** 대상 하천 — 단일 값 입력 (기존에 여러 개가 저장돼 있으면 첫 번째만 표시) */

@@ -12,7 +12,9 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   waterSupplyWork: 'waterSupply',
   waterworksLedger: 'constructionLedger',
   riverBasicPlan: 'riverBasicPlan',
+  fmsLinkage: 'roadFMS',
   // occupationLedger* · *NglFeeList 는 ser_eng 그대로 opened 토큰으로 사용 (접두사로 패널 분기)
+  // roadFMS 는 ser_eng 그대로 opened (안전점검 공통 화면)
 };
 
 export function getOpenedKeyForSerEng(serEng: string): string {

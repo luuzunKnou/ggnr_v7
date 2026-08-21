@@ -71,6 +71,7 @@ export function takeMountainFromJibunRest(rest: string): { isMountain: boolean; 
 export function parseAddressForPnu(address: string): ExcelUploadParsedPnuParts | null {
   let s = String(address ?? '').trim();
   if (!s) return null;
+  s = s.replace(/(\d+)\s*번지\s*\d+\s*호/gi, '$1번지');
   s = s.replace(/번지/g, '').trim();
   const parts = s.split(/\s+/).filter(Boolean);
   if (parts.length < 5) return null;
@@ -92,4 +93,82 @@ export function buildPnu19(
 ): string {
   const land = parts.isMountain ? '2' : '1';
   return `${riCd}${land}${parts.bonbun}${parts.bubun}`;
+}
+
+const SIDO_ABBR: Record<string, string> = {
+  서울: '서울특별시',
+  부산: '부산광역시',
+  대구: '대구광역시',
+  인천: '인천광역시',
+  광주: '광주광역시',
+  대전: '대전광역시',
+  울산: '울산광역시',
+  세종: '세종특별자치시',
+  경기: '경기도',
+  강원: '강원특별자치도',
+  충북: '충청북도',
+  충남: '충청남도',
+  전북: '전북특별자치도',
+  전남: '전라남도',
+  경북: '경상북도',
+  경남: '경상남도',
+  제주: '제주특별자치도',
+};
+
+const SIDO_ABBR_NAMES = Object.keys(SIDO_ABBR).join('|');
+const SIDO_HEAD = `(?:${SIDO_ABBR_NAMES}|[가-힣]+(?:특별자치시|특별자치도|특별시|광역시|도))`;
+
+/** 경북→경상북도 등 시·도 약칭을 정식 명칭으로 */
+export function expandExcelSidoAbbreviation(s: string): string {
+  const re = new RegExp(`(^|[\\s])(${SIDO_ABBR_NAMES})(?=[\\s]|$)`, 'g');
+  return String(s ?? '').replace(re, (_full, pre: string, abbr: string) => `${pre}${SIDO_ABBR[abbr] ?? abbr}`);
+}
+
+/** 새골길13 → 새골길 13 */
+export function spaceExcelRoadNameNumber(s: string): string {
+  return String(s ?? '').replace(/([가-힣]+(?:대로|로|길))(\d+(?:-\d+)?)/g, '$1 $2');
+}
+
+export function polishExcelGeocodeAddress(s: string): string {
+  return spaceExcelRoadNameNumber(expandExcelSidoAbbreviation(s)).replace(/\s{2,}/g, ' ').trim();
+}
+
+function sidoSigunguPrefix(addr: string): string {
+  const m = addr.match(
+    /^([가-힣]+(?:특별자치시|특별자치도|특별시|광역시|도)\s+[가-힣]+(?:시|군|구))/
+  );
+  return m?.[1] ?? '';
+}
+
+/**
+ * «81번지 경북 … 새골길13»처럼 지번 뒤에 시·도(약칭 포함)가 이어지면 2건으로 분리.
+ * 시·군 접두는 뒤 주소에서 가져와 앞 지번에도 붙인다.
+ */
+export function splitExcelJibunThenFollowingAddress(raw: string): string[] | null {
+  const t = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  const re = new RegExp(`^(.+?번지)\\s+(${SIDO_HEAD}\\s+.+)$`);
+  const m = t.match(re);
+  if (!m) return null;
+  let head = (m[1] ?? '').trim();
+  const tail = polishExcelGeocodeAddress(m[2] ?? '');
+  if (!head || !tail) return null;
+  if (!/(?:시|군|구)/.test(tail) && !/(?:대로|로|길)\s*\d+/.test(tail)) return null;
+  const prefix = sidoSigunguPrefix(tail);
+  if (prefix && !head.startsWith(prefix)) {
+    head = `${prefix} ${head}`.replace(/\s+/g, ' ').trim();
+  }
+  head = polishExcelGeocodeAddress(head);
+  if (!head || !tail || head === tail) return null;
+  return [head, tail];
+}
+
+/** 번지 뒤에 시·도 약칭·정식명 또는 도로명이 이어지면 복수 주소로 본다. */
+export function excelAddressLooksLikeJibunThenFollowing(raw: string): boolean {
+  const t = String(raw ?? '').trim();
+  if (!t) return false;
+  const sidoRe = new RegExp(`번지\\s+(?:${SIDO_ABBR_NAMES}|[가-힣]+(?:특별자치시|특별자치도|특별시|광역시|도))`);
+  if (sidoRe.test(t)) return true;
+  if (/번지\s+.+(?:대로|로|길)\s*\d+/.test(t)) return true;
+  return splitExcelJibunThenFollowingAddress(t) != null;
 }

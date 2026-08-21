@@ -26,6 +26,25 @@ function clearSession(): void {
   }
 }
 
+/** Next 오버레이가 객체를 {}로 보여 한 줄 문자열만 남긴다. */
+function logApiCallError(info: Record<string, unknown>): void {
+  try {
+    console.error('API call error', JSON.stringify(info));
+  } catch {
+    console.error('API call error', String(info?.message ?? info?.error ?? 'unknown'));
+  }
+}
+
+function requestMeta(request?: any): { service?: string; action?: string } {
+  if (!request || typeof request !== 'object') return {};
+  const service = request.service != null ? String(request.service) : undefined;
+  const action = request.action != null ? String(request.action) : undefined;
+  return {
+    ...(service ? { service } : {}),
+    ...(action ? { action } : {}),
+  };
+}
+
 /**
  * 기본 API 호출 함수
  */
@@ -36,7 +55,8 @@ export function call(
   requestOptions?: { signal?: AbortSignal }
 ): Promise<any> {
   const authToken = getAuthToken();
-  const url = API_BASE_URL + api;
+  const meta = requestMeta(request);
+  let url = API_BASE_URL + api;
 
   const fetchOptions: RequestInit = {
     method,
@@ -60,7 +80,7 @@ export function call(
           }
         });
       }
-      api = `${api}?${params.toString()}`;
+      url = `${API_BASE_URL}${api}?${params.toString()}`;
     } else {
       // POST 요청은 body로 전달
       if (typeof request === 'object') {
@@ -89,43 +109,49 @@ export function call(
           json = text ? JSON.parse(text) : {};
         } catch {
           const err = {
-            status: response.status,
+            ...meta,
+            url,
+            method,
+            httpStatus: response.status,
             message: 'Response is not JSON',
-            body: text?.slice(0, 300),
+            bodyTextSnippet: text?.slice(0, 300),
+            __apiLogged: true,
           };
-          console.error('API call error:', err);
+          logApiCallError(err);
           return Promise.reject(err);
         }
         if (!response.ok) {
-          if (response.status !== 401 && response.status !== 403) {
-            const isEmptyObject =
-              json != null &&
-              typeof json === 'object' &&
-              !Array.isArray(json) &&
-              Object.keys(json as Record<string, unknown>).length === 0;
-            const payload =
-              json && typeof json === 'object'
-                ? {
-                    url,
-                    method,
-                    httpStatus: response.status,
-                    httpStatusText: response.statusText,
-                    ...(json as Record<string, unknown>),
-                    ...(isEmptyObject ? { bodyTextSnippet: text?.slice(0, 300) } : {}),
-                  }
-                : { httpStatus: response.status, httpStatusText: response.statusText, body: json };
-            // Next 개발 오버레이에서 객체가 {}처럼 보이는 경우가 있어 문자열도 함께 로깅
-            console.error('API call error', payload);
-            try {
-              console.error('API call error (string)', JSON.stringify(payload));
-            } catch {
-              // ignore
-            }
-          }
+          const isEmptyObject =
+            json != null &&
+            typeof json === 'object' &&
+            !Array.isArray(json) &&
+            Object.keys(json as Record<string, unknown>).length === 0;
+          const payload =
+            json && typeof json === 'object'
+              ? {
+                  ...meta,
+                  url,
+                  method,
+                  httpStatus: response.status,
+                  httpStatusText: response.statusText,
+                  ...(json as Record<string, unknown>),
+                  ...(isEmptyObject ? { bodyTextSnippet: text?.slice(0, 300) } : {}),
+                  __apiLogged: true,
+                }
+              : {
+                  ...meta,
+                  url,
+                  method,
+                  httpStatus: response.status,
+                  httpStatusText: response.statusText,
+                  body: json,
+                  __apiLogged: true,
+                };
+          logApiCallError(payload);
           const rejectVal =
             json && typeof json === 'object'
-              ? { ...(json as Record<string, unknown>), httpStatus: response.status }
-              : { httpStatus: response.status, error: String(json) };
+              ? { ...(json as Record<string, unknown>), httpStatus: response.status, __apiLogged: true }
+              : { httpStatus: response.status, error: String(json), __apiLogged: true };
           return Promise.reject(rejectVal);
         }
         return json;
@@ -138,18 +164,15 @@ export function call(
       if (error?.status === 401 || error?.status === 403) {
         return Promise.reject(error);
       }
-      const msg = error?.message ?? error?.error ?? (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
-      console.error('API call error:', msg);
-      if (typeof error === 'object' && error !== null) {
-        try {
-          console.error('API call error (object)', error);
-          console.error('API call error (json)', JSON.stringify(error));
-        } catch {
-          // ignore
-        }
-      } else {
-        console.error('API call error (raw)', error);
+      // then 절에서 이미 남긴 HTTP/파싱 오류는 재로깅하지 않음 (Next Issues 중복 방지)
+      if (error && typeof error === 'object' && (error as { __apiLogged?: boolean }).__apiLogged) {
+        return Promise.reject(error);
       }
+      const msg =
+        error?.message ??
+        error?.error ??
+        (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
+      logApiCallError({ ...meta, url, method, message: msg });
       return Promise.reject(error);
     });
 }

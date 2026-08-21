@@ -45,6 +45,7 @@ import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAu
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import type { VWorldAddressItem } from "../../../_mapComponents/addressSearch/vworldAddressSearch";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   ROAD_REWARD_CASE_FIELDS,
   createEmptyRoadRewardCase,
@@ -216,6 +217,19 @@ export function RoadRewardDetailPanel({
     if (isCreateMode) return { ...createEmptyRoadRewardCase(), id: caseId || ROAD_REWARD_NEW_ID };
     return null;
   }, [cases, caseId, isCreateMode]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode) return;
+    const id = String(caseId ?? "").trim();
+    if (!id) return;
+    recordDataViewLog({
+      tableName: "road_reward",
+      keyField: "ogc_fid",
+      keyValue: id,
+      serviceName: "보상편입용지",
+    });
+  }, [caseId, isCreateMode]);
 
   const [isEditing, setIsEditing] = useState(() => isNewRoadRewardCaseId(caseId));
   const [attrsOpen, setAttrsOpen] = useState(true);

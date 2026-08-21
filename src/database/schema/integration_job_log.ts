@@ -5,7 +5,7 @@ export const ijl = pgTable('integration_job_log', {
   ijlSystem: varchar('ijl_system', { length: 30 }).notNull(),
   ijlStartedAt: timestamp('ijl_started_at').defaultNow().notNull(),
   ijlFinishedAt: timestamp('ijl_finished_at'),
-  ijlStatus: varchar('ijl_status', { length: 20 }).notNull(), // STARTED|SUCCESS|FAILED
+  ijlStatus: varchar('ijl_status', { length: 20 }).notNull(), // STARTED|SUCCESS|FAILED|NO_DATA|NOT_PROD
   ijlMessage: text('ijl_message'),
 });
 

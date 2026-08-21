@@ -150,6 +150,7 @@ function s(v: unknown): string {
   return String(v ?? '').trim();
 }
 
+/** GPT 키가 없거나 호출 실패 시에만 사용. GPT 입력에는 원문을 넘긴다. */
 function normalizeParcelText(raw: string): string {
   let t = s(raw);
   if (!t) return t;
@@ -159,21 +160,6 @@ function normalizeParcelText(raw: string): string {
   // 5자리 이상 숫자는 본번·부번이 아니므로 제거 (주민번호·관리번호 등 오염 방지)
   t = t.replace(/\b\d{5,}\b/g, '');
   return t.replace(/\s{2,}/g, ' ').trim();
-}
-
-function isLikelyComplexParcelText(raw: string): boolean {
-  const t = normalizeParcelText(raw);
-  if (!t) return false;
-  if (/[\r\n,;]|외\s*\d+|및|\/|·/.test(t)) return true;
-  // '번지'가 두 번 이상 → 한 칸에 지번이 여러 개
-  if ((t.match(/번지/g) ?? []).length >= 2) return true;
-  // 숫자-(한글/영문 단어 1개 이상)-숫자 → 지번이 여러 개로 추정 (공백 포함 멀티워드도 감지)
-  if (/\d+(?:\s+[가-힣A-Za-z]+)+\s+\d+/.test(t)) return true;
-  // "번지" 뒤에 읍/면/동/리가 또 나오면 새 필지 주소가 시작됨 (예: "236번지 입암면 금학리 1203")
-  if (/번지\s+[가-힣]+(?:읍|면|동|리)/.test(t)) return true;
-  // 시·도 행정구역 단위(도/광역시/특별시 등)가 2번 이상 → 전체 주소가 반복됨 (예: "...도곡리 630 경상북도 영양군...")
-  if ((t.match(/[가-힣]+(?:도|광역시|특별시|특별자치시|특별자치도)/g) ?? []).length >= 2) return true;
-  return false;
 }
 
 function enrichParcelPrefixContext(parcels: string[], rawText: string): string[] {
@@ -238,12 +224,19 @@ function splitParcelsByRule(raw: string): string[] {
   return enrichParcelPrefixContext(uniq, t);
 }
 
+function localFallbackParcels(rawText: string): string[] {
+  const n = normalizeParcelText(rawText);
+  return n ? splitParcelsByRule(n) : [];
+}
+
 async function gptNormalizeParcels(openaiApiKey: string, rawText: string): Promise<string[]> {
-  const normalizedInput = normalizeParcelText(rawText);
   const prompt = `다음 문자열은 도로점용 필지목록입니다.
 - 콤마/줄바꿈/세미콜론/외 N필지 등 혼합 표기를 "개별 지번 문자열 배열"로 정규화하세요.
 - "652번지 5호"처럼 "번지" 뒤에 오는 "N호"는 호수/건물번호이므로 부번(-N)으로 보지 말고 제외하고 "652번지"로만 반환하세요. ("652-5"로 만들지 마세요)
 - "번지" 뒤에 읍/면/동/리가 다시 나오면 새 필지의 시작으로 보고 분리하세요. (예: "236번지 입암면 금학리 1203" → ["...입암면 금학리 236번지", "...입암면 금학리 1203번지"])
+- "번지" 뒤에 시·도(경북, 경상북도 등)가 이어지면 그 앞에서 분리하세요. 뒤가 도로명(로/길/대로)이면 도로명 형식을 유지하고 지번으로 바꾸지 마세요.
+  예: "입암면 신사리 81번지 경북 영양군 입암면 새골길13" → ["경상북도 영양군 입암면 신사리 81번지", "경상북도 영양군 입암면 새골길 13"]
+- 시·도 약칭은 정식 명칭으로 맞추세요(경북→경상북도). "새골길13"은 "새골길 13"처럼 공백을 두세요.
 - "하천", "하천부지", "번지선" 등 지번이 아닌 설명어는 제거하세요.
 - 모르는 정보는 추정하지 마세요.
 - 빈값은 제외하세요.
@@ -251,7 +244,7 @@ async function gptNormalizeParcels(openaiApiKey: string, rawText: string): Promi
 { "parcels": ["...", "..."] }
 
 입력:
-${normalizedInput}`;
+${rawText}`;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -275,25 +268,24 @@ ${normalizedInput}`;
   const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const body = fence ? s(fence[1]) : content;
   const objMatch = body.match(/\{[\s\S]*\}/);
-  if (!objMatch) return splitParcelsByRule(rawText);
+  if (!objMatch) return localFallbackParcels(rawText);
   try {
     const parsed = JSON.parse(objMatch[0]) as { parcels?: unknown[] };
     const arr = Array.isArray(parsed?.parcels) ? parsed.parcels : [];
     const out = arr.map((x) => s(x)).filter(Boolean);
-    return out.length > 0 ? enrichParcelPrefixContext(out, rawText) : splitParcelsByRule(rawText);
+    return out.length > 0 ? enrichParcelPrefixContext(out, rawText) : localFallbackParcels(rawText);
   } catch {
-    return splitParcelsByRule(rawText);
+    return localFallbackParcels(rawText);
   }
 }
 
 async function normalizeParcels(rawText: string, openaiApiKey?: string): Promise<string[]> {
-  const normalized = normalizeParcelText(rawText);
-  const rule = splitParcelsByRule(normalized);
-  if (!openaiApiKey || !isLikelyComplexParcelText(normalized)) return rule;
+  if (!s(rawText)) return [];
+  if (!openaiApiKey?.trim()) return localFallbackParcels(rawText);
   try {
-    return await gptNormalizeParcels(openaiApiKey, normalized);
+    return await gptNormalizeParcels(openaiApiKey, rawText);
   } catch {
-    return rule;
+    return localFallbackParcels(rawText);
   }
 }
 
@@ -708,15 +700,15 @@ export async function buildRoadUseAndongHierarchy(
       const chargeId = Number(chRes.rows[0]?.id);
       inserted.charge += 1;
 
-      const useGptForOccupancy = Boolean(params.openaiApiKey) && isLikelyComplexParcelText(occupancyRaw);
-      const useGptForObject = Boolean(params.openaiApiKey) && isLikelyComplexParcelText(objectRaw);
+      const occupancyViaGpt = Boolean(params.openaiApiKey?.trim());
+      const objectViaGpt = occupancyViaGpt;
       log(
-        `행 ${i + 1}/${rows.length} 점용지 정규화 시작 (${useGptForOccupancy ? 'GPT 호출중' : '규칙 분해'})`
+        `행 ${i + 1}/${rows.length} 점용지 정규화 시작 (${occupancyViaGpt ? 'GPT 호출중' : '규칙 분해'})`
       );
       const occupancyList = await normalizeParcels(occupancyRaw, params.openaiApiKey);
       log(`행 ${i + 1}/${rows.length} 점용지 정규화 완료 (${occupancyList.length}건)`);
       log(
-        `행 ${i + 1}/${rows.length} 물건지 정규화 시작 (${useGptForObject ? 'GPT 호출중' : '규칙 분해'})`
+        `행 ${i + 1}/${rows.length} 물건지 정규화 시작 (${objectViaGpt ? 'GPT 호출중' : '규칙 분해'})`
       );
       const objectList = await normalizeParcels(objectRaw, params.openaiApiKey);
       log(`행 ${i + 1}/${rows.length} 물건지 정규화 완료 (${objectList.length}건)`);
