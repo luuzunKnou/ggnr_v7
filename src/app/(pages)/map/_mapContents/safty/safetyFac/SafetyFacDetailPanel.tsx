@@ -105,10 +105,10 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
 
   return (
     <div
-      className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background"
       aria-label="재난대응시설 상세"
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span
             className="inline-flex shrink-0 items-center rounded px-2.5 py-1.5 text-[10px] font-semibold leading-none"
@@ -117,7 +117,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
             {chipName}
           </span>
           <p
-            className="min-w-0 truncate text-sm font-semibold leading-snug text-slate-800"
+            className="min-w-0 truncate text-sm font-semibold leading-snug text-foreground"
             title={headerTitle}
           >
             {headerTitle || '—'}
@@ -126,7 +126,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -134,27 +134,27 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
         </button>
       </div>
 
-      <div className="shrink-0 border-slate-200 bg-white px-3 py-2 pb-0">
+      <div className="shrink-0 border-border bg-background px-3 py-2 pb-0">
         <SafetyFacRelatedLayerSection lon={facility.lon} lat={facility.lat} />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden border-slate-200 p-3 pt-2">
+      <div className="min-h-0 flex-1 overflow-hidden border-border p-3 pt-2">
         <MapSideDetailScroll className="h-full min-h-0 overflow-y-auto">
           {rows.length === 0 ? (
-            <p className="text-[11px] text-slate-500">표시할 항목이 없습니다.</p>
+            <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>
           ) : (
             <>
-            <div className="overflow-hidden rounded-[5px] border border-slate-200">
+            <div className="overflow-hidden rounded-[5px] border border-border">
               {rows.map((row, index) => (
                 <div
                   key={`${row.label}-${index}`}
-                  className={cn('flex', index !== rows.length - 1 && 'border-b border-slate-200')}
+                  className={cn('flex', index !== rows.length - 1 && 'border-b border-border')}
                 >
                   <div
-                    className="flex shrink-0 items-start bg-slate-100 px-2 py-1.5"
+                    className="flex shrink-0 items-start bg-muted px-2 py-1.5"
                     style={{ width: `${labelColumnRem}rem` }}
                   >
-                    <span className="whitespace-nowrap text-[11px] leading-snug text-[#666]">
+                    <span className="whitespace-nowrap text-[11px] leading-snug text-muted-foreground">
                       {row.label}
                     </span>
                   </div>
@@ -171,7 +171,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
                   >
                     <span
                       className={cn(
-                        'text-[11px] leading-snug text-[#666]',
+                        'text-[11px] leading-snug text-foreground',
                         row.maxLength == null
                           ? 'break-all'
                           : 'block w-full truncate whitespace-nowrap'
@@ -184,7 +184,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
                 </div>
               ))}
             </div>
-            <p className="mt-1.5 text-[11px] text-slate-500">출처: 재난안전공유 플랫폼</p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">출처: 재난안전공유 플랫폼</p>
             </>
           )}
         </MapSideDetailScroll>

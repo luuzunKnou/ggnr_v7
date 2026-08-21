@@ -101,22 +101,35 @@ const SAFETY_FAC_DETAIL_LAYOUT: Record<string, SafetyFacDetailLayout> = {
     ],
   },
   sd_earthquake_outdoor_evac_site: {
-    name: 'vt_acmdfclty_nm',
-    address: 'eqk_acmdfclty_adres',
-    detailAddress: 'dtl_adres',
-    personnel: 'vt_acmd_psbl_nmpr',
+    orderedFields: [
+      { field: 'vt_acmdfclty_nm' },
+      { field: 'arcd' },
+      { field: 'bdong_cd' },
+      { field: 'hdong_cd' },
+      { field: 'eqk_acmdfclty_adres' },
+      { field: 'telno' },
+    ],
   },
   sd_tsunami_emergency_evac_site: {
-    name: 'shnt_place_nm',
-    address: 'rn_dtl_adres',
-    detailAddress: 'shnt_place_dtl_position',
-    personnel: 'psbl_nmpr',
+    orderedFields: [
+      { field: 'shnt_place_nm' },
+      { field: 'arcd' },
+      { field: 'bdong_cd' },
+      { field: 'hdong_cd' },
+      { field: 'rn_dtl_adres' },
+      { field: 'telno' },
+    ],
   },
   sd_mois_displaced_temp_housing: {
-    name: 'vt_acmdfclty_nm',
-    address: 'rn_dtl_adres',
-    detailAddress: 'dtl_adres',
-    personnel: 'vt_acmd_psbl_nmpr',
+    orderedFields: [
+      { field: 'acmdfclty_sn' },
+      { field: 'vt_acmdfclty_nm' },
+      { field: 'korean_ctprvn_nm' },
+      { field: 'hdong_cd' },
+      { field: 'bdong_cd' },
+      { field: 'sgg_rn' },
+      { field: 'dtl_adres' },
+    ],
   },
 };
 
