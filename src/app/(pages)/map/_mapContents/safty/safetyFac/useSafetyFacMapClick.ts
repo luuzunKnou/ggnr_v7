@@ -132,7 +132,8 @@ type Props = {
   onSelectFacility: (facility: SafetyFacFacilityRow | null) => void;
 };
 
-const SAFETY_FAC_CLICK_ZOOM = 16;
+/** 목록·지도 선택 시 목표 줌 (지적 상세가 보이는 수준) */
+const SAFETY_FAC_CLICK_ZOOM = 18;
 const SAFETY_FAC_FLY_MS = 600;
 
 function lonLatFromFacility(f: SafetyFacFacilityRow): { lon: number; lat: number } | null {
@@ -180,10 +181,17 @@ export function animateSafetyFacToCenter3857(
     prepareMapForPanelAwareNavigation(map, applyMapViewPadding);
     const view = map.getView();
     view.cancelAnimations();
-    const zoom = Math.max(view.getZoom() ?? SAFETY_FAC_CLICK_ZOOM, SAFETY_FAC_CLICK_ZOOM);
+    // constrainResolution + resolutions 배열에서는 zoom 옵션만으로는 확대가 스킵되는 경우가 있어
+    // 목표 줌의 resolution을 직접 넣어 목록 선택 시 확대가 항상 적용되게 한다.
+    const currentZoom = view.getZoom();
+    const targetZoom = Math.max(
+      Number.isFinite(currentZoom) ? (currentZoom as number) : 0,
+      SAFETY_FAC_CLICK_ZOOM
+    );
+    const resolution = view.getResolutionForZoom(targetZoom);
     view.animate({
       center: center3857,
-      zoom,
+      resolution,
       duration: SAFETY_FAC_FLY_MS,
       easing: easeOut,
     });
