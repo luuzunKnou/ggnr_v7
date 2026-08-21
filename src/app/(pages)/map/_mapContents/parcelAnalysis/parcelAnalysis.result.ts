@@ -587,10 +587,10 @@ function toEnrichBaseRows(rows: LandRow[]): AnalyzeLandRow[] {
 
 function fromEnrichedLandRows(
   rows: Array<{
-    pnu: string;
-    jibun: string;
-    jimok: string;
-    areaSqm: number;
+    pnu?: string;
+    jibun?: string;
+    jimok?: string;
+    areaSqm?: number;
     ownerName?: string;
     ownerType?: string;
     publicPrice?: number | null;
@@ -604,22 +604,28 @@ function fromEnrichedLandRows(
     serverError?: string;
   }
 ): LandRow[] {
-  return rows.map((r) => ({
-    pnu: r.pnu,
-    jibun: r.jibun,
-    jimok: r.jimok,
-    areaSqm: r.areaSqm,
-    ownerName: r.ownerName,
-    ownerType: r.ownerType,
-    publicPrice: r.publicPrice ?? null,
-    source: r.source,
-    linkageFailed: r.linkageFailed,
-    linkageFailReason: landRowFailReason({
-      failed: r.linkageFailed,
-      pnu: r.pnu,
-      ...reasonOpts,
-    }),
-  }));
+  return rows.map((r) => {
+    const pnu = String(r.pnu ?? '').trim();
+    const jibun = String(r.jibun ?? '').trim();
+    const jimok = String(r.jimok ?? '미상');
+    const areaSqm = Number(r.areaSqm ?? 0) || 0;
+    return {
+      pnu,
+      jibun,
+      jimok,
+      areaSqm,
+      ownerName: r.ownerName,
+      ownerType: r.ownerType,
+      publicPrice: r.publicPrice ?? null,
+      source: r.source,
+      linkageFailed: r.linkageFailed,
+      linkageFailReason: landRowFailReason({
+        failed: r.linkageFailed,
+        pnu,
+        ...reasonOpts,
+      }),
+    };
+  });
 }
 
 type ProgressiveLoadParams = {
