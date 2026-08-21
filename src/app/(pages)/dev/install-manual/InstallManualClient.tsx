@@ -153,7 +153,7 @@ npm -v`}</CodeBlock>
             </ul>
             <h2 className="text-base font-semibold">옵션 설명</h2>
             <h3 className="text-sm font-semibold">GNMS 최신</h3>
-            <p>192.168.126.1에 업로드 되어 있는 GNMS 최신 버전을 다운로드합니다.</p>
+            <p>GNMS 서버에 업로드되어 있는 최신 버전을 다운로드합니다.</p>
             <h3 className="text-sm font-semibold">현재 서버</h3>
             <p>현재 로컬 기준으로 파일을 다운로드합니다.</p>
             <ol className="list-decimal space-y-3 pl-5">

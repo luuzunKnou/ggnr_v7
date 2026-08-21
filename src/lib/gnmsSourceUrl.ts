@@ -1,8 +1,12 @@
 /**
  * common.runtime.env `GNMS_URL` → 스킴 포함 base (경로 prefix 유지).
- * 예: `192.168.126.1:3000` → `http://192.168.126.1:3000`
- * 예: `http://dggs.kr/gnms` → `http://dggs.kr/gnms` (경로 유지)
+ * 예: `host:3000` → `http://host:3000`
+ * 예: `http://dggskorea/gnms` → `http://dggskorea/gnms` (경로 유지)
  */
+
+/** common.runtime.env 미설정·빈 값일 때 최후 fallback (`common.runtime.env` 기본과 동일) */
+export const DEFAULT_GNMS_URL = 'http://dggskorea/gnms';
+
 export function normalizeGnmsOrigin(raw: string): string {
   const t = String(raw ?? '').trim().replace(/\/+$/, '');
   if (!t) return '';
@@ -26,9 +30,17 @@ export function buildGnmsVersionApiBase(gnmsUrl: string): string {
   return `${base}/api/source/version`;
 }
 
+/** GNMS_URL → source/upload API base (`…/api/source/upload`) — 소스코드 업로드 대상 */
+export function buildGnmsUploadApiBase(gnmsUrl: string): string {
+  const base = normalizeGnmsOrigin(gnmsUrl);
+  if (!base) return '';
+  if (/\/api\/source\/upload$/i.test(base)) return base;
+  return `${base}/api/source/upload`;
+}
+
 /**
  * GNMS source/version API base 기준 URL 조합.
- * base 예: http://192.168.126.1:3000/api/source/version
+ * base 예: http://dggskorea/gnms/api/source/version
  */
 export function resolveGnmsApiUrl(gnmsBaseUrl: string, maybeRelative: string): string {
   const rel = maybeRelative.trim();

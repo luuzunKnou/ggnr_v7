@@ -14,8 +14,8 @@ import {
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import {
   RemoteUploadError,
-  SOURCE_UPLOAD_REMOTE_BASE,
   cancelRemoteSourceUpload,
+  getRemoteUploadBase,
   uploadZipByChunks,
   type RemoteStageReport,
 } from '@/service/sourceUploadRemote';
@@ -515,7 +515,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       progressId,
-      remoteBase: SOURCE_UPLOAD_REMOTE_BASE,
+      remoteBase: getRemoteUploadBase(),
       workspaceRoot,
       zipName,
       zipSize,

@@ -178,7 +178,7 @@ export function getSystemKorName(): string {
 
 /**
  * common.runtime.env / 프로젝트 runtime.env 의 GNMS_URL.
- * 예: `192.168.126.1:3000` 또는 `http://192.168.126.1:3000` (없으면 빈 문자열)
+ * 예: `host:3000` 또는 `http://dggskorea/gnms` (없으면 빈 문자열)
  */
 export function getGnmsUrl(): string {
   return getRuntimeEnvVars().GNMS_URL?.trim() ?? ""

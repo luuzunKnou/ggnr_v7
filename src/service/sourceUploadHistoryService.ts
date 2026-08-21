@@ -4,7 +4,7 @@ import {
   buildSourceUploadSuccessBody,
 } from '@/lib/sourceUploadHistoryMessage';
 import { recordVersionHistory } from '@/service/mngVersionHistoryService';
-import { SOURCE_UPLOAD_REMOTE_BASE } from '@/service/sourceUploadRemote';
+import { getRemoteUploadBase } from '@/service/sourceUploadRemote';
 
 export { buildSourceUploadFailBody, buildSourceUploadSuccessBody };
 
@@ -31,7 +31,7 @@ export async function recordUploadFlowHistory(params: {
     memo: fields.memo,
     version: params.version,
     ip: params.ip,
-    clientHost: params.clientHost ?? SOURCE_UPLOAD_REMOTE_BASE,
+    clientHost: params.clientHost ?? getRemoteUploadBase(),
   });
   return result.ok;
 }
