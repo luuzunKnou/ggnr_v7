@@ -9,10 +9,7 @@ import {
   type BuildingRegisterMode,
   type BuildingRegisterRow,
 } from './api';
-import {
-  BuildingLinkageLegend,
-  BuildingPermitLinkageLegend,
-} from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
+import { BuildingDataSourceLine } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 
 function isNumericZero(text: string): boolean {
   if (!/^-?\d+(?:\.\d+)?$/.test(text)) return false;
@@ -100,6 +97,13 @@ function jijiguList(row: BuildingRegisterRow | undefined): string[] {
   return one ? [one] : [];
 }
 
+/** 동 목록 구분 — DB 짧은값(표제·일반)을 대장 종류명과 맞춤 */
+function ledgerTypeLabel(type: string): string {
+  if (type === '표제') return '표제부';
+  if (type === '일반') return '일반건축물';
+  return type;
+}
+
 function selectOptionText(bracket: string, rest: string): string {
   const body = rest.replace(/\s+/g, ' ').trim();
   const gb = bracket.trim();
@@ -118,7 +122,7 @@ function ThTd({
 }) {
   return (
     <>
-      <th className="bg-muted/30 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top break-keep">
+      <th className="bg-muted px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top break-keep">
         {label}
       </th>
       <td
@@ -159,7 +163,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
           colSpan={viol ? 1 : 3}
         />
         {viol ? (
-          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 border border-border">
+          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 dark:text-red-400 border border-border">
             위반건축물
           </td>
         ) : null}
@@ -185,7 +189,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
               {i === 0 ? (
                 <th
                   rowSpan={jijigus.length}
-                  className="w-[28%] bg-muted/30 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
+                  className="w-[28%] bg-muted px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
                 >
                   지역지구구역
                 </th>
@@ -239,7 +243,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
           colSpan={viol ? 1 : 3}
         />
         {viol ? (
-          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 border border-border">
+          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 dark:text-red-400 border border-border">
             위반건축물
           </td>
         ) : null}
@@ -271,7 +275,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
               {i === 0 ? (
                 <th
                   rowSpan={jijigus.length}
-                  className="w-[28%] bg-muted/30 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
+                  className="w-[28%] bg-muted px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
                 >
                   지역지구구역
                 </th>
@@ -326,26 +330,28 @@ function ChildListTable({
   onDongLookup?: (bldNm: string) => void;
 }) {
   const isRecap = mode === 'recap';
+  const th = 'px-2 py-1.5 border border-border';
+  const td = 'px-2 py-1 border border-border';
   return (
-    <div className="overflow-auto max-h-[190px] rounded border border-border">
-      <table className="w-full border-collapse text-[11px]">
+    <div className="overflow-x-auto rounded border border-border">
+      <table className="w-full table-auto border-collapse text-[11px]">
         <thead>
-          <tr className="bg-muted/30 text-muted-foreground">
+          <tr className="bg-muted text-muted-foreground">
             {isRecap ? (
               <>
-                <th className="px-2 py-1.5 border border-border w-10">구분</th>
-                <th className="px-2 py-1.5 border border-border text-left">건물명</th>
-                <th className="px-2 py-1.5 border border-border w-[7.5rem]">용도</th>
-                <th className="px-2 py-1.5 border border-border text-left">주구조</th>
-                <th className="px-2 py-1.5 border border-border w-14">면적(㎡)</th>
-                <th className="px-2 py-1.5 border border-border w-12">조회</th>
+                <th className={`${th} whitespace-nowrap`}>구분</th>
+                <th className={`${th} text-left`}>건물명</th>
+                <th className={`${th} text-left`}>용도</th>
+                <th className={`${th} text-left`}>주구조</th>
+                <th className={`${th} whitespace-nowrap text-right`}>면적(㎡)</th>
+                <th className={`${th} whitespace-nowrap w-[1%]`}>조회</th>
               </>
             ) : (
               <>
-                <th className="px-2 py-1.5 border border-border w-12">층별</th>
-                <th className="px-2 py-1.5 border border-border text-left">구조</th>
-                <th className="px-2 py-1.5 border border-border text-left">용도</th>
-                <th className="px-2 py-1.5 border border-border w-14">면적(㎡)</th>
+                <th className={`${th} whitespace-nowrap`}>층별</th>
+                <th className={`${th} text-left`}>구조</th>
+                <th className={`${th} text-left`}>용도</th>
+                <th className={`${th} whitespace-nowrap text-right`}>면적(㎡)</th>
               </>
             )}
           </tr>
@@ -364,19 +370,22 @@ function ChildListTable({
             childRows.map((row, i) =>
               isRecap ? (
                 <tr key={i}>
-                  <td className="px-2 py-1 border border-border text-center">{fmt(row.type)}</td>
-                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'bld_nm', 'bldNm'))}</td>
-                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
-                  <td className="px-2 py-1 border border-border">
+                  <td className={`${td} whitespace-nowrap text-center`}>
+                    {fmt(ledgerTypeLabel(field(row, 'type')))}
+                  </td>
+                  <td className={td}>{fmt(field(row, 'bld_nm', 'bldNm'))}</td>
+                  <td className={td}>{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
+                  <td className={td}>
                     {fmt(field(row, 'main_strct_cd_nm', 'mainStrctCdNm', 'strct_cd_nm', 'strctCdNm'))}
                   </td>
-                  <td className="px-2 py-1 border border-border text-center">{fmt(field(row, 'totarea', 'totArea'))}</td>
-                  <td className="px-2 py-1 border border-border text-center">
+                  <td className={`${td} whitespace-nowrap text-right`}>{fmt(field(row, 'totarea', 'totArea'))}</td>
+                  <td className={`${td} whitespace-nowrap text-center`}>
                     {field(row, 'type') !== '동' && onDongLookup ? (
                       <button
                         type="button"
-                        className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted/50"
+                        className="inline-flex shrink-0 whitespace-nowrap rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted"
                         onClick={() => onDongLookup(field(row, 'bld_nm', 'bldNm'))}
+                        title="조회"
                       >
                         조회
                       </button>
@@ -387,10 +396,10 @@ function ChildListTable({
                 </tr>
               ) : (
                 <tr key={i}>
-                  <td className="px-2 py-1 border border-border text-center">{fmt(field(row, 'flrno_nm', 'flrNoNm'))}</td>
-                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'strct_cd_nm', 'strctCdNm'))}</td>
-                  <td className="px-2 py-1 border border-border">{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
-                  <td className="px-2 py-1 border border-border text-center">{fmt(field(row, 'area', 'area'))}</td>
+                  <td className={`${td} whitespace-nowrap text-center`}>{fmt(field(row, 'flrno_nm', 'flrNoNm'))}</td>
+                  <td className={td}>{fmt(field(row, 'strct_cd_nm', 'strctCdNm'))}</td>
+                  <td className={td}>{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
+                  <td className={`${td} whitespace-nowrap text-right`}>{fmt(field(row, 'area', 'area'))}</td>
                 </tr>
               )
             )
@@ -446,12 +455,14 @@ export function BuildingRegisterPanel({
   const handleSelectChange = async (seq: string) => {
     setSelectedSeq(seq);
     const next = localBuildings.find((b) => field(b, 'bldrgst_seqno') === seq);
-    if (!next || localMode === 'recap' || localMode === 'portal') return;
+    if (!next || localMode === 'recap') return;
     setBusy(true);
     try {
       const floors = await fetchBuildingFloorList({
         type: field(next, 'type'),
         seqNo: seq,
+        pnu,
+        source,
       });
       setLocalChildren(floors);
     } finally {
@@ -463,7 +474,7 @@ export function BuildingRegisterPanel({
     if (!pnu) return;
     setBusy(true);
     try {
-      const res = await fetchBuildingRegisterByDong({ pnu, bldNm });
+      const res = await fetchBuildingRegisterByDong({ pnu, bldNm, source });
       if (!res.buildings.length) return;
       setLocalBuildings(res.buildings);
       setLocalChildren(res.children);
@@ -498,38 +509,37 @@ export function BuildingRegisterPanel({
   const typeLabel = field(selected, 'type') || (localMode === 'recap' ? '총괄표제부' : '표제부');
 
   return (
-    <div className="space-y-3">
+    <div className="min-h-full flex flex-col space-y-3">
       {notice ? (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
           {notice}
         </p>
       ) : null}
-      {source ? (
-        <div style={{ display: 'none' }} aria-hidden>
-          <BuildingLinkageLegend sources={[source]} />
-        </div>
-      ) : null}
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-xs font-semibold text-foreground">건축물대장 {typeLabel}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 text-xs font-semibold text-foreground">
+          건축물대장 {ledgerTypeLabel(typeLabel)}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
         {showBack ? (
           <button
             type="button"
-            className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-muted/50"
+            className="whitespace-nowrap rounded border border-primary bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
             onClick={handleBack}
+            title="총괄"
           >
-            ← 총괄으로
+            ← 총괄
           </button>
         ) : localBuildings.length > 0 ? (
           <select
-            className="max-w-full rounded border border-border px-1.5 py-0.5 text-[11px]"
+            className="max-w-[14rem] rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground"
             value={selectedSeq}
             onChange={(e) => void handleSelectChange(e.target.value)}
           >
             {localBuildings.map((item, i) => {
               const seq = field(item, 'bldrgst_seqno', 'mgmBldrgstPk') || String(i);
               const label = selectOptionText(
-                field(item, 'type'),
+                ledgerTypeLabel(field(item, 'type')),
                 `${field(item, 'bld_nm', 'bldNm')} ${field(item, 'dong_nm', 'dongNm')}`.trim() ||
                   fmt(item.totarea || item.totArea, '㎡')
               );
@@ -542,6 +552,7 @@ export function BuildingRegisterPanel({
           </select>
         ) : null}
         {busy ? <span className="text-[10px] text-muted-foreground">불러오는 중…</span> : null}
+        </div>
       </div>
 
       {selected ? (
@@ -564,6 +575,7 @@ export function BuildingRegisterPanel({
           />
         </div>
       ) : null}
+      <BuildingDataSourceLine className="mt-auto pt-2 text-right" sources={[source]} />
     </div>
   );
 }
@@ -615,21 +627,18 @@ export function BuildingPermitPanel({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-h-full flex flex-col space-y-3">
       {notice ? (
         <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           {notice}
         </p>
       ) : null}
-      <div style={{ display: 'none' }} aria-hidden>
-        <BuildingPermitLinkageLegend source={source} />
-      </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-xs font-semibold text-foreground">건축허가대장</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 text-xs font-semibold text-foreground">건축허가대장</p>
         {rows.length > 0 ? (
           <select
-            className="max-w-full rounded border border-border px-1.5 py-0.5 text-[11px]"
+            className="max-w-[14rem] shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground"
             value={selectedKey}
             onChange={(e) => setSelectedKey(e.target.value)}
           >
@@ -639,7 +648,9 @@ export function BuildingPermitPanel({
                 String(i);
               const label = selectOptionText(
                 field(item, 'pmsrgst_gb_cd_nm', 'pmsno_gb_cd_nm', 'pmsGbCdNm', 'archPmsGbCdNm'),
-                field(item, 'bld_nm', 'bldNm') || fmt(item.totarea || item.totArea, '㎡')
+                field(item, 'bld_nm', 'bldNm') ||
+                  fmt(item.totarea || item.totArea, '㎡') ||
+                  field(item, 'bjdong_cd_nm', 'bjdongCdNm')
               );
               return (
                 <option
@@ -766,6 +777,10 @@ export function BuildingPermitPanel({
           </tr>
         </DetailTable>
       ) : null}
+      <BuildingDataSourceLine
+        className="mt-auto pt-2 text-right"
+        sources={[source === 'arch' || source === 'housing' ? 'portal' : source]}
+      />
     </div>
   );
 }

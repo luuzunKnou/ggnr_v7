@@ -63,7 +63,70 @@ export function ParcelLinkageValueText({
       title={hasValue ? parcelLandLinkageSourceTitle(source) : isFail ? PARCEL_LAND_LINKAGE_FAIL_TITLE : undefined}
     >
       {text}
+      {isFail ? <ParcelLandLinkageFailReasonHidden reason={PARCEL_LAND_LINKAGE_FAIL_TITLE} /> : null}
     </span>
+  );
+}
+
+/** 연계실패 상세원인 — 화면에는 안 보이고 개발자도구에서만 확인 */
+export function ParcelLandLinkageFailReasonHidden({ reason }: { reason?: string | null }) {
+  const text = reason?.trim();
+  if (!text) return null;
+  return (
+    <span data-linkage-fail-reason={text} style={{ display: 'none' }}>
+      {text}
+    </span>
+  );
+}
+
+/** 건축물대장·인허가·토지 화면 출처 — 우클릭·필지분석 공통 */
+const DATA_SOURCE_LABEL: Record<string, string> = {
+  seum: '세움터',
+  portal: '공공데이터포털',
+  arch: '공공데이터포털',
+  housing: '공공데이터포털',
+  kras: '행망',
+  koreps: '코렙스',
+  vworld: '브이월드',
+};
+
+const DATA_SOURCE_ORDER = ['세움터', '공공데이터포털', '행망', '코렙스', '브이월드'];
+
+export function dataSourceLabel(source?: string | null): string | undefined {
+  if (source == null || source === '') return undefined;
+  const key = normalizeParcelLandSource(source);
+  if (!key) return undefined;
+  if (key === 'mixed') return undefined;
+  return DATA_SOURCE_LABEL[key];
+}
+
+function dataSourceLabels(source?: string | null): string[] {
+  if (source == null || source === '') return [];
+  const key = normalizeParcelLandSource(source);
+  if (key === 'mixed') return ['행망', '코렙스'];
+  const one = dataSourceLabel(source);
+  return one ? [one] : [];
+}
+
+export function buildingDataSourceLabel(source?: string | null): string | undefined {
+  return dataSourceLabel(source);
+}
+
+/** 사용자 화면 출처 한 줄. 디버그 색 범례와 별개로 항상 표시 */
+export function BuildingDataSourceLine({
+  sources,
+  className,
+}: {
+  sources: Array<string | null | undefined>;
+  className?: string;
+}) {
+  const found = new Set(sources.flatMap((s) => dataSourceLabels(s)));
+  const labels = DATA_SOURCE_ORDER.filter((label) => found.has(label));
+  if (!labels.length) return null;
+  return (
+    <p className={cn('text-[11px] text-muted-foreground', className)}>
+      출처: {labels.join(' · ')}
+    </p>
   );
 }
 
@@ -86,9 +149,9 @@ export function BuildingPermitLinkageLegend({
   if (!source) return null;
   return (
     <p className="text-[10px] leading-relaxed text-muted-foreground">
-      {source === 'seum' ? <span className="mr-2 font-medium text-violet-700">보라·세움터</span> : null}
+      {source === 'seum' ? <span className="mr-2 font-medium text-violet-700">세움터</span> : null}
       {source === 'arch' || source === 'housing' ? (
-        <span className="mr-2 font-medium text-sky-700">하늘·데이터포털</span>
+        <span className="mr-2 font-medium text-sky-700">공공데이터포털</span>
       ) : null}
       <span className="mr-2">표 값 = 동일 출처 색</span>
       <span>- = 연계됐으나 값 없음</span>
@@ -103,8 +166,8 @@ export function BuildingLinkageLegend({ sources }: { sources: Array<ParcelLandRo
   if (!set.size) return null;
   return (
     <p className="text-[10px] leading-relaxed text-muted-foreground">
-      {set.has('seum') ? <span className="mr-2 font-medium text-violet-700">보라·세움터</span> : null}
-      {set.has('portal') ? <span className="mr-2 font-medium text-sky-700">하늘·데이터포털</span> : null}
+      {set.has('seum') ? <span className="mr-2 font-medium text-violet-700">세움터</span> : null}
+      {set.has('portal') ? <span className="mr-2 font-medium text-sky-700">공공데이터포털</span> : null}
       <span className="mr-2">대지위치·지번 = 비면 PNU(행정명·번지) 폴백 · 도로명 = 원천만(폴백 없음)</span>
       <span className="mr-2">명칭·면적·건폐율 등 = 동일 출처</span>
       <span>- = 연계됐으나 값 없음</span>

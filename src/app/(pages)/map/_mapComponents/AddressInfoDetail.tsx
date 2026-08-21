@@ -23,7 +23,7 @@ export default function AddressInfoDetail() {
 
   return (
     <div
-      className="flex flex-col w-[520px] h-full rounded-l-xl border-l border-border bg-background/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto"
+      className="flex flex-col w-[520px] h-full rounded-l-xl border-l border-border bg-background/95 text-foreground shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto"
       style={{
         position: 'absolute',
         top: 0,
@@ -32,16 +32,17 @@ export default function AddressInfoDetail() {
         zIndex: 10000,
       }}
     >
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/30">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/40">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           {pnuDisplay ? `필지정보 (${pnuDisplay})` : '필지정보'}
         </span>
         <button
           type="button"
           onClick={handleClose}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="닫기"
+          title="닫기"
         >
           <X className="h-3.5 w-3.5" />
         </button>
