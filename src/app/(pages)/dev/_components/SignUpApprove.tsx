@@ -69,7 +69,7 @@ const FILTERS: { id: StatusFilter; label: string }[] = [
 
 const uiStyle = USER_MANAGER_UI_STYLE;
 const tableRowClass =
-  'border-t border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
 
 export function SignUpApprove() {
   const [rows, setRows] = useState<SignUpRow[]>([]);
@@ -242,6 +242,7 @@ export function SignUpApprove() {
       </div>
 
       <div className={uiStyle.tableWrap}>
+        <div className={uiStyle.tableScroll}>
         <table className={cn(uiStyle.table, 'min-w-[72rem] table-fixed')}>
           <thead className={cn('sticky top-0', uiStyle.tableHead)}>
             <tr>
@@ -412,6 +413,7 @@ export function SignUpApprove() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

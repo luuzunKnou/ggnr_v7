@@ -1,6 +1,6 @@
 /**
  * 세움터 적재 DB — 건축물대장(표제) · 건축/주택 인허가
- * 스키마/테이블 없으면 빈 결과 → 호출측에서 포털 2차.
+ * 스키마/테이블 없으면 빈 결과 → 호출측에서 포털만 사용(세움과 섞지 않음).
  */
 import type { PoolClient } from 'pg';
 import { pool } from '@/database/db';

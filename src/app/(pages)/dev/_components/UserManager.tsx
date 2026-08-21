@@ -10,6 +10,7 @@ import { Building2, CalendarClock, Check, FileText, IdCard, Lock, Mail, Phone, P
 import { PermRoleMappingPanel } from "./perm/PermRoleMappingPanel"
 import { UgUtManageModal } from "./UgUtManageModal"
 import { USER_MANAGER_UI_STYLE } from "./userManagerUiVariants"
+import { SuggestNameInput } from "@/app/_components/SuggestNameInput"
 
 type UserRow = {
   usrId: string
@@ -103,46 +104,6 @@ const emptyForm = (): FormState => ({
   usr_cancle_time: "",
 })
 
-/** 한글 초성 ※음절 맨 앞 자음 (ㄱ…ㅎ). 타입어헤드 초성 검색용 */
-const HANGUL_CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
-const HANGUL_BASE = 0xac00
-const HANGUL_END = 0xd7a3
-
-function toChoseongKey(text: string): string {
-  let out = ""
-  for (const ch of text) {
-    const code = ch.codePointAt(0) ?? 0
-    if (code >= HANGUL_BASE && code <= HANGUL_END) {
-      out += HANGUL_CHOSEONG[Math.floor((code - HANGUL_BASE) / 588)] ?? ""
-      continue
-    }
-    if (HANGUL_CHOSEONG.includes(ch)) {
-      out += ch
-      continue
-    }
-    out += ch.toLowerCase()
-  }
-  return out
-}
-
-function isChoseongOnlyQuery(q: string): boolean {
-  return q.length > 0 && [...q].every((ch) => HANGUL_CHOSEONG.includes(ch))
-}
-
-/** 부분 문자열·초성(예: ㅌ → 토지과) 매칭 */
-function matchesSuggestQuery(label: string, query: string): boolean {
-  const q = query.trim()
-  if (!q) return true
-  const lower = label.toLowerCase()
-  const qLower = q.toLowerCase()
-  if (lower.includes(qLower)) return true
-  const labelCho = toChoseongKey(label)
-  const queryCho = toChoseongKey(q)
-  if (labelCho.includes(queryCho)) return true
-  if (isChoseongOnlyQuery(q) && labelCho.startsWith(queryCho)) return true
-  return false
-}
-
 function LabeledInput({
   label,
   icon,
@@ -202,80 +163,23 @@ function LabeledSuggestInput({
   disabled?: boolean
   required?: boolean
 }) {
-  const rootRef = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
-
-  const suggestions = useMemo(() => {
-    const seen = new Set<string>()
-    const list: string[] = []
-    for (const raw of options) {
-      const name = raw.trim()
-      if (!name || seen.has(name)) continue
-      if (!matchesSuggestQuery(name, value)) continue
-      seen.add(name)
-      list.push(name)
-    }
-    return list.slice(0, 40)
-  }, [options, value])
-
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
-  }, [open])
-
   return (
-    <div className="flex items-center gap-2" ref={rootRef}>
+    <div className="flex items-center gap-2">
       <span className="flex h-8 shrink-0 items-center text-muted-foreground/80">{icon}</span>
       <span className="w-20 shrink-0 text-[12px] text-muted-foreground/90">
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </span>
-      <div className="relative flex-1 min-w-0">
-        <Input
-          type="text"
-          value={value ?? ""}
-          onChange={(e) => {
-            onChange(e.target.value)
-            setOpen(true)
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder={placeholder}
-          disabled={disabled}
-          autoComplete="off"
-          style={{ fontSize: "12px" }}
-          className="h-8 w-full border-border/80 bg-muted/30 placeholder:text-[12px]"
-          title={`${label}: ${placeholder}`}
-        />
-        {open && !disabled && suggestions.length > 0 ? (
-          <ul
-            className="absolute left-0 right-0 top-[calc(100%+2px)] z-50 max-h-44 overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
-            role="listbox"
-          >
-            {suggestions.map((name) => (
-              <li key={name}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={name === value}
-                  className="flex w-full px-2.5 py-1.5 text-left text-[12px] hover:bg-muted"
-                  title={name}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    onChange(name)
-                    setOpen(false)
-                  }}
-                >
-                  {name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+      <SuggestNameInput
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder={placeholder}
+        disabled={disabled}
+        title={`${label}: ${placeholder}`}
+        className="flex-1"
+        inputClassName="h-8 w-full border-border/80 bg-muted/30 placeholder:text-[12px] text-[12px]"
+      />
     </div>
   )
 }
@@ -563,11 +467,16 @@ export function UserManager() {
           </p>
         ) : null}
         {loading && <span className="text-sm text-muted-foreground">조회 중...</span>}
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground whitespace-nowrap">
+          {searchQuery.trim() && filteredItems.length !== items.length
+            ? `검색 ${filteredItems.length}건 / 전체 ${items.length}건`
+            : `총 ${filteredItems.length}건`}
+        </span>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className={cn("ml-auto shrink-0 rounded-none", uiStyle.secondaryButton)}
+          className={cn("shrink-0 rounded-none", uiStyle.secondaryButton)}
           onClick={() => setUgUtManageOpen(true)}
           disabled={saving}
           title="부서/팀 관리"
@@ -577,9 +486,11 @@ export function UserManager() {
       </div>
 
       <div className={uiStyle.tableWrap}>
+        <div className={uiStyle.tableScroll}>
         <table className={uiStyle.table}>
           <thead className={cn("sticky top-0", uiStyle.tableHead)}>
             <tr>
+              <th className={cn("w-14 text-left", uiStyle.tableCell)}>순번</th>
               <th className={cn("text-left", uiStyle.tableCell)}>아이디</th>
               <th className={cn("text-left", uiStyle.tableCell)}>이름</th>
               <th className={cn("text-left", uiStyle.tableCell)}>부서/팀</th>
@@ -589,12 +500,13 @@ export function UserManager() {
             </tr>
           </thead>
           <tbody>
-            {filteredItems.map((row) => (
+            {filteredItems.map((row, idx) => (
               <tr
                 key={row.usrId}
                 className={uiStyle.tableRow}
                 onClick={() => void startEdit(row)}
               >
+                <td className={cn("whitespace-nowrap", uiStyle.tableCell)}>{idx + 1}</td>
                 <td className={uiStyle.tableCell}>{row.usrId}</td>
                 <td className={uiStyle.tableCell}>{row.usrName ?? "-"}</td>
                 <td className={uiStyle.tableCell}>{row.ugName} / {row.utName}</td>
@@ -616,13 +528,14 @@ export function UserManager() {
             ))}
             {!filteredItems.length && (
               <tr>
-                <td className={cn("text-muted-foreground", uiStyle.tableCell)} colSpan={6}>
+                <td className={cn("text-muted-foreground", uiStyle.tableCell)} colSpan={7}>
                   검색 결과가 없습니다.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

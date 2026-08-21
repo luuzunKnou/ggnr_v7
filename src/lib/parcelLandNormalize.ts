@@ -22,6 +22,15 @@ export const PARCEL_LAND_LINKAGE_FAIL_LABEL = '연계실패';
 /** 연계실패 셀·값 title(툴팁) */
 export const PARCEL_LAND_LINKAGE_FAIL_TITLE = '이 필지 토지 정보를 조회하지 못했습니다';
 
+/** 연계실패 상세원인 — 화면에는 숨기고 DOM에서만 확인 */
+export const PARCEL_LAND_LINKAGE_FAIL_REASON = {
+  krasEmpty: '행망에 해당 필지 없음',
+  krasBatchThenVworld: '행망 묶음 실패 후 브이월드 조회 실패',
+  vworldFailed: '브이월드 조회 실패',
+  vworldNoKey: '브이월드 키 없음',
+  invalidPnu: 'PNU 형식 오류',
+} as const;
+
 export type ParcelLandRowSource =
   | 'db'
   | 'kras'
@@ -91,7 +100,7 @@ export function parcelLandLinkageSourceLabel(source: ParcelLandRowSource): strin
     case 'seum':
       return '세움터';
     case 'portal':
-      return '데이터포털';
+      return '공공데이터포털';
     case 'mixed':
       return '혼합';
     default:
@@ -153,6 +162,8 @@ export type AnalyzeLandRow = {
   source?: ParcelLandSource;
   /** 연계 보강을 시도했으나 해당 PNU에 성공 응답이 없음 */
   linkageFailed?: boolean;
+  /** 연계실패 상세원인 (화면 숨김용) */
+  linkageFailReason?: string;
 };
 
 export type OwnerStatRow = { label: string; count: number; areaSqm: number };
