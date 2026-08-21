@@ -23,8 +23,28 @@ import {
 import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
+
+/** 자동수정이력 폴더. 데이터 루트·autofix_log 가 없으면 상위부터 생성 */
+function ensureAutofixLogDirSync(): string {
+  const dir = turbopackOpaquePath(path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.autofixLog));
+  const chain: string[] = [];
+  let cur = dir;
+  while (true) {
+    chain.push(cur);
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  for (const p of chain.reverse()) {
+    const opaque = turbopackOpaquePath(p);
+    if (fs.existsSync(opaque)) continue;
+    fs.mkdirSync(opaque, { recursive: true });
+  }
+  return dir;
+}
 
 /** 심볼 베이스 URL (GeoServer가 이미지를 요청할 주소). NEXT_PUBLIC_APP_URL 없으면 localhost:3000 */
 const SYMBOL_BASE_URL =
@@ -3448,8 +3468,7 @@ function writeLayerSetupAutofixLog(p: {
     const pad2 = (n: number) => String(n).padStart(2, '0');
     const ts = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}_${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
     const safeTable = String(p.tableName).replace(/[^a-zA-Z0-9_-]/g, '_') || 'unknown';
-    const dir = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.autofixLog);
-    fs.mkdirSync(dir, { recursive: true });
+    const dir = ensureAutofixLogDirSync();
     const fileName = `${ts}_${safeTable}.log`;
     const abs = path.join(dir, fileName);
 
@@ -3591,10 +3610,9 @@ function peekAutofixLogResult(absPath: string): '성공' | '실패' | null {
 export async function listLayerSetupAutofixLogs(params: { page?: number; limit?: number } = {}) {
   const limit = Math.min(Math.max(Number(params.limit) || 20, 1), 100);
   const page = Math.max(Number(params.page) || 1, 1);
-  const dir = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.autofixLog);
+  const dir = ensureAutofixLogDirSync();
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
       return {
         success: true as const,
         logs: [] as LayerSetupAutofixLogRow[],
