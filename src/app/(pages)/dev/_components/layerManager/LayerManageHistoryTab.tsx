@@ -24,6 +24,7 @@ import {
   ChevronsRight,
 } from "lucide-react"
 import { call } from "@/lib/api"
+import { GeoJsonMiniMap } from "../shp/GeoJsonMiniMap"
 
 const WORK_TYPES = ["전체", "되돌리기", "삭제", "수정", "저장", "조회", "추가"] as const
 type WorkType = (typeof WORK_TYPES)[number]
@@ -92,6 +93,55 @@ function toInputDate(ymd: string): string {
 function cellText(v: string | null | undefined): string {
   const s = String(v ?? "").trim()
   return s || "—"
+}
+
+const GEOM_COL_NAMES = new Set(["geom", "geometry", "the_geom", "shape"])
+
+function isGeomAttr(d: DetailAttr): boolean {
+  const col = String(d.colName ?? "").trim().toLowerCase()
+  if (GEOM_COL_NAMES.has(col)) return true
+  const n = String(d.name ?? "").trim().toLowerCase()
+  if (GEOM_COL_NAMES.has(n)) return true
+  return /^(geom|geometry|the_geom|shape)\s*\(/.test(n)
+}
+
+function parseGeoJsonGeometry(raw?: string): Record<string, unknown> | null {
+  const s = String(raw ?? "").trim()
+  if (!s.startsWith("{")) return null
+  try {
+    const parsed = JSON.parse(s) as Record<string, unknown>
+    if (!parsed || typeof parsed !== "object") return null
+    if (parsed.type === "Feature" && parsed.geometry && typeof parsed.geometry === "object") {
+      const g = parsed.geometry as Record<string, unknown>
+      if (g.type && ("coordinates" in g || "geometries" in g)) return g
+      return null
+    }
+    if (parsed.type && ("coordinates" in parsed || "geometries" in parsed)) return parsed
+    return null
+  } catch {
+    return null
+  }
+}
+
+function GeomEmptySlot({ label, text }: { label?: string; text?: string }) {
+  return (
+    <div>
+      {label ? (
+        <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">{label}</h4>
+      ) : null}
+      <div className="flex h-[180px] items-center justify-center rounded border bg-muted/20 text-xs text-muted-foreground">
+        {cellText(text)}
+      </div>
+    </div>
+  )
+}
+
+function GeomPreviewSlot({ label, raw }: { label?: string; raw?: string }) {
+  const geom = parseGeoJsonGeometry(raw)
+  if (geom) {
+    return <GeoJsonMiniMap geometry={geom} dataProjection="EPSG:5181" label={label} />
+  }
+  return <GeomEmptySlot label={label} text={raw} />
 }
 
 export function LayerManageHistoryTab() {
@@ -319,6 +369,12 @@ export function LayerManageHistoryTab() {
     })
     setPage(1)
   }
+
+  const geomDetails = (detailRow?.details ?? []).filter(isGeomAttr)
+  const attrDetails = (detailRow?.details ?? []).filter((d) => !isGeomAttr(d))
+  const isCompare =
+    detailRow?.workType === "수정" || detailRow?.workType === "되돌리기"
+  const emptyLabel = isCompare ? "변경된 속성이 없습니다." : "속성 값이 없습니다."
 
   return (
     <div className="flex flex-col h-full min-h-0 px-2 pt-2 pb-0 gap-2">
@@ -602,7 +658,7 @@ export function LayerManageHistoryTab() {
       </div>
 
       <Dialog open={!!detailRow} onOpenChange={(open) => !open && setDetailRow(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-2 overflow-hidden">
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col gap-2 overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle className="text-base">데이터 상세보기</DialogTitle>
             {detailRow ? (
@@ -634,96 +690,19 @@ export function LayerManageHistoryTab() {
               </div>
             ) : null}
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border rounded">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-2">
             {detailLoading ? (
               <div className="flex items-center justify-center py-8 text-xs text-muted-foreground gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" /> 불러오는 중…
               </div>
-            ) : detailRow &&
-              (detailRow.workType === "수정" || detailRow.workType === "되돌리기") ? (
-              <table className="w-full table-fixed text-xs">
-                <colgroup>
-                  <col className="w-[20%]" />
-                  <col className="w-[32%]" />
-                  <col className="w-[32%]" />
-                  <col className="w-[16%]" />
-                </colgroup>
-                <thead className="sticky top-0 bg-muted">
-                  <tr className="text-center">
-                    <th className="py-1.5 px-2 font-medium border-r">속성명</th>
-                    <th className="py-1.5 px-2 font-medium border-r">변경 전</th>
-                    <th className="py-1.5 px-2 font-medium border-r">변경 후</th>
-                    <th className="py-1.5 px-2 font-medium">되돌리기</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(detailRow.details ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-4 text-center text-muted-foreground">
-                        변경된 속성이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    (detailRow.details ?? []).map((d) => (
-                      <tr key={d.name} className="border-t text-center align-top">
-                        <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
-                        <td className="py-1.5 px-2 text-muted-foreground break-all whitespace-pre-wrap">
-                          {d.before ?? "—"}
-                        </td>
-                        <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.after ?? "—"}</td>
-                        <td className="py-1.5 px-2">
-                          {d.canRevert && d.ddKey ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-1.5"
-                              disabled={actionLoading}
-                              onClick={() => void handleRevertField(d)}
-                              title="되돌리기"
-                              aria-label="되돌리기"
-                            >
-                              <Undo2 className="w-3.5 h-3.5" />
-                            </Button>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
             ) : detailRow ? (
-              <table className="w-full table-fixed text-xs">
-                <colgroup>
-                  <col className="w-[28%]" />
-                  <col className="w-[56%]" />
-                  <col className="w-[16%]" />
-                </colgroup>
-                <thead className="sticky top-0 bg-muted">
-                  <tr className="text-center">
-                    <th className="py-1.5 px-2 font-medium border-r">속성명</th>
-                    <th className="py-1.5 px-2 font-medium border-r">
-                      {detailRow.workType === "추가" ? "추가" : "값"}
-                    </th>
-                    <th className="py-1.5 px-2 font-medium">되돌리기</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(detailRow.details ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="py-4 text-center text-muted-foreground">
-                        속성 값이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    (detailRow.details ?? []).map((d) => (
-                      <tr key={d.name} className="border-t text-center align-top">
-                        <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
-                        <td className="py-1.5 px-2 break-all whitespace-pre-wrap">
-                          {d.value ?? d.after ?? "—"}
-                        </td>
-                        <td className="py-1.5 px-2">
+              <>
+                {geomDetails.length > 0 ? (
+                  <div className="shrink-0 space-y-2 rounded border p-2">
+                    {geomDetails.map((d) => (
+                      <div key={d.name} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium">{d.name}</span>
                           {d.canRevert && d.ddKey ? (
                             <Button
                               size="sm"
@@ -736,15 +715,124 @@ export function LayerManageHistoryTab() {
                             >
                               <Undo2 className="w-3.5 h-3.5" />
                             </Button>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                          ) : null}
+                        </div>
+                        {isCompare ? (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <GeomPreviewSlot label="변경 전" raw={d.before} />
+                            <GeomPreviewSlot label="변경 후" raw={d.after} />
+                          </div>
+                        ) : (
+                          <GeomPreviewSlot
+                            label={detailRow.workType === "추가" ? "추가" : "값"}
+                            raw={d.value ?? d.after}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {attrDetails.length > 0 ? (
+                  <div className="min-h-0 overflow-x-hidden rounded border">
+                    {isCompare ? (
+                      <table className="w-full table-fixed text-xs">
+                        <colgroup>
+                          <col className="w-[20%]" />
+                          <col className="w-[32%]" />
+                          <col className="w-[32%]" />
+                          <col className="w-[16%]" />
+                        </colgroup>
+                        <thead className="sticky top-0 bg-muted">
+                          <tr className="text-center">
+                            <th className="py-1.5 px-2 font-medium border-r">속성명</th>
+                            <th className="py-1.5 px-2 font-medium border-r">변경 전</th>
+                            <th className="py-1.5 px-2 font-medium border-r">변경 후</th>
+                            <th className="py-1.5 px-2 font-medium">되돌리기</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attrDetails.map((d) => (
+                            <tr key={d.name} className="border-t text-center align-top">
+                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
+                              <td className="py-1.5 px-2 text-muted-foreground break-all whitespace-pre-wrap">
+                                {d.before ?? "—"}
+                              </td>
+                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">
+                                {d.after ?? "—"}
+                              </td>
+                              <td className="py-1.5 px-2">
+                                {d.canRevert && d.ddKey ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-1.5"
+                                    disabled={actionLoading}
+                                    onClick={() => void handleRevertField(d)}
+                                    title="되돌리기"
+                                    aria-label="되돌리기"
+                                  >
+                                    <Undo2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="w-full table-fixed text-xs">
+                        <colgroup>
+                          <col className="w-[28%]" />
+                          <col className="w-[56%]" />
+                          <col className="w-[16%]" />
+                        </colgroup>
+                        <thead className="sticky top-0 bg-muted">
+                          <tr className="text-center">
+                            <th className="py-1.5 px-2 font-medium border-r">속성명</th>
+                            <th className="py-1.5 px-2 font-medium border-r">
+                              {detailRow.workType === "추가" ? "추가" : "값"}
+                            </th>
+                            <th className="py-1.5 px-2 font-medium">되돌리기</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attrDetails.map((d) => (
+                            <tr key={d.name} className="border-t text-center align-top">
+                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
+                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">
+                                {d.value ?? d.after ?? "—"}
+                              </td>
+                              <td className="py-1.5 px-2">
+                                {d.canRevert && d.ddKey ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-1.5"
+                                    disabled={actionLoading}
+                                    onClick={() => void handleRevertField(d)}
+                                    title="되돌리기"
+                                    aria-label="되돌리기"
+                                  >
+                                    <Undo2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                ) : geomDetails.length === 0 ? (
+                  <div className="rounded border py-4 text-center text-xs text-muted-foreground">
+                    {emptyLabel}
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
         </DialogContent>
