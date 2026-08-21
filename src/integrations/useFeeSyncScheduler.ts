@@ -30,8 +30,9 @@ export function startUseFeeSyncScheduler(): void {
     if (lastSlot === slot) return;
     lastSlot = slot;
 
+    console.info(`${LOG} 스케줄 시각 — 연계 시작`);
     void runNextGenFeeSync().then((r) => {
-      if (r.skipped) console.info(`${LOG} skipped: ${r.skipped} — ${r.message}`);
+      if (r.skipped) console.info(`${LOG} 건너뜀: ${r.skipped} — ${r.message}`);
       else console.info(`${LOG} ${r.message}`);
     });
   }, 15_000);

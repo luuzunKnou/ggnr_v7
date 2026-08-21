@@ -59,6 +59,8 @@ export function ensureOccupationLedgerWmsLayers(
     system?: string | null;
     /** true면 필지·물건지 WMS도 켬. 기본은 본표만 (목록 선택 시 자식 도형 숨김) */
     includeChildren?: boolean;
+    /** true면 본표 WMS를 켜지 않고, 켜져 있으면 끔 (도형 다시 그리기 중 기존 도형 숨김) */
+    omitMain?: boolean;
   }
 ) {
   if (!setVisibleLayerNames) return;
@@ -70,10 +72,13 @@ export function ensureOccupationLedgerWmsLayers(
   const mainId = binding.mainTable.trim().toLowerCase();
   const childIds = [binding.jijukTable, binding.mgjTable].map((t) => t.trim().toLowerCase());
   const includeChildren = params?.includeChildren === true;
+  const omitMain = params?.omitMain === true;
   setVisibleLayerNames((prev) => {
     const next = new Set(prev);
     let changed = false;
-    if (!next.has(mainId)) {
+    if (omitMain) {
+      if (next.delete(mainId)) changed = true;
+    } else if (!next.has(mainId)) {
       next.add(mainId);
       changed = true;
     }

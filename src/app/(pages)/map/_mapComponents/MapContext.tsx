@@ -427,7 +427,15 @@ export type MapContextValue = {
           pnu?: string;
           point4326?: { x: number; y: number };
         }[],
-        options?: { replaceAuto?: boolean }
+        options?: {
+          replaceAuto?: boolean;
+          /** true면 저장분(keepOnReplace)도 비우고, 주소검색 추가만 남김 */
+          replaceKept?: boolean;
+          /** 다시 그리기 취소 — 필지목록 스냅샷 복원 */
+          restoreSnapshot?: boolean;
+          /** 적용 후 스냅샷 폐기 */
+          commitSnapshot?: boolean;
+        }
       ) => void)
     | null
   >;
@@ -661,7 +669,15 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
           pnu?: string;
           point4326?: { x: number; y: number };
         }[],
-        options?: { replaceAuto?: boolean }
+        options?: {
+          replaceAuto?: boolean;
+          /** true면 저장분(keepOnReplace)도 비우고, 주소검색 추가만 남김 */
+          replaceKept?: boolean;
+          /** 다시 그리기 취소 — 필지목록 스냅샷 복원 */
+          restoreSnapshot?: boolean;
+          /** 적용 후 스냅샷 폐기 */
+          commitSnapshot?: boolean;
+        }
       ) => void)
     | null
   >(null);

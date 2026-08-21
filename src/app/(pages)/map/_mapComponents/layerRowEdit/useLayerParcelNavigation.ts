@@ -25,12 +25,15 @@ export function useLayerParcelNavigation(wmsLayerId?: string) {
         enableWmsLayer?: boolean;
         /** true면 주소/키로 geom 재조회하지 않고 item 도형을 그대로 씀 */
         useItemGeometry?: boolean;
+        /** true면 목록 선택만. 지적 도형을 지도에 올리지 않음 */
+        skipMap?: boolean;
       }
     ) => {
+      setSelectedParcelIdx(idx);
+      if (options?.skipMap) return;
+
       const map = mapContext?.mapInstanceRef?.current;
       if (!map) return;
-
-      setSelectedParcelIdx(idx);
       setMovingParcelIdx(idx);
       try {
         const target = options?.useItemGeometry

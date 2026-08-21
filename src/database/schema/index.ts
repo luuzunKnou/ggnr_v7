@@ -17,6 +17,7 @@ export * from './flight_logbook';
 export * from './gp_map';
 export * from './integration_job_log';
 export * from './layer_detail_history';
+export * from './layer_extra_def';
 export * from './layer_history';
 export * from './log_kais';
 export * from './log_safetydata';

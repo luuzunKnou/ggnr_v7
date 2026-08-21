@@ -11,19 +11,25 @@ type Options = {
   onSetPlace: (fieldKey: string, value: string) => void;
   /** 도형 교차 필지 주소 — 역지오코딩 실패 시 폴백 */
   parcelAddresses?: string[];
+  /**
+   * true면 필지목록이 바뀔 때도 장소를 다시 채운다.
+   * 수정에서는 끄고, 도형을 그렸을 때만 장소를 갱신한다.
+   */
+  refillOnParcelList?: boolean;
 };
 
 /**
  * 도형 추가·수정 → 점용장소 자동 입력.
  * 1) 도형 중심 역지오코딩
  * 2) 실패 시 필지목록 첫 주소
- * 기존 값과 관계없이 갱신.
+ * 신규는 필지목록이 채워진 뒤에도 장소를 맞춘다. 수정은 도형을 그렸을 때만 갱신한다.
  */
 export function useLayerRowPlaceFromGeom({
   enabled,
   placeFieldKey,
   onSetPlace,
   parcelAddresses = [],
+  refillOnParcelList = true,
 }: Options) {
   const mapContext = useMapContext();
   const drawnRef = mapContext?.layerRowGeomDrawnRef;
@@ -87,12 +93,12 @@ export function useLayerRowPlaceFromGeom({
    */
   const parcelSig = parcelAddresses.map((a) => a.trim()).filter(Boolean).join("|");
   useEffect(() => {
-    if (!enabled || !placeFieldKey) return;
+    if (!enabled || !placeFieldKey || !refillOnParcelList) return;
     if (!parcelSig) return;
     if (dirtyRef?.current !== true) return;
     const wkt = String(wktRef?.current ?? "").trim();
     if (!wkt) return;
     applyPlaceForWkt(wkt);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 필지·편집 세션 변화 시만
-  }, [enabled, placeFieldKey, parcelSig]);
+  }, [enabled, placeFieldKey, parcelSig, refillOnParcelList]);
 }
