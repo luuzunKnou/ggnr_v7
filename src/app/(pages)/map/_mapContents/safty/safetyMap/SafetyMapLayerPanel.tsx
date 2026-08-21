@@ -44,9 +44,9 @@ const SAFETY_RASTER_OPACITY = {
   waterPlayManaged: 1,
 } as const;
 
-/** 500·CORS·네트워크 오류 시 타일 큐/맵 렌더가 멈추지 않도록 투명 1px로 대체 */
+/** 500·CORS·타임아웃 시 OL 로드 완료만 유도(알파 0). 불투명 1px는 extent 전체에 흰색 오버레이가 됨 */
 const TRANSPARENT_PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ZQAAAAASUVORK5CYII=';
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 const SAFETY_MAP_OL_LAYER_KEY = 'safetyMapLayerKind';
 const FLOOD_RIVER_LOCAL_KIND = 'floodRiverLocal';
@@ -341,6 +341,9 @@ function useSafemapFloodWmsSync(
         map.un('moveend', scheduleApply);
         map.un('change:size', scheduleApply);
       }
+      // 실패·타임아웃 이미지가 extent에 남지 않도록 레이어 제거 (흰 오버레이 방지)
+      detach();
+      imageLayer = null;
       try {
         onCallFailed?.();
       } catch {

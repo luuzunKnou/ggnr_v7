@@ -126,7 +126,7 @@
   },
   {
     "define_field_name": "vt_acmdfclty_nm",
-    "define_field_kor_name": "이재민수용 시설명",
+    "define_field_kor_name": "시설명",
     "define_field_type": "TEXT",
     "define_field_idx": "1",
     "define_field_is_required": false,
@@ -376,7 +376,7 @@
   },
   {
     "define_field_name": "vt_acmd_psbl_nmpr",
-    "define_field_kor_name": "이재민수용가능 인원",
+    "define_field_kor_name": "수용가능 인원",
     "define_field_type": "TEXT",
     "define_field_idx": "3",
     "define_field_is_required": false,

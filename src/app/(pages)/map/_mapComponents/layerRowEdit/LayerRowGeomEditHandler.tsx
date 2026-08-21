@@ -246,7 +246,14 @@ export function LayerRowGeomEditHandler({
   const mapOpsRef = useRef<GeomMapOps | null>(null);
   const geomEditSourceRef = useRef<VectorSource | null>(null);
   const attachModifyRef = useRef<(() => void) | null>(null);
-  const loadParcelsRef = useRef<((opts?: { silent?: boolean }) => Promise<void>) | null>(null);
+  const loadParcelsRef = useRef<
+    ((opts?: {
+      silent?: boolean;
+      attempt?: number;
+      replaceKept?: boolean;
+      commitSnapshot?: boolean;
+    }) => Promise<void>) | null
+  >(null);
   const isDrawActiveRef = useRef(false);
   /** 적용 전 — 필지목록·점용장소는 «적용»에서만 반영 */
   const pendingApplyRef = useRef(true);
