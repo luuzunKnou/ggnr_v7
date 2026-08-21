@@ -80,6 +80,55 @@ select exists(
   return Boolean(r.rows[0]?.x);
 }
 
+/**
+ * KAIS 시군구 필터: runtime.env SGG_CODE 우선, 없으면 public_layer.sgg.adm_sect_c.
+ * 둘 다 없으면 undefined (필터 생략).
+ */
+export async function resolveKaisSggCode(): Promise<string | undefined> {
+  const fromEnv = (process.env.SGG_CODE ?? '').trim();
+  if (fromEnv) return fromEnv;
+
+  const schema = 'public_layer';
+  const table = 'sgg';
+  try {
+    const exists = await tableExists(schema, table);
+    if (!exists) return undefined;
+
+    const col = await pool.query<{ x: boolean }>(
+      `
+select exists(
+  select 1 from information_schema.columns
+  where table_schema = $1 and table_name = $2 and column_name = $3
+) as x
+`,
+      [schema, table, 'adm_sect_c']
+    );
+    if (!col.rows[0]?.x) return undefined;
+
+    const r = await pool.query<{ adm_sect_c: string }>(
+      `
+select distinct trim(adm_sect_c::text) as adm_sect_c
+from ${quoteIdent(schema)}.${quoteIdent(table)}
+where adm_sect_c is not null and trim(adm_sect_c::text) <> ''
+order by 1
+limit 2
+`
+    );
+    const first = (r.rows[0]?.adm_sect_c ?? '').trim();
+    if (!first) return undefined;
+    if (r.rows.length > 1) {
+      console.warn(`[kais] public_layer.sgg adm_sect_c 고유값이 여러 개입니다. 첫 값 사용: ${first}`);
+    }
+    return first;
+  } catch (e) {
+    console.warn(
+      '[kais] public_layer.sgg adm_sect_c 조회 실패:',
+      e instanceof Error ? e.message : e
+    );
+    return undefined;
+  }
+}
+
 /** Staging 테이블명(스키마 제외). 본 테이블 `tl_*`와 충돌 없음. */
 function stagingRelFor(shpName: string): string {
   return `_kais_stg_${tiToTl(shpName)}`;

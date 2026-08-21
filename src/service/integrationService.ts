@@ -1,5 +1,5 @@
 import { pool } from '@/database/db';
-import { runKais, defaultDailyWindow } from '@/integrations/kais';
+import { runKais, defaultDailyWindow, resolveKaisSggCode } from '@/integrations/kais';
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
 import { getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
@@ -134,7 +134,7 @@ export async function runIntegration(p: Params) {
     console.error(`[INTEGRATION] START system=${system} mode=${mode} ijlKey=${ijlKey ?? '-'}`);
     if (system === 'KAIS') {
       const appKey = (process.env.KAIS_APP_KEY ?? '').trim() || HARDCODED_KAIS_APP_KEY;
-      const sggCode = process.env.SGG_CODE;
+      const sggCode = await resolveKaisSggCode();
       const window = from && to ? { from, to } : defaultDailyWindow();
       const cntcList = ['300001', '300002', '300003'];
 
