@@ -9,10 +9,12 @@ import { Point } from "ol/geom";
 import { Style, Circle as CircleStyle, Fill, Stroke } from "ol/style";
 import { Loader2, MapPin } from "lucide-react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { formatToYmdOrText } from "@/lib/formatDateYmd";
 import { useMapContext } from "../../_mapComponents/MapContext";
 import { LAYER_ROW_NEW_ID } from "../../_mapComponents/layerRowEdit";
 import { encodeMemoRowKey, memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
+import { MEMO_KEY_FIELD } from "@/lib/memoConfig";
 import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
@@ -152,6 +154,17 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
       .catch(() => setError("상세 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, [isCreateMode, memoKey, tableName]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode || !tableName || !memoKey) return;
+    recordDataViewLog({
+      tableName,
+      keyField: MEMO_KEY_FIELD,
+      keyValue: memoKey,
+      serviceName: "메모",
+    });
+  }, [isCreateMode, tableName, memoKey]);
 
   useEffect(() => {
     if (!tableName) return;

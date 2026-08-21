@@ -4,12 +4,27 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Play, Plus, FileImage, FileVideo, MapPin, Download, X } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import type { AttrRow, WorkFileItem, WorkUnitItem } from './aerialMediaTypes';
 import { AttributeSection, SectionTitle, StatusBadge } from './AerialMediaUi';
 import { updateWorkUnitAttrs } from './aerialMediaMockData';
 import { FlightLogbookForm } from './FlightLogbookForm';
 import { SHOOT_TYPE_LABEL, type ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
 import { ServiceFileImagePreview } from '../../_mapComponents/standard/ServiceFileImagePreview';
+
+/** 데이터 이력관리에 조회 저장을 위해 추가 */
+function useWorkUnitViewLog(kind: string, id: string | null | undefined) {
+  useEffect(() => {
+    const key = String(id ?? '').trim();
+    if (!key) return;
+    recordDataViewLog({
+      tableName: 'work_unit',
+      keyField: 'id',
+      keyValue: key,
+      serviceName: `항공영상(${kind})`,
+    });
+  }, [kind, id]);
+}
 
 /** 속성정보 인라인 수정 상태 (목업 저장) */
 function useAttrEdit(unit: WorkUnitItem) {
@@ -266,6 +281,7 @@ export function OrthoWorkUnitDetailPanel({
   onClearLink,
   onDelete,
 }: OrthoDetailProps) {
+  useWorkUnitViewLog('ortho', unit.id);
   const edit = useAttrEdit(unit);
   const workLabel =
     unit.attrs.find(
@@ -383,6 +399,7 @@ export function DroneWorkUnitDetailPanel({
   onClearLink,
   onDelete,
 }: DroneDetailProps) {
+  useWorkUnitViewLog('drone', unit.id);
   const edit = useAttrEdit(unit);
   const workLabel =
     unit.attrs.find(
@@ -482,6 +499,7 @@ function aerialMediaUrl(relativePath: string, download = false): string {
 }
 
 export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: DroneFileProps) {
+  useWorkUnitViewLog('drone-file', file.id);
   const isVideo = file.previewKind === 'video';
   const mediaSrc = file.relativePath ? aerialMediaUrl(file.relativePath) : null;
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -654,6 +672,7 @@ export function PanoramaWorkUnitDetailPanel({
   onClearLink,
   onDelete,
 }: PanoDetailProps) {
+  useWorkUnitViewLog('panorama', unit.id);
   const edit = useAttrEdit(unit);
   const workLabel =
     unit.attrs.find(
@@ -759,6 +778,7 @@ export function SatelliteWorkUnitDetailPanel({
   onFolderUpload,
   onClearLink,
 }: SatDetailProps) {
+  useWorkUnitViewLog('satellite', unit.id);
   const edit = useAttrEdit(unit);
   const workLabel =
     unit.attrs.find(

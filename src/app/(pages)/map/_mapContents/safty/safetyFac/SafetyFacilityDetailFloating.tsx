@@ -1,15 +1,16 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { FileText, Pentagon, X } from 'lucide-react';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { MapFloatingPanel } from '@/app/(pages)/map/_mapComponents/MapFloatingPanel';
 import { InfoSection } from '@/app/(pages)/map/_mapComponents/standard/DetailInfoSection';
 import {
   FLOAT_PANEL_BELOW_SEARCH_TOP_EXTRA,
   useSearchBarOffset,
 } from '@/app/(pages)/map/searchBarOffsetContext';
-import { buildSafetyFacDetailRows } from './safetyFacDetailConfig';
+import { buildSafetyFacDetailRows, SAFETY_FAC_TABLE_DETAIL_FIELDS } from './safetyFacDetailConfig';
 
 type Props = {
   open: boolean;
@@ -33,6 +34,38 @@ export function SafetyFacilityDetailFloating({
     () => ({ top: topPx + FLOAT_PANEL_BELOW_SEARCH_TOP_EXTRA, left: leftPx }),
     [leftPx, topPx]
   );
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (!open) return;
+    const tableName = String(table ?? '').trim();
+    if (!tableName) return;
+    const fields = SAFETY_FAC_TABLE_DETAIL_FIELDS[tableName] ?? [];
+    const keyField = fields[0]?.field ?? 'ogc_fid';
+    const lower = keyField.toLowerCase();
+    let keyValue = '';
+    for (const [k, v] of Object.entries(detailAttrs ?? {})) {
+      if (k.toLowerCase() === lower) {
+        keyValue = String(v ?? '').trim();
+        break;
+      }
+    }
+    if (!keyValue) {
+      for (const [k, v] of Object.entries(detailAttrs ?? {})) {
+        if (k.toLowerCase() === 'ogc_fid') {
+          keyValue = String(v ?? '').trim();
+          break;
+        }
+      }
+    }
+    if (!keyValue) return;
+    recordDataViewLog({
+      tableName,
+      keyField,
+      keyValue,
+      serviceName: '안전시설',
+    });
+  }, [open, table, detailAttrs]);
 
   if (!open || typeof document === 'undefined') return null;
 

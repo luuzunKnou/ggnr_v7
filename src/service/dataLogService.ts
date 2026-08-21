@@ -5,6 +5,8 @@
 import { db } from '@/database/db';
 import { dl } from '@/database/schema/data_log';
 import { dd } from '@/database/schema/data_detail_log';
+import { usr } from '@/database/schema/usr';
+import { getSessionUsrId } from '@/lib/auth/guard';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -263,6 +265,58 @@ function mapSyncOpToType(op: string | null | undefined): DataLogType | null {
   if (o === 'remove' || o === 'delete') return '삭제';
   if (o === 'kept') return null;
   return null;
+}
+
+/** 세션 사용자 → `usrId(usrName)` (이름 없으면 usrId만) */
+async function resolveSessionLogUser(): Promise<string | null> {
+  const usrId = await getSessionUsrId();
+  if (!usrId) return null;
+  try {
+    const [row] = await db
+      .select({ usrName: usr.usrName })
+      .from(usr)
+      .where(eq(usr.usrId, usrId))
+      .limit(1);
+    const name = String(row?.usrName ?? '').trim();
+    if (name) return `${usrId}(${name})`;
+    if (usrId === 'su') return `${usrId}(슈퍼관리자)`;
+    return usrId;
+  } catch {
+    return usrId === 'su' ? `${usrId}(슈퍼관리자)` : usrId;
+  }
+}
+
+/**
+ * 상세 패널 조회 이력 — data_detail_log 없이 data_log만 남긴다.
+ */
+export async function recordViewLog(params: {
+  tableName: string;
+  keyField: string;
+  keyValue: string | number;
+  serviceName?: string | null;
+  group?: string | null;
+  tableKorName?: string | null;
+  source?: DataLogSource;
+  user?: string | null;
+}): Promise<{ success: boolean; dlKey?: number; skipped?: boolean; error?: string }> {
+  const tableName = String(params.tableName ?? '').trim();
+  const keyField = String(params.keyField ?? '').trim();
+  const keyValue = String(params.keyValue ?? '').trim();
+  if (!tableName || !keyField || !keyValue) {
+    return { success: false, error: 'tableName, keyField, keyValue가 필요합니다.' };
+  }
+  const user = String(params.user ?? '').trim() || (await resolveSessionLogUser());
+  return recordDataLog({
+    source: params.source ?? '시스템',
+    type: '조회',
+    user,
+    serviceName: params.serviceName,
+    tableName,
+    tableKorName: params.tableKorName,
+    group: params.group,
+    keyField,
+    keyValue,
+  });
 }
 
 /**

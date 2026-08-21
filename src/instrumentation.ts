@@ -3,6 +3,7 @@
  * 재난안전데이터: safetydata.config 의 일/주/월·interval 스케줄.
  * KAIS: kais.config 의 KAIS_REFRESH_SCHEDULE.
  * 점사용료(차세대): useFeeSync.config 의 USE_FEE_SYNC_SCHEDULE.
+ * FMS 안전점검: fmsSync.config 의 FMS_SYNC_SCHEDULE.
  * nssm 로그 백업: start 전용, 매일 00:00 (C:\\logs → backup).
  * interval(분)은 시계 격자(예 5분→:00,:05,…)에 맞춤. (next dev에서는 5분 interval만 daily 1회로 축소)
  * - process.env DISABLE_*_SCHEDULER=1 또는 runtime.env DISABLED_SCHEDULERS=useFeeSync,kais,…
@@ -95,6 +96,18 @@ export async function register(): Promise<void> {
     } else {
       console.info(
         '[instrumentation] use-fee sync scheduler skipped (DISABLE_USE_FEE_SYNC_SCHEDULER or DISABLED_SCHEDULERS=useFeeSync)'
+      );
+    }
+
+    const skipFms =
+      process.env.DISABLE_FMS_SYNC_SCHEDULER === '1' ||
+      isSchedulerDisabledInRuntime(SCHEDULER_CODES.fmsSync);
+    if (!skipFms) {
+      const { startFmsSyncScheduler } = await import('@/integrations/fmsSyncScheduler');
+      startFmsSyncScheduler();
+    } else {
+      console.info(
+        '[instrumentation] fms sync scheduler skipped (DISABLE_FMS_SYNC_SCHEDULER or DISABLED_SCHEDULERS=fmsSync)'
       );
     }
   }

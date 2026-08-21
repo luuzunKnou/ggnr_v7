@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   FileText,
   Map,
@@ -174,6 +175,21 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [relatedDrawingLoadingKey, setRelatedDrawingLoadingKey] = useState<string | null>(null);
   /** 구조물도 켜기 클릭 시 자식 목록이 아직 없으면, 목록 도착 후 자식만 켜기 */
   const pendingEnableStructureChildrenRef = useRef(false);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    const name = String(riverName ?? "").trim();
+    if (!name) return;
+    const planYear = String(selected?.planYear ?? "").trim();
+    const planName = String(selected?.planName ?? "").trim();
+    const keyValue = planYear || planName ? `${name}|${planYear}|${planName}` : name;
+    recordDataViewLog({
+      tableName: planAsLayer,
+      keyField: "river_name",
+      keyValue,
+      serviceName: "하천기본계획",
+    });
+  }, [riverName, selected?.planYear, selected?.planName, planAsLayer]);
 
   useEffect(() => {
     let cancelled = false;

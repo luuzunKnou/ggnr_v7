@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
+import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -160,13 +161,21 @@ export async function getTableData(params: {
     else if (spatialPart) whereClause = ` WHERE ${spatialPart}`;
     else if (filterPart) whereClause = ` WHERE ${filterPart}`;
 
+    /** 안전점검 시설물 — 접두 무시, 번호 속 연도(4자리) → 나머지 오름차순 (FMS 목록과 동일) */
+    let orderClause = '';
+    const facilNoCol = columns.find((c) => c.toLowerCase() === 'facil_no');
+    if (isFmsFacilityLayerTable(table) && facilNoCol) {
+      const safeFacilNo = facilNoCol.replace(/"/g, '""');
+      orderClause = ` ORDER BY (substring("${safeFacilNo}" from '[0-9]{4}'))::integer ASC NULLS LAST, regexp_replace("${safeFacilNo}", '^[A-Za-z]+', '') ASC NULLS LAST`;
+    }
+
     const [countRes, dataRes] = await Promise.all([
       db.execute(
         sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereClause}`)
       ),
       db.execute(
         sql.raw(
-          `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereClause} LIMIT ${limit} OFFSET ${offset}`
+          `SELECT ${selectList} FROM "${safeSchema}"."${safeTable}"${whereClause}${orderClause} LIMIT ${limit} OFFSET ${offset}`
         )
       ),
     ]);
