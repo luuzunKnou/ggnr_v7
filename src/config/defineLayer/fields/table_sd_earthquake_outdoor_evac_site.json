@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "arcd",
-    "define_field_kor_name": "지역코드",
+    "define_field_kor_name": "지역",
     "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -101,7 +101,7 @@
   },
   {
     "define_field_name": "bdong_cd",
-    "define_field_kor_name": "법정동코드",
+    "define_field_kor_name": "법정동",
     "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -176,7 +176,7 @@
   },
   {
     "define_field_name": "eqk_acmdfclty_adres",
-    "define_field_kor_name": "지진옥외대피장소주소",
+    "define_field_kor_name": "대피장 주소",
     "define_field_type": "TEXT",
     "define_field_idx": "4",
     "define_field_is_required": false,
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "hdong_cd",
-    "define_field_kor_name": "행정동코드",
+    "define_field_kor_name": "행정동",
     "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "rn_dtl_adres",
-    "define_field_kor_name": "도로명상세주소",
+    "define_field_kor_name": "도로명 상세주소",
     "define_field_type": "TEXT",
     "define_field_idx": "2",
     "define_field_is_required": false,
@@ -351,7 +351,7 @@
   },
   {
     "define_field_name": "use_se_cd",
-    "define_field_kor_name": "사용구분코드",
+    "define_field_kor_name": "사용구분",
     "define_field_type": "CODE",
     "define_field_idx": "",
     "define_field_is_required": false,
