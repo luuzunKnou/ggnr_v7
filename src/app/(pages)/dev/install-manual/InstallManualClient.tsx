@@ -7,7 +7,8 @@ const SECTIONS = [
   { id: 'package', label: '프로젝트 파일 설치/실행 및 서비스 등록' },
   { id: 'run', label: '구동' },
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
-  { id: 'contour', label: '기초데이터: 고도(등고선)' }
+  { id: 'contour', label: '기초데이터: 고도(등고선)' },
+  { id: 'kais', label: '기초데이터: 건설•도로' },
 ] as const;
 
 const HEADER_BAR = 'flex h-10 shrink-0 items-center border-b';
@@ -285,6 +286,18 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
                 속성 삭제 &gt; 저장
               </li>
             </ol>
+          </section>
+
+          <section id="kais" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">기초데이터: 건설•도로</h1>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li>폴더 위치
+                <div className="mt-1">
+                      <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\133 공간누리 세팅 자료\\11 KAIS 지자체별 데이터`}</CodeBlock>
+                    </div>
+              </li>
+              <li>해당 위치에서 <code className="rounded bg-muted px-1 py-0.5">sig_cd</code>를 기준으로 필터링해서 레이어 추출</li>
+            </ul>
           </section>
         </article>
         </div>
