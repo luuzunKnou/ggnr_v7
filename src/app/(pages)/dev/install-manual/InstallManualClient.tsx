@@ -1,5 +1,9 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { copyTextToClipboard } from '@/lib/utils';
+
 const SECTIONS = [
   { id: 'setting_file_list', label: '세팅용 파일' },
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
@@ -28,10 +32,44 @@ function ExtLink({ href, children }: { href: string; children: string }) {
 }
 
 function CodeBlock({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    const ok = await copyTextToClipboard(children);
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1500);
+  }, [children]);
+
   return (
-    <pre className="overflow-x-auto rounded border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-foreground">
-      <code>{children}</code>
-    </pre>
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      title={copied ? '복사됨' : '클릭하여 복사'}
+      className="flex w-full cursor-pointer items-start gap-2 rounded border border-border bg-muted/40 px-3 py-2 text-left text-[11px] leading-relaxed text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60"
+    >
+      <pre className="m-0 min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono">
+        <code>{children}</code>
+      </pre>
+      <span
+        className="mt-0.5 inline-flex shrink-0 items-center justify-center rounded p-0.5 text-muted-foreground"
+        aria-hidden
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-primary" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -293,10 +331,15 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
             <ul className="list-decimal space-y-3 pl-5">
               <li>폴더 위치
                 <div className="mt-1">
-                      <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\133 공간누리 세팅 자료\\11 KAIS 지자체별 데이터`}</CodeBlock>
-                    </div>
+                  <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\133 공간누리 세팅 자료\\11 KAIS 지자체별 데이터`}</CodeBlock>
+                </div>
               </li>
               <li>해당 위치에서 <code className="rounded bg-muted px-1 py-0.5">sig_cd</code>를 기준으로 필터링해서 레이어 추출</li>
+              <li>
+                <p>이후 스케줄러 필터링 기준은 아래 우선순위에 따라 적용됩니다.</p>
+                <p>- runtime.env에 SGG_CODE 넣기</p> 
+                <p>- public_layer.sgg의 <code className="rounded bg-muted px-1 py-0.5">adm_sect_cd</code> 참고</p>
+              </li>
             </ul>
           </section>
         </article>
