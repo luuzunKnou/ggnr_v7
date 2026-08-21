@@ -61,8 +61,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -110,8 +110,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xB3D9;&#xBD80;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -159,8 +159,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xC11C;&#xBD80;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -208,8 +208,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xAC10;&#xCC9C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -257,8 +257,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xC804;&#xACE1;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -306,8 +306,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xD669;&#xC6A9;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -355,8 +355,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xC0BC;&#xC9C0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -404,8 +404,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xD604;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -453,8 +453,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xD558;&#xC6D0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -502,8 +502,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xC0C1;&#xC6D0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -551,8 +551,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xBB34;&#xD559;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -600,8 +600,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xBB34;&#xCC3D;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -649,8 +649,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xB300;&#xCC9C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -698,8 +698,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xD654;&#xCC9C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -747,8 +747,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xC591;&#xAD6C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -796,8 +796,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC601;&#xC591;&#xC74D; &#xAE30;&#xC0B0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -845,8 +845,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -894,8 +894,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xC2E0;&#xAD6C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -943,8 +943,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xC591;&#xD56D;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -992,8 +992,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xC5F0;&#xB2F9;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1041,8 +1041,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xAD50;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1090,8 +1090,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xC0BC;&#xC0B0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1139,8 +1139,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xC2E0;&#xC0AC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1188,8 +1188,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xB300;&#xCC9C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1237,8 +1237,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xAE08;&#xD559;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1286,8 +1286,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xC0B0;&#xD574;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1335,8 +1335,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xB178;&#xB2EC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1384,8 +1384,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xBC29;&#xC804;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1433,8 +1433,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xBCD1;&#xC625;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1482,8 +1482,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC785;&#xC554;&#xBA74; &#xD765;&#xAD6C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1531,8 +1531,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1580,8 +1580,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xC815;&#xC871;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1629,8 +1629,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xD1A0;&#xACE1;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1678,8 +1678,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xC0AC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1727,8 +1727,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xCCAD;&#xAE30;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1776,8 +1776,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xAD6C;&#xB9E4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1825,8 +1825,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xC800;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1874,8 +1874,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xC0B0;&#xC6B4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1923,8 +1923,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xD1A0;&#xAD6C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -1972,8 +1972,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xBB34;&#xC9C4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2021,8 +2021,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xD589;&#xD654;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2070,8 +2070,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xB2F9;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2119,8 +2119,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xC0C1;&#xCCAD;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2168,8 +2168,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xCCAD;&#xAE30;&#xBA74; &#xAE30;&#xD3EC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2217,8 +2217,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2266,8 +2266,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xC8FC;&#xACE1;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2315,8 +2315,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xACE1;&#xAC15;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2364,8 +2364,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xBB38;&#xC554;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2413,8 +2413,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xC624;&#xB9AC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2462,8 +2462,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xC6A9;&#xD654;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2511,8 +2511,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xB3C4;&#xACC4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2560,8 +2560,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xC12C;&#xCD0C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2609,8 +2609,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xAC00;&#xCC9C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2658,8 +2658,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xB3C4;&#xACE1;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2707,8 +2707,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xCE60;&#xC131;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2756,8 +2756,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC77C;&#xC6D4;&#xBA74; &#xAC00;&#xACE1;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2805,8 +2805,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2854,8 +2854,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xC218;&#xD558;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2903,8 +2903,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xBC1C;&#xB9AC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -2952,8 +2952,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xC2E0;&#xC6D0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3001,8 +3001,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xC8FD;&#xD30C;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3050,8 +3050,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xC624;&#xAE30;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3099,8 +3099,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xACC4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3148,8 +3148,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xBCF8;&#xC2E0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3197,8 +3197,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xC2E0;&#xC554;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3246,8 +3246,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC218;&#xBE44;&#xBA74; &#xC1A1;&#xD558;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3295,8 +3295,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3344,8 +3344,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC6D0;&#xB9AC;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3393,8 +3393,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC625;&#xACC4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3442,8 +3442,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC8FC;&#xB0A8;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3491,8 +3491,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC694;&#xC6D0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3540,8 +3540,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xD0DD;&#xC804;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3589,8 +3589,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC2E0;&#xD3C9;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3638,8 +3638,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xD3EC;&#xC0B0;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3687,8 +3687,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC18C;&#xACC4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3736,8 +3736,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xD654;&#xB9E4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3785,8 +3785,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xB2F5;&#xACE1;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3834,8 +3834,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xD64D;&#xACC4;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3883,8 +3883,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC9C0;&#xACBD;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3932,8 +3932,8 @@
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="strConcat">
-                <ogc:Literal>&#xC11D;&#xBCF4;&#xBA74; &#xC0BC;&#xC758;&#xB9AC; - </ogc:Literal>
-                <ogc:PropertyName>mng_no</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
@@ -3968,7 +3968,7 @@
         <sld:Rule>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>mng_no</ogc:PropertyName>
+              <ogc:PropertyName>jibun_addr</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
