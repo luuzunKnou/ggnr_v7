@@ -1,4 +1,5 @@
 import type { LayerUploadDialogKind } from "./LayerManagerUploadDialogs"
+import { invalidateLayerManagerListCache } from "./layerManagerListCache"
 
 type OpenUploadFn = (kind: Exclude<LayerUploadDialogKind, null>) => void
 
@@ -26,6 +27,7 @@ export function registerLayerManagerListRefresh(fn: RefreshListMetaFn) {
 }
 
 export function requestLayerManagerListRefresh() {
+  invalidateLayerManagerListCache()
   refreshListMeta?.()
 }
 
@@ -55,6 +57,7 @@ export function registerLayerManagerDefineRefresh(fn: RefreshDefineFn) {
 }
 
 export function requestLayerManagerDefineRefresh() {
+  invalidateLayerManagerListCache()
   for (const fn of refreshDefineListeners) fn()
 }
 

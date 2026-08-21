@@ -67,6 +67,10 @@ export type LayerRowParcelItem = {
   point4326?: { x: number; y: number };
   /** false면 지도 파란 미리보기 생략 (필지목록 불러오기 등) */
   showMapGeom?: boolean;
+  /** true면 도형 교차로 필지목록을 갈아끼워도 이 행은 유지 (저장분·주소검색 추가) */
+  keepOnReplace?: boolean;
+  /** 주소검색으로 직접 넣은 행 — 다시 그리기·적용 때도 유지 */
+  manualAdd?: boolean;
   /** WMS 레이어 개별 on/off — ogc_fid 등 */
   wmsRowKey?: { keyField: string; keyValue: string };
   /** 공사대장 등 — 주소검색 대신 하천명·비고를 직접 입력하는 필지 항목용 */

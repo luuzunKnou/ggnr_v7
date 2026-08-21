@@ -659,6 +659,8 @@ export async function syncUsageDataAsMgjByConsCode(params: {
     return {
       address: String(item.address).trim(),
       pnu: String(resolvedRow?.pnu ?? item.pnu ?? '').trim() || undefined,
+      lon: item.x4326,
+      lat: item.y4326,
     };
   });
 

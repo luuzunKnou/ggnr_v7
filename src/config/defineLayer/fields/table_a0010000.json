@@ -2,7 +2,7 @@
   {
     "define_field_name": "ogc_fid",
     "define_field_kor_name": "ogc_fid",
-    "define_field_type": "integer",
+    "define_field_type": "NUMBER",
     "define_field_idx": 1,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -26,8 +26,8 @@
   },
   {
     "define_field_name": "ufid",
-    "define_field_kor_name": "ufid",
-    "define_field_type": "text",
+    "define_field_kor_name": "공간유일참조아이디",
+    "define_field_type": "TEXT",
     "define_field_idx": 2,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -52,7 +52,7 @@
   {
     "define_field_name": "remark",
     "define_field_kor_name": "비고",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 3,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -76,8 +76,8 @@
   },
   {
     "define_field_name": "n_name",
-    "define_field_kor_name": "n_name",
-    "define_field_type": "text",
+    "define_field_kor_name": "면단위구분 노선명칭",
+    "define_field_type": "TEXT",
     "define_field_idx": 4,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -101,8 +101,8 @@
   },
   {
     "define_field_name": "n_code",
-    "define_field_kor_name": "n_code",
-    "define_field_type": "text",
+    "define_field_kor_name": "면단위구분 노선명칭 영문약어",
+    "define_field_type": "TEXT",
     "define_field_idx": 5,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -126,8 +126,8 @@
   },
   {
     "define_field_name": "jhline_id",
-    "define_field_kor_name": "jhline_id",
-    "define_field_type": "text",
+    "define_field_kor_name": "내부작업용ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 6,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -151,8 +151,8 @@
   },
   {
     "define_field_name": "rdid",
-    "define_field_kor_name": "rdid",
-    "define_field_type": "text",
+    "define_field_kor_name": "도로대장 공간정보ID",
+    "define_field_type": "TEXT",
     "define_field_idx": 7,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -177,7 +177,7 @@
   {
     "define_field_name": "geom",
     "define_field_kor_name": "geom",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 8,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -202,7 +202,7 @@
   {
     "define_field_name": "ROAD_DV",
     "define_field_kor_name": "보차도 구분",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -227,7 +227,7 @@
   {
     "define_field_name": "suid",
     "define_field_kor_name": "관리번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000000,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -252,7 +252,7 @@
   {
     "define_field_name": "road_no",
     "define_field_kor_name": "노선번호",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000001,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -277,7 +277,7 @@
   {
     "define_field_name": "sect",
     "define_field_kor_name": "구간",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000002,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -302,7 +302,7 @@
   {
     "define_field_name": "segment",
     "define_field_kor_name": "분절구간(중용)",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000003,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -327,7 +327,7 @@
   {
     "define_field_name": "overlap",
     "define_field_kor_name": "중용구간여부",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000004,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -352,7 +352,7 @@
   {
     "define_field_name": "sern",
     "define_field_kor_name": "SERN",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 1000005,
     "define_field_is_required": false,
     "define_field_show_search": false,

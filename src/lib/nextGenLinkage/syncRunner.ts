@@ -83,6 +83,62 @@ function appendCsv(filePath: string, rows: Record<string, unknown>[]): void {
   fs.appendFileSync(filePath, `${lines.join('\n')}\n`, 'utf8');
 }
 
+const PROGRESS_EVERY = 10;
+
+type FetchSaveKind = 'saved' | 'empty' | 'error';
+
+function kindLabel(interfaceId: string): string {
+  return interfaceId === 'B-2' ? '수납' : '미납';
+}
+
+function previewItem(item: Record<string, unknown>): string {
+  const key = String(item.lvyKey ?? '').trim() || '-';
+  const pyr = String(item.pyrNm ?? '').trim() || '-';
+  const addr = String(item.glAddr ?? '').trim() || '-';
+  const amt = String(item.lastPctAmt ?? item.pidAfAmt ?? item.rcvmtPctAmt ?? '').trim() || '-';
+  return `부과키=${key} 납부자=${pyr} 주소=${addr} 금액=${amt}`;
+}
+
+function fetchCtx(p: { fyr: string; rprsTxmNm: string; interfaceId: string; lvyNo: string }): string {
+  return `연도=${p.fyr} 과목=${p.rprsTxmNm} ${kindLabel(p.interfaceId)} 부과=${p.lvyNo}`;
+}
+
+async function recordSyncError(
+  params: {
+    lvyNo: string;
+    itmSn: string;
+    ifId: string;
+    rprsTxmCd: string;
+    rprsTxmNm: string;
+    fyr: string;
+    interfaceId: string;
+  },
+  errorCode: string,
+  errorMessage: string
+): Promise<void> {
+  const msg = String(errorMessage ?? '').trim();
+  console.warn(`${LOG} 오류 ${fetchCtx(params)} 코드=${errorCode}${msg ? ` ${msg}` : ''}`);
+  await insertNextGenErrorLog({
+    lvyNo: params.lvyNo,
+    itmSn: params.itmSn,
+    interfaceId: params.ifId,
+    rprsTxmCd: params.rprsTxmCd,
+    rprsTxmNm: params.rprsTxmNm,
+    errorCode,
+    errorMessage: msg,
+  });
+}
+
+type FetchSaveResult = {
+  kind: FetchSaveKind;
+  savedRows: number;
+  samples: string[];
+};
+
+function fetchResult(kind: FetchSaveKind, savedRows = 0, samples: string[] = []): FetchSaveResult {
+  return { kind, savedRows, samples };
+}
+
 async function fetchAndSave(params: {
   lvyNo: string;
   itmSn: string;
@@ -97,7 +153,8 @@ async function fetchAndSave(params: {
   runStamp: string;
   config: NonNullable<ReturnType<typeof getNextGenLinkageConfig>>;
   feeTable: NglFeeListTable;
-}): Promise<boolean> {
+  tableName: string;
+}): Promise<FetchSaveResult> {
   const { config } = params;
   const reqVo: Record<string, string> = {
     sgbCd: config.srcOrgCd,
@@ -129,67 +186,74 @@ async function fetchAndSave(params: {
   try {
     response = JSON.parse(responseJson) as Record<string, unknown>;
   } catch {
-    await insertNextGenErrorLog({
-      lvyNo: params.lvyNo,
-      itmSn: params.itmSn,
-      interfaceId: params.ifId,
-      rprsTxmCd: params.rprsTxmCd,
-      rprsTxmNm: params.rprsTxmNm,
-      errorCode: 'PARSE_ERR',
-      errorMessage: responseJson.slice(0, 500),
-    });
-    return false;
+    await recordSyncError(params, 'PARSE_ERR', responseJson.slice(0, 500));
+    return fetchResult('error');
   }
 
   const resBody = (response.body ?? null) as Record<string, unknown> | null;
   const linkRstCd = resBody ? String(resBody.linkRstCd ?? 'UNKNOWN') : 'UNKNOWN';
   const linkRstMsg = resBody ? String(resBody.linkRstMsg ?? '') : '';
 
-  if (linkRstCd === '005') return false;
+  if (linkRstCd === '005') return fetchResult('empty');
 
   if (linkRstCd === '002' || linkRstCd === '003' || linkRstCd === '006') {
-    await insertNextGenErrorLog({
-      lvyNo: params.lvyNo,
-      itmSn: params.itmSn,
-      interfaceId: params.ifId,
-      rprsTxmCd: params.rprsTxmCd,
-      rprsTxmNm: params.rprsTxmNm,
-      errorCode: linkRstCd,
-      errorMessage: linkRstMsg,
-    });
-    return false;
+    await recordSyncError(params, linkRstCd, linkRstMsg);
+    return fetchResult('error');
   }
 
   if (linkRstCd !== '001' && linkRstCd !== '004') {
-    await insertNextGenErrorLog({
-      lvyNo: params.lvyNo,
-      itmSn: params.itmSn,
-      interfaceId: params.ifId,
-      rprsTxmCd: params.rprsTxmCd,
-      rprsTxmNm: params.rprsTxmNm,
-      errorCode: linkRstCd,
-      errorMessage: linkRstMsg || 'unknown linkRstCd',
-    });
-    return false;
+    await recordSyncError(params, linkRstCd, linkRstMsg || '알 수 없는 연계 코드');
+    return fetchResult('error');
   }
 
   const resVo1 = (resBody?.resVo1 ?? null) as Record<string, unknown>[] | null;
-  if (!resVo1?.length) return false;
+  if (!resVo1?.length) {
+    await recordSyncError(params, 'EMPTY_BODY', `성공코드=${linkRstCd} 인데 행이 없습니다`);
+    return fetchResult('empty');
+  }
 
-  if (params.interfaceId === 'B-2') {
-    for (const item of resVo1) await upsertReceiptRow(mapReceiptItem(item), params.feeTable);
-  } else {
-    // 조회에 쓰는 특별회계사업코드를 미납 행에도 저장 → 이후 과세번호 매칭 키에 포함
-    for (const item of resVo1) {
-      const mapped = mapArrearsItem(item);
-      await upsertArrearsRow(
-        {
-          ...mapped,
-          spacBizCd: mapped.spacBizCd || params.spacBizCd || null,
-        },
-        params.feeTable
+  let savedRows = 0;
+  const samples: string[] = [];
+  const saveOne = async (item: Record<string, unknown>, kind: 'receipt' | 'arrears') => {
+    try {
+      let r;
+      if (kind === 'receipt') {
+        r = await upsertReceiptRow(mapReceiptItem(item), params.feeTable, params.tableName);
+      } else {
+        const mapped = mapArrearsItem(item);
+        r = await upsertArrearsRow(
+          {
+            ...mapped,
+            spacBizCd: mapped.spacBizCd || params.spacBizCd || null,
+          },
+          params.feeTable,
+          params.tableName
+        );
+      }
+      if (!r.saved) {
+        await recordSyncError(params, 'NO_LVY_KEY', previewItem(item));
+        return;
+      }
+      savedRows++;
+      if (samples.length < 2) samples.push(previewItem(item));
+    } catch (e) {
+      await recordSyncError(
+        params,
+        'SAVE_ERR',
+        `${previewItem(item)} ${e instanceof Error ? e.message : String(e)}`
       );
     }
+  };
+
+  if (params.interfaceId === 'B-2') {
+    for (const item of resVo1) await saveOne(item, 'receipt');
+  } else {
+    for (const item of resVo1) await saveOne(item, 'arrears');
+  }
+
+  if (savedRows === 0) {
+    await recordSyncError(params, 'SAVE_NONE', `수신=${resVo1.length} ${previewItem(resVo1[0]!)}`);
+    return fetchResult('error');
   }
 
   if (config.filePath) {
@@ -198,23 +262,38 @@ async function fetchAndSave(params: {
     try {
       appendCsv(filePath, resVo1);
     } catch (e) {
-      console.warn(`${LOG} csv save fail:`, e instanceof Error ? e.message : e);
+      console.warn(`${LOG} csv 저장 실패:`, e instanceof Error ? e.message : e);
     }
   }
 
-  return true;
+  return fetchResult('saved', savedRows, samples);
 }
 
 let running = false;
 
+export function isNextGenFeeSyncRunning(): boolean {
+  return running;
+}
+
+/** 수동 시작 전 — 이미 실행 중이거나 접속값이 없으면 안내 문구 */
+export function getNextGenFeeSyncBlockReason(): string | null {
+  if (running) return '이미 연계가 실행 중입니다.';
+  if (!getNextGenLinkageConfig()) {
+    return '차세대 연계 접속 설정이 없습니다.';
+  }
+  return null;
+}
+
 /** v6 NextGenInfoModule.run 이식 — rprs_txm_nm별 water|road|public_ngl_fee_list 저장 */
 export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<NextGenSyncResult> {
   if (running) {
+    console.info(`${LOG} 건너뜀 — 이미 실행 중`);
     return { ok: false, skipped: 'already_running', success: 0, fail: 0, message: '이미 연계가 실행 중입니다.' };
   }
 
   const config = getNextGenLinkageConfig();
   if (!config) {
+    console.warn(`${LOG} 중단 — 차세대 연계 접속 설정이 없습니다`);
     return {
       ok: false,
       skipped: 'no_config',
@@ -239,6 +318,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
       .where(eq(nglQueryTable.isActive, 'Y'));
 
     if (!queries.length) {
+      console.warn(`${LOG} 중단 — 활성 조회가 없습니다`);
       return {
         ok: false,
         skipped: 'no_query',
@@ -249,8 +329,10 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
     }
 
     const fyrList = parseFyrList(params?.fyr);
+    const fyrFrom = fyrList[0] ?? '';
+    const fyrTo = fyrList[fyrList.length - 1] ?? '';
     console.info(
-      `${LOG} start fyr=${fyrList.join(',')} queries=${queries.length} stamp=${runStamp} enabledSystems=${enabledSystems?.join(',') ?? '(all)'}`
+      `${LOG} 시작 연도=${fyrFrom}~${fyrTo} (${fyrList.length}년) 조회=${queries.length}개 stamp=${runStamp} 시스템=${enabledSystems?.join(',') ?? '(전체)'}`
     );
 
     let totalSuccess = 0;
@@ -271,27 +353,33 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
         const prefix = getUseFeePrefixForRprsTxmNm(rprsTxmNm);
         if (!prefix) {
           skippedQuery++;
-          console.info(`${LOG} skip unknown rprs_txm_nm=${rprsTxmNm}`);
+          console.info(`${LOG} 건너뜀 과목=${rprsTxmNm} — 하천·도로·국공유지에 해당 없음`);
           continue;
         }
         if (!isUseFeePrefixAllowedBySystems(prefix, enabledSystems)) {
           skippedQuery++;
-          console.info(
-            `${LOG} skip rprs_txm_nm=${rprsTxmNm} prefix=${prefix} (ENABLED_SYSTEMS)`
-          );
+          console.info(`${LOG} 건너뜀 과목=${rprsTxmNm} — 이 시스템의 점사용료가 아님`);
           continue;
         }
         const feeTable = getNglFeeListTableByPrefix(prefix);
+        const tableName = `${prefix}_ngl_fee_list`;
 
         let nextLvyNo = 1;
         let emptyCount = 0;
-        let success = 0;
         let fail = 0;
+        let scanned = 0;
+        let rowOk = 0;
+        const samples: string[] = [];
+
+        console.info(
+          `${LOG} 조회 시작 연도=${fyr} 과목=${rprsTxmNm} ${kindLabel(interfaceId)}`
+        );
 
         while (true) {
           const lvyNoStr = padLvyNo(nextLvyNo);
+          scanned++;
           try {
-            const hasData = await fetchAndSave({
+            const result = await fetchAndSave({
               lvyNo: lvyNoStr,
               itmSn: '00',
               fyr,
@@ -305,43 +393,60 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
               runStamp,
               config,
               feeTable,
+              tableName,
             });
-            if (hasData) {
-              success++;
+            if (result.kind === 'saved') {
+              rowOk += result.savedRows;
+              for (const s of result.samples) {
+                if (samples.length < 2) samples.push(s);
+              }
               emptyCount = 0;
+            } else if (result.kind === 'error') {
+              fail++;
+              emptyCount++;
+              if (emptyCount >= USE_FEE_SYNC_MAX_EMPTY_COUNT) break;
             } else {
               emptyCount++;
               if (emptyCount >= USE_FEE_SYNC_MAX_EMPTY_COUNT) break;
             }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            console.warn(`${LOG} http err lvyNo=${lvyNoStr}:`, msg);
-            await insertNextGenErrorLog({
-              lvyNo: lvyNoStr,
-              itmSn: '00',
-              interfaceId: ifId,
-              rprsTxmCd,
-              rprsTxmNm,
-              errorCode: 'HTTP_ERR',
-              errorMessage: msg,
-            });
+            await recordSyncError(
+              {
+                lvyNo: lvyNoStr,
+                itmSn: '00',
+                ifId,
+                rprsTxmCd,
+                rprsTxmNm,
+                fyr,
+                interfaceId,
+              },
+              'HTTP_ERR',
+              msg
+            );
             fail++;
             emptyCount++;
             if (emptyCount >= USE_FEE_SYNC_MAX_EMPTY_COUNT) break;
           }
+          if (scanned % PROGRESS_EVERY === 0) {
+            console.info(
+              `${LOG} 진행 연도=${fyr} 과목=${rprsTxmNm} ${kindLabel(interfaceId)} 건수=${rowOk} 실패=${fail} 빈응답연속=${emptyCount}`
+            );
+          }
           nextLvyNo++;
         }
 
-        totalSuccess += success;
+        totalSuccess += rowOk;
         totalFail += fail;
+        const sampleText = samples.length ? ` 확인=${samples.join(' / ')}` : '';
         console.info(
-          `${LOG} done fyr=${fyr} rprsTxmNm=${rprsTxmNm} table=${prefix}_ngl_fee_list interface=${interfaceId} success=${success} fail=${fail}`
+          `${LOG} 조회 끝 연도=${fyr} 과목=${rprsTxmNm} ${kindLabel(interfaceId)} 건수=${rowOk} 실패=${fail}${sampleText}`
         );
       }
     }
 
-    const message = `연계 완료 — 성공 ${totalSuccess}, 실패 ${totalFail}${skippedQuery ? `, 스킵쿼리 ${skippedQuery}` : ''}`;
-    console.info(`${LOG} end ${message}`);
+    const message = `연계 완료 — 건수 ${totalSuccess}, 실패 ${totalFail}${skippedQuery ? `, 스킵조회 ${skippedQuery}` : ''}`;
+    console.info(`${LOG} 전체 끝 ${message}`);
     return { ok: true, success: totalSuccess, fail: totalFail, message };
   } finally {
     running = false;
