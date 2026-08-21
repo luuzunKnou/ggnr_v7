@@ -1,6 +1,6 @@
 /**
  * layer 스키마에 공통 점용대장·점사용료 빈 테이블 생성
- * (본대·지적·물건지 × 하천/도로/국공유지 + ngl_fee_list × 3 = 12개)
+ * (본대·지적·물건지 × 하천/도로/국공유지 + ngl_fee_list × 3 + 차세대 연계 2)
  * 사용: npx tsx scripts/ensure-occupation-ledger-tables.ts build_uj dev
  *
  * 실제 DDL은 ensureLayerAppTables(기동 시와 동일)를 호출한다.
@@ -17,6 +17,7 @@ async function main() {
   const {
     ensureOccupationLedgerTables,
     ensureNglFeeListTables,
+    ensureNextGenLinkageTables,
   } = await import('../src/service/ensureLayerAppTables');
 
   const result = {
@@ -27,6 +28,7 @@ async function main() {
   };
   await ensureOccupationLedgerTables(result);
   await ensureNglFeeListTables(result);
+  await ensureNextGenLinkageTables(result);
 
   for (const t of result.created) console.log('[created]', t);
   for (const t of result.moved) console.log('[moved]', t);

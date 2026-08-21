@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
 import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import { cn, formatFileSize } from '@/lib/utils';
 import {
   isImageServiceFileName,
@@ -789,6 +790,7 @@ export function LayerDataPanel({
         const excludeGeomLike = (name: string) => {
           const n = name.trim().toLowerCase();
           return (
+            isLayerExtraFieldName(n) ||
             n === 'gid' ||
             n === 'geom' ||
             n === 'geometry' ||
@@ -1111,6 +1113,7 @@ export function LayerDataPanel({
   const isGeomLikeFieldName = (name: string) => {
     const n = name.trim().toLowerCase();
     return (
+      isLayerExtraFieldName(n) ||
       n === 'gid' ||
       n === 'geom' ||
       n === 'geometry' ||
