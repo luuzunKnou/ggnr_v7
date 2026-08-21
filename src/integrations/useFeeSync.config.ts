@@ -12,10 +12,9 @@ export const USE_FEE_SYNC_SCHEDULE: SafetydataRefreshSchedule = {
   minute: 0,
 };
 
-/** 접속 정보 */
+/** 접속 정보. 기관코드(srcOrgCd)는 프로젝트 runtime.env `USE_FEE_SYNC_SRC_ORG_CD` */
 export const USE_FEE_SYNC_CONNECTION = {
   baseUrl: 'https://10.60.75.57:32471/mediate/ltis',
-  srcOrgCd: '5250000',
   srcSysCd: 'PUM',
   /** CSV 저장 경로. 빈 문자열이면 파일 저장 안 함 */
   filePath: 'C:\\NextGen_Data',

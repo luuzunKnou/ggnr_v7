@@ -83,6 +83,13 @@ type SystemOption = {
 
 const SIDEBAR_WIDTH = 65;
 const SEARCH_BAR_MARGIN = 20;
+/** 지도가 넓을 때 주소검색 칸 최대 너비 */
+const ADDRESS_SEARCH_WIDTH_MAX_PX = 260;
+/** 왼쪽 패널이 넓어져 지도가 좁아져도 칸이 남을 최소 너비 */
+const ADDRESS_SEARCH_WIDTH_MIN_PX = 120;
+/** 우측 시스템선택·아이콘·여백 */
+const SEARCH_BAR_RIGHT_RESERVE_PX = 380;
+const SEARCH_BAR_EYE_BTN_PX = 38;
 
 /**
  * 상단 왼쪽 검색창 (지도 위 오버레이)
@@ -268,9 +275,17 @@ export function MapSearchBar({
   const [addressPanelOpen, setAddressPanelOpen] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
   const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번/장소 검색');
+  const [viewportWidth, setViewportWidth] = useState(1280);
   const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
   const centerPlaceholderReqIdRef = useRef(0);
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
+
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     const el = addressSearchWrapperRef.current;
@@ -487,6 +502,12 @@ export function MapSearchBar({
   }, [query, runSplitAddressSearch]);
 
   const leftOffset = SIDEBAR_WIDTH + listPanelWidth + SEARCH_BAR_MARGIN;
+  const availableSearchWidthPx =
+    viewportWidth - leftOffset - SEARCH_BAR_EYE_BTN_PX - SEARCH_BAR_RIGHT_RESERVE_PX;
+  const addressSearchWidthPx = Math.min(
+    ADDRESS_SEARCH_WIDTH_MAX_PX,
+    Math.max(ADDRESS_SEARCH_WIDTH_MIN_PX, availableSearchWidthPx)
+  );
 
   return (
     <>
@@ -504,9 +525,10 @@ export function MapSearchBar({
               runAddressSearch();
             }}
             className={cn(
-              'flex items-center gap-2 w-[350px] rounded-[5px] px-1 py-1',
+              'flex items-center gap-2 rounded-[5px] px-1 py-1 transition-[width] duration-200',
               mapSearchBarSurface
             )}
+            style={{ width: addressSearchWidthPx }}
           >
             <button
               type="submit"
@@ -527,7 +549,7 @@ export function MapSearchBar({
               onFocus={() => setAddressPanelOpen(true)}
               placeholder={centerPlaceholder}
               className={cn(
-                'h-[20px] min-h-[20px] text-[12px] border-0 bg-transparent shadow-none',
+                'h-[20px] min-h-[20px] min-w-0 flex-1 text-[12px] border-0 bg-transparent shadow-none',
                 'text-foreground placeholder:text-muted-foreground',
                 'focus-visible:ring-0 focus-visible:border-0 dark:bg-transparent'
               )}
@@ -560,10 +582,11 @@ export function MapSearchBar({
           {addressPanelOpen && (
             <div
               className={cn(
-                'absolute top-full left-0 mt-1 w-[350px] rounded-[5px] opacity-90 shadow-lg overflow-hidden z-50 border',
+                'absolute top-full left-0 mt-1 rounded-[5px] opacity-90 shadow-lg overflow-hidden z-50 border transition-[width] duration-200',
                 'bg-white border-slate-200',
                 'dark:bg-black/80 dark:border-white/10 dark:backdrop-blur-sm'
               )}
+              style={{ width: addressSearchWidthPx }}
             >
               {addressSearchLoading ? (
                 <div className="flex items-center justify-center gap-2 py-6 text-[12px] text-slate-500 dark:text-white/50">

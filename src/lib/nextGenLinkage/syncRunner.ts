@@ -299,7 +299,8 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
       skipped: 'no_config',
       success: 0,
       fail: 0,
-      message: 'useFeeSync.config 의 USE_FEE_SYNC_CONNECTION(baseUrl·srcOrgCd·srcSysCd) 이 필요합니다.',
+      message:
+        '차세대 연계 접속값이 없습니다. useFeeSync.config(URL·시스템코드)와 runtime.env USE_FEE_SYNC_SRC_ORG_CD 를 확인하세요.',
     };
   }
 
@@ -332,7 +333,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
     const fyrFrom = fyrList[0] ?? '';
     const fyrTo = fyrList[fyrList.length - 1] ?? '';
     console.info(
-      `${LOG} 시작 연도=${fyrFrom}~${fyrTo} (${fyrList.length}년) 조회=${queries.length}개 stamp=${runStamp} 시스템=${enabledSystems?.join(',') ?? '(전체)'}`
+      `${LOG} 시작 연도=${fyrFrom}~${fyrTo} (${fyrList.length}년) 조회=${queries.length}개 stamp=${runStamp} 기관=${config.srcOrgCd} 시스템=${enabledSystems?.join(',') ?? '(전체)'}`
     );
 
     let totalSuccess = 0;
