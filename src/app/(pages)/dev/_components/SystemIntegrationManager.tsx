@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
 
-type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS"
+type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS" | "NEXTGEN"
 
 type LogRow = {
   ijl_key: number
@@ -129,6 +129,7 @@ export function SystemIntegrationManager() {
         { key: "SAEOL", label: "새올" },
         { key: "SAFETYDATA", label: "재난안전데이터" },
         { key: "FMS", label: "FMS" },
+        { key: "NEXTGEN", label: "차세대" },
       ] as const,
     []
   )
@@ -155,7 +156,7 @@ export function SystemIntegrationManager() {
       const res = await call("", "POST", {
         service: "integrationService",
         action: "listIntegrationLogs",
-        params: { system, limit: 50 },
+        params: { system, limit: system === "NEXTGEN" ? 120 : 50 },
       })
       setRows((res?.data?.rows ?? []) as LogRow[])
     } catch (e) {
