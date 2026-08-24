@@ -1,7 +1,7 @@
 import { notifyAuthRequired } from '@/lib/authRequiredEvent';
 import { withBasePath } from '@/lib/basePath';
 
-/** 호출 시점에 basePath 반영 (모듈 로드 시점 고정 방지) */
+/** 호출 시점에 basePath 반영 (모듈 로드 시점 고정 방지). trailingSlash 대비 /api/ */
 function apiBaseUrl(): string {
   return withBasePath('/api');
 }

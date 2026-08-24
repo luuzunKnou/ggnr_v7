@@ -10,6 +10,7 @@ import {
   deleteFileDataPath,
   relocateServiceFileDataKey,
 } from '@/service/fileManagerService';
+import { rethrowWithPgCause } from '@/lib/rethrowWithPgCause';
 
 const BOARD_FILE_LAYER = 'board';
 
@@ -69,21 +70,25 @@ export async function list(params: { limit?: number; offset?: number; keyword?: 
   }
   const where = and(...conditions);
 
-  const rows = await db
-    .select()
-    .from(board)
-    .where(where)
-    .orderBy(desc(board.boardCreateDate), desc(board.boardKey))
-    .limit(limit)
-    .offset(offset);
+  try {
+    const rows = await db
+      .select()
+      .from(board)
+      .where(where)
+      .orderBy(desc(board.boardCreateDate), desc(board.boardKey))
+      .limit(limit)
+      .offset(offset);
 
-  const countResult = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(board)
-    .where(where);
-  const total = countResult[0]?.count ?? 0;
+    const countResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(board)
+      .where(where);
+    const total = countResult[0]?.count ?? 0;
 
-  return { rows: rows.map(toListItem), total };
+    return { rows: rows.map(toListItem), total };
+  } catch (e: unknown) {
+    rethrowWithPgCause(e, '자료실 조회 실패');
+  }
 }
 
 /** 단건 조회 (조회수 +1) */

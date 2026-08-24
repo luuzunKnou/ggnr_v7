@@ -10,6 +10,7 @@ import {
   deleteFileDataPath,
   relocateServiceFileDataKey,
 } from '@/service/fileManagerService';
+import { rethrowWithPgCause } from '@/lib/rethrowWithPgCause';
 
 const NOTICE_FILE_LAYER = 'notice';
 
@@ -106,46 +107,54 @@ export async function list(
   }
   const where = and(...conditions);
 
-  const rows = await db
-    .select()
-    .from(notice)
-    .where(where)
-    .orderBy(desc(notice.noticeCreateDate), desc(notice.noticeKey))
-    .limit(limit)
-    .offset(offset);
+  try {
+    const rows = await db
+      .select()
+      .from(notice)
+      .where(where)
+      .orderBy(desc(notice.noticeCreateDate), desc(notice.noticeKey))
+      .limit(limit)
+      .offset(offset);
 
-  const countResult = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(notice)
-    .where(where);
-  const total = countResult[0]?.count ?? 0;
+    const countResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notice)
+      .where(where);
+    const total = countResult[0]?.count ?? 0;
 
-  return { rows: rows.map(toListItem), total };
+    return { rows: rows.map(toListItem), total };
+  } catch (e: unknown) {
+    rethrowWithPgCause(e, '공지 목록 조회 실패');
+  }
 }
 
 /** 접속 시 팝업용 — 현재 시각이 공지기간 내이고 공지여부 true */
 export async function listActivePopups() {
-  const rows = await db
-    .select()
-    .from(notice)
-    .where(
-      and(
-        eq(notice.noticeIsDel, false),
-        eq(notice.noticeIsActive, true),
-        sql`${notice.noticeStartDate} <= now()`,
-        sql`${notice.noticeEndDate} >= now()`
+  try {
+    const rows = await db
+      .select()
+      .from(notice)
+      .where(
+        and(
+          eq(notice.noticeIsDel, false),
+          eq(notice.noticeIsActive, true),
+          sql`${notice.noticeStartDate} <= now()`,
+          sql`${notice.noticeEndDate} >= now()`
+        )
       )
-    )
-    .orderBy(desc(notice.noticeCreateDate), desc(notice.noticeKey));
+      .orderBy(desc(notice.noticeCreateDate), desc(notice.noticeKey));
 
-  return rows.map((row) => ({
-    noticeKey: row.noticeKey,
-    noticeTitle: row.noticeTitle,
-    noticeContents: row.noticeContents,
-    noticeStartDate: row.noticeStartDate,
-    noticeEndDate: row.noticeEndDate,
-    periodLabel: periodLabel(row.noticeStartDate, row.noticeEndDate),
-  }));
+    return rows.map((row) => ({
+      noticeKey: row.noticeKey,
+      noticeTitle: row.noticeTitle,
+      noticeContents: row.noticeContents,
+      noticeStartDate: row.noticeStartDate,
+      noticeEndDate: row.noticeEndDate,
+      periodLabel: periodLabel(row.noticeStartDate, row.noticeEndDate),
+    }));
+  } catch (e: unknown) {
+    rethrowWithPgCause(e, '공지 팝업 조회 실패');
+  }
 }
 
 /** 단건 조회 (조회수 +1) */

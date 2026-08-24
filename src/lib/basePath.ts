@@ -22,9 +22,13 @@ export function getBasePath(): string {
 export function withBasePath(appPath: string): string {
   const base = getBasePath();
   if (!appPath.startsWith('/')) return appPath;
-  if (!base) return appPath;
-  if (appPath === base || appPath.startsWith(`${base}/`)) return appPath;
-  return `${base}${appPath}`;
+  let path = appPath;
+  // next.config trailingSlash:true → POST /api 는 /api/ 로 308. 게이트웨이는 처음부터 /api/
+  if (path === '/api') path = '/api/';
+  if (!base) return path;
+  // 이미 접두됨 (`/build_yy`, `/build_yy/`, `/build_yy/api/...`)
+  if (path === base || path === `${base}/` || path.startsWith(`${base}/`)) return path;
+  return `${base}${path}`;
 }
 
 /**
