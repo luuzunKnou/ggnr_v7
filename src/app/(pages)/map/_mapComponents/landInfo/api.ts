@@ -233,6 +233,8 @@ export type ParcelTabData = {
   prices: JsonObject[];
   possessions: JsonObject[];
   source?: 'kras' | 'koreps' | 'vworld' | 'mixed';
+  /** 행망을 안 썼거나 실패한 이유 — 브이월드 폴백 원인 확인용 */
+  krasSkipReason?: string;
   hangmangCalls?: HangmangCallLine[];
 };
 
@@ -246,7 +248,10 @@ function emptyParcelTabData(): ParcelTabData {
   };
 }
 
-function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): ParcelTabData {
+function normalizeParcelTabPayload(
+  payload: ParcelTabData & { ok?: boolean; krasSkipReason?: string }
+): ParcelTabData {
+  const skip = String(payload.krasSkipReason ?? '').trim();
   return {
     characteristics: sortCharacteristicsLatestFirst(
       Array.isArray(payload.characteristics) ? payload.characteristics : []
@@ -263,6 +268,7 @@ function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): P
       payload.source === 'mixed'
         ? payload.source
         : undefined,
+    krasSkipReason: skip || undefined,
     hangmangCalls: Array.isArray(payload.hangmangCalls) ? payload.hangmangCalls : undefined,
   };
 }
@@ -272,26 +278,36 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
 
+  let krasSkipReason: string | undefined;
   let hangmangCalls: HangmangCallLine[] | undefined;
-  try {
-    const res = await call('', 'POST', {
-      service: 'landLinkageService',
-      action: 'fetchParcelLandInfoTab',
-      params: { pnu },
-    });
-    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
-    const tab = normalizeParcelTabPayload(payload);
-    hangmangCalls = tab.hangmangCalls;
-    if (payload?.ok !== false && hasParcelLandInfoTabData(tab)) {
-      return { ...tab, hangmangCalls };
+  const cfg = await fetchLandInfoConfig();
+
+  if (cfg.useKras) {
+    try {
+      const res = await call('', 'POST', {
+        service: 'landLinkageService',
+        action: 'fetchParcelLandInfoTab',
+        params: { pnu },
+      });
+      const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
+      krasSkipReason = String(payload?.krasSkipReason ?? payload?.error ?? '').trim() || undefined;
+      hangmangCalls = Array.isArray(payload?.hangmangCalls) ? payload.hangmangCalls : undefined;
+      if (payload?.ok !== false) {
+        const tab = normalizeParcelTabPayload(payload);
+        if (hasParcelLandInfoTabData(tab)) return { ...tab, krasSkipReason, hangmangCalls };
+      }
+      if (!krasSkipReason) krasSkipReason = '행망 응답을 필지정보에 쓸 수 없어 브이월드로 표시';
+    } catch (e) {
+      krasSkipReason =
+        krasSkipReason || (e instanceof Error ? e.message : '행망 조회 실패');
     }
-  } catch {
-    /* 행망 실패 → 브이월드. 호출 로그는 유지 */
   }
 
-  if (!toStr(args.vworldKey)) return { ...emptyParcelTabData(), hangmangCalls };
+  if (!toStr(args.vworldKey)) {
+    return { ...emptyParcelTabData(), source: undefined, krasSkipReason, hangmangCalls };
+  }
   const vworld = await fetchVworldParcelTabData(args);
-  return { ...vworld, hangmangCalls };
+  return { ...vworld, krasSkipReason, hangmangCalls };
 }
 
 /** 필지 PNU 기준 최신 공시지가 1건 — 공용 브이월드 클라이언트 */

@@ -38,6 +38,7 @@ export const SCHEDULER_CODES = {
   fmsSync: 'fmsSync',
   safetydata: 'safetydata',
   kais: 'kais',
+  krasLayer: 'krasLayer',
   nssmLogBackup: 'nssmLogBackup',
 } as const;
 

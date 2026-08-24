@@ -1,4 +1,5 @@
 import type { RoadRewardCase, RoadRewardParcel } from "./roadRewardMock";
+import { withRoadRewardCompensationTotal } from "./roadRewardMock";
 
 /** roadRewardService DTO (client) */
 export type RoadRewardParcelDtoClient = {
@@ -15,8 +16,12 @@ export type RoadRewardParcelDtoClient = {
   appraisal2Value?: number;
   appliedUnitPrice?: number;
   compensationAmount?: number;
+  farmingCompensationAmount?: number;
+  obstacleCompensationAmount?: number;
   ownerAddress?: string;
   ownerName?: string;
+  actualOwner?: string;
+  actualCultivator?: string;
   note?: string;
   geometry3857?: Record<string, unknown> | null;
   extent3857?: [number, number, number, number] | null;
@@ -47,7 +52,7 @@ function num(v: unknown): number {
 }
 
 export function mapRoadRewardParcelDto(dto: RoadRewardParcelDtoClient): RoadRewardParcel {
-  return {
+  return withRoadRewardCompensationTotal({
     id: String(dto.id),
     pnu: dto.pnu ? String(dto.pnu) : undefined,
     eupmyeonDong: String(dto.eupmyeonDong ?? ""),
@@ -60,13 +65,18 @@ export function mapRoadRewardParcelDto(dto: RoadRewardParcelDtoClient): RoadRewa
     appraisal2Value: num(dto.appraisal2Value),
     appliedUnitPrice: num(dto.appliedUnitPrice),
     compensationAmount: num(dto.compensationAmount),
+    farmingCompensationAmount: num(dto.farmingCompensationAmount),
+    obstacleCompensationAmount: num(dto.obstacleCompensationAmount),
+    compensationTotal: 0,
     ownerAddress: String(dto.ownerAddress ?? ""),
     ownerName: String(dto.ownerName ?? ""),
+    actualOwner: String(dto.actualOwner ?? ""),
+    actualCultivator: String(dto.actualCultivator ?? ""),
     note: String(dto.note ?? ""),
     geometry3857: dto.geometry3857 ?? null,
     extent3857: dto.extent3857 ?? null,
-    mockLonLat: dto.mockLonLat ?? { lon: 129.4, lat: 36.99 },
-  };
+    mockLonLat: dto.mockLonLat,
+  });
 }
 
 export function mapRoadRewardDtoToCase(dto: RoadRewardCaseDtoClient): RoadRewardCase {
