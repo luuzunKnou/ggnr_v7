@@ -1,8 +1,23 @@
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 
+/** CSS/JS·이미지 등 — basePath(/프로젝트명) 뒤에서도 인증 리다이렉트 금지 */
+function isStaticAssetPath(pathname: string): boolean {
+  if (pathname.startsWith('/_next/')) return true;
+  if (pathname.includes('/_next/')) return true;
+  if (pathname.startsWith('/cesiumStatic/') || pathname === '/cesiumStatic') return true;
+  if (pathname.includes('/cesiumStatic/')) return true;
+  return /\.(?:css|js|map|mjs|cjs|json|svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot|mp4|webm|ogg|mov)$/i.test(
+    pathname
+  );
+}
+
 export default auth((req) => {
   const path = req.nextUrl.pathname;
+
+  // basePath 사용 시 matcher만으로는 _next 제외가 깨질 수 있음 → 핸들러에서도 방어
+  if (isStaticAssetPath(path)) return NextResponse.next();
+
   const isApiAuth = path.startsWith('/api/auth');
   const isApi = path.startsWith('/api');
   if (isApiAuth) return NextResponse.next();
@@ -30,8 +45,11 @@ export default auth((req) => {
 });
 
 export const config = {
-  /** public 정적 자산(이미지·동영상)은 인증 없이 서빙 — mp4 제외 시 영상 요청이 미들웨어에 걸려 로드 실패 */
+  /**
+   * 게이트: dggskorea/[프로젝트명] → Next basePath.
+   * 요청 path가 `/uav_ulsan/_next/static/...` 형태여도 _next·확장자 정적파일은 미들웨어 제외.
+   */
   matcher: [
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp4|webm|ogg|mov)$).*)',
+    '/((?!api/auth|_next/|(?:[^/]+/)+_next/|favicon.ico|.*\\.(?:css|js|map|mjs|cjs|svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot|mp4|webm|ogg|mov)$).*)',
   ],
 };

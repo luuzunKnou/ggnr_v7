@@ -116,13 +116,13 @@ export function RiverBasicPlanListPanel({
   const title = useMemo(() => (tab === "smallRiver" ? "소하천 기본계획" : "지방하천 기본계획"), [tab]);
 
   return (
-    <div className="flex flex-col min-h-0 h-full bg-white">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0">
-        <span className="text-sm font-semibold text-slate-800">{title}</span>
+    <div className="flex flex-col min-h-0 h-full bg-background">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0">
+        <span className="text-sm font-semibold text-foreground">{title}</span>
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           title="닫기"
           aria-label="닫기"
         >
@@ -130,7 +130,7 @@ export function RiverBasicPlanListPanel({
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-slate-200 bg-white">
+      <div className="shrink-0 border-b border-border bg-background">
         <div className="flex border-b border-border">
           <button
             type="button"
@@ -159,27 +159,27 @@ export function RiverBasicPlanListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-slate-200 px-3 py-2">
+      <div className="shrink-0 border-b border-border px-3 py-2">
         <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="하천명 통합검색"
-            className="w-full h-9 rounded border border-slate-300 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
+            className="w-full h-9 rounded border border-border pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
           />
         </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">
         {loading ? (
-          <p className="text-sm text-slate-500 px-4 py-4">불러오는 중...</p>
+          <p className="text-sm text-muted-foreground px-4 py-4">불러오는 중...</p>
         ) : error ? (
-          <p className="text-sm text-red-600 px-4 py-4">{error}</p>
+          <p className="text-sm text-destructive px-4 py-4">{error}</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-500 px-4 py-4">검색 결과가 없습니다.</p>
+          <p className="text-sm text-muted-foreground px-4 py-4">검색 결과가 없습니다.</p>
         ) : (
-          <ul className="divide-y divide-slate-200">
+          <ul className="divide-y divide-border">
             {items.map((item) => {
               const active = selectedRiver === item.riverName;
               return (
@@ -219,15 +219,15 @@ export function RiverBasicPlanListPanel({
                       }
                     }}
                     className={cn(
-                      "w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors",
-                      active && "bg-blue-50"
+                      "w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors",
+                      active && "bg-primary/10"
                     )}
                   >
                     <div className="flex items-center justify-between gap-3 h-2">
-                      <p className={cn("text-sm font-medium", active ? "text-blue-700" : "text-slate-800")}>
+                      <p className={cn("text-sm font-medium", active ? "text-primary" : "text-foreground")}>
                         {item.riverName}
                       </p>
-                      <span className="text-xs text-slate-500 shrink-0">기본계획 {item.count}건</span>
+                      <span className="text-xs text-muted-foreground shrink-0">기본계획 {item.count}건</span>
                     </div>
                   </button>
                 </li>

@@ -9,9 +9,9 @@ import {
 } from '@/lib/krasLandUseXml';
 import {
   emptyParcelLandInfoTab,
-  hasParcelLandInfoTabData,
   mapKrasToParcelLandInfoTab,
   normalizeFromKrasRow,
+  type HangmangCallLine,
   type NormalizedParcelLand,
   type ParcelLandEnrichmentMap,
   type ParcelLandInfoTabData,
@@ -25,6 +25,7 @@ import {
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
+const KRAS_LAYER_LIST_QUERY_ID = 'KRAS000037';
 const KOREPS_PRICE_QUERY_ID = 'KOREPS00011';
 
 function toStr(value: unknown): string {
@@ -121,7 +122,16 @@ function buildKorepsUrl(cfg: ReturnType<typeof getLandLinkageConfig>): string | 
   return `http://${cfg.korepsIp}:${cfg.korepsPort}${withSlash}/${KOREPS_PRICE_QUERY_ID}`;
 }
 
-async function postKrasXml(url: string, body: string, timeoutMs?: number): Promise<string> {
+function pickXmlTag(xml: string, tag: string): string {
+  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
+  return m?.[1]?.trim() ?? '';
+}
+
+async function postKrasXmlDetailed(
+  url: string,
+  body: string,
+  timeoutMs?: number
+): Promise<{ xml: string; httpStatus: number; error?: string }> {
   const ms = timeoutMs ?? PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -133,13 +143,95 @@ async function postKrasXml(url: string, body: string, timeoutMs?: number): Promi
       signal: controller.signal,
       cache: 'no-store',
     });
-    if (!res.ok) return '';
-    return await res.text();
-  } catch {
-    return '';
+    const xml = await res.text().catch(() => '');
+    return { xml, httpStatus: res.status };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = msg.toLowerCase().includes('abort');
+    return { xml: '', httpStatus: 0, error: aborted ? '타임아웃' : msg };
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function postKrasXml(url: string, body: string, timeoutMs?: number): Promise<string> {
+  return (await postKrasXmlDetailed(url, body, timeoutMs)).xml;
+}
+
+function hangmangCallFromProbe(
+  svcId: string,
+  probe: { xml: string; httpStatus: number; error?: string }
+): HangmangCallLine {
+  if (probe.error && !probe.xml) {
+    const skipped = probe.error === '키/주소 없음';
+    return { svcId, called: !skipped, detail: probe.error };
+  }
+  const code = pickXmlTag(probe.xml, 'CODE');
+  const message = pickXmlTag(probe.xml, 'MESSAGE');
+  if (code || message) {
+    return { svcId, called: true, detail: [code, message].filter(Boolean).join(' ') };
+  }
+  if (probe.httpStatus && probe.httpStatus !== 200) {
+    return { svcId, called: true, detail: `HTTP${probe.httpStatus}` };
+  }
+  if (probe.xml.trim()) {
+    return { svcId, called: true, detail: `HTTP${probe.httpStatus || 200}` };
+  }
+  return { svcId, called: true, detail: '응답없음' };
+}
+
+function skippedHangmangCalls(reason: string): HangmangCallLine[] {
+  return [
+    KRAS_LAYER_LIST_QUERY_ID,
+    KRAS_LAND_QUERY_ID,
+    KRAS_LAND_USE_QUERY_ID,
+    KOREPS_PRICE_QUERY_ID,
+  ].map((svcId) => ({ svcId, called: false, detail: reason }));
+}
+
+async function probeHangmangCalls(
+  pnu: string,
+  cfg: ReturnType<typeof getLandLinkageConfig>
+): Promise<{
+  calls: HangmangCallLine[];
+  landXml: string;
+  useXml: string;
+}> {
+  const krasUrl = buildKrasUrl(cfg);
+  const korepsUrl = buildKorepsUrl(cfg);
+  const emptyProbe = { xml: '', httpStatus: 0 as const, error: undefined as string | undefined };
+
+  const krasReady = Boolean(krasUrl && cfg.krasKey && cfg.sggCode);
+  const korepsReady = Boolean(korepsUrl);
+
+  const [p037, p002, p025, pKoreps] = await Promise.all([
+    krasReady
+      ? postKrasXmlDetailed(krasUrl!, buildKrasParam(pnu, KRAS_LAYER_LIST_QUERY_ID, cfg))
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? postKrasXmlDetailed(krasUrl!, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg))
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? postKrasXmlDetailed(krasUrl!, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg))
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    korepsReady
+      ? postKrasXmlDetailed(
+          korepsUrl!,
+          buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey)
+        )
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+  ]);
+
+  return {
+    calls: [
+      hangmangCallFromProbe(KRAS_LAYER_LIST_QUERY_ID, p037),
+      hangmangCallFromProbe(KRAS_LAND_QUERY_ID, p002),
+      hangmangCallFromProbe(KRAS_LAND_USE_QUERY_ID, p025),
+      hangmangCallFromProbe(KOREPS_PRICE_QUERY_ID, pKoreps),
+    ],
+    landXml: p002.xml,
+    useXml: p025.xml,
+  };
 }
 
 async function fetchKrasForPnu(
@@ -328,26 +420,6 @@ export async function fetchLandUseZonesByPnus(params: {
   }
 }
 
-async function fetchKrasLandInfoRowForPnu(
-  pnu: string,
-  cfg: ReturnType<typeof getLandLinkageConfig>
-) {
-  const url = buildKrasUrl(cfg);
-  if (!url || !cfg.krasKey || !cfg.sggCode) return null;
-  const xml = await postKrasXml(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg));
-  return parseKrasLandInfoRows(xml)[0] ?? null;
-}
-
-async function fetchKrasLandUseRowsForPnu(
-  pnu: string,
-  cfg: ReturnType<typeof getLandLinkageConfig>
-) {
-  const url = buildKrasUrl(cfg);
-  if (!url || !cfg.krasKey || !cfg.sggCode) return [];
-  const xml = await postKrasXml(url, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg));
-  return parseKrasBodyFieldMaps(xml);
-}
-
 /** 우클릭 필지정보 탭 — 서버는 행망(KRAS)만. 브이월드는 클라이언트 JSONP. */
 export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
   ParcelLandInfoTabData & { ok: boolean; error?: string }
@@ -359,20 +431,25 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
   const cfg = getLandLinkageConfig();
 
   try {
-    if (cfg.useKras) {
-      const [landRow, useRows] = await Promise.all([
-        fetchKrasLandInfoRowForPnu(pnu, cfg),
-        fetchKrasLandUseRowsForPnu(pnu, cfg),
-      ]);
-      const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
-      if (hasParcelLandInfoTabData(krasTab)) {
-        return { ...krasTab, ok: true };
-      }
+    if (!cfg.useKras) {
+      return {
+        ...emptyParcelLandInfoTab(),
+        ok: true,
+        hangmangCalls: skippedHangmangCalls('외부망'),
+      };
     }
 
-    return { ...emptyParcelLandInfoTab(), ok: true };
+    const probed = await probeHangmangCalls(pnu, cfg);
+    const landRow = parseKrasLandInfoRows(probed.landXml)[0] ?? null;
+    const useRows = parseKrasBodyFieldMaps(probed.useXml);
+    const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
+    return {
+      ...krasTab,
+      ok: true,
+      hangmangCalls: probed.calls,
+    };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ...empty, error: msg };
+    return { ...empty, error: msg, hangmangCalls: skippedHangmangCalls(msg) };
   }
 }

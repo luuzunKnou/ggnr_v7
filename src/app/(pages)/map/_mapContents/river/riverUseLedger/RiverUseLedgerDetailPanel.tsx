@@ -317,7 +317,7 @@ export function RiverUseLedgerDetailPanel({
   const parcelEditing = isEditing && mode.parcelsEditable;
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
+    <div className="flex min-h-0 h-full flex-col bg-background">
       <LayerRowEditHeader
         title="하천점용 상세"
         isEditing={isEditing}
@@ -333,16 +333,16 @@ export function RiverUseLedgerDetailPanel({
 
       <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {showLoading && (
-          <div className="flex items-center gap-2 py-6 text-slate-500">
+          <div className="flex items-center gap-2 py-6 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
             불러오는 중…
           </div>
         )}
         {!showLoading && error && (
-          <div className="rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">{error}</div>
+          <div className="rounded border border-destructive/20 bg-destructive/10 px-2 py-2 text-destructive">{error}</div>
         )}
         {!showLoading && editError && (
-          <div className="mb-2 rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">{editError}</div>
+          <div className="mb-2 rounded border border-destructive/20 bg-destructive/10 px-2 py-2 text-destructive">{editError}</div>
         )}
         {showBody && (
           <>
@@ -370,7 +370,7 @@ export function RiverUseLedgerDetailPanel({
             {mode.showMulgunji && !isCreateMode && (
               <div className="mt-4">
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     물건지목록
                   </div>
                   {isEditing && (
@@ -385,36 +385,36 @@ export function RiverUseLedgerDetailPanel({
                 </div>
 
                 {mulgunjiList.length === 0 ? (
-                  <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+                  <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground">
                     {isEditing
                       ? "「추가」로 주소를 검색해 물건지를 등록합니다."
                       : "등록된 물건지가 없습니다."}
                   </div>
                 ) : (
-                  <ul className="list-none space-y-0 rounded border border-slate-200 bg-white">
+                  <ul className="list-none space-y-0 rounded border border-border bg-background">
                     {mulgunjiList.map((item, i) => (
                       <li
                         key={`m-${i}-${item.address.slice(0, 24)}`}
-                        className="flex items-start gap-1 border-b border-slate-100 px-2 py-2 text-slate-800 last:border-b-0"
+                        className="flex items-start gap-1 border-b border-border px-2 py-2 text-foreground last:border-b-0"
                       >
                         {isEditing ? (
                           <>
                             <button
                               type="button"
-                              className="flex min-w-0 flex-1 items-start gap-1 text-left text-xs text-slate-800 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                              className="flex min-w-0 flex-1 items-start gap-1 text-left text-xs text-foreground hover:text-primary disabled:cursor-default disabled:opacity-70"
                               disabled={!item.extent3857}
                               onClick={() => void navigateToMulgunjiParcel(item, i)}
                               title={item.extent3857 ? "클릭 시 위치 이동" : "위치 정보 없음"}
                             >
-                              <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
+                              <span className="mr-1 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
                               <span className="min-w-0 flex-1 break-words">{item.address}</span>
                               {movingMulgunjiIdx === i && (
-                                <span className="ml-1 shrink-0 text-[11px] text-slate-500">이동 중…</span>
+                                <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">이동 중…</span>
                               )}
                             </button>
                             <button
                               type="button"
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               onClick={() => handleRemoveMulgunji(i)}
                               aria-label="물건지 삭제"
                               title="삭제"
@@ -425,15 +425,15 @@ export function RiverUseLedgerDetailPanel({
                         ) : (
                           <button
                             type="button"
-                            className="w-full text-left text-slate-800 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                            className="w-full text-left text-foreground hover:text-primary disabled:cursor-default disabled:opacity-70"
                             disabled={!item.extent3857}
                             onClick={() => void navigateToMulgunjiParcel(item, i)}
                             title={item.extent3857 ? "클릭 시 위치 이동" : "위치 정보 없음"}
                           >
-                            <span className="mr-2 tabular-nums text-slate-400">{i + 1}.</span>
+                            <span className="mr-2 tabular-nums text-muted-foreground">{i + 1}.</span>
                             {item.address}
                             {movingMulgunjiIdx === i && (
-                              <span className="ml-2 text-[11px] text-slate-500">이동 중…</span>
+                              <span className="ml-2 text-[11px] text-muted-foreground">이동 중…</span>
                             )}
                           </button>
                         )}
@@ -450,7 +450,7 @@ export function RiverUseLedgerDetailPanel({
           isCreateMode &&
           !formFieldsLoading &&
           formAttributesForEdit.length === 0 && (
-            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground">
               등록할 필드 정의를 불러오지 못했습니다.
             </div>
           )}

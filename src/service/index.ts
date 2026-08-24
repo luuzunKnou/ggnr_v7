@@ -50,6 +50,7 @@ import * as seumService from './seumService';
 /** API `service: 'seumPermitService'` 호환 — seumService와 동일 모듈 */
 import * as seumPermitService from './seumService';
 import * as memoService from './memoService';
+import * as villagePatrolService from './villagePatrolService';
 import * as dataQueryHistoryService from './dataQueryHistoryService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
@@ -116,6 +117,7 @@ export {
   seumService,
   seumPermitService,
   memoService,
+  villagePatrolService,
   dataQueryHistoryService,
   noticeService,
   boardService,

@@ -1,5 +1,7 @@
 /** 카카오 지도 JS SDK 1회 로드 (로드뷰용) */
 
+import { withBasePath } from '@/lib/basePath';
+
 export type KakaoRoadviewOptions = {
   disableZoomControl?: boolean;
   pan?: number;
@@ -134,7 +136,7 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
 
   // 경로에 dapi.kakao.com/v2/maps/sdk.js 유지 — SDK 콜백 경로 검사용. Referer 는 서버 프록시에서 dggs.kr 고정.
   const scriptUrl =
-    `/proxy/dapi.kakao.com/v2/maps/sdk.js` +
+    withBasePath(`/proxy/dapi.kakao.com/v2/maps/sdk.js`) +
     `?appkey=${encodeURIComponent(key)}&autoload=false`;
 
   loadPromise = new Promise((resolve, reject) => {

@@ -214,8 +214,8 @@ export function MapPrintLayerPanel({
           className="map-print-layer-selector map-print-service-layer-selector"
         />
 
-        <div className="rounded-[5px] bg-white/95 p-2 shadow-xl">
-          <p className="mb-1.5 px-1 text-[11px] text-slate-400">지도 컨트롤 레이어</p>
+        <div className="rounded-[5px] border border-border bg-card/95 p-2 shadow-xl">
+          <p className="mb-1.5 px-1 text-[11px] text-muted-foreground">지도 컨트롤 레이어</p>
           <div className="flex flex-col gap-1">
             {CONTROL_ROWS.map(({ id, label, opensList }) => {
               const selected = summaryById[id];
@@ -228,21 +228,22 @@ export function MapPrintLayerPanel({
                 <button
                   key={id}
                   type="button"
+                  title={label}
                   onClick={() => handleControlClick(id, opensList)}
                   className={cn(
-                    'flex w-full items-center gap-1.5 rounded border px-2 py-1.5 text-left transition-colors',
+                    'flex w-full cursor-pointer items-center gap-1.5 rounded border px-2 py-1.5 text-left transition-colors',
                     isOpen
-                      ? 'border-blue-400 bg-blue-50 text-blue-800 shadow-sm'
+                      ? 'border-primary/45 bg-primary/10 text-foreground shadow-sm'
                       : isOn
-                        ? 'border-slate-300 bg-slate-50 text-slate-800 hover:border-slate-400 hover:bg-slate-100'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                        ? 'border-border bg-muted/60 text-foreground hover:border-border hover:bg-muted'
+                        : 'border-border bg-card text-foreground/90 hover:border-border hover:bg-muted/50'
                   )}
                 >
                   {opensList ? (
                     <ChevronLeft
                       className={cn(
                         'h-3.5 w-3.5 shrink-0',
-                        isOpen ? 'text-blue-600' : 'text-slate-400'
+                        isOpen ? 'text-primary' : 'text-muted-foreground'
                       )}
                       aria-hidden
                     />
@@ -251,7 +252,7 @@ export function MapPrintLayerPanel({
                       <span
                         className={cn(
                           'h-2 w-2 rounded-full',
-                          isOn ? 'bg-blue-500' : 'bg-slate-300'
+                          isOn ? 'bg-primary' : 'bg-muted-foreground/40'
                         )}
                       />
                     </span>
@@ -259,7 +260,7 @@ export function MapPrintLayerPanel({
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-medium">{label}</span>
                     {selected.length > 0 ? (
-                      <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">
+                      <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
                         {selected.join(', ')}
                       </span>
                     ) : null}

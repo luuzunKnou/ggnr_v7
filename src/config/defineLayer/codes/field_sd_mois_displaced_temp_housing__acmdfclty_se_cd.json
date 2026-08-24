@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_name": "001",
+    "define_code_kor_name": "학교"
+  },
+  {
+    "define_code_name": "002",
+    "define_code_kor_name": "마을회관"
+  },
+  {
+    "define_code_name": "003",
+    "define_code_kor_name": "경로당"
+  },
+  {
+    "define_code_name": "007",
+    "define_code_kor_name": "기타시설"
+  },
+  {
+    "define_code_name": "015",
+    "define_code_kor_name": "교육훈련·연수 숙박시설"
+  },
+  {
+    "define_code_name": "016",
+    "define_code_kor_name": "병원급 의료시설"
+  },
+  {
+    "define_code_name": "017",
+    "define_code_kor_name": "종교시설"
+  },
+  {
+    "define_code_name": "018",
+    "define_code_kor_name": "공공시설"
+  },
+  {
+    "define_code_name": "019",
+    "define_code_kor_name": "민간숙박시설"
+  }
+]

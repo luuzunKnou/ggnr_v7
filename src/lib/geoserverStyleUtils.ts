@@ -53,7 +53,8 @@ const LABEL_STYLE_DEFAULTS = {
   haloRadius: 2,
   haloColor: '#222222',
   fontWeight: 'bold',
-  fontFamily: '"Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif"',
+  // emd와 동일. z-index로 규칙을 나누면 첫 글꼴만 쓰이므로 생성 CSS도 단일 규칙에 둘 것.
+  fontFamily: '"Nanum Gothic", "Malgun Gothic", "SansSerif"',
 } as const;
 
 /**

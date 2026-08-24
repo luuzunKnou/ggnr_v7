@@ -29,8 +29,33 @@ const getDatabaseConfig = () => {
   };
 };
 
-// PostgreSQL 연결 풀 생성
-const pool = new Pool(getDatabaseConfig());
+function resolvePoolMax(): number {
+  const raw = String(process.env.DATABASE_POOL_MAX ?? '').trim();
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  // 기본 5 — Next/Turbopack HMR·다중 프로세스에서 공유 DB 53300(too_many_connections) 완화
+  if (Number.isFinite(n) && n >= 1 && n <= 50) return n;
+  return 5;
+}
+
+type GlobalPg = typeof globalThis & { __ggnrPgPool?: Pool };
+
+function getOrCreatePool(): Pool {
+  const g = globalThis as GlobalPg;
+  // HMR 시 모듈이 다시 로드돼도 풀을 재사용 (미종료 연결 누적 → 53300 방지)
+  if (g.__ggnrPgPool) return g.__ggnrPgPool;
+
+  const pool = new Pool({
+    ...getDatabaseConfig(),
+    max: resolvePoolMax(),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 15_000,
+  });
+  g.__ggnrPgPool = pool;
+  return pool;
+}
+
+// PostgreSQL 연결 풀 (프로세스당 싱글톤)
+const pool = getOrCreatePool();
 
 /** SQL 콘솔 로그는 기본 비활성. 필요할 때만 env로 켬. */
 const SQL_LOG_ENABLED = (() => {
@@ -82,7 +107,9 @@ export { pool };
 
 // 연결 풀 종료 함수
 export async function closePool(): Promise<void> {
+  const g = globalThis as GlobalPg;
   await pool.end();
+  if (g.__ggnrPgPool === pool) delete g.__ggnrPgPool;
 }
 
 export default db;

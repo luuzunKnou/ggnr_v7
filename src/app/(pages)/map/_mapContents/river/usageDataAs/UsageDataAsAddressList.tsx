@@ -39,7 +39,7 @@ export function UsageDataAsAddressList({
   return (
     <div className="mt-4">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
         <div className="flex shrink-0 items-center gap-1">
           {isEditing && onAdd && (
             <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={onAdd}>
@@ -50,13 +50,13 @@ export function UsageDataAsAddressList({
         </div>
       </div>
       {items.length === 0 ? (
-        <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+        <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground">
           {isEditing ? emptyHintEdit : emptyHintView}
         </div>
       ) : (
         <ul
           className={cn(
-            'list-none space-y-0 rounded border border-slate-200 bg-white',
+            'list-none space-y-0 rounded border border-border bg-background',
             items.length > MAX_VISIBLE_ROWS &&
               'overflow-y-auto scrollbar-hide'
           )}
@@ -69,12 +69,12 @@ export function UsageDataAsAddressList({
           {items.map((item, i) => {
             const isSelected = selectedIdx === i
             const rowClass = cn(
-              'flex items-start gap-1 border-b border-slate-100 px-2 py-2 text-slate-800 last:border-b-0 transition-colors',
+              'flex items-start gap-1 border-b border-border px-2 py-2 text-foreground last:border-b-0 transition-colors',
               isSelected &&
                 (selectionTone === 'yellow' ? 'bg-yellow-100' : 'bg-primary/10')
             )
             const buttonClass = cn(
-              'min-w-0 flex-1 text-left text-xs text-slate-800',
+              'min-w-0 flex-1 text-left text-xs text-foreground',
               isSelected
                 ? selectionTone === 'yellow'
                   ? 'font-medium text-yellow-800'
@@ -98,13 +98,13 @@ export function UsageDataAsAddressList({
                       onClick={() => onClick?.(item, i)}
                       title="클릭 시 위치 이동 및 선택"
                     >
-                      <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
+                      <span className="mr-1 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
                       <span className="min-w-0 flex-1 break-words">{item.address}</span>
                     </button>
                     {onRemove && (
                       <button
                         type="button"
-                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onRemove(i)}
                         aria-label="삭제"
                         title="삭제"
@@ -120,7 +120,7 @@ export function UsageDataAsAddressList({
                     onClick={() => onClick?.(item, i)}
                     title="클릭 시 위치 이동 및 선택"
                   >
-                    <span className="mr-2 tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className="mr-2 tabular-nums text-muted-foreground">{i + 1}.</span>
                     {item.address}
                   </button>
                 )}

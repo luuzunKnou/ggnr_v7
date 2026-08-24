@@ -4,7 +4,6 @@
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
   mark-anchor: 0.5 0.5;
   mark-offset: 0 0;
-  z-index: 0;
 }
 
 [stdg_cd = '4776025000'], [stdg_cd = 4776025000] {
@@ -12,12 +11,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025021'], [stdg_cd = 4776025021] {
@@ -25,12 +23,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025022'], [stdg_cd = 4776025022] {
@@ -38,12 +35,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025023'], [stdg_cd = 4776025023] {
@@ -51,12 +47,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025024'], [stdg_cd = 4776025024] {
@@ -64,12 +59,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025025'], [stdg_cd = 4776025025] {
@@ -77,12 +71,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025026'], [stdg_cd = 4776025026] {
@@ -90,12 +83,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025027'], [stdg_cd = 4776025027] {
@@ -103,12 +95,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025028'], [stdg_cd = 4776025028] {
@@ -116,12 +107,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025029'], [stdg_cd = 4776025029] {
@@ -129,12 +119,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025030'], [stdg_cd = 4776025030] {
@@ -142,12 +131,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025031'], [stdg_cd = 4776025031] {
@@ -155,12 +143,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025032'], [stdg_cd = 4776025032] {
@@ -168,12 +155,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025033'], [stdg_cd = 4776025033] {
@@ -181,12 +167,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025034'], [stdg_cd = 4776025034] {
@@ -194,12 +179,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776025035'], [stdg_cd = 4776025035] {
@@ -207,12 +191,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031000'], [stdg_cd = 4776031000] {
@@ -220,12 +203,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031034'], [stdg_cd = 4776031034] {
@@ -233,12 +215,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031035'], [stdg_cd = 4776031035] {
@@ -246,12 +227,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031036'], [stdg_cd = 4776031036] {
@@ -259,12 +239,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031037'], [stdg_cd = 4776031037] {
@@ -272,12 +251,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031038'], [stdg_cd = 4776031038] {
@@ -285,12 +263,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031039'], [stdg_cd = 4776031039] {
@@ -298,12 +275,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031040'], [stdg_cd = 4776031040] {
@@ -311,12 +287,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031041'], [stdg_cd = 4776031041] {
@@ -324,12 +299,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031042'], [stdg_cd = 4776031042] {
@@ -337,12 +311,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031043'], [stdg_cd = 4776031043] {
@@ -350,12 +323,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031044'], [stdg_cd = 4776031044] {
@@ -363,12 +335,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031045'], [stdg_cd = 4776031045] {
@@ -376,12 +347,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776031046'], [stdg_cd = 4776031046] {
@@ -389,12 +359,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032000'], [stdg_cd = 4776032000] {
@@ -402,12 +371,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032034'], [stdg_cd = 4776032034] {
@@ -415,12 +383,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032035'], [stdg_cd = 4776032035] {
@@ -428,12 +395,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032036'], [stdg_cd = 4776032036] {
@@ -441,12 +407,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032037'], [stdg_cd = 4776032037] {
@@ -454,12 +419,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032038'], [stdg_cd = 4776032038] {
@@ -467,12 +431,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032039'], [stdg_cd = 4776032039] {
@@ -480,12 +443,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032040'], [stdg_cd = 4776032040] {
@@ -493,12 +455,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032041'], [stdg_cd = 4776032041] {
@@ -506,12 +467,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032042'], [stdg_cd = 4776032042] {
@@ -519,12 +479,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032043'], [stdg_cd = 4776032043] {
@@ -532,12 +491,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032044'], [stdg_cd = 4776032044] {
@@ -545,12 +503,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032045'], [stdg_cd = 4776032045] {
@@ -558,12 +515,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776032046'], [stdg_cd = 4776032046] {
@@ -571,12 +527,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033000'], [stdg_cd = 4776033000] {
@@ -584,12 +539,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033032'], [stdg_cd = 4776033032] {
@@ -597,12 +551,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033033'], [stdg_cd = 4776033033] {
@@ -610,12 +563,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033034'], [stdg_cd = 4776033034] {
@@ -623,12 +575,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033035'], [stdg_cd = 4776033035] {
@@ -636,12 +587,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033036'], [stdg_cd = 4776033036] {
@@ -649,12 +599,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033037'], [stdg_cd = 4776033037] {
@@ -662,12 +611,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033038'], [stdg_cd = 4776033038] {
@@ -675,12 +623,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033039'], [stdg_cd = 4776033039] {
@@ -688,12 +635,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033040'], [stdg_cd = 4776033040] {
@@ -701,12 +647,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033041'], [stdg_cd = 4776033041] {
@@ -714,12 +659,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776033042'], [stdg_cd = 4776033042] {
@@ -727,12 +671,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034000'], [stdg_cd = 4776034000] {
@@ -740,12 +683,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034030'], [stdg_cd = 4776034030] {
@@ -753,12 +695,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034031'], [stdg_cd = 4776034031] {
@@ -766,12 +707,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034032'], [stdg_cd = 4776034032] {
@@ -779,12 +719,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034033'], [stdg_cd = 4776034033] {
@@ -792,12 +731,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034034'], [stdg_cd = 4776034034] {
@@ -805,12 +743,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034035'], [stdg_cd = 4776034035] {
@@ -818,12 +755,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034036'], [stdg_cd = 4776034036] {
@@ -831,12 +767,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034037'], [stdg_cd = 4776034037] {
@@ -844,12 +779,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776034038'], [stdg_cd = 4776034038] {
@@ -857,12 +791,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035000'], [stdg_cd = 4776035000] {
@@ -870,12 +803,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035034'], [stdg_cd = 4776035034] {
@@ -883,12 +815,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035035'], [stdg_cd = 4776035035] {
@@ -896,12 +827,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035036'], [stdg_cd = 4776035036] {
@@ -909,12 +839,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035037'], [stdg_cd = 4776035037] {
@@ -922,12 +851,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035038'], [stdg_cd = 4776035038] {
@@ -935,12 +863,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035039'], [stdg_cd = 4776035039] {
@@ -948,12 +875,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035040'], [stdg_cd = 4776035040] {
@@ -961,12 +887,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035041'], [stdg_cd = 4776035041] {
@@ -974,12 +899,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035042'], [stdg_cd = 4776035042] {
@@ -987,12 +911,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035043'], [stdg_cd = 4776035043] {
@@ -1000,12 +923,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035044'], [stdg_cd = 4776035044] {
@@ -1013,12 +935,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035045'], [stdg_cd = 4776035045] {
@@ -1026,12 +947,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 [stdg_cd = '4776035046'], [stdg_cd = 4776035046] {
@@ -1039,12 +959,11 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }
 
 * {
@@ -1052,10 +971,9 @@
   font-size: 14;
   font-fill: #FF9800;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }

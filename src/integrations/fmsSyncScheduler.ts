@@ -21,8 +21,12 @@ export function startFmsSyncScheduler(): void {
     const now = new Date(
       new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })
     );
-    const slot =
-      sched.mode === 'interval' ? intervalSlotKey(sched, now) : calendarSlotKey(sched, now);
+    let slot: string | null = null;
+    if (sched.mode === 'interval') {
+      slot = intervalSlotKey(sched, now);
+    } else {
+      slot = calendarSlotKey(sched, now);
+    }
     if (!slot) return;
     if (lastSlot === slot) return;
     lastSlot = slot;
