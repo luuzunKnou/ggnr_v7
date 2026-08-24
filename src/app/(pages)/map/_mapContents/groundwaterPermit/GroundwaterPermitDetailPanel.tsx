@@ -11,7 +11,7 @@ import {
 } from '@/lib/groundwaterPermitStatus'
 import { GROUNDWATER_PERMIT_DETAIL_SECTIONS } from './groundwaterPermitSections'
 import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
-import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
+import { MapSideDetailScroll } from '../../_mapComponents/MapSideDetailScroll'
 
 type Props = {
   detailId: string
@@ -121,10 +121,10 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <div className="min-w-0 flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-slate-800">지하수 개발허가 상세</span>
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-foreground">지하수 개발허가 상세</span>
           {row && (
             <span
               className={cn(
@@ -139,7 +139,7 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
         <button
           type="button"
           onClick={handleClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -149,28 +149,28 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
 
       <MapSideDetailScroll className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-2 text-xs">
         {loading && !row ? (
-          <div className="px-1 py-8 text-center text-slate-500">불러오는 중…</div>
+          <div className="px-1 py-8 text-center text-muted-foreground">불러오는 중…</div>
         ) : error && !row ? (
-          <div className="px-1 py-8 text-center text-red-600">{error}</div>
+          <div className="px-1 py-8 text-center text-destructive">{error}</div>
         ) : row && fields ? (
           <>
             {GROUNDWATER_PERMIT_DETAIL_SECTIONS.map((section) => {
               const isOpen = openSectionIds.has(section.id)
               return (
-                <section key={section.id} className="rounded border border-slate-200 bg-white">
+                <section key={section.id} className="rounded border border-border bg-card">
                   <button
                     type="button"
                     onClick={() => toggleSection(section.id)}
                     aria-expanded={isOpen}
-                    className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left hover:bg-slate-50"
+                    className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left hover:bg-muted/50"
                   >
-                    <span className="text-[11px] font-semibold tracking-wide text-slate-700">
+                    <span className="text-[11px] font-semibold tracking-wide text-foreground/90">
                       {section.title}
-                      <span className="ml-1.5 font-normal text-slate-400">
+                      <span className="ml-1.5 font-normal text-muted-foreground">
                         ({section.fields.length})
                       </span>
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
                       {isOpen ? '접기' : '펼치기'}
                       <ChevronDown
                         className={cn(
@@ -181,7 +181,7 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
                     </span>
                   </button>
                   {isOpen && (
-                    <div className="divide-y divide-slate-100 border-t border-slate-100 bg-slate-50/50">
+                    <div className="divide-y divide-border border-t border-border bg-muted/40">
                       {section.fields.map((field) => {
                         const value = String(fields[field.key] ?? '').trim()
                         return (
@@ -189,10 +189,10 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
                             key={field.key}
                             className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 px-2 py-1.5"
                           >
-                            <dt className="shrink-0 overflow-hidden whitespace-nowrap font-medium text-slate-600">
+                            <dt className="shrink-0 overflow-hidden whitespace-nowrap font-medium text-muted-foreground">
                               {field.label}
                             </dt>
-                            <dd className="min-w-0 break-words text-slate-800">{value || '—'}</dd>
+                            <dd className="min-w-0 break-words text-foreground">{value || '—'}</dd>
                           </div>
                         )
                       })}
@@ -203,7 +203,7 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
             })}
           </>
         ) : (
-          <div className="px-1 py-8 text-center text-slate-500">항목을 찾을 수 없습니다.</div>
+          <div className="px-1 py-8 text-center text-muted-foreground">항목을 찾을 수 없습니다.</div>
         )}
       </MapSideDetailScroll>
     </div>

@@ -769,7 +769,7 @@ export function OccupationLedgerDetailPanel({
   };
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
+    <div className="flex min-h-0 h-full flex-col bg-background">
       <LayerRowEditHeader
         title={`${binding?.title ?? '점용'} 상세`}
         actionsPlacement="footer"
@@ -789,16 +789,16 @@ export function OccupationLedgerDetailPanel({
       {/* 울진하천 목록과 동일: overflow-auto scrollbar-thin (+ MapSideListPanel mr) */}
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs scrollbar-thin">
         {showLoading && (
-          <div className="flex items-center gap-2 py-6 text-slate-500">
+          <div className="flex items-center gap-2 py-6 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
             불러오는 중…
           </div>
         )}
         {!showLoading && error && (
-          <div className="rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">{error}</div>
+          <div className="rounded border border-destructive/20 bg-destructive/10 px-2 py-2 text-destructive">{error}</div>
         )}
         {!showLoading && editError && (
-          <div className="mb-2 rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">
+          <div className="mb-2 rounded border border-destructive/20 bg-destructive/10 px-2 py-2 text-destructive">
             {editError}
           </div>
         )}
@@ -858,10 +858,10 @@ export function OccupationLedgerDetailPanel({
 
             {!isCreateMode && (
               <div className="mt-4">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   점사용료 이력
                 </div>
-                <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-4 text-center text-slate-500">
+                <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
                   연계된 점사용료가 없습니다.
                 </div>
               </div>
@@ -873,7 +873,7 @@ export function OccupationLedgerDetailPanel({
           isCreateMode &&
           !formFieldsLoading &&
           formAttributesForEdit.length === 0 && (
-            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground">
               등록할 필드 정의를 불러오지 못했습니다.
             </div>
           )}

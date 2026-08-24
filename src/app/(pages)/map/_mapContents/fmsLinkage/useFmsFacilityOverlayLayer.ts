@@ -55,8 +55,8 @@ function styleForFeature(feature: FeatureLike): Style | Style[] {
 /** 소면적 폴리곤은 굵은 펄스가 원처럼 보이므로 얇은 면 강조 사용 */
 function createFmsSelectionStyle(getPulsePhase: () => number): StyleFunction {
   const base = createDataQuerySelectionRowHighlightStyle(getPulsePhase);
-  return (feature) => {
-    if (feature.get('isRadarPoint')) return base(feature);
+  return (feature, resolution) => {
+    if (feature.get('isRadarPoint')) return base(feature, resolution);
 
     const geom = feature.getGeometry();
     const type = geom?.getType();
@@ -90,7 +90,7 @@ function createFmsSelectionStyle(getPulsePhase: () => number): StyleFunction {
       }
     }
 
-    return base(feature);
+    return base(feature, resolution);
   };
 }
 

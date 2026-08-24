@@ -18,6 +18,7 @@ import {
 } from '../_mapContents/bizNotif/bizNotifStore';
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 import { SHOOTING_REQUEST_UI_ENABLED } from '../_mapContents/shootingRequest/shootingRequestUiFlag';
+import { withBasePath } from '@/lib/basePath';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -250,7 +251,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
         />
       );
     }
-    const iconSrc = `/image/serviceListIcon/${serEng}.svg`;
+    const iconSrc = withBasePath(`/image/serviceListIcon/${serEng}.svg`);
     return (
       <span
         className="w-5 h-5 shrink-0 inline-block bg-current"

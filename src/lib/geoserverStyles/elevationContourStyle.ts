@@ -55,7 +55,7 @@ function labelBlock(strokeColor: string): string {
   font-size: 11;
   font-fill: ${strokeColor};
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 1.5;
   halo-color: #FFFFFF;
   -gt-label-repeat: 400;

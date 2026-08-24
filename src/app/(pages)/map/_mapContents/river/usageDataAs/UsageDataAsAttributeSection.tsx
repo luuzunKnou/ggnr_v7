@@ -19,14 +19,14 @@ const RIVER_NAME_FIELD = "river_name";
 const RIVER_TYPE_FIELD = "river_type";
 
 const inputClass =
-  "rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
+  "rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
 const readonlyInputClass =
-  "cursor-default rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700 outline-none";
+  "cursor-default rounded border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground/90 outline-none";
 /** 도로망 유지보수 «추가»와 동일 primary 톤, 입력 높이보다 약간 낮게 */
 const btnAutoCalc =
-  "inline-flex h-6 shrink-0 items-center rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+  "inline-flex h-6 shrink-0 items-center rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const areaInputClass =
-  "h-6 min-w-0 flex-1 rounded border border-slate-200 bg-white px-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
+  "h-6 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
 
 export type UsageDataAsRiverOption = {
   riverName: string;
@@ -95,10 +95,10 @@ export function UsageDataAsAttributeSection({
 
   return (
     <>
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">상세 속성</div>
-      <dl className="divide-y divide-slate-100 rounded border border-slate-200 bg-slate-50/50">
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">상세 속성</div>
+      <dl className="divide-y divide-border rounded border border-border bg-muted/40">
         {attributes.length === 0 ? (
-          <div className="px-2 py-3 text-slate-500">표시할 속성이 없습니다.</div>
+          <div className="px-2 py-3 text-muted-foreground">표시할 속성이 없습니다.</div>
         ) : (
           attributes.map((row) => {
             const fieldLower = row.field.toLowerCase();
@@ -123,8 +123,8 @@ export function UsageDataAsAttributeSection({
                 key={row.field}
                 className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
               >
-                <dt className="shrink-0 leading-none font-medium text-slate-600">{row.label}</dt>
-                <dd className="relative min-w-0 break-words text-slate-800">
+                <dt className="shrink-0 leading-none font-medium text-muted-foreground">{row.label}</dt>
+                <dd className="relative min-w-0 break-words text-foreground">
                   {showInput ? (
                     isRiverName ? (
                       <select
@@ -188,7 +188,7 @@ export function UsageDataAsAttributeSection({
                           className={`min-w-0 flex-1 ${inputClass}`}
                           aria-label="점용 시작일"
                         />
-                        <span className="shrink-0 text-slate-400">~</span>
+                        <span className="shrink-0 text-muted-foreground">~</span>
                         <input
                           type="date"
                           value={toDateInputValue(periodEnd)}
@@ -211,7 +211,7 @@ export function UsageDataAsAttributeSection({
                             className={areaInputClass}
                             placeholder="0"
                           />
-                          <span className="shrink-0 text-slate-500">m²</span>
+                          <span className="shrink-0 text-muted-foreground">m²</span>
                           {onAutoCalcArea ? (
                             <button
                               type="button"
@@ -227,7 +227,7 @@ export function UsageDataAsAttributeSection({
                           ) : null}
                         </div>
                         {areaHint ? (
-                          <span className="text-[10px] text-amber-700">{areaHint}</span>
+                          <span className="text-[10px] text-muted-foreground">{areaHint}</span>
                         ) : null}
                       </div>
                     ) : isDate ? (

@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import dns from 'node:dns/promises';
 import { Agent } from 'undici';
+import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL } from '@/lib/gnmsSourceUrl';
+import { getGnmsUrl } from '@/service/configService';
 import {
   failUploadProgress,
   patchUploadProgress,
@@ -8,9 +10,15 @@ import {
   setUploadProgressPhase,
 } from '@/service/sourceUploadProgress';
 
+/** @deprecated 호출 시점 값은 `getRemoteUploadBase()` 사용 (GNMS_URL 반영) */
 export const SOURCE_UPLOAD_REMOTE_BASE =
-  process.env.SOURCE_UPLOAD_REMOTE_BASE ?? 'http://192.168.126.1:3000/api/source/upload';
-export const SOURCE_UPLOAD_REMOTE_BEARER = process.env.SOURCE_UPLOAD_REMOTE_BEARER ?? '';
+  process.env.SOURCE_UPLOAD_REMOTE_BASE?.trim() ||
+  buildGnmsUploadApiBase(DEFAULT_GNMS_URL);
+export const SOURCE_UPLOAD_REMOTE_BEARER =
+  process.env.SOURCE_UPLOAD_REMOTE_BEARER?.trim() ||
+  process.env.GNMS_SOURCE_BEARER?.trim() ||
+  process.env.NEXT_PUBLIC_GNMS_SOURCE_BEARER?.trim() ||
+  '';
 
 export type RemoteUploadStageId = 'preflight' | 'init' | 'chunk' | 'complete' | 'npmInstall';
 
@@ -122,8 +130,18 @@ export class RemoteUploadError extends Error {
   }
 }
 
+/**
+ * 업로드 대상 base — common.runtime.env `GNMS_URL` 우선
+ * (최신소스 적용과 동일). 없으면 SOURCE_UPLOAD_REMOTE_BASE 환경변수 → 공통 기본 URL.
+ */
 export function getRemoteUploadBase(): string {
-  return SOURCE_UPLOAD_REMOTE_BASE.replace(/\/+$/, '');
+  const fromRuntime = buildGnmsUploadApiBase(getGnmsUrl());
+  const fromEnv = process.env.SOURCE_UPLOAD_REMOTE_BASE?.trim();
+  const base =
+    fromRuntime ||
+    fromEnv ||
+    buildGnmsUploadApiBase(DEFAULT_GNMS_URL);
+  return base.replace(/\/+$/, '');
 }
 
 export function buildRemoteAuthHeaders(json = true): Record<string, string> {
@@ -358,8 +376,9 @@ export async function checkRemoteTargetReady(): Promise<PreflightResult> {
   checks.push({ id: 'target', ok: true, message: target.targetLabel });
 
   try {
+    // origin만이 아니라 basePath 포함 URL로 점검 (예: http://dggs.kr/gnms/api/source/upload)
     const reachRes = await fetchWithTimeout(
-      target.targetOrigin,
+      target.remoteBase,
       { method: 'GET' },
       PREFLIGHT_PROBE_TIMEOUT_MS
     );

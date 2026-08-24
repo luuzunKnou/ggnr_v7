@@ -20,7 +20,7 @@ export type ExcelGeocodeResult = {
   hangjeongFix: string | null;
 };
 
-function isTransientVworldFailure(result: Pick<GetCoordFromAddressResult, 'ok' | 'message'>): boolean {
+function isTransientVworldFailure(result: { ok: boolean; message?: string }): boolean {
   if (result.ok) return false;
   const msg = String(result.message ?? '');
   return msg.includes('JSONP') || msg.includes('로드에 실패');
