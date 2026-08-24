@@ -50,6 +50,7 @@ import * as seumService from './seumService';
 /** API `service: 'seumPermitService'` 호환 — seumService와 동일 모듈 */
 import * as seumPermitService from './seumService';
 import * as memoService from './memoService';
+import * as villagePatrolService from './villagePatrolService';
 import * as dataQueryHistoryService from './dataQueryHistoryService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
@@ -60,6 +61,7 @@ import * as flightLogbookService from './flightLogbookService';
 import * as aerialUploadService from './aerialUploadService';
 import * as aerialOrthoService from './aerialOrthoService';
 import * as useFeeService from './useFeeService';
+import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
@@ -115,6 +117,7 @@ export {
   seumService,
   seumPermitService,
   memoService,
+  villagePatrolService,
   dataQueryHistoryService,
   noticeService,
   boardService,
@@ -124,6 +127,7 @@ export {
   aerialUploadService,
   aerialOrthoService,
   useFeeService,
+  fmsLinkageService,
   groundwaterPermitService,
   bizNotifService,
 };

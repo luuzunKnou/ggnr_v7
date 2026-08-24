@@ -14,6 +14,11 @@ import {
   cleanRoadNetworkDisplayText,
   formatRoadNetworkNumericAttr,
 } from '@/app/(pages)/map/_mapContents/road/roadNetwork/roadNetworkFormat';
+import {
+  deleteTableRowByKey,
+  insertTableRow,
+  updateTableRowByKey,
+} from './layerRowService';
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
@@ -568,6 +573,34 @@ function geomSqlExpr(geom: RoadNetworkGeom | null | undefined): string | null {
   return `ST_Multi(ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('${json}'), 4326), 5181))`;
 }
 
+function attrSqlValuesToRecord(values: AttrSqlValue[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const v of values) {
+    if (v.sql === 'NULL') {
+      out[v.col] = null;
+      continue;
+    }
+    if (v.sql.startsWith("'") && v.sql.endsWith("'")) {
+      out[v.col] = v.sql.slice(1, -1).replace(/''/g, "'");
+      continue;
+    }
+    out[v.col] = v.sql;
+  }
+  return out;
+}
+
+async function geomToWkt5181(geom: RoadNetworkGeom | null | undefined): Promise<string | null> {
+  const expr = geomSqlExpr(geom);
+  if (!expr) return null;
+  try {
+    const res = await db.execute(sql.raw(`SELECT ST_AsText(${expr}) AS wkt`));
+    const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+    return wkt || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchOneRowById(id: string): Promise<RoadNetworkRow | null> {
   const parsed = parseStoredId(id);
   if (!parsed) return null;
@@ -649,7 +682,6 @@ export async function saveRoadNetworkRow(
 
   const tableName = await resolveLayerTableName(target.table);
   if (!tableName) return { success: false, error: `테이블이 없습니다: ${target.table}` };
-  const safeTbl = tableName.replace(/"/g, '""');
   const typeMap = await getColumnTypeMap(tableName);
   const built = buildAttrSqlValues(target.table, typeMap, {
     roadName,
@@ -667,59 +699,47 @@ export async function saveRoadNetworkRow(
   let geom = params.geom ?? null;
   const id = String(params.id ?? '').trim();
   const parsed = parseStoredId(id);
+  const attrValues = attrSqlValuesToRecord(built.values);
 
   try {
-    // 개설여부·종류 변경으로 테이블이 바뀌면 기존 geom을 옮겨 INSERT
     if (parsed && parsed.table !== target.table) {
       if (!geom) {
         geom = await readGeomGeoJson4326(parsed.table, parsed.ogcFid);
       }
       const oldTbl = await resolveLayerTableName(parsed.table);
       if (oldTbl) {
-        await db.execute(
-          sql.raw(
-            `DELETE FROM layer."${oldTbl.replace(/"/g, '""')}" WHERE ogc_fid = ${parsed.ogcFid}`
-          )
-        );
+        const deleted = await deleteTableRowByKey({
+          table: parsed.table,
+          schema: 'layer',
+          keyField: 'ogc_fid',
+          keyValue: parsed.ogcFid,
+        });
+        if (!deleted.success) {
+          return { success: false, error: deleted.error ?? '기존 행 삭제에 실패했습니다.' };
+        }
       }
     }
 
-    const geomExpr = geomSqlExpr(geom);
+    const geomWkt5181 = await geomToWkt5181(geom);
+    const geomClear = params.geom === null;
     const moveInsert = Boolean(parsed && parsed.table !== target.table);
 
     if (!parsed || moveInsert || isClientOnlyId(id)) {
-      const insertCols = built.values.map((v) => `"${v.col.replace(/"/g, '""')}"`);
-      const insertVals = built.values.map((v) => v.sql);
-      if (geomExpr && typeMap.has('geom')) {
-        insertCols.push('"geom"');
-        insertVals.push(geomExpr);
+      if (Object.keys(attrValues).length === 0 && !geomWkt5181) {
+        return { success: false, error: '저장할 도형 또는 속성이 없습니다.' };
       }
-      if (insertCols.length === 0 && !geomExpr) {
-        // 입체교차로 등 속성 없이 도형만
-        if (!geomExpr) return { success: false, error: '저장할 도형 또는 속성이 없습니다.' };
+      const inserted = await insertTableRow({
+        table: target.table,
+        schema: 'layer',
+        keyField: 'ogc_fid',
+        values: attrValues,
+        allowPhysicalColumns: true,
+        geomWkt5181,
+      });
+      if (!inserted.success) {
+        return { success: false, error: inserted.error ?? '등록에 실패했습니다.' };
       }
-      const colSql =
-        insertCols.length > 0
-          ? `(${insertCols.join(', ')})`
-          : '("geom")';
-      const valSql =
-        insertCols.length > 0
-          ? `(${insertVals.join(', ')})`
-          : `(${geomExpr})`;
-      // geom-only insert when no attr cols
-      const finalColSql =
-        insertCols.length === 0 && geomExpr ? '("geom")' : colSql;
-      const finalValSql =
-        insertCols.length === 0 && geomExpr ? `(${geomExpr})` : valSql;
-
-      const res = await db.execute(
-        sql.raw(
-          `INSERT INTO layer."${safeTbl}" ${finalColSql}
-           VALUES ${finalValSql}
-           RETURNING ogc_fid`
-        )
-      );
-      const ogcFid = Number((res.rows?.[0] as { ogc_fid?: number })?.ogc_fid);
+      const ogcFid = Number(inserted.keyValue);
       if (!Number.isFinite(ogcFid)) {
         return { success: false, error: '등록 후 식별자를 확인하지 못했습니다.' };
       }
@@ -728,24 +748,23 @@ export async function saveRoadNetworkRow(
       return { success: true, row };
     }
 
-    const sets: string[] = built.values.map(
-      (v) => `"${v.col.replace(/"/g, '""')}" = ${v.sql}`
-    );
-    if (typeMap.has('geom')) {
-      if (geomExpr) sets.push(`"geom" = ${geomExpr}`);
-      else if (params.geom === null) sets.push(`"geom" = NULL`);
+    const updated = await updateTableRowByKey({
+      table: target.table,
+      schema: 'layer',
+      keyField: 'ogc_fid',
+      keyValue: parsed.ogcFid,
+      changes: attrValues,
+      allowPhysicalColumns: true,
+      geomWkt5181,
+      geomClear,
+    });
+    if (!updated.success) {
+      if (updated.error === '변경할 항목이 없습니다.') {
+        const row = await fetchOneRowById(id);
+        return row ? { success: true, row } : { success: false, error: '수정할 행이 없습니다.' };
+      }
+      return { success: false, error: updated.error ?? '수정에 실패했습니다.' };
     }
-    if (sets.length === 0) {
-      const row = await fetchOneRowById(id);
-      return row ? { success: true, row } : { success: false, error: '수정할 행이 없습니다.' };
-    }
-    await db.execute(
-      sql.raw(
-        `UPDATE layer."${safeTbl}"
-         SET ${sets.join(', ')}
-         WHERE ogc_fid = ${parsed.ogcFid}`
-      )
-    );
     const row = await fetchOneRowById(`${target.table}:${parsed.ogcFid}`);
     if (!row) return { success: false, error: '수정 후 조회에 실패했습니다.' };
     return { success: true, row };
@@ -776,20 +795,10 @@ export async function deleteRoadNetworkRow(params: {
   }
   const tableName = await resolveLayerTableName(parsed.table);
   if (!tableName) return { success: false, error: '테이블이 없습니다.' };
-  try {
-    const res = await db.execute(
-      sql.raw(
-        `DELETE FROM layer."${tableName.replace(/"/g, '""')}"
-         WHERE ogc_fid = ${parsed.ogcFid}
-         RETURNING ogc_fid`
-      )
-    );
-    if (!res.rows?.length) return { success: false, error: '삭제할 데이터를 찾을 수 없습니다.' };
-    return { success: true };
-  } catch (e) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : '삭제에 실패했습니다.',
-    };
-  }
+  return deleteTableRowByKey({
+    table: parsed.table,
+    schema: 'layer',
+    keyField: 'ogc_fid',
+    keyValue: parsed.ogcFid,
+  });
 }

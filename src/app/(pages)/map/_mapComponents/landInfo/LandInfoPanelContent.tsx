@@ -647,7 +647,18 @@ export function LandInfoPanelContent({
             />
           </section>
           </div>
-          <BuildingDataSourceLine className="mt-auto pt-2 text-right" sources={[parcelData.source]} />
+          <div className="mt-auto pt-4">
+            <BuildingDataSourceLine className="text-right" sources={[parcelData.source]} />
+            {parcelData.hangmangCalls?.length ? (
+              <div className="mt-1 space-y-0.5">
+                {parcelData.hangmangCalls.map((line) => (
+                  <p key={line.svcId} className="select-text text-[10px] leading-snug text-background">
+                    {line.svcId} {line.called ? '호출' : '미호출'} {line.detail}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       );
     }

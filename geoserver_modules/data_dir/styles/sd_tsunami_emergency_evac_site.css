@@ -1,21 +1,18 @@
+/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 */
 * {
   mark: url("sd_tsunami_emergency_evac_site.svg");
   mark-mime: "image/svg+xml";
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
   mark-anchor: 0.5 0.5;
   mark-offset: 0 0;
-  z-index: 0;
-}
 
-* {
   label: [shnt_place_nm];
   font-size: 14;
   font-fill: #673AB7;
   font-weight: bold;
-  font-family: "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", "Pretendard", "SansSerif";
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   halo-radius: 2;
   halo-color: #FFFFFF;
   label-anchor: 0.5 1.0;
   label-offset: 0 -16;
-  z-index: 1;
 }

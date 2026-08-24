@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     }
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     profile = parseProfile(body.profile);
+    const includePythonEnvParts = body.includePythonEnvParts !== false;
     const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
     clientIp = pickClientIpFromRequest(req, bodyIp);
     progressId =
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
       initInstallZipProgress(progressId);
     }
 
-    const result = await buildInstallZip({ profile, progressId });
+    const result = await buildInstallZip({ profile, progressId, includePythonEnvParts });
     await recordInstallZipHistory({
       ok: true,
       message: `${result.zipName} (${result.fileCount}건)`,

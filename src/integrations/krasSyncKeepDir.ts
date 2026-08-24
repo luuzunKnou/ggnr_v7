@@ -29,14 +29,13 @@ export function krasSyncRelShp(table: string, fileName: string): string {
 export async function pruneOldKrasSyncDays(): Promise<void> {
   const root = path.join(krasSyncDataDir(), 'kras_sync');
   const today = krasSyncSeoulDay();
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
   try {
-    entries = await fs.readdir(root, { withFileTypes: true });
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.name === today) continue;
+      await fs.rm(path.join(root, e.name), { recursive: true, force: true }).catch(() => {});
+    }
   } catch {
     return;
-  }
-  for (const e of entries) {
-    if (e.name === today) continue;
-    await fs.rm(path.join(root, e.name), { recursive: true, force: true }).catch(() => {});
   }
 }

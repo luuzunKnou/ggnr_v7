@@ -4,11 +4,13 @@
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
+ * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
  * - 보상편입: road_reward, road_reward_parcel
  * - 공사대장: cons_data_as, cons_data_solo_as
+ * - 마을순찰대: village_patrol
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -52,11 +54,25 @@ async function columnExists(schema: string, table: string, column: string): Prom
   return (res.rows?.length ?? 0) > 0;
 }
 
+async function schemaExists(name: string): Promise<boolean> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT 1
+       FROM information_schema.schemata
+       WHERE schema_name = '${name.replace(/'/g, "''")}'
+       LIMIT 1`
+    )
+  );
+  return (res.rows?.length ?? 0) > 0;
+}
+
 async function ensureSchemaLayer(): Promise<void> {
+  if (await schemaExists('layer')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS layer`));
 }
 
 async function ensureSchemaNextGenLinkage(): Promise<void> {
+  if (await schemaExists('next_gen_linkage')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
 }
 
@@ -319,6 +335,56 @@ CREATE INDEX IF NOT EXISTS cons_data_solo_as_cons_code_idx ON layer.cons_data_so
 COMMENT ON TABLE layer.cons_data_solo_as IS '공사대장_개별';
 `;
 
+const VILLAGE_PATROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.village_patrol (
+  id SERIAL PRIMARY KEY,
+  eup text NOT NULL DEFAULT '',
+  village text NOT NULL DEFAULT '',
+  team text NOT NULL DEFAULT 'A조',
+  name text NOT NULL DEFAULT '',
+  affiliation text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  note text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS village_patrol_place_idx
+  ON layer.village_patrol (eup, village, team);
+CREATE INDEX IF NOT EXISTS village_patrol_phone_idx
+  ON layer.village_patrol (phone);
+COMMENT ON TABLE layer.village_patrol IS '마을순찰대 편성 명단';
+`;
+
+/** 기존 중복 정리 후 편성 유니크 인덱스 확보 */
+async function ensureVillagePatrolAssignmentUnique(result: EnsureResult): Promise<void> {
+  const fq = 'layer.village_patrol';
+  try {
+    if ((await tableExists('layer', 'village_patrol')) !== 'BASE TABLE') return;
+
+    await db.execute(
+      sql.raw(`
+        DELETE FROM layer.village_patrol a
+        USING layer.village_patrol b
+        WHERE a.id > b.id
+          AND a.eup = b.eup
+          AND a.village = b.village
+          AND a.team = b.team
+          AND a.name = b.name
+          AND a.phone = b.phone
+      `)
+    );
+
+    await db.execute(
+      sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS village_patrol_assignment_uidx
+          ON layer.village_patrol (eup, village, team, name, phone)
+      `)
+    );
+    result.created.push(`${fq}.village_patrol_assignment_uidx`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.assignment_uidx: ${msg}`);
+  }
+}
+
 function memoCreateSql(tableName: string): string {
   const t = tableName.replace(/"/g, '""');
   return `
@@ -518,6 +584,99 @@ COMMENT ON TABLE layer.${t} IS '점사용료 미납·수납 통합';
 `;
 }
 
+function fmsFacilitySql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_facil_no_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  facil_no text,
+  facil_nm text,
+  mng_no text,
+  mng_main_cd text,
+  permit_org_cd text,
+  facil_owner text,
+  route_class text,
+  route_detail text,
+  facil_class text,
+  facil_gbn text,
+  facil_kind text,
+  facil_desc_cd text,
+  addr_sido text,
+  addr_gugun text,
+  addr_dong text,
+  addr_detail text,
+  cpl_ymd text,
+  temp_ymd text,
+  rsp_to_ymd text,
+  design_ymd_from text,
+  design_ymd_to text,
+  designer_nm text,
+  const_ymd_from text,
+  const_ymd_to text,
+  constractor_cd text,
+  constractor_nm text,
+  const_amt text,
+  spv_ymd_from text,
+  spv_ymd_to text,
+  supervisor_nm text,
+  const_order_cd text,
+  const_order_nm text,
+  const_nm text,
+  const_spvsr_nm text,
+  dsn_book_st_yn text,
+  eq_dsn_app_yn text,
+  gam_reason_cd text,
+  whl_pht_file_ct text,
+  etc_pht_file_ct text,
+  upper_no text,
+  lnk_facil_no text,
+  etc_remark text,
+  addr_full text,
+  geom geometry(MultiPolygon, 5181),
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (facil_no)
+);
+CREATE INDEX IF NOT EXISTS ${t}_facil_no_idx ON layer.${t} (facil_no);
+CREATE INDEX IF NOT EXISTS ${t}_facil_nm_idx ON layer.${t} (facil_nm);
+CREATE INDEX IF NOT EXISTS ${t}_geom_gix ON layer.${t} USING GIST (geom);
+COMMENT ON TABLE layer.${t} IS 'FMS 시설물관리대장';
+`;
+}
+
+function fmsInspectionSql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_facil_dign_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  facil_no text,
+  dign_seq text,
+  start_ymd text,
+  end_ymd text,
+  dign_gbn text,
+  regular_gbn text,
+  rep_engineer_nm text,
+  dign_amt text,
+  state_grade text,
+  dign_content text,
+  amend_content text,
+  wrt_ymd text,
+  wrt_person_nm text,
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (facil_no, dign_seq)
+);
+CREATE INDEX IF NOT EXISTS ${t}_facil_no_idx ON layer.${t} (facil_no);
+COMMENT ON TABLE layer.${t} IS 'FMS 점검진단실적';
+`;
+}
+
 /** public→layer 이동 후 geom 컬럼·인덱스·좌표 백필 */
 async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
   const fq = 'layer.file_unit';
@@ -588,6 +747,43 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
     await ensureBaseTable({
       table: `${base}_mgj`,
       createSql: occupationLedgerChildSql(`${base}_mgj`, '공통 점용대장 물건지'),
+      result: out,
+    });
+  }
+  return out;
+}
+
+/** FMS water|road|public × facility·inspection (6개) */
+export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const facility = `${prefix}_fms_facility`;
+    const inspection = `${prefix}_fms_inspection`;
+    await ensureBaseTable({
+      table: facility,
+      createSql: fmsFacilitySql(facility),
+      result: out,
+    });
+    try {
+      if (!(await columnExists('layer', facility, 'geom'))) {
+        await db.execute(
+          sql.raw(`
+            ALTER TABLE layer.${facility}
+              ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+            CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
+              ON layer.${facility} USING GIST (geom);
+          `)
+        );
+      }
+    } catch (e) {
+      out.errors.push(
+        `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+    await ensureBaseTable({
+      table: inspection,
+      createSql: fmsInspectionSql(inspection),
       result: out,
     });
   }
@@ -762,6 +958,18 @@ export async function ensureConsDataAsTables(result?: EnsureResult): Promise<Ens
   return out;
 }
 
+export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'village_patrol',
+    createSql: VILLAGE_PATROL_SQL,
+    result: out,
+  });
+  await ensureVillagePatrolAssignmentUnique(out);
+  return out;
+}
+
 /** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
 export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -792,11 +1000,13 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureRoadUseLedgerTables(result);
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
+    await ensureFmsTables(result);
     await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
     await ensureRoadRewardTables(result);
     await ensureConsDataAsTables(result);
+    await ensureVillagePatrolTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

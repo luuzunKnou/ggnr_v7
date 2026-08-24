@@ -97,11 +97,11 @@ export function RiverNameSelect({ value, onChange, className, placeholder }: Pro
         ? createPortal(
             <div
               ref={dropdownRef}
-              className="fixed z-[9999] max-h-48 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg"
+              className="fixed z-[9999] max-h-48 overflow-y-auto rounded border border-border bg-background shadow-lg"
               style={{ left: rect.left, top: rect.top, width: rect.width }}
             >
               {loading ? (
-                <p className="px-2 py-1.5 text-[11px] text-slate-400">검색 중…</p>
+                <p className="px-2 py-1.5 text-[11px] text-muted-foreground">검색 중…</p>
               ) : options.length === 0 ? (
                 <p className="px-2 py-1.5 text-[11px] text-slate-400">
                   {listError || "일치하는 하천이 없습니다."}
@@ -111,7 +111,7 @@ export function RiverNameSelect({ value, onChange, className, placeholder }: Pro
                   <button
                     key={name}
                     type="button"
-                    className="block w-full truncate px-2 py-1.5 text-left text-[11px] text-slate-700 hover:bg-slate-100"
+                    className="block w-full truncate px-2 py-1.5 text-left text-[11px] text-foreground/90 hover:bg-muted"
                     onMouseDown={(e) => {
                       e.preventDefault();
                       onChange(name);

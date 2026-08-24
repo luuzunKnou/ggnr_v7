@@ -27,6 +27,7 @@ import type { SafetyWaterStationKind } from "./_mapContents/safty/safetyWater/sa
 import { SafetyFacPanel } from "./_mapContents/safty/safetyFac/SafetyFacPanel"
 import { SafetyFacDetailPanel } from "./_mapContents/safty/safetyFac/SafetyFacDetailPanel"
 import type { SafetyFacFacilityRow } from "./_mapContents/safty/safetyFac/safetyFacSymbols"
+import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/VillagePatrolListPanel"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
@@ -120,6 +121,9 @@ import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
 import { clearForeignUseFeeWmsLayers } from "./_mapContents/useFee/useFeeMapSync"
 import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
 import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
+import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
+import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
+import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
 import {
   UserAccountProtoPanel,
 } from "./_mapContents/prototypes/UserAccountProtoPanel"
@@ -208,6 +212,10 @@ const SAFETY_FAC_DETAIL_DEFAULT_WIDTH = 400
 const SAFETY_FAC_DETAIL_MIN_WIDTH = 320
 const SAFETY_FAC_DETAIL_MAX_WIDTH = 640
 
+const VILLAGE_PATROL_PANEL_DEFAULT_WIDTH = 910
+const VILLAGE_PATROL_PANEL_MIN_WIDTH = 640
+const VILLAGE_PATROL_PANEL_MAX_WIDTH = 1320
+
 const SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH = 420
 const SAFETY_HOSPITAL_BED_PANEL_MIN_WIDTH = 320
 const SAFETY_HOSPITAL_BED_PANEL_MAX_WIDTH = 720
@@ -259,6 +267,7 @@ const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
 const SAFETY_FAC_OPENED_KEY = "safetyFac"
+const VILLAGE_PATROL_OPENED_KEY = "villagePatrol"
 const SAFETY_HOSPITAL_BED_OPENED_KEY = "safetyBedState"
 /** serviceList `ser_eng`: jsjWaterLevel — 저수지 수위(saftyJsj) */
 const JSJ_WATER_LEVEL_OPENED_KEY = "jsjWaterLevel"
@@ -312,6 +321,14 @@ const GROUNDWATER_PERMIT_PANEL_MAX_WIDTH = 960
 const GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH = 400
 const GROUNDWATER_PERMIT_DETAIL_MIN_WIDTH = 320
 const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
+
+/** 안전점검 — ser_eng roadFMS */
+const FMS_PANEL_DEFAULT_WIDTH = 500
+const FMS_PANEL_MIN_WIDTH = 440
+const FMS_PANEL_MAX_WIDTH = 650
+const FMS_DETAIL_DEFAULT_WIDTH = 420
+const FMS_DETAIL_MIN_WIDTH = 320
+const FMS_DETAIL_MAX_WIDTH = 640
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -400,8 +417,13 @@ function MapLayoutContent({
   const setRiverConstructionLedgerRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus
   const setRiverConstructionLedgerGeomEditingId =
     mapContext?.setRiverConstructionLedgerGeomEditingId
+  const setFmsLinkagePanelOpen = mapContext?.setFmsLinkagePanelOpen
+  const setFmsLinkageOverlayRows = mapContext?.setFmsLinkageOverlayRows
+  const setFmsLinkageSelectedId = mapContext?.setFmsLinkageSelectedId
+  const fmsLinkageDetailId = mapContext?.fmsLinkageSelectedId ?? null
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
+  const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
   const setRoadCctvExtentWgs84 = mapContext?.setRoadCctvExtentWgs84
@@ -450,6 +472,7 @@ function MapLayoutContent({
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
   const safetyFacOpen = openedWindows.includes(SAFETY_FAC_OPENED_KEY)
+  const villagePatrolOpen = openedWindows.includes(VILLAGE_PATROL_OPENED_KEY)
   const safetyHospitalBedOpen = openedWindows.includes(SAFETY_HOSPITAL_BED_OPENED_KEY)
   const jsjWaterLevelOpen = openedWindows.includes(JSJ_WATER_LEVEL_OPENED_KEY)
   const roadDocOpen = openedWindows.includes(ROAD_DOC_OPENED_KEY)
@@ -508,6 +531,8 @@ function MapLayoutContent({
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
   const useFeeOpen = Boolean(useFeeSerEng)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
+  const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
+  const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -607,6 +632,7 @@ function MapLayoutContent({
   const [safetyFacDetail, setSafetyFacDetail] = useState<SafetyFacFacilityRow | null>(null)
   const [safetyFacDetailWidth, setSafetyFacDetailWidth] = useState(SAFETY_FAC_DETAIL_DEFAULT_WIDTH)
   const safetyFacDetailOpen = safetyFacOpen && safetyFacDetail != null
+  const [villagePatrolPanelWidth, setVillagePatrolPanelWidth] = useState(VILLAGE_PATROL_PANEL_DEFAULT_WIDTH)
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
   )
@@ -656,6 +682,9 @@ function MapLayoutContent({
   const [groundwaterPermitDetailWidth, setGroundwaterPermitDetailWidth] = useState(
     GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH
   )
+  const [fmsLinkagePanelWidth, setFmsLinkagePanelWidth] = useState(FMS_PANEL_DEFAULT_WIDTH)
+  const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
+  const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -701,6 +730,7 @@ function MapLayoutContent({
     (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
     (safetyFacDetailOpen ? safetyFacDetailWidth : 0) +
+    (villagePatrolOpen ? villagePatrolPanelWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
@@ -711,7 +741,9 @@ function MapLayoutContent({
     (useFeeOpen ? useFeePanelWidth : 0) +
     (useFeeDetailOpen ? useFeeDetailWidth : 0) +
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
-    (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
+    (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
+    (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
+    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -792,8 +824,10 @@ function MapLayoutContent({
     safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
   const safetyFacDetailLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
-  const safetyHospitalBedPanelLeftPx =
+  const villagePatrolPanelLeftPx =
     safetyFacDetailLeftPx + (safetyFacDetailOpen ? safetyFacDetailWidth : 0)
+  const safetyHospitalBedPanelLeftPx =
+    villagePatrolPanelLeftPx + (villagePatrolOpen ? villagePatrolPanelWidth : 0)
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
@@ -814,6 +848,11 @@ function MapLayoutContent({
   const groundwaterPermitDetailLeftPx =
     groundwaterPermitPanelLeftPx +
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0)
+  const fmsLinkagePanelLeftPx =
+    groundwaterPermitDetailLeftPx +
+    (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
+  const fmsLinkageDetailLeftPx =
+    fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
@@ -968,6 +1007,10 @@ function MapLayoutContent({
   useEffect(() => {
     setSafetyFacPanelOpen?.(safetyFacOpen)
   }, [setSafetyFacPanelOpen, safetyFacOpen])
+
+  useEffect(() => {
+    setComplaintPanelOpen?.(complaintManagementOpen)
+  }, [setComplaintPanelOpen, complaintManagementOpen])
 
   useEffect(() => {
     if (!roadCctvOpen) {
@@ -1182,6 +1225,14 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseFmsLinkage = () => {
+    setFmsGeomToastMsg(null)
+    setFmsLinkageSelectedId?.(null)
+    setFmsLinkageOverlayRows?.([])
+    const next = openedWindows.filter((w) => !isFmsOpenedToken(w))
+    setOpened(next)
+  }
+
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
@@ -1261,6 +1312,23 @@ function MapLayoutContent({
   useEffect(() => {
     if (!groundwaterPermitOpen) setGroundwaterPermitDetailId(null)
   }, [groundwaterPermitOpen])
+
+  useEffect(() => {
+    setFmsLinkagePanelOpen?.(fmsLinkageOpen)
+    if (!fmsLinkageOpen) {
+      setFmsLinkageSelectedId?.(null)
+      setFmsLinkageOverlayRows?.([])
+    }
+  }, [
+    fmsLinkageOpen,
+    setFmsLinkagePanelOpen,
+    setFmsLinkageSelectedId,
+    setFmsLinkageOverlayRows,
+  ])
+
+  useEffect(() => {
+    setFmsLinkageSelectedId?.(null)
+  }, [systemKeyFromUrl, setFmsLinkageSelectedId])
 
   useEffect(() => {
     const onToggle = () => {
@@ -1373,6 +1441,11 @@ function MapLayoutContent({
   useEffect(() => {
     if (!safetyFacOpen) setSafetyFacDetail(null)
   }, [safetyFacOpen])
+
+  const handleCloseVillagePatrol = () => {
+    const next = openedWindows.filter((w) => w !== VILLAGE_PATROL_OPENED_KEY)
+    setOpened(next)
+  }
 
   const handleCloseSafetyHospitalBed = () => {
     const next = openedWindows.filter((w) => w !== SAFETY_HOSPITAL_BED_OPENED_KEY)
@@ -2237,6 +2310,20 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {villagePatrolOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={villagePatrolPanelWidth}
+                minWidth={VILLAGE_PATROL_PANEL_MIN_WIDTH}
+                maxWidth={VILLAGE_PATROL_PANEL_MAX_WIDTH}
+                leftOffsetPx={villagePatrolPanelLeftPx}
+                onWidthChange={setVillagePatrolPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <VillagePatrolListPanel onClose={handleCloseVillagePatrol} />
+              </MapSideListPanel>
+            </div>
+          )}
           {safetyHospitalBedOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2359,6 +2446,46 @@ function MapLayoutContent({
                 <GroundwaterPermitDetailPanel
                   detailId={groundwaterPermitDetailId}
                   onClose={() => setGroundwaterPermitDetailId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {fmsLinkageOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={fmsLinkagePanelWidth}
+                minWidth={FMS_PANEL_MIN_WIDTH}
+                maxWidth={FMS_PANEL_MAX_WIDTH}
+                leftOffsetPx={fmsLinkagePanelLeftPx}
+                onWidthChange={setFmsLinkagePanelWidth}
+              >
+                <FmsLinkageListPanel
+                  onClose={handleCloseFmsLinkage}
+                  selectedDetailId={fmsLinkageDetailId}
+                  onSelectDetailId={(id) => setFmsLinkageSelectedId?.(id)}
+                  onGeomToast={setFmsGeomToastMsg}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {fmsLinkageOpen && fmsLinkageDetailId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={fmsLinkageDetailWidth}
+                minWidth={FMS_DETAIL_MIN_WIDTH}
+                maxWidth={FMS_DETAIL_MAX_WIDTH}
+                leftOffsetPx={fmsLinkageDetailLeftPx}
+                onWidthChange={setFmsLinkageDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <FmsLinkageDetailPanel
+                  detailId={fmsLinkageDetailId}
+                  onClose={() => {
+                    setFmsGeomToastMsg(null)
+                    setFmsLinkageSelectedId?.(null)
+                  }}
+                  toastMsg={fmsGeomToastMsg}
+                  onToastClear={() => setFmsGeomToastMsg(null)}
                 />
               </MapSideListPanel>
             </div>

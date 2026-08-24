@@ -198,9 +198,9 @@ export function RiverUseLedgerListPanel({
   }, [keyword, refreshKey]);
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">하천점용</span>
+    <div className="flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">하천점용</span>
         <div className="flex items-center gap-1">
           {onAdd && (
             <LayerRowAddButton
@@ -211,7 +211,7 @@ export function RiverUseLedgerListPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -220,39 +220,39 @@ export function RiverUseLedgerListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 border-b border-border px-3 py-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-border"
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
         {error && (
-          <div className="shrink-0 px-3 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">
+          <div className="shrink-0 px-3 py-2 text-xs text-destructive bg-destructive/10 border-b border-destructive/20">
             {error}
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           <table className="w-full min-w-[520px] border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50 shadow-[0_1px_0_0_var(--border)]">
               <tr>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   {headers.permitNo}
                 </th>
-                <th className="min-w-[120px] px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="min-w-[120px] px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   {headers.spot}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   {headers.col3}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-slate-700 border-b border-slate-200">
+                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
                   {headers.col4}
                 </th>
               </tr>
@@ -260,13 +260,13 @@ export function RiverUseLedgerListPanel({
             <tbody>
               {loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
                     불러오는 중…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
                     {error ? "데이터를 표시할 수 없습니다." : "조회된 항목이 없습니다."}
                   </td>
                 </tr>
@@ -287,21 +287,21 @@ export function RiverUseLedgerListPanel({
                         }
                       }}
                       className={cn(
-                        "border-b border-slate-100 cursor-pointer hover:bg-slate-50/80 transition-colors",
+                        "border-b border-border cursor-pointer hover:bg-muted/50 transition-colors",
                         isSelected && "bg-primary/10"
                       )}
                       aria-busy={isBusy}
                     >
-                      <td className="max-w-[140px] truncate px-2 py-1.5 text-slate-800" title={row.permitNo}>
+                      <td className="max-w-[140px] truncate px-2 py-1.5 text-foreground" title={row.permitNo}>
                         {row.permitNo || "—"}
                       </td>
-                      <td className="px-2 py-1.5 text-slate-700 align-top break-words" title={row.spot}>
+                      <td className="px-2 py-1.5 text-foreground/90 align-top break-words" title={row.spot}>
                         {row.spot || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-700" title={row.col3}>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-foreground/90" title={row.col3}>
                         {row.col3 || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-700" title={row.col4}>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-foreground/90" title={row.col4}>
                         {row.col4 || "—"}
                       </td>
                     </tr>
@@ -312,7 +312,7 @@ export function RiverUseLedgerListPanel({
           </table>
         </div>
         {!loading && items.length > 0 && (
-          <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+          <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
             {items.length.toLocaleString()}건
           </div>
         )}

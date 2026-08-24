@@ -4,6 +4,7 @@ import { call } from '@/lib/api';
 import {
   buildPnuQueryParams,
   hasParcelLandInfoTabData,
+  type HangmangCallLine,
 } from '@/lib/parcelLandNormalize';
 import {
   fetchLandInfoConfig,
@@ -234,6 +235,7 @@ export type ParcelTabData = {
   source?: 'kras' | 'koreps' | 'vworld' | 'mixed';
   /** 행망을 안 썼거나 실패한 이유 — 브이월드 폴백 원인 확인용 */
   krasSkipReason?: string;
+  hangmangCalls?: HangmangCallLine[];
 };
 
 function emptyParcelTabData(): ParcelTabData {
@@ -267,15 +269,17 @@ function normalizeParcelTabPayload(
         ? payload.source
         : undefined,
     krasSkipReason: skip || undefined,
+    hangmangCalls: Array.isArray(payload.hangmangCalls) ? payload.hangmangCalls : undefined,
   };
 }
 
-/** 행망이면 KRAS 우선, 없거나 실패하면 브이월드 */
+/** 행망이면 KRAS 우선, 없거나 실패하면 브이월드. 호출 여부는 항상 서버에서 받아 표시 */
 export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
 
   let krasSkipReason: string | undefined;
+  let hangmangCalls: HangmangCallLine[] | undefined;
   const cfg = await fetchLandInfoConfig();
 
   if (cfg.useKras) {
@@ -287,9 +291,10 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
       });
       const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
       krasSkipReason = String(payload?.krasSkipReason ?? payload?.error ?? '').trim() || undefined;
+      hangmangCalls = Array.isArray(payload?.hangmangCalls) ? payload.hangmangCalls : undefined;
       if (payload?.ok !== false) {
         const tab = normalizeParcelTabPayload(payload);
-        if (hasParcelLandInfoTabData(tab)) return tab;
+        if (hasParcelLandInfoTabData(tab)) return { ...tab, krasSkipReason, hangmangCalls };
       }
       if (!krasSkipReason) krasSkipReason = '행망 응답을 필지정보에 쓸 수 없어 브이월드로 표시';
     } catch (e) {
@@ -299,10 +304,10 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   }
 
   if (!toStr(args.vworldKey)) {
-    return { ...emptyParcelTabData(), source: undefined, krasSkipReason };
+    return { ...emptyParcelTabData(), source: undefined, krasSkipReason, hangmangCalls };
   }
   const vworld = await fetchVworldParcelTabData(args);
-  return { ...vworld, krasSkipReason };
+  return { ...vworld, krasSkipReason, hangmangCalls };
 }
 
 /** 필지 PNU 기준 최신 공시지가 1건 — 공용 브이월드 클라이언트 */

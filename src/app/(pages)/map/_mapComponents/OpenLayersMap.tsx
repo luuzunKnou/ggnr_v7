@@ -90,6 +90,7 @@ import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
 import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
 import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstructionLedgerMapHighlight';
 import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
+import { useFmsFacilityOverlayLayer } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
 import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
 import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
 import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler';
@@ -1007,6 +1008,7 @@ export default function OpenLayersMap({
   useRoadNetworkOverlayLayer(mapReady);
   useRiverConstructionLedgerMapHighlight(mapReady);
   useRiverConstructionLedgerOverlayLayer(mapReady);
+  useFmsFacilityOverlayLayer(mapReady);
 
   const roadCctvOverlay = mapContext?.roadCctvOverlay ?? null;
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay;
@@ -1069,6 +1071,7 @@ export default function OpenLayersMap({
     visibleLayerNames,
     roadCctvPanelOpen ||
       (mapContext?.safetyFacPanelOpen ?? false) ||
+      (mapContext?.complaintPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||
@@ -2119,11 +2122,8 @@ export default function OpenLayersMap({
     }
   };
 
-  /** 측정·도형 그리기 중에는 우측 목록 패널 호버/클릭 끄기 (지도 입력 우선) */
-  const overlayListPointerClass =
-    mapContext?.measurementActive || spatialDrawRequest || layerRowGeomEdit
-      ? 'pointer-events-none'
-      : 'pointer-events-auto';
+  /** 목록 패널은 항상 클릭 가능. 바깥 빈 공간은 상위 pointer-events-none으로 지도 측정·그리기가 받음 */
+  const overlayListPointerClass = 'pointer-events-auto';
 
   const jijukLayerEnabled =
     activeControls.includes('cadastral') &&

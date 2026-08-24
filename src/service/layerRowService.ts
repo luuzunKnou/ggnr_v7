@@ -2,17 +2,21 @@
  * defineLayer 기반 레이어 행 조회·수정 (국공유지, 도로점용 등 공통)
  */
 import { db } from '@/database/db';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { extent3857CenterTo4326, fetchParcelJibunFromCoord } from '@/lib/vworldAddressServer';
+import { getSessionUsrId } from '@/lib/auth/guard';
+import { usr } from '@/database/schema/usr';
 import { getPnuFromAddress } from './excelUploadService';
 import { getDefineTableKeyFieldName } from './standardService';
-import { recordDataLog } from './dataLogService';
+import { recordDataLog, type DataLogType } from './dataLogService';
+import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 
 const DEFAULT_SCHEMA = 'layer';
+const FMS_FACILITY_READ_ONLY_ERROR = '안전점검 시설물은 조회만 가능합니다.';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer', 'public']);
 /** jijuk — geometry_columns SRID=0, 실제 좌표는 EPSG:5181 */
 const JIJUK_GEOM_SRID = 5181;
@@ -245,7 +249,14 @@ async function getTableColumns(schema: string, table: string): Promise<string[]>
 
 function findColumnName(columns: string[], field: string): string | null {
   const lower = field.toLowerCase();
-  return columns.find((c) => c.toLowerCase() === lower) ?? null;
+  const exact = columns.find((c) => c.toLowerCase() === lower);
+  if (exact) return exact;
+  // SHP/DBF 10자 제한 (memo_contents → memo_conte)
+  if (lower.length > 10) {
+    const trunc = lower.slice(0, 10);
+    return columns.find((c) => c.toLowerCase() === trunc) ?? null;
+  }
+  return null;
 }
 
 /** 자식 FK 컬럼 — 힌트 우선, 없으면 점용/공통 관례 순 */
@@ -356,6 +367,14 @@ export async function getTableRowForEdit(params: {
 
 function normalizeChangeValue(raw: unknown): string | null {
   if (raw == null) return null;
+  if (typeof raw === 'object') {
+    try {
+      const s = JSON.stringify(raw);
+      return s === '' ? null : s;
+    } catch {
+      return String(raw);
+    }
+  }
   const s = String(raw).trim();
   return s === '' ? null : s;
 }
@@ -829,7 +848,28 @@ function safeLogUser(raw?: string | null): string | null {
   return s || null;
 }
 
-/** defineLayer 허용 필드만 UPDATE */
+/** 세션 사용자 → `usrId(usrName)` (이름 없으면 usrId만) */
+async function resolveSessionLogUser(): Promise<string | null> {
+  const usrId = await getSessionUsrId();
+  if (!usrId) return null;
+  try {
+    const [row] = await db
+      .select({ usrName: usr.usrName })
+      .from(usr)
+      .where(eq(usr.usrId, usrId))
+      .limit(1);
+    const name = row?.usrName?.trim();
+    return name ? `${usrId}(${name})` : usrId;
+  } catch {
+    return usrId;
+  }
+}
+
+async function resolveLogUser(raw?: string | null): Promise<string | null> {
+  return safeLogUser(raw) ?? (await resolveSessionLogUser());
+}
+
+/** defineLayer 허용 필드만 UPDATE. allowPhysicalColumns 이면 실제 컬럼도 저장 */
 export async function updateTableRowByKey(params: {
   table: string;
   schema?: string;
@@ -838,14 +878,21 @@ export async function updateTableRowByKey(params: {
   changes: Record<string, unknown>;
   excludeFields?: string[];
   includeHiddenDetail?: boolean;
+  /** true면 defineLayer에 없어도 DB 컬럼이면 저장 (메뉴 전용 저장용) */
+  allowPhysicalColumns?: boolean;
   geomWkt5181?: string | null;
   geomClear?: boolean;
   /** 이력 작업자 표시 문자열 */
   logUser?: string | null;
+  /** 이력 작업분류. 기본은 수정. 논리삭제 등에서 삭제로 남길 때 사용 */
+  logType?: DataLogType;
 }): Promise<{ success: boolean; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   const keyValue = String(params?.keyValue ?? '').trim();
   if (!tableGuess || !keyValue) return { success: false, error: 'table과 keyValue가 필요합니다.' };
+  if (isFmsFacilityLayerTable(tableGuess)) {
+    return { success: false, error: FMS_FACILITY_READ_ONLY_ERROR };
+  }
 
   const changes = params?.changes ?? {};
   const entries = Object.entries(changes).filter(([k]) => String(k).trim());
@@ -889,12 +936,15 @@ export async function updateTableRowByKey(params: {
   });
 
   const setParts: string[] = [];
+  const allowPhysical = params.allowPhysicalColumns === true;
   for (const [key, rawVal] of entries) {
     const col = findColumnName(columns, key);
     if (!col) continue;
     if (GEOM_COLUMN_NAMES.has(col.toLowerCase())) continue;
-    const def = editableFields.get(col.toLowerCase());
-    if (!def) continue;
+    if (!allowPhysical) {
+      const def = editableFields.get(col.toLowerCase());
+      if (!def) continue;
+    }
     const val = normalizeChangeValue(rawVal);
     const oldKey =
       oldData && Object.prototype.hasOwnProperty.call(oldData, col)
@@ -962,10 +1012,11 @@ export async function updateTableRowByKey(params: {
       keyCol,
       keyValue,
     });
+    const logUser = await resolveLogUser(params.logUser);
     void recordDataLog({
       source: '시스템',
-      type: '수정',
-      user: safeLogUser(params.logUser),
+      type: params.logType ?? '수정',
+      user: logUser,
       tableName: tableGuess,
       keyField,
       keyValue,
@@ -1027,7 +1078,7 @@ function buildInsertEditableMap(
   );
 }
 
-/** defineLayer 허용 필드만 INSERT */
+/** defineLayer 허용 필드만 INSERT. allowPhysicalColumns 이면 실제 컬럼도 저장 */
 export async function insertTableRow(params: {
   table: string;
   schema?: string;
@@ -1035,11 +1086,17 @@ export async function insertTableRow(params: {
   values: Record<string, unknown>;
   excludeFields?: string[];
   includeHiddenDetail?: boolean;
+  /** true면 defineLayer에 없어도 DB 컬럼이면 저장 (메뉴 전용 저장용) */
+  allowPhysicalColumns?: boolean;
   geomWkt5181?: string | null;
   logUser?: string | null;
+  logType?: DataLogType;
 }): Promise<{ success: boolean; keyValue?: string; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   if (!tableGuess) return { success: false, error: 'table이 필요합니다.' };
+  if (isFmsFacilityLayerTable(tableGuess)) {
+    return { success: false, error: FMS_FACILITY_READ_ONLY_ERROR };
+  }
 
   const schema = resolveSchema(params?.schema);
   const table = await resolveLayerPhysicalRelName(schema, tableGuess);
@@ -1067,12 +1124,16 @@ export async function insertTableRow(params: {
   const insertVals: string[] = [];
 
   const insertedColSet = new Set<string>();
+  const allowPhysical = params.allowPhysicalColumns === true;
 
   for (const [key, rawVal] of Object.entries(values)) {
     const col = findColumnName(columnMeta.map((c) => c.name), key);
     if (!col) continue;
-    const def = editableFields.get(col.toLowerCase());
-    if (!def) continue;
+    if (GEOM_COLUMN_NAMES.has(col.toLowerCase())) continue;
+    if (!allowPhysical) {
+      const def = editableFields.get(col.toLowerCase());
+      if (!def) continue;
+    }
     const val = normalizeChangeValue(rawVal);
     insertCols.push(quoteIdent(col));
     insertVals.push(val == null ? 'NULL' : `'${esc(val)}'`);
@@ -1160,10 +1221,11 @@ export async function insertTableRow(params: {
       if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
       const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
       const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+      const logUser = await resolveLogUser(params.logUser);
       void recordDataLog({
         source: '시스템',
-        type: '추가',
-        user: safeLogUser(params.logUser),
+        type: params.logType ?? '추가',
+        user: logUser,
         tableName: tableGuess,
         keyField,
         keyValue,
@@ -1189,19 +1251,31 @@ export async function insertTableRow(params: {
       if (!fid || !Number.isFinite(Number(fid))) {
         return { success: false, error: '등록 후 순번을 확인하지 못했습니다.' };
       }
+      await db.execute(
+        sql.raw(
+          `UPDATE ${quoteIdent(schema)}.${quoteIdent(table)}
+           SET ${quoteIdent(resolvedKeyCol)} = '${esc(fid)}'
+           WHERE ${quoteIdent(ogcFidCol)} = ${Number(fid)}`
+        )
+      );
       const keyValue = fid;
-      const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
-      const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+      const newData = await fetchRowAttrsAsJson({
+        schema,
+        table,
+        keyCol: resolvedKeyCol,
+        keyValue,
+      });
+      const logUser = await resolveLogUser(params.logUser);
       void recordDataLog({
         source: '시스템',
-        type: '추가',
-        user: safeLogUser(params.logUser),
+        type: params.logType ?? '추가',
+        user: logUser,
         tableName: tableGuess,
         keyField,
         keyValue,
         newData: newData ?? undefined,
       }).catch(() => {});
-      return { success: true, keyValue };
+      return { success: true, keyValue: fid };
     }
 
     const res = await db.execute(
@@ -1212,10 +1286,11 @@ export async function insertTableRow(params: {
     if (!keyValue) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
     const keyCol = findColumnName(columnMeta.map((c) => c.name), keyField)!;
     const newData = await fetchRowAttrsAsJson({ schema, table, keyCol, keyValue });
+    const logUser = await resolveLogUser(params.logUser);
     void recordDataLog({
       source: '시스템',
-      type: '추가',
-      user: safeLogUser(params.logUser),
+      type: params.logType ?? '추가',
+      user: logUser,
       tableName: tableGuess,
       keyField,
       keyValue,
@@ -2402,10 +2477,14 @@ export async function deleteTableRowByKey(params: {
   childTableNames?: string[];
   childParentField?: string;
   logUser?: string | null;
+  logType?: DataLogType;
 }): Promise<{ success: boolean; error?: string }> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
   const keyValue = String(params?.keyValue ?? '').trim();
   if (!tableGuess || !keyValue) return { success: false, error: 'table과 keyValue가 필요합니다.' };
+  if (isFmsFacilityLayerTable(tableGuess)) {
+    return { success: false, error: FMS_FACILITY_READ_ONLY_ERROR };
+  }
 
   const schema = resolveSchema(params?.schema);
   const table = await resolveLayerPhysicalRelName(schema, tableGuess);
@@ -2476,10 +2555,11 @@ export async function deleteTableRowByKey(params: {
     const deleted = res.rows?.[0] as { deleted_key?: string } | undefined;
     if (!deleted?.deleted_key) return { success: false, error: '삭제할 데이터를 찾을 수 없습니다.' };
 
+    const logUser = await resolveLogUser(params.logUser);
     void recordDataLog({
       source: '시스템',
-      type: '삭제',
-      user: safeLogUser(params.logUser),
+      type: params.logType ?? '삭제',
+      user: logUser,
       tableName: tableGuess,
       keyField,
       keyValue,

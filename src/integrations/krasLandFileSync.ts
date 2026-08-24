@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import iconv from 'iconv-lite';
 
+import { parseKrasBodyFieldMaps } from '@/lib/krasLandUseXml';
 import { pool } from '@/database/db';
 import { extractZip, withAdvisoryLock } from '@/integrations/core';
 import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';

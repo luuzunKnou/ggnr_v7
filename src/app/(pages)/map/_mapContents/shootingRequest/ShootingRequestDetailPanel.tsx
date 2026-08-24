@@ -38,6 +38,7 @@ import {
 import { shootTypeToAerialKind } from './shootTypeToAerialKind';
 import type { ShootingListMode } from './ShootingRequestPanel';
 import { call } from '@/lib/api';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 
 /** 작업단위 상세 하단과 동일 — 색 강조·아이콘 버튼 쓰지 않음 */
 const footerBtnClass =
@@ -86,6 +87,19 @@ export function ShootingRequestDetailPanel({
     void loadShootingRequestDetail(detailId)
       .catch(() => undefined)
       .finally(() => setDetailLoading(false));
+  }, [detailId, isNew]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isNew) return;
+    const id = String(detailId ?? '').trim();
+    if (!id) return;
+    recordDataViewLog({
+      tableName: 'shooting_request',
+      keyField: 'id',
+      keyValue: id,
+      serviceName: '촬영요청',
+    });
   }, [detailId, isNew]);
 
   useEffect(() => {
