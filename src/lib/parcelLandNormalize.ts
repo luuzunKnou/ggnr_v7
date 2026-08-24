@@ -71,11 +71,11 @@ export function parcelLandLinkageSourceTitle(source: ParcelLandRowSource): strin
   if (!label) return undefined;
   switch (normalizeParcelLandSource(source)) {
     case 'kras':
-      return '행망(KRAS)에서 조회';
+      return 'KRAS에서 조회';
     case 'koreps':
-      return '코렙스(공시지가)에서 조회';
+      return 'KOREPS에서 조회';
     case 'vworld':
-      return '브이월드에서 조회';
+      return 'V-WORLD에서 조회';
     case 'seum':
       return '세움터 적재 DB에서 조회';
     case 'portal':
@@ -92,11 +92,11 @@ export function parcelLandLinkageSourceLabel(source: ParcelLandRowSource): strin
   if (!SHOW_PARCEL_LAND_LINKAGE_DEBUG_UI) return undefined;
   switch (normalizeParcelLandSource(source)) {
     case 'kras':
-      return '행망';
+      return 'KRAS';
     case 'koreps':
-      return '코렙스';
+      return 'KOREPS';
     case 'vworld':
-      return '브이월드';
+      return 'V-WORLD';
     case 'seum':
       return '세움터';
     case 'portal':
