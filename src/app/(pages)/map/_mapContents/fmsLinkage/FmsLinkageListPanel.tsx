@@ -8,7 +8,14 @@ import { cn } from '@/lib/utils'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
-import { FMS_EMPTY_LIST_MESSAGE, FMS_LIST_COLUMNS, FMS_LIST_TITLE } from './fmsLinkageBinding'
+import {
+  defaultFmsListSystemFilter,
+  FMS_EMPTY_LIST_MESSAGE,
+  FMS_LIST_COLUMNS,
+  FMS_LIST_SYSTEM_FILTERS,
+  FMS_LIST_TITLE,
+  type FmsListSystemFilter,
+} from './fmsLinkageBinding'
 
 type ListRow = {
   id: string
@@ -72,6 +79,9 @@ export function FmsLinkageListPanel({
   const setOverlayRows = mapContext?.setFmsLinkageOverlayRows
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const [systemFilter, setSystemFilter] = useState<FmsListSystemFilter>(() =>
+    defaultFmsListSystemFilter(system)
+  )
   const [rows, setRows] = useState<ListRow[]>([])
   const [sorts, setSorts] = useState<SortSpec[]>([])
   const [loading, setLoading] = useState(false)
@@ -112,7 +122,7 @@ export function FmsLinkageListPanel({
         const res = await call('', 'POST', {
           service: 'fmsLinkageService',
           action: 'getFmsFacilityExtent3857ByFacilNo',
-          params: { facilNo: key, system: system || undefined },
+          params: { facilNo: key, system: systemFilter || undefined },
         })
         const data = res?.data ?? res
         const ext = data?.extent3857 as unknown
@@ -135,7 +145,7 @@ export function FmsLinkageListPanel({
         onGeomToast?.('도형을 찾을 수 없습니다.')
       }
     },
-    [mapContext, system, onGeomToast]
+    [mapContext, systemFilter, onGeomToast]
   )
 
   const handleRowSelect = useCallback(
@@ -159,7 +169,7 @@ export function FmsLinkageListPanel({
     void call('', 'POST', {
       service: 'fmsLinkageService',
       action: 'getFmsFacilityList',
-      params: { keyword: debouncedKeyword, system: system || undefined },
+      params: { keyword: debouncedKeyword, system: systemFilter || undefined },
     })
       .then((res) => {
         if (cancelled) return
@@ -178,14 +188,14 @@ export function FmsLinkageListPanel({
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword, system])
+  }, [debouncedKeyword, systemFilter])
 
   useEffect(() => {
     let cancelled = false
     void call('', 'POST', {
       service: 'fmsLinkageService',
       action: 'getFmsFacilityGeomOverlayList',
-      params: { keyword: debouncedKeyword, system: system || undefined },
+      params: { keyword: debouncedKeyword, system: systemFilter || undefined },
     })
       .then((res) => {
         if (cancelled) return
