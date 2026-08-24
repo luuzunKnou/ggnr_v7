@@ -680,16 +680,16 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
               <col className="w-[4.75rem]" />
               <col className="w-[5.25rem]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted/50 shadow-[0_1px_0_0_var(--border)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50">
               <tr>
-                <th className="px-2 py-2 font-semibold text-foreground/90 border-b border-border">공사명</th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">공사명</th>
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   하천
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   업체명
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   착수일자
                 </th>
               </tr>

@@ -1,7 +1,6 @@
 * {
-  stroke: #FFFFFF, #FF9800;
-  stroke-width: 3, 2;
-  stroke-opacity: 0.4, 0.85;
-  stroke-dasharray: 8 4, 8 4;
+  stroke: #FF9800;
+  stroke-width: 2;
+  stroke-opacity: 0.85;
   z-index: 0;
 }

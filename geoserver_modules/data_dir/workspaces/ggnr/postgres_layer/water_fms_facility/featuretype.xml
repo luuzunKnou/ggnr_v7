@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-389342b5:1a032442aee:-7f0b</id>
+  <name>water_fms_facility</name>
+  <nativeName>water_fms_facility</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>water_fms_facility</title>
+  <keywords>
+    <string>features</string>
+    <string>water_fms_facility</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>383694.648573339</minx>
+    <maxx>396818.46990590007</maxx>
+    <miny>341261.8211403198</miny>
+    <maxy>365503.5209023901</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.05161268671174</minx>
+    <maxx>129.20431072201208</maxx>
+    <miny>36.54944113812087</miny>
+    <maxy>36.770361879716695</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

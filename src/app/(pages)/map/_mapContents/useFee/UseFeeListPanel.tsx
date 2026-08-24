@@ -504,7 +504,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
               <col className="w-[90px]" />
               <col className="w-[80px]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted/50 shadow-[0_1px_0_0_var(--border)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50">
               <tr>
                 {SORT_COLUMNS.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key)
@@ -519,7 +519,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                   return (
                     <th
                       key={col.key}
-                      className="whitespace-nowrap border-b border-border px-1.5 py-1.5 text-center font-semibold text-foreground/90"
+                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                     >
                       <button
                         type="button"
