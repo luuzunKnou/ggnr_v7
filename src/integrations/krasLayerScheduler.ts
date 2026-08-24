@@ -1,4 +1,5 @@
 import { calendarSlotKey, intervalSlotKey } from '@/integrations/integrationSchedule';
+import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';
 import { isKrasLayerAutoEnabled } from '@/integrations/krasLayerSync';
 import { runKrasFullSync } from '@/integrations/krasLandFileSync';
 import { KRAS_LAYER_REFRESH_SCHEDULE } from '@/integrations/krasLayerSync.config';
@@ -16,6 +17,11 @@ async function runDailyJob(label: string): Promise<void> {
     console.info(`${LOG} ok (${label}) success=${r.success} skipped=${r.skipped} failed=${r.failed}`);
   } catch (e) {
     console.warn(`${LOG} fail:`, e instanceof Error ? e.message : e);
+    void appendLinkageError({
+      system: 'KRAS',
+      title: `매일 배치 (${label})`,
+      detail: formatLinkageError(e),
+    });
   }
 }
 

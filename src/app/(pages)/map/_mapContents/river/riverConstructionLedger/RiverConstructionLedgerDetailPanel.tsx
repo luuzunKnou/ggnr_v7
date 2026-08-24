@@ -49,6 +49,7 @@ import {
   withServiceFileThumbQuery,
 } from "../../../_mapComponents/standard/useServiceFileData";
 import { useMapContext } from "../../../_mapComponents/MapContext";
+import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
 import {
@@ -1298,9 +1299,17 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
   const handleDelete = async () => {
     if (!window.confirm(`「${row.name || "신규 공사"}」을(를) 삭제할까요?`)) return;
-    if (isNewRow) {
+    const clearDeletedFromMap = () => {
+      finishParcelGeomEdit();
       mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
+      mapContext?.setRiverConstructionLedgerOverlayRows?.((rows) =>
+        rows.filter((r) => r.id !== row.id)
+      );
       mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      setRiverFocus?.(null);
+    };
+    if (isNewRow) {
+      clearDeletedFromMap();
       return;
     }
     setDeleting(true);
@@ -1315,8 +1324,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         window.alert(String(data?.error ?? "삭제에 실패했습니다."));
         return;
       }
-      mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
-      mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      clearDeletedFromMap();
+      const map = mapContext?.mapInstanceRef?.current;
+      refreshServiceWmsLayer(map);
+      requestAnimationFrame(() => refreshServiceWmsLayer(map));
     } catch (e: unknown) {
       window.alert(e instanceof Error ? e.message : "삭제에 실패했습니다.");
     } finally {

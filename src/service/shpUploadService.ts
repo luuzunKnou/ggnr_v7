@@ -1264,6 +1264,8 @@ export async function createTableFromShp(params: {
   dbSchema?: 'layer' | 'public_layer';
   /** 테이블명 강제 (스키마 재생성용 임시 테이블 등) */
   tableNameOverride?: string;
+  /** false면 공간 인덱스를 만들지 않음(임시 테이블명 충돌 방지). 기본 true */
+  spatialIndex?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
@@ -1325,6 +1327,7 @@ export async function createTableFromShp(params: {
         ...(sourceSrs ? (['-s_srs', sourceSrs] as const) : []),
         '-t_srs', targetSrs,
         '-lco', 'GEOMETRY_NAME=geom',
+        ...(params.spatialIndex === false ? (['-lco', 'SPATIAL_INDEX=NO'] as const) : []),
         // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (PRECISION=NO/FLOAT8 사용 안 함)
         ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
         '-overwrite',

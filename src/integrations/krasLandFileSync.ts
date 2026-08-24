@@ -9,6 +9,7 @@ import iconv from 'iconv-lite';
 
 import { pool } from '@/database/db';
 import { extractZip, withAdvisoryLock } from '@/integrations/core';
+import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';
 import {
   buildKrasQuery,
   fetchKrasBytes,
@@ -31,7 +32,7 @@ import {
   KRAS_LAYER_SCHEMA_CANDIDATES,
 } from '@/integrations/krasLayerSync.config';
 import type { KrasLayerSyncResult } from '@/integrations/krasLayerSync';
-import { parseKrasBodyFieldMaps } from '@/lib/krasLandUseXml';
+import { krasSyncWorkDir, pruneOldKrasSyncDays } from '@/integrations/krasSyncKeepDir';
 import { createOrUpdateGeoServerLayer } from '@/service/devTestService';
 
 const LOG = '[kras-land-file]';
@@ -428,10 +429,6 @@ export async function recreateLandownFromBasic(): Promise<KrasStepResult> {
   }
 }
 
-function dataDir(): string {
-  return (process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir').trim() || 'd:\\ggnr_data_dir';
-}
-
 async function findFirstTxt(dir: string): Promise<string | null> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const e of entries) {
@@ -456,31 +453,28 @@ export async function refreshKorepsPriceFile(): Promise<KrasStepResult> {
     throw new Error('공시지가 파일이 압축 형식이 아닙니다');
   }
 
-  const workDir = path.join(dataDir(), 'kras_sync', 'koreps00039');
+  await pruneOldKrasSyncDays();
+  const workDir = krasSyncWorkDir('koreps00039');
   await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   await fs.mkdir(workDir, { recursive: true });
   const zipPath = path.join(workDir, `${queryId}.zip`);
-  try {
-    await fs.writeFile(zipPath, buf);
-    await extractZip(zipPath, workDir);
-    const txtPath = await findFirstTxt(workDir);
-    if (!txtPath) {
-      return { status: 'skip', detail: '공시지가 파일 안 텍스트 없음 — 기존 유지' };
-    }
-    const txt = decodeText(await fs.readFile(txtPath));
-    const parsed = parseDelimitedRows(txt);
-    const rows = parsed.map((r) => pickCols(r, PRICE_FILE_COLS));
-    await ensureLinkageSchema();
-    return loadVarcharTable({
-      schema: KRAS_LAYER_CATALOG_SCHEMA,
-      table: KOREPS_PRICE_FILE_TABLE,
-      columns: [...PRICE_FILE_COLS],
-      rows,
-      label: '공시지가 파일',
-    });
-  } finally {
-    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  await fs.writeFile(zipPath, buf);
+  await extractZip(zipPath, workDir);
+  const txtPath = await findFirstTxt(workDir);
+  if (!txtPath) {
+    return { status: 'skip', detail: '공시지가 파일 안 텍스트 없음 — 기존 유지' };
   }
+  const txt = decodeText(await fs.readFile(txtPath));
+  const parsed = parseDelimitedRows(txt);
+  const rows = parsed.map((r) => pickCols(r, PRICE_FILE_COLS));
+  await ensureLinkageSchema();
+  return loadVarcharTable({
+    schema: KRAS_LAYER_CATALOG_SCHEMA,
+    table: KOREPS_PRICE_FILE_TABLE,
+    columns: [...PRICE_FILE_COLS],
+    rows,
+    label: '공시지가 파일',
+  });
 }
 
 async function runStep(
@@ -531,6 +525,7 @@ export async function runKrasFullSync(opts?: {
       const msg = e instanceof Error ? e.message : String(e);
       details.push(`레이어 목록 실패: ${msg}`);
       await opts?.onProgress?.(`실패 | 레이어 목록 | ${msg}`);
+      void appendLinkageError({ system: 'KRAS', title: '레이어 목록', detail: formatLinkageError(e) });
     }
 
     if (includeShape) {
@@ -549,6 +544,7 @@ export async function runKrasFullSync(opts?: {
         const msg = e instanceof Error ? e.message : String(e);
         details.push(`도형 실패: ${msg}`);
         await opts?.onProgress?.(`실패 | 도형 | ${msg}`);
+        void appendLinkageError({ system: 'KRAS', title: '도형', detail: formatLinkageError(e) });
       }
     }
 
@@ -559,6 +555,7 @@ export async function runKrasFullSync(opts?: {
       const msg = e instanceof Error ? e.message : String(e);
       details.push(`토지기본정보 실패: ${msg}`);
       await opts?.onProgress?.(`실패 | 토지기본정보 | ${msg}`);
+      void appendLinkageError({ system: 'KRAS', title: '토지기본정보', detail: formatLinkageError(e) });
     }
 
     try {
@@ -568,6 +565,7 @@ export async function runKrasFullSync(opts?: {
       const msg = e instanceof Error ? e.message : String(e);
       details.push(`소유현황 실패: ${msg}`);
       await opts?.onProgress?.(`실패 | 소유현황 | ${msg}`);
+      void appendLinkageError({ system: 'KRAS', title: '소유현황', detail: formatLinkageError(e) });
     }
 
     if (includePriceFile) {
@@ -578,6 +576,11 @@ export async function runKrasFullSync(opts?: {
         const msg = e instanceof Error ? e.message : String(e);
         details.push(`공시지가 파일 실패: ${msg}`);
         await opts?.onProgress?.(`실패 | 공시지가 파일 | ${msg}`);
+        void appendLinkageError({
+          system: 'KORPES',
+          title: '공시지가 파일',
+          detail: formatLinkageError(e),
+        });
       }
     }
 
@@ -593,6 +596,11 @@ export async function runKrasFullSync(opts?: {
     return await withAdvisoryLock('KRAS-layer', run);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    void appendLinkageError({
+      system: 'KRAS',
+      title: '연계 중단',
+      detail: formatLinkageError(e),
+    });
     if (/lock busy/i.test(msg)) throw new Error('이미 실행 중입니다.');
     throw e;
   }
@@ -616,6 +624,11 @@ export async function runKorepsPriceFileSync(opts?: {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    void appendLinkageError({
+      system: 'KORPES',
+      title: '공시지가 파일',
+      detail: formatLinkageError(e),
+    });
     if (/lock busy/i.test(msg)) throw new Error('이미 실행 중입니다.');
     throw e;
   }
@@ -647,6 +660,11 @@ export async function runKrasFileStep(
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    void appendLinkageError({
+      system: 'KRAS',
+      title: label,
+      detail: formatLinkageError(e),
+    });
     if (/lock busy/i.test(msg)) throw new Error('이미 실행 중입니다.');
     throw e;
   }

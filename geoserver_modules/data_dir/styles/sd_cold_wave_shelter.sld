@@ -35,11 +35,7 @@
                 <sld:AnchorPointX>0.5</sld:AnchorPointX>
                 <sld:AnchorPointY>0.5</sld:AnchorPointY>
               </sld:AnchorPoint>
-                          <sld:Displacement>
-                <sld:DisplacementX>0</sld:DisplacementX>
-                <sld:DisplacementY>0</sld:DisplacementY>
-              </sld:Displacement>
-</sld:Graphic>
+            </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
         <sld:VendorOption name="ruleEvaluation">first</sld:VendorOption>
@@ -52,7 +48,7 @@
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">10</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
             </sld:Font>

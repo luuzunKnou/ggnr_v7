@@ -8,6 +8,7 @@ import path from 'node:path';
 import tables from '@/config/defineLayer/tables.json';
 import { pool } from '@/database/db';
 import { withAdvisoryLock } from '@/integrations/core';
+import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';
 import {
   buildKrasQuery,
   fetchKrasBytes,
@@ -16,6 +17,7 @@ import {
   shouldStopAll,
   type KrasConn,
 } from '@/integrations/krasGateway';
+import { krasSyncRelShp, krasSyncWorkDir, pruneOldKrasSyncDays } from '@/integrations/krasSyncKeepDir';
 import {
   KRAS_DEFAULT_SOURCE_SRS,
   KRAS_DROP_GUARD_MIN_OLD,
@@ -181,10 +183,6 @@ function sourceSrs(): string {
   return /^EPSG:/i.test(raw) ? raw.toUpperCase() : `EPSG:${raw}`;
 }
 
-function dataDir(): string {
-  return (process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir').trim() || 'd:\\ggnr_data_dir';
-}
-
 function buildShapeParam(sendLayerCd: string, fileType: string, key: string, sgg: string): string {
   return buildKrasQuery({
     key,
@@ -226,7 +224,109 @@ async function countRows(schema: string, table: string): Promise<number> {
 }
 
 async function dropTable(schema: string, table: string): Promise<void> {
-  await pool.query(`drop table if exists ${qi(schema)}.${qi(table)}`);
+  await pool.query(`drop table if exists ${qi(schema)}.${qi(table)} cascade`);
+}
+
+async function relNameExists(schema: string, name: string): Promise<boolean> {
+  const { rows } = await pool.query<{ ok: boolean }>(
+    `select exists(
+       select 1 from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = $1 and c.relname = $2
+     ) as ok`,
+    [schema, name]
+  );
+  return Boolean(rows[0]?.ok);
+}
+
+async function uniqueRelName(schema: string, preferred: string): Promise<string> {
+  const base = preferred.replace(/_+$/, '') || preferred;
+  if (!(await relNameExists(schema, base))) return base;
+  for (let i = 2; i <= 20; i++) {
+    const n = `${base}_${i}`;
+    if (!(await relNameExists(schema, n))) return n;
+  }
+  throw new Error(`식별자 이름 충돌: ${schema}.${preferred}`);
+}
+
+/** 본 테이블로 이름만 바꾼 뒤에도 임시 테이블 이름이 남은 인덱스·제약·시퀀스를 본 이름으로 맞춤 */
+async function rebindKrasTmpNames(schema: string, table: string, tmpName: string): Promise<void> {
+  if (!(await tableExists(schema, table))) return;
+
+  const { rows: idxRows } = await pool.query<{ name: string }>(
+    `select i.relname as name
+     from pg_index x
+     join pg_class i on i.oid = x.indexrelid
+     join pg_class t on t.oid = x.indrelid
+     join pg_namespace n on n.oid = t.relnamespace
+     where n.nspname = $1 and t.relname = $2 and i.relname like $3
+     order by i.relname`,
+    [schema, table, `%${tmpName}%`]
+  );
+  for (const row of idxRows) {
+    const preferred = row.name.split(tmpName).join(table);
+    const next = await uniqueRelName(schema, preferred);
+    if (next === row.name) continue;
+    await pool.query(`alter index ${qi(schema)}.${qi(row.name)} rename to ${qi(next)}`);
+  }
+
+  const { rows: conRows } = await pool.query<{ name: string }>(
+    `select c.conname as name
+     from pg_constraint c
+     join pg_class t on t.oid = c.conrelid
+     join pg_namespace n on n.oid = t.relnamespace
+     where n.nspname = $1 and t.relname = $2 and c.conname like $3
+     order by c.conname`,
+    [schema, table, `%${tmpName}%`]
+  );
+  for (const row of conRows) {
+    const preferred = row.name.split(tmpName).join(table);
+    const next = await uniqueRelName(schema, preferred);
+    if (next === row.name) continue;
+    try {
+      await pool.query(
+        `alter table ${qi(schema)}.${qi(table)} rename constraint ${qi(row.name)} to ${qi(next)}`
+      );
+    } catch {
+      /* 기본키 인덱스를 먼저 바꾸면 제약 이름도 같이 바뀌는 경우가 있음 */
+    }
+  }
+
+  const { rows: seqRows } = await pool.query<{ name: string }>(
+    `select s.relname as name
+     from pg_class s
+     join pg_depend d on d.objid = s.oid and d.deptype = 'a'
+     join pg_class t on t.oid = d.refobjid
+     join pg_namespace n on n.oid = t.relnamespace
+     where s.relkind = 'S' and n.nspname = $1 and t.relname = $2 and s.relname like $3
+     order by s.relname`,
+    [schema, table, `%${tmpName}%`]
+  );
+  for (const row of seqRows) {
+    const preferred = row.name.split(tmpName).join(table);
+    const next = await uniqueRelName(schema, preferred);
+    if (next === row.name) continue;
+    await pool.query(`alter sequence ${qi(schema)}.${qi(row.name)} rename to ${qi(next)}`);
+  }
+}
+
+async function ensureKrasGeomIndex(schema: string, table: string): Promise<void> {
+  const { rows } = await pool.query<{ ok: boolean }>(
+    `select exists(
+       select 1
+       from pg_index x
+       join pg_class t on t.oid = x.indrelid
+       join pg_namespace n on n.oid = t.relnamespace
+       where n.nspname = $1 and t.relname = $2
+         and pg_get_indexdef(x.indexrelid) ilike '% gist %'
+     ) as ok`,
+    [schema, table]
+  );
+  if (rows[0]?.ok) return;
+  const idx = await uniqueRelName(schema, `${table}_geom_idx`);
+  await pool.query(
+    `create index ${qi(idx)} on ${qi(schema)}.${qi(table)} using gist (geom)`
+  );
 }
 
 async function swapTables(schema: string, tmp: string, target: string): Promise<void> {
@@ -257,7 +357,7 @@ async function syncOne(
 ): Promise<{ status: 'ok' | 'skip'; detail: string }> {
   const schema = await resolveSchema(target.targetTable);
   const tmpName = `${target.targetTable}_krastmp`;
-  const workDir = path.join(dataDir(), 'kras_sync', target.targetTable);
+  const workDir = krasSyncWorkDir(target.targetTable);
   const baseName = target.targetTable;
   await cleanupDir(workDir);
   await fs.mkdir(workDir, { recursive: true });
@@ -279,12 +379,14 @@ async function syncOne(
     }
 
     await dropTable(schema, tmpName);
-    const relShp = path.join('kras_sync', target.targetTable, `${baseName}.shp`).replace(/\\/g, '/');
+    await rebindKrasTmpNames(schema, target.targetTable, tmpName);
+    const relShp = krasSyncRelShp(target.targetTable, `${baseName}.shp`);
     const loaded = await createTableFromShp({
       pathOrResult: relShp,
       dbSchema: schema,
       tableNameOverride: tmpName,
       sourceSrsOverride: sourceSrs(),
+      spatialIndex: false,
     });
     if (!loaded.success) {
       throw new Error(loaded.error || '도형 적재 실패');
@@ -311,6 +413,12 @@ async function syncOne(
     }
 
     await swapTables(schema, tmpName, target.targetTable);
+    await rebindKrasTmpNames(schema, target.targetTable, tmpName);
+    try {
+      await ensureKrasGeomIndex(schema, target.targetTable);
+    } catch (e) {
+      console.warn(`${LOG} geom index ${target.targetTable}:`, e instanceof Error ? e.message : e);
+    }
     try {
       await createOrUpdateGeoServerLayer({ layerName: target.targetTable });
     } catch (e) {
@@ -322,7 +430,6 @@ async function syncOne(
     };
   } finally {
     await dropTable(schema, tmpName).catch(() => {});
-    await cleanupDir(workDir);
   }
 }
 
@@ -336,6 +443,7 @@ export async function runKrasLayerSync(opts?: {
   const throwIfAllFailed = opts?.throwIfAllFailed !== false;
   const run = async (): Promise<KrasLayerSyncResult> => {
     const conn = requireKrasConn();
+    await pruneOldKrasSyncDays();
     const targets = await listKrasLayerSyncTargets(scope);
     if (!targets.length) {
       throw new Error('받을 레이어가 없습니다. 레이어 목록 또는 주제도 정의를 확인하세요.');
@@ -367,6 +475,11 @@ export async function runKrasLayerSync(opts?: {
         const line = `${t.label} 실패: ${msg}`;
         details.push(line);
         console.warn(`${LOG} ${line}`);
+        void appendLinkageError({
+          system: 'KRAS',
+          title: `${t.label} (${t.targetTable})`,
+          detail: msg,
+        });
         await opts?.onProgress?.(`실패 ${seq}/${total} | ${t.label} | ${msg}`);
         if (shouldStopAll(msg)) {
           throw new Error(`${line} (중단 ${seq}/${total})`);
@@ -386,6 +499,11 @@ export async function runKrasLayerSync(opts?: {
     return await withAdvisoryLock('KRAS-layer', run);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    void appendLinkageError({
+      system: 'KRAS',
+      title: '도형 연계 중단',
+      detail: formatLinkageError(e),
+    });
     if (/lock busy/i.test(msg)) throw new Error('이미 실행 중입니다.');
     throw e;
   }

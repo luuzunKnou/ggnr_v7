@@ -2,6 +2,7 @@
  * Config 파일 읽기/쓰기 (systemList.config 등)
  * - 서버 측에서만 실행되며, 프로젝트 src/config 경로를 사용합니다.
  * - common.runtime.env + <project>.runtime.env, serviceList.config, systemList.config 는 호출 시마다 파일을 읽어 재시작 없이 반영됩니다.
+ * - SERVICE_SYSTEM_MAP: 기능(ser_eng):시스템(sys_key) 를 쉼표로 나열해 해당 프로젝트만 메뉴 소속을 옮김.
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
@@ -681,6 +682,51 @@ export function getSystemListAll(_params?: unknown): { systems: SystemConfigItem
 }
 
 /**
+ * runtime.env SERVICE_SYSTEM_MAP — 기능(ser_eng)을 지정 시스템(sys_key) 메뉴로 옮김.
+ * 예: roadReward:river → 도로에서 빼고 하천 메뉴에 넣음. 여러 건은 쉼표.
+ */
+function parseServiceSystemMap(raw: string): { serEng: string; sysKey: string }[] {
+  const out: { serEng: string; sysKey: string }[] = []
+  for (const part of raw.split(",")) {
+    const t = part.trim()
+    if (!t) continue
+    const colon = t.indexOf(":")
+    if (colon <= 0) continue
+    const serEng = t.slice(0, colon).trim()
+    const sysKey = t.slice(colon + 1).trim()
+    if (serEng && sysKey) out.push({ serEng, sysKey })
+  }
+  return out
+}
+
+function applyServiceSystemMap(
+  systems: SystemConfigItem[],
+  pairs: { serEng: string; sysKey: string }[]
+): SystemConfigItem[] {
+  if (pairs.length === 0) return systems
+  const moveTo = new Map<string, string>()
+  for (const p of pairs) moveTo.set(p.serEng, p.sysKey)
+  return systems.map((s) => {
+    const key = s.sys_key?.trim() ?? ""
+    const prev = s.serviceList ?? []
+    const kept = prev.filter((eng) => {
+      const mapped = moveTo.get(String(eng).trim())
+      return !mapped || mapped === key
+    })
+    const next = [...kept]
+    for (const [serEng, sysKey] of moveTo) {
+      if (sysKey !== key) continue
+      if (next.includes(serEng)) continue
+      const after = next.indexOf("riverConstructionLedger")
+      if (after >= 0) next.splice(after + 1, 0, serEng)
+      else next.push(serEng)
+    }
+    if (next.length === prev.length && next.every((v, i) => v === prev[i])) return s
+    return { ...s, serviceList: next }
+  })
+}
+
+/**
  * systemList.config 전체 조회 (공통 시스템 목록).
  * runtime.env 의 ENABLED_SYSTEMS 가 있으면 해당 값(쉼표 구분)을 sys_key 로만 매칭해 노출.
  * 예: ENABLED_SYSTEMS=wtl,river → sys_key 가 wtl, river 인 시스템만 반환.
@@ -709,6 +755,10 @@ export function getSystemListDebug(): {
       const filtered = systems.filter((s) => allowedKeys.has(s.sys_key?.trim() ?? ""))
       if (filtered.length > 0) systems = filtered
     }
+  }
+  const mapStr = (runtime.SERVICE_SYSTEM_MAP ?? "").trim()
+  if (mapStr) {
+    systems = applyServiceSystemMap(systems, parseServiceSystemMap(mapStr))
   }
   /** runtime.env DISABLED_SERVICES — 프로젝트별로 사이드바 메뉴(ser_eng) 숨김 */
   const disabledStr = (runtime.DISABLED_SERVICES ?? "").trim()

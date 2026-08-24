@@ -6,6 +6,7 @@ import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest'
 import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
 import type { KrasIntegrationTarget } from '@/integrations/krasLayerSync.config';
 import { runKrasFileStep, runKrasFullSync, runKorepsPriceFileSync } from '@/integrations/krasLandFileSync';
+import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';
 
 type Params = Record<string, unknown>;
 
@@ -195,6 +196,11 @@ export async function runIntegration(p: Params) {
             const msg = compactErrorMessage(e);
             console.error(`[SAFETYDATA RUN] ${seq}/${total} FAIL ${d.id} ${d.tableNameEn} ${msg}`);
             errors.push(`${seq}/${total} ${d.id} ${d.tableNameEn}: ${msg}`);
+            void appendLinkageError({
+              system: 'SAFETYDATA',
+              title: `${d.tableNameKo} (${d.id})`,
+              detail: formatLinkageError(e),
+            });
             await updateIntegrationJobProgress(
               ijlKey,
               `실패 ${seq}/${total} | ${d.id} | ${d.tableNameEn} | ${msg}`
@@ -279,6 +285,13 @@ export async function runIntegration(p: Params) {
   } catch (e) {
     const msg = compactErrorMessage(e);
     console.error(`[INTEGRATION] FAIL system=${system} ijlKey=${ijlKey ?? '-'} message=${msg}`);
+    if (system !== 'KRAS' && system !== 'KORPES') {
+      void appendLinkageError({
+        system,
+        title: '연계 실패',
+        detail: formatLinkageError(e),
+      });
+    }
     await pool.query(
       `update integration_job_log
        set ijl_status='FAILED', ijl_finished_at=now(), ijl_message=$2

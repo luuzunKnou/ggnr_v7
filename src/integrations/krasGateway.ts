@@ -2,7 +2,10 @@
  * 토지행정망(KRAS)·공시지가(KOREPS) 게이트웨이 내려받기.
  * GET 쿼리, POST 본문. 웹페이지·오류 XML·연결 실패는 예외.
  */
+import iconv from 'iconv-lite';
+
 import { KRAS_DOWNLOAD_TIMEOUT_MS } from '@/integrations/krasLayerSync.config';
+import { appendLinkageError } from '@/integrations/linkageErrorLog';
 import { getLandLinkageConfig } from '@/service/configService';
 
 export type KrasConn = {
@@ -102,19 +105,63 @@ function isHtmlWelcomeBody(buf: Buffer, contentType: string | null): boolean {
 }
 
 function looksLikeXml(buf: Buffer): boolean {
-  const sample = buf.subarray(0, Math.min(buf.length, 400)).toString('utf8');
+  const sample = buf.subarray(0, Math.min(buf.length, 400)).toString('latin1');
   return /<\?xml|<RESPONSE[\s>]|<HEADER[\s>]/i.test(sample);
 }
 
-/** 오류 XML이면 안내 문구. 성공 XML(코드 0000)은 allowSuccessXml일 때 통과. */
-export function krasXmlFaultMessage(buf: Buffer, allowSuccessXml = false): string | null {
+/** 게이트웨이 본문 디코드. XML encoding 선언이 있으면 따름. */
+export function decodeGatewayBody(buf: Buffer): string {
+  if (buf.length === 0) return '';
+  const head = buf.subarray(0, Math.min(buf.length, 240)).toString('ascii');
+  const enc = head.match(/encoding\s*=\s*["']?\s*([a-z0-9_\-]+)/i)?.[1]?.toLowerCase() ?? '';
+  if (/euc-?kr|ks_c_5601|cp949|windows-949/.test(enc)) {
+    return iconv.decode(buf, 'cp949');
+  }
+  if (/utf-8|utf8/.test(enc)) {
+    return buf.toString('utf8');
+  }
+  const utf8 = buf.toString('utf8');
+  if (utf8.includes('\uFFFD')) {
+    try {
+      return iconv.decode(buf, 'cp949');
+    } catch {
+      return utf8;
+    }
+  }
+  return utf8;
+}
+
+export type KrasXmlFault = { message: string; xml: string };
+
+/** 오류 XML이면 안내 문구와 본문. 성공 XML(코드 0000)은 allowSuccessXml일 때 통과. */
+export function krasXmlFault(buf: Buffer, allowSuccessXml = false): KrasXmlFault | null {
   if (!looksLikeXml(buf)) return null;
-  const xml = buf.toString('utf8');
+  const xml = decodeGatewayBody(buf);
   const code = xml.match(/<CODE>([\s\S]*?)<\/CODE>/i)?.[1]?.trim() ?? '';
   const msg = xml.match(/<MESSAGE>([\s\S]*?)<\/MESSAGE>/i)?.[1]?.trim() ?? '';
   if (allowSuccessXml && (code === '0000' || /^success$/i.test(msg))) return null;
-  if (msg) return `행망 응답: ${msg}`;
-  return `행망 XML 오류: ${xml.replace(/\s+/g, ' ').slice(0, 120)}`;
+  if (msg) return { message: `행망 응답: ${msg}`, xml };
+  return { message: '행망 XML 오류', xml };
+}
+
+export function krasXmlFaultMessage(buf: Buffer, allowSuccessXml = false): string | null {
+  return krasXmlFault(buf, allowSuccessXml)?.message ?? null;
+}
+
+function linkageSystemFromUrl(url: string): string {
+  return /KOREPS|:8502\b/i.test(url) ? 'KORPES' : 'KRAS';
+}
+
+function redactConnKey(text: string): string {
+  return text.replace(/conn_sys_id=[^&]*/gi, 'conn_sys_id=***');
+}
+
+export function logKrasGatewayFault(url: string, title: string, body: string): void {
+  void appendLinkageError({
+    system: linkageSystemFromUrl(url),
+    title,
+    detail: `요청: ${redactKrasUrl(url)}\n\n${body.trim() || '(본문 없음)'}`,
+  });
 }
 
 function resolveSameOriginRedirect(fromUrl: string, location: string): string | null {
@@ -171,16 +218,24 @@ export async function fetchKrasBytes(url: string, opts: FetchKrasBytesOpts = {})
       }
       throw new Error(`${HTML_ENDPOINT_MSG} (${shown} → ${loc || res.status})`);
     }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const requestHint =
+      method === 'POST' && opts.body ? `본문: ${redactConnKey(opts.body)}\n\n` : '';
     if (!res.ok) {
+      const body = decodeGatewayBody(buf);
+      logKrasGatewayFault(url, `HTTP ${res.status}`, `${requestHint}${body}`);
       throw new Error(`HTTP ${res.status} (${shown})`);
     }
-    const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length < 1) throw new Error('빈 파일');
     if (isHtmlWelcomeBody(buf, res.headers.get('content-type'))) {
+      logKrasGatewayFault(url, HTML_ENDPOINT_MSG, `${requestHint}${decodeGatewayBody(buf)}`);
       throw new Error(`${HTML_ENDPOINT_MSG} (${shown})`);
     }
-    const xmlErr = krasXmlFaultMessage(buf, opts.allowSuccessXml === true);
-    if (xmlErr) throw new Error(xmlErr);
+    const xmlErr = krasXmlFault(buf, opts.allowSuccessXml === true);
+    if (xmlErr) {
+      logKrasGatewayFault(url, xmlErr.message, `${requestHint}${xmlErr.xml}`);
+      throw new Error(xmlErr.message);
+    }
     return buf;
   } finally {
     clearTimeout(timer);

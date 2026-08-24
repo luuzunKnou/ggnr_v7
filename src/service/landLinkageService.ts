@@ -22,6 +22,12 @@ import {
   PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
   PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
 } from '@/lib/parcelAnalysisTheme';
+import {
+  decodeGatewayBody,
+  krasXmlFault,
+  logKrasGatewayFault,
+  redactKrasUrl,
+} from '@/integrations/krasGateway';
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
@@ -146,11 +152,12 @@ async function fetchLinkageXmlResult(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   const q = query.replace(/^\?/, '');
-  const shown = url.replace(/conn_sys_id=[^&]*/i, 'conn_sys_id=***');
+  const requestUrl = method === 'GET' ? `${url.replace(/\/+$/, '')}?${q}` : url;
+  const shown = redactKrasUrl(requestUrl);
   try {
     const res =
       method === 'GET'
-        ? await fetch(`${url.replace(/\/+$/, '')}?${q}`, {
+        ? await fetch(requestUrl, {
             method: 'GET',
             signal: controller.signal,
             cache: 'no-store',
@@ -162,11 +169,24 @@ async function fetchLinkageXmlResult(
             signal: controller.signal,
             cache: 'no-store',
           });
-    if (!res.ok) return { xml: '', error: `HTTP ${res.status} (${shown})` };
-    const xml = await res.text();
+    const buf = Buffer.from(await res.arrayBuffer());
+    const xml = decodeGatewayBody(buf);
+    const requestHint = method === 'POST' ? `본문: ${q.replace(/conn_sys_id=[^&]*/gi, 'conn_sys_id=***')}\n\n` : '';
+    if (!res.ok) {
+      logKrasGatewayFault(requestUrl, `HTTP ${res.status}`, `${requestHint}${xml}`);
+      return { xml: '', error: `HTTP ${res.status} (${shown})` };
+    }
     if (!xml.trim()) return { xml: '', error: `빈 응답 (${shown})` };
+    const xmlErr = krasXmlFault(buf, true);
+    if (xmlErr) {
+      logKrasGatewayFault(requestUrl, xmlErr.message, `${requestHint}${xmlErr.xml}`);
+      return { xml: '', error: `${xmlErr.message} (${shown})` };
+    }
     const issue = linkageXmlIssue(xml);
-    if (issue) return { xml: '', error: `${issue} (${shown})` };
+    if (issue) {
+      logKrasGatewayFault(requestUrl, issue, `${requestHint}${xml}`);
+      return { xml: '', error: `${issue} (${shown})` };
+    }
     return { xml };
   } catch (e) {
     const name = e instanceof Error ? e.name : '';

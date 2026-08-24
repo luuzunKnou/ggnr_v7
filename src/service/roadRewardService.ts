@@ -1013,16 +1013,13 @@ type ParcelSaveInput = {
 };
 
 /**
- * 자식 필지 geom 합집합 → 부모 road_reward.geom.
- * 필지 도형이 하나도 없으면 부모 geom 을 NULL 로 둔다.
- */
-/**
- * 필지 합집합으로 부모 geom 채움.
- * 기본은 부모 geom 이 비어 있을 때만 — 사용자가 그린 편입 범위를 덮어쓰지 않는다.
+ * 자식 필지 geom 합집합을 부모 road_reward.geom 에 반영.
+ * 기본: 그린 편입 범위가 있어도 필지 도형을 모두 포함하도록 합친다. 필지가 없으면 본표는 그대로 둔다.
+ * force: 본표를 필지 합집합으로만 교체(잔존 당초 지적 복구).
  */
 export async function recomputeMainGeomFromParcels(params?: {
   rewardOgcFid?: number | string;
-  /** true면 기존 부모 geom 도 필지 합집합으로 강제 교체 */
+  /** true면 기존 부모 geom 을 버리고 필지 합집합으로 교체 */
   force?: boolean;
 }): Promise<{ updated: number; error?: string }> {
   try {
@@ -1050,26 +1047,61 @@ export async function recomputeMainGeomFromParcels(params?: {
       Number.isFinite(rewardFid) && rewardFid > 0
         ? `AND m.${quoteIdent(mainKeyCol)} = ${Math.floor(rewardFid)}`
         : '';
-    const emptyOnly = params?.force !== true;
-    const emptyFilter = emptyOnly
-      ? `AND m.${quoteIdent(mainGeomCol)} IS NULL`
-      : '';
+    const parcelUnion = `ST_Multi(
+             ST_CollectionExtract(
+               ST_MakeValid(
+                 ST_UnaryUnion(
+                   ST_Collect(ST_MakeValid(p.${quoteIdent(parcelGeomCol)}))
+                 )
+               ),
+               3
+             )
+           )`;
+    const mergedGeom =
+      params?.force === true
+        ? 'sub.union_geom'
+        : `ST_Multi(
+             ST_CollectionExtract(
+               ST_MakeValid(
+                 ST_UnaryUnion(
+                   ST_Collect(
+                     ST_MakeValid(COALESCE(m.${quoteIdent(mainGeomCol)}, sub.union_geom)),
+                     ST_MakeValid(sub.union_geom)
+                   )
+                 )
+               ),
+               3
+             )
+           )`;
+
+    const coversFilter =
+      params?.force === true
+        ? ''
+        : `AND (
+             m.${quoteIdent(mainGeomCol)} IS NULL
+             OR NOT ST_Covers(
+               ST_MakeValid(m.${quoteIdent(mainGeomCol)}),
+               ST_MakeValid(sub.union_geom)
+             )
+           )`;
 
     const res = await db.execute(
       sql.raw(
         `UPDATE "${ms}"."${mt}" m
-         SET ${quoteIdent(mainGeomCol)} = sub.union_geom
+         SET ${quoteIdent(mainGeomCol)} = ${mergedGeom}
          FROM (
            SELECT
              p.${quoteIdent(parentCol)} AS reward_fid,
-             ST_Multi(ST_UnaryUnion(ST_Collect(p.${quoteIdent(parcelGeomCol)}))) AS union_geom
+             ${parcelUnion} AS union_geom
            FROM "${ps}"."${pt}" p
            WHERE p.${quoteIdent(parcelGeomCol)} IS NOT NULL
            GROUP BY p.${quoteIdent(parentCol)}
          ) sub
          WHERE m.${quoteIdent(mainKeyCol)} = sub.reward_fid
+           AND sub.union_geom IS NOT NULL
+           AND NOT ST_IsEmpty(sub.union_geom)
          ${fidFilter}
-         ${emptyFilter}`
+         ${coversFilter}`
       )
     );
     const updated = Number((res as { rowCount?: number }).rowCount ?? 0);
@@ -1324,7 +1356,7 @@ async function syncParcels(params: {
         )
       );
     }
-    // 부모 geom 은 그린 편입 범위 우선 — 필지 합집합으로 덮지 않음
+    // 본표는 그린 편입 범위 + 필지 도형을 모두 포함 (아래에서 합침)
     return { success: true };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -1487,10 +1519,8 @@ export async function saveRow(params: {
       });
       if (!sync.success) return { success: false, ogcFid: fid, error: sync.error };
     }
-    // 그린 도형이 없을 때만 필지 합집합으로 부모 geom 보강
-    if (!geomWkt && params.geomClear !== true) {
-      await recomputeMainGeomFromParcels({ rewardOgcFid: fid });
-    }
+    // 그린 편입 범위가 있어도 자식 필지 도형은 본표에 모두 포함
+    await recomputeMainGeomFromParcels({ rewardOgcFid: fid });
     return { success: true, ogcFid: fid };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
