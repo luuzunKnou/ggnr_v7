@@ -72,10 +72,10 @@ function AttrRows({ items }: { items: DetailAttr[] }) {
           key={item.field}
           className="grid grid-cols-[8.25rem_minmax(0,1fr)]"
         >
-          <dt className="flex h-full shrink-0 items-start whitespace-nowrap bg-muted px-2 py-1.5 font-medium text-muted-foreground">
+          <dt className="flex h-full shrink-0 items-start whitespace-nowrap bg-slate-100 px-2 py-1.5 font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground">
             {item.label}
           </dt>
-          <dd className="flex min-w-0 items-start break-words bg-background px-2 py-1.5 text-foreground">
+          <dd className="flex min-w-0 items-start break-words bg-background px-2 py-1.5 text-slate-900 dark:text-foreground">
             {item.field === 'state_grade' ? (
               <StateGradeBadge grade={item.value} />
             ) : (
@@ -105,7 +105,7 @@ function GroupedAttrList({
       {visible.map((section) => (
         <div key={section.id}>
           {section.label ? (
-            <div className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground">
+            <div className="mb-1 text-xs font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
               {section.label}
             </div>
           ) : null}
@@ -290,7 +290,7 @@ export function FmsLinkageDetailPanel({
             />
 
             <div className="mt-3">
-              <div className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground">
+              <div className="mb-1.5 text-xs font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
                 {FMS_INSPECTION_TITLE}
               </div>
               {inspections.length === 0 ? (
@@ -299,18 +299,18 @@ export function FmsLinkageDetailPanel({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-muted px-2.5 py-2">
-                    <span className="inline-flex h-5 items-center gap-1.5 text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-slate-50 px-2.5 py-2 dark:bg-muted">
+                    <span className="inline-flex h-5 items-center gap-1.5 text-slate-500 dark:text-muted-foreground">
                       <span className="leading-none">최근 등급</span>
                       <StateGradeBadge grade={latestInspection?.stateGrade ?? ''} />
                     </span>
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="flex items-center gap-1.5 text-slate-500 dark:text-muted-foreground">
                       최근 점검일
-                      <span className="font-medium text-foreground">{latestDateLabel}</span>
+                      <span className="font-medium text-slate-900 dark:text-foreground">{latestDateLabel}</span>
                     </span>
-                    <span className="flex items-center gap-1 text-muted-foreground">
+                    <span className="flex items-center gap-1 text-slate-500 dark:text-muted-foreground">
                       총
-                      <span className="font-medium text-foreground">
+                      <span className="font-medium text-slate-900 dark:text-foreground">
                         {inspections.length.toLocaleString()}건
                       </span>
                     </span>
@@ -323,15 +323,15 @@ export function FmsLinkageDetailPanel({
                         <col />
                         <col className="w-[3.75rem]" />
                       </colgroup>
-                      <thead className="bg-muted">
+                      <thead className="bg-slate-100 dark:bg-muted">
                         <tr>
-                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-muted-foreground">
+                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500 dark:text-muted-foreground">
                             구분
                           </th>
-                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-muted-foreground">
+                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500 dark:text-muted-foreground">
                             기간
                           </th>
-                          <th className="border-b border-border px-2 py-1.5 text-center align-middle font-semibold text-muted-foreground">
+                          <th className="border-b border-border px-2 py-1.5 text-center align-middle font-semibold text-slate-500 dark:text-muted-foreground">
                             등급
                           </th>
                         </tr>
@@ -365,13 +365,13 @@ export function FmsLinkageDetailPanel({
                               )}
                             >
                               <td
-                                className="truncate px-2 py-1.5 align-middle font-medium text-foreground"
+                                className="truncate px-2 py-1.5 align-middle font-medium text-slate-900 dark:text-foreground"
                                 title={item.dignGbn || '점검'}
                               >
                                 {item.dignGbn || '점검'}
                               </td>
                               <td
-                                className="truncate px-2 py-1.5 align-middle tabular-nums text-foreground"
+                                className="truncate px-2 py-1.5 align-middle tabular-nums text-slate-900 dark:text-foreground"
                                 title={formatInspectionPeriod(item)}
                               >
                                 {formatInspectionPeriod(item)}
@@ -420,9 +420,9 @@ export function FmsLinkageDetailPanel({
                       className="rounded border border-border bg-muted/30 px-2.5 py-2"
                     >
                       <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-xs">
-                        <span className="font-semibold text-foreground">점검 상세</span>
-                        <span className="font-normal text-muted-foreground/50">·</span>
-                        <span className="font-normal text-muted-foreground">
+                        <span className="font-semibold text-slate-600 dark:text-foreground">점검 상세</span>
+                        <span className="font-normal text-black/40 dark:text-muted-foreground/50">·</span>
+                        <span className="font-normal text-black/50 dark:text-muted-foreground">
                           {selectedInspection.dignGbn || '점검'}
                           {' · '}
                           {formatInspectionPeriod(selectedInspection)}
