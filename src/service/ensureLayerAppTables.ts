@@ -8,6 +8,7 @@
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
+ * - 마을순찰대: village_patrol
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -51,11 +52,25 @@ async function columnExists(schema: string, table: string, column: string): Prom
   return (res.rows?.length ?? 0) > 0;
 }
 
+async function schemaExists(name: string): Promise<boolean> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT 1
+       FROM information_schema.schemata
+       WHERE schema_name = '${name.replace(/'/g, "''")}'
+       LIMIT 1`
+    )
+  );
+  return (res.rows?.length ?? 0) > 0;
+}
+
 async function ensureSchemaLayer(): Promise<void> {
+  if (await schemaExists('layer')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS layer`));
 }
 
 async function ensureSchemaNextGenLinkage(): Promise<void> {
+  if (await schemaExists('next_gen_linkage')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
 }
 
@@ -206,6 +221,56 @@ CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key);
 CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom);
 COMMENT ON TABLE layer.file_unit IS '영상작업단위파일';
 `;
+
+const VILLAGE_PATROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.village_patrol (
+  id SERIAL PRIMARY KEY,
+  eup text NOT NULL DEFAULT '',
+  village text NOT NULL DEFAULT '',
+  team text NOT NULL DEFAULT 'A조',
+  name text NOT NULL DEFAULT '',
+  affiliation text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  note text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS village_patrol_place_idx
+  ON layer.village_patrol (eup, village, team);
+CREATE INDEX IF NOT EXISTS village_patrol_phone_idx
+  ON layer.village_patrol (phone);
+COMMENT ON TABLE layer.village_patrol IS '마을순찰대 편성 명단';
+`;
+
+/** 기존 중복 정리 후 편성 유니크 인덱스 확보 */
+async function ensureVillagePatrolAssignmentUnique(result: EnsureResult): Promise<void> {
+  const fq = 'layer.village_patrol';
+  try {
+    if ((await tableExists('layer', 'village_patrol')) !== 'BASE TABLE') return;
+
+    await db.execute(
+      sql.raw(`
+        DELETE FROM layer.village_patrol a
+        USING layer.village_patrol b
+        WHERE a.id > b.id
+          AND a.eup = b.eup
+          AND a.village = b.village
+          AND a.team = b.team
+          AND a.name = b.name
+          AND a.phone = b.phone
+      `)
+    );
+
+    await db.execute(
+      sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS village_patrol_assignment_uidx
+          ON layer.village_patrol (eup, village, team, name, phone)
+      `)
+    );
+    result.created.push(`${fq}.village_patrol_assignment_uidx`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.assignment_uidx: ${msg}`);
+  }
+}
 
 function memoCreateSql(tableName: string): string {
   const t = tableName.replace(/"/g, '""');
@@ -712,6 +777,18 @@ export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise
   return out;
 }
 
+export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'village_patrol',
+    createSql: VILLAGE_PATROL_SQL,
+    result: out,
+  });
+  await ensureVillagePatrolAssignmentUnique(out);
+  return out;
+}
+
 /** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
 export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -746,6 +823,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
+    await ensureVillagePatrolTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

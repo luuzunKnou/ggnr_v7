@@ -59,4 +59,5 @@ export * from './usr_biz_notif_state';
 export * from './usr_ser_grant';
 export * from './usr_sys_grant';
 export * from './ut';
+export * from './village_patrol';
 export * from './work_unit';

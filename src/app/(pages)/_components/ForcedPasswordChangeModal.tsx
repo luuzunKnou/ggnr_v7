@@ -105,7 +105,7 @@ export function ForcedPasswordChangeModal() {
         <DialogHeader>
           <DialogTitle>비밀번호 변경</DialogTitle>
           <DialogDescription>
-            처음 로그인하셨습니다. 아이디(성명)와 다른 비밀번호를 설정하세요.
+            처음 로그인하셨습니다. 임시 비밀번호와 다른 비밀번호를 설정하세요.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4 pt-2">

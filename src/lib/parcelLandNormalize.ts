@@ -286,12 +286,20 @@ export function recomputeJimokStats(rows: AnalyzeLandRow[]): JimokStatRow[] {
 
 type JsonRow = Record<string, unknown>;
 
+export type HangmangCallLine = {
+  svcId: string;
+  called: boolean;
+  detail: string;
+};
+
 export type ParcelLandInfoTabData = {
   characteristics: JsonRow[];
   landUses: JsonRow[];
   prices: JsonRow[];
   possessions: JsonRow[];
   source: 'kras' | 'koreps' | 'vworld' | 'mixed';
+  /** 우클릭 필지정보 — 행망 서비스 호출 여부(운영 확인) */
+  hangmangCalls?: HangmangCallLine[];
 };
 
 function krasCtypeLabel(ctype: unknown): string {
