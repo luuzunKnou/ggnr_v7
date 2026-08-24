@@ -5,7 +5,7 @@ import { ug } from '@/database/schema/ug';
 import { ut } from '@/database/schema/ut';
 import { perm } from '@/database/schema/perm';
 import { upMap } from '@/database/schema/up_map';
-import { hashPassword, verifyPassword } from '@/lib/auth/password';
+import { hashPassword, isForbiddenNewPassword, isTemporaryPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
 
@@ -104,7 +104,7 @@ export async function getMyProfile(_params?: unknown) {
 
     if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
 
-    const mustChangePassword = await verifyPassword(row.usrPwd ?? null, row.usrId);
+    const mustChangePassword = await isTemporaryPassword(row.usrPwd ?? null, row.usrId);
 
     return {
       success: true,
@@ -133,7 +133,9 @@ export async function changeOwnPassword(params: Record<string, unknown>) {
   if (!nextPwd) return { success: false, error: '새 비밀번호는 필수입니다.' };
   if (nextPwd.length < 4) return { success: false, error: '비밀번호는 4자 이상이어야 합니다.' };
   if (nextPwd !== nextConfirm) return { success: false, error: '비밀번호 확인이 일치하지 않습니다.' };
-  if (nextPwd === usrId) return { success: false, error: '아이디와 다른 비밀번호를 사용하세요.' };
+  if (isForbiddenNewPassword(nextPwd, usrId)) {
+    return { success: false, error: '아이디·임시 비밀번호와 다른 값을 사용하세요.' };
+  }
 
   try {
     const [row] = await db
@@ -142,11 +144,6 @@ export async function changeOwnPassword(params: Record<string, unknown>) {
       .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
       .limit(1);
     if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
-
-    const stillTemp = await verifyPassword(row.usrPwd ?? null, usrId);
-    if (stillTemp && nextPwd === usrId) {
-      return { success: false, error: '아이디와 다른 비밀번호를 사용하세요.' };
-    }
 
     const hashed = await hashPassword(nextPwd);
     await db.update(usr).set({ usrPwd: hashed }).where(eq(usr.usrId, usrId));
