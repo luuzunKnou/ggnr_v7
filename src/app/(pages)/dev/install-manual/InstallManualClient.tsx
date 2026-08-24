@@ -210,7 +210,7 @@ npm -v`}</CodeBlock>
               </li>
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code> 관리자로
-                실행 (소스테스트와 지오서버구동 그리고 실행파일이 만들어짐)
+                실행 (ggnr_start.bat 생성 및 선택 시 nssm 등록)
                 <ul className="mt-2 list-disc space-y-2 pl-5">
                   <li>
                     node_modules 폴더 여부 확인 후 npm install 진행 질문: y/n 입력 (폐쇄망일 경우
@@ -230,26 +230,17 @@ npm -v`}</CodeBlock>
                     </ul>
                   </li>
                   <li>
-                    이후 자동 진행되는 내용
+                    이후 자동 진행되는 내용 (nssm 등록을 Y로 한 경우)
                     <ul className="mt-1 list-disc pl-5">
-                      <li>smoke: npm run start 되는지 확인</li>
                       <li>nssm: Window 서비스 등록</li>
                       <li>window 서비스 로그 확인용 cmd 열기</li>
                     </ul>
                   </li>
-                </ul>
-              </li>
-              <li>
-                <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code> 구동중
-                취소할 경우 npm run start가 제대로 구동되는지 체크되고 있어 cmd 종료시 실행중인 프로세스
-                종료가 필요함.
-                <ol className="mt-2 list-[lower-alpha] space-y-1 pl-5">
-                  <li>Ctrl+C로 종료(자동 청소): 자동 실행중 생성된 파일 제거</li>
                   <li>
-                    cmd 자체 종료(수동 청소):{' '}
-                    <code className="rounded bg-muted px-1 py-0.5">smoke_ggnr_cleanup.ps1</code> 실행
+                    설치 ZIP에 python/env 분할압축본(env_parts)이 있으면 시작 시 복원하고, 없으면
+                    건너뜁니다 (없어도 정상 진행).
                   </li>
-                </ol>
+                </ul>
               </li>
             </ol>
           </section>

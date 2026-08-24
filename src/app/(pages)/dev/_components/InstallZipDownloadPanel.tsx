@@ -155,9 +155,33 @@ function ModeDescription({ mode }: { mode: DownloadSourceMode }) {
   }
   return (
     <p className="text-xs text-muted-foreground">
-      이 서버 워크스페이스를 지금 로컬 기준으로 설치용 ZIP으로 만듭니다.<br />
-      python/env 원본은 빼고 분할압축본을 생성합니다. 설치 서버에서 시작 스크립트가 분할 압축을 복원합니다.
+      이 서버 워크스페이스를 지금 로컬 기준으로 설치용 ZIP으로 만듭니다.
+      <br />
+      python/env_parts: 레이어 업로드 등에 사용되는 python/env의 분할 압축본으로 최초 설치시에는 포함해야합니다. 
     </p>
+  );
+}
+
+function PythonEnvPartsCheckbox({
+  checked,
+  setChecked,
+  disabled,
+}: {
+  checked: boolean;
+  setChecked: (v: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+      <input
+        type="checkbox"
+        className="cursor-pointer"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => setChecked(e.target.checked)}
+      />
+      python/env 분할압축본(env_parts) 포함
+    </label>
   );
 }
 
@@ -188,6 +212,7 @@ function ProgressBar({
 export function InstallZipDownloadPanel() {
   const [sourceMode, setSourceMode] = useState<DownloadSourceMode>('gnms');
   const [profile, setProfile] = useState<SourcePackageProfile>('closed');
+  const [includePythonEnvParts, setIncludePythonEnvParts] = useState(true);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<SideProgress>(emptySideProgress());
   const [stages, setStages] = useState(() => buildGnmsInstallBaseStages());
@@ -466,6 +491,7 @@ export function InstallZipDownloadPanel() {
         body: JSON.stringify({
           profile,
           progressId,
+          includePythonEnvParts,
           clientIp: await resolveClientMachineIp(),
         }),
         signal,
@@ -661,7 +687,14 @@ export function InstallZipDownloadPanel() {
         <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={uiBusy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (
-          <ProfileRadios profile={profile} setProfile={setProfile} disabled={uiBusy} />
+          <>
+            <ProfileRadios profile={profile} setProfile={setProfile} disabled={uiBusy} />
+            <PythonEnvPartsCheckbox
+              checked={includePythonEnvParts}
+              setChecked={setIncludePythonEnvParts}
+              disabled={uiBusy}
+            />
+          </>
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <Button

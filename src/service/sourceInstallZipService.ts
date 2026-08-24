@@ -278,8 +278,10 @@ export type BuildInstallZipResult = {
 export async function buildInstallZip(params: {
   profile: SourcePackageProfile;
   progressId?: string;
+  /** true면 python/env → env_parts 분할압축을 ZIP에 포함. 기본 true(기존 동작). */
+  includePythonEnvParts?: boolean;
 }): Promise<BuildInstallZipResult> {
-  const { profile, progressId } = params;
+  const { profile, progressId, includePythonEnvParts = true } = params;
   const date = todayYmd();
   if (progressId) setInstallZipPhase(progressId, 'scan', '이전 임시 파일 정리 중...');
   await purgeStaleInstallTemps();
@@ -288,19 +290,23 @@ export async function buildInstallZip(params: {
   const files = [...scan.included];
   let envPartsTmp: string | null = null;
   try {
-    if (progressId) {
-      setInstallZipPhase(progressId, 'zip', '파이썬 환경 분할 압축 중...');
-    }
-    const split = await createPythonEnvSplitParts(process.cwd());
-    if (split) {
-      envPartsTmp = split.tmpDir;
-      for (const part of split.parts) {
-        files.push({
-          absPath: part.absPath,
-          relPath: part.relPath,
-          category: 'runtime',
-        });
+    if (includePythonEnvParts) {
+      if (progressId) {
+        setInstallZipPhase(progressId, 'zip', '파이썬 환경 분할 압축 중...');
       }
+      const split = await createPythonEnvSplitParts(process.cwd());
+      if (split) {
+        envPartsTmp = split.tmpDir;
+        for (const part of split.parts) {
+          files.push({
+            absPath: part.absPath,
+            relPath: part.relPath,
+            category: 'runtime',
+          });
+        }
+      }
+    } else if (progressId) {
+      setInstallZipPhase(progressId, 'zip', '파이썬 env 분할압축 생략...');
     }
     if (files.length === 0) throw new Error('설치 ZIP 대상 파일이 없습니다.');
     if (progressId) {

@@ -1,7 +1,10 @@
 import { notifyAuthRequired } from '@/lib/authRequiredEvent';
 import { withBasePath } from '@/lib/basePath';
 
-const API_BASE_URL = withBasePath('/api');
+/** 호출 시점에 basePath 반영 (모듈 로드 시점 고정 방지) */
+function apiBaseUrl(): string {
+  return withBasePath('/api');
+}
 
 /**
  * 인증 토큰 가져오기 (나중에 구현)
@@ -56,7 +59,7 @@ export function call(
 ): Promise<any> {
   const authToken = getAuthToken();
   const meta = requestMeta(request);
-  let url = API_BASE_URL + api;
+  let url = apiBaseUrl() + api;
 
   const fetchOptions: RequestInit = {
     method,
@@ -80,7 +83,7 @@ export function call(
           }
         });
       }
-      url = `${API_BASE_URL}${api}?${params.toString()}`;
+      url = `${apiBaseUrl()}${api}?${params.toString()}`;
     } else {
       // POST 요청은 body로 전달
       if (typeof request === 'object') {

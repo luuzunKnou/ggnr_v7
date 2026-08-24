@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
+import { withBasePath } from "@/lib/basePath"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -610,8 +611,8 @@ export function getIndexSliderImages(projectName: string): string[] {
     const base = `${projectName}_${String(i).padStart(2, "0")}`
     const jpgPath = join(dir, `${base}.jpg`)
     const pngPath = join(dir, `${base}.png`)
-    if (existsSync(jpgPath)) out.push(`/image/indexImage/${base}.jpg`)
-    else if (existsSync(pngPath)) out.push(`/image/indexImage/${base}.png`)
+    if (existsSync(jpgPath)) out.push(withBasePath(`/image/indexImage/${base}.jpg`))
+    else if (existsSync(pngPath)) out.push(withBasePath(`/image/indexImage/${base}.png`))
     else out.push("")
   }
   return out
@@ -627,9 +628,9 @@ export function getIndexLogoSrc(projectName?: string): string {
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")
   const base = `${name}_index_logo`
-  if (existsSync(join(dir, `${base}.svg`))) return `/image/indexImage/${base}.svg`
-  if (existsSync(join(dir, `${base}.png`))) return `/image/indexImage/${base}.png`
-  return `/image/indexImage/default_index_logo.svg`
+  if (existsSync(join(dir, `${base}.svg`))) return withBasePath(`/image/indexImage/${base}.svg`)
+  if (existsSync(join(dir, `${base}.png`))) return withBasePath(`/image/indexImage/${base}.png`)
+  return withBasePath(`/image/indexImage/default_index_logo.svg`)
 }
 
 export type SystemConfigItem = {

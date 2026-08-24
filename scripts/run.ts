@@ -571,6 +571,14 @@ async function main(): Promise<void> {
     console.warn('[run] Boot command record skipped:', e instanceof Error ? e.message : e);
   }
   console.log(`[run] Loaded env: project=${PROJECT}, type=${TYPE}, script=${COMMAND}`);
+  {
+    const bp = (process.env.BASE_PATH ?? '').trim();
+    if (bp) {
+      console.log(
+        `[run] BASE_PATH=${bp.startsWith('/') ? bp : `/${bp}`} (게이트: dggskorea${bp.startsWith('/') ? bp : `/${bp}`}) — next ${COMMAND === 'dev' ? 'dev' : 'build·start'} 시 동일 값이어야 CSS/JS 경로가 맞음`
+      );
+    }
+  }
 
   // 슈퍼유저(postgres/postgres)로 DB·사용자 없으면 생성
   await ensureDbUser(PROJECT, TYPE);

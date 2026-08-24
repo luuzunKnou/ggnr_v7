@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
+import { withBasePath } from "@/lib/basePath"
 import { Trash2, Plus } from "lucide-react"
 
 export type SystemItem = {
@@ -110,13 +111,14 @@ function SvgPreview({ value, color }: { value: string; color?: string }) {
     )
   }
   if (color) {
+    const maskSrc = withBasePath(raw)
     return (
       <div
         className="w-7 h-6 shrink-0 rounded border border-border overflow-hidden"
         style={{
           backgroundColor: color,
-          WebkitMaskImage: `url(${raw})`,
-          maskImage: `url(${raw})`,
+          WebkitMaskImage: `url(${maskSrc})`,
+          maskImage: `url(${maskSrc})`,
           WebkitMaskSize: "contain",
           maskSize: "contain",
           WebkitMaskRepeat: "no-repeat",
@@ -130,7 +132,7 @@ function SvgPreview({ value, color }: { value: string; color?: string }) {
   }
   return (
     <div className="w-7 h-6 flex items-center justify-center rounded border border-border bg-muted/20 overflow-hidden">
-      <img src={raw} alt="" className="max-w-6 max-h-5 object-contain" title="SVG 미리보기" />
+      <img src={withBasePath(raw)} alt="" className="max-w-6 max-h-5 object-contain" title="SVG 미리보기" />
     </div>
   )
 }
