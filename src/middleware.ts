@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
 /** CSS/JS·이미지 등 — basePath(/프로젝트명) 뒤에서도 인증 리다이렉트 금지 */
 function isStaticAssetPath(pathname: string): boolean {
@@ -16,6 +16,15 @@ function isStaticAssetPath(pathname: string): boolean {
 function stripTrailingSlash(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);
   return pathname;
+}
+
+/** basePath 유지한 앱 루트 URL (게이트에서 `/`로 떨어지지 않게) */
+function appHomeUrl(req: NextRequest): URL {
+  const home = req.nextUrl.clone();
+  home.pathname = '/';
+  home.search = '';
+  home.hash = '';
+  return home;
 }
 
 export default auth((req) => {
@@ -37,7 +46,7 @@ export default auth((req) => {
     if (path === '/signup' || path.startsWith('/signup/')) return NextResponse.next();
     if (path === '/notice' || path.startsWith('/notice/')) return NextResponse.next();
     if (path === '/library' || path.startsWith('/library/')) return NextResponse.next();
-    const home = new URL('/', req.nextUrl);
+    const home = appHomeUrl(req);
     const dest = rawPath + req.nextUrl.search;
     home.searchParams.set('next', dest);
     home.searchParams.set('openLogin', '1');
@@ -45,7 +54,7 @@ export default auth((req) => {
   }
 
   if (loggedIn && path === '/login') {
-    return NextResponse.redirect(new URL('/', req.nextUrl));
+    return NextResponse.redirect(appHomeUrl(req));
   }
 
   return NextResponse.next();

@@ -44,8 +44,7 @@ export function resolveFetchInput(input: RequestInfo | URL): RequestInfo | URL {
   }
   if (input instanceof URL) {
     if (typeof window !== 'undefined' && input.origin === window.location.origin) {
-      const path = `${input.pathname}${input.search}${input.hash}`;
-      if (shouldPrefixAppPath(path)) {
+      if (shouldPrefixAppPath(input.pathname)) {
         return new URL(withBasePath(input.pathname) + input.search + input.hash, input.origin);
       }
     }
@@ -65,24 +64,54 @@ export function resolveFetchInput(input: RequestInfo | URL): RequestInfo | URL {
   return input;
 }
 
-function shouldPrefixAppPath(pathOrUrl: string): boolean {
-  if (!pathOrUrl.startsWith('/')) return false;
+/**
+ * fetch·img·video·EventSource 등 앱이 서빙하는 루트 절대 경로인지.
+ * (이미 basePath가 있으면 false)
+ */
+export function shouldPrefixAppPath(pathOrUrl: string): boolean {
+  const pathname = pathOnly(pathOrUrl);
+  if (!pathname.startsWith('/') || pathname.startsWith('//')) return false;
   const base = getBasePath();
-  if (base && (pathOrUrl === base || pathOrUrl.startsWith(`${base}/`))) return false;
-  // 앱이 서빙하는 루트 절대 경로만 (외부 http는 여기 안 옴)
+  if (base && (pathname === base || pathname.startsWith(`${base}/`))) return false;
   return (
-    pathOrUrl.startsWith('/api') ||
-    pathOrUrl.startsWith('/proxy') ||
-    pathOrUrl.startsWith('/symbol') ||
-    pathOrUrl.startsWith('/image') ||
-    pathOrUrl.startsWith('/font') ||
-    pathOrUrl.startsWith('/cesiumStatic') ||
-    pathOrUrl.startsWith('/favicon') ||
-    pathOrUrl.startsWith('/file.svg') ||
-    pathOrUrl.startsWith('/globe.svg') ||
-    pathOrUrl.startsWith('/window.svg') ||
-    pathOrUrl.startsWith('/ggnr_ai.svg') ||
-    pathOrUrl.startsWith('/pdf.worker') ||
-    pathOrUrl.startsWith('/vworld')
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/proxy') ||
+    pathname.startsWith('/symbol') ||
+    pathname.startsWith('/image') ||
+    pathname.startsWith('/font') ||
+    pathname.startsWith('/cesiumStatic') ||
+    pathname.startsWith('/favicon') ||
+    pathname.startsWith('/file.svg') ||
+    pathname.startsWith('/globe.svg') ||
+    pathname.startsWith('/window.svg') ||
+    pathname.startsWith('/ggnr_ai.svg') ||
+    pathname.startsWith('/pdf.worker') ||
+    pathname.startsWith('/vworld')
   );
+}
+
+/**
+ * location.assign / window.open 용 — `_next` 제외한 앱 절대경로 전반.
+ */
+export function shouldPrefixNavPath(pathOrUrl: string): boolean {
+  const pathname = pathOnly(pathOrUrl);
+  if (!pathname.startsWith('/') || pathname.startsWith('//')) return false;
+  if (pathname.startsWith('/_next')) return false;
+  const base = getBasePath();
+  if (base && (pathname === base || pathname.startsWith(`${base}/`))) return false;
+  return true;
+}
+
+/** pathname(+query 가능)에 basePath 접두. 네비게이션·open 공용 */
+export function withBasePathNav(pathOrUrl: string): string {
+  if (!shouldPrefixNavPath(pathOrUrl)) return pathOrUrl;
+  const q = pathOrUrl.search(/[?#]/);
+  if (q < 0) return withBasePath(pathOrUrl);
+  return withBasePath(pathOrUrl.slice(0, q)) + pathOrUrl.slice(q);
+}
+
+function pathOnly(pathOrUrl: string): string {
+  if (!pathOrUrl.startsWith('/')) return pathOrUrl;
+  const q = pathOrUrl.search(/[?#]/);
+  return q < 0 ? pathOrUrl : pathOrUrl.slice(0, q);
 }
