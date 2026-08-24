@@ -9,7 +9,8 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - 로그 = C:\logs\GGNR_V7_stdout.log / GGNR_V7_stderr.log
 :: - 기존 서비스가 있으면 Y/N 후 삭제·재등록 (N이면 등록 중단 exit 2)
 :: - GGNR_NSSM_REREG=Y^|N 이면 재질문 없이 그 값 사용 (00_make_ggnr_starter 연동)
-:: - 실패 시 항상 pause (창 유지). 성공 시 GGNR_START_NO_PAUSE=1 이면 pause 생략
+:: - 실패 시 항상 pause + C:\logs\nssm_install_last.log 기록
+:: - 성공 시: 직접 실행이면 항상 pause. starter 연동(GGNR_NSSM_FROM_STARTER=1)만 pause 생략
 :: - stop 전 포트·ggnr_start 강제 종료 + AppStopMethodSkip (Terminate Y/N 멈춤 방지)
 :: =============================================================================
 
@@ -21,8 +22,18 @@ set "LOG_DIR=C:\logs"
 set "LOG_BACKUP=%LOG_DIR%\backup"
 set "LOG_OUT=%LOG_DIR%\GGNR_V7_stdout.log"
 set "LOG_ERR=%LOG_DIR%\GGNR_V7_stderr.log"
+set "INSTALL_LOG=%LOG_DIR%\nssm_install_last.log"
 set "APP_PORT=3000"
 set "EXIT_EC=0"
+:: 더블클릭·직접 실행: 결과 보고 창 유지. starter 가 1 로 넘기면 성공 시만 생략
+set "KEEP_OPEN=1"
+if /i "%GGNR_NSSM_FROM_STARTER%"=="1" set "KEEP_OPEN=0"
+
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" 2>nul
+(
+  echo ==== nssm_install %DATE% %TIME% ====
+  echo ROOT=%ROOT%
+) > "%INSTALL_LOG%"
 
 echo.
 echo ============================================================
@@ -31,6 +42,7 @@ echo ============================================================
 echo [nssm-install] root     = %ROOT%
 echo [nssm-install] app      = %APP_BAT%
 echo [nssm-install] log dir  = %LOG_DIR%
+echo [nssm-install] 결과로그 = %INSTALL_LOG%
 echo [nssm-install] backup   = %LOG_BACKUP%
 echo.
 
@@ -95,7 +107,8 @@ if not errorlevel 1 (
     echo ===== 중단 ^(실패 아님^) =====
     echo [중단] 기존 서비스를 유지합니다. 재등록하지 않았습니다. ^(exit=2^)
     echo.
-    if /i not "%GGNR_START_NO_PAUSE%"=="1" call :pause_keep
+    call :log_line "중단 exit=2 재등록 안 함"
+    if "!KEEP_OPEN!"=="1" call :pause_keep
     exit /b 2
   )
   echo [nssm-install] 기존 서비스 강제 정리 후 중지/제거...
@@ -188,15 +201,17 @@ echo [완료] 서비스 %SERVICE_NAME% 등록·시작됨.
 echo   stdout: %LOG_OUT%
 echo   stderr: %LOG_ERR%
 echo   backup 폴더: %LOG_BACKUP%
+echo   설치 결과: %INSTALL_LOG%
 echo.
 echo [실시간 로그]
 echo   open_ggnr_logs.bat 또는
 echo   powershell -Command "Get-Content '%LOG_OUT%' -Encoding UTF8 -Wait -Tail 10"
 echo.
-if /i "%GGNR_START_NO_PAUSE%"=="1" (
-  echo [안내] GGNR_START_NO_PAUSE=1 — 성공 pause 생략 ^(상위 starter 가 이어서 진행^)
-) else (
+call :log_line "성공 — 서비스 등록·시작 완료"
+if "!KEEP_OPEN!"=="1" (
   call :pause_keep
+) else (
+  echo [안내] starter 연동 — 성공 pause 생략. 결과: %INSTALL_LOG%
 )
 exit /b 0
 
@@ -204,16 +219,25 @@ exit /b 0
 echo.
 echo ===== 실패 =====
 echo [종료] nssm_install 실패 ^(exit=!EXIT_EC!^). 위 메시지를 확인하세요.
-echo         창을 닫지 마세요 — 로그 확인 후 아무 키나 누르면 종료됩니다.
+echo         결과 로그: %INSTALL_LOG%
+echo         창을 닫지 마세요 — 확인 후 Enter 를 누르면 종료됩니다.
 echo.
+call :log_line "실패 exit=!EXIT_EC!"
+:: 실패는 starter 연동이어도 항상 창 유지 (결과 확인)
 call :pause_keep
 exit /b !EXIT_EC!
 
 :pause_keep
 echo -----------------------------------------------------------
-echo  확인 후 아무 키나 누르면 이 창이 닫힙니다.
+echo  확인 후 Enter 키를 누르면 이 창이 닫힙니다.
+echo  ^(결과 로그: %INSTALL_LOG%^)
 echo -----------------------------------------------------------
-pause >nul
+:: pause ^>nul 은 관리자 더블클릭에서 바로 통과하는 경우가 있어 set /p 사용
+set /p "=Enter... "
+goto :eof
+
+:log_line
+echo %~1>> "%INSTALL_LOG%"
 goto :eof
 
 :: ---------------------------------------------------------------------------

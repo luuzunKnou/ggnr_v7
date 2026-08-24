@@ -319,12 +319,14 @@ if not exist "%LOGS_BAT%" (
 
 echo.
 echo [1/2] nssm 서비스 등록...
-echo         ^(실패 시 nssm_install 창이 pause 로 유지됩니다. 메시지 확인 후 키를 누르세요.^)
+echo         ^(실패 시 nssm_install 창이 pause 로 유지됩니다. 메시지 확인 후 Enter.^)
 set "GGNR_NSSM_REREG=!DO_REREG!"
 set "GGNR_NSSM_PROJECT=%PROJECT_NAME%"
 set "GGNR_NSSM_ENV=%ENV_NAME%"
+set "GGNR_NSSM_FROM_STARTER=1"
 call "%NSSM_BAT%"
 set "NSSM_EC=!ERRORLEVEL!"
+set "GGNR_NSSM_FROM_STARTER="
 if "!NSSM_EC!"=="2" (
   echo [안내] 기존 GGNR_V7 서비스를 유지했습니다 ^(재등록 안 함^).
   echo         필요 시 서비스 관리자에서 GGNR_V7 을 시작하세요.
