@@ -1,4 +1,4 @@
-import { calendarSlotKey } from '@/integrations/integrationSchedule';
+import { calendarSlotKey, intervalSlotKey } from '@/integrations/integrationSchedule';
 import { describeSafetydataSchedule } from '@/integrations/safetydata';
 import { FMS_SYNC_SCHEDULE } from '@/integrations/fmsSync.config';
 import { runIntegration } from '@/service/integrationService';
@@ -21,7 +21,8 @@ export function startFmsSyncScheduler(): void {
     const now = new Date(
       new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })
     );
-    const slot = calendarSlotKey(sched, now);
+    const slot =
+      sched.mode === 'interval' ? intervalSlotKey(sched, now) : calendarSlotKey(sched, now);
     if (!slot) return;
     if (lastSlot === slot) return;
     lastSlot = slot;
