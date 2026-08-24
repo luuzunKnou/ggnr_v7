@@ -13,8 +13,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - nssm = root\nssm\win64\nssm.exe (프로젝트 내)
 :: - python/env_parts 는 필수가 아님. 있을 때만 python/env 로 복원 후 env_parts 삭제
 ::   (이미 python\env\python.exe 가 있거나 env_parts 가 없으면 복원 생략·정상 진행)
-:: - 입력 후: 이전 GGNR 서비스·앱 포트 정리 → 생성 → (선택) nssm → 로그 창
+:: - 입력 후: (nssm=Y 이면 관리자 검사) → 이전 실행 정리 → 생성 → (선택) nssm → 로그 창
 :: - 이전 실행이 남아 Ctrl+C 로 끊지 않도록, 작업 시작 전 자동 중지 (Terminate batch job 방지)
+:: - DO_NSSM=Y 인데 비관리자면 빌드 전에 중단 (긴 빌드 후 nssm 스킵 방지)
 :: =============================================================================
 
 set "ROOT=%~dp0"
@@ -84,6 +85,32 @@ if /i "%GGNR_START_NO_PAUSE%"=="1" (
   )
 )
 
+:: Y/N 정규화 (공백 제거 · Y/N 만 허용 · 그 외·빈값 → 기본값 + 경고)
+set "DO_NPM_SYNC=!DO_NPM_SYNC: =!"
+if /i not "!DO_NPM_SYNC!"=="Y" if /i not "!DO_NPM_SYNC!"=="N" (
+  echo [경고] npm 동기화 입력이 Y/N 이 아님 — N 으로 처리합니다 ^(입력=[!DO_NPM_SYNC!]^)
+  set "DO_NPM_SYNC=N"
+)
+set "OVERWRITE=!OVERWRITE: =!"
+if /i not "!OVERWRITE!"=="Y" if /i not "!OVERWRITE!"=="N" (
+  echo [경고] 덮어쓰기 입력이 Y/N 이 아님 — Y 로 처리합니다 ^(입력=[!OVERWRITE!]^)
+  set "OVERWRITE=Y"
+)
+set "DO_NSSM=!DO_NSSM: =!"
+if /i not "!DO_NSSM!"=="Y" if /i not "!DO_NSSM!"=="N" (
+  echo [경고] nssm 등록 입력이 Y/N 이 아님 — N 으로 처리합니다 ^(입력=[!DO_NSSM!]^)
+  set "DO_NSSM=N"
+)
+if /i "!DO_NSSM!"=="Y" (
+  set "DO_REREG=!DO_REREG: =!"
+  if /i not "!DO_REREG!"=="Y" if /i not "!DO_REREG!"=="N" (
+    echo [경고] 재등록 입력이 Y/N 이 아님 — N 으로 처리합니다 ^(입력=[!DO_REREG!]^)
+    set "DO_REREG=N"
+  )
+) else (
+  set "DO_REREG=N"
+)
+
 echo.
 echo [확인]
 echo   PROJECT     = %PROJECT_NAME%
@@ -93,6 +120,12 @@ echo   덮어쓰기    = !OVERWRITE!
 echo   nssm 등록   = !DO_NSSM!
 echo   재등록      = !DO_REREG!
 echo.
+
+:: nssm=Y 이면 빌드 전에 관리자 확인 (비관리자+긴 빌드 후 스킵 방지)
+if /i "!DO_NSSM!"=="Y" (
+  call :require_admin
+  if errorlevel 1 goto :fail_exit
+)
 
 :: 이전 ggnr_start / nssm / node 가 살아 있으면 npm ci·재등록이 잠기거나
 :: 사용자가 Ctrl+C 로 끊다 «Terminate batch job (Y/N)?» 를 보게 됨 → 먼저 정리
@@ -276,7 +309,10 @@ if "!SKIP_WRITE!"=="0" (
   echo.
 )
 
+echo [진행] ggnr_start.bat 처리 완료.
+
 if /i not "!DO_NSSM!"=="Y" (
+  echo [건너뜀] nssm·로그 ^(DO_NSSM=!DO_NSSM!^)
   echo [종료] 생성만 완료했습니다.
   echo   수동: nssm_install_ggnr.bat ^(관리자 CMD^) → open_ggnr_logs.bat
   echo.
@@ -287,15 +323,9 @@ if /i not "!DO_NSSM!"=="Y" (
   exit /b 0
 )
 
-:: --- 관리자 확인 (nssm 등록용) ---
-net session >nul 2>&1
-if errorlevel 1 (
-  echo [오류] 관리자 실행이 아닙니다.
-  echo         nssm 등록은 관리자 CMD에서 실행해야 합니다.
-  echo         CMD를 마우스 오른쪽 버튼 → «관리자 권한으로 실행» 후 다시 실행하세요.
-  goto :fail_exit
-)
-echo [확인] 관리자 권한으로 실행 중입니다.
+:: --- 관리자 재확인 (안전망: 빌드 전에도 이미 검사함) ---
+call :require_admin
+if errorlevel 1 goto :fail_exit
 
 if not exist "%ROOT%\node_modules\next\package.json" (
   echo [오류] node_modules 가 없거나 next 가 설치되지 않았습니다.
@@ -318,7 +348,7 @@ if not exist "%LOGS_BAT%" (
 )
 
 echo.
-echo [1/2] nssm 서비스 등록...
+echo [진행] nssm 등록 ^(1/2^)...
 echo         ^(실패 시 nssm_install 창이 pause 로 유지됩니다. 메시지 확인 후 Enter.^)
 set "GGNR_NSSM_REREG=!DO_REREG!"
 set "GGNR_NSSM_PROJECT=%PROJECT_NAME%"
@@ -331,7 +361,7 @@ if "!NSSM_EC!"=="2" (
   echo [안내] 기존 GGNR_V7 서비스를 유지했습니다 ^(재등록 안 함^).
   echo         필요 시 서비스 관리자에서 GGNR_V7 을 시작하세요.
   echo.
-  echo [2/2] 로그 창 열기...
+  echo [진행] 로그 창 ^(2/2^)...
   call "%LOGS_BAT%"
   echo.
   echo [완료] 생성 → ^(기존 서비스 유지^) → 로그 창까지 끝났습니다.
@@ -349,7 +379,7 @@ if not "!NSSM_EC!"=="0" (
 )
 
 echo.
-echo [2/2] 로그 창 열기...
+echo [진행] 로그 창 ^(2/2^)...
 call "%LOGS_BAT%"
 
 echo.
@@ -365,11 +395,28 @@ exit /b 0
 if not defined FAIL_EC set "FAIL_EC=1"
 echo.
 echo [종료] 오류로 중단되었습니다 ^(exit=!FAIL_EC!^). 위 메시지를 확인하세요.
+echo         nssm 결과 로그: C:\logs\nssm_install_last.log
+echo         수동: nssm_install_ggnr.bat ^(관리자 CMD^) → open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" (
   echo 아무 키나 누르면 창이 닫힙니다.
   pause >nul
 )
 exit /b !FAIL_EC!
+
+:: ---------------------------------------------------------------------------
+:: 관리자 권한 확인. 실패 시 FAIL_EC=1, exit /b 1
+:: ---------------------------------------------------------------------------
+:require_admin
+net session >nul 2>&1
+if errorlevel 1 (
+  echo [오류] 관리자 실행이 아닙니다.
+  echo         nssm 등록은 관리자 CMD에서 실행해야 합니다.
+  echo         CMD를 마우스 오른쪽 버튼 → «관리자 권한으로 실행» 후 다시 실행하세요.
+  set "FAIL_EC=1"
+  exit /b 1
+)
+echo [확인] 관리자 권한으로 실행 중입니다.
+exit /b 0
 
 :: package-lock.json 기준 npm ci ^(없으면 npm install^). exit /b 로 FAIL_EC 반환.
 :run_npm_sync

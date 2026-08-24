@@ -39,48 +39,48 @@ function FileKindIcon({ name }: { name: string }) {
   const wrap = "flex shrink-0 items-center justify-center";
   if (kind === "hwp") {
     return (
-      <span className={cn(wrap, "text-sky-600")} title="HWP">
+      <span className={cn(wrap, "text-chart-3")} title="HWP">
         <File className="h-4 w-4" strokeWidth={2} aria-hidden />
       </span>
     );
   }
   if (kind === "pdf") {
     return (
-      <span className={cn(wrap, "text-red-600")} title="PDF">
+      <span className={cn(wrap, "text-destructive")} title="PDF">
         <FileText className="h-4 w-4" strokeWidth={2} aria-hidden />
       </span>
     );
   }
   if (kind === "image") {
     return (
-      <span className={cn(wrap, "text-violet-600")} title="이미지">
+      <span className={cn(wrap, "text-chart-1")} title="이미지">
         <ImageFileIcon className="h-4 w-4" strokeWidth={2} aria-hidden />
       </span>
     );
   }
   if (kind === "zip") {
     return (
-      <span className={cn(wrap, "text-blue-600")} title="ZIP">
+      <span className={cn(wrap, "text-primary")} title="ZIP">
         <Archive className="h-4 w-4" strokeWidth={2} aria-hidden />
       </span>
     );
   }
   if (kind === "dwg") {
     return (
-      <span className={cn(wrap, "text-teal-600")} title="DWG">
+      <span className={cn(wrap, "text-chart-2")} title="DWG">
         <DraftingCompass className="h-4 w-4" strokeWidth={2} aria-hidden />
       </span>
     );
   }
   if (kind === "dxf") {
     return (
-      <span className={cn(wrap, "text-amber-600")} title="DXF">
+      <span className={cn(wrap, "text-chart-4")} title="DXF">
         <DraftingCompass className="h-4 w-4" strokeWidth={2} aria-hidden />
       </span>
     );
   }
   return (
-    <span className={cn(wrap, "text-slate-500")} title="파일">
+    <span className={cn(wrap, "text-muted-foreground")} title="파일">
       <FileText className="h-4 w-4" strokeWidth={2} aria-hidden />
     </span>
   );
@@ -327,11 +327,11 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col bg-white">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-800">업무메뉴얼</h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">도로점용 서식 및 매뉴얼 파일</p>
+            <h2 className="text-sm font-semibold text-foreground">업무메뉴얼</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">도로점용 서식 및 매뉴얼 파일</p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <input
@@ -346,7 +346,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
               title="파일 업로드"
               aria-label="파일 업로드"
               disabled={uploading}
-              className="hidden rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:pointer-events-none disabled:opacity-50"
+              className="hidden rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
               onClick={() => void handleUploadClick()}
             >
               <Upload className={cn("h-4 w-4", uploading && "animate-pulse")} aria-hidden />
@@ -355,7 +355,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
               type="button"
               title="새로고침"
               aria-label="새로고침"
-              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => void fetchList()}
             >
               <RefreshCw className={cn("h-4 w-4", (loading || cadPreparing) && "animate-spin")} aria-hidden />
@@ -364,7 +364,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
               type="button"
               title="닫기"
               aria-label="닫기"
-              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={onClose}
             >
               <X className="h-4 w-4" />
@@ -373,7 +373,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div
-          className="flex shrink-0 gap-0 border-b border-slate-200 px-3"
+          className="flex shrink-0 gap-0 border-b border-border px-3"
           role="tablist"
           aria-label="업무메뉴얼 구분"
         >
@@ -384,8 +384,8 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
             className={cn(
               "relative -mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
               activeTab === "doc"
-                ? "border-slate-800 text-slate-900"
-                : "border-transparent text-slate-500 hover:text-slate-700"
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setActiveTab("doc")}
           >
@@ -398,8 +398,8 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
             className={cn(
               "relative -mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
               activeTab === "drawing"
-                ? "border-slate-800 text-slate-900"
-                : "border-transparent text-slate-500 hover:text-slate-700"
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setActiveTab("drawing")}
           >
@@ -409,34 +409,34 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
 
         <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
           {loading ? (
-            <p className="px-1 py-2 text-[12px] text-slate-500">불러오는 중…</p>
+            <p className="px-1 py-2 text-[12px] text-muted-foreground">불러오는 중…</p>
           ) : listError || uploadError ? (
-            <p className="px-1 py-2 text-[12px] text-red-600">{listError ?? uploadError}</p>
+            <p className="px-1 py-2 text-[12px] text-destructive">{listError ?? uploadError}</p>
           ) : (
             <>
               {cadPreparing ? (
-                <p className="flex items-center gap-1.5 px-1 py-1.5 text-[12px] text-slate-600">
+                <p className="flex items-center gap-1.5 px-1 py-1.5 text-[12px] text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
                   CAD 미리보기 PNG 준비 중…
                 </p>
               ) : null}
               {notice ? (
-                <p className="px-1 py-2 text-[12px] text-amber-800">{notice}</p>
+                <p className="px-1 py-2 text-[12px] text-chart-4">{notice}</p>
               ) : null}
               {emptyMessage ? (
-                <p className="px-1 py-2 text-[12px] text-slate-500">{emptyMessage}</p>
+                <p className="px-1 py-2 text-[12px] text-muted-foreground">{emptyMessage}</p>
               ) : activeTab === "doc" ? (
                 <ul className="flex flex-col gap-1">
                   {docDisplayFiles.map((f) => (
                     <li key={`doc-${f.name}`}>
                       <button
                         type="button"
-                        className="flex w-full min-h-[40px] items-center gap-2 rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-100/90"
+                        className="flex w-full min-h-[40px] items-center gap-2 rounded border border-border bg-muted/50 px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-muted"
                         onClick={() => void handleRowActivate(f.name, "doc")}
                       >
                         <FileKindIcon name={f.name} />
                         <span
-                          className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-800"
+                          className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground"
                           title={f.name}
                         >
                           {f.name}
@@ -448,14 +448,14 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
               ) : (
                 <div className="flex min-h-0 flex-col gap-2">
                   <nav
-                    className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 pb-2 text-[11px] text-slate-600"
+                    className="flex flex-wrap items-center gap-0.5 border-b border-border pb-2 text-[11px] text-muted-foreground"
                     aria-label="도면 폴더 경로"
                   >
                     <button
                       type="button"
                       className={cn(
-                        "rounded px-1 py-0.5 font-medium transition-colors hover:bg-slate-100",
-                        cadPath === "" ? "text-slate-900" : "text-slate-600"
+                        "rounded px-1 py-0.5 font-medium transition-colors hover:bg-muted",
+                        cadPath === "" ? "text-foreground" : "text-muted-foreground"
                       )}
                       onClick={() => setCadPath("")}
                     >
@@ -467,13 +467,13 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
                           const isLast = i === arr.length - 1;
                           return (
                             <Fragment key={upTo}>
-                              <ChevronRight className="h-3 w-3 shrink-0 text-slate-400" aria-hidden />
+                              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
                               {isLast ? (
-                                <span className="px-1 py-0.5 font-medium text-slate-900">{seg}</span>
+                                <span className="px-1 py-0.5 font-medium text-foreground">{seg}</span>
                               ) : (
                                 <button
                                   type="button"
-                                  className="rounded px-1 py-0.5 text-slate-600 transition-colors hover:bg-slate-100"
+                                  className="rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted"
                                   onClick={() => setCadPath(upTo)}
                                 >
                                   {seg}
@@ -485,7 +485,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
                       : null}
                   </nav>
                   {cadExplorer.folders.length === 0 && cadExplorer.files.length === 0 ? (
-                    <p className="px-1 py-2 text-[12px] text-slate-500">
+                    <p className="px-1 py-2 text-[12px] text-muted-foreground">
                       이 폴더에 표시할 항목이 없습니다. 상위 경로를 눌러 이동하세요.
                     </p>
                   ) : (
@@ -496,14 +496,14 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
                           <li key={`cad-folder-${nextPath}`}>
                             <button
                               type="button"
-                              className="flex w-full min-h-[40px] items-center gap-2 rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-100/90"
+                              className="flex w-full min-h-[40px] items-center gap-2 rounded border border-border bg-muted/50 px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-muted"
                               onClick={() => setCadPath(nextPath)}
                             >
-                              <span className="flex shrink-0 items-center justify-center text-amber-600">
+                              <span className="flex shrink-0 items-center justify-center text-chart-4">
                                 <Folder className="h-4 w-4" strokeWidth={2} aria-hidden />
                               </span>
                               <span
-                                className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-800"
+                                className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground"
                                 title={nextPath}
                               >
                                 {folderName}
@@ -516,12 +516,12 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
                         <li key={`cad-${f.name}`}>
                           <button
                             type="button"
-                            className="flex w-full min-h-[40px] items-center gap-2 rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-100/90"
+                            className="flex w-full min-h-[40px] items-center gap-2 rounded border border-border bg-muted/50 px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-muted"
                             onClick={() => void handleRowActivate(f.name, "cad")}
                           >
                             <FileKindIcon name={f.name} />
                             <span
-                              className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-800"
+                              className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground"
                               title={f.name}
                             >
                               {f.name.includes("/") ? (f.name.split("/").pop() ?? f.name) : f.name}

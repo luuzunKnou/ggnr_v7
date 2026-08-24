@@ -57,22 +57,22 @@ export const ROAD_NETWORK_OPEN_STATUS_BADGE: Record<
   RoadNetworkOpenStatus,
   { bg: string; text: string; border: string }
 > = {
-  개설: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
-  미개설: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  개설: { bg: "bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/40" },
+  미개설: { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/30" },
 };
 
 export const ROAD_NETWORK_TYPE_BADGE: Record<
   RoadNetworkType,
   { bg: string; text: string; border: string }
 > = {
-  국도: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  지방도: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
-  국지도: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
-  군도: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  농도: { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-200" },
-  일반도로: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
-  임도: { bg: "bg-lime-50", text: "text-lime-800", border: "border-lime-200" },
-  입체교차로: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
+  국도: { bg: "bg-chart-3/15", text: "text-chart-3", border: "border-chart-3/40" },
+  지방도: { bg: "bg-primary/10", text: "text-primary", border: "border-primary/30" },
+  국지도: { bg: "bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/40" },
+  군도: { bg: "bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/40" },
+  농도: { bg: "bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/40" },
+  일반도로: { bg: "bg-muted", text: "text-foreground/90", border: "border-border" },
+  임도: { bg: "bg-chart-5/15", text: "text-chart-5", border: "border-chart-5/40" },
+  입체교차로: { bg: "bg-secondary", text: "text-secondary-foreground", border: "border-border" },
 };
 
 export type RoadNetworkGeom =

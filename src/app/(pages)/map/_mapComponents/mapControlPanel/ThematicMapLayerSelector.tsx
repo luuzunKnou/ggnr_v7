@@ -76,7 +76,7 @@ function ThematicMapGroupSection({
           'flex w-full items-center justify-between gap-2 py-2 pl-3 pr-4 font-medium transition-colors',
           'bg-slate-100 text-foreground',
           'dark:bg-white/10 dark:text-white/90',
-          (allSelected || someSelected) && 'text-blue-600 dark:text-white'
+          (allSelected || someSelected) && 'text-primary dark:text-primary'
         )}
       >
         <button
@@ -89,7 +89,7 @@ function ThematicMapGroupSection({
             <ChevronDown
               className={cn(
                 'h-3.5 w-3.5 shrink-0',
-                allSelected || someSelected ? 'text-blue-600 dark:text-white' : 'text-slate-400 dark:text-white/50'
+                allSelected || someSelected ? 'text-primary' : 'text-slate-400 dark:text-white/50'
               )}
             />
           ) : (
@@ -145,7 +145,7 @@ function ThematicMapGroupSection({
                     className={cn(
                       'truncate text-xs',
                       checked
-                        ? 'font-medium text-blue-600 dark:text-white'
+                        ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
                     )}
                     title={option.layerName}
