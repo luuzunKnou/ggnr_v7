@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-389342b5:1a032442aee:-7f12</id>
+  <name>public_fms_facility</name>
+  <nativeName>public_fms_facility</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>public_fms_facility</title>
+  <keywords>
+    <string>features</string>
+    <string>public_fms_facility</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>388789.85998924787</minx>
+    <maxx>402555.620112168</maxx>
+    <miny>352833.3305876291</miny>
+    <maxy>373478.619369771</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.1113238268142</minx>
+    <maxx>129.27064017742512</maxx>
+    <miny>36.652437345834706</miny>
+    <maxy>36.84117695774246</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>
