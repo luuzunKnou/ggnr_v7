@@ -158,6 +158,8 @@ export function useFmsFacilityOverlayLayer(mapReady: boolean) {
       zIndex: 1089,
     });
     layer.set(FMS_FACILITY_OVERLAY_LAYER_KEY, true);
+    // 지도분할 보조 칸 미러는 name|id 필요
+    layer.set('name', FMS_FACILITY_OVERLAY_LAYER_KEY);
     map.getLayers().push(layer);
     layerRef.current = layer;
 
@@ -170,6 +172,7 @@ export function useFmsFacilityOverlayLayer(mapReady: boolean) {
       zIndex: 1090,
     });
     selectionLayer.set(FMS_FACILITY_SELECTION_LAYER_KEY, true);
+    selectionLayer.set('name', FMS_FACILITY_SELECTION_LAYER_KEY);
     map.getLayers().push(selectionLayer);
     selectionLayerRef.current = selectionLayer;
 
