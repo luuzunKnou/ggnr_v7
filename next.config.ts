@@ -11,7 +11,7 @@ import { getProjectEnvVars } from "./scripts/load-project-env";
  * 없으면 "" → localhost/IP 루트 접속(기존과 동일).
  *
  * 주의: basePath 는 next build / next dev 기동 시점에 반영됨. env만 바꾸고 재빌드 없이 start 하면 CSS/JS 경로가 어긋날 수 있음.
- * 게이트 진입 예: https://dggskorea/build_yy — BASE_PATH=/build_yy (끝 / 없음).
+ * 게이트 진입 예: https://dggs.kr/build_yy — BASE_PATH=/build_yy (끝 / 없음).
  */
 function resolveBasePath(): string {
   let raw = (process.env.BASE_PATH ?? "").trim();

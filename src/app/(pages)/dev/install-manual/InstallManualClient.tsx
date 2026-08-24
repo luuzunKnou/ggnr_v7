@@ -13,6 +13,7 @@ const SECTIONS = [
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
   { id: 'contour', label: '기초데이터: 고도(등고선)' },
   { id: 'kais', label: '기초데이터: 건설•도로' },
+  { id: 'base_path', label: 'BASE_PTH 설정' },
 ] as const;
 
 const HEADER_BAR = 'flex h-10 shrink-0 items-center border-b';
@@ -332,6 +333,11 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
                 <p>- public_layer.sgg의 <code className="rounded bg-muted px-1 py-0.5">adm_sect_cd</code> 참고</p>
               </li>
             </ul>
+          </section>
+          <section id="base_path" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">BASE_PTH 설정</h1>
+            <p>시연 게이트 서버 등록했을 때, [프로젝트명].env에 <code className="rounded bg-muted px-1 py-0.5">BASE_PATH</code> 설정</p>
+            <p className="text-red-500">'/프로젝트명'으로 넣어주세요.</p>
           </section>
         </article>
         </div>
