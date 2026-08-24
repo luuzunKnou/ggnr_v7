@@ -2,13 +2,14 @@
  * Next.js 서버(Node) 기동 시 타이머만 등록(기동 직후 연계 실행 없음).
  * 재난안전데이터: safetydata.config 의 일/주/월·interval 스케줄.
  * KAIS: kais.config 의 KAIS_REFRESH_SCHEDULE.
+ * KRAS: krasLayerSync.config 매일 01:00 (목록·지적·읍면동·주제도·토지기본·소유현황·공시지가 파일).
  * 점사용료(차세대): useFeeSync.config 의 USE_FEE_SYNC_SCHEDULE.
  * FMS 안전점검: fmsSync.config 의 FMS_SYNC_SCHEDULE.
  * nssm 로그 백업: start 전용, 매일 00:00 (C:\\logs → backup).
  * interval(분)은 시계 격자(예 5분→:00,:05,…)에 맞춤. (next dev에서는 5분 interval만 daily 1회로 축소)
  * - process.env DISABLE_*_SCHEDULER=1 또는 runtime.env DISABLED_SCHEDULERS=useFeeSync,kais,…
  *
- * 앱 layer 테이블: 도로점용대장·공통점용(9)·점사용료(3)·차세대 연계(ngl_error_log·ngl_query_table)·메모·영상 등 — 없으면 CREATE, public에만 있으면 layer로 이동.
+ * 앱 layer 테이블: 도로점용대장·공통점용(9)·점사용료(3)·차세대 연계(ngl_error_log·ngl_query_table)·메모·영상·공사대장·보상편입용지 등 — 없으면 CREATE, public에만 있으면 layer로 이동.
  *
  * instrumentation은 edge/nodejs 둘 다 컴파일되므로, pg를 쓰는 스케줄러는
  * NEXT_RUNTIME === 'nodejs' 분기 안에서만 동적 import 한다.
@@ -75,6 +76,16 @@ export async function register(): Promise<void> {
       startKaisScheduler();
     } else {
       console.info('[instrumentation] KAIS scheduler skipped');
+    }
+
+    const skipKrasLayer =
+      process.env.DISABLE_KRAS_LAYER_SCHEDULER === '1' ||
+      isSchedulerDisabledInRuntime(SCHEDULER_CODES.krasLayer);
+    if (!skipKrasLayer) {
+      const { startKrasLayerScheduler } = await import('@/integrations/krasLayerScheduler');
+      startKrasLayerScheduler();
+    } else {
+      console.info('[instrumentation] KRAS layer scheduler skipped');
     }
 
     const skipNssm =

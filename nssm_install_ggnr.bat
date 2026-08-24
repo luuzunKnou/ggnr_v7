@@ -168,4 +168,8 @@ if not exist "%LOG_BACKUP%" (
   )
   echo [nssm-install] 생성: %LOG_BACKUP%
 )
+if not exist "%LOG_DIR%\linkage" (
+  mkdir "%LOG_DIR%\linkage"
+  echo [nssm-install] 생성: %LOG_DIR%\linkage
+)
 exit /b 0

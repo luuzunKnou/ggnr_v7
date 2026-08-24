@@ -20,6 +20,7 @@ import {
 import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPanels';
 import {
   BuildingDataSourceLine,
+  LandLinkageLegendText,
   ParcelLandLinkageSourceText,
   ParcelLinkageValueText,
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
@@ -598,6 +599,11 @@ export function LandInfoPanelContent({
           {!parcelData.source && hasNoLinkageRows ? (
             <p className="text-[11px] text-muted-foreground">연계 데이터 없음</p>
           ) : null}
+          {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
+          {parcelData.krasSkipReason ? (
+            <p className="text-[11px] leading-relaxed text-amber-800">행망 미사용: {parcelData.krasSkipReason}</p>
+          ) : null}
+          <LandLinkageLegendText source={parcelData.source} />
           <section className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">토지기본정보</p>
             <div className="grid grid-cols-[85px_1fr_85px_1fr] overflow-hidden rounded border border-border text-[12px]">
