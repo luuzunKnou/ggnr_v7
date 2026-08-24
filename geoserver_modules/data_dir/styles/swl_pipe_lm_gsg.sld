@@ -10,13 +10,15 @@
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
               <sld:CssParameter name="stroke-opacity">0.4</sld:CssParameter>
               <sld:CssParameter name="stroke-width">3</sld:CssParameter>
+              <sld:CssParameter name="stroke-dasharray">8.0 4.0</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
           <sld:LineSymbolizer>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#673AB7</sld:CssParameter>
-              <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
+              <sld:CssParameter name="stroke">#FF9800</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.85</sld:CssParameter>
               <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+              <sld:CssParameter name="stroke-dasharray">8.0 4.0</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
         </sld:Rule>
@@ -25,3 +27,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+
