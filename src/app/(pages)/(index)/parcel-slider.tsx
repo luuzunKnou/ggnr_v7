@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import Link from "next/link"
 
 interface ParcelSlide {
   title: string
@@ -121,9 +122,9 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
         </svg>
       </button>
 
-      {/* 바로가기 버튼 */}
-      <button
-        type="button"
+      {/* 바로가기 — 지도 이동 후 시스템 선택 */}
+      <Link
+        href="/map"
         className="absolute z-10 bottom-[calc(1rem+30px+0.5rem)] left-1/2 -translate-x-1/2 inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur px-6 py-3 text-sm font-medium transition-colors text-white rounded-[5px]"
       >
         바로가기
@@ -138,7 +139,7 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
           <path d="m12 8 4 4-4 4" />
           <path d="M8 12h8" />
         </svg>
-      </button>
+      </Link>
 
       {/* Indicators */}
       <div className="absolute z-10 bottom-4 left-1/2 -translate-x-1/2 flex gap-2">

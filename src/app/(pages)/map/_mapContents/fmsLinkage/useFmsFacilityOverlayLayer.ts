@@ -11,7 +11,11 @@ import type { FeatureLike } from 'ol/Feature';
 import type { MapBrowserEvent } from 'ol';
 import { unByKey } from 'ol/Observable';
 import { useMapContext } from '../../_mapComponents/MapContext';
-import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
+import {
+  compareFeaturesByGeometryStackOrder,
+  markLayerGeomStack,
+  LAYER_GEOM_STACK_SKIP_KEY,
+} from '@/lib/mapLayerGeometryOrder';
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
@@ -155,8 +159,8 @@ export function useFmsFacilityOverlayLayer(mapReady: boolean) {
       source,
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: (feature) => styleForFeature(feature),
-      zIndex: 1089,
     });
+    markLayerGeomStack(layer, 'POLYGON');
     layer.set(FMS_FACILITY_OVERLAY_LAYER_KEY, true);
     // 지도분할 보조 칸 미러는 name|id 필요
     layer.set('name', FMS_FACILITY_OVERLAY_LAYER_KEY);
@@ -171,6 +175,7 @@ export function useFmsFacilityOverlayLayer(mapReady: boolean) {
       style: createFmsSelectionStyle(() => pulsePhaseRef.current),
       zIndex: 1090,
     });
+    selectionLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true);
     selectionLayer.set(FMS_FACILITY_SELECTION_LAYER_KEY, true);
     selectionLayer.set('name', FMS_FACILITY_SELECTION_LAYER_KEY);
     map.getLayers().push(selectionLayer);

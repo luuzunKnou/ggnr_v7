@@ -18,6 +18,11 @@ import {
   createServiceLayer,
   useServiceLayerSync,
 } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
+import {
+  bindMapGeometryStackOrder,
+  mergeDefineLayerShpTypesIntoGeometryMap,
+} from '@/lib/mapLayerGeometryOrder';
+import tables from '@/config/defineLayer/tables.json';
 import { useBackgroundLayer } from '@/app/(pages)/map/_mapComponents/hooks/useBackgroundLayer';
 import {
   useCadastralLayerSync,
@@ -30,6 +35,11 @@ import { useThematicMapLayerSync } from '@/app/(pages)/map/_mapComponents/layerF
 import { useThematicMapCatalog } from '@/app/(pages)/map/_mapComponents/hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from '@/app/(pages)/map/_mapComponents/hooks/useOwnershipCatalog';
 import type { MapPrintSnapshot } from './mapPrintTypes';
+
+const PRINT_WMS_GEOM_TYPES = mergeDefineLayerShpTypesIntoGeometryMap(
+  {},
+  tables as unknown[]
+);
 
 export function useMapPrintMap(
   hostRef: React.RefObject<HTMLDivElement | null>,
@@ -84,6 +94,7 @@ export function useMapPrintMap(
       controls: defaultControls({ zoom: false, attribution: false }),
       interactions: defaultInteractions({ doubleClickZoom: false }),
     });
+    const unbindGeomStack = bindMapGeometryStackOrder(olMap, PRINT_WMS_GEOM_TYPES);
     olMap.getLayers().push(createServiceLayer());
     mapRef.current = olMap;
     setMap(olMap);
@@ -94,6 +105,7 @@ export function useMapPrintMap(
     window.addEventListener('resize', updateSize);
 
     return () => {
+      unbindGeomStack();
       window.removeEventListener('resize', updateSize);
       olMap.setTarget(undefined);
       mapRef.current = null;
@@ -103,7 +115,7 @@ export function useMapPrintMap(
   }, [open, hostRef, snapshot]);
 
   useBackgroundLayer(map, backgroundMapId);
-  useServiceLayerSync(map, mapReady, visibleLayerNames);
+  useServiceLayerSync(map, mapReady, visibleLayerNames, undefined, undefined, PRINT_WMS_GEOM_TYPES);
   useCadastralLayerSync(map, mapReady, activeLayerControls, visibleCadastral);
   useBuildingRoadLayerSync(map, mapReady, activeLayerControls, visibleBuildingRoad);
   useBasicSectionLayerSync(map, mapReady, activeLayerControls);
