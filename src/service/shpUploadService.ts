@@ -413,13 +413,9 @@ async function getShpRawExtent(absoluteShpPath: string): Promise<{ minX: number;
 
   const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
   const args = [...prefix, '-al', '-so', normalized];
-  const isWin = process.platform === 'win32';
-  const useConda = prefix.length > 0;
-  const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
-  const spawnArgs = useConda ? args : (isWin ? ['/c', ogrinfoCmd, ...args.slice(prefix.length)] : args);
 
   const stdout = await new Promise<string>((resolve, reject) => {
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
+    const child = spawnGdalProcess(ogrinfoCmd, args, gdalEnv);
     const chunks: Buffer[] = [];
     child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
     child.on('close', (code) => resolve(code === 0 ? Buffer.concat(chunks).toString('utf8') : ''));
@@ -1084,6 +1080,15 @@ function resolveOgr2ogrRun(): {
   return { cmd: 'ogr2ogr', args: [] };
 }
 
+/**
+ * Windows `cmd /c`는 경로 공백을 다음 명령으로 잘라
+ * `'d:\20260608'은(는) 내부 또는 외부 명령…` 으로 실패한다.
+ * 실행 파일·인자를 그대로 spawn한다.
+ */
+function spawnGdalProcess(cmd: string, args: string[], env?: NodeJS.ProcessEnv) {
+  return spawn(cmd, args, { windowsHide: true, shell: false, env: env ?? process.env });
+}
+
 /** ogrinfo 실행 방식: ogr2ogr와 동일(conda env 또는 GGNR_GDAL 경로). 도구명만 ogrinfo */
 function resolveOgrInfoRun(): { cmd: string; args: string[]; env?: NodeJS.ProcessEnv } {
   const root = process.cwd();
@@ -1122,13 +1127,9 @@ export async function getShpGeometryType(absoluteShpPath: string): Promise<ShpGe
 
   const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
   const args = [...prefix, '-al', '-so', normalized];
-  const isWin = process.platform === 'win32';
-  const useConda = prefix.length > 0;
-  const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
-  const spawnArgs = useConda ? args : (isWin ? ['/c', ogrinfoCmd, ...args.slice(prefix.length)] : args);
 
   const stdout = await new Promise<string>((resolve, reject) => {
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
+    const child = spawnGdalProcess(ogrinfoCmd, args, gdalEnv);
     const chunks: Buffer[] = [];
     child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
     child.on('close', (code) => {
@@ -1326,15 +1327,7 @@ export async function createTableFromShp(params: {
         '-overwrite',
       ];
       const execArgs = ogr2ogrRunPrefix.length > 0 ? [...ogr2ogrRunPrefix, ...ogr2ogrArgs] : ogr2ogrArgs;
-      const isWin = process.platform === 'win32';
-      const useConda = ogr2ogrRunPrefix.length > 0;
-      const spawnCmd = useConda ? ogr2ogrCmd : (isWin ? 'cmd.exe' : ogr2ogrCmd);
-      const spawnArgs = useConda ? execArgs : (isWin ? ['/c', ogr2ogrCmd, ...execArgs] : execArgs);
-      const child = spawn(spawnCmd, spawnArgs, {
-        windowsHide: true,
-        shell: false,
-        env: gdalEnv ?? process.env,
-      });
+      const child = spawnGdalProcess(ogr2ogrCmd, execArgs, gdalEnv);
       const stderrChunks: Buffer[] = [];
       if (child.stderr) {
         child.stderr.on('data', (d) => stderrChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
@@ -2413,9 +2406,13 @@ export async function getTitleFieldName(params: { tableName: string }): Promise<
 }
 
 /** ogr2ogr 실행 공통 래퍼 (createTableFromShp와 동일한 stderr 디코딩) */
-async function runOgr2ogr(ogr2ogrArgs: string[]): Promise<{ code: number; stderr: string }> {
+async function runOgr2ogr(
+  ogr2ogrArgs: string[],
+  extraEnv?: Record<string, string>,
+): Promise<{ code: number; stderr: string }> {
   const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv } = resolveOgr2ogrRun();
   const execArgs = ogr2ogrRunPrefix.length > 0 ? [...ogr2ogrRunPrefix, ...ogr2ogrArgs] : ogr2ogrArgs;
+  const gdalRunEnv = { ...(gdalEnv ?? process.env), ...extraEnv };
 
   const decodeStderr = (chunk: Buffer | string): string => {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk;
@@ -2427,11 +2424,7 @@ async function runOgr2ogr(ogr2ogrArgs: string[]): Promise<{ code: number; stderr
   };
 
   return new Promise<{ code: number; stderr: string }>((resolve) => {
-    const isWin = process.platform === 'win32';
-    const useConda = ogr2ogrRunPrefix.length > 0;
-    const spawnCmd = useConda ? ogr2ogrCmd : (isWin ? 'cmd.exe' : ogr2ogrCmd);
-    const spawnArgs = useConda ? execArgs : (isWin ? ['/c', ogr2ogrCmd, ...execArgs] : execArgs);
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
+    const child = spawnGdalProcess(ogr2ogrCmd, execArgs, gdalRunEnv);
     const stderrChunks: Buffer[] = [];
     if (child.stderr) {
       child.stderr.on('data', (d) => stderrChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
@@ -2504,13 +2497,9 @@ async function runOgrinfoStdout(absoluteShpPath: string, extraArgs: string[]): P
 
   const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
   const args = [...prefix, ...extraArgs, normalized];
-  const isWin = process.platform === 'win32';
-  const useConda = prefix.length > 0;
-  const spawnCmd = useConda ? ogrinfoCmd : (isWin ? 'cmd.exe' : ogrinfoCmd);
-  const spawnArgs = useConda ? args : (isWin ? ['/c', ogrinfoCmd, ...args.slice(prefix.length)] : args);
 
   return new Promise<string>((resolve) => {
-    const child = spawn(spawnCmd, spawnArgs, { windowsHide: true, shell: false, env: gdalEnv ?? process.env });
+    const child = spawnGdalProcess(ogrinfoCmd, args, gdalEnv);
     const chunks: Buffer[] = [];
     child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
     child.on('close', (code) => {
@@ -6547,6 +6536,9 @@ export async function exportLayerTableToShp(params: {
   const dbCfg = getDbConfig();
   const pgConn = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
   const layerTable = `${schema}.${tableName}`;
+  /** 국내 SHP·엑셀은 CP949. UTF-8로 쓰면 한글이 깨져 보인다. */
+  const dbfEncoding = 'CP949';
+  const ogrEnv = { SHAPE_ENCODING: dbfEncoding };
 
   /**
    * public_layer.jijuk 등: geometry_columns SRID=0인데 실제 좌표는 5181 → -s_srs로 소스 고정.
@@ -6561,8 +6553,8 @@ export async function exportLayerTableToShp(params: {
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
-  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', 'ENCODING=UTF-8');
-  const result = await runOgr2ogr(ogrBase);
+  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', `ENCODING=${dbfEncoding}`);
+  const result = await runOgr2ogr(ogrBase, ogrEnv);
 
   let shpSize = 0;
   try {
@@ -6578,8 +6570,8 @@ export async function exportLayerTableToShp(params: {
     if (schema === 'public_layer') {
       retryArgs.push('-s_srs', 'EPSG:5181');
     }
-    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', 'ENCODING=UTF-8');
-    const result2 = await runOgr2ogr(retryArgs);
+    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', `ENCODING=${dbfEncoding}`);
+    const result2 = await runOgr2ogr(retryArgs, ogrEnv);
     try {
       shpSize = (await fs.stat(outShp)).size;
     } catch {
@@ -6590,7 +6582,7 @@ export async function exportLayerTableToShp(params: {
       const tail = (result2.stderr ?? result.stderr ?? '').trim() || `ogr2ogr 코드 ${result2.code}`;
       return {
         success: false,
-        error: `SHP 생성 실패(jijuk 등 일부 행 좌표계·지오메트리 오류). ${tail}`,
+        error: `SHP 생성 실패. ${tail}`,
       };
     }
     if (result2.code !== 0) {
@@ -6599,6 +6591,8 @@ export async function exportLayerTableToShp(params: {
   } else if (result.code !== 0) {
     console.warn(`[exportLayerTableToShp] ${schema}.${tableName} ogr2ogr exit ${result.code} (일부 행 생략, shp ${shpSize}b)`);
   }
+
+  await fs.writeFile(path.join(tempDir, `${tableName}.cpg`), `${dbfEncoding}\n`, 'utf8');
 
   const chunks: Buffer[] = [];
   const archive = archiver('zip', { zlib: { level: 9 } });

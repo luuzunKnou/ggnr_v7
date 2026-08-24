@@ -1,12 +1,13 @@
 /**
  * 서버 기동 시 앱 필수 layer 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
+ * - 접도구역 건축물: road_frontage_building(+_detail|_confirm)
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
  */
-import { db } from '@/database/db';
+import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { MEMO_TABLES } from '@/lib/memoConfig';
 
@@ -48,8 +49,33 @@ async function columnExists(schema: string, table: string, column: string): Prom
   return (res.rows?.length ?? 0) > 0;
 }
 
+async function schemaExists(schema: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM information_schema.schemata WHERE schema_name = $1 LIMIT 1`,
+    [schema]
+  );
+  return (res.rowCount ?? res.rows.length) > 0;
+}
+
+function pgErrCode(e: unknown): string {
+  if (e && typeof e === 'object' && 'code' in e) return String((e as { code?: unknown }).code ?? '');
+  const cause = e instanceof Error ? (e as Error & { cause?: unknown }).cause : undefined;
+  if (cause && typeof cause === 'object' && 'code' in cause) {
+    return String((cause as { code?: unknown }).code ?? '');
+  }
+  return '';
+}
+
 async function ensureSchemaLayer(): Promise<void> {
-  await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS layer`));
+  if (await schemaExists('layer')) return;
+  try {
+    await pool.query('CREATE SCHEMA IF NOT EXISTS layer');
+  } catch (e: unknown) {
+    if (await schemaExists('layer')) return;
+    const code = pgErrCode(e);
+    if (code === '42P06' || code === '42501') return;
+    throw e;
+  }
 }
 
 async function execSqlStatements(raw: string): Promise<void> {
@@ -134,6 +160,74 @@ CREATE INDEX IF NOT EXISTS road_use_ledger_jijuk_parent_id_idx
 CREATE INDEX IF NOT EXISTS road_use_ledger_jijuk_geom_gix
   ON layer.road_use_ledger_jijuk USING GIST (geom);
 COMMENT ON TABLE layer.road_use_ledger_jijuk IS '도로점용 대장 필지목록';
+`;
+
+const ROAD_FRONTAGE_BUILDING_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_frontage_building (
+  id SERIAL PRIMARY KEY,
+  geom geometry(Point, 5181),
+  lon double precision,
+  lat double precision,
+  road_type text,
+  route_no text,
+  route_name text,
+  serial_no text,
+  prepared_date text,
+  location_address text,
+  resident_name text,
+  resident_phone text,
+  building_owner_name text,
+  building_owner_phone text,
+  building_owner_address text,
+  land_owner_name text,
+  land_owner_phone text,
+  land_owner_address text,
+  writer_dept text,
+  writer_name text,
+  written_at text,
+  attach_shot_before text,
+  attach_shot_after text,
+  is_del boolean NOT NULL DEFAULT false,
+  create_date text,
+  create_user text,
+  update_date text,
+  update_user text
+);
+CREATE INDEX IF NOT EXISTS road_frontage_building_geom_gix
+  ON layer.road_frontage_building USING GIST (geom);
+COMMENT ON TABLE layer.road_frontage_building IS '접도구역 기존 건축물 관리대장';
+`;
+
+const ROAD_FRONTAGE_BUILDING_DETAIL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_frontage_building_detail (
+  id SERIAL PRIMARY KEY,
+  parent_id integer NOT NULL REFERENCES layer.road_frontage_building (id) ON DELETE CASCADE,
+  dong_no integer,
+  installed_date text,
+  structure text,
+  usage_type text,
+  area_sqm double precision,
+  location_kind text,
+  bad_marks text,
+  sort_no integer NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS road_frontage_building_detail_parent_id_idx
+  ON layer.road_frontage_building_detail (parent_id);
+COMMENT ON TABLE layer.road_frontage_building_detail IS '접도구역 건축물 내용';
+`;
+
+const ROAD_FRONTAGE_BUILDING_CONFIRM_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_frontage_building_confirm (
+  id SERIAL PRIMARY KEY,
+  parent_id integer NOT NULL REFERENCES layer.road_frontage_building (id) ON DELETE CASCADE,
+  confirm_date text,
+  confirmer_name text,
+  approver_name text,
+  sort_no integer NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS road_frontage_building_confirm_parent_id_idx
+  ON layer.road_frontage_building_confirm (parent_id);
+COMMENT ON TABLE layer.road_frontage_building_confirm IS '접도구역 건축물 확인 결과';
 `;
 
 const WORK_UNIT_SQL = `
@@ -424,6 +518,33 @@ export async function ensureRoadUseLedgerTables(result?: EnsureResult): Promise<
   return out;
 }
 
+export async function ensureRoadFrontageBuildingTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'road_frontage_building',
+    createSql: ROAD_FRONTAGE_BUILDING_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'road_frontage_building_detail',
+    createSql: ROAD_FRONTAGE_BUILDING_DETAIL_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'road_frontage_building_confirm',
+    createSql: ROAD_FRONTAGE_BUILDING_CONFIRM_SQL,
+    result: out,
+  });
+  try {
+    await pool.query(`DROP TABLE IF EXISTS layer.road_frontage_building_attach`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`layer.road_frontage_building_attach drop: ${msg}`);
+  }
+  return out;
+}
+
 /** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
 export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -500,6 +621,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
   try {
     await ensureSchemaLayer();
     await ensureRoadUseLedgerTables(result);
+    await ensureRoadFrontageBuildingTables(result);
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
     await ensureMemoTables(result);

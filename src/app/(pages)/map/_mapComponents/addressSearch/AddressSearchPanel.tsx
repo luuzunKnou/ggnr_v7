@@ -45,6 +45,8 @@ type Props = {
    * field: 폼 Input 한 칸 대체(결과만 드롭다운)
    */
   layout?: 'default' | 'field';
+  /** field일 때 표 칸 높이에 맞춤 */
+  compact?: boolean;
 };
 
 /** 지도 map-search-bar와 동일한 VWorld 주소검색 UI */
@@ -56,6 +58,7 @@ export function AddressSearchPanel({
   onClear,
   onQueryChange,
   layout = 'default',
+  compact = false,
 }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const [addressResults, setAddressResults] = useState<VWorldAddressItem[]>([]);
@@ -160,7 +163,9 @@ export function AddressSearchPanel({
         }}
         className={
           isField
-            ? 'flex h-8 items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2'
+            ? compact
+              ? 'flex h-[20px] items-center gap-0.5 rounded-none border-0 bg-transparent px-0'
+              : 'flex h-8 items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2'
             : 'flex items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-2 py-1.5'
         }
       >
@@ -182,10 +187,12 @@ export function AddressSearchPanel({
             onQueryChange?.(next);
           }}
           placeholder={placeholder}
-          style={isField ? { fontSize: '12px' } : undefined}
+          style={isField ? { fontSize: compact ? '11px' : '12px' } : undefined}
           className={
             isField
-              ? 'h-7 min-h-7 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
+              ? compact
+                ? 'h-[20px] min-h-0 border-0 bg-transparent px-0.5 text-[11px] shadow-none focus-visible:border-0 focus-visible:ring-0'
+                : 'h-7 min-h-7 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
               : 'h-5 min-h-5 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
           }
         />
@@ -202,7 +209,7 @@ export function AddressSearchPanel({
         )}
       </form>
 
-      {!vworldApiKey && (
+      {!vworldApiKey && !compact && (
         <div className="rounded border border-amber-100 bg-amber-50 px-2 py-2 text-[11px] text-amber-800">
           VWorld API 키가 설정되지 않아 주소검색을 사용할 수 없습니다.
         </div>

@@ -1,0 +1,19 @@
+<layer>
+  <name>road_frontage_building</name>
+  <id>LayerInfoImpl-349feda:19ffdde5500:-64c9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-349feda:19ffdde5500:-64c8</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-349feda:19ffdde5500:-64ca</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-24 02:46:57.319 UTC</dateCreated>
+  <dateModified>2026-08-24 02:46:59.73 UTC</dateModified>
+</layer>
