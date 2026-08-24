@@ -447,6 +447,17 @@ export function MapSearchBar({
     fetchSystemList();
   }, [fetchSystemList]);
 
+  const mustPickSystem = !selectedSystemKey && systemList.length > 0;
+
+  useEffect(() => {
+    if (mustPickSystem) setSystemModalOpen(true);
+  }, [mustPickSystem]);
+
+  const handleSystemModalOpenChange = (open: boolean) => {
+    if (!open && mustPickSystem) return;
+    setSystemModalOpen(open);
+  };
+
   /** 지도 주소 검색·역지오코딩용 VWorld API 키는 서버(runtime.env)에서만 읽히므로 API로 조회 후 context에 저장 */
   const fetchMapConfig = useCallback(() => {
     call('', 'POST', { service: 'configService', action: 'getMapConfig', params: {} })
@@ -699,8 +710,20 @@ export function MapSearchBar({
                 <ChevronDown className="w-4 h-4 shrink-0 text-slate-400 dark:text-white/50" aria-hidden />
               </button>
 
-              <Dialog open={systemModalOpen} onOpenChange={setSystemModalOpen}>
-                <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90" showCloseButton={false}>
+              <Dialog open={systemModalOpen} onOpenChange={handleSystemModalOpenChange}>
+                <DialogContent
+                  className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90"
+                  showCloseButton={false}
+                  onPointerDownOutside={(e) => {
+                    if (mustPickSystem) e.preventDefault();
+                  }}
+                  onInteractOutside={(e) => {
+                    if (mustPickSystem) e.preventDefault();
+                  }}
+                  onEscapeKeyDown={(e) => {
+                    if (mustPickSystem) e.preventDefault();
+                  }}
+                >
                   <DialogHeader className="px-3 py-2 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white dark:border-white/10 dark:from-white/5 dark:to-black/90">
                     <DialogTitle className="text-sm font-semibold text-slate-800 dark:text-white/90 flex items-center gap-2">
                       <div className="flex items-center justify-center w-6 h-6 rounded-[5px] bg-primary/10 text-primary">

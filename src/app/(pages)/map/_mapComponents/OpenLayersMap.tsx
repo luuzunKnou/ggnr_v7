@@ -2122,11 +2122,8 @@ export default function OpenLayersMap({
     }
   };
 
-  /** 측정·도형 그리기 중에는 우측 목록 패널 호버/클릭 끄기 (지도 입력 우선) */
-  const overlayListPointerClass =
-    mapContext?.measurementActive || spatialDrawRequest || layerRowGeomEdit
-      ? 'pointer-events-none'
-      : 'pointer-events-auto';
+  /** 목록 패널은 항상 클릭 가능. 바깥 빈 공간은 상위 pointer-events-none으로 지도 측정·그리기가 받음 */
+  const overlayListPointerClass = 'pointer-events-auto';
 
   const jijukLayerEnabled =
     activeControls.includes('cadastral') &&
