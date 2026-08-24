@@ -606,12 +606,7 @@ export function LayerInfoManager({
       const data = res?.data ?? res
       const files: string[] = data?.success && Array.isArray(data.files) ? data.files : []
       setSymbolFolderFiles(files)
-      const currentName = symbolFileNameFromUrl(lastSymbolUrlRef.current)
-      setSymbolLinkFile((prev) => {
-        if (prev && files.includes(prev)) return prev
-        if (currentName && files.includes(currentName)) return currentName
-        return files[0] ?? ""
-      })
+      setSymbolLinkFile((prev) => (prev && files.includes(prev) ? prev : ""))
     } catch {
       setSymbolFolderFiles([])
       setSymbolLinkFile("")
@@ -740,14 +735,15 @@ export function LayerInfoManager({
         return
       }
       setFormProps((p) => ({ ...p, symbolUrl: data.symbolUrl }))
+      lastSymbolUrlRef.current = data.symbolUrl
       setSymbolPreviewKey((n) => n + 1)
-      await loadSymbolFolderFiles(symbolFolder)
+      setSymbolLinkFile("")
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "심볼 파일 연결 실패")
     } finally {
       setSymbolUploading(false)
     }
-  }, [symbolFolder, symbolLinkFile, targetLayerName, loadSymbolFolderFiles])
+  }, [symbolFolder, symbolLinkFile, targetLayerName])
 
   const openAdd = useCallback((layerName: string, shpType?: string) => {
     setTargetLayerName(layerName)
@@ -793,7 +789,7 @@ export function LayerInfoManager({
         )
         setSymbolPickFile(null)
         setPickPreviewUrl("")
-        setSymbolLinkFile(symbolFileNameFromUrl(symbolUrl))
+        setSymbolLinkFile("")
         setSymbolPreviewKey((n) => n + 1)
         void loadSymbolFolders(parseSymbolFolderFromUrl(symbolUrl))
       }
@@ -1333,7 +1329,11 @@ export function LayerInfoManager({
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                   value={symbolFolder}
-                  onChange={(e) => setSymbolFolder(e.target.value)}
+                  onChange={(e) => {
+                    setSymbolFolder(e.target.value)
+                    setSymbolLinkFile("")
+                    setSymbolPickFile(null)
+                  }}
                 >
                   {symbolFolders.length === 0 ? (
                     <option value="">폴더 없음</option>
@@ -1378,13 +1378,16 @@ export function LayerInfoManager({
                     }}
                   >
                     {symbolFolderFiles.length === 0 ? (
-                      <option value="">이 폴더에 파일 없음</option>
+                      <option value="">파일을 선택해주세요</option>
                     ) : (
-                      symbolFolderFiles.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))
+                      <>
+                        <option value="">파일을 선택해주세요</option>
+                        {symbolFolderFiles.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </>
                     )}
                   </select>
                   <Button
@@ -1392,7 +1395,12 @@ export function LayerInfoManager({
                     variant="outline"
                     size="sm"
                     className="h-8 shrink-0 hover:cursor-pointer"
-                    disabled={symbolUploading || !symbolFolder || !symbolLinkFile}
+                    disabled={
+                      symbolUploading ||
+                      !symbolFolder ||
+                      !symbolLinkFile ||
+                      symbolLinkFile === symbolFileNameFromUrl(formProps.symbolUrl ?? "")
+                    }
                     onClick={() => void handleLinkSymbolFile()}
                   >
                     이 파일로 사용
