@@ -226,13 +226,24 @@ export function FmsLinkageListPanel({
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword, system, setOverlayRows])
+  }, [debouncedKeyword, systemFilter, setOverlayRows])
 
   useEffect(() => {
     return () => {
       setOverlayRows?.([])
     }
   }, [setOverlayRows])
+
+  useEffect(() => {
+    setSystemFilter(defaultFmsListSystemFilter(system))
+  }, [system])
+
+  useEffect(() => {
+    if (loading) return
+    if (!selectedDetailId) return
+    if (rows.some((r) => r.id === selectedDetailId)) return
+    onSelectDetailId('')
+  }, [loading, rows, selectedDetailId, onSelectDetailId])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -249,7 +260,7 @@ export function FmsLinkageListPanel({
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 border-b border-border px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -260,9 +271,36 @@ export function FmsLinkageListPanel({
             className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border focus:ring-2 focus:ring-ring"
           />
         </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          총 {rows.length.toLocaleString()}건
-        </p>
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <div
+            className="flex min-w-0 flex-wrap items-center gap-1"
+            role="group"
+            aria-label="시스템 필터"
+          >
+            {FMS_LIST_SYSTEM_FILTERS.map((opt) => {
+              const active = systemFilter === opt.value
+              return (
+                <button
+                  key={opt.value || '__all__'}
+                  type="button"
+                  onClick={() => setSystemFilter(opt.value)}
+                  aria-pressed={active}
+                  className={cn(
+                    'rounded border px-2 py-1 text-[11px] font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="shrink-0 text-xs text-muted-foreground">
+            총 {rows.length.toLocaleString()}건
+          </p>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
@@ -278,14 +316,14 @@ export function FmsLinkageListPanel({
             <col className="w-[90px]" />
             <col className="w-[90px]" />
           </colgroup>
-          <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+          <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
             <tr>
               {FMS_LIST_COLUMNS.map((col) => {
                 if (!isSortKey(col.key)) {
                   return (
                     <th
                       key={col.key}
-                      className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
+                      className="whitespace-nowrap border-b border-border px-1.5 py-1.5 text-center font-semibold text-foreground"
                     >
                       <span className="block truncate">{col.label}</span>
                     </th>
@@ -300,14 +338,14 @@ export function FmsLinkageListPanel({
                 return (
                   <th
                     key={sortKey}
-                    className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
+                    className="whitespace-nowrap border-b border-border px-1.5 py-1.5 text-center font-semibold text-foreground"
                   >
                     <button
                       type="button"
                       onClick={() => toggleSort(sortKey)}
                       className={cn(
-                        'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-slate-100',
-                        active ? 'text-primary' : 'text-slate-700'
+                        'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-background/80',
+                        active ? 'text-primary' : 'text-foreground'
                       )}
                       title={
                         !active
