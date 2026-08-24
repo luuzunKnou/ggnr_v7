@@ -289,7 +289,7 @@ export function RoadLedgerFacilityListSection({
     <div className="mt-3 border-t border-slate-200 pt-3">
       <div className="flex flex-col gap-0">
         <div
-          className="-mx-0 flex flex-wrap gap-0.5 border-b border-slate-200"
+          className="-mx-0 flex flex-nowrap gap-0 overflow-x-auto border-b border-slate-200 scrollbar-hide"
           role="tablist"
           aria-label="시설 구분"
         >
@@ -303,7 +303,7 @@ export function RoadLedgerFacilityListSection({
                 aria-selected={isSel}
                 onClick={() => setSelectedTabKey(key)}
                 className={cn(
-                  "relative shrink-0 border px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+                  "relative min-w-0 shrink-0 truncate whitespace-nowrap border px-2.5 py-1.5 text-center text-[11px] font-medium transition-colors",
                   isSel
                     ? "z-[1] -mb-px border-slate-200 border-b-white bg-white font-semibold text-primary"
                     : "border-transparent bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800",
@@ -362,7 +362,7 @@ export function RoadLedgerFacilityListSection({
                           e.currentTarget.style.display = "none";
                         }}
                       />
-                      <span className="min-w-0 text-[11px] font-medium text-slate-800">{t.title}</span>
+                      <span className="min-w-0 truncate text-[11px] font-medium text-slate-800">{t.title}</span>
                       <span className="shrink-0 text-[10px] text-slate-500">
                         {t.defineTableName}
                         {typeof t.total === "number" ? ` · ${t.total}건` : ""}

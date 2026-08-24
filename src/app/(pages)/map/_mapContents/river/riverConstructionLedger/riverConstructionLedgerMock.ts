@@ -15,6 +15,9 @@ export type RiverConstructionLedgerAttachmentCategory = string;
 
 export const CONS_ATTACH_ROOT_FOLDER = "기타";
 export const CONS_DATA_AS_FILE_LAYER = "cons_data_as";
+/** 목록에 넣지 않는 신규 등록 화면용 고정 id (점용·보상편입과 동일 패턴) */
+export const CONS_DATA_AS_NEW_ID = "rcl-new";
+/** 예전 timestamp 임시 행 호환 */
 export const CONS_DATA_AS_NEW_ID_PREFIX = "rcl-new-";
 
 export type RiverConstructionLedgerAttachment = {
@@ -330,7 +333,8 @@ export function rowHasRiver(row: RiverConstructionLedgerRow, riverName: string):
 }
 
 export function isNewRiverConstructionLedgerRow(row: Pick<RiverConstructionLedgerRow, "id">): boolean {
-  return String(row.id ?? "").startsWith(CONS_DATA_AS_NEW_ID_PREFIX);
+  const id = String(row.id ?? "");
+  return id === CONS_DATA_AS_NEW_ID || id.startsWith(CONS_DATA_AS_NEW_ID_PREFIX);
 }
 
 export function mapConsDataAsApiToLedgerRow(api: ConsDataAsApiRow): RiverConstructionLedgerRow {
@@ -458,7 +462,7 @@ export function ledgerRowToConsDataAsValues(row: {
 
 export function createEmptyRiverConstructionLedgerRow(): RiverConstructionLedgerRow {
   return {
-    id: `${CONS_DATA_AS_NEW_ID_PREFIX}${Date.now()}`,
+    id: CONS_DATA_AS_NEW_ID,
     name: "",
     location: "",
     quantity: "",

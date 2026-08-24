@@ -13,7 +13,36 @@ import {
   type RoadLedgerDocButtonKey,
 } from '@/app/(pages)/map/_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import { getDefineLayerTables, getLayerTableList } from './devTestService';
-import { getLayerTableRowByOgcFid, getTableData, sanitizeDefineLayerRowFilter } from './standardService';
+import {
+  getLayerTableRowByOgcFid,
+  getTableData,
+  resolveLayerPhysicalRelName,
+  sanitizeDefineLayerRowFilter,
+} from './standardService';
+
+/** 시설 건수 조회 동시 실행 수 — 전체 레이어를 한꺼번에 열면 DB 연결이 고갈됨 */
+const FACILITY_COUNT_CONCURRENCY = 3;
+
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const n = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(
+    Array.from({ length: n }, async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]!);
+      }
+    })
+  );
+  return results;
+}
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
@@ -65,8 +94,9 @@ export type RoadLedgerListRow = {
  */
 export async function getRoadLedgerList(params?: {
   keyword?: string;
-}): Promise<{ rows: RoadLedgerListRow[] }> {
+}): Promise<{ rows: RoadLedgerListRow[]; error?: string }> {
   const keyword = String(params?.keyword ?? '').trim();
+  try {
   const tableName = await resolveLayerTableName('a0020000');
   const safeTbl = tableName.replace(/"/g, '""');
 
@@ -155,6 +185,10 @@ export async function getRoadLedgerList(params?: {
   });
 
   return { rows };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { rows: [], error: msg };
+  }
 }
 
 /** 도로대장 레이어 전체 범위(3857) — 패널 진입 시 맞춤 줌용 */
@@ -402,6 +436,7 @@ async function createRoadLedgerFacilityTableFetcher(masterRdid: string): Promise
     total: number;
     error?: string;
   }>;
+  fetchTableCount: (defineTableName: string) => Promise<{ total: number; error?: string }>;
   defineMap: Map<string, DefineLayerRowLite>;
 }> {
   const rdidJoinBuilt = buildRoadLedgerFacilityRdidJoinFilter(masterRdid);
@@ -418,11 +453,15 @@ async function createRoadLedgerFacilityTableFetcher(masterRdid: string): Promise
     if (n) defineMap.set(n, row);
   }
 
-  const cache = new Map<string, { rows: Record<string, unknown>[]; total: number; error?: string }>();
+  const rowCache = new Map<string, { rows: Record<string, unknown>[]; total: number; error?: string }>();
+  const countCache = new Map<string, { total: number; error?: string }>();
 
-  async function fetchTableRows(
-    defineTableName: string
-  ): Promise<{ rows: Record<string, unknown>[]; total: number; error?: string }> {
+  function resolveFacilityTarget(defineTableName: string): {
+    schema: 'layer' | 'public_layer';
+    physical: string;
+    safeCombined: string;
+    cacheKey: string;
+  } | { error: string } {
     const tn = defineTableName.trim().toLowerCase();
     const def = defineMap.get(tn);
     let physical = tn;
@@ -447,17 +486,65 @@ async function createRoadLedgerFacilityTableFetcher(masterRdid: string): Promise
     }
     const safeCombined = sanitizeDefineLayerRowFilter(combined);
     if (!safeCombined) {
-      return { rows: [], total: 0, error: '행 필터 구성 실패(CQL/길이)' };
+      return { error: '행 필터 구성 실패(CQL/길이)' };
     }
+    return {
+      schema,
+      physical,
+      safeCombined,
+      cacheKey: `${schema}::${physical}::${safeCombined}`,
+    };
+  }
 
-    const cacheKey = `${schema}::${physical}::${safeCombined}`;
-    const hit = cache.get(cacheKey);
+  async function fetchTableCount(
+    defineTableName: string
+  ): Promise<{ total: number; error?: string }> {
+    const target = resolveFacilityTarget(defineTableName);
+    if ('error' in target) return { total: 0, error: target.error };
+
+    const rowHit = rowCache.get(target.cacheKey);
+    if (rowHit) return { total: rowHit.total, ...(rowHit.error ? { error: rowHit.error } : {}) };
+    const countHit = countCache.get(target.cacheKey);
+    if (countHit) return countHit;
+
+    const physicalName = await resolveLayerPhysicalRelName(target.schema, target.physical);
+    if (!physicalName) {
+      const out = { total: 0 };
+      countCache.set(target.cacheKey, out);
+      return out;
+    }
+    const safeSchema = target.schema.replace(/"/g, '""');
+    const safeTable = physicalName.replace(/"/g, '""');
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT COUNT(*)::int AS total FROM "${safeSchema}"."${safeTable}" WHERE ${target.safeCombined}`
+        )
+      );
+      const total = Number((res.rows?.[0] as { total?: number } | undefined)?.total ?? 0);
+      const out = { total: Number.isFinite(total) ? total : 0 };
+      countCache.set(target.cacheKey, out);
+      return out;
+    } catch (e: unknown) {
+      const out = { total: 0, error: e instanceof Error ? e.message : String(e) };
+      countCache.set(target.cacheKey, out);
+      return out;
+    }
+  }
+
+  async function fetchTableRows(
+    defineTableName: string
+  ): Promise<{ rows: Record<string, unknown>[]; total: number; error?: string }> {
+    const target = resolveFacilityTarget(defineTableName);
+    if ('error' in target) return { rows: [], total: 0, error: target.error };
+
+    const hit = rowCache.get(target.cacheKey);
     if (hit) return hit;
 
     const res = await getTableData({
-      table: physical,
-      schema,
-      rowFilter: safeCombined,
+      table: target.physical,
+      schema: target.schema,
+      rowFilter: target.safeCombined,
       limit: 500,
       offset: 0,
     });
@@ -466,11 +553,15 @@ async function createRoadLedgerFacilityTableFetcher(masterRdid: string): Promise
       total: typeof res.total === 'number' ? res.total : 0,
       ...(res.error ? { error: res.error } : {}),
     };
-    cache.set(cacheKey, out);
+    rowCache.set(target.cacheKey, out);
+    countCache.set(target.cacheKey, {
+      total: out.total,
+      ...(out.error ? { error: out.error } : {}),
+    });
     return out;
   }
 
-  return { fetchTableRows, defineMap };
+  return { fetchTableRows, fetchTableCount, defineMap };
 }
 
 /**
@@ -561,24 +652,25 @@ export async function getRoadLedgerFacilityGroupDataCounts(params: {
 
   try {
     const existingDefineIds = await getRoadLedgerExistingDefineLayerIdSet();
-    const { fetchTableRows } = await createRoadLedgerFacilityTableFetcher(rdid);
+    const { fetchTableCount } = await createRoadLedgerFacilityTableFetcher(rdid);
     const counts: Partial<Record<RoadLedgerDocButtonKey, number>> = {};
+    for (const groupKey of ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT) {
+      counts[groupKey] = 0;
+    }
 
-    await Promise.all(
-      ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.map(async (groupKey) => {
-        const layerNames = (ROAD_LEDGER_DOC_LAYERS[groupKey] ?? []).filter((dn) =>
-          existingDefineIds.has(String(dn ?? '').trim().toLowerCase())
-        );
-        const parts = await Promise.all(
-          layerNames.map((dn) => fetchTableRows(String(dn ?? '').trim().toLowerCase()))
-        );
-        let sum = 0;
-        for (const p of parts) {
-          if (!p.error) sum += p.total;
-        }
-        counts[groupKey] = sum;
-      })
-    );
+    const jobs: { groupKey: RoadLedgerDocButtonKey; dn: string }[] = [];
+    for (const groupKey of ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT) {
+      for (const raw of ROAD_LEDGER_DOC_LAYERS[groupKey] ?? []) {
+        const dn = String(raw ?? '').trim().toLowerCase();
+        if (dn && existingDefineIds.has(dn)) jobs.push({ groupKey, dn });
+      }
+    }
+
+    const parts = await mapLimit(jobs, FACILITY_COUNT_CONCURRENCY, (job) => fetchTableCount(job.dn));
+    jobs.forEach((job, i) => {
+      const p = parts[i];
+      if (p && !p.error) counts[job.groupKey] = (counts[job.groupKey] ?? 0) + p.total;
+    });
 
     return { counts };
   } catch (e: unknown) {

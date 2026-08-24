@@ -38,8 +38,8 @@ const CONS_DATA_AS_DEFAULT_ATTACH_FOLDERS = ['도면', '조서'] as const;
 
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
 const SEARCH_SCHEMAS = ['layer', 'public'] as const;
-/** 대상 하천 검색용 — 하천구역(river_d_as) · 소하천구역(river_s_as) */
-const RIVER_ZONE_TABLES = ['river_d_as', 'river_s_as'] as const;
+/** 대상 하천 검색용 — 하천구역·소하천구역이 없으면 하천기본계획(river_plan_as)도 사용 */
+const RIVER_NAME_SOURCE_TABLES = ['river_d_as', 'river_s_as', 'river_plan_as'] as const;
 
 const ATTR_FIELDS = [
   'cons_name',
@@ -644,7 +644,7 @@ export async function getNextConsCode(): Promise<{ consCode: string; error?: str
   }
 }
 
-/** river_d_as/river_s_as 중 한 테이블에서 하천명 DISTINCT 조회 SQL (테이블·컬럼 없으면 null) */
+/** 하천구역·소하천구역·하천기본계획 중 한 테이블에서 하천명 DISTINCT 조회 SQL (테이블·컬럼 없으면 null) */
 async function riverZoneNameSelectSql(table: string, keyword: string): Promise<string | null> {
   const meta = await resolveTableWithSchema(table);
   if (!meta) return null;
@@ -659,17 +659,17 @@ async function riverZoneNameSelectSql(table: string, keyword: string): Promise<s
     WHERE COALESCE(TRIM(${quoteIdent(riverCol)}::text), '') <> ''${kw}`;
 }
 
-/** 대상 하천 검색 — river_d_as(하천구역) ∪ river_s_as(소하천구역)의 하천명 목록 */
+/** 대상 하천 검색 — 하천구역·소하천구역 ∪ 하천기본계획의 하천명 목록 */
 export async function listRiverNamesFromZones(params?: {
   keyword?: string;
 }): Promise<{ rivers: string[]; error?: string }> {
   const keyword = String(params?.keyword ?? '').trim();
   const selects = (
-    await Promise.all(RIVER_ZONE_TABLES.map((t) => riverZoneNameSelectSql(t, keyword)))
+    await Promise.all(RIVER_NAME_SOURCE_TABLES.map((t) => riverZoneNameSelectSql(t, keyword)))
   ).filter((s): s is string => Boolean(s));
 
   if (selects.length === 0) {
-    return { rivers: [], error: '하천 구역 레이어(river_d_as/river_s_as)를 찾을 수 없습니다.' };
+    return { rivers: [], error: '하천명 목록을 조회할 레이어를 찾을 수 없습니다.' };
   }
 
   try {
