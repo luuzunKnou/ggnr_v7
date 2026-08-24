@@ -1543,7 +1543,7 @@ export function LayerInfoManager({
                   type="button"
                   onClick={() => setLayerFilterMode(opt.value)}
                   className={cn(
-                    "h-6 rounded-sm px-2 text-xs transition-colors",
+                    "h-6 rounded-sm px-2 text-xs leading-none whitespace-nowrap transition-colors",
                     layerFilterMode === opt.value
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted"

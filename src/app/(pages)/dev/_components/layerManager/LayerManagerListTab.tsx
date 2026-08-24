@@ -663,13 +663,13 @@ export function LayerManagerListTab() {
           className="h-8 w-56 rounded-md text-sm"
         />
         <div className="flex items-center gap-1 rounded-md border p-0.5">
-          {FILTER_OPTIONS.map((opt) => (
+              {FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
               disabled={opt.value === "error" && styleLoading}
               onClick={() => setFilterMode(opt.value)}
-              className={`h-7 rounded-sm px-2.5 text-sm transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                  className={`h-6 rounded-sm px-2 text-xs leading-none whitespace-nowrap transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                 filterMode === opt.value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted"
