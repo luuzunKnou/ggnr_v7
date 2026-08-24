@@ -45,6 +45,7 @@ export function createBasicSectionLayers(): ImageLayer<ImageWMS>[] {
       });
       layer.set('name', layerName);
       layer.set('basicSectionLayer', true);
+      layer.set('layerTableName', tableName);
       return layer;
     }
   );
