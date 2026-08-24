@@ -32,7 +32,9 @@ export type StyleProps = {
   strokeWidth?: number;
   opacity?: number;
   labelField?: string;
-  size?: number; // POINT: mark-size / font-size
+  size?: number; // 라벨 글자크기 (font-size)
+  /** 점·심볼 표시 크기. CSS mark-size 상한(줌인 시 최대 픽셀) */
+  markSize?: number;
   /** POINT + 외부 심볼: 아이콘 URL (있으면 심볼 있는 버전 CSS 생성) */
   symbolUrl?: string;
 };
@@ -44,7 +46,16 @@ const DEFAULT_PROPS: StyleProps = {
   opacity: 0.3,
   labelField: '',
   size: 14,
+  markSize: 18,
 };
+
+const MARK_SIZE_SCALE_SYMBOL = 4.0;
+const MARK_SIZE_SCALE_POINT = 1.5;
+
+function markSizeCssLine(markSize: number, scaleFactor: number): string {
+  const n = Number.isFinite(markSize) && markSize > 0 ? markSize : DEFAULT_PROPS.markSize ?? 18;
+  return `  mark-size: [min(${n}, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * ${scaleFactor})];`;
+}
 
 /** 라벨 필드 지정 시 자동으로 넣는 글자·후광 기본값 (항공지도 가독성) */
 const LABEL_STYLE_DEFAULTS = {
@@ -192,13 +203,21 @@ export function parseSimpleStyleFromCss(cssText: string): {
     else if (key === 'fill-opacity') target.opacity = parseFloat(v);
     else if (key === 'font-size') target.size = parseFloat(v) || LABEL_STYLE_DEFAULTS.fontSize;
     else if (key === 'mark-size') {
-      // mark-size 표현식은 무시하고, 단순 숫자일 때만 size로 반영
       const n = parseFloat(v);
-      if (!Number.isNaN(n) && !/[\[\]]/.test(v)) target.size = n;
+      if (!Number.isNaN(n) && !/[\[\]]/.test(v)) {
+        target.markSize = n;
+        return;
+      }
+      const cap = v.match(/min\s*\(\s*([0-9.]+)/i);
+      if (cap) target.markSize = parseFloat(cap[1]);
     }
     else if (key === 'label') {
       const m = v.match(/\[\s*([^\]]+)\s*\]/);
       if (m) target.labelField = m[1].trim();
+    }
+    else if (key === 'mark') {
+      const urlMatch = v.match(/url\s*\(\s*["']?([^"')]+)["']?\s*\)/i);
+      if (urlMatch) target.symbolUrl = urlMatch[1].trim();
     }
   };
 
@@ -260,11 +279,13 @@ export function buildCssFromSimpleStyle(
       const mime = symbolUrl.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
       geomLines.push(`  mark: url("${symbolUrl}");`);
       geomLines.push(`  mark-mime: "${mime}";`);
-      geomLines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];`);
+      const markSize = styleProps.markSize ?? DEFAULT_PROPS.markSize ?? 18;
+      geomLines.push(markSizeCssLine(markSize, MARK_SIZE_SCALE_SYMBOL));
     } else {
       // Point - 심볼이 없을 때
       geomLines.push(`  mark: symbol(circle);`);
-      geomLines.push(`  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];`);
+      const markSize = styleProps.markSize ?? DEFAULT_PROPS.markSize ?? 18;
+      geomLines.push(markSizeCssLine(markSize, MARK_SIZE_SCALE_POINT));
       geomLines.push(`  :mark {`);
       geomLines.push(`    fill: ${f};`);
       geomLines.push(`    stroke: ${s};`);
@@ -331,4 +352,35 @@ export function replaceDefaultRuleInCss(cssText: string, newStarBlock: string): 
   const before = cssText.slice(0, idx);
   const after = cssText.slice(end).trim();
   return (before + newStarBlock + (after ? '\n\n' + after : '')).trim();
+}
+
+/** GeoServer www 주소 또는 파일명 → Next public/symbol 미리보기 경로 */
+export function toPublicSymbolPreviewUrl(symbolUrlOrName: string): string | null {
+  const raw = String(symbolUrlOrName ?? '').trim();
+  if (!raw) return null;
+  const file = raw.split(/[?#]/)[0].split(/[\\/]/).pop() ?? '';
+  const m = file.match(/^(.+)\.(svg|png)$/i);
+  if (m) return `/symbol/${m[1]}.${m[2].toLowerCase()}`;
+  if (/^[a-zA-Z0-9._-]+$/.test(raw)) return `/symbol/${raw}.svg`;
+  return null;
+}
+
+/** 심볼 주소에서 폴더명 추출. `.../www/symbol/{폴더}/{파일}` 형식만 인식 */
+export function parseSymbolFolderFromUrl(symbolUrl: string): string | null {
+  const raw = String(symbolUrl ?? '').trim();
+  if (!raw) return null;
+  const m = raw.split(/[?#]/)[0].match(/\/www\/symbol\/([^/]+)\/[^/]+\.(?:svg|png)$/i);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+}
+
+/** 심볼 주소에서 파일명만 추출 (모달 표시용) */
+export function symbolFileNameFromUrl(symbolUrl: string): string {
+  const raw = String(symbolUrl ?? '').trim();
+  if (!raw) return '';
+  return raw.split(/[?#]/)[0].split(/[\\/]/).pop() ?? raw;
 }
