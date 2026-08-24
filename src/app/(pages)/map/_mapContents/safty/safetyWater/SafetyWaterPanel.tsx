@@ -165,7 +165,7 @@ export function SafetyWaterPanel({ onClose }: Props) {
       <div className="relative shrink-0 border-b border-border bg-gradient-to-b from-primary/5 to-background">
         <div className="flex items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0 flex-1 pt-0.5">
-            <h2 className="text-[15px] font-semibold leading-tight text-foreground">침수·홍수 현황</h2>
+            <h2 className="text-[12px] font-semibold leading-tight text-foreground">침수·홍수 현황</h2>
             <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
               강수량·수위를 한 화면에서 확인합니다.
             </p>
