@@ -117,6 +117,7 @@ echo.
 
 :: --- python/env : env_parts 있으면 복원(필수 아님·없으면 생략 exit 0) ---
 echo [진행] python/env 복원 확인 ^(env_parts 없으면 생략^)...
+:: PowerShell 한글 로그: 스크립트 UTF-8 BOM + 콘솔 UTF-8 (restore-python-env.ps1 상단)
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\restore-python-env.ps1" -Root "%ROOT%"
 if errorlevel 1 goto :fail_exit
 echo.
