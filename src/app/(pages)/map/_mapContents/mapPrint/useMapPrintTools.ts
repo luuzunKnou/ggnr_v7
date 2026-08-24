@@ -19,6 +19,7 @@ import { useMeasure, type MeasureType } from '@/app/(pages)/map/_mapComponents/h
 import { useAltitudeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useAltitudeMeasure';
 import { useSlopeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useSlopeMeasure';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
+import type { MapPrintTool } from './mapPrintTypes';
 
 const PRINT_COORD_INPUT_KEY = 'printCoordInput';
 
