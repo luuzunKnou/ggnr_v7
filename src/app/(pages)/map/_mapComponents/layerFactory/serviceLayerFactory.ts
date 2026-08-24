@@ -5,6 +5,7 @@ import ImageWrapper from 'ol/Image';
 import type { Map as OLMap } from 'ol';
 import {
   sortLayerNamesForWmsStack,
+  markLayerGeomStack,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
 import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
@@ -231,6 +232,7 @@ export function createServiceLayer(): ImageLayer<ImageWMS> {
   });
 
   layer.set('serviceLayer', true);
+  markLayerGeomStack(layer, 'POLYGON');
   return layer;
 }
 
@@ -264,7 +266,7 @@ export function refreshServiceWmsLayer(map: OLMap | null | undefined): void {
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.
  * serviceWmsCqlByLayer는 레이어별 추가 속성 CQL(기본계획도 선택 하천 등).
  * occupationDeptPanelOpen이면 점용 부서업무 레이어에 울진 팔레트 스타일을 적용.
- * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점(아래→위)으로 맞춘다.
+ * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점→심볼(아래→위)으로 맞춘다.
  */
 export function useServiceLayerSync(
   map: OLMap | null,

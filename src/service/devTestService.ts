@@ -46,14 +46,14 @@ function ensureAutofixLogDirSync(): string {
   return dir;
 }
 
-/** 심볼 베이스 URL (GeoServer가 이미지를 요청할 주소). NEXT_PUBLIC_APP_URL 없으면 localhost:3000 */
-const SYMBOL_BASE_URL =
-  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_APP_URL) || 'http://localhost:3000';
+/** GeoServer www 심볼 경로 (data_dir/www/symbol/water). GEOSERVER_URL 없으면 localhost:8080/geoserver */
+function geoserverWaterSymbolUrl(name: string, ext: 'svg' | 'png'): string {
+  const gs =
+    (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
+    'http://localhost:8080/geoserver';
+  return `${gs.replace(/\/$/, '')}/www/symbol/water/${name}.${ext}`;
+}
 
-/**
- * 레이어(스타일) 이름과 동일한 심볼 파일이 public/symbol에 있는지 확인.
- * SVG 우선, 없으면 PNG. 있으면 전체 URL 반환, 없으면 null.
- */
 /**
  * PostGIS 테이블 목록 Map에서 논리 이름 대소문자 무관 조회 (레거시 혼합 대소문자 테이블 호환).
  */
@@ -72,6 +72,7 @@ function resolveDbTableCaseInsensitive(
   return undefined;
 }
 
+/** public/symbol에 파일이 있으면 GeoServer www/symbol/water URL 반환. SVG 우선, 없으면 PNG. */
 function resolveSymbolUrlForLayer(layerName: string): string | null {
   if (!layerName?.trim()) return null;
   const name = layerName.trim();
@@ -79,12 +80,254 @@ function resolveSymbolUrlForLayer(layerName: string): string | null {
   const svgPath = path.join(base, `${name}.svg`);
   const pngPath = path.join(base, `${name}.png`);
   if (fs.existsSync(svgPath)) {
-    return `${SYMBOL_BASE_URL.replace(/\/$/, '')}/symbol/${name}.svg`;
+    return geoserverWaterSymbolUrl(name, 'svg');
   }
   if (fs.existsSync(pngPath)) {
-    return `${SYMBOL_BASE_URL.replace(/\/$/, '')}/symbol/${name}.png`;
+    return geoserverWaterSymbolUrl(name, 'png');
   }
   return null;
+}
+
+const SYMBOL_FOLDER_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/;
+const SYMBOL_MAX_BYTES = 1024 * 1024;
+
+function getGeoServerSymbolRootDir(): string {
+  const projectRoot = path.resolve(path.dirname(DEFINE_LAYER_TABLES_PATH), '..', '..', '..');
+  return path.join(projectRoot, 'geoserver_modules', 'data_dir', 'www', 'symbol');
+}
+
+function geoserverSymbolFileUrl(folder: string, fileName: string): string {
+  const gs =
+    (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
+    'http://localhost:8080/geoserver';
+  return `${gs.replace(/\/$/, '')}/www/symbol/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
+}
+
+function assertSafeSymbolFolder(folder: string): string | null {
+  const name = String(folder ?? '').trim();
+  if (!SYMBOL_FOLDER_NAME_RE.test(name)) return null;
+  if (name.toLowerCase() === 'history') return null;
+  return name;
+}
+
+function symbolFileStamp(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+/** 같은 레이어 현재 파일(svg/png)을 history 폴더로 옮긴다. keepPath는 그대로 둔다 */
+function archiveSymbolFilesToHistory(destDir: string, stem: string, keepPath?: string): void {
+  const historyDir = path.join(destDir, 'history');
+  const stamp = symbolFileStamp();
+  const keep = keepPath ? path.resolve(keepPath) : '';
+  for (const ext of ['svg', 'png'] as const) {
+    const src = path.join(destDir, `${stem}.${ext}`);
+    if (!fs.existsSync(src) || !fs.statSync(src).isFile()) continue;
+    if (keep && path.resolve(src) === keep) continue;
+    fs.mkdirSync(historyDir, { recursive: true });
+    let dest = path.join(historyDir, `${stem}_${stamp}.${ext}`);
+    let n = 2;
+    while (fs.existsSync(dest)) {
+      dest = path.join(historyDir, `${stem}_${stamp}_${n}.${ext}`);
+      n += 1;
+    }
+    fs.renameSync(src, dest);
+  }
+}
+
+const SYMBOL_FILE_NAME_RE = /^[a-zA-Z0-9._-]+\.(svg|png)$/i;
+
+function assertSafeSymbolFileName(fileName: string): { fileName: string; ext: 'svg' | 'png' } | null {
+  const name = path.basename(String(fileName ?? '').trim());
+  const m = name.match(SYMBOL_FILE_NAME_RE);
+  if (!m) return null;
+  return { fileName: name, ext: m[1].toLowerCase() as 'svg' | 'png' };
+}
+
+function writeCurrentSymbolFile(
+  destDir: string,
+  stem: string,
+  ext: 'svg' | 'png',
+  buf: Buffer,
+  sourcePath?: string
+): string {
+  const fileName = `${stem}.${ext}`;
+  const destPath = path.join(destDir, fileName);
+  archiveSymbolFilesToHistory(destDir, stem, sourcePath);
+  fs.writeFileSync(destPath, buf);
+  const publicDir = path.join(process.cwd(), 'public', 'symbol');
+  fs.mkdirSync(publicDir, { recursive: true });
+  fs.writeFileSync(path.join(publicDir, fileName), buf);
+  return fileName;
+}
+
+/** GeoServer www/symbol 아래 1단계 폴더 목록 */
+export async function listGeoServerSymbolFolders() {
+  try {
+    const root = getGeoServerSymbolRootDir();
+    if (!fs.existsSync(root)) {
+      fs.mkdirSync(root, { recursive: true });
+      return { success: true as const, folders: [] as string[] };
+    }
+    const folders = fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && SYMBOL_FOLDER_NAME_RE.test(d.name) && d.name.toLowerCase() !== 'history')
+      .map((d) => d.name)
+      .sort((a, b) => a.localeCompare(b, 'ko'));
+    return { success: true as const, folders };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg, folders: [] as string[] };
+  }
+}
+
+/** www/symbol 아래 폴더 생성 */
+export async function createGeoServerSymbolFolder(params: { folder?: string } = {}) {
+  const folder = assertSafeSymbolFolder(params.folder ?? '');
+  if (!folder) {
+    return { success: false as const, error: '폴더 이름은 영문·숫자·밑줄·하이픈만 쓸 수 있습니다.' };
+  }
+  try {
+    const dir = path.join(getGeoServerSymbolRootDir(), folder);
+    fs.mkdirSync(dir, { recursive: true });
+    return { success: true as const, folder };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg };
+  }
+}
+
+/**
+ * 선택한 폴더에 심볼 파일 저장. 파일명은 레이어명 + 확장자.
+ * 같은 이름 이전 파일은 폴더 안 history로 옮긴 뒤 덮어쓴다.
+ * GeoServer www와 Next public/symbol에 같이 넣는다.
+ */
+export async function uploadGeoServerSymbolFile(params: {
+  folder?: string;
+  layerName?: string;
+  fileName?: string;
+  mime?: string;
+  base64?: string;
+}) {
+  const folder = assertSafeSymbolFolder(params.folder ?? '');
+  if (!folder) {
+    return { success: false as const, error: '폴더를 먼저 선택하거나 만드세요.' };
+  }
+  const layerName = String(params.layerName ?? '').trim();
+  const srcName = String(params.fileName ?? '').trim();
+  const extMatch = srcName.match(/\.(svg|png)$/i);
+  const mime = String(params.mime ?? '').toLowerCase();
+  const ext =
+    extMatch?.[1]?.toLowerCase() ||
+    (mime.includes('svg') ? 'svg' : mime.includes('png') ? 'png' : '');
+  if (ext !== 'svg' && ext !== 'png') {
+    return { success: false as const, error: 'svg 또는 png 파일만 올릴 수 있습니다.' };
+  }
+  const stem = (layerName || path.basename(srcName, path.extname(srcName))).replace(
+    /[^a-zA-Z0-9._-]/g,
+    '_'
+  );
+  if (!stem) {
+    return { success: false as const, error: '레이어 이름이 필요합니다.' };
+  }
+  const b64 = String(params.base64 ?? '').replace(/^data:[^;]+;base64,/, '');
+  if (!b64) {
+    return { success: false as const, error: '파일 내용이 없습니다.' };
+  }
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(b64, 'base64');
+  } catch {
+    return { success: false as const, error: '파일 내용을 읽을 수 없습니다.' };
+  }
+  if (buf.length === 0 || buf.length > SYMBOL_MAX_BYTES) {
+    return { success: false as const, error: '파일 크기는 1MB 이하여야 합니다.' };
+  }
+
+  try {
+    const destDir = path.join(getGeoServerSymbolRootDir(), folder);
+    fs.mkdirSync(destDir, { recursive: true });
+    const fileName = writeCurrentSymbolFile(destDir, stem, ext as 'svg' | 'png', buf);
+    return {
+      success: true as const,
+      folder,
+      fileName,
+      symbolUrl: geoserverSymbolFileUrl(folder, fileName),
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg };
+  }
+}
+
+/** 선택한 폴더의 svg·png 목록 (history 제외) */
+export async function listGeoServerSymbolFiles(params: { folder?: string } = {}) {
+  const folder = assertSafeSymbolFolder(params.folder ?? '');
+  if (!folder) {
+    return { success: false as const, error: '폴더를 먼저 선택하세요.', files: [] as string[] };
+  }
+  try {
+    const destDir = path.join(getGeoServerSymbolRootDir(), folder);
+    if (!fs.existsSync(destDir)) {
+      return { success: true as const, files: [] as string[] };
+    }
+    const files = fs
+      .readdirSync(destDir, { withFileTypes: true })
+      .filter((d) => d.isFile() && SYMBOL_FILE_NAME_RE.test(d.name))
+      .map((d) => d.name)
+      .sort((a, b) => a.localeCompare(b, 'ko'));
+    return { success: true as const, files };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg, files: [] as string[] };
+  }
+}
+
+/**
+ * 폴더에 있는 파일을 레이어 이름 현재 파일로 복사해 연결한다.
+ * 이전 현재 파일은 history로 옮긴다. 원본 이름은 그대로 둔다.
+ */
+export async function linkGeoServerSymbolFile(params: {
+  folder?: string;
+  layerName?: string;
+  fileName?: string;
+}) {
+  const folder = assertSafeSymbolFolder(params.folder ?? '');
+  if (!folder) {
+    return { success: false as const, error: '폴더를 먼저 선택하세요.' };
+  }
+  const parsed = assertSafeSymbolFileName(params.fileName ?? '');
+  if (!parsed) {
+    return { success: false as const, error: 'svg 또는 png 파일을 선택하세요.' };
+  }
+  const stem = String(params.layerName ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  if (!stem) {
+    return { success: false as const, error: '레이어 이름이 필요합니다.' };
+  }
+  try {
+    const destDir = path.join(getGeoServerSymbolRootDir(), folder);
+    const srcPath = path.join(destDir, parsed.fileName);
+    if (!fs.existsSync(srcPath) || !fs.statSync(srcPath).isFile()) {
+      return { success: false as const, error: '선택한 파일이 폴더에 없습니다.' };
+    }
+    const buf = fs.readFileSync(srcPath);
+    if (buf.length === 0 || buf.length > SYMBOL_MAX_BYTES) {
+      return { success: false as const, error: '파일 크기는 1MB 이하여야 합니다.' };
+    }
+    const fileName = writeCurrentSymbolFile(destDir, stem, parsed.ext, buf, srcPath);
+    return {
+      success: true as const,
+      folder,
+      fileName,
+      symbolUrl: geoserverSymbolFileUrl(folder, fileName),
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg };
+  }
 }
 
 /**

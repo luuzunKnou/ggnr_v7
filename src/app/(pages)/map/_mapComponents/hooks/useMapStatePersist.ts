@@ -24,6 +24,7 @@ export interface PersistedMapState {
   visibleCadastralLayerNames?: string[];
   visibleBuildingRoadLayerNames?: string[];
   visibleThematicLayerNames?: string[];
+  visibleUndergroundFacilityLayerNames?: string[];
 }
 
 export function loadPersistedMapState(projectName?: string): PersistedMapState | null {
@@ -59,6 +60,11 @@ export function loadPersistedMapState(projectName?: string): PersistedMapState |
         visibleThematicLayerNames: Array.isArray(parsed.visibleThematicLayerNames)
           ? parsed.visibleThematicLayerNames
           : undefined,
+        visibleUndergroundFacilityLayerNames: Array.isArray(
+          parsed.visibleUndergroundFacilityLayerNames
+        )
+          ? parsed.visibleUndergroundFacilityLayerNames
+          : undefined,
       } as PersistedMapState;
     }
   } catch { /* ignore corrupted data */ }
@@ -85,6 +91,7 @@ export type PersistedLayerPanelSelections = {
   visibleCadastralLayerNames: string[] | null;
   visibleBuildingRoadLayerNames: string[] | null;
   visibleThematicLayerNames: string[] | null;
+  visibleUndergroundFacilityLayerNames: string[] | null;
 };
 
 /**
@@ -146,6 +153,9 @@ export function useMapStatePersist(
         ...(sel.visibleThematicLayerNames && {
           visibleThematicLayerNames: sel.visibleThematicLayerNames,
         }),
+        ...(sel.visibleUndergroundFacilityLayerNames && {
+          visibleUndergroundFacilityLayerNames: sel.visibleUndergroundFacilityLayerNames,
+        }),
       }, projectName);
     };
 
@@ -189,6 +199,9 @@ export function useMapStatePersist(
       }),
       ...(sel.visibleThematicLayerNames && {
         visibleThematicLayerNames: sel.visibleThematicLayerNames,
+      }),
+      ...(sel.visibleUndergroundFacilityLayerNames && {
+        visibleUndergroundFacilityLayerNames: sel.visibleUndergroundFacilityLayerNames,
       }),
     }, projectName);
   }, [

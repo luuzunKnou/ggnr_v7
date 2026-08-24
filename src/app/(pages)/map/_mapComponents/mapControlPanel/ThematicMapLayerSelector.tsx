@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import {
@@ -85,7 +85,16 @@ function ThematicMapGroupSection({
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left hover:opacity-90"
         >
-          <div className="h-4 w-1 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400" />
+          {isExpanded ? (
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 shrink-0',
+                allSelected || someSelected ? 'text-blue-600 dark:text-white' : 'text-slate-400 dark:text-white/50'
+              )}
+            />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-white/50" />
+          )}
           <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate text-[12px] leading-none">{group.title}</span>
             <span className="shrink-0 text-[11px] font-normal leading-none text-slate-400 dark:text-white/50">

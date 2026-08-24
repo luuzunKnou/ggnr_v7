@@ -12,9 +12,15 @@ import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFacto
 import { createJimokLayers } from '../layerFactory/jimokLayerFactory';
 import { createOwnershipLayers } from '../layerFactory/ownershipLayerFactory';
 import { createThematicMapLayers } from '../layerFactory/thematicMapLayerFactory';
+import { createUndergroundFacilityLayers } from '../layerFactory/undergroundFacilityLayerFactory';
 import { createSafetydataMapLayers } from '../layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from './useMapStatePersist';
+import {
+  bindMapGeometryStackOrder,
+  mergeDefineLayerShpTypesIntoGeometryMap,
+} from '@/lib/mapLayerGeometryOrder';
+import tables from '@/config/defineLayer/tables.json';
 
 /**
  * OpenLayers 지도 인스턴스 생성 및 관리 훅
@@ -64,6 +70,7 @@ export function useMapInstance(
         ...createJimokLayers(),
         ...createOwnershipLayers(),
         ...createThematicMapLayers(),
+        ...createUndergroundFacilityLayers(),
         ...createSafetydataMapLayers(),
       ],
       view: new View({
@@ -84,11 +91,15 @@ export function useMapInstance(
     if (externalMapRef) externalMapRef.current = map;
     setMapReady(true);
 
-    const serviceLayer = createServiceLayer();
-    map.getLayers().push(serviceLayer);
+    const unbindGeomStack = bindMapGeometryStackOrder(
+      map,
+      mergeDefineLayerShpTypesIntoGeometryMap({}, tables as unknown[])
+    );
+    map.getLayers().push(createServiceLayer());
 
     // 컴포넌트 언마운트 시 지도 정리
     return () => {
+      unbindGeomStack();
       if (mapInstanceRef.current) {
         mapInstanceRef.current.setTarget(undefined);
         mapInstanceRef.current = null;

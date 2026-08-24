@@ -12,6 +12,34 @@ function projectRoot(): string {
   return process.cwd();
 }
 
+function javaFileName(): string {
+  return process.platform === 'win32' ? 'java.exe' : 'java';
+}
+
+function javaBinExists(dir: string): string | null {
+  const candidate = path.join(dir, 'bin', javaFileName());
+  return fs.existsSync(candidate) ? candidate : null;
+}
+
+const JAVA_NOT_FOUND =
+  'Java를 찾을 수 없습니다. geoserver_modules/java 에 JDK를 두세요.';
+
+function isSpawnEnoent(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT');
+}
+
+/** GeoServer start-geoserver.bat 과 동일: geoserver_modules/java/<첫 JDK>/bin/java */
+function resolveJavaBin(): string | null {
+  const javaDir = path.join(projectRoot(), 'geoserver_modules', 'java');
+  if (!fs.existsSync(javaDir)) return null;
+  for (const ent of fs.readdirSync(javaDir, { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue;
+    const fromDir = javaBinExists(path.join(javaDir, ent.name));
+    if (fromDir) return fromDir;
+  }
+  return null;
+}
+
 function resolveKistecJar(config: FmsLinkageConfig): string | null {
   if (config.kistecJarPath && fs.existsSync(config.kistecJarPath)) {
     return config.kistecJarPath;
@@ -85,21 +113,31 @@ export async function receiveFmsFirstLine(
   const id = String(identifier ?? '').trim();
   if (!id) throw new Error('identifier 가 필요합니다.');
 
-  const { stdout, stderr } = await execFileAsync(
-    'java',
-    [
-      '-Dfile.encoding=UTF-8',
-      '-cp',
-      classPathFor(jarPath),
-      'FmsLinkBridge',
-      config.orgCode,
-      config.userId,
-      config.password,
-      config.certiKey,
-      id,
-    ],
-    { timeout: 120_000, maxBuffer: 4 * 1024 * 1024, encoding: 'buffer' }
-  );
+  const javaBin = resolveJavaBin();
+  if (!javaBin) throw new Error(JAVA_NOT_FOUND);
+
+  let stdout: Buffer | string;
+  let stderr: Buffer | string;
+  try {
+    ({ stdout, stderr } = await execFileAsync(
+      javaBin,
+      [
+        '-Dfile.encoding=UTF-8',
+        '-cp',
+        classPathFor(jarPath),
+        'FmsLinkBridge',
+        config.orgCode,
+        config.userId,
+        config.password,
+        config.certiKey,
+        id,
+      ],
+      { timeout: 120_000, maxBuffer: 4 * 1024 * 1024, encoding: 'buffer' }
+    ));
+  } catch (err) {
+    if (isSpawnEnoent(err)) throw new Error(JAVA_NOT_FOUND);
+    throw err;
+  }
 
   const out = decodeJavaStdout(stdout).trim();
   if (!out) {

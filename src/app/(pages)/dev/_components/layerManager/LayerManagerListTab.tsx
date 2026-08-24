@@ -17,7 +17,7 @@ import { SchemaBadge, SourceBadge } from "./defineBadges"
 import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
-import { StylePreviewSwatch } from "./StylePreviewSwatch"
+import { StyleLegendThumb } from "./StylePreviewSwatch"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
 
@@ -339,8 +339,8 @@ export function LayerManagerListTab() {
   }, [])
 
   /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
-  const loadCssFallback = useCallback((key: string) => {
-    setCssFallbackMap((prev) => (prev[key] ? prev : { ...prev, [key]: "loading" }))
+  const loadCssFallback = useCallback((key: string, force = false) => {
+    setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
     call("", "POST", {
       service: "devTestService",
       action: "getGeoServerStyle",
@@ -569,6 +569,8 @@ export function LayerManagerListTab() {
 
   useEffect(() => {
     return registerLayerManagerListRefresh(() => {
+      setStyleVersion(Date.now())
+      setCssFallbackMap({})
       void loadData()
       void loadRowMeta()
       void loadStyleInfo()
@@ -862,38 +864,22 @@ export function LayerManagerListTab() {
                         : ""
                       const fallbackKey = (styleName || tableName || "").toLowerCase()
                       const fallbackState = fallbackKey ? cssFallbackMap[fallbackKey] : undefined
-                      const showImg = Boolean(legendUrl && canShowLegend && fallbackState === undefined)
-                      const showSwatch = fallbackState && typeof fallbackState === "object"
-                      const showLoading = fallbackState === "loading"
                       return (
                         <div key={col.id} className={`${cellClass} justify-center`} style={cellStyle}>
-                          {showImg && (
-                            <img
-                              src={legendUrl}
-                              alt=""
-                              className="max-h-7 max-w-full object-contain"
-                              title={`${tableName} 범례`}
-                              onError={() => {
-                                if (!fallbackKey) return
-                                if (hasCssStyle) loadCssFallback(fallbackKey)
-                                else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
-                              }}
-                            />
-                          )}
-                          {showSwatch && (
-                            <StylePreviewSwatch
-                              geometryType={(fallbackState as StyleProps & { geometryType: GeometryType }).geometryType}
-                              fillColor={(fallbackState as StyleProps & { geometryType: GeometryType }).fillColor}
-                              strokeColor={(fallbackState as StyleProps & { geometryType: GeometryType }).strokeColor}
-                              opacity={(fallbackState as StyleProps & { geometryType: GeometryType }).opacity}
-                              showFrame={false}
-                              size="sm"
-                            />
-                          )}
-                          {showLoading && <span className="text-xs text-muted-foreground">…</span>}
-                          {!showImg && !showSwatch && !showLoading && (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                          <StyleLegendThumb
+                            key={`${tableName}-${styleVersion}`}
+                            tableName={tableName}
+                            shpType={row.define_table_shp_type}
+                            legendUrl={legendUrl}
+                            canShowLegend={canShowLegend}
+                            fallbackState={fallbackState}
+                            cacheBust={styleVersion}
+                            onNeedCssFallback={() => {
+                              if (!fallbackKey) return
+                              if (hasCssStyle) loadCssFallback(fallbackKey)
+                              else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
+                            }}
+                          />
                         </div>
                       )
                     }

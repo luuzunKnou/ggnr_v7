@@ -19,6 +19,7 @@ import {
   ClipboardPen,
   Images,
   Columns2 as MapSplitIcon,
+  Waypoints,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -30,6 +31,12 @@ export interface MapControlItem {
   icon: LucideIcon
   label: string
   allowMultiple?: boolean // 다중 선택 가능 여부
+  /** 라벨 글자 크기(px). 미지정 시 9 */
+  labelFontSize?: number
+  /** false면 말줄임(...) 없이 표시. 미지정 시 true */
+  labelEllipsis?: boolean
+  /** 자간(px). 음수면 글자를 좁혀 한 줄에 맞춤 */
+  labelLetterSpacing?: number
   onClick?: () => void
 }
 
@@ -89,7 +96,23 @@ function MapControlButton({
       title={item.label}
     >
       <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-      <span className="max-w-full leading-tight text-center whitespace-nowrap overflow-hidden truncate px-0.5" style={{ fontSize: '9px' }}>
+      <span
+        className={cn(
+          "leading-tight text-center",
+          item.labelEllipsis === false
+            ? "flex w-full justify-center whitespace-nowrap px-0"
+            : "max-w-full whitespace-nowrap overflow-hidden truncate px-0.5"
+        )}
+        style={{
+          fontSize: `${item.labelFontSize ?? 9}px`,
+          ...(item.labelLetterSpacing != null
+            ? {
+                letterSpacing: `${item.labelLetterSpacing}px`,
+                marginLeft: -1,
+              }
+            : {}),
+        }}
+      >
         {item.label}
       </span>
     </button>
@@ -186,6 +209,7 @@ export const defaultMapControlGroups: MapControlGroup[] = [
       { id: "basic-section", icon: Route, label: "기초구간", allowMultiple: true },
       { id: "land-category", icon: SquareStack, label: "지목", allowMultiple: true },
       { id: "ownership", icon: Users, label: "소유구분", allowMultiple: true },
+      { id: "underground-facility", icon: Waypoints, label: "지하시설물", allowMultiple: true, labelEllipsis: false, labelLetterSpacing: -0.3 },
       { id: "official-land-price", icon: Banknote, label: "공시지가", allowMultiple: true },
     ],
   },
