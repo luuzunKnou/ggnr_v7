@@ -4,6 +4,7 @@ import { call } from '@/lib/api';
 import {
   buildPnuQueryParams,
   hasParcelLandInfoTabData,
+  type HangmangCallLine,
 } from '@/lib/parcelLandNormalize';
 import {
   fetchLandInfoConfig,
@@ -232,6 +233,7 @@ export type ParcelTabData = {
   prices: JsonObject[];
   possessions: JsonObject[];
   source?: 'kras' | 'koreps' | 'vworld' | 'mixed';
+  hangmangCalls?: HangmangCallLine[];
 };
 
 function emptyParcelTabData(): ParcelTabData {
@@ -261,35 +263,35 @@ function normalizeParcelTabPayload(payload: ParcelTabData & { ok?: boolean }): P
       payload.source === 'mixed'
         ? payload.source
         : undefined,
+    hangmangCalls: Array.isArray(payload.hangmangCalls) ? payload.hangmangCalls : undefined,
   };
 }
 
-/** 행망이면 KRAS 우선, 없거나 실패하면 브이월드 */
+/** 행망이면 KRAS 우선, 없거나 실패하면 브이월드. 호출 여부는 항상 서버에서 받아 표시 */
 export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
 
-  const cfg = await fetchLandInfoConfig();
-
-  if (cfg.useKras) {
-    try {
-      const res = await call('', 'POST', {
-        service: 'landLinkageService',
-        action: 'fetchParcelLandInfoTab',
-        params: { pnu },
-      });
-      const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
-      if (payload?.ok !== false) {
-        const tab = normalizeParcelTabPayload(payload);
-        if (hasParcelLandInfoTabData(tab)) return tab;
-      }
-    } catch {
-      /* 행망 실패 → 브이월드 */
+  let hangmangCalls: HangmangCallLine[] | undefined;
+  try {
+    const res = await call('', 'POST', {
+      service: 'landLinkageService',
+      action: 'fetchParcelLandInfoTab',
+      params: { pnu },
+    });
+    const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean };
+    const tab = normalizeParcelTabPayload(payload);
+    hangmangCalls = tab.hangmangCalls;
+    if (payload?.ok !== false && hasParcelLandInfoTabData(tab)) {
+      return { ...tab, hangmangCalls };
     }
+  } catch {
+    /* 행망 실패 → 브이월드. 호출 로그는 유지 */
   }
 
-  if (!toStr(args.vworldKey)) return emptyParcelTabData();
-  return fetchVworldParcelTabData(args);
+  if (!toStr(args.vworldKey)) return { ...emptyParcelTabData(), hangmangCalls };
+  const vworld = await fetchVworldParcelTabData(args);
+  return { ...vworld, hangmangCalls };
 }
 
 /** 필지 PNU 기준 최신 공시지가 1건 — 공용 브이월드 클라이언트 */
