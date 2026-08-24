@@ -52,9 +52,12 @@ type Candidate = {
   divQuery?: string;
 };
 
+type LayerSchemaName = 'public_layer' | 'layer';
+
 function collectCandidates(
-  publicTables: Set<string>,
-  isGroup: (group: string) => boolean
+  existingTables: Set<string>,
+  isGroup: (group: string) => boolean,
+  schemaName: LayerSchemaName = 'public_layer'
 ): Candidate[] {
   const rows = tables as DefineTableRow[];
   const parentNames = new Set<string>();
@@ -66,7 +69,7 @@ function collectCandidates(
   const out: Candidate[] = [];
   for (const t of rows) {
     const schema = String(t.define_table_schema ?? '').trim();
-    if (schema && schema !== 'public_layer') continue;
+    if (schema && schema !== schemaName) continue;
 
     const group = String(t.define_table_group ?? '').trim();
     if (!isGroup(group)) continue;
@@ -82,32 +85,35 @@ function collectCandidates(
     if (!parentTableName && layerName.startsWith('(연속주제)')) continue;
 
     if (parentTableName) {
-      if (!publicTables.has(parentTableName.toLowerCase())) continue;
+      if (!existingTables.has(parentTableName.toLowerCase())) continue;
       if (!divQuery) continue;
       out.push({ tableName, sourceTable: parentTableName, divQuery });
     } else {
-      if (!publicTables.has(tableName.toLowerCase())) continue;
+      if (!existingTables.has(tableName.toLowerCase())) continue;
       out.push({ tableName, sourceTable: tableName });
     }
   }
   return out;
 }
 
-async function listAvailableLayerNames(isGroup: (group: string) => boolean) {
+async function listAvailableLayerNames(
+  isGroup: (group: string) => boolean,
+  schemaName: LayerSchemaName = 'public_layer'
+) {
   try {
     const listRes = await getLayerTableList();
     if (!listRes.success) {
       return { success: false as const, error: listRes.error ?? '테이블 목록 조회 실패', tableNames: [] as string[] };
     }
 
-    const publicTables = new Set(
+    const existingTables = new Set(
       (listRes.tables ?? [])
-        .filter((t) => String(t.schema ?? '').toLowerCase() === 'public_layer')
+        .filter((t) => String(t.schema ?? '').toLowerCase() === schemaName)
         .map((t) => String(t.table ?? '').trim().toLowerCase())
         .filter(Boolean)
     );
 
-    const candidates = collectCandidates(publicTables, isGroup);
+    const candidates = collectCandidates(existingTables, isGroup, schemaName);
     if (candidates.length === 0) {
       return { success: true as const, tableNames: [] as string[] };
     }
@@ -116,7 +122,7 @@ async function listAvailableLayerNames(isGroup: (group: string) => boolean) {
     const resolvePhysical = async (logical: string) => {
       const key = logical.toLowerCase();
       if (physicalCache.has(key)) return physicalCache.get(key) ?? null;
-      const phys = await resolveLayerPhysicalRelName('public_layer', logical);
+      const phys = await resolveLayerPhysicalRelName(schemaName, logical);
       physicalCache.set(key, phys);
       return phys;
     };
@@ -131,7 +137,7 @@ async function listAvailableLayerNames(isGroup: (group: string) => boolean) {
       if (!physical) continue;
 
       const litName = escLit(c.tableName);
-      const qTable = `"public_layer"."${escIdent(physical)}"`;
+      const qTable = `"${escIdent(schemaName)}"."${escIdent(physical)}"`;
 
       if (c.divQuery) {
         const filter = sanitizeDefineLayerRowFilter(c.divQuery);
@@ -180,6 +186,29 @@ export async function listAvailableThematicMapLayerNames() {
  */
 export async function listAvailableOwnershipLayerNames() {
   return listAvailableLayerNames(isOwnershipGroup);
+}
+
+/** 지하시설물 — 레이어관리 그룹명과 동일 (schema: layer) */
+const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
+  '상수',
+  '하수',
+  '광역상수',
+  '가스',
+  '도시가스',
+  'LPG배관',
+  '전기',
+  '통신',
+]);
+
+function isUndergroundFacilityGroup(group: string): boolean {
+  return UNDERGROUND_FACILITY_GROUP_ALLOW.has(group);
+}
+
+/**
+ * 지하시설물 UI: tables.json 해당 그룹(layer) + 부모 존재 + 분할 조건에 데이터가 있는 테이블만.
+ */
+export async function listAvailableUndergroundFacilityLayerNames() {
+  return listAvailableLayerNames(isUndergroundFacilityGroup, 'layer');
 }
 
 const JIMOK_GROUP_NAME = '지목';

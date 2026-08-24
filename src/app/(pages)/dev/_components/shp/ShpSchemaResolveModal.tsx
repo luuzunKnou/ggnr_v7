@@ -195,7 +195,7 @@ export function ShpSchemaResolveModal({
                     <span className="font-medium">기존 테이블을 백업명으로 바꾼 뒤 SHP로 재생성</span>
                     <span className="mt-1 flex items-start gap-1 text-muted-foreground">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                      백업명은 _rctmp_테이블_날짜_시분 형식입니다. 백업 삭제는 수동이며, 새
+                      백업명은 _rctmp_테이블_날짜_시분초 형식입니다. 백업 삭제는 수동이며, 새
                       테이블은 SHP 기준으로 새로 만들어집니다.
                     </span>
                   </span>

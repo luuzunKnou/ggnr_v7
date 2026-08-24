@@ -18,7 +18,7 @@ import { getCenter } from 'ol/extent';
 import { useMeasure, type MeasureType } from '@/app/(pages)/map/_mapComponents/hooks/useMeasure';
 import { useAltitudeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useAltitudeMeasure';
 import { useSlopeMeasure } from '@/app/(pages)/map/_mapComponents/hooks/useSlopeMeasure';
-import type { MapPrintTool } from './mapPrintTypes';
+import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 
 const PRINT_COORD_INPUT_KEY = 'printCoordInput';
 
@@ -143,6 +143,7 @@ export function useMapPrintTools(
     const diagramLayer = new VectorLayer({
       source: diagramSource,
       zIndex: 200,
+      renderOrder: compareFeaturesByGeometryStackOrder,
       properties: { name: 'MapPrintDiagram' },
     });
     map.addLayer(diagramLayer);
@@ -250,6 +251,7 @@ export function useMapPrintTools(
         map.addOverlay(overlay);
         overlaysRef.current.push(overlay);
         feature.set('printOverlay', overlay);
+        feature.set('isSymbol', true);
       });
     } else if (activeTool === 'comment') {
       attachDraw('Point', undefined, (feature) => {

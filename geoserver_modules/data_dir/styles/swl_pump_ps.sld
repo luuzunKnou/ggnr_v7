@@ -8,7 +8,7 @@
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://localhost:3000/symbol/swl_pump_ps.png"/>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://localhost:8080/geoserver/www/symbol/water/swl_pump_ps.png"/>
                 <sld:Format>image/png</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>

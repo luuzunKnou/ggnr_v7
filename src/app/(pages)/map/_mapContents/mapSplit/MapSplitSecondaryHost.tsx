@@ -16,6 +16,8 @@ import { createOwnershipLayers } from '../../_mapComponents/layerFactory/ownersh
 import { createThematicMapLayers } from '../../_mapComponents/layerFactory/thematicMapLayerFactory';
 import { createSafetydataMapLayers } from '../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
+import { bindMapGeometryStackOrder, mergeDefineLayerShpTypesIntoGeometryMap } from '@/lib/mapLayerGeometryOrder';
+import tables from '@/config/defineLayer/tables.json';
 import { useBackgroundLayer } from '../../_mapComponents/hooks/useBackgroundLayer';
 import { FALLBACK_BACKGROUND_MAP_ID } from '../../_mapComponents/mapControlPanel/backgroundMapSelector';
 import { syncSecondaryLayersFromPrimary } from './syncSecondaryLayersFromPrimary';
@@ -91,6 +93,10 @@ export function MapSplitSecondaryHost({ active }: MapSplitSecondaryHostProps) {
       }),
     });
 
+    const unbindGeomStack = bindMapGeometryStackOrder(
+      map,
+      mergeDefineLayerShpTypesIntoGeometryMap({}, tables as unknown[])
+    );
     map.getLayers().push(createServiceLayer());
 
     localMapRef.current = map;
@@ -105,6 +111,7 @@ export function MapSplitSecondaryHost({ active }: MapSplitSecondaryHostProps) {
     if (bg) mapContext?.setMapSplitSecondaryBackgroundId?.(bg);
 
     return () => {
+      unbindGeomStack();
       clearDynamicLayerMirrors(map, mirrorRegistryRef.current);
       map.setTarget(undefined);
       localMapRef.current = null;

@@ -928,7 +928,7 @@ export function ShpWizardModal({
     setConsistencyRows((prev) => {
       const next = prev.map((r) => (r.pathOrResult === updated.pathOrResult ? updated : r));
       const allOk = next.every((r) => !r.error && (r.isNew || !consistencyNeedsReview(r)));
-      setConsistencyDone((d) => d ? allOk : d);
+      setConsistencyDone(allOk);
       return next;
     });
   }, [statusRows, checkSingleRow, consistencyRows]);
