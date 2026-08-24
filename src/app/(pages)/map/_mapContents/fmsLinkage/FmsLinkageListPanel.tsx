@@ -239,7 +239,7 @@ export function FmsLinkageListPanel({
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-border px-3 py-2">
+      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -268,14 +268,14 @@ export function FmsLinkageListPanel({
             <col className="w-[90px]" />
             <col className="w-[90px]" />
           </colgroup>
-          <thead className="sticky top-0 z-[1] bg-muted">
+          <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
             <tr>
               {FMS_LIST_COLUMNS.map((col) => {
                 if (!isSortKey(col.key)) {
                   return (
                     <th
                       key={col.key}
-                      className="border-t border-b border-border px-2 py-2 font-semibold text-foreground"
+                      className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
                     >
                       <span className="block truncate">{col.label}</span>
                     </th>
@@ -290,14 +290,14 @@ export function FmsLinkageListPanel({
                 return (
                   <th
                     key={sortKey}
-                    className="border-t border-b border-border px-2 py-2 font-semibold text-foreground"
+                    className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
                   >
                     <button
                       type="button"
                       onClick={() => toggleSort(sortKey)}
                       className={cn(
-                        'inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-background/80',
-                        active ? 'text-primary' : 'text-foreground'
+                        'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-slate-100',
+                        active ? 'text-primary' : 'text-slate-700'
                       )}
                       title={
                         !active

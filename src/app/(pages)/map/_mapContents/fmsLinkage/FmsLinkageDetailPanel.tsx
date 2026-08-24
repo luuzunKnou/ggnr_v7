@@ -23,7 +23,7 @@ function StateGradeBadge({ grade }: { grade: string }) {
   return (
     <span
       className={cn(
-        'inline-flex max-w-full truncate rounded px-1.5 py-0.5 text-[11px] font-medium',
+        'inline-flex max-w-full truncate rounded px-1.5 py-0.5 text-[11px] font-medium leading-none',
         getStateGradeBadgeClass(g)
       )}
       title={g}
@@ -66,16 +66,16 @@ function formatInspectionPeriod(item: Pick<InspectionRow, 'startYmd' | 'endYmd'>
 
 function AttrRows({ items }: { items: DetailAttr[] }) {
   return (
-    <div className="divide-y divide-border rounded border border-border bg-muted/50">
+    <div className="divide-y divide-border overflow-hidden rounded border border-border">
       {items.map((item) => (
         <div
           key={item.field}
-          className="grid grid-cols-[8.25rem_minmax(0,1fr)] gap-x-2 px-2 py-1.5"
+          className="grid grid-cols-[8.25rem_minmax(0,1fr)]"
         >
-          <dt className="shrink-0 whitespace-nowrap font-medium text-muted-foreground">
+          <dt className="flex h-full shrink-0 items-start whitespace-nowrap bg-slate-100 px-2 py-1.5 font-medium text-slate-500">
             {item.label}
           </dt>
-          <dd className="min-w-0 break-words text-foreground">
+          <dd className="flex min-w-0 items-start break-words bg-background px-2 py-1.5 text-slate-900">
             {item.field === 'state_grade' ? (
               <StateGradeBadge grade={item.value} />
             ) : (
@@ -105,7 +105,7 @@ function GroupedAttrList({
       {visible.map((section) => (
         <div key={section.id}>
           {section.label ? (
-            <div className="mb-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
+            <div className="mb-1 text-xs font-semibold tracking-wide text-slate-600">
               {section.label}
             </div>
           ) : null}
@@ -290,7 +290,7 @@ export function FmsLinkageDetailPanel({
             />
 
             <div className="mt-3">
-              <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground">
+              <div className="mb-1.5 text-xs font-semibold tracking-wide text-slate-600">
                 {FMS_INSPECTION_TITLE}
               </div>
               {inspections.length === 0 ? (
@@ -299,21 +299,20 @@ export function FmsLinkageDetailPanel({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-muted/40 px-2.5 py-2">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      최근 등급
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-slate-50 px-2.5 py-2">
+                    <span className="inline-flex h-5 items-center gap-1.5 text-slate-500">
+                      <span className="leading-none">최근 등급</span>
                       <StateGradeBadge grade={latestInspection?.stateGrade ?? ''} />
                     </span>
-                    <span className="text-muted-foreground">
-                      최근 점검일{' '}
-                      <span className="font-medium text-foreground">{latestDateLabel}</span>
+                    <span className="flex items-center gap-1.5 text-slate-500">
+                      최근 점검일
+                      <span className="font-medium text-slate-900">{latestDateLabel}</span>
                     </span>
-                    <span className="text-muted-foreground">
-                      총{' '}
-                      <span className="font-medium text-foreground">
-                        {inspections.length.toLocaleString()}
+                    <span className="flex items-center gap-1 text-slate-500">
+                      총
+                      <span className="font-medium text-slate-900">
+                        {inspections.length.toLocaleString()}건
                       </span>
-                      건
                     </span>
                   </div>
 
@@ -324,15 +323,15 @@ export function FmsLinkageDetailPanel({
                         <col />
                         <col className="w-[3.75rem]" />
                       </colgroup>
-                      <thead className="bg-muted">
+                      <thead className="bg-slate-100">
                         <tr>
-                          <th className="border-b border-border px-2 py-1.5 font-semibold text-foreground">
+                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500">
                             구분
                           </th>
-                          <th className="border-b border-border px-2 py-1.5 font-semibold text-foreground">
+                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500">
                             기간
                           </th>
-                          <th className="border-b border-border px-2 py-1.5 text-center font-semibold text-foreground">
+                          <th className="border-b border-border px-2 py-1.5 text-center align-middle font-semibold text-slate-500">
                             등급
                           </th>
                         </tr>
@@ -366,18 +365,18 @@ export function FmsLinkageDetailPanel({
                               )}
                             >
                               <td
-                                className="truncate px-2 py-1.5 font-medium text-foreground"
+                                className="truncate px-2 py-1.5 align-middle font-medium text-slate-900"
                                 title={item.dignGbn || '점검'}
                               >
                                 {item.dignGbn || '점검'}
                               </td>
                               <td
-                                className="truncate px-2 py-1.5 tabular-nums text-muted-foreground"
+                                className="truncate px-2 py-1.5 align-middle tabular-nums text-slate-900"
                                 title={formatInspectionPeriod(item)}
                               >
                                 {formatInspectionPeriod(item)}
                               </td>
-                              <td className="px-2 py-1.5 text-center">
+                              <td className="px-2 py-1.5 text-center align-middle">
                                 <StateGradeBadge grade={item.stateGrade} />
                               </td>
                             </tr>
@@ -419,9 +418,11 @@ export function FmsLinkageDetailPanel({
                     <div
                       ref={inspectionDetailRef}
                       className="rounded border border-border bg-muted/30 px-2.5 py-2"
-                    >                      <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground">
-                        점검 상세
-                        <span className="ml-1.5 font-normal">
+                    >
+                      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-xs">
+                        <span className="font-semibold text-slate-600">점검 상세</span>
+                        <span className="font-normal text-black/40">·</span>
+                        <span className="font-normal text-black/50">
                           {selectedInspection.dignGbn || '점검'}
                           {' · '}
                           {formatInspectionPeriod(selectedInspection)}
