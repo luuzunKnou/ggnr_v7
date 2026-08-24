@@ -12,6 +12,15 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** 대장번호 = 회계연도-부과번호 (예: 2026-000001). 차세대 API에 없는 로컬 표시키 */
+export function buildLedgerNo(fyr?: string | null, lvyNo?: string | null): string | null {
+  const y = String(fyr ?? '').trim();
+  const n = String(lvyNo ?? '').trim();
+  if (!y && !n) return null;
+  const padded = n.replace(/\D/g, '').padStart(6, '0').slice(-6) || '000000';
+  return `${y || '0000'}-${padded}`;
+}
+
 function vaFields(item: Record<string, unknown>): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (let i = 1; i <= 20; i++) {
@@ -100,6 +109,7 @@ export function mapArrearsItem(item: Record<string, unknown>): NewNglFeeList {
     glAddr: str(item.glAddr),
     ...vaFields(item),
     epayNo: str(item.epayNo),
+    ledgerNo: buildLedgerNo(str(item.fyr), str(item.lvyNo)),
     ...mng,
     arrRsnCd: str(item.arrRsnCd),
     arrRsnNm: str(item.arrRsnNm),
@@ -143,6 +153,7 @@ export function mapReceiptItem(item: Record<string, unknown>): NewNglFeeList {
     glNm: str(item.glNm),
     ...vaFields(item),
     epayNo: str(item.epayNo),
+    ledgerNo: buildLedgerNo(str(item.fyr), str(item.lvyNo)),
     pyrNo: str(item.pyrNo),
     pyrNm: str(item.pyrNm),
     rcvmtSeCd: str(item.rcvmtSeCd),

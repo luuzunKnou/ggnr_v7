@@ -6,7 +6,7 @@ import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest'
 
 type Params = Record<string, unknown>;
 
-export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS';
+export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS' | 'NEXTGEN';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -62,7 +62,8 @@ function normalizeSystem(v: unknown): IntegrationSystem {
     s === 'SEUMTEO' ||
     s === 'SAEOL' ||
     s === 'SAFETYDATA' ||
-    s === 'FMS'
+    s === 'FMS' ||
+    s === 'NEXTGEN'
   )
     return s;
   throw new Error(`Unknown integration system: ${s}`);
@@ -124,6 +125,18 @@ export async function runIntegration(p: Params) {
   await ensureIntegrationTables();
 
   const trigger = String(p.trigger ?? '').trim().toLowerCase();
+
+  if (system === 'NEXTGEN') {
+    const { runNextGenFeeSync } = await import('@/lib/nextGenLinkage/syncRunner');
+    console.error(`[INTEGRATION] START system=NEXTGEN trigger=${trigger || 'manual'}`);
+    const r = await runNextGenFeeSync();
+    if (r.skipped) {
+      throw new Error(r.message);
+    }
+    console.error(`[INTEGRATION] DONE system=NEXTGEN ok=${r.ok} success=${r.success} fail=${r.fail}`);
+    return { system, ok: r.ok, success: r.success, fail: r.fail };
+  }
+
   const schedulerLabel =
     trigger === 'scheduler'
       ? `FMS 연계 스케줄러 실행 - ${new Date().toLocaleString('ko-KR', {

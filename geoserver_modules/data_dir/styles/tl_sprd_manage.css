@@ -1,8 +1,25 @@
+/* 도로구간(tl_sprd_manage)
+ * - 도로대장(a0020000)과 동일: 종점(endPoint) 화살표
+ * - 축척(wms_scale_denominator)에 따라 선 굵기·화살표 크기 변화
+ *   기준 축척 1:10000 근처에서 stroke≈3
+ */
 * {
-  stroke: #FFFFFF, #000000;
-  stroke-width: 3, 2;
-  stroke-opacity: 0.0, 0.0;
-  
+  stroke-geometry: [geom];
+  stroke: #03A9F4;
+  stroke-width: [min(6, max(1, sqrt(100000 / env('wms_scale_denominator', 10000)) * 0.95))];
+  stroke-opacity: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+
+  mark-geometry: [endPoint(geom)];
+  mark: symbol(triangle);
+  mark-rotation: [endAngle(geom) + 90];
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
+  :nth-mark(1) {
+    fill: #03A9F4;
+    stroke: #03A9F4;
+  };
+
   label: [rn];
   label-anchor: 0.5 0.5;
   label-geometry: [centroid(geom)];
@@ -21,7 +38,7 @@
   label-max-displacement: 0;
   label-priority: [area(geom)];
   label-fit-goodness: 0.1;
-  
+
   -gt-label-polygon-align: true;
   -gt-label-all-group: true;
 }

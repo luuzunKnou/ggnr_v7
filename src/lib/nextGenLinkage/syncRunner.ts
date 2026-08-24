@@ -9,6 +9,11 @@ import {
   USE_FEE_SYNC_MAX_EMPTY_COUNT,
 } from '@/integrations/useFeeSync.config';
 import { getNextGenLinkageConfig } from '@/lib/nextGenLinkage/config';
+import {
+  finishNextGenYearJobLog,
+  insertNextGenSkipJobLog,
+  startNextGenYearJobLog,
+} from '@/lib/nextGenLinkage/integrationJobLog';
 import { postNextGenJson } from '@/lib/nextGenLinkage/httpsClient';
 import { mapArrearsItem, mapReceiptItem } from '@/lib/nextGenLinkage/mapper';
 import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
@@ -294,12 +299,15 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
   const config = getNextGenLinkageConfig();
   if (!config) {
     console.warn(`${LOG} 중단 — 차세대 연계 접속 설정이 없습니다`);
+    const message =
+      '차세대 연계 접속값이 없습니다. useFeeSync.config(URL·시스템코드)와 runtime.env USE_FEE_SYNC_SRC_ORG_CD 를 확인하세요.';
+    await insertNextGenSkipJobLog(message);
     return {
       ok: false,
       skipped: 'no_config',
       success: 0,
       fail: 0,
-      message: 'useFeeSync.config 의 USE_FEE_SYNC_CONNECTION(baseUrl·srcOrgCd·srcSysCd) 이 필요합니다.',
+      message,
     };
   }
 
@@ -319,12 +327,14 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
 
     if (!queries.length) {
       console.warn(`${LOG} 중단 — 활성 조회가 없습니다`);
+      const message = '활성 인터페이스가 없습니다. ngl_query_table 을 확인하세요.';
+      await insertNextGenSkipJobLog(message);
       return {
         ok: false,
         skipped: 'no_query',
         success: 0,
         fail: 0,
-        message: '활성 인터페이스가 없습니다. ngl_query_table 을 확인하세요.',
+        message,
       };
     }
 
@@ -332,15 +342,20 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
     const fyrFrom = fyrList[0] ?? '';
     const fyrTo = fyrList[fyrList.length - 1] ?? '';
     console.info(
-      `${LOG} 시작 연도=${fyrFrom}~${fyrTo} (${fyrList.length}년) 조회=${queries.length}개 stamp=${runStamp} 시스템=${enabledSystems?.join(',') ?? '(전체)'}`
+      `${LOG} 시작 연도=${fyrFrom}~${fyrTo} (${fyrList.length}년) 조회=${queries.length}개 stamp=${runStamp} 기관=${config.srcOrgCd} 시스템=${enabledSystems?.join(',') ?? '(전체)'}`
     );
 
     let totalSuccess = 0;
     let totalFail = 0;
     let skippedQuery = 0;
+    let yearFailed = false;
 
     for (const fyr of fyrList) {
-      for (const query of queries) {
+      const yearLogKey = await startNextGenYearJobLog(fyr);
+      let yearOk = 0;
+      let yearFail = 0;
+      try {
+        for (const query of queries) {
         const interfaceId = String(query.interfaceId ?? '').trim();
         const ifId = String(query.ifId ?? '').trim();
         const rprsTxmCd = String(query.rprsTxmCd ?? '').trim();
@@ -436,6 +451,8 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
           nextLvyNo++;
         }
 
+        yearOk += rowOk;
+        yearFail += fail;
         totalSuccess += rowOk;
         totalFail += fail;
         const sampleText = samples.length ? ` 확인=${samples.join(' / ')}` : '';
@@ -443,11 +460,26 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
           `${LOG} 조회 끝 연도=${fyr} 과목=${rprsTxmNm} ${kindLabel(interfaceId)} 건수=${rowOk} 실패=${fail}${sampleText}`
         );
       }
+        await finishNextGenYearJobLog(
+          yearLogKey,
+          'SUCCESS',
+          `${fyr}년 연계 완료 — 건수 ${yearOk}, 실패 ${yearFail}`
+        );
+      } catch (e) {
+        yearFailed = true;
+        const msg = e instanceof Error ? e.message : String(e);
+        await finishNextGenYearJobLog(
+          yearLogKey,
+          'FAILED',
+          `${fyr}년 연계 실패 — 건수 ${yearOk}, 실패 ${yearFail}: ${msg}`
+        );
+        console.warn(`${LOG} 연도 실패 연도=${fyr} ${msg}`);
+      }
     }
 
     const message = `연계 완료 — 건수 ${totalSuccess}, 실패 ${totalFail}${skippedQuery ? `, 스킵조회 ${skippedQuery}` : ''}`;
     console.info(`${LOG} 전체 끝 ${message}`);
-    return { ok: true, success: totalSuccess, fail: totalFail, message };
+    return { ok: !yearFailed, success: totalSuccess, fail: totalFail, message };
   } finally {
     running = false;
   }

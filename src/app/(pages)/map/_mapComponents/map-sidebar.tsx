@@ -18,6 +18,7 @@ import {
 } from '../_mapContents/bizNotif/bizNotifStore';
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 import { SHOOTING_REQUEST_UI_ENABLED } from '../_mapContents/shootingRequest/shootingRequestUiFlag';
+import { withBasePath } from '@/lib/basePath';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -190,14 +191,11 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
 
   // systemList.config 의 해당 시스템 serviceList 만 사용 (serviceList.config 전체가 아님)
   const currentSystem = systemList.find((s) => s.sys_key === systemKeyFromUrl);
-  const firstSystem = systemList[0];
   const fromCurrent =
     currentSystem?.serviceList != null && currentSystem.serviceList.length > 0
       ? currentSystem.serviceList
       : null;
-  const fromFirst =
-    firstSystem?.serviceList != null && firstSystem.serviceList.length > 0 ? firstSystem.serviceList : null;
-  const serviceKeysInOrder: string[] = fromCurrent ?? fromFirst ?? [];
+  const serviceKeysInOrder: string[] = fromCurrent ?? [];
   const serviceMap = new Map(serviceListConfig.map((s) => [s.ser_eng ?? '', s]));
   const sidebarItems: ServiceItem[] = serviceKeysInOrder
     .map((key) => serviceMap.get(key))
@@ -250,7 +248,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
         />
       );
     }
-    const iconSrc = `/image/serviceListIcon/${serEng}.svg`;
+    const iconSrc = withBasePath(`/image/serviceListIcon/${serEng}.svg`);
     return (
       <span
         className="w-5 h-5 shrink-0 inline-block bg-current"

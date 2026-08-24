@@ -10,6 +10,7 @@ import {
   createOrUpdateGeoServerLayer,
   getGeoServerLayerList,
   getGeoServerStyleList,
+  getLayerGeometryType,
   setLayerDefaultStyle,
 } from '@/service/devTestService';
 import {
@@ -25,8 +26,9 @@ const COMP_LAYER_ID = 'comp';
 const COMP_TABLE_SQL = 'layer."comp"';
 
 /**
- * 민원관리 WMS: GeoServer 레이어·스타일 없으면 생성.
- * 스타일이 이미 있으면 덮어쓰지 않는다. (테이블은 layer.comp 실테이블)
+ * 민원관리 WMS: GeoServer 레이어·스타일 확보.
+ * geom 컬럼 추가 후 구 FeatureType(도형 없음·POLYGON 오인)이 남으면 재생성한다.
+ * 스타일이 이미 있으면 덮어쓰지 않는다.
  */
 export async function ensureWmsLayer(): Promise<{
   success: boolean;
@@ -40,7 +42,16 @@ export async function ensureWmsLayer(): Promise<{
   try {
     const listRes = await getGeoServerLayerList();
     const layerNames = (listRes.layers ?? []).map((n) => String(n).toLowerCase());
-    if (!layerNames.includes(COMP_LAYER_ID)) {
+    const layerExists = layerNames.includes(COMP_LAYER_ID);
+
+    let needsPublish = !layerExists;
+    if (layerExists) {
+      const geomType = await getLayerGeometryType({ layerName: COMP_LAYER_ID });
+      // POINT가 아니면 geom 반영 전 FeatureType이거나 메타 오류 → 재발행
+      needsPublish = !geomType.success || geomType.geometryType !== 'POINT';
+    }
+
+    if (needsPublish) {
       const layerRes = await createOrUpdateGeoServerLayer({ layerName: COMP_LAYER_ID });
       if (!layerRes.success) {
         return {
@@ -122,6 +133,10 @@ function parseLonLat(
   lon?: number | string | null,
   lat?: number | string | null
 ): { lon: number; lat: number } | null {
+  // Number(null)===0 이라 null/빈값은 좌표 없음으로 처리 (0,0 오인 방지)
+  if (lon == null || lat == null) return null;
+  if (typeof lon === 'string' && lon.trim() === '') return null;
+  if (typeof lat === 'string' && lat.trim() === '') return null;
   const x = Number(lon);
   const y = Number(lat);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -159,11 +174,17 @@ async function syncCompGeomFromAddress(params: {
       )
     );
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    // 컬럼 미적용 DB에서도 접수 저장은 유지
-    if (/column .*geom.* does not exist/i.test(msg) || /geom.*존재하지/i.test(msg)) {
+    const err = e as { cause?: { message?: string; code?: string }; message?: string };
+    const msg = [err.message, err.cause?.message, String(e)].filter(Boolean).join(' ');
+    // 컬럼 미적용·권한·투영 실패 등이어도 접수 저장은 유지
+    if (
+      /column .*geom.* does not exist/i.test(msg) ||
+      /geom.*존재하지/i.test(msg) ||
+      /Failed query:[\s\S]*["']?geom["']?/i.test(msg)
+    ) {
       console.warn(
-        '[complaintService] layer.comp.geom 컬럼이 없습니다. ALTER TABLE layer.comp ADD COLUMN geom geometry(Point,5181); 후 다시 저장하세요.'
+        '[complaintService] layer.comp.geom 갱신 실패(접수는 저장됨):',
+        msg.slice(0, 300)
       );
       return;
     }
@@ -212,7 +233,7 @@ export async function list(params: {
   return { rows: rowsWithState, total };
 }
 
-/** 단건 조회 + 처리내역(compd) 목록 + 지도 이동용 extent3857 */
+/** 단건 조회 + 처리내역(compd) 목록 + 지도 이동용 extent3857 + 하이라이트용 geom(EPSG:4326) */
 export async function get(params: { compKey: number }) {
   const key = Number(params?.compKey);
   if (!Number.isInteger(key) || key < 1) return null;
@@ -233,7 +254,30 @@ export async function get(params: { compKey: number }) {
     extent3857 = await getCompExtent3857(key);
   }
 
-  return { ...row, compdList, extent3857 };
+  const geomGeoJson4326 = await getCompGeomGeoJson4326(key);
+
+  return { ...row, compdList, extent3857, geomGeoJson4326 };
+}
+
+/** comp.geom → GeoJSON (EPSG:4326). 하이라이트용 */
+async function getCompGeomGeoJson4326(compKey: number): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsGeoJSON(ST_Transform(geom, 4326))::text AS g
+         FROM ${COMP_TABLE_SQL}
+         WHERE "comp_key" = ${compKey} AND geom IS NOT NULL
+         LIMIT 1`
+      )
+    );
+    const raw = (res.rows?.[0] as { g?: unknown } | undefined)?.g;
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 /** comp.geom → EPSG:3857 점 extent (없으면 null) */

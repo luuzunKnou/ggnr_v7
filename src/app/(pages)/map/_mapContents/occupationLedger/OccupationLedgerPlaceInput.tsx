@@ -9,11 +9,11 @@ import {
 } from '../../_mapComponents/addressSearch/vworldAddressSearch';
 
 const inputClass =
-  'w-full rounded border border-slate-200 bg-white py-0.5 pl-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
+  'w-full rounded border border-border bg-background py-0.5 pl-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 const btnClass =
-  'inline-flex shrink-0 items-center justify-center rounded border border-slate-200 bg-white p-0.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50';
+  'inline-flex shrink-0 items-center justify-center rounded border border-border bg-background p-0.5 text-muted-foreground hover:bg-muted/50 disabled:opacity-50';
 const clearBtnClass =
-  'absolute right-1 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600';
+  'absolute right-1 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground';
 
 const DEBOUNCE_MS = 300;
 const RESULT_MAX = 8;
@@ -140,12 +140,12 @@ export function OccupationLedgerPlaceInput({
         </button>
       </div>
       {!vworldApiKey ? (
-        <p className="mt-0.5 text-[10px] text-amber-700">주소검색 API 키가 없습니다.</p>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">주소검색 API 키가 없습니다.</p>
       ) : null}
       {open && (loading || results.length > 0 || value.trim()) ? (
-        <div className="absolute left-0 right-0 top-full z-30 mt-0.5 max-h-[180px] overflow-y-auto rounded border border-slate-200 bg-white shadow-md">
+        <div className="absolute left-0 right-0 top-full z-30 mt-0.5 max-h-[180px] overflow-y-auto rounded border border-border bg-background shadow-md">
           {loading ? (
-            <div className="flex items-center justify-center gap-1.5 py-3 text-[11px] text-slate-500">
+            <div className="flex items-center justify-center gap-1.5 py-3 text-[11px] text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               검색 중…
             </div>
@@ -158,7 +158,7 @@ export function OccupationLedgerPlaceInput({
                     <button
                       type="button"
                       title={label}
-                      className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-2 py-1.5 text-left last:border-b-0 hover:bg-slate-50"
+                      className="flex w-full flex-col gap-0.5 border-b border-border px-2 py-1.5 text-left last:border-b-0 hover:bg-muted/50"
                       onClick={() => {
                         if (label) onChange(label);
                         setResults([]);
@@ -166,23 +166,23 @@ export function OccupationLedgerPlaceInput({
                       }}
                     >
                       {item.roadAddress ? (
-                        <span className="truncate text-[11px] text-slate-800">
-                          <span className="mr-1 rounded bg-blue-100 px-1 text-[10px] font-semibold text-blue-700">
+                        <span className="truncate text-[11px] text-foreground">
+                          <span className="mr-1 rounded bg-primary/15 px-1 text-[10px] font-semibold text-primary">
                             도로명
                           </span>
                           {item.roadAddress}
                         </span>
                       ) : null}
                       {item.jibunAddress ? (
-                        <span className="truncate text-[11px] text-slate-700">
-                          <span className="mr-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">
+                        <span className="truncate text-[11px] text-foreground/90">
+                          <span className="mr-1 rounded bg-muted px-1 text-[10px] font-semibold text-foreground">
                             지번
                           </span>
                           {item.jibunAddress}
                         </span>
                       ) : null}
                       {!item.roadAddress && !item.jibunAddress ? (
-                        <span className="truncate text-[11px] text-slate-800">{label}</span>
+                        <span className="truncate text-[11px] text-foreground">{label}</span>
                       ) : null}
                     </button>
                   </li>
@@ -190,7 +190,7 @@ export function OccupationLedgerPlaceInput({
               })}
             </ul>
           ) : (
-            <div className="py-3 text-center text-[11px] text-slate-500">검색 결과가 없습니다</div>
+            <div className="py-3 text-center text-[11px] text-muted-foreground">검색 결과가 없습니다</div>
           )}
         </div>
       ) : null}

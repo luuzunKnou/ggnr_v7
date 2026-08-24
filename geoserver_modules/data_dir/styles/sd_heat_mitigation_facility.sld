@@ -66,7 +66,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -115,7 +185,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -164,7 +304,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -213,7 +423,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -262,7 +542,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -311,7 +661,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -360,7 +780,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -409,7 +899,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -458,7 +1018,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -507,7 +1137,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -556,7 +1256,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -605,7 +1375,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -654,7 +1494,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -703,7 +1613,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -752,7 +1732,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -801,7 +1851,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -850,7 +1970,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -899,7 +2089,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -948,7 +2208,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -997,7 +2327,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1046,7 +2446,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1095,7 +2565,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1144,7 +2684,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1193,7 +2803,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1242,7 +2922,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1291,7 +3041,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1340,7 +3160,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1389,7 +3279,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1438,7 +3398,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1487,7 +3517,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1536,7 +3636,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1585,7 +3755,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1634,7 +3874,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1683,7 +3993,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1732,7 +4112,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1781,7 +4231,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1830,7 +4350,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1879,7 +4469,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1928,7 +4588,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1977,7 +4707,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2026,7 +4826,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2075,7 +4945,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2124,7 +5064,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2173,7 +5183,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2222,7 +5302,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2271,7 +5421,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2320,7 +5540,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2369,7 +5659,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2418,7 +5778,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2467,7 +5897,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2516,7 +6016,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2565,7 +6135,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2614,7 +6254,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2663,7 +6373,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2712,7 +6492,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2761,7 +6611,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2810,7 +6730,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2859,7 +6849,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2908,7 +6968,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2957,7 +7087,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3006,7 +7206,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3055,7 +7325,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3104,7 +7444,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3153,7 +7563,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3202,7 +7682,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3251,7 +7801,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3300,7 +7920,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3349,7 +8039,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3398,7 +8158,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3447,7 +8277,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3496,7 +8396,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3545,7 +8515,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3594,7 +8634,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3643,7 +8753,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3692,7 +8872,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3741,7 +8991,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3790,7 +9110,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3839,7 +9229,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3888,7 +9348,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3937,7 +9467,77 @@
               </ogc:Function>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="strConcat">
+                <ogc:Literal></ogc:Literal>
+                <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3971,7 +9571,71 @@
               <ogc:PropertyName>jibun_addr</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">14</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-16</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>jibun_addr</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
               <sld:CssParameter name="font-size">14</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>

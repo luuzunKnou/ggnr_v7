@@ -7,6 +7,7 @@ import { ChevronRight, Droplets, CloudRain, Waves, Plane } from "lucide-react"
 import { canAccessPrivateSystem } from "@/lib/accessClient"
 import { useMyAccessSnapshot } from "@/hooks/useMyAccessSnapshot"
 import { ResourceAccessDeniedDialog } from "@/app/(pages)/_components/AccessRequest"
+import { withBasePath } from "@/lib/basePath"
 
 export type SystemItem = {
   sys_key: string
@@ -112,7 +113,10 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
                   {(() => {
                     const imgRaw = sys.sys_img?.trim() ?? "";
                     const isInlineSvg = imgRaw.startsWith("<");
-                    const iconSrc = !isInlineSvg && (imgRaw || `/image/systemlistIcon/${sys.sys_key}.svg`);
+                    // CSS mask-image 는 img.src 패치가 안 됨 → basePath 직접 적용
+                    const iconSrc =
+                      !isInlineSvg &&
+                      withBasePath(imgRaw || `/image/systemlistIcon/${sys.sys_key}.svg`);
                     if (isInlineSvg) {
                       return (
                         <div

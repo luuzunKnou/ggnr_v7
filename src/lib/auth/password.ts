@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { tempPasswordCandidates } from '@/lib/auth/hangulQwerty';
 
 const SALT_ROUNDS = 10;
 
@@ -21,4 +22,16 @@ export function isPlaintextPassword(stored: string | null): boolean {
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, SALT_ROUNDS);
+}
+
+/** 저장된 값이 성명 또는 영문 자판 임시 비밀번호이면 true */
+export async function isTemporaryPassword(stored: string | null, usrId: string): Promise<boolean> {
+  for (const candidate of tempPasswordCandidates(usrId)) {
+    if (await verifyPassword(stored, candidate)) return true;
+  }
+  return false;
+}
+
+export function isForbiddenNewPassword(nextPwd: string, usrId: string): boolean {
+  return tempPasswordCandidates(usrId).includes(nextPwd);
 }
