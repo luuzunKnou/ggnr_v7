@@ -1,7 +1,9 @@
 /**
  * Next.js `basePath` (next.config `env.BASE_PATH` 와 동일).
- * 게이트: dggskorea/[프로젝트명] → `/[프로젝트명]`.
+ * 게이트: dggskorea/[프로젝트명] → `/[프로젝트명]` (예: `/build_yy`).
  * 없으면 빈 문자열 → `/api`, `/cesiumStatic` 등 기존 루트 경로.
+ *
+ * basePath 설정값에는 끝 `/` 를 두지 않는다 (`/build_yy`). Next 기본이 경로 끝 슬래시를 제거한다.
  */
 export function getBasePath(): string {
   let raw = (process.env.BASE_PATH ?? '').trim();
@@ -22,13 +24,9 @@ export function getBasePath(): string {
 export function withBasePath(appPath: string): string {
   const base = getBasePath();
   if (!appPath.startsWith('/')) return appPath;
-  let path = appPath;
-  // next.config trailingSlash:true → POST /api 는 /api/ 로 308. 게이트웨이는 처음부터 /api/
-  if (path === '/api') path = '/api/';
-  if (!base) return path;
-  // 이미 접두됨 (`/build_yy`, `/build_yy/`, `/build_yy/api/...`)
-  if (path === base || path === `${base}/` || path.startsWith(`${base}/`)) return path;
-  return `${base}${path}`;
+  if (!base) return appPath;
+  if (appPath === base || appPath.startsWith(`${base}/`)) return appPath;
+  return `${base}${appPath}`;
 }
 
 /**
@@ -48,7 +46,8 @@ export function resolveFetchInput(input: RequestInfo | URL): RequestInfo | URL {
   }
   if (input instanceof URL) {
     if (typeof window !== 'undefined' && input.origin === window.location.origin) {
-      if (shouldPrefixAppPath(input.pathname)) {
+      const path = `${input.pathname}${input.search}${input.hash}`;
+      if (shouldPrefixAppPath(path)) {
         return new URL(withBasePath(input.pathname) + input.search + input.hash, input.origin);
       }
     }
@@ -95,7 +94,7 @@ export function shouldPrefixAppPath(pathOrUrl: string): boolean {
 }
 
 /**
- * location.assign / window.open 용 — `_next` 제외한 앱 절대경로 전반.
+ * location.assign / window.open 등 — `_next` 제외한 앱 절대경로 일반.
  */
 export function shouldPrefixNavPath(pathOrUrl: string): boolean {
   const pathname = pathOnly(pathOrUrl);
@@ -106,7 +105,7 @@ export function shouldPrefixNavPath(pathOrUrl: string): boolean {
   return true;
 }
 
-/** pathname(+query 가능)에 basePath 접두. 네비게이션·open 공용 */
+/** pathname(+query 가능)에 basePath 접두. 내비게이션·open 공용 */
 export function withBasePathNav(pathOrUrl: string): string {
   if (!shouldPrefixNavPath(pathOrUrl)) return pathOrUrl;
   const q = pathOrUrl.search(/[?#]/);

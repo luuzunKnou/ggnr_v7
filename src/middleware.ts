@@ -12,12 +12,6 @@ function isStaticAssetPath(pathname: string): boolean {
   );
 }
 
-/** trailingSlash: true 시 `/map/` → `/map` (루트 `/`는 유지) */
-function stripTrailingSlash(pathname: string): string {
-  if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);
-  return pathname;
-}
-
 /** basePath 유지한 앱 루트 URL (게이트에서 `/`로 떨어지지 않게) */
 function appHomeUrl(req: NextRequest): URL {
   const home = req.nextUrl.clone();
@@ -28,11 +22,10 @@ function appHomeUrl(req: NextRequest): URL {
 }
 
 export default auth((req) => {
-  const rawPath = req.nextUrl.pathname;
-  const path = stripTrailingSlash(rawPath);
+  const path = req.nextUrl.pathname;
 
   // basePath 사용 시 matcher만으로는 _next 제외가 깨질 수 있음 → 핸들러에서도 방어
-  if (isStaticAssetPath(rawPath) || isStaticAssetPath(path)) return NextResponse.next();
+  if (isStaticAssetPath(path)) return NextResponse.next();
 
   const isApiAuth = path.startsWith('/api/auth');
   const isApi = path.startsWith('/api');
@@ -47,7 +40,7 @@ export default auth((req) => {
     if (path === '/notice' || path.startsWith('/notice/')) return NextResponse.next();
     if (path === '/library' || path.startsWith('/library/')) return NextResponse.next();
     const home = appHomeUrl(req);
-    const dest = rawPath + req.nextUrl.search;
+    const dest = path + req.nextUrl.search;
     home.searchParams.set('next', dest);
     home.searchParams.set('openLogin', '1');
     return NextResponse.redirect(home);
