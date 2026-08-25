@@ -63,17 +63,17 @@ const FORM_SLOT_LABEL: Record<RoadFrontageBuildingFormAttachId, string> = {
 };
 
 const fieldClass =
-  'h-[20px] w-full min-w-0 border-0 bg-transparent px-0.5 text-[11px] leading-none outline-none focus:bg-white/70';
+  'h-[20px] w-full min-w-0 border-0 bg-transparent px-0.5 text-[11px] leading-none text-foreground outline-none focus:bg-muted/50';
 /** type=date 는 leading-none·기본 달력 아이콘 때문에 연·월·일이 잘려 별도 보정 */
 const dateFieldClass = `${fieldClass} input-date-compact`;
 const btnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
 const btnGhost =
-  'inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50';
+  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
 const btnDanger =
-  'inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50';
-const BORDER = 'border-[1px] border-solid border-slate-800';
-const FORM_TH_BG = 'bg-[#F1F5F9]';
+  'inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-background px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40';
+const BORDER = 'border-[1px] border-solid border-foreground/80';
+const FORM_TH_BG = 'bg-muted';
 const PAPER_SIZE_LABEL = '364mm × 257mm [백상지 200g/m²]';
 /** 원본 서식 건축물 내용 칸 수 */
 const FORM_DETAIL_MIN_ROWS = 5;
@@ -102,9 +102,9 @@ function callFailMessage(e: unknown, fallback: string): string {
 
 const formTableClass = 'w-full table-fixed border-collapse leading-none';
 const thClass =
-  `box-border ${BORDER} ${FORM_TH_BG} px-1 py-0.5 text-center align-middle text-[11px] font-semibold leading-tight text-slate-900`;
+  `box-border ${BORDER} ${FORM_TH_BG} px-1 py-0.5 text-center align-middle text-[11px] font-semibold leading-tight text-foreground`;
 const tdClass =
-  `box-border ${FORM_ROW_H} ${BORDER} bg-white px-1 py-0.5 align-middle text-[11px] leading-tight text-slate-800`;
+  `box-border ${FORM_ROW_H} ${BORDER} bg-background px-1 py-0.5 align-middle text-[11px] leading-tight text-foreground`;
 
 function Th({
   children,
@@ -198,7 +198,7 @@ function CrudBtn({
         e.stopPropagation();
         onClick();
       }}
-      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-slate-400 bg-white text-slate-600 hover:bg-slate-100"
+      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
     >
       {kind === 'plus' ? <Plus className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
     </button>
@@ -255,20 +255,20 @@ function ActionDialog({
           : Check;
   const iconWrap =
     action.kind === 'delete' || action.kind === 'photoRemove' || action.danger
-      ? 'bg-red-50 text-red-600'
+      ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
       : action.kind === 'notice'
-        ? 'bg-amber-50 text-amber-700'
+        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200'
         : action.kind === 'success'
-          ? 'bg-emerald-50 text-emerald-700'
+          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
           : 'bg-primary/10 text-primary';
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="rfb-action-title"
         aria-describedby="rfb-action-desc"
-        className="w-full max-w-[19rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className="w-full max-w-[19rem] overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
       >
         <div className="flex gap-3 px-4 py-3.5">
           <span
@@ -280,21 +280,21 @@ function ActionDialog({
             <Icon className={cn('h-4 w-4', action.kind === 'progress' && 'animate-spin')} />
           </span>
           <div className="min-w-0 pt-0.5">
-            <p id="rfb-action-title" className="text-sm font-semibold text-slate-800">
+            <p id="rfb-action-title" className="text-sm font-semibold text-foreground">
               {action.title}
             </p>
-            <p id="rfb-action-desc" className="mt-1 text-[12px] leading-relaxed text-slate-600">
+            <p id="rfb-action-desc" className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
               {action.message}
             </p>
           </div>
         </div>
         {action.kind === 'progress' ? (
-          <div className="flex items-center justify-center gap-1.5 border-t border-slate-100 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-500">
+          <div className="flex items-center justify-center gap-1.5 border-t border-border bg-muted px-3 py-2.5 text-[12px] text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {action.confirmLabel}
           </div>
         ) : (
-          <div className="flex justify-end gap-1.5 border-t border-slate-100 bg-slate-50 px-3 py-2.5">
+          <div className="flex justify-end gap-1.5 border-t border-border bg-muted px-3 py-2.5">
             {action.cancelLabel ? (
               <button type="button" className={btnGhost} onClick={onClose} disabled={busy}>
                 {action.cancelLabel}
@@ -364,11 +364,11 @@ function FormAttachPane({
   const showImg = Boolean(main) && !imgFailed && !capturing;
   return (
     <div
-      className="rfb-form-attach-pane relative h-full w-full overflow-hidden bg-white"
+      className="rfb-form-attach-pane relative h-full w-full overflow-hidden bg-background"
       onClick={editing && picker && !main ? onAdd : undefined}
     >
       {capturing ? (
-        <div className="flex h-full items-center justify-center gap-1 text-[10px] text-slate-500">
+        <div className="flex h-full items-center justify-center gap-1 text-[10px] text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           지도를 담는 중…
         </div>
@@ -380,7 +380,7 @@ function FormAttachPane({
           onError={() => setImgFailed(true)}
         />
       ) : (
-        <div className="flex h-full items-center justify-center px-2 text-center text-[10px] text-slate-400">
+        <div className="flex h-full items-center justify-center px-2 text-center text-[10px] text-muted-foreground">
           {editing ? emptyHint || (picker ? '등록' : '') : ''}
         </div>
       )}
@@ -390,7 +390,7 @@ function FormAttachPane({
             type="button"
             title="등록"
             aria-label="등록"
-            className="rounded bg-white/90 p-0.5 text-slate-500 hover:bg-slate-100"
+            className="rounded bg-background/90 p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation();
               onAdd();
@@ -403,7 +403,7 @@ function FormAttachPane({
               type="button"
               title="삭제"
               aria-label="삭제"
-              className="rounded bg-white/90 p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+              className="rounded bg-background/90 p-0.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove(0);
@@ -470,7 +470,7 @@ function NameWithPhone({
           <span className="block truncate">{dash(name)}</span>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-0.5 text-[11px] text-slate-700">
+      <div className="flex shrink-0 items-center gap-0.5 text-[11px] text-foreground">
         <span>(전화번호:</span>
         {editing ? (
           <input
@@ -491,7 +491,7 @@ function SignSlot({ name }: { name?: string }) {
   return (
     <div className="relative min-w-0 overflow-hidden">
       <span className="block truncate px-1 pr-[4.2rem] text-center">{dash(name)}</span>
-      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center whitespace-nowrap text-[9px] leading-none text-slate-600">
+      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center whitespace-nowrap text-[9px] leading-none text-muted-foreground">
         (서명 또는 인)
       </span>
     </div>
@@ -508,7 +508,7 @@ function BadMarksCell({
   onToggle?: (mark: string) => void;
 }) {
   return (
-    <div className="flex flex-nowrap items-center justify-center gap-x-1.5 text-[13px] leading-none text-slate-800">
+    <div className="flex flex-nowrap items-center justify-center gap-x-1.5 text-[13px] leading-none text-foreground">
       {ROAD_FRONTAGE_BUILDING_BAD_MARKS.map((mark) => (
         <button
           key={mark}
@@ -1318,20 +1318,20 @@ export function RoadFrontageBuildingDetailPanel({
 
   if (loading && !isCreateMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-white">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-          <span className="text-sm font-semibold text-slate-800">접도구역 건축물</span>
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+          <span className="text-sm font-semibold text-foreground">접도구역 건축물</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="flex items-center justify-center gap-1 px-3 py-6 text-center text-xs text-slate-500">
+        <p className="flex items-center justify-center gap-1 px-3 py-6 text-center text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           불러오는 중…
         </p>
@@ -1341,20 +1341,20 @@ export function RoadFrontageBuildingDetailPanel({
 
   if (!saved && !isCreateMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-white">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-          <span className="text-sm font-semibold text-slate-800">접도구역 건축물</span>
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+          <span className="text-sm font-semibold text-foreground">접도구역 건축물</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="px-3 py-6 text-center text-xs text-slate-500">
+        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
           {loadError || '선택한 관리대장을 찾을 수 없습니다.'}
         </p>
       </div>
@@ -1422,9 +1422,9 @@ export function RoadFrontageBuildingDetailPanel({
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-[#f4f6f8]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-1.5">
-        <span className="min-w-0 truncate text-sm font-semibold text-slate-800">
+    <div className="relative flex h-full min-h-0 flex-col bg-muted">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-1.5">
+        <span className="min-w-0 truncate text-sm font-semibold text-foreground">
           {isCreateMode
             ? '관리대장 등록'
             : String(current.locationAddress ?? '').trim() || '(위치 미입력)'}
@@ -1469,7 +1469,7 @@ export function RoadFrontageBuildingDetailPanel({
           <button
             type="button"
             onClick={isEditing ? askCancel : onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -1481,15 +1481,15 @@ export function RoadFrontageBuildingDetailPanel({
       <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-2 py-1.5 text-xs">
         <div className="rfb-form-print-root text-xs">
         <div className="rfb-print-page">
-        <div className="mb-0 flex items-start justify-between gap-2 text-[10px] leading-none text-slate-600">
+        <div className="mb-0 flex items-start justify-between gap-2 text-[10px] leading-none text-muted-foreground">
           <span>■ 도로법 시행규칙 [별지 제17호서식]</span>
           <span className="shrink-0">(2쪽 중 제1쪽)</span>
         </div>
-        <h2 className="mb-1 text-center text-[17px] font-bold leading-tight tracking-tight text-slate-900">
+        <h2 className="mb-1 text-center text-[17px] font-bold leading-tight tracking-tight text-foreground">
           접도구역의 기존 건축물(공작물) 관리대장
         </h2>
 
-        <div className="rfb-print-page-form bg-white [&_table+table]:-mt-px">
+        <div className="rfb-print-page-form bg-background [&_table+table]:-mt-px">
           <table className={formTableClass}>
             <colgroup>
               <col style={{ width: '4.25rem' }} />
@@ -1866,7 +1866,7 @@ export function RoadFrontageBuildingDetailPanel({
               ))}
             </tbody>
           </table>
-          <div className="mt-1 flex items-end justify-between gap-3 px-0.5 text-[10px] leading-tight text-slate-500">
+          <div className="mt-1 flex items-end justify-between gap-3 px-0.5 text-[10px] leading-tight text-muted-foreground">
             <span>
               {[
                 String(current.writerDept ?? '').trim() || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
@@ -1882,7 +1882,7 @@ export function RoadFrontageBuildingDetailPanel({
         </div>
 
         <section className="rfb-print-page rfb-print-page-drawings mt-3 pb-1">
-          <div className="mb-0.5 flex items-center justify-end text-[10px] leading-none text-slate-600">
+          <div className="mb-0.5 flex items-center justify-end text-[10px] leading-none text-muted-foreground">
             <span>(2쪽 중 제2쪽)</span>
           </div>
           <table className={formTableClass}>
@@ -1987,7 +1987,7 @@ export function RoadFrontageBuildingDetailPanel({
               </tr>
             </tbody>
           </table>
-          <div className="mt-1 flex justify-end px-0.5 text-[10px] leading-tight text-slate-500">
+          <div className="mt-1 flex justify-end px-0.5 text-[10px] leading-tight text-muted-foreground">
             <span>{PAPER_SIZE_LABEL}</span>
           </div>
         </section>
@@ -2006,7 +2006,7 @@ export function RoadFrontageBuildingDetailPanel({
 
         <section className="mt-3 pb-1">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
               <Paperclip className="h-3.5 w-3.5" />
               첨부파일
               {photos.length > 0 ? ` (${photos.length.toLocaleString()})` : ''}
@@ -2023,7 +2023,7 @@ export function RoadFrontageBuildingDetailPanel({
             ) : null}
           </div>
           {photos.length === 0 ? (
-            <p className="rounded border border-dashed border-slate-200 bg-white py-4 text-center text-[11px] text-slate-500">
+            <p className="rounded border border-dashed border-border bg-background py-4 text-center text-[11px] text-muted-foreground">
               {isEditing ? '등록을 눌러 사진을 넣으세요.' : '등록된 첨부파일이 없습니다.'}
             </p>
           ) : (
@@ -2031,7 +2031,7 @@ export function RoadFrontageBuildingDetailPanel({
               {photos.map((src, index) => (
                 <div
                   key={`${index}-${src.slice(0, 24)}`}
-                  className="relative h-[5.5rem] overflow-hidden rounded border border-slate-200 bg-white"
+                  className="relative h-[5.5rem] overflow-hidden rounded border border-border bg-background"
                 >
                   <img src={src} alt="" className="h-full w-full object-contain" />
                   {isEditing ? (
@@ -2040,7 +2040,7 @@ export function RoadFrontageBuildingDetailPanel({
                       title="삭제"
                       aria-label="삭제"
                       onClick={() => void removePhoto(index)}
-                      className="absolute right-0.5 top-0.5 rounded bg-white/90 p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="absolute right-0.5 top-0.5 rounded bg-background/90 p-0.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
