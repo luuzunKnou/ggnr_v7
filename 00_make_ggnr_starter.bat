@@ -265,7 +265,7 @@ if "!NSSM_EC!"=="2" (
   echo        start GGNR_V7 from services if needed.
   echo.
   echo [RUN] log window ^(2/2^)...
-  call "%LOGS_BAT%"
+  start "" "%LOGS_BAT%"
   echo.
   echo [DONE] generate -> ^(keep service^) -> logs
   echo.
@@ -280,7 +280,7 @@ if not "!NSSM_EC!"=="0" (
 
 echo.
 echo [RUN] log window ^(2/2^)...
-call "%LOGS_BAT%"
+start "" "%LOGS_BAT%"
 
 echo.
 echo [DONE] generate -> nssm -> logs

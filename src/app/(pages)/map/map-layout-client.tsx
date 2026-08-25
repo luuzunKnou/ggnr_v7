@@ -1538,12 +1538,12 @@ function MapLayoutContent({
                 className="shadow-none"
               >
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-                    <span className="text-sm font-semibold text-slate-800">시설관리</span>
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 py-2.5">
+                    <span className="text-sm font-semibold text-foreground">시설관리</span>
                     <button
                       type="button"
                       onClick={handleCloseRoadInfra}
-                      className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                       title="닫기"
                       aria-label="닫기"
                     >
