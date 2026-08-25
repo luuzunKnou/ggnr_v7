@@ -10,6 +10,7 @@ import { LayerDataPanel } from "./_mapComponents/standard/LayerDataPanel"
 import StandardDetail from "./_mapComponents/standard/StandardDetail"
 import ComplaintListPanel from "./_mapComponents/complaint/ComplaintListPanel"
 import ComplaintDetail from "./_mapComponents/complaint/ComplaintDetail"
+import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
 import { RiverBasicPlanDetailPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
@@ -157,9 +158,6 @@ const COMPLAINT_PANEL_MAX_WIDTH = 900
 const MEMO_PANEL_DEFAULT_WIDTH = 420
 const MEMO_PANEL_MIN_WIDTH = 320
 const MEMO_PANEL_MAX_WIDTH = 720
-const MEMO_DETAIL_DEFAULT_WIDTH = 400
-const MEMO_DETAIL_MIN_WIDTH = 320
-const MEMO_DETAIL_MAX_WIDTH = 640
 
 const MAP_3D_DATA_PANEL_DEFAULT_WIDTH = 360
 const MAP_3D_DATA_PANEL_MIN_WIDTH = 280
@@ -565,9 +563,10 @@ function MapLayoutContent({
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
+  const [memoAddTable, setMemoAddTable] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
-  const memoDetailOpen = memoManagementOpen && Boolean(memoDetailId)
   const [complaintListRefreshKey, setComplaintListRefreshKey] = useState(0)
+  const [complaintAddOpen, setComplaintAddOpen] = useState(false)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
   /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
@@ -686,7 +685,6 @@ function MapLayoutContent({
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
-  const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
@@ -721,7 +719,6 @@ function MapLayoutContent({
     (roadRewardOpen ? roadRewardPanelWidth : 0) +
     (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
-    (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
     (safetyMapOpen ? safetyMapPanelWidth : 0) +
@@ -812,9 +809,8 @@ function MapLayoutContent({
     roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
   const memoPanelLeftPx =
     roadRewardDetailLeftPx + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
-  const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
-    memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
+    memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const map3dPanelLeftPx = complaintPanelLeftPx + (complaintManagementOpen ? complaintPanelWidth : 0)
   const safetyMapPanelLeftPx = map3dPanelLeftPx + (map3dDataOpen ? map3dDataPanelWidth : 0)
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
@@ -1346,8 +1342,19 @@ function MapLayoutContent({
   }, [])
 
   useEffect(() => {
-    if (!memoManagementOpen) setMemoDetailId(null)
+    if (!memoManagementOpen) {
+      setMemoDetailId(null)
+      setMemoAddTable(null)
+    }
   }, [memoManagementOpen])
+
+  useEffect(() => {
+    if (!complaintManagementOpen) setComplaintAddOpen(false)
+  }, [complaintManagementOpen])
+
+  useEffect(() => {
+    if (mapContext?.complaintDetail) setComplaintAddOpen(false)
+  }, [mapContext?.complaintDetail])
 
   useEffect(() => {
     if (!shootingPanelOpen) {
@@ -2175,33 +2182,14 @@ function MapLayoutContent({
                 <MemoListPanel
                   onClose={handleCloseMemoManagement}
                   selectedDetailId={memoDetailId}
-                  onSelectDetailId={setMemoDetailId}
-                  refreshKey={memoListRefreshKey}
-                />
-              </MapSideListPanel>
-            </div>
-          )}
-          {memoManagementOpen && memoDetailId && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={memoDetailWidth}
-                minWidth={MEMO_DETAIL_MIN_WIDTH}
-                maxWidth={MEMO_DETAIL_MAX_WIDTH}
-                leftOffsetPx={memoDetailLeftPx}
-                onWidthChange={setMemoDetailWidth}
-                contentClassName="overflow-hidden"
-              >
-                <MemoDetailPanel
-                  detailId={memoDetailId}
-                  onClose={() => setMemoDetailId(null)}
-                  onSaved={() => setMemoListRefreshKey((k) => k + 1)}
-                  onCreated={(newRowKey) => {
-                    setMemoListRefreshKey((k) => k + 1)
-                    setMemoDetailId(newRowKey)
+                  onSelectDetailId={(id) => {
+                    setMemoAddTable(null)
+                    setMemoDetailId(id)
                   }}
-                  onDeleted={() => {
+                  refreshKey={memoListRefreshKey}
+                  onAdd={(table) => {
                     setMemoDetailId(null)
-                    setMemoListRefreshKey((k) => k + 1)
+                    setMemoAddTable(table)
                   }}
                 />
               </MapSideListPanel>
@@ -2216,7 +2204,13 @@ function MapLayoutContent({
                 leftOffsetPx={complaintPanelLeftPx}
                 onWidthChange={setComplaintPanelWidth}
               >
-                <ComplaintListPanel refreshKey={complaintListRefreshKey} />
+                <ComplaintListPanel
+                  refreshKey={complaintListRefreshKey}
+                  onRequestAdd={() => {
+                    mapContext?.setComplaintDetail?.(null)
+                    setComplaintAddOpen(true)
+                  }}
+                />
               </MapSideListPanel>
             </div>
           )}
@@ -2507,6 +2501,36 @@ function MapLayoutContent({
                 }
               />
               <StandardDetail />
+              {memoManagementOpen && memoAddTable && (
+                <MemoDetailPanel
+                  mode="add"
+                  addTableName={memoAddTable}
+                  onClose={() => setMemoAddTable(null)}
+                  onCreated={(newRowKey) => {
+                    setMemoAddTable(null)
+                    setMemoListRefreshKey((k) => k + 1)
+                    setMemoDetailId(newRowKey)
+                  }}
+                />
+              )}
+              {memoManagementOpen && memoDetailId && (
+                <MemoDetailPanel
+                  mode="edit"
+                  detailId={memoDetailId}
+                  onClose={() => setMemoDetailId(null)}
+                  onSaved={() => setMemoListRefreshKey((k) => k + 1)}
+                  onDeleted={() => {
+                    setMemoDetailId(null)
+                    setMemoListRefreshKey((k) => k + 1)
+                  }}
+                />
+              )}
+              {complaintManagementOpen && complaintAddOpen && (
+                <ComplaintAdd
+                  onClose={() => setComplaintAddOpen(false)}
+                  onCreated={() => setComplaintListRefreshKey((k) => k + 1)}
+                />
+              )}
               <ComplaintDetail
                 onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
               />

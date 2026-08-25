@@ -3,7 +3,7 @@
  * 재난안전데이터: safetydata.config 의 일/주/월·interval 스케줄.
  * KAIS: kais.config 의 KAIS_REFRESH_SCHEDULE.
  * KRAS: krasLayerSync.config 매일 01:00 (목록·지적·읍면동·주제도·토지기본·소유현황·공시지가 파일).
- * 점사용료(차세대): useFeeSync.config 의 USE_FEE_SYNC_SCHEDULE.
+ * 점사용료(차세대): useFeeSync.config 의 USE_FEE_SYNC_SCHEDULE — GGNR_ENV=prod 일 때만 등록.
  * FMS 안전점검: fmsSync.config 의 FMS_SYNC_SCHEDULE.
  * nssm 로그 백업: start 전용, 매일 00:00 (C:\\logs → backup).
  * interval(분)은 시계 격자(예 5분→:00,:05,…)에 맞춤. (next dev에서는 5분 interval만 daily 1회로 축소)
@@ -98,7 +98,9 @@ export async function register(): Promise<void> {
       console.info('[instrumentation] nssm log backup scheduler skipped');
     }
 
+    const ggnrEnv = (process.env.GGNR_ENV ?? '').trim().toLowerCase();
     const skipUseFee =
+      ggnrEnv !== 'prod' ||
       process.env.DISABLE_USE_FEE_SYNC_SCHEDULER === '1' ||
       isSchedulerDisabledInRuntime(SCHEDULER_CODES.useFeeSync);
     if (!skipUseFee) {
@@ -106,7 +108,7 @@ export async function register(): Promise<void> {
       startUseFeeSyncScheduler();
     } else {
       console.info(
-        '[instrumentation] use-fee sync scheduler skipped (DISABLE_USE_FEE_SYNC_SCHEDULER or DISABLED_SCHEDULERS=useFeeSync)'
+        `[instrumentation] use-fee sync scheduler skipped (GGNR_ENV=${ggnrEnv || '(empty)'} — prod only; or DISABLE_USE_FEE_SYNC_SCHEDULER / DISABLED_SCHEDULERS=useFeeSync)`
       );
     }
 

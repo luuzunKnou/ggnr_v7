@@ -2,9 +2,10 @@
  * 메모관리 — layer.memo* 테이블 CRUD
  */
 import { db } from '@/database/db';
-import { sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { auth } from '@/auth';
+import { usr } from '@/database/schema/usr';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
-import { getSessionUsrId } from '@/lib/auth/guard';
 import { MEMO_KEY_FIELD, MEMO_SCHEMA, MEMO_TABLES } from '@/lib/memoConfig';
 import {
   deleteTableRowByKey,
@@ -226,6 +227,12 @@ export async function getMemoList(params?: {
     return b.memoKey.localeCompare(a.memoKey);
   });
 
+  const names = await lookupUserDisplayNames(rows.map((r) => r.createUser));
+  for (const row of rows) {
+    const name = names.get(row.createUser);
+    if (name) row.createUser = name;
+  }
+
   return { rows: rows.slice(0, limit) };
 }
 
@@ -241,6 +248,8 @@ export async function getMemoDetail(params?: {
   createUser: string;
   createGroup: string;
   hasGeom: boolean;
+  lon?: number | null;
+  lat?: number | null;
   error?: string;
 }> {
   const tableName = String(params?.table ?? '').trim().toLowerCase();
@@ -326,15 +335,38 @@ export async function getMemoDetail(params?: {
       return String(row[col] ?? '').trim();
     };
 
+    const createUserRaw = pick('memo_create_user');
+    const names = await lookupUserDisplayNames([createUserRaw]);
+    const hasGeom = row.has_geom === true;
+    let lon: number | null = null;
+    let lat: number | null = null;
+    if (hasGeom && geomCol) {
+      try {
+        const focus = await readMemoMapFocus({
+          schema: resolved.schema,
+          table: resolved.table,
+          keyCol,
+          geomCol,
+          memoKey,
+        });
+        lon = focus.lon4326;
+        lat = focus.lat4326;
+      } catch {
+        lon = null;
+        lat = null;
+      }
+    }
     return {
       tableName,
       memoKey,
       title: pick('memo_title'),
       contents: pick('memo_contents'),
       createDate: formatToYmdOrText(pick('memo_create_date')),
-      createUser: pick('memo_create_user'),
+      createUser: names.get(createUserRaw) || createUserRaw,
       createGroup: pick('memo_create_group'),
-      hasGeom: row.has_geom === true,
+      hasGeom,
+      lon,
+      lat,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -352,68 +384,211 @@ export async function getMemoDetail(params?: {
   }
 }
 
+function parseGeoJsonGeometry(raw: unknown): Record<string, unknown> | null {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'type' in (raw as object)) {
+    return raw as Record<string, unknown>;
+  }
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  try {
+    const parsed = JSON.parse(s) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function readMemoMapFocus(params: {
+  schema: string;
+  table: string;
+  keyCol: string;
+  geomCol: string;
+  memoKey: string;
+}): Promise<{
+  extent3857: [number, number, number, number] | null;
+  geomGeoJson4326: Record<string, unknown> | null;
+  lon4326: number | null;
+  lat4326: number | null;
+}> {
+  const g = quoteIdent(params.geomCol);
+  const q = `SELECT
+               ST_X(ST_Transform(${g}, 3857))::float8 AS x,
+               ST_Y(ST_Transform(${g}, 3857))::float8 AS y,
+               ST_X(ST_Transform(${g}, 4326))::float8 AS lon,
+               ST_Y(ST_Transform(${g}, 4326))::float8 AS lat,
+               ST_AsGeoJSON(ST_Transform(${g}, 4326))::text AS g
+             FROM ${quoteIdent(params.schema)}.${quoteIdent(params.table)}
+             WHERE ${quoteIdent(params.keyCol)}::text = '${esc(params.memoKey)}'
+               AND ${g} IS NOT NULL
+             LIMIT 1`;
+  const res = await db.execute(sql.raw(q));
+  const row = res.rows?.[0] as { x?: unknown; y?: unknown; lon?: unknown; lat?: unknown; g?: unknown } | undefined;
+  const x = Number(row?.x);
+  const y = Number(row?.y);
+  const lon = Number(row?.lon);
+  const lat = Number(row?.lat);
+  const extent3857 =
+    Number.isFinite(x) && Number.isFinite(y) ? ([x, y, x, y] as [number, number, number, number]) : null;
+  return {
+    extent3857,
+    geomGeoJson4326: parseGeoJsonGeometry(row?.g),
+    lon4326: Number.isFinite(lon) ? lon : null,
+    lat4326: Number.isFinite(lat) ? lat : null,
+  };
+}
+
 export async function getMemoExtent3857(params?: { table?: string; memoKey?: string }) {
   const tableName = String(params?.table ?? '').trim().toLowerCase();
   const memoKey = String(params?.memoKey ?? '').trim();
-  if (!tableName || !memoKey) return { extent3857: null, error: 'table과 memoKey가 필요합니다.' };
+  if (!tableName || !memoKey) {
+    return { extent3857: null, geomGeoJson4326: null, error: 'table과 memoKey가 필요합니다.' };
+  }
 
   const resolved = await resolvePhysicalTable(tableName);
-  if (!resolved) return { extent3857: null, error: '테이블을 찾을 수 없습니다.' };
+  if (!resolved) return { extent3857: null, geomGeoJson4326: null, error: '테이블을 찾을 수 없습니다.' };
 
   const columns = await getTableColumns(resolved.schema, resolved.table);
   const keyCol = findColumn(columns, MEMO_KEY_FIELD);
   const geomCol = await resolveGeomColumn(resolved.schema, resolved.table, columns);
-  if (!keyCol || !geomCol) return { extent3857: null, error: '위치 정보 컬럼을 찾을 수 없습니다.' };
-
-  const q = `SELECT ST_Extent(ST_Expand(ST_Transform(${quoteIdent(geomCol)}, 3857), 80)) AS ext
-             FROM ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)}
-             WHERE ${quoteIdent(keyCol)}::text = '${esc(memoKey)}'
-               AND ${quoteIdent(geomCol)} IS NOT NULL
-             LIMIT 1`;
+  if (!keyCol || !geomCol) {
+    return { extent3857: null, geomGeoJson4326: null, error: '위치 정보 컬럼을 찾을 수 없습니다.' };
+  }
 
   try {
-    const res = await db.execute(sql.raw(q));
-    const row = res.rows?.[0] as { ext?: string | null } | undefined;
-    const box = row?.ext ? String(row.ext) : '';
-    const m = /BOX\(([-\d.]+)\s+([-\d.]+),([-\d.]+)\s+([-\d.]+)\)/.exec(box);
-    if (!m) return { extent3857: null, error: '저장된 위치가 없습니다.' };
-    const nums = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
-    if (!nums.every((v) => Number.isFinite(v))) return { extent3857: null, error: '위치 좌표를 해석하지 못했습니다.' };
-    return { extent3857: nums as [number, number, number, number] };
+    return await readMemoMapFocus({
+      schema: resolved.schema,
+      table: resolved.table,
+      keyCol,
+      geomCol,
+      memoKey,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { extent3857: null, error: msg };
+    return { extent3857: null, geomGeoJson4326: null, error: msg };
   }
 }
 
-async function resolveUserKeys(usrId: string | null): Promise<{ userKey: string | null; groupKey: string | null }> {
-  if (!usrId) return { userKey: null, groupKey: null };
+async function lookupUserDisplayNames(keys: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(keys.map((k) => String(k ?? '').trim()).filter(Boolean))];
+  const out = new Map<string, string>();
+  if (unique.length === 0) return out;
+  const inList = unique.map((k) => `'${esc(k)}'`).join(',');
   try {
     const res = await db.execute(
       sql.raw(
-        `SELECT users_key::text AS user_key, users_group::text AS group_key
-         FROM ${quoteIdent('public')}.${quoteIdent('users')}
-         WHERE users_id::text = '${esc(usrId)}'
-         LIMIT 1`
+        `SELECT usr_id::text AS k, COALESCE(NULLIF(TRIM(usr_name), ''), usr_id)::text AS n
+         FROM ${quoteIdent('public')}.${quoteIdent('usr')}
+         WHERE usr_id::text IN (${inList})`
       )
     );
-    const row = res.rows?.[0] as { user_key?: string; group_key?: string } | undefined;
-    return {
-      userKey: row?.user_key ? String(row.user_key).trim() : null,
-      groupKey: row?.group_key ? String(row.group_key).trim() : null,
-    };
+    for (const row of res.rows ?? []) {
+      const r = row as { k?: string; n?: string };
+      const k = String(r.k ?? '').trim();
+      const n = String(r.n ?? '').trim();
+      if (k && n) out.set(k, n);
+    }
   } catch {
-    return { userKey: null, groupKey: null };
+    // usr 조회 실패 시 아래 레거시 시도
   }
+  const missing = unique.filter((k) => !out.has(k));
+  if (missing.length === 0) return out;
+  try {
+    const missList = missing.map((k) => `'${esc(k)}'`).join(',');
+    const res = await db.execute(
+      sql.raw(
+        `SELECT s.users_key::text AS k,
+                COALESCE(NULLIF(TRIM(u.usr_name), ''), NULLIF(TRIM(s.users_id), ''), s.users_key::text) AS n
+         FROM ${quoteIdent('public')}.${quoteIdent('users')} s
+         LEFT JOIN ${quoteIdent('public')}.${quoteIdent('usr')} u ON u.usr_id::text = s.users_id::text
+         WHERE s.users_key::text IN (${missList}) OR s.users_id::text IN (${missList})`
+      )
+    );
+    for (const row of res.rows ?? []) {
+      const r = row as { k?: string; n?: string };
+      const k = String(r.k ?? '').trim();
+      const n = String(r.n ?? '').trim();
+      if (k && n) out.set(k, n);
+    }
+  } catch {
+    // users/usr 조인 실패 시 키 그대로
+  }
+  return out;
+}
+
+async function resolveCreatorLabels(): Promise<{ userName: string; groupName: string }> {
+  const session = await auth();
+  const usrId = String(session?.user?.id ?? '').trim();
+  const sessionName = String(session?.user?.name ?? '').trim();
+
+  if (usrId === 'su') {
+    return { userName: sessionName || '슈퍼관리자', groupName: '시스템' };
+  }
+
+  if (usrId) {
+    try {
+      const [row] = await db
+        .select({ usrName: usr.usrName, ugName: usr.ugName })
+        .from(usr)
+        .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
+        .limit(1);
+      if (row) {
+        return {
+          userName: String(row.usrName ?? '').trim() || sessionName || usrId,
+          groupName: String(row.ugName ?? '').trim(),
+        };
+      }
+    } catch {
+      // 로그인 세션 이름만이라도 저장
+    }
+  }
+
+  return { userName: sessionName || usrId, groupName: '' };
+}
+
+async function applyCreatorFields(params: {
+  schema: string;
+  table: string;
+  columns: string[];
+  keyCol: string;
+  memoKey: string;
+  userName: string;
+  groupName: string;
+}): Promise<void> {
+  const userCol =
+    params.columns.find((c) => c.toLowerCase() === 'memo_create_user') ??
+    params.columns.find((c) => /create_user/i.test(c)) ??
+    null;
+  const groupCol =
+    params.columns.find((c) => c.toLowerCase() === 'memo_create_group') ??
+    params.columns.find((c) => /create_group/i.test(c)) ??
+    null;
+  const sets: string[] = [];
+  if (userCol && params.userName) {
+    sets.push(`${quoteIdent(userCol)} = '${esc(params.userName)}'`);
+  }
+  if (groupCol && params.groupName) {
+    sets.push(`${quoteIdent(groupCol)} = '${esc(params.groupName)}'`);
+  }
+  if (sets.length === 0) return;
+  await db.execute(
+    sql.raw(
+      `UPDATE ${quoteIdent(params.schema)}.${quoteIdent(params.table)}
+       SET ${sets.join(', ')}
+       WHERE ${quoteIdent(params.keyCol)}::text = '${esc(params.memoKey)}'`
+    )
+  );
 }
 
 async function wkt5181FromPoint3857(x: number, y: number): Promise<string | null> {
+  const likely5181 = x > 50_000 && x < 1_000_000 && y > 50_000 && y < 1_000_000;
+  const expr = likely5181
+    ? `ST_SetSRID(ST_MakePoint(${x}, ${y}), 5181)`
+    : `ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857), 5181)`;
   try {
-    const res = await db.execute(
-      sql.raw(
-        `SELECT ST_AsText(ST_Transform(ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857), 5181)) AS wkt`
-      )
-    );
+    const res = await db.execute(sql.raw(`SELECT ST_AsText(${expr}) AS wkt`));
     const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
     return wkt || null;
   } catch {
@@ -426,6 +601,8 @@ export async function createMemo(params?: {
   title?: string;
   contents?: string;
   createDate?: string;
+  createUser?: string;
+  createGroup?: string;
   pointX3857?: number;
   pointY3857?: number;
 }): Promise<{ success: boolean; memoKey?: string; error?: string }> {
@@ -439,12 +616,24 @@ export async function createMemo(params?: {
   const keyCol = findColumn(columns, MEMO_KEY_FIELD);
   if (!keyCol) return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
 
-  const usrId = await getSessionUsrId();
-  const { userKey, groupKey } = await resolveUserKeys(usrId);
+  const resolvedCreator = await resolveCreatorLabels();
+  const userName =
+    resolvedCreator.userName || String(params?.createUser ?? '').trim();
+  const groupName =
+    resolvedCreator.groupName || String(params?.createGroup ?? '').trim();
 
   const values: Record<string, unknown> = {};
   const put = (field: string, value: unknown) => {
-    const col = findColumn(columns, field);
+    const col =
+      field === 'memo_create_user'
+        ? columns.find((c) => c.toLowerCase() === 'memo_create_user') ??
+          columns.find((c) => /create_user/i.test(c)) ??
+          findColumn(columns, field)
+        : field === 'memo_create_group'
+          ? columns.find((c) => c.toLowerCase() === 'memo_create_group') ??
+            columns.find((c) => /create_group/i.test(c)) ??
+            findColumn(columns, field)
+          : findColumn(columns, field);
     if (!col) return;
     values[col] = value;
   };
@@ -457,8 +646,8 @@ export async function createMemo(params?: {
   put('memo_title', params?.title ?? '');
   put('memo_contents', params?.contents ?? '');
   put('memo_create_date', params?.createDate || formatToYmdOrText(new Date()));
-  if (userKey) put('memo_create_user', userKey);
-  if (groupKey) put('memo_create_group', groupKey);
+  if (userName) put('memo_create_user', userName);
+  if (groupName) put('memo_create_group', groupName);
   put('memo_is_del', false);
 
   const x = Number(params?.pointX3857);
@@ -481,6 +670,15 @@ export async function createMemo(params?: {
   }
   const memoKey = String(inserted.keyValue ?? '').trim();
   if (!memoKey) return { success: false, error: '등록 후 키를 확인하지 못했습니다.' };
+  await applyCreatorFields({
+    schema: resolved.schema,
+    table: resolved.table,
+    columns,
+    keyCol,
+    memoKey,
+    userName,
+    groupName,
+  });
   return { success: true, memoKey };
 }
 
